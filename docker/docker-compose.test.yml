@@ -18,11 +18,17 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.test
+    hostname: tests
     depends_on:
       asterisk:
         condition: service_healthy
     environment:
       - ASTERISK_HOST=asterisk
       - ASTERISK_AMI_PORT=5038
+      - ASTERISK_AMI_USERNAME=testadmin
+      - ASTERISK_AMI_PASSWORD=testpass
       - ASTERISK_AGI_PORT=4573
       - ASTERISK_ARI_PORT=8088
+      - ASTERISK_ARI_USERNAME=testari
+      - ASTERISK_ARI_PASSWORD=testari
+      - ASTERISK_ARI_APP=test-app
