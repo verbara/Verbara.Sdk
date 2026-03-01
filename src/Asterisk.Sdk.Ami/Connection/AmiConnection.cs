@@ -100,7 +100,7 @@ public sealed class AmiConnection : IAmiConnection
         var identMsg = await _reader.ReadMessageAsync(cancellationToken);
         if (identMsg is null || !identMsg.IsProtocolIdentifier)
         {
-            throw new InvalidOperationException("Expected Asterisk protocol identifier");
+            throw new AmiProtocolException("Expected Asterisk protocol identifier");
         }
 
         // MD5 challenge-response login
@@ -139,7 +139,7 @@ public sealed class AmiConnection : IAmiConnection
 
         var challengeResponse = await ReadResponseAsync(challengeId, ct);
         var challenge = challengeResponse["Challenge"]
-            ?? throw new InvalidOperationException("No challenge received from Asterisk");
+            ?? throw new AmiAuthenticationException("No challenge received from Asterisk");
 
         // Step 2: Compute MD5(challenge + secret) — required by AMI protocol
 #pragma warning disable CA5351 // MD5 is mandated by the Asterisk AMI authentication protocol
@@ -161,7 +161,7 @@ public sealed class AmiConnection : IAmiConnection
         if (!string.Equals(loginResponse.ResponseStatus, "Success", StringComparison.OrdinalIgnoreCase))
         {
             var msg = loginResponse["Message"] ?? "Unknown error";
-            throw new InvalidOperationException($"AMI login failed: {msg}");
+            throw new AmiAuthenticationException($"AMI login failed: {msg}");
         }
     }
 
@@ -204,7 +204,7 @@ public sealed class AmiConnection : IAmiConnection
         while (true)
         {
             var msg = await _reader!.ReadMessageAsync(linked.Token)
-                ?? throw new InvalidOperationException("Connection closed while waiting for response");
+                ?? throw new AmiConnectionException("Connection closed while waiting for response");
 
             if (msg.IsResponse && string.Equals(msg.ActionId, actionId, StringComparison.OrdinalIgnoreCase))
             {
@@ -556,7 +556,7 @@ public sealed class AmiConnection : IAmiConnection
     {
         if (_state != AmiConnectionState.Connected)
         {
-            throw new InvalidOperationException($"Not connected. Current state: {_state}");
+            throw new AmiNotConnectedException($"Not connected. Current state: {_state}");
         }
     }
 
