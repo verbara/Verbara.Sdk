@@ -1,12 +1,9 @@
 namespace Asterisk.Sdk.Agi.Commands;
 
-/// <summary>AGI command: SET CALLERID</summary>
+/// <summary>AGI command: SET CALLERID number</summary>
 public sealed class SetCallerIdCommand : AgiCommandBase
 {
     public string? CallerId { get; set; }
-    public override string BuildCommand()
-    {
-        // TODO: Build full command string with parameters
-        return "SET CALLERID";
-    }
+
+    public override string BuildCommand() => $"SET CALLERID {CallerId}";
 }

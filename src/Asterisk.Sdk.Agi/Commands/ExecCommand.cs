@@ -1,12 +1,11 @@
 namespace Asterisk.Sdk.Agi.Commands;
 
-/// <summary>AGI command: EXEC</summary>
+/// <summary>AGI command: EXEC application options</summary>
 public sealed class ExecCommand : AgiCommandBase
 {
     public string? Application { get; set; }
-    public override string BuildCommand()
-    {
-        // TODO: Build full command string with parameters
-        return "EXEC";
-    }
+    public string? Options { get; set; }
+
+    public override string BuildCommand() =>
+        Options is not null ? $"EXEC {Application} {Options}" : $"EXEC {Application}";
 }

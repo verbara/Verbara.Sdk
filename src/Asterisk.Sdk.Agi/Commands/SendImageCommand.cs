@@ -1,12 +1,9 @@
 namespace Asterisk.Sdk.Agi.Commands;
 
-/// <summary>AGI command: SEND IMAGE</summary>
+/// <summary>AGI command: SEND IMAGE image</summary>
 public sealed class SendImageCommand : AgiCommandBase
 {
     public string? Image { get; set; }
-    public override string BuildCommand()
-    {
-        // TODO: Build full command string with parameters
-        return "SEND IMAGE";
-    }
+
+    public override string BuildCommand() => $"SEND IMAGE {Image}";
 }
