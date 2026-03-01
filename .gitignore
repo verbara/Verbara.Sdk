@@ -1,0 +1,46 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstats
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+build/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+## IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*~
+
+## Test Results
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+## BenchmarkDotNet
+BenchmarkDotNet.Artifacts/
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Publish
+publish/

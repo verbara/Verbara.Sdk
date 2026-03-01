@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Asterisk.NetAot.Ami\Asterisk.NetAot.Ami.csproj" />
+    <ProjectReference Include="..\..\src\Asterisk.NetAot.Agi\Asterisk.NetAot.Agi.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+
+</Project>

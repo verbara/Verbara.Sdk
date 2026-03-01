@@ -1,0 +1,55 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningLevel>9999</WarningLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <!-- Suppress CS1591 (missing XML comment) during initial development -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <!-- Native AOT readiness -->
+  <PropertyGroup>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+  </PropertyGroup>
+
+  <!-- Package metadata -->
+  <PropertyGroup>
+    <Authors>Asterisk.NetAot Contributors</Authors>
+    <Company>Asterisk.NetAot</Company>
+    <Product>Asterisk.NetAot</Product>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- Source projects: output to src/ -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('src'))">
+    <RootNamespace>$(MSBuildProjectName)</RootNamespace>
+    <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <!-- Test projects -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('Tests'))">
+    <IsPackable>false</IsPackable>
+    <IsAotCompatible>false</IsAotCompatible>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!-- Example projects -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('Examples'))">
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+</Project>
