@@ -50,19 +50,26 @@ public abstract class ManagerAction
 /// Base class for all AMI manager events.
 /// Concrete events are source-generated for AOT compatibility.
 /// </summary>
-public abstract class ManagerEvent
+public class ManagerEvent
 {
     public string? Privilege { get; set; }
     public string? UniqueId { get; set; }
     public double? Timestamp { get; set; }
+    public string? EventType { get; set; }
+
+    /// <summary>Raw fields from the AMI message.</summary>
+    public IReadOnlyDictionary<string, string>? RawFields { get; set; }
 }
 
 /// <summary>
 /// Base class for all AMI manager responses.
 /// </summary>
-public abstract class ManagerResponse
+public class ManagerResponse
 {
     public string? ActionId { get; set; }
     public string? Response { get; set; }
     public string? Message { get; set; }
+
+    /// <summary>Raw fields from the AMI message.</summary>
+    public IReadOnlyDictionary<string, string>? RawFields { get; set; }
 }
