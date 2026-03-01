@@ -1,12 +1,9 @@
 namespace Asterisk.Sdk.Agi.Commands;
 
-/// <summary>AGI command: SET PRIORITY</summary>
+/// <summary>AGI command: SET PRIORITY priority</summary>
 public sealed class SetPriorityCommand : AgiCommandBase
 {
     public string? Priority { get; set; }
-    public override string BuildCommand()
-    {
-        // TODO: Build full command string with parameters
-        return "SET PRIORITY";
-    }
+
+    public override string BuildCommand() => $"SET PRIORITY {Priority}";
 }
