@@ -23,15 +23,15 @@
 
   <!-- Package metadata -->
   <PropertyGroup>
-    <Authors>Asterisk.NetAot Contributors</Authors>
-    <Company>Asterisk.NetAot</Company>
-    <Product>Asterisk.NetAot</Product>
+    <Authors>Asterisk.Sdk Contributors</Authors>
+    <Company>Asterisk.Sdk</Company>
+    <Product>Asterisk.Sdk</Product>
     <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/asterisk-netaot/Asterisk.NetAot</RepositoryUrl>
+    <RepositoryUrl>https://github.com/asterisk-sdk/Asterisk.Sdk</RepositoryUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageTags>asterisk;ami;agi;ari;voip;pbx;telephony;native-aot</PackageTags>
-    <PackageVersion>1.0.0-preview.1</PackageVersion>
+    <PackageTags>asterisk;ami;agi;ari;voip;pbx;telephony;native-aot;sdk</PackageTags>
+    <PackageVersion>0.1.0-beta.1</PackageVersion>
   </PropertyGroup>
 
   <!-- Source projects: output to src/ -->

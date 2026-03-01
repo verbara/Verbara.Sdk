@@ -1,0 +1,30 @@
+<Solution>
+  <Folder Name="/Examples/">
+    <Project Path="Examples/AriStasisExample/AriStasisExample.csproj" />
+    <Project Path="Examples/BasicAmiExample/BasicAmiExample.csproj" />
+    <Project Path="Examples/FastAgiServerExample/FastAgiServerExample.csproj" />
+    <Project Path="Examples/LiveApiExample/LiveApiExample.csproj" />
+    <Project Path="Examples/PbxActivitiesExample/PbxActivitiesExample.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Asterisk.Sdk.Agi/Asterisk.Sdk.Agi.csproj" />
+    <Project Path="src/Asterisk.Sdk.Ami.SourceGenerators/Asterisk.Sdk.Ami.SourceGenerators.csproj" />
+    <Project Path="src/Asterisk.Sdk.Ami/Asterisk.Sdk.Ami.csproj" />
+    <Project Path="src/Asterisk.Sdk.Ari/Asterisk.Sdk.Ari.csproj" />
+    <Project Path="src/Asterisk.Sdk.Config/Asterisk.Sdk.Config.csproj" />
+    <Project Path="src/Asterisk.Sdk.Live/Asterisk.Sdk.Live.csproj" />
+    <Project Path="src/Asterisk.Sdk.Activities/Asterisk.Sdk.Activities.csproj" />
+    <Project Path="src/Asterisk.Sdk/Asterisk.Sdk.csproj" />
+    <Project Path="src/Asterisk.Sdk.Hosting/Asterisk.Sdk.Hosting.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/Asterisk.Sdk.Agi.Tests/Asterisk.Sdk.Agi.Tests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.Ami.Tests/Asterisk.Sdk.Ami.Tests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.Ari.Tests/Asterisk.Sdk.Ari.Tests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.Benchmarks/Asterisk.Sdk.Benchmarks.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.Config.Tests/Asterisk.Sdk.Config.Tests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.IntegrationTests/Asterisk.Sdk.IntegrationTests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.Live.Tests/Asterisk.Sdk.Live.Tests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.Activities.Tests/Asterisk.Sdk.Activities.Tests.csproj" />
+  </Folder>
+</Solution>
