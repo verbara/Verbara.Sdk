@@ -1,0 +1,30 @@
+<Solution>
+  <Folder Name="/Examples/">
+    <Project Path="Examples/AriStasisExample/AriStasisExample.csproj" />
+    <Project Path="Examples/BasicAmiExample/BasicAmiExample.csproj" />
+    <Project Path="Examples/FastAgiServerExample/FastAgiServerExample.csproj" />
+    <Project Path="Examples/LiveApiExample/LiveApiExample.csproj" />
+    <Project Path="Examples/PbxActivitiesExample/PbxActivitiesExample.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Asterisk.NetAot.Abstractions/Asterisk.NetAot.Abstractions.csproj" />
+    <Project Path="src/Asterisk.NetAot.Agi/Asterisk.NetAot.Agi.csproj" />
+    <Project Path="src/Asterisk.NetAot.Ami.SourceGenerators/Asterisk.NetAot.Ami.SourceGenerators.csproj" />
+    <Project Path="src/Asterisk.NetAot.Ami/Asterisk.NetAot.Ami.csproj" />
+    <Project Path="src/Asterisk.NetAot.Ari/Asterisk.NetAot.Ari.csproj" />
+    <Project Path="src/Asterisk.NetAot.Config/Asterisk.NetAot.Config.csproj" />
+    <Project Path="src/Asterisk.NetAot.Live/Asterisk.NetAot.Live.csproj" />
+    <Project Path="src/Asterisk.NetAot.Pbx/Asterisk.NetAot.Pbx.csproj" />
+    <Project Path="src/Asterisk.NetAot/Asterisk.NetAot.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/Asterisk.NetAot.Agi.Tests/Asterisk.NetAot.Agi.Tests.csproj" />
+    <Project Path="Tests/Asterisk.NetAot.Ami.Tests/Asterisk.NetAot.Ami.Tests.csproj" />
+    <Project Path="Tests/Asterisk.NetAot.Ari.Tests/Asterisk.NetAot.Ari.Tests.csproj" />
+    <Project Path="Tests/Asterisk.NetAot.Benchmarks/Asterisk.NetAot.Benchmarks.csproj" />
+    <Project Path="Tests/Asterisk.NetAot.Config.Tests/Asterisk.NetAot.Config.Tests.csproj" />
+    <Project Path="Tests/Asterisk.NetAot.IntegrationTests/Asterisk.NetAot.IntegrationTests.csproj" />
+    <Project Path="Tests/Asterisk.NetAot.Live.Tests/Asterisk.NetAot.Live.Tests.csproj" />
+    <Project Path="Tests/Asterisk.NetAot.Pbx.Tests/Asterisk.NetAot.Pbx.Tests.csproj" />
+  </Folder>
+</Solution>

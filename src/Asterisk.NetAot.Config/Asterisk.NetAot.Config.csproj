@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Asterisk configuration file parser - sip.conf, extensions.conf, dialplan parsing</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Asterisk.NetAot.Abstractions\Asterisk.NetAot.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

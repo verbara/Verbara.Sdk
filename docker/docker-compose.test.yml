@@ -1,0 +1,28 @@
+services:
+  asterisk:
+    image: andrius/asterisk:20-alpine
+    ports:
+      - "5038:5038"   # AMI
+      - "4573:4573"   # FastAGI
+      - "8088:8088"   # ARI HTTP
+      - "8089:8089"   # ARI WebSocket
+    volumes:
+      - ./test-config:/etc/asterisk
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show version"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  tests:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.test
+    depends_on:
+      asterisk:
+        condition: service_healthy
+    environment:
+      - ASTERISK_HOST=asterisk
+      - ASTERISK_AMI_PORT=5038
+      - ASTERISK_AGI_PORT=4573
+      - ASTERISK_ARI_PORT=8088
