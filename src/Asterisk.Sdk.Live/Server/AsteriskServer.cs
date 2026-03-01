@@ -35,7 +35,7 @@ internal static partial class AsteriskServerLog
 /// Listens to AMI events and maintains live domain objects:
 /// channels, queues, agents, and conference rooms.
 /// </summary>
-public sealed class AsteriskServer : IAsyncDisposable
+public sealed class AsteriskServer : IAsteriskServer
 {
     private readonly IAmiConnection _connection;
     private readonly ILogger<AsteriskServer> _logger;
@@ -63,10 +63,10 @@ public sealed class AsteriskServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Initialize state by subscribing to AMI events.
+    /// Initialize state by subscribing to AMI events and loading current state.
     /// Call this after the AMI connection is established.
     /// </summary>
-    public void StartTracking()
+    public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         _subscription = _connection.Subscribe(new EventObserver(this));
         _connection.Reconnected += OnReconnected;
@@ -87,6 +87,8 @@ public sealed class AsteriskServer : IAsyncDisposable
         LiveMetrics.Meter.CreateObservableGauge("live.agents.paused",
             () => Agents.Agents.Count(a => a.State == AgentState.Paused),
             description: "Agents in Paused state");
+
+        await RequestInitialStateAsync(cancellationToken);
     }
 
     private async void OnReconnected()
@@ -190,7 +192,7 @@ public sealed class AsteriskServer : IAsyncDisposable
             Priority = priority,
             CallerId = callerId,
             Timeout = timeout.HasValue ? (long)timeout.Value.TotalMilliseconds : 30000,
-            Async = true
+            IsAsync = true
         };
 
         await foreach (var evt in _connection.SendEventGeneratingActionAsync(action, cancellationToken))

@@ -71,7 +71,7 @@ public class AmiConnectionIntegrationTests : IClassFixture<AsteriskFixture>, IAs
             Context = "default",
             Exten = "100",
             Priority = 1,
-            Async = true,
+            IsAsync = true,
             Timeout = 5000
         });
 

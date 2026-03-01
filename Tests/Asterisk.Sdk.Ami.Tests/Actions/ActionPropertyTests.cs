@@ -50,7 +50,7 @@ public class ActionPropertyTests
             Priority = 1,
             CallerId = "Test <1234>",
             Timeout = 30000,
-            Async = true,
+            IsAsync = true,
             Application = "Dial",
             Data = "SIP/3000"
         };
@@ -61,7 +61,7 @@ public class ActionPropertyTests
         action.Priority.Should().Be(1);
         action.CallerId.Should().Be("Test <1234>");
         action.Timeout.Should().Be(30000);
-        action.Async.Should().BeTrue();
+        action.IsAsync.Should().BeTrue();
         action.Application.Should().Be("Dial");
         action.Data.Should().Be("SIP/3000");
     }

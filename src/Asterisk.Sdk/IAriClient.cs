@@ -58,12 +58,28 @@ public interface IAriBridgesResource
     ValueTask RemoveChannelAsync(string bridgeId, string channelId, CancellationToken cancellationToken = default);
 }
 
+/// <summary>ARI channel state.</summary>
+public enum AriChannelState
+{
+    Down,
+    Rsrvd,
+    OffHook,
+    Dialing,
+    Ring,
+    Ringing,
+    Up,
+    Busy,
+    DialingOffhook,
+    PreRing,
+    Unknown
+}
+
 /// <summary>ARI channel model.</summary>
 public sealed class AriChannel
 {
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
-    public string State { get; set; } = string.Empty;
+    public AriChannelState State { get; set; } = AriChannelState.Unknown;
 }
 
 /// <summary>ARI bridge model.</summary>
@@ -72,5 +88,5 @@ public sealed class AriBridge
     public string Id { get; set; } = string.Empty;
     public string Technology { get; set; } = string.Empty;
     public string BridgeType { get; set; } = string.Empty;
-    public List<string> Channels { get; set; } = [];
+    public IReadOnlyList<string> Channels { get; set; } = [];
 }

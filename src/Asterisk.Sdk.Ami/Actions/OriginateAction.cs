@@ -16,7 +16,8 @@ public sealed class OriginateAction : ManagerAction, IEventGeneratingAction
     public string? Application { get; set; }
     public string? Data { get; set; }
     public long? Timeout { get; set; }
-    public bool? Async { get; set; }
+    [AsteriskMapping("Async")]
+    public bool? IsAsync { get; set; }
     public bool? EarlyMedia { get; set; }
     public string? Codecs { get; set; }
     public string? ChannelId { get; set; }

@@ -55,8 +55,7 @@ public sealed class AsteriskServerPool : IAsyncDisposable
         server.Agents.AgentLoggedIn += a => _agentRouting[a.AgentId] = serverId;
         server.Agents.AgentLoggedOff += a => _agentRouting.TryRemove(a.AgentId, out _);
 
-        server.StartTracking();
-        await server.RequestInitialStateAsync(cancellationToken);
+        await server.StartAsync(cancellationToken);
 
         // Index existing agents after initial state load
         foreach (var agent in server.Agents.Agents)

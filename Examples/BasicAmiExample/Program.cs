@@ -7,7 +7,7 @@ Console.WriteLine("===================================");
 
 // TODO: Configure and connect to AMI
 // var services = new ServiceCollection();
-// services.AddAsteriskNetAot(options =>
+// services.AddAsterisk(options =>
 // {
 //     options.Ami.Hostname = "192.168.1.100";
 //     options.Ami.Port = 5038;
