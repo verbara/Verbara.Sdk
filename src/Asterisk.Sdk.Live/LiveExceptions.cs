@@ -1,7 +1,9 @@
+using Asterisk.Sdk;
+
 namespace Asterisk.Sdk.Live;
 
 public class LiveException(string message, Exception? inner = null)
-    : Exception(message, inner);
+    : AsteriskException(message, inner);
 
 public class AmiCommunicationException(string message, Exception? inner = null)
     : LiveException(message, inner);

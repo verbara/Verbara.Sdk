@@ -1,7 +1,9 @@
+using Asterisk.Sdk;
+
 namespace Asterisk.Sdk.Agi.Server;
 
 public class AgiException(string message, Exception? innerException = null)
-    : Exception(message, innerException);
+    : AsteriskException(message, innerException);
 
 public class AgiHangupException(string message = "Channel hung up")
     : AgiException(message);
