@@ -14,7 +14,7 @@ public class ServiceRegistrationTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddAsteriskNetAot(options =>
+        services.AddAsterisk(options =>
         {
             options.Ami.Hostname = "localhost";
             options.Ami.Username = "admin";

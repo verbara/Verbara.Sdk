@@ -11,19 +11,19 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace Asterisk.Sdk.Hosting;
 
 /// <summary>
-/// Extension methods for registering Asterisk.Sdk services in the DI container.
+/// Extension methods for registering Asterisk SDK services in the DI container.
 /// </summary>
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Add all Asterisk.Sdk services (AMI, AGI, ARI, Live, PBX) to the service collection.
+    /// Add all Asterisk SDK services (AMI, AGI, ARI, Live) to the service collection.
     /// Configures a single Asterisk server connection.
     /// </summary>
-    public static IServiceCollection AddAsteriskNetAot(
+    public static IServiceCollection AddAsterisk(
         this IServiceCollection services,
-        Action<AsteriskNetAotOptions> configure)
+        Action<AsteriskOptions> configure)
     {
-        var options = new AsteriskNetAotOptions();
+        var options = new AsteriskOptions();
         configure(options);
 
         // Transport
@@ -55,6 +55,7 @@ public static class ServiceCollectionExtensions
 
         // Live
         services.TryAddSingleton<AsteriskServer>();
+        services.TryAddSingleton<IAsteriskServer>(sp => sp.GetRequiredService<AsteriskServer>());
 
         // ARI
         if (options.Ari is not null)
@@ -73,10 +74,10 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Register Asterisk.Sdk with multi-server support.
+    /// Register Asterisk SDK with multi-server support.
     /// Use <see cref="AsteriskServerPool"/> to add and manage multiple Asterisk server connections.
     /// </summary>
-    public static IServiceCollection AddAsteriskNetAotMultiServer(
+    public static IServiceCollection AddAsteriskMultiServer(
         this IServiceCollection services)
     {
         services.TryAddSingleton<ISocketConnectionFactory, PipelineSocketConnectionFactory>();
@@ -87,9 +88,9 @@ public static class ServiceCollectionExtensions
 }
 
 /// <summary>
-/// Top-level configuration for all Asterisk.Sdk services.
+/// Top-level configuration for all Asterisk SDK services.
 /// </summary>
-public sealed class AsteriskNetAotOptions
+public sealed class AsteriskOptions
 {
     public AmiConnectionOptions Ami { get; set; } = new();
     public AriClientOptions? Ari { get; set; }

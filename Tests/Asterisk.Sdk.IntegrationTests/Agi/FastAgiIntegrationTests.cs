@@ -52,7 +52,7 @@ public class FastAgiIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncLif
             Context = "default",
             Exten = "200",
             Priority = 1,
-            Async = true,
+            IsAsync = true,
             Timeout = 10000
         });
 
@@ -78,7 +78,7 @@ public class FastAgiIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncLif
             Context = "default",
             Exten = "200",
             Priority = 1,
-            Async = true,
+            IsAsync = true,
             Timeout = 10000
         });
 

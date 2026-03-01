@@ -18,7 +18,7 @@ public class AriJsonBenchmark
     [GlobalSetup]
     public void Setup()
     {
-        _channel = new AriChannel { Id = "1234567890.1", Name = "PJSIP/2000-00000001", State = "Up" };
+        _channel = new AriChannel { Id = "1234567890.1", Name = "PJSIP/2000-00000001", State = AriChannelState.Up };
         _bridge = new AriBridge
         {
             Id = "bridge-1",
@@ -31,7 +31,7 @@ public class AriJsonBenchmark
         _bridgeJson = JsonSerializer.Serialize(_bridge, AriJsonContext.Default.AriBridge);
 
         var channels = Enumerable.Range(0, 100).Select(i =>
-            new AriChannel { Id = $"{i}.1", Name = $"PJSIP/200{i}-{i:D8}", State = "Up" }).ToArray();
+            new AriChannel { Id = $"{i}.1", Name = $"PJSIP/200{i}-{i:D8}", State = AriChannelState.Up }).ToArray();
         _channelArrayJson = JsonSerializer.Serialize(channels, AriJsonContext.Default.AriChannelArray);
     }
 

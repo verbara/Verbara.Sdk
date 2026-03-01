@@ -17,7 +17,7 @@ public class AriModelTests
         channel.Should().NotBeNull();
         channel!.Id.Should().Be("ch-001");
         channel.Name.Should().Be("PJSIP/2000-00000001");
-        channel.State.Should().Be("Up");
+        channel.State.Should().Be(AriChannelState.Up);
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public class AriModelTests
     [Fact]
     public void AriChannel_ShouldSerializeToJson()
     {
-        var channel = new AriChannel { Id = "test-1", Name = "SIP/100", State = "Ring" };
+        var channel = new AriChannel { Id = "test-1", Name = "SIP/100", State = AriChannelState.Ring };
 
         var json = JsonSerializer.Serialize(channel, AriJsonContext.Default.AriChannel);
 
