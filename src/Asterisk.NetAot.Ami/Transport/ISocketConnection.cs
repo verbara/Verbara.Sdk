@@ -19,6 +19,18 @@ public interface ISocketConnection : IAsyncDisposable
     /// <summary>Connect to the remote host.</summary>
     ValueTask ConnectAsync(string hostname, int port, bool useSsl = false, CancellationToken cancellationToken = default);
 
-    /// <summary>Close the connection.</summary>
+    /// <summary>Close the connection gracefully.</summary>
     ValueTask CloseAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Factory for creating socket connections. Enables DI and testability.
+/// </summary>
+public interface ISocketConnectionFactory
+{
+    /// <summary>Create a new unconnected socket connection.</summary>
+    ISocketConnection Create();
+
+    /// <summary>Wrap an existing stream as a socket connection (for accepted TCP connections).</summary>
+    ISocketConnection FromStream(Stream stream);
 }
