@@ -55,7 +55,12 @@ public sealed class PipelineSocketConnection : ISocketConnection
         _stream = stream;
 
         var pipeOptions = new PipeOptions(
+            pool: MemoryPool<byte>.Shared,
             minimumSegmentSize: MinimumBufferSize,
+            pauseWriterThreshold: 1024 * 1024,
+            resumeWriterThreshold: 512 * 1024,
+            readerScheduler: PipeScheduler.Inline,
+            writerScheduler: PipeScheduler.Inline,
             useSynchronizationContext: false);
 
         _inputPipe = new Pipe(pipeOptions);
@@ -212,7 +217,12 @@ public sealed class PipelineSocketConnection : ISocketConnection
         var conn = new PipelineSocketConnection { _stream = stream };
 
         var pipeOptions = new PipeOptions(
+            pool: MemoryPool<byte>.Shared,
             minimumSegmentSize: MinimumBufferSize,
+            pauseWriterThreshold: 1024 * 1024,
+            resumeWriterThreshold: 512 * 1024,
+            readerScheduler: PipeScheduler.Inline,
+            writerScheduler: PipeScheduler.Inline,
             useSynchronizationContext: false);
 
         conn._inputPipe = new Pipe(pipeOptions);

@@ -5,6 +5,7 @@ namespace Asterisk.NetAot.Live.Agents;
 
 /// <summary>
 /// Tracks Asterisk agents in real-time from AMI events.
+/// All state mutations are protected by per-entity locks for atomic updates.
 /// </summary>
 public sealed class AgentManager
 {
@@ -17,7 +18,9 @@ public sealed class AgentManager
 
     public AgentManager(ILogger logger) => _logger = logger;
 
-    public IReadOnlyCollection<AsteriskAgent> Agents => _agents.Values.ToList().AsReadOnly();
+    public IEnumerable<AsteriskAgent> Agents => _agents.Values;
+
+    public int AgentCount => _agents.Count;
 
     public AsteriskAgent? GetById(string agentId) => _agents.GetValueOrDefault(agentId);
 
@@ -25,9 +28,12 @@ public sealed class AgentManager
     public void OnAgentLogin(string agentId, string? channel = null)
     {
         var agent = _agents.GetOrAdd(agentId, _ => new AsteriskAgent { AgentId = agentId });
-        agent.State = AgentState.Available;
-        agent.Channel = channel;
-        agent.LoggedInAt = DateTimeOffset.UtcNow;
+        lock (agent.SyncRoot)
+        {
+            agent.State = AgentState.Available;
+            agent.Channel = channel;
+            agent.LoggedInAt = DateTimeOffset.UtcNow;
+        }
         AgentLoggedIn?.Invoke(agent);
     }
 
@@ -36,8 +42,11 @@ public sealed class AgentManager
     {
         if (_agents.TryGetValue(agentId, out var agent))
         {
-            agent.State = AgentState.LoggedOff;
-            agent.Channel = null;
+            lock (agent.SyncRoot)
+            {
+                agent.State = AgentState.LoggedOff;
+                agent.Channel = null;
+            }
             AgentLoggedOff?.Invoke(agent);
         }
     }
@@ -47,8 +56,11 @@ public sealed class AgentManager
     {
         if (_agents.TryGetValue(agentId, out var agent))
         {
-            agent.State = AgentState.OnCall;
-            agent.TalkingTo = talkingTo;
+            lock (agent.SyncRoot)
+            {
+                agent.State = AgentState.OnCall;
+                agent.TalkingTo = talkingTo;
+            }
             AgentStateChanged?.Invoke(agent);
         }
     }
@@ -58,8 +70,11 @@ public sealed class AgentManager
     {
         if (_agents.TryGetValue(agentId, out var agent))
         {
-            agent.State = AgentState.Available;
-            agent.TalkingTo = null;
+            lock (agent.SyncRoot)
+            {
+                agent.State = AgentState.Available;
+                agent.TalkingTo = null;
+            }
             AgentStateChanged?.Invoke(agent);
         }
     }
@@ -69,10 +84,21 @@ public sealed class AgentManager
     {
         if (_agents.TryGetValue(agentId, out var agent))
         {
-            agent.State = paused ? AgentState.Paused : AgentState.Available;
+            lock (agent.SyncRoot)
+            {
+                agent.State = paused ? AgentState.Paused : AgentState.Available;
+            }
             AgentStateChanged?.Invoke(agent);
         }
     }
+
+    /// <summary>Get agents filtered by state (lazy, zero-alloc).</summary>
+    public IEnumerable<AsteriskAgent> GetAgentsByState(AgentState state) =>
+        _agents.Values.Where(a => a.State == state);
+
+    /// <summary>Get agents matching a predicate (lazy, zero-alloc).</summary>
+    public IEnumerable<AsteriskAgent> GetAgentsWhere(Func<AsteriskAgent, bool> predicate) =>
+        _agents.Values.Where(predicate);
 
     public void Clear() => _agents.Clear();
 }
@@ -80,6 +106,8 @@ public sealed class AgentManager
 /// <summary>Represents a live Asterisk agent.</summary>
 public sealed class AsteriskAgent : LiveObjectBase
 {
+    internal readonly Lock SyncRoot = new();
+
     public override string Id => AgentId;
     public string AgentId { get; init; } = string.Empty;
     public string? Name { get; set; }

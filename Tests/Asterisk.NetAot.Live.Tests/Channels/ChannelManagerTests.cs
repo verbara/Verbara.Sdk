@@ -14,7 +14,7 @@ public class ChannelManagerTests
     {
         _sut.OnNewChannel("123.1", "PJSIP/2000-001", ChannelState.Ringing, "5551234", "John");
 
-        _sut.ActiveChannels.Should().HaveCount(1);
+        _sut.ChannelCount.Should().Be(1);
         var ch = _sut.GetByUniqueId("123.1");
         ch.Should().NotBeNull();
         ch!.Name.Should().Be("PJSIP/2000-001");
@@ -86,5 +86,33 @@ public class ChannelManagerTests
 
         _sut.OnHangup("123.1");
         removed.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void GetByName_ShouldReturnChannel()
+    {
+        _sut.OnNewChannel("123.1", "PJSIP/2000-001", ChannelState.Up);
+
+        _sut.GetByName("PJSIP/2000-001").Should().NotBeNull();
+        _sut.GetByName("PJSIP/2000-001")!.UniqueId.Should().Be("123.1");
+    }
+
+    [Fact]
+    public void GetByName_ShouldTrackRenames()
+    {
+        _sut.OnNewChannel("123.1", "PJSIP/2000-001", ChannelState.Up);
+        _sut.OnRename("123.1", "PJSIP/2000-001<MASQ>");
+
+        _sut.GetByName("PJSIP/2000-001").Should().BeNull();
+        _sut.GetByName("PJSIP/2000-001<MASQ>").Should().NotBeNull();
+    }
+
+    [Fact]
+    public void GetByName_ShouldReturnNull_AfterHangup()
+    {
+        _sut.OnNewChannel("123.1", "PJSIP/2000-001", ChannelState.Up);
+        _sut.OnHangup("123.1");
+
+        _sut.GetByName("PJSIP/2000-001").Should().BeNull();
     }
 }

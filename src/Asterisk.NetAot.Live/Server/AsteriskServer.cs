@@ -5,6 +5,7 @@ using Asterisk.NetAot.Ami.Events;
 using Asterisk.NetAot.Ami.Events.Base;
 using Asterisk.NetAot.Live.Agents;
 using Asterisk.NetAot.Live.Channels;
+using Asterisk.NetAot.Live.Diagnostics;
 using Asterisk.NetAot.Live.MeetMe;
 using Asterisk.NetAot.Live.Queues;
 using Microsoft.Extensions.Logging;
@@ -15,6 +16,18 @@ internal static partial class AsteriskServerLog
 {
     [LoggerMessage(Level = LogLevel.Information, Message = "Initial state loaded: {Channels} channels, {Queues} queues, {Agents} agents")]
     public static partial void InitialStateLoaded(ILogger logger, int channels, int queues, int agents);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "AMI connection error in Live API tracking")]
+    public static partial void ConnectionError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "AMI connection closed, Live API tracking stopped")]
+    public static partial void ConnectionClosed(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "AMI reconnected, reloading Live API state")]
+    public static partial void Reconnected(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to reload state after AMI reconnection")]
+    public static partial void ReconnectReloadFailed(ILogger logger, Exception exception);
 }
 
 /// <summary>
@@ -32,6 +45,9 @@ public sealed class AsteriskServer : IAsyncDisposable
     public QueueManager Queues { get; }
     public AgentManager Agents { get; }
     public MeetMeManager MeetMe { get; }
+
+    /// <summary>Fired when the AMI connection is lost or completed.</summary>
+    public event Action<Exception?>? ConnectionLost;
 
     /// <summary>The Asterisk version string.</summary>
     public string? AsteriskVersion => _connection.AsteriskVersion;
@@ -53,6 +69,49 @@ public sealed class AsteriskServer : IAsyncDisposable
     public void StartTracking()
     {
         _subscription = _connection.Subscribe(new EventObserver(this));
+        _connection.Reconnected += OnReconnected;
+
+        // Register observable gauges for live state
+        LiveMetrics.Meter.CreateObservableGauge("live.channels.active",
+            () => Channels.ChannelCount, description: "Active channels");
+        LiveMetrics.Meter.CreateObservableGauge("live.queues.count",
+            () => Queues.QueueCount, description: "Configured queues");
+        LiveMetrics.Meter.CreateObservableGauge("live.agents.total",
+            () => Agents.AgentCount, description: "Total tracked agents");
+        LiveMetrics.Meter.CreateObservableGauge("live.agents.available",
+            () => Agents.Agents.Count(a => a.State == AgentState.Available),
+            description: "Agents in Available state");
+        LiveMetrics.Meter.CreateObservableGauge("live.agents.on_call",
+            () => Agents.Agents.Count(a => a.State == AgentState.OnCall),
+            description: "Agents currently on a call");
+        LiveMetrics.Meter.CreateObservableGauge("live.agents.paused",
+            () => Agents.Agents.Count(a => a.State == AgentState.Paused),
+            description: "Agents in Paused state");
+    }
+
+    private async void OnReconnected()
+    {
+        try
+        {
+            AsteriskServerLog.Reconnected(_logger);
+
+            // Clear stale state from all managers
+            Channels.Clear();
+            Queues.Clear();
+            Agents.Clear();
+            MeetMe.Clear();
+
+            // Re-subscribe observer (the connection is new after reconnect)
+            _subscription?.Dispose();
+            _subscription = _connection.Subscribe(new EventObserver(this));
+
+            // Reload fresh state from Asterisk
+            await RequestInitialStateAsync();
+        }
+        catch (Exception ex)
+        {
+            AsteriskServerLog.ReconnectReloadFailed(_logger, ex);
+        }
     }
 
     /// <summary>
@@ -112,7 +171,7 @@ public sealed class AsteriskServer : IAsyncDisposable
             }
         }
 
-        AsteriskServerLog.InitialStateLoaded(_logger, Channels.ActiveChannels.Count, Queues.Queues.Count, Agents.Agents.Count);
+        AsteriskServerLog.InitialStateLoaded(_logger, Channels.ChannelCount, Queues.QueueCount, Agents.AgentCount);
     }
 
     /// <summary>
@@ -153,6 +212,7 @@ public sealed class AsteriskServer : IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
+        _connection.Reconnected -= OnReconnected;
         _subscription?.Dispose();
         return ValueTask.CompletedTask;
     }
@@ -214,6 +274,29 @@ public sealed class AsteriskServer : IAsyncDisposable
                         qmr.Interface ?? "");
                     break;
 
+                case QueueMemberPausedEvent qmp:
+                    server.Queues.OnMemberPaused(
+                        qmp.Queue ?? "",
+                        qmp.Interface ?? "",
+                        qmp.Paused ?? false,
+                        qmp.Reason);
+                    break;
+
+                case QueueMemberStatusEvent qms:
+                    server.Queues.OnMemberStatusChanged(
+                        qms.RawFields?.GetValueOrDefault("Queue") ?? "",
+                        qms.RawFields?.GetValueOrDefault("Interface") ?? "",
+                        qms.Wrapuptime ?? 0);
+                    break;
+
+                case QueueMemberPauseEvent qmpe:
+                    server.Queues.OnMemberPaused(
+                        qmpe.RawFields?.GetValueOrDefault("Queue") ?? "",
+                        qmpe.RawFields?.GetValueOrDefault("Interface") ?? "",
+                        qmpe.RawFields?.GetValueOrDefault("Paused") == "1",
+                        qmpe.Pausedreason);
+                    break;
+
                 case QueueCallerJoinEvent qcj:
                     server.Queues.OnCallerJoined(
                         qcj.RawFields?.GetValueOrDefault("Queue") ?? "",
@@ -264,8 +347,17 @@ public sealed class AsteriskServer : IAsyncDisposable
             }
         }
 
-        public void OnError(Exception error) { }
-        public void OnCompleted() { }
+        public void OnError(Exception error)
+        {
+            AsteriskServerLog.ConnectionError(server._logger, error);
+            server.ConnectionLost?.Invoke(error);
+        }
+
+        public void OnCompleted()
+        {
+            AsteriskServerLog.ConnectionClosed(server._logger);
+            server.ConnectionLost?.Invoke(null);
+        }
     }
 }
 

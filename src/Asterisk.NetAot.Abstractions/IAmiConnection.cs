@@ -33,6 +33,9 @@ public interface IAmiConnection : IAsyncDisposable
     /// <summary>Event raised when an AMI event is received.</summary>
     event Func<ManagerEvent, ValueTask>? OnEvent;
 
+    /// <summary>Fired after a successful automatic reconnection.</summary>
+    event Action? Reconnected;
+
     /// <summary>Gracefully disconnect from the AMI.</summary>
     ValueTask DisconnectAsync(CancellationToken cancellationToken = default);
 }

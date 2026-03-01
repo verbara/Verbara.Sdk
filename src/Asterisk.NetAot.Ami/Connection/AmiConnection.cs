@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using Asterisk.NetAot.Abstractions;
 using Asterisk.NetAot.Abstractions.Enums;
+using Asterisk.NetAot.Ami.Diagnostics;
 using Asterisk.NetAot.Ami.Generated;
 using Asterisk.NetAot.Ami.Internal;
 using Asterisk.NetAot.Ami.Transport;
@@ -31,6 +33,9 @@ internal static partial class AmiConnectionLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "AMI reader loop error")]
     public static partial void ReaderError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "AMI event dropped (buffer full): {EventType}")]
+    public static partial void EventDropped(ILogger logger, string? eventType);
 }
 
 /// <summary>
@@ -57,7 +62,8 @@ public sealed class AmiConnection : IAmiConnection
     private long _actionIdCounter;
     private readonly ConcurrentDictionary<string, TaskCompletionSource<AmiMessage>> _pendingActions = new();
     private readonly ConcurrentDictionary<string, ResponseEventCollector> _pendingEventActions = new();
-    private readonly List<IObserver<ManagerEvent>> _observers = [];
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
+    private volatile IObserver<ManagerEvent>[] _observers = [];
     private readonly Lock _observerLock = new();
 
     private volatile AmiConnectionState _state = AmiConnectionState.Initial;
@@ -68,6 +74,7 @@ public sealed class AmiConnection : IAmiConnection
 #pragma warning disable CS0067
     public event Func<ManagerEvent, ValueTask>? OnEvent;
 #pragma warning restore CS0067
+    public event Action? Reconnected;
 
     public AmiConnection(IOptions<AmiConnectionOptions> options, ISocketConnectionFactory socketFactory, ILogger<AmiConnection> logger)
     {
@@ -105,9 +112,20 @@ public sealed class AmiConnection : IAmiConnection
         _state = AmiConnectionState.Connected;
 
         // Start event pump and reader loop
-        _eventPump = new AsyncEventPump();
+        _eventPump = new AsyncEventPump(_options.EventPumpCapacity);
+        _eventPump.OnEventDropped = evt =>
+        {
+            AmiMetrics.EventsDropped.Add(1);
+            AmiConnectionLog.EventDropped(_logger, evt.EventType);
+        };
         _eventPump.Start(DispatchEventAsync);
         _readerLoop = Task.Run(() => ReaderLoopAsync(_cts.Token), CancellationToken.None);
+
+        // Register observable gauges for this connection
+        AmiMetrics.Meter.CreateObservableGauge("ami.event_pump.pending",
+            () => _eventPump?.PendingCount ?? 0, description: "Events pending in the event pump buffer");
+        AmiMetrics.Meter.CreateObservableGauge("ami.pending_actions",
+            () => _pendingActions.Count, description: "Actions awaiting response");
 
         AmiConnectionLog.Connected(_logger, _options.Hostname, _options.Port, AsteriskVersion);
     }
@@ -213,12 +231,15 @@ public sealed class AmiConnection : IAmiConnection
             var actionName = GeneratedActionSerializer.GetActionName(action);
             var fields = GeneratedActionSerializer.Serialize(action);
 
-            await _writer!.WriteActionAsync(actionName, actionId, fields, cancellationToken);
+            await WriteActionLockedAsync(actionName, actionId, fields, cancellationToken);
+            AmiMetrics.ActionsSent.Add(1);
 
             using var timeout = new CancellationTokenSource(_options.DefaultResponseTimeout);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
 
+            var sw = Stopwatch.GetTimestamp();
             var responseMsg = await tcs.Task.WaitAsync(linked.Token);
+            AmiMetrics.ActionRoundtripMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
 
             // Use source-generated deserializer for typed response mapping
             return GeneratedResponseDeserializer.Deserialize(responseMsg, actionName);
@@ -245,12 +266,15 @@ public sealed class AmiConnection : IAmiConnection
             var actionName = GeneratedActionSerializer.GetActionName(action);
             var fields = GeneratedActionSerializer.Serialize(action);
 
-            await _writer!.WriteActionAsync(actionName, actionId, fields, cancellationToken);
+            await WriteActionLockedAsync(actionName, actionId, fields, cancellationToken);
+            AmiMetrics.ActionsSent.Add(1);
 
             using var timeout = new CancellationTokenSource(_options.DefaultResponseTimeout);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
 
+            var sw = Stopwatch.GetTimestamp();
             var responseMsg = await tcs.Task.WaitAsync(linked.Token);
+            AmiMetrics.ActionRoundtripMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
 
             // Use source-generated deserializer for full typed response
             var response = GeneratedResponseDeserializer.Deserialize(responseMsg, actionName);
@@ -278,7 +302,7 @@ public sealed class AmiConnection : IAmiConnection
             var actionName = GeneratedActionSerializer.GetActionName(action);
             var fields = GeneratedActionSerializer.Serialize(action);
 
-            await _writer!.WriteActionAsync(actionName, actionId, fields, cancellationToken);
+            await WriteActionLockedAsync(actionName, actionId, fields, cancellationToken);
 
             await foreach (var evt in collector.ReadAllAsync(cancellationToken))
             {
@@ -291,11 +315,26 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
+    /// <summary>Serialize writes to the PipeWriter to prevent interleaving from concurrent callers.</summary>
+    private async ValueTask WriteActionLockedAsync(string actionName, string actionId,
+        IEnumerable<KeyValuePair<string, string>> fields, CancellationToken cancellationToken)
+    {
+        await _writeLock.WaitAsync(cancellationToken);
+        try
+        {
+            await _writer!.WriteActionAsync(actionName, actionId, fields, cancellationToken);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
     public IDisposable Subscribe(IObserver<ManagerEvent> observer)
     {
         lock (_observerLock)
         {
-            _observers.Add(observer);
+            _observers = [.. _observers, observer];
         }
 
         return new Unsubscriber(this, observer);
@@ -312,6 +351,7 @@ public sealed class AmiConnection : IAmiConnection
 
                 if (msg.IsResponse)
                 {
+                    AmiMetrics.ResponsesReceived.Add(1);
                     AmiConnectionLog.ResponseReceived(_logger, msg.ActionId, msg.ResponseStatus);
 
                     if (msg.ActionId is not null && _pendingActions.TryRemove(msg.ActionId, out var tcs))
@@ -321,6 +361,7 @@ public sealed class AmiConnection : IAmiConnection
                 }
                 else if (msg.IsEvent)
                 {
+                    AmiMetrics.EventsReceived.Add(1);
                     AmiConnectionLog.EventReceived(_logger, msg.EventType);
 
                     // Use source-generated deserializer for typed events
@@ -378,6 +419,7 @@ public sealed class AmiConnection : IAmiConnection
             attempt++;
             var delay = attempt <= 10 ? 50 : 5000;
 
+            AmiMetrics.ReconnectionAttempts.Add(1);
             AmiConnectionLog.Reconnecting(_logger, delay, attempt);
             await Task.Delay(delay);
 
@@ -391,6 +433,7 @@ public sealed class AmiConnection : IAmiConnection
             {
                 await CleanupAsync();
                 await ConnectAsync();
+                Reconnected?.Invoke();
                 return; // Success
             }
             catch
@@ -402,12 +445,10 @@ public sealed class AmiConnection : IAmiConnection
 
     private ValueTask DispatchEventAsync(ManagerEvent evt)
     {
-        // Notify observers
-        IObserver<ManagerEvent>[] snapshot;
-        lock (_observerLock)
-        {
-            snapshot = [.. _observers];
-        }
+        var sw = Stopwatch.GetTimestamp();
+
+        // Lock-free read: volatile array reference swap is atomic
+        var snapshot = _observers;
 
         foreach (var observer in snapshot)
         {
@@ -420,6 +461,9 @@ public sealed class AmiConnection : IAmiConnection
                 // Observer errors should not crash the pump
             }
         }
+
+        AmiMetrics.EventsDispatched.Add(1);
+        AmiMetrics.EventDispatchMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
 
         // Notify event handler
         return OnEvent?.Invoke(evt) ?? ValueTask.CompletedTask;
@@ -434,7 +478,7 @@ public sealed class AmiConnection : IAmiConnection
         {
             try
             {
-                await _writer.WriteActionAsync("Logoff", NextActionId(), cancellationToken: cancellationToken);
+                await WriteActionLockedAsync("Logoff", NextActionId(), [], cancellationToken);
             }
             catch
             {
@@ -522,7 +566,7 @@ public sealed class AmiConnection : IAmiConnection
         {
             lock (connection._observerLock)
             {
-                connection._observers.Remove(observer);
+                connection._observers = connection._observers.Where(o => o != observer).ToArray();
             }
         }
     }
@@ -530,12 +574,18 @@ public sealed class AmiConnection : IAmiConnection
 
 /// <summary>
 /// Collects response events for event-generating actions.
-/// Uses System.Threading.Channels internally.
+/// Uses a bounded System.Threading.Channel to prevent unbounded memory growth.
 /// </summary>
 internal sealed class ResponseEventCollector
 {
     private readonly System.Threading.Channels.Channel<ManagerEvent> _channel =
-        System.Threading.Channels.Channel.CreateUnbounded<ManagerEvent>();
+        System.Threading.Channels.Channel.CreateBounded<ManagerEvent>(
+            new System.Threading.Channels.BoundedChannelOptions(100_000)
+            {
+                FullMode = System.Threading.Channels.BoundedChannelFullMode.DropOldest,
+                SingleReader = true,
+                SingleWriter = true
+            });
 
     public void Add(ManagerEvent evt) => _channel.Writer.TryWrite(evt);
 
