@@ -1,0 +1,17 @@
+using Asterisk.NetAot.Abstractions;
+using Asterisk.NetAot.Abstractions.Attributes;
+
+namespace Asterisk.NetAot.Ami.Actions;
+
+[AsteriskMapping("QueueAdd")]
+public sealed class QueueAddAction : ManagerAction
+{
+    public string? Queue { get; set; }
+    public string? Interface { get; set; }
+    public int? Penalty { get; set; }
+    public bool? Paused { get; set; }
+    public string? Reason { get; set; }
+    public string? MemberName { get; set; }
+    public string? StateInterface { get; set; }
+}
+
