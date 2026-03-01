@@ -65,7 +65,7 @@ public sealed class AmiProtocolReader
 
                 var lineStr = GetString(line);
 
-                // Handle multiline command response body
+                // Handle multiline command response body (after all headers are parsed)
                 if (isCommandResponse)
                 {
                     if (lineStr.StartsWith("--END COMMAND--", StringComparison.Ordinal))
@@ -89,12 +89,25 @@ public sealed class AmiProtocolReader
                     var value = lineStr[(colonIndex + 1)..].Trim();
                     fields[key] = value;
 
-                    // Detect "Response: Follows" for multiline command output
+                    // Detect "Response: Follows" — headers continue normally,
+                    // command output starts when we see a non-header line
                     if (key.Equals("Response", StringComparison.OrdinalIgnoreCase)
                         && value.Equals("Follows", StringComparison.OrdinalIgnoreCase))
                     {
-                        isCommandResponse = true;
                         commandOutput = new StringBuilder();
+                    }
+                }
+                else if (commandOutput is not null)
+                {
+                    // Non-header line in a Follows response — this is command output
+                    isCommandResponse = true;
+                    if (lineStr.StartsWith("--END COMMAND--", StringComparison.Ordinal))
+                    {
+                        isCommandResponse = false;
+                    }
+                    else
+                    {
+                        commandOutput.AppendLine(lineStr);
                     }
                 }
                 else
