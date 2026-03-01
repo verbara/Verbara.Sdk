@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Sockets;
 using Asterisk.NetAot.Abstractions;
+using Asterisk.NetAot.Agi.Mapping;
+using Asterisk.NetAot.Ami.Transport;
 using Microsoft.Extensions.Logging;
 
 namespace Asterisk.NetAot.Agi.Server;
@@ -12,24 +14,39 @@ internal static partial class FastAgiServerLog
 
     [LoggerMessage(Level = LogLevel.Information, Message = "FastAGI server stopped")]
     public static partial void ServerStopped(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "AGI connection accepted from {RemoteEndpoint}")]
+    public static partial void ConnectionAccepted(ILogger logger, string? remoteEndpoint);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "AGI script '{Script}' executing for channel {Channel}")]
+    public static partial void ScriptExecuting(ILogger logger, string? script, string? channel);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No AGI script mapped for request: {Script}")]
+    public static partial void NoScriptMapped(ILogger logger, string? script);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "AGI connection handler error")]
+    public static partial void ConnectionError(ILogger logger, Exception exception);
 }
 
 /// <summary>
-/// Async FastAGI TCP server. Accepts connections from Asterisk
-/// and dispatches them to mapped AGI scripts.
+/// Async FastAGI TCP server. Accepts connections from Asterisk,
+/// parses AGI requests, maps them to scripts and executes them.
 /// </summary>
 public sealed class FastAgiServer : IAgiServer
 {
+    private readonly IMappingStrategy _mappingStrategy;
     private readonly ILogger<FastAgiServer> _logger;
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
+    private Task? _acceptLoop;
 
     public int Port { get; }
     public bool IsRunning { get; private set; }
 
-    public FastAgiServer(int port, ILogger<FastAgiServer> logger)
+    public FastAgiServer(int port, IMappingStrategy mappingStrategy, ILogger<FastAgiServer> logger)
     {
         Port = port;
+        _mappingStrategy = mappingStrategy;
         _logger = logger;
     }
 
@@ -42,23 +59,96 @@ public sealed class FastAgiServer : IAgiServer
 
         FastAgiServerLog.ServerStarted(_logger, Port);
 
-        // TODO: Accept loop with async connection handling
+        _acceptLoop = AcceptLoopAsync(_cts.Token);
     }
 
-    public ValueTask StopAsync(CancellationToken cancellationToken = default)
+    private async Task AcceptLoopAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                var client = await _listener!.AcceptTcpClientAsync(ct);
+                client.NoDelay = true;
+
+                var endpoint = client.Client.RemoteEndPoint?.ToString();
+                FastAgiServerLog.ConnectionAccepted(_logger, endpoint);
+
+                // Handle each connection concurrently
+                _ = HandleConnectionAsync(client, ct);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal shutdown
+        }
+        catch (ObjectDisposedException)
+        {
+            // Listener stopped
+        }
+    }
+
+    private async Task HandleConnectionAsync(TcpClient client, CancellationToken ct)
+    {
+        await using var conn = PipelineSocketConnection.FromStream(client.GetStream());
+
+        try
+        {
+            var reader = new FastAgiReader(conn.Input);
+            var writer = new FastAgiWriter(conn.Output);
+
+            // Read AGI request headers
+            var request = await reader.ReadRequestAsync(ct);
+
+            FastAgiServerLog.ScriptExecuting(_logger, request.Script, request.Channel);
+
+            // Map request to script
+            var script = _mappingStrategy.Resolve(request);
+            if (script is null)
+            {
+                FastAgiServerLog.NoScriptMapped(_logger, request.Script);
+                return;
+            }
+
+            // Create channel and execute script
+            var channel = new AgiChannel(writer, reader);
+            await script.ExecuteAsync(channel, request, ct);
+        }
+        catch (AgiHangupException)
+        {
+            // Normal hangup during script execution
+        }
+        catch (OperationCanceledException)
+        {
+            // Server shutting down
+        }
+        catch (Exception ex)
+        {
+            FastAgiServerLog.ConnectionError(_logger, ex);
+        }
+    }
+
+    public async ValueTask StopAsync(CancellationToken cancellationToken = default)
     {
         _listener?.Stop();
-        _cts?.Cancel();
+
+        if (_cts is not null)
+        {
+            await _cts.CancelAsync();
+        }
+
+        if (_acceptLoop is not null)
+        {
+            await _acceptLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        }
+
         IsRunning = false;
-
         FastAgiServerLog.ServerStopped(_logger);
-        return ValueTask.CompletedTask;
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        _listener?.Stop();
+        if (IsRunning) await StopAsync();
         _cts?.Dispose();
-        return ValueTask.CompletedTask;
     }
 }
