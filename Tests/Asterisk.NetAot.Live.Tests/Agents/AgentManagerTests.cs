@@ -13,7 +13,7 @@ public class AgentManagerTests
     {
         _sut.OnAgentLogin("1001", "PJSIP/1001");
 
-        _sut.Agents.Should().HaveCount(1);
+        _sut.AgentCount.Should().Be(1);
         var agent = _sut.GetById("1001");
         agent.Should().NotBeNull();
         agent!.State.Should().Be(AgentState.Available);

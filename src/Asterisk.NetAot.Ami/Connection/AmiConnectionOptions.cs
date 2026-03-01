@@ -37,4 +37,7 @@ public sealed class AmiConnectionOptions
 
     /// <summary>Maximum reconnection attempts. 0 = unlimited. Default: 0.</summary>
     public int MaxReconnectAttempts { get; set; }
+
+    /// <summary>Event pump buffer capacity. Default: 20,000.</summary>
+    public int EventPumpCapacity { get; set; } = Internal.AsyncEventPump.DefaultCapacity;
 }

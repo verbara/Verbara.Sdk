@@ -17,6 +17,7 @@ public static class ServiceCollectionExtensions
 {
     /// <summary>
     /// Add all Asterisk.NetAot services (AMI, AGI, ARI, Live, PBX) to the service collection.
+    /// Configures a single Asterisk server connection.
     /// </summary>
     public static IServiceCollection AddAsteriskNetAot(
         this IServiceCollection services,
@@ -28,7 +29,7 @@ public static class ServiceCollectionExtensions
         // Transport
         services.TryAddSingleton<ISocketConnectionFactory, PipelineSocketConnectionFactory>();
 
-        // AMI
+        // AMI (single-server)
         services.Configure<AmiConnectionOptions>(o =>
         {
             o.Hostname = options.Ami.Hostname;
@@ -39,6 +40,9 @@ public static class ServiceCollectionExtensions
             o.AutoReconnect = options.Ami.AutoReconnect;
         });
         services.TryAddSingleton<IAmiConnection, AmiConnection>();
+
+        // AMI Factory (always available for creating additional connections)
+        services.TryAddSingleton<IAmiConnectionFactory, AmiConnectionFactory>();
 
         // AGI
         var mappingStrategy = options.AgiMappingStrategy ?? new SimpleMappingStrategy();
@@ -65,6 +69,19 @@ public static class ServiceCollectionExtensions
             services.TryAddSingleton<IAriClient, AriClient>();
         }
 
+        return services;
+    }
+
+    /// <summary>
+    /// Register Asterisk.NetAot with multi-server support.
+    /// Use <see cref="AsteriskServerPool"/> to add and manage multiple Asterisk server connections.
+    /// </summary>
+    public static IServiceCollection AddAsteriskNetAotMultiServer(
+        this IServiceCollection services)
+    {
+        services.TryAddSingleton<ISocketConnectionFactory, PipelineSocketConnectionFactory>();
+        services.TryAddSingleton<IAmiConnectionFactory, AmiConnectionFactory>();
+        services.TryAddSingleton<AsteriskServerPool>();
         return services;
     }
 }
