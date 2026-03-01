@@ -27,8 +27,11 @@
     <Company>Asterisk.NetAot</Company>
     <Product>Asterisk.NetAot</Product>
     <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/asterisk-netaot/Asterisk.NetAot</RepositoryUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>asterisk;ami;agi;ari;voip;pbx;telephony;native-aot</PackageTags>
+    <PackageVersion>1.0.0-preview.1</PackageVersion>
   </PropertyGroup>
 
   <!-- Source projects: output to src/ -->

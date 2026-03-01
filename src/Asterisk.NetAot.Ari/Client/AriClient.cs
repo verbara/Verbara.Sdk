@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Reactive.Subjects;
@@ -79,13 +80,13 @@ public sealed class AriClient : IAriClient
 
     private async Task EventLoopAsync(CancellationToken ct)
     {
-        var buffer = new byte[8192];
+        var buffer = ArrayPool<byte>.Shared.Rent(8192);
 
         try
         {
             while (!ct.IsCancellationRequested && _webSocket?.State == WebSocketState.Open)
             {
-                var result = await _webSocket.ReceiveAsync(buffer, ct);
+                var result = await _webSocket.ReceiveAsync(buffer.AsMemory(), ct);
 
                 if (result.MessageType == WebSocketMessageType.Close)
                     break;
@@ -106,6 +107,10 @@ public sealed class AriClient : IAriClient
         catch (WebSocketException ex)
         {
             AriClientLog.WebSocketError(_logger, ex);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
         }
     }
 

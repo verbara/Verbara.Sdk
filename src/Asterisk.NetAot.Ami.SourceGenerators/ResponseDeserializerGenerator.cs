@@ -10,42 +10,41 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Asterisk.NetAot.Ami.SourceGenerators;
 
 /// <summary>
-/// Source generator that creates AOT-compatible deserializers for ManagerEvent subclasses.
-/// Replaces the reflection-based EventBuilderImpl from asterisk-java.
-/// Generates per-type property assignment from AmiMessage fields.
+/// Source generator that creates AOT-compatible deserializers for ManagerResponse subclasses.
+/// Generates a static Deserialize method that populates typed response instances from AmiMessage fields.
 /// </summary>
 [Generator]
-public sealed class EventDeserializerGenerator : IIncrementalGenerator
+public sealed class ResponseDeserializerGenerator : IIncrementalGenerator
 {
     private const string AsteriskMappingFqn =
         "Asterisk.NetAot.Abstractions.Attributes.AsteriskMappingAttribute";
 
-    private const string ManagerEventFqn =
-        "Asterisk.NetAot.Abstractions.ManagerEvent";
+    private const string ManagerResponseFqn =
+        "Asterisk.NetAot.Abstractions.ManagerResponse";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var eventInfos = context.SyntaxProvider
+        var responseInfos = context.SyntaxProvider
             .ForAttributeWithMetadataName(
                 AsteriskMappingFqn,
                 predicate: static (node, _) => node is ClassDeclarationSyntax,
-                transform: static (ctx, ct) => ExtractEventInfo(ctx, ct))
+                transform: static (ctx, ct) => ExtractResponseInfo(ctx, ct))
             .Where(static info => info != null)
             .Select(static (info, _) => info!.Value);
 
-        var collected = eventInfos.Collect();
+        var collected = responseInfos.Collect();
 
-        context.RegisterSourceOutput(collected, static (spc, events) =>
+        context.RegisterSourceOutput(collected, static (spc, responses) =>
         {
-            if (events.IsEmpty)
+            if (responses.IsEmpty)
                 return;
 
-            var source = GenerateDeserializer(events);
-            spc.AddSource("GeneratedEventDeserializer.g.cs", source);
+            var source = GenerateDeserializer(responses);
+            spc.AddSource("GeneratedResponseDeserializer.g.cs", source);
         });
     }
 
-    private static EventInfo? ExtractEventInfo(
+    private static ResponseInfo? ExtractResponseInfo(
         GeneratorAttributeSyntaxContext ctx, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -53,7 +52,7 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
         if (ctx.TargetSymbol is not INamedTypeSymbol symbol || symbol.IsAbstract)
             return null;
 
-        if (!InheritsFrom(symbol, ManagerEventFqn))
+        if (!InheritsFrom(symbol, ManagerResponseFqn))
             return null;
 
         var attr = ctx.Attributes.FirstOrDefault(a =>
@@ -67,25 +66,20 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
 
         var fullyQualifiedName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-        // Collect type hierarchy for intermediate base class handling
-        var hierarchy = new List<TypeLayerInfo>();
-        CollectHierarchy(symbol, hierarchy, ct);
+        // Collect all properties from the type hierarchy (flat: all responses inherit directly from ManagerResponse)
+        var properties = new List<PropertyInfo>();
+        CollectProperties(symbol, properties, ct);
 
-        return new EventInfo(
+        return new ResponseInfo(
             mappingName!,
             fullyQualifiedName,
             symbol.Name,
-            hierarchy.ToArray());
+            properties.ToArray());
     }
 
-    /// <summary>
-    /// Collects the type hierarchy from the leaf class up to (but not including)
-    /// ManagerEvent. Each layer contains only the properties declared at that level.
-    /// The list is ordered from base to leaf.
-    /// </summary>
-    private static void CollectHierarchy(
+    private static void CollectProperties(
         INamedTypeSymbol symbol,
-        List<TypeLayerInfo> hierarchy,
+        List<PropertyInfo> properties,
         CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -93,21 +87,18 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
         var typeChain = new List<INamedTypeSymbol>();
         var current = symbol;
         while (current != null
-               && current.ToDisplayString() != ManagerEventFqn
+               && current.ToDisplayString() != ManagerResponseFqn
                && current.SpecialType != SpecialType.System_Object)
         {
             typeChain.Add(current);
             current = current.BaseType;
         }
 
-        // Reverse: base first, leaf last
         typeChain.Reverse();
 
+        var seen = new HashSet<string>();
         foreach (var type in typeChain)
         {
-            var fqn = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var properties = new List<PropertyInfo>();
-
             foreach (var member in type.GetMembers())
             {
                 if (member is IPropertySymbol prop
@@ -115,30 +106,22 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
                     && prop.SetMethod != null
                     && prop.SetMethod.DeclaredAccessibility == Accessibility.Public
                     && !prop.IsStatic
-                    && !prop.IsIndexer)
+                    && !prop.IsIndexer
+                    && seen.Add(prop.Name))
                 {
-                    // Skip ManagerEvent base properties (handled separately)
-                    // and the RawFields property
-                    var propName = prop.Name;
-                    if (propName == "RawFields" || propName == "EventType"
-                        || propName == "Privilege" || propName == "UniqueId"
-                        || propName == "Timestamp")
+                    // Skip ManagerResponse base properties (handled separately)
+                    if (prop.Name == "ActionId" || prop.Name == "Response"
+                        || prop.Name == "Message" || prop.Name == "RawFields")
                         continue;
 
                     var propType = ClassifyPropertyType(prop.Type);
                     if (propType != PropertyType.Unsupported)
                     {
                         var fieldName = GetFieldName(prop);
-                        properties.Add(new PropertyInfo(propName, fieldName, propType));
+                        properties.Add(new PropertyInfo(prop.Name, fieldName, propType));
                     }
                 }
             }
-
-            hierarchy.Add(new TypeLayerInfo(
-                fqn,
-                type.Name,
-                SymbolEqualityComparer.Default.Equals(type, symbol), // isLeaf
-                properties.ToArray()));
         }
     }
 
@@ -192,13 +175,14 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static string GenerateDeserializer(ImmutableArray<EventInfo> events)
+    private static string GenerateDeserializer(ImmutableArray<ResponseInfo> responses)
     {
-        var sb = new StringBuilder(65536);
+        var sb = new StringBuilder(16384);
         sb.AppendLine("// <auto-generated/>");
         sb.AppendLine("#nullable enable");
         sb.AppendLine();
         sb.AppendLine("using System;");
+        sb.AppendLine("using System.Collections.Frozen;");
         sb.AppendLine("using System.Collections.Generic;");
         sb.AppendLine("using System.Globalization;");
         sb.AppendLine("using Asterisk.NetAot.Abstractions;");
@@ -207,106 +191,67 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
         sb.AppendLine("namespace Asterisk.NetAot.Ami.Generated;");
         sb.AppendLine();
         sb.AppendLine("/// <summary>");
-        sb.AppendLine("/// AOT-compatible event deserializer. Populates ManagerEvent instances");
+        sb.AppendLine("/// AOT-compatible response deserializer. Populates typed ManagerResponse instances");
         sb.AppendLine("/// from AmiMessage fields without reflection.");
-        sb.AppendLine("/// Auto-generated by EventDeserializerGenerator.");
+        sb.AppendLine("/// Auto-generated by ResponseDeserializerGenerator.");
         sb.AppendLine("/// </summary>");
-        sb.AppendLine("internal static class GeneratedEventDeserializer");
+        sb.AppendLine("internal static class GeneratedResponseDeserializer");
         sb.AppendLine("{");
 
-        // Main Deserialize method
+        var sorted = responses.OrderBy(r => r.MappingName).ToArray();
+
+        // Registry: action name -> factory
+        sb.AppendLine("    private static readonly FrozenDictionary<string, Func<ManagerResponse>> Registry =");
+        sb.AppendLine("        new Dictionary<string, Func<ManagerResponse>>(StringComparer.OrdinalIgnoreCase)");
+        sb.AppendLine("        {");
+        foreach (var resp in sorted)
+        {
+            sb.AppendLine($"            [\"{EscapeString(resp.MappingName)}\"] = static () => new {resp.FullyQualifiedTypeName}(),");
+        }
+        sb.AppendLine("        }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);");
+        sb.AppendLine();
+
+        // Deserialize(msg, actionName)
         sb.AppendLine("    /// <summary>");
-        sb.AppendLine("    /// Deserializes an AmiMessage into a typed ManagerEvent instance.");
-        sb.AppendLine("    /// Uses GeneratedEventRegistry to create the correct type, then populates");
-        sb.AppendLine("    /// all properties from the message fields.");
+        sb.AppendLine("    /// Deserializes an AmiMessage into a typed ManagerResponse based on the action name.");
+        sb.AppendLine("    /// Returns a base ManagerResponse if the action name is not recognized.");
         sb.AppendLine("    /// </summary>");
-        sb.AppendLine("    public static ManagerEvent Deserialize(AmiMessage msg)");
+        sb.AppendLine("    public static ManagerResponse Deserialize(AmiMessage msg, string actionName)");
         sb.AppendLine("    {");
-        sb.AppendLine("        var eventName = msg.EventType ?? \"\";");
-        sb.AppendLine("        var evt = GeneratedEventRegistry.Create(eventName) ?? new ManagerEvent();");
+        sb.AppendLine("        var resp = Registry.TryGetValue(actionName, out var factory)");
+        sb.AppendLine("            ? factory()");
+        sb.AppendLine("            : new ManagerResponse();");
         sb.AppendLine();
-        sb.AppendLine("        // Set base ManagerEvent properties");
-        sb.AppendLine("        evt.EventType = eventName;");
-        sb.AppendLine("        evt.UniqueId = msg[\"Uniqueid\"];");
-        sb.AppendLine("        evt.Privilege = msg[\"Privilege\"];");
-        sb.AppendLine("        if (double.TryParse(msg[\"Timestamp\"], NumberStyles.Float, CultureInfo.InvariantCulture, out var ts))");
-        sb.AppendLine("            evt.Timestamp = ts;");
+        sb.AppendLine("        // Set base ManagerResponse properties");
+        sb.AppendLine("        resp.ActionId = msg.ActionId;");
+        sb.AppendLine("        resp.Response = msg.ResponseStatus;");
+        sb.AppendLine("        resp.Message = msg[\"Message\"];");
+        sb.AppendLine("        resp.RawFields = msg.Fields;");
         sb.AppendLine();
 
-        var sorted = events.OrderBy(e => e.MappingName).ToArray();
-
-        // Collect all unique intermediate base types (non-leaf layers) across all events
-        var intermediateTypes = new Dictionary<string, IntermediateBaseInfo>();
-        foreach (var evt in sorted)
+        // Switch on concrete type for typed property assignment
+        var responsesWithProps = sorted.Where(r => r.Properties.Length > 0).ToArray();
+        if (responsesWithProps.Length > 0)
         {
-            foreach (var layer in evt.Hierarchy)
-            {
-                if (!layer.IsLeaf && layer.Properties.Length > 0)
-                {
-                    if (!intermediateTypes.ContainsKey(layer.FullyQualifiedTypeName))
-                    {
-                        intermediateTypes[layer.FullyQualifiedTypeName] = new IntermediateBaseInfo(
-                            layer.FullyQualifiedTypeName,
-                            layer.ClassName,
-                            layer.Properties);
-                    }
-                }
-            }
-        }
-
-        // Generate intermediate base class property assignment
-        if (intermediateTypes.Count > 0)
-        {
-            sb.AppendLine("        // Set intermediate base class properties");
-            foreach (var kvp in intermediateTypes.OrderBy(k => k.Key))
-            {
-                var baseInfo = kvp.Value;
-                var varName = ToCamelCase(baseInfo.ClassName);
-                sb.AppendLine($"        if (evt is {baseInfo.FullyQualifiedTypeName} {varName})");
-                sb.AppendLine("        {");
-                foreach (var prop in baseInfo.Properties)
-                {
-                    EmitPropertyDeserialization(sb, varName, prop, "            ");
-                }
-                sb.AppendLine("        }");
-                sb.AppendLine();
-            }
-        }
-
-        // Generate leaf class property assignment via switch
-        var leafEvents = sorted.Where(e =>
-        {
-            var leafLayer = e.Hierarchy.LastOrDefault();
-            return leafLayer.Properties != null && leafLayer.Properties.Length > 0 && leafLayer.IsLeaf;
-        }).ToArray();
-
-        if (leafEvents.Length > 0)
-        {
-            sb.AppendLine("        // Set leaf class properties");
-            sb.AppendLine("        switch (evt)");
+            sb.AppendLine("        // Set typed response properties");
+            sb.AppendLine("        switch (resp)");
             sb.AppendLine("        {");
-
-            foreach (var evt in leafEvents)
+            foreach (var resp in responsesWithProps)
             {
-                var leafLayer = evt.Hierarchy.Last();
-                sb.AppendLine($"            case {evt.FullyQualifiedTypeName} e:");
+                sb.AppendLine($"            case {resp.FullyQualifiedTypeName} r:");
                 sb.AppendLine("            {");
-                foreach (var prop in leafLayer.Properties)
+                foreach (var prop in resp.Properties)
                 {
-                    EmitPropertyDeserialization(sb, "e", prop, "                ");
+                    EmitPropertyDeserialization(sb, "r", prop, "                ");
                 }
                 sb.AppendLine("                break;");
                 sb.AppendLine("            }");
             }
-
             sb.AppendLine("        }");
             sb.AppendLine();
         }
 
-        sb.AppendLine("        // Set raw fields for passthrough access");
-        sb.AppendLine("        evt.RawFields = msg.Fields;");
-        sb.AppendLine();
-        sb.AppendLine("        return evt;");
+        sb.AppendLine("        return resp;");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
@@ -349,24 +294,11 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
         }
     }
 
-    /// <summary>
-    /// Converts a property name to a unique local variable name (camelCase).
-    /// </summary>
     private static string ToLocalVar(string propertyName)
     {
         if (string.IsNullOrEmpty(propertyName))
             return "v";
         return char.ToLowerInvariant(propertyName[0]) + propertyName.Substring(1);
-    }
-
-    /// <summary>
-    /// Converts a class name to camelCase for use as a variable name.
-    /// </summary>
-    private static string ToCamelCase(string name)
-    {
-        if (string.IsNullOrEmpty(name))
-            return "v";
-        return char.ToLowerInvariant(name[0]) + name.Substring(1);
     }
 
     private static string EscapeString(string value)
@@ -398,49 +330,19 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
         }
     }
 
-    private readonly struct TypeLayerInfo
-    {
-        public readonly string FullyQualifiedTypeName;
-        public readonly string ClassName;
-        public readonly bool IsLeaf;
-        public readonly PropertyInfo[] Properties;
-
-        public TypeLayerInfo(string fqn, string className, bool isLeaf, PropertyInfo[] properties)
-        {
-            FullyQualifiedTypeName = fqn;
-            ClassName = className;
-            IsLeaf = isLeaf;
-            Properties = properties;
-        }
-    }
-
-    private readonly struct IntermediateBaseInfo
-    {
-        public readonly string FullyQualifiedTypeName;
-        public readonly string ClassName;
-        public readonly PropertyInfo[] Properties;
-
-        public IntermediateBaseInfo(string fqn, string className, PropertyInfo[] properties)
-        {
-            FullyQualifiedTypeName = fqn;
-            ClassName = className;
-            Properties = properties;
-        }
-    }
-
-    private readonly struct EventInfo
+    private readonly struct ResponseInfo
     {
         public readonly string MappingName;
         public readonly string FullyQualifiedTypeName;
         public readonly string ClassName;
-        public readonly TypeLayerInfo[] Hierarchy;
+        public readonly PropertyInfo[] Properties;
 
-        public EventInfo(string mappingName, string fqn, string className, TypeLayerInfo[] hierarchy)
+        public ResponseInfo(string mappingName, string fullyQualifiedTypeName, string className, PropertyInfo[] properties)
         {
             MappingName = mappingName;
-            FullyQualifiedTypeName = fqn;
+            FullyQualifiedTypeName = fullyQualifiedTypeName;
             ClassName = className;
-            Hierarchy = hierarchy;
+            Properties = properties;
         }
     }
 }
