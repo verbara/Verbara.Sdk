@@ -1,5 +1,8 @@
 using Asterisk.NetAot.Abstractions;
 using Asterisk.NetAot.Abstractions.Enums;
+using Asterisk.NetAot.Ami.Actions;
+using Asterisk.NetAot.Ami.Events;
+using Asterisk.NetAot.Ami.Events.Base;
 using Asterisk.NetAot.Live.Agents;
 using Asterisk.NetAot.Live.Channels;
 using Asterisk.NetAot.Live.MeetMe;
@@ -7,6 +10,12 @@ using Asterisk.NetAot.Live.Queues;
 using Microsoft.Extensions.Logging;
 
 namespace Asterisk.NetAot.Live.Server;
+
+internal static partial class AsteriskServerLog
+{
+    [LoggerMessage(Level = LogLevel.Information, Message = "Initial state loaded: {Channels} channels, {Queues} queues, {Agents} agents")]
+    public static partial void InitialStateLoaded(ILogger logger, int channels, int queues, int agents);
+}
 
 /// <summary>
 /// Aggregate root for real-time Asterisk state tracking.
@@ -50,32 +59,97 @@ public sealed class AsteriskServer : IAsyncDisposable
     /// Request initial state snapshots from Asterisk.
     /// Sends StatusAction, QueueStatusAction, AgentsAction to populate managers.
     /// </summary>
-    #pragma warning disable CA1822 // Will use instance data when fully implemented
     public async ValueTask RequestInitialStateAsync(CancellationToken cancellationToken = default)
     {
-        // TODO: Send StatusAction -> receive StatusEvent per channel
-        // TODO: Send QueueStatusAction -> receive QueueParams/QueueMember/QueueEntry events
-        // TODO: Send AgentsAction -> receive AgentsEvent per agent
-        // These require the event-generating action flow from AmiConnection
+        // Populate channels from StatusAction
+        await foreach (var evt in _connection.SendEventGeneratingActionAsync(new StatusAction(), cancellationToken))
+        {
+            if (evt is StatusEvent se)
+            {
+                var state = Enum.TryParse<ChannelState>(se.State, out var cs) ? cs : ChannelState.Unknown;
+                Channels.OnNewChannel(
+                    se.UniqueId ?? "",
+                    se.Channel ?? "",
+                    state,
+                    se.CallerId,
+                    context: se.RawFields?.GetValueOrDefault("Context"),
+                    exten: se.Extension);
+            }
+        }
+
+        // Populate queues from QueueStatusAction
+        await foreach (var evt in _connection.SendEventGeneratingActionAsync(new QueueStatusAction(), cancellationToken))
+        {
+            switch (evt)
+            {
+                case QueueParamsEvent qp:
+                    Queues.OnQueueParams(
+                        qp.Queue ?? "", qp.Max ?? 0, qp.Strategy,
+                        qp.Calls ?? 0, qp.HoldTime ?? 0, qp.TalkTime ?? 0,
+                        qp.Completed ?? 0, qp.Abandoned ?? 0);
+                    break;
+                case QueueMemberEvent qm:
+                    Queues.OnMemberAdded(
+                        qm.Queue ?? "", qm.Interface ?? "", qm.MemberName,
+                        qm.Penalty ?? 0, qm.Paused ?? false, qm.Status ?? 0);
+                    break;
+                case QueueEntryEvent qe:
+                    Queues.OnCallerJoined(
+                        qe.Queue ?? "", qe.Channel ?? "", qe.CallerId, qe.Position ?? 0);
+                    break;
+            }
+        }
+
+        // Populate agents from AgentsAction
+        await foreach (var evt in _connection.SendEventGeneratingActionAsync(new AgentsAction(), cancellationToken))
+        {
+            if (evt is AgentsEvent ae && ae.Agent is not null)
+            {
+                if (!string.Equals(ae.Status, "AGENT_LOGGEDOFF", StringComparison.OrdinalIgnoreCase))
+                {
+                    Agents.OnAgentLogin(ae.Agent, ae.LoggedInChan);
+                }
+            }
+        }
+
+        AsteriskServerLog.InitialStateLoaded(_logger, Channels.ActiveChannels.Count, Queues.Queues.Count, Agents.Agents.Count);
     }
-    #pragma warning restore CA1822
 
     /// <summary>
     /// Originate an outbound call asynchronously.
     /// </summary>
-    #pragma warning disable CA1822 // Will use instance data when fully implemented
     public async ValueTask<OriginateResult> OriginateAsync(
         string channel, string context, string extension, int priority = 1,
         string? callerId = null, TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
-        _ = channel; _ = context; _ = extension; _ = priority; _ = callerId; _ = timeout;
-        await Task.CompletedTask;
-        // TODO: Send OriginateAction via _connection with Async=true
-        // TODO: Wait for OriginateResponseEvent correlation by ActionId
-        return new OriginateResult { Success = false, Message = "Not yet implemented" };
+        var action = new OriginateAction
+        {
+            Channel = channel,
+            Context = context,
+            Exten = extension,
+            Priority = priority,
+            CallerId = callerId,
+            Timeout = timeout.HasValue ? (long)timeout.Value.TotalMilliseconds : 30000,
+            Async = true
+        };
+
+        await foreach (var evt in _connection.SendEventGeneratingActionAsync(action, cancellationToken))
+        {
+            if (evt is OriginateResponseEvent ore)
+            {
+                var success = string.Equals(ore.Response, "Success", StringComparison.OrdinalIgnoreCase);
+                return new OriginateResult
+                {
+                    Success = success,
+                    Message = ore.Response,
+                    ChannelId = ore.Channel
+                };
+            }
+        }
+
+        return new OriginateResult { Success = false, Message = "No OriginateResponse received" };
     }
-    #pragma warning restore CA1822
 
     public ValueTask DisposeAsync()
     {
@@ -83,114 +157,109 @@ public sealed class AsteriskServer : IAsyncDisposable
         return ValueTask.CompletedTask;
     }
 
-    /// <summary>Internal observer that dispatches AMI events to the appropriate manager.</summary>
+    /// <summary>Internal observer that dispatches typed AMI events to the appropriate manager.</summary>
     private sealed class EventObserver(AsteriskServer server) : IObserver<ManagerEvent>
     {
         public void OnNext(ManagerEvent value)
         {
-            var eventType = value.EventType;
-
-            switch (eventType)
+            switch (value)
             {
-                // Channel events
-                case "Newchannel":
+                // Channel events — typed via source-generated deserializer
+                case NewChannelEvent nce:
                     server.Channels.OnNewChannel(
-                        value.UniqueId ?? "",
-                        value.RawFields?.GetValueOrDefault("Channel") ?? "",
-                        Enum.TryParse<ChannelState>(value.RawFields?.GetValueOrDefault("ChannelState"), out var cs) ? cs : ChannelState.Unknown,
-                        value.RawFields?.GetValueOrDefault("CallerIDNum"),
-                        value.RawFields?.GetValueOrDefault("CallerIDName"),
-                        value.RawFields?.GetValueOrDefault("Context"),
-                        value.RawFields?.GetValueOrDefault("Exten"),
-                        int.TryParse(value.RawFields?.GetValueOrDefault("Priority"), out var p) ? p : 1);
+                        nce.UniqueId ?? "",
+                        nce.Channel ?? "",
+                        Enum.TryParse<ChannelState>(nce.ChannelState, out var cs) ? cs : ChannelState.Unknown,
+                        nce.CallerIdNum,
+                        nce.CallerIdName,
+                        nce.Context,
+                        nce.Exten,
+                        nce.Priority ?? 1);
                     break;
 
-                case "Newstate":
+                case NewStateEvent nse:
                     server.Channels.OnNewState(
-                        value.UniqueId ?? "",
-                        Enum.TryParse<ChannelState>(value.RawFields?.GetValueOrDefault("ChannelState"), out var ns) ? ns : ChannelState.Unknown);
+                        nse.UniqueId ?? "",
+                        Enum.TryParse<ChannelState>(nse.ChannelState, out var ns) ? ns : ChannelState.Unknown);
                     break;
 
-                case "Hangup":
+                case HangupEvent he:
                     server.Channels.OnHangup(
-                        value.UniqueId ?? "",
-                        Enum.TryParse<HangupCause>(value.RawFields?.GetValueOrDefault("Cause"), out var hc) ? hc : HangupCause.NormalClearing);
+                        he.UniqueId ?? "",
+                        he.Cause is not null && Enum.IsDefined(typeof(HangupCause), he.Cause.Value)
+                            ? (HangupCause)he.Cause.Value
+                            : HangupCause.NormalClearing);
                     break;
 
-                case "Rename":
+                case RenameEvent re:
                     server.Channels.OnRename(
-                        value.UniqueId ?? "",
-                        value.RawFields?.GetValueOrDefault("Newname") ?? "");
+                        re.UniqueId ?? "",
+                        re.RawFields?.GetValueOrDefault("Newname") ?? "");
                     break;
 
                 // Queue events
-                case "QueueMemberAdded":
+                case QueueMemberAddedEvent qma:
                     server.Queues.OnMemberAdded(
-                        value.RawFields?.GetValueOrDefault("Queue") ?? "",
-                        value.RawFields?.GetValueOrDefault("Interface") ?? "",
-                        value.RawFields?.GetValueOrDefault("MemberName"),
-                        int.TryParse(value.RawFields?.GetValueOrDefault("Penalty"), out var pen) ? pen : 0,
-                        string.Equals(value.RawFields?.GetValueOrDefault("Paused"), "1", StringComparison.Ordinal),
-                        int.TryParse(value.RawFields?.GetValueOrDefault("Status"), out var st) ? st : 0);
+                        qma.Queue ?? "",
+                        qma.Interface ?? "",
+                        qma.MemberName,
+                        qma.Penalty ?? 0,
+                        qma.Paused ?? false,
+                        qma.Status ?? 0);
                     break;
 
-                case "QueueMemberRemoved":
+                case QueueMemberRemovedEvent qmr:
                     server.Queues.OnMemberRemoved(
-                        value.RawFields?.GetValueOrDefault("Queue") ?? "",
-                        value.RawFields?.GetValueOrDefault("Interface") ?? "");
+                        qmr.Queue ?? "",
+                        qmr.Interface ?? "");
                     break;
 
-                case "QueueCallerJoin":
+                case QueueCallerJoinEvent qcj:
                     server.Queues.OnCallerJoined(
-                        value.RawFields?.GetValueOrDefault("Queue") ?? "",
-                        value.RawFields?.GetValueOrDefault("Channel") ?? "",
-                        value.RawFields?.GetValueOrDefault("CallerIDNum"),
-                        int.TryParse(value.RawFields?.GetValueOrDefault("Position"), out var pos) ? pos : 0);
+                        qcj.RawFields?.GetValueOrDefault("Queue") ?? "",
+                        qcj.RawFields?.GetValueOrDefault("Channel") ?? "",
+                        qcj.RawFields?.GetValueOrDefault("CallerIDNum"),
+                        qcj.Position ?? 0);
                     break;
 
-                case "QueueCallerLeave":
+                case QueueCallerLeaveEvent qcl:
                     server.Queues.OnCallerLeft(
-                        value.RawFields?.GetValueOrDefault("Queue") ?? "",
-                        value.RawFields?.GetValueOrDefault("Channel") ?? "");
+                        qcl.RawFields?.GetValueOrDefault("Queue") ?? "",
+                        qcl.RawFields?.GetValueOrDefault("Channel") ?? "");
                     break;
 
                 // Agent events
-                case "AgentLogin":
-                    server.Agents.OnAgentLogin(
-                        value.RawFields?.GetValueOrDefault("Agent") ?? "",
-                        value.RawFields?.GetValueOrDefault("Channel"));
+                case AgentLoginEvent ale:
+                    server.Agents.OnAgentLogin(ale.Agent ?? "", ale.Channel);
                     break;
 
-                case "AgentLogoff":
-                    server.Agents.OnAgentLogoff(
-                        value.RawFields?.GetValueOrDefault("Agent") ?? "");
+                case AgentLogoffEvent alo:
+                    server.Agents.OnAgentLogoff(alo.Agent ?? "");
                     break;
 
-                case "AgentConnect":
-                    server.Agents.OnAgentConnect(
-                        value.RawFields?.GetValueOrDefault("Agent") ?? "",
-                        value.RawFields?.GetValueOrDefault("Channel"));
+                case AgentConnectEvent ace:
+                    server.Agents.OnAgentConnect(ace.Agent ?? "", ace.Channel);
                     break;
 
-                case "AgentComplete":
-                    server.Agents.OnAgentComplete(
-                        value.RawFields?.GetValueOrDefault("Agent") ?? "");
+                case AgentCompleteEvent acoe:
+                    server.Agents.OnAgentComplete(acoe.Agent ?? "");
                     break;
 
-                // MeetMe events
-                case "MeetMeJoin":
-                case "ConfbridgeJoin":
-                    server.MeetMe.OnUserJoined(
-                        value.RawFields?.GetValueOrDefault("Meetme") ?? value.RawFields?.GetValueOrDefault("Conference") ?? "",
-                        int.TryParse(value.RawFields?.GetValueOrDefault("Usernum"), out var un) ? un : 0,
-                        value.RawFields?.GetValueOrDefault("Channel") ?? "");
+                // MeetMe/ConfBridge events
+                case MeetMeJoinEvent mmj:
+                    server.MeetMe.OnUserJoined(mmj.Meetme ?? "", mmj.Usernum ?? 0, mmj.Channel ?? "");
                     break;
 
-                case "MeetMeLeave":
-                case "ConfbridgeLeave":
-                    server.MeetMe.OnUserLeft(
-                        value.RawFields?.GetValueOrDefault("Meetme") ?? value.RawFields?.GetValueOrDefault("Conference") ?? "",
-                        int.TryParse(value.RawFields?.GetValueOrDefault("Usernum"), out var unl) ? unl : 0);
+                case ConfbridgeJoinEvent cbj:
+                    server.MeetMe.OnUserJoined(cbj.Conference ?? "", 0, cbj.Channel ?? "");
+                    break;
+
+                case MeetMeLeaveEvent mml:
+                    server.MeetMe.OnUserLeft(mml.Meetme ?? "", mml.Usernum ?? 0);
+                    break;
+
+                case ConfbridgeLeaveEvent cbl:
+                    server.MeetMe.OnUserLeft(cbl.Conference ?? "", 0);
                     break;
             }
         }

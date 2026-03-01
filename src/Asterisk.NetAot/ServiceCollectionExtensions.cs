@@ -1,7 +1,12 @@
 using Asterisk.NetAot.Abstractions;
+using Asterisk.NetAot.Agi.Mapping;
+using Asterisk.NetAot.Agi.Server;
 using Asterisk.NetAot.Ami.Connection;
+using Asterisk.NetAot.Ami.Transport;
 using Asterisk.NetAot.Ari.Client;
+using Asterisk.NetAot.Live.Server;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Asterisk.NetAot;
 
@@ -20,6 +25,9 @@ public static class ServiceCollectionExtensions
         var options = new AsteriskNetAotOptions();
         configure(options);
 
+        // Transport
+        services.TryAddSingleton<ISocketConnectionFactory, PipelineSocketConnectionFactory>();
+
         // AMI
         services.Configure<AmiConnectionOptions>(o =>
         {
@@ -30,7 +38,19 @@ public static class ServiceCollectionExtensions
             o.UseSsl = options.Ami.UseSsl;
             o.AutoReconnect = options.Ami.AutoReconnect;
         });
-        services.AddSingleton<IAmiConnection, AmiConnection>();
+        services.TryAddSingleton<IAmiConnection, AmiConnection>();
+
+        // AGI
+        var mappingStrategy = options.AgiMappingStrategy ?? new SimpleMappingStrategy();
+        services.TryAddSingleton<IMappingStrategy>(mappingStrategy);
+        services.TryAddSingleton<IAgiServer>(sp =>
+            new FastAgiServer(
+                options.AgiPort,
+                sp.GetRequiredService<IMappingStrategy>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<FastAgiServer>>()));
+
+        // Live
+        services.TryAddSingleton<AsteriskServer>();
 
         // ARI
         if (options.Ari is not null)
@@ -42,9 +62,8 @@ public static class ServiceCollectionExtensions
                 o.Password = options.Ari.Password;
                 o.Application = options.Ari.Application;
             });
+            services.TryAddSingleton<IAriClient, AriClient>();
         }
-
-        // TODO: Register AGI, Live, PBX services
 
         return services;
     }
@@ -58,4 +77,5 @@ public sealed class AsteriskNetAotOptions
     public AmiConnectionOptions Ami { get; set; } = new();
     public AriClientOptions? Ari { get; set; }
     public int AgiPort { get; set; } = 4573;
+    public IMappingStrategy? AgiMappingStrategy { get; set; }
 }

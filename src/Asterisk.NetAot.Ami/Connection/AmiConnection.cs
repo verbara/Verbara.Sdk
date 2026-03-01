@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Asterisk.NetAot.Abstractions;
 using Asterisk.NetAot.Abstractions.Enums;
+using Asterisk.NetAot.Ami.Generated;
 using Asterisk.NetAot.Ami.Internal;
 using Asterisk.NetAot.Ami.Transport;
 using Microsoft.Extensions.Logging;
@@ -208,27 +209,19 @@ public sealed class AmiConnection : IAmiConnection
 
         try
         {
-            // Serialize action fields — for now use reflection-free manual approach
-            // Source generators will replace this in Phase 3
-            var actionName = action.GetType().Name;
-            if (actionName.EndsWith("Action", StringComparison.Ordinal))
-            {
-                actionName = actionName[..^6]; // Strip "Action" suffix
-            }
+            // Use source-generated serializer for AOT-compatible action dispatch
+            var actionName = GeneratedActionSerializer.GetActionName(action);
+            var fields = GeneratedActionSerializer.Serialize(action);
 
-            await _writer!.WriteActionAsync(actionName, actionId, cancellationToken: cancellationToken);
+            await _writer!.WriteActionAsync(actionName, actionId, fields, cancellationToken);
 
             using var timeout = new CancellationTokenSource(_options.DefaultResponseTimeout);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
 
             var responseMsg = await tcs.Task.WaitAsync(linked.Token);
 
-            return new ManagerResponse
-            {
-                ActionId = responseMsg.ActionId,
-                Response = responseMsg.ResponseStatus,
-                Message = responseMsg["Message"]
-            };
+            // Use source-generated deserializer for typed response mapping
+            return GeneratedResponseDeserializer.Deserialize(responseMsg, actionName);
         }
         finally
         {
@@ -239,14 +232,34 @@ public sealed class AmiConnection : IAmiConnection
     public async ValueTask<TResponse> SendActionAsync<TResponse>(ManagerAction action, CancellationToken cancellationToken = default)
         where TResponse : ManagerResponse
     {
-        var response = await SendActionAsync(action, cancellationToken);
-        if (response is TResponse typed)
-        {
-            return typed;
-        }
+        EnsureConnected();
 
-        // For now return base response cast — source generators will handle typed responses
-        return (TResponse)response;
+        var actionId = action.ActionId ?? NextActionId();
+        action.ActionId = actionId;
+
+        var tcs = new TaskCompletionSource<AmiMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pendingActions[actionId] = tcs;
+
+        try
+        {
+            var actionName = GeneratedActionSerializer.GetActionName(action);
+            var fields = GeneratedActionSerializer.Serialize(action);
+
+            await _writer!.WriteActionAsync(actionName, actionId, fields, cancellationToken);
+
+            using var timeout = new CancellationTokenSource(_options.DefaultResponseTimeout);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+
+            var responseMsg = await tcs.Task.WaitAsync(linked.Token);
+
+            // Use source-generated deserializer for full typed response
+            var response = GeneratedResponseDeserializer.Deserialize(responseMsg, actionName);
+            return response as TResponse ?? (TResponse)response;
+        }
+        finally
+        {
+            _pendingActions.TryRemove(actionId, out _);
+        }
     }
 
     public async IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
@@ -262,13 +275,10 @@ public sealed class AmiConnection : IAmiConnection
 
         try
         {
-            var actionName = action.GetType().Name;
-            if (actionName.EndsWith("Action", StringComparison.Ordinal))
-            {
-                actionName = actionName[..^6];
-            }
+            var actionName = GeneratedActionSerializer.GetActionName(action);
+            var fields = GeneratedActionSerializer.Serialize(action);
 
-            await _writer!.WriteActionAsync(actionName, actionId, cancellationToken: cancellationToken);
+            await _writer!.WriteActionAsync(actionName, actionId, fields, cancellationToken);
 
             await foreach (var evt in collector.ReadAllAsync(cancellationToken))
             {
@@ -313,11 +323,8 @@ public sealed class AmiConnection : IAmiConnection
                 {
                     AmiConnectionLog.EventReceived(_logger, msg.EventType);
 
-                    var evt = new ManagerEvent
-                    {
-                        UniqueId = msg["Uniqueid"],
-                        Privilege = msg["Privilege"]
-                    };
+                    // Use source-generated deserializer for typed events
+                    var evt = GeneratedEventDeserializer.Deserialize(msg);
 
                     // Check if this event belongs to an event-generating action
                     var actionId = msg.ActionId;
@@ -495,8 +502,11 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
-    private string NextActionId() =>
-        $"{GetHashCode()}_{Interlocked.Increment(ref _actionIdCounter)}";
+    private string NextActionId()
+    {
+        var counter = Interlocked.Increment(ref _actionIdCounter);
+        return string.Create(null, stackalloc char[32], $"{GetHashCode()}_{counter}");
+    }
 
     private void EnsureConnected()
     {
