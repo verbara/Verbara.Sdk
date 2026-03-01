@@ -27,11 +27,12 @@ public interface IAriClient : IAsyncDisposable
 /// <summary>
 /// Base class for all ARI events received via WebSocket.
 /// </summary>
-public abstract class AriEvent
+public class AriEvent
 {
     public string? Type { get; set; }
     public string? Application { get; set; }
     public DateTimeOffset? Timestamp { get; set; }
+    public string? RawJson { get; set; }
 }
 
 /// <summary>
