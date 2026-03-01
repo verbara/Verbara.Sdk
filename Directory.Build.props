@@ -44,6 +44,8 @@
     <IsPackable>false</IsPackable>
     <IsAotCompatible>false</IsAotCompatible>
     <IsTestProject>true</IsTestProject>
+    <!-- Allow underscores in test method names (Method_Should_When pattern) -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
   </PropertyGroup>
 
   <!-- Example projects -->
