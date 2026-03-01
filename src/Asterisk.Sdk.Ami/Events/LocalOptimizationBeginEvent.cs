@@ -1,0 +1,54 @@
+using Asterisk.Sdk;
+using Asterisk.Sdk.Attributes;
+
+namespace Asterisk.Sdk.Ami.Events;
+
+[AsteriskMapping("LocalOptimizationBegin")]
+public sealed class LocalOptimizationBeginEvent : ManagerEvent
+{
+    public int? Id { get; set; }
+    public string? DestUniqueId { get; set; }
+    public string? LocalOneChannel { get; set; }
+    public string? LocalOneChannelState { get; set; }
+    public string? LocalOneChannelStateDesc { get; set; }
+    public string? LocalOneCallerIDNum { get; set; }
+    public string? LocalOneCallerIDName { get; set; }
+    public string? LocalOneConnectedLineNum { get; set; }
+    public string? LocalOneConnectedLineName { get; set; }
+    public string? LocalOneAccountCode { get; set; }
+    public string? LocalOneContext { get; set; }
+    public string? LocalOneExten { get; set; }
+    public int? LocalOnePriority { get; set; }
+    public string? LocalOneUniqueid { get; set; }
+    public string? LocalOneLinkedid { get; set; }
+    public string? LocalTwoChannel { get; set; }
+    public string? LocalTwoChannelState { get; set; }
+    public string? LocalTwoChannelStateDesc { get; set; }
+    public string? LocalTwoCallerIDNum { get; set; }
+    public string? LocalTwoCallerIDName { get; set; }
+    public string? LocalTwoConnectedLineNum { get; set; }
+    public string? LocalTwoConnectedLineName { get; set; }
+    public string? LocalTwoAccountCode { get; set; }
+    public string? LocalTwoContext { get; set; }
+    public string? LocalTwoExten { get; set; }
+    public int? LocalTwoPriority { get; set; }
+    public string? LocalTwoUniqueid { get; set; }
+    public string? LocalTwoLinkedid { get; set; }
+    public string? SourceChannel { get; set; }
+    public string? SourceChannelState { get; set; }
+    public string? SourceChannelStateDesc { get; set; }
+    public string? SourceCallerIDNum { get; set; }
+    public string? SourceCallerIDName { get; set; }
+    public string? SourceConnectedLineNum { get; set; }
+    public string? SourceConnectedLineName { get; set; }
+    public string? SourceAccountCode { get; set; }
+    public string? SourceContext { get; set; }
+    public string? SourceExten { get; set; }
+    public int? SourcePriority { get; set; }
+    public string? SourceUniqueid { get; set; }
+    public string? SourceLinkedid { get; set; }
+    public string? LocalTwoLanguage { get; set; }
+    public string? LocalOneLanguage { get; set; }
+    public string? SourceLanguage { get; set; }
+}
+

@@ -2,7 +2,7 @@
 // Demonstrates connecting to Asterisk AMI, sending a PingAction
 // and listening for events.
 
-Console.WriteLine("Asterisk.NetAot - Basic AMI Example");
+Console.WriteLine("Asterisk.Sdk - Basic AMI Example");
 Console.WriteLine("===================================");
 
 // TODO: Configure and connect to AMI
