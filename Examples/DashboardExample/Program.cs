@@ -8,7 +8,8 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddAsteriskMultiServer();
 builder.Services.AddSingleton<EventLogService>();
-builder.Services.AddHostedService<AsteriskMonitorService>();
+builder.Services.AddSingleton<AsteriskMonitorService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AsteriskMonitorService>());
 
 var app = builder.Build();
 
