@@ -201,12 +201,12 @@ Asterisk.Sdk.Config             (-> Sdk only)
 |--------|--------|-------|
 | Sprint 0 | ✅ Completado | Branch creado, baseline verificado (176 tests) |
 | Sprint 1 | ✅ Completado | Filesystem renombrado, csproj actualizados |
-| Sprint 2 | 🔄 En progreso | Namespaces reemplazados, pendiente build verification |
-| Sprint 3 | ⬜ Pendiente | |
-| Sprint 4 | ⬜ Pendiente | |
-| Sprint 5 | ⬜ Pendiente | |
-| Sprint 6 | ⬜ Pendiente | |
-| Sprint 7 | ⬜ Pendiente | |
-| Sprint 8 | ⬜ Pendiente | |
-| Sprint 9 | ⬜ Pendiente | |
+| Sprint 2 | ✅ Completado | Namespaces reemplazados, build + tests passing (e78c0c7) |
+| Sprint 3 | ✅ Completado | AddAsterisk, StartAsync, IAsteriskServer (9278703) |
+| Sprint 4 | ✅ Completado | Typed exception hierarchy AMI/ARI (b7d2dac) |
+| Sprint 5 | ✅ Completado | 53 AGI BuildCommand() + AgiHostedService (8c30532) |
+| Sprint 6 | ✅ Completado | DataAnnotations validation on options (31c5d05) |
+| Sprint 7 | ✅ Completado | ARI client completo + AMI resilience (5d73109) |
+| Sprint 8 | ✅ Completado | README, XML docs, ejemplos funcionales (8a2755d, 224771a) |
+| Sprint 9 | 🔄 En progreso | |
 | Sprint 10 | ⬜ Pendiente | |

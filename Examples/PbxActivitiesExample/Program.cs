@@ -46,7 +46,7 @@ try
 
     // 4. Show active channels
     Console.WriteLine($"\nActive channels: {server.Channels.ChannelCount}");
-    foreach (var ch in server.Channels.AllChannels)
+    foreach (var ch in server.Channels.ActiveChannels)
     {
         Console.WriteLine($"  {ch.Name} ({ch.State})");
     }
