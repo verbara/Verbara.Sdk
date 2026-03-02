@@ -48,4 +48,13 @@ public sealed class AmiConnectionOptions
     /// <summary>Event pump buffer capacity. Default: 20,000.</summary>
     [Range(1, int.MaxValue)]
     public int EventPumpCapacity { get; set; } = Internal.AsyncEventPump.DefaultCapacity;
+
+    /// <summary>Initial delay before the first reconnection attempt. Default: 1 second.</summary>
+    public TimeSpan ReconnectInitialDelay { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>Maximum delay between reconnection attempts. Default: 30 seconds.</summary>
+    public TimeSpan ReconnectMaxDelay { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Multiplier applied to the delay after each failed reconnection attempt. Default: 2.0.</summary>
+    public double ReconnectMultiplier { get; set; } = 2.0;
 }
