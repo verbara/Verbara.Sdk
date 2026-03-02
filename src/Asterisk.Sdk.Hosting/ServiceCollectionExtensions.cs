@@ -7,6 +7,7 @@ using Asterisk.Sdk.Ari.Client;
 using Asterisk.Sdk.Live.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace Asterisk.Sdk.Hosting;
 
@@ -29,7 +30,7 @@ public static class ServiceCollectionExtensions
         // Transport
         services.TryAddSingleton<ISocketConnectionFactory, PipelineSocketConnectionFactory>();
 
-        // AMI (single-server) with validation
+        // AMI (single-server) with AOT-safe source-generated validation
         services.AddOptions<AmiConnectionOptions>()
             .Configure(o =>
             {
@@ -40,8 +41,8 @@ public static class ServiceCollectionExtensions
                 o.UseSsl = options.Ami.UseSsl;
                 o.AutoReconnect = options.Ami.AutoReconnect;
             })
-            .ValidateDataAnnotations()
             .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<AmiConnectionOptions>, AmiConnectionOptionsValidator>();
         services.TryAddSingleton<IAmiConnection, AmiConnection>();
 
         // AMI Factory (always available for creating additional connections)
@@ -71,8 +72,8 @@ public static class ServiceCollectionExtensions
                     o.Password = options.Ari.Password;
                     o.Application = options.Ari.Application;
                 })
-                .ValidateDataAnnotations()
                 .ValidateOnStart();
+            services.AddSingleton<IValidateOptions<AriClientOptions>, AriClientOptionsValidator>();
             services.TryAddSingleton<IAriClient, AriClient>();
         }
 
