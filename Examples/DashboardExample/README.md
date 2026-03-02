@@ -8,6 +8,7 @@ A full-featured **Blazor Server** dashboard that demonstrates the **Asterisk.Sdk
 
 ## Table of Contents
 
+- [Quick Start with Docker](#quick-start-with-docker)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Screenshots](#screenshots)
@@ -48,6 +49,31 @@ A full-featured **Blazor Server** dashboard that demonstrates the **Asterisk.Sdk
 
 ---
 
+## Quick Start with Docker
+
+Run the full demo (Asterisk PBX + Dashboard) with zero local dependencies:
+
+```bash
+docker compose -f docker/docker-compose.dashboard.yml up --build
+```
+
+Open [http://localhost:8080](http://localhost:8080). You should see:
+
+- **demo-pbx** with a green connection dot in the header
+- **2 queues** — `sales` (3 members, ringall) and `support` (3 members, leastrecent)
+- **6 PJSIP endpoints** — 2001-2003 (sales) and 3001-3003 (support)
+- **4 agents** — 1001-1004 (available after login via `*11`)
+
+The Docker setup includes a pre-configured Asterisk 20 instance with AMI, queues, agents, conferences, and a demo dialplan. No Asterisk installation required.
+
+To stop:
+
+```bash
+docker compose -f docker/docker-compose.dashboard.yml down
+```
+
+---
+
 ## Features
 
 | Feature | Description |
@@ -81,16 +107,16 @@ A full-featured **Blazor Server** dashboard that demonstrates the **Asterisk.Sdk
          ┌──────────▼──────────┐
          │  AsteriskMonitor    │  IHostedService (singleton)
          │  Service            │  1 IAmiConnection per server
-         │  ┌───────────────┐  │
-         │  │ AsteriskServer │──┤  Live domain objects:
-         │  │  .Channels     │  │  - ChannelManager
-         │  │  .Queues       │  │  - QueueManager
-         │  │  .Agents       │  │  - AgentManager
-         │  │  .MeetMe       │  │  - MeetMeManager
-         │  └───────────────┘  │
-         │  ┌───────────────┐  │
-         │  │ EventLogService│  │  Circular buffer (200 entries)
-         │  └───────────────┘  │
+         │  ┌────────────────┐ │
+         │  │ AsteriskServer │─┤  Live domain objects:
+         │  │  .Channels     │ │  - ChannelManager
+         │  │  .Queues       │ │  - QueueManager
+         │  │  .Agents       │ │  - AgentManager
+         │  │  .MeetMe       │ │  - MeetMeManager
+         │  └────────────────┘ │
+         │  ┌────────────────┐ │
+         │  │ EventLogService│ │  Circular buffer (200 entries)
+         │  └────────────────┘ │
          └──────────┬──────────┘
                     │ In-memory (singleton)
          ┌──────────▼──────────┐
@@ -98,7 +124,7 @@ A full-featured **Blazor Server** dashboard that demonstrates the **Asterisk.Sdk
          │  7 pages + layout   │  Timer-based refresh (1–2s)
          └──────────┬──────────┘
                     │ WebSocket
-         ┌──────────▼──────────┐
+         ┌──────────▼────────────────┐
          │  Browser 1  │  Browser 2  │  ... N browsers
          └─────────────┴─────────────┘
 ```
