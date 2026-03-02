@@ -1,0 +1,154 @@
+@page "/metrics"
+@using System.Collections.Concurrent
+@using System.Diagnostics.Metrics
+@using Asterisk.Sdk.Ami.Diagnostics
+@using Asterisk.Sdk.Live.Diagnostics
+@implements IDisposable
+
+<PageTitle>Metrics — Asterisk Dashboard</PageTitle>
+
+<h2>SDK Metrics</h2>
+
+<h3>AMI Connection Health</h3>
+<div class="kpi-grid">
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@GetCounter("ami.events.received")</div>
+        <div class="kpi-label">Events Received</div>
+    </div>
+    <div class="kpi-card @(GetCounter("ami.events.dropped") > 0 ? "kpi-red" : "kpi-gray")">
+        <div class="kpi-value">@GetCounter("ami.events.dropped")</div>
+        <div class="kpi-label">Events Dropped</div>
+    </div>
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@GetCounter("ami.events.dispatched")</div>
+        <div class="kpi-label">Dispatched</div>
+    </div>
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@GetCounter("ami.actions.sent")</div>
+        <div class="kpi-label">Actions Sent</div>
+    </div>
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@GetCounter("ami.responses.received")</div>
+        <div class="kpi-label">Responses</div>
+    </div>
+    <div class="kpi-card @(GetCounter("ami.reconnections") > 0 ? "kpi-yellow" : "kpi-gray")">
+        <div class="kpi-value">@GetCounter("ami.reconnections")</div>
+        <div class="kpi-label">Reconnections</div>
+    </div>
+</div>
+
+<h3>AMI Histograms</h3>
+<div class="kpi-grid kpi-grid-sm">
+    <div class="kpi-card kpi-purple">
+        <div class="kpi-value">@GetHistogram("ami.action.roundtrip")</div>
+        <div class="kpi-label">Avg Roundtrip (ms)</div>
+    </div>
+    <div class="kpi-card kpi-purple">
+        <div class="kpi-value">@GetHistogram("ami.event.dispatch")</div>
+        <div class="kpi-label">Avg Dispatch (ms)</div>
+    </div>
+</div>
+
+<h3>Live State Gauges</h3>
+<div class="kpi-grid">
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@GetGauge("live.channels.active")</div>
+        <div class="kpi-label">Active Channels</div>
+    </div>
+    <div class="kpi-card kpi-purple">
+        <div class="kpi-value">@GetGauge("live.queues.count")</div>
+        <div class="kpi-label">Queues</div>
+    </div>
+    <div class="kpi-card kpi-gray">
+        <div class="kpi-value">@GetGauge("live.agents.total")</div>
+        <div class="kpi-label">Total Agents</div>
+    </div>
+    <div class="kpi-card kpi-green">
+        <div class="kpi-value">@GetGauge("live.agents.available")</div>
+        <div class="kpi-label">Available</div>
+    </div>
+    <div class="kpi-card kpi-red">
+        <div class="kpi-value">@GetGauge("live.agents.on_call")</div>
+        <div class="kpi-label">On Call</div>
+    </div>
+    <div class="kpi-card kpi-yellow">
+        <div class="kpi-value">@GetGauge("live.agents.paused")</div>
+        <div class="kpi-label">Paused</div>
+    </div>
+</div>
+
+@code {
+    private Timer? _refreshTimer;
+    private MeterListener? _listener;
+    private readonly ConcurrentDictionary<string, long> _counters = new();
+    private readonly ConcurrentDictionary<string, double> _histogramSums = new();
+    private readonly ConcurrentDictionary<string, long> _histogramCounts = new();
+    private readonly ConcurrentDictionary<string, double> _gauges = new();
+
+    protected override void OnInitialized()
+    {
+        _listener = new MeterListener();
+
+        _listener.InstrumentPublished = (instrument, listener) =>
+        {
+            if (instrument.Meter.Name is "Asterisk.Sdk.Ami" or "Asterisk.Sdk.Live")
+            {
+                listener.EnableMeasurementEvents(instrument);
+            }
+        };
+
+        _listener.SetMeasurementEventCallback<long>((instrument, measurement, _, _) =>
+        {
+            if (instrument is Counter<long>)
+            {
+                _counters.AddOrUpdate(instrument.Name, measurement, (_, old) => old + measurement);
+            }
+        });
+
+        _listener.SetMeasurementEventCallback<double>((instrument, measurement, _, _) =>
+        {
+            if (instrument is Histogram<double>)
+            {
+                _histogramSums.AddOrUpdate(instrument.Name, measurement, (_, old) => old + measurement);
+                _histogramCounts.AddOrUpdate(instrument.Name, 1, (_, old) => old + 1);
+            }
+            else
+            {
+                _gauges[instrument.Name] = measurement;
+            }
+        });
+
+        _listener.SetMeasurementEventCallback<int>((instrument, measurement, _, _) =>
+        {
+            _gauges[instrument.Name] = measurement;
+        });
+
+        _listener.Start();
+
+        _refreshTimer = new Timer(_ =>
+        {
+            _listener.RecordObservableInstruments();
+            InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+    }
+
+    private long GetCounter(string name) =>
+        _counters.GetValueOrDefault(name, 0);
+
+    private string GetHistogram(string name)
+    {
+        var count = _histogramCounts.GetValueOrDefault(name, 0);
+        if (count == 0) return "—";
+        var sum = _histogramSums.GetValueOrDefault(name, 0);
+        return (sum / count).ToString("F1");
+    }
+
+    private string GetGauge(string name) =>
+        _gauges.TryGetValue(name, out var v) ? ((int)v).ToString() : "—";
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+        _listener?.Dispose();
+    }
+}

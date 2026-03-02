@@ -1,0 +1,71 @@
+@inherits LayoutComponentBase
+@using DashboardExample.Services
+@using Asterisk.Sdk.Enums
+@inject AsteriskMonitorService Monitor
+@implements IDisposable
+
+<div class="layout">
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <h2>Asterisk</h2>
+        </div>
+        <NavLink href="/" Match="NavLinkMatch.All" class="nav-item">Home</NavLink>
+        <NavLink href="/queues" class="nav-item">Queues</NavLink>
+        <NavLink href="/agents" class="nav-item">Agents</NavLink>
+        <NavLink href="/channels" class="nav-item">Channels</NavLink>
+        <NavLink href="/conferences" class="nav-item">Conferences</NavLink>
+        <NavLink href="/metrics" class="nav-item">Metrics</NavLink>
+        <NavLink href="/events" class="nav-item">Events</NavLink>
+    </nav>
+
+    <div class="main-area">
+        <header class="header">
+            <div class="header-left">
+                <h1>Asterisk Dashboard</h1>
+            </div>
+            <div class="header-center">
+                @foreach (var (id, entry) in Monitor.Servers)
+                {
+                    var state = entry.Connection.State;
+                    var dotClass = state switch
+                    {
+                        AmiConnectionState.Connected => "dot-green",
+                        AmiConnectionState.Reconnecting or AmiConnectionState.Connecting => "dot-yellow",
+                        _ => "dot-red"
+                    };
+                    <span class="connection-dot @dotClass" title="@id: @state"></span>
+                    <span class="connection-label">@id</span>
+                }
+            </div>
+            <div class="header-right">
+                <span class="header-stat">@_totalChannels calls</span>
+                <span class="header-stat">@_totalQueues queues</span>
+                <span class="header-stat">@_totalAgents agents</span>
+            </div>
+        </header>
+
+        <main class="content">
+            @Body
+        </main>
+    </div>
+</div>
+
+@code {
+    private Timer? _timer;
+    private int _totalChannels;
+    private int _totalQueues;
+    private int _totalAgents;
+
+    protected override void OnInitialized()
+    {
+        _timer = new Timer(_ =>
+        {
+            _totalChannels = Monitor.Servers.Sum(s => s.Value.Server.Channels.ChannelCount);
+            _totalQueues = Monitor.Servers.Sum(s => s.Value.Server.Queues.QueueCount);
+            _totalAgents = Monitor.Servers.Sum(s => s.Value.Server.Agents.AgentCount);
+            InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

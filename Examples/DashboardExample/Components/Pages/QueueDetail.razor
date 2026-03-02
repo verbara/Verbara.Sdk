@@ -1,0 +1,204 @@
+@page "/queue/{ServerId}/{QueueName}"
+@using DashboardExample.Services
+@using Asterisk.Sdk.Live
+@using Asterisk.Sdk.Live.Queues
+@using Asterisk.Sdk.Ami.Actions
+@inject AsteriskMonitorService Monitor
+@implements IDisposable
+
+<PageTitle>@QueueName — Asterisk Dashboard</PageTitle>
+
+<h2>
+    <a href="/queues" class="back-link">Queues</a> / @QueueName
+    <span class="badge badge-muted">@ServerId</span>
+</h2>
+
+@if (_queue is null)
+{
+    <p>Queue not found.</p>
+}
+else
+{
+    <div class="stats-bar">
+        <div class="stat-item"><strong>@_queue.Max</strong> Max</div>
+        <div class="stat-item"><strong>@_queue.Strategy</strong> Strategy</div>
+        <div class="stat-item"><strong>@_queue.Calls</strong> Calls</div>
+        <div class="stat-item"><strong>@FormatSeconds(_queue.HoldTime)</strong> Hold</div>
+        <div class="stat-item"><strong>@FormatSeconds(_queue.TalkTime)</strong> Talk</div>
+        <div class="stat-item"><strong>@_queue.Completed</strong> Done</div>
+        <div class="stat-item"><strong>@_queue.Abandoned</strong> Dropped</div>
+    </div>
+
+    <h3>Agents (@_queue.MemberCount)</h3>
+    <div class="card-grid">
+        @foreach (var member in _queue.Members.Values)
+        {
+            var (dotClass, icon) = GetMemberStyle(member);
+            <div class="agent-card @dotClass">
+                <div class="agent-card-header">
+                    <span class="status-dot @dotClass"></span>
+                    <strong>@(member.MemberName ?? member.Interface)</strong>
+                    <span class="agent-icon">@icon</span>
+                </div>
+                <div class="agent-card-body">
+                    <div>@member.Interface</div>
+                    <div>Calls: @member.CallsTaken | Penalty: @member.Penalty</div>
+                    @if (member.Paused)
+                    {
+                        <div class="badge badge-yellow">Paused @(member.PausedReason is not null ? $"— {member.PausedReason}" : "")</div>
+                    }
+                </div>
+                <div class="agent-card-actions">
+                    @if (member.Paused)
+                    {
+                        <button class="btn btn-sm btn-green" @onclick="() => TogglePause(member, false)">Unpause</button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-sm btn-yellow" @onclick="() => TogglePause(member, true)">Pause</button>
+                    }
+                    <button class="btn btn-sm btn-red" @onclick="() => RemoveMember(member)">Remove</button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <h3>Callers Waiting (@_queue.EntryCount)</h3>
+    @if (_queue.EntryCount > 0)
+    {
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Pos</th>
+                    <th>Caller ID</th>
+                    <th>Channel</th>
+                    <th>Wait Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in _queue.Entries.Values.OrderBy(e => e.Position))
+                {
+                    <tr>
+                        <td>@entry.Position</td>
+                        <td>@entry.CallerId</td>
+                        <td>@entry.Channel</td>
+                        <td class="caller-timer">@FormatDuration(DateTimeOffset.UtcNow - entry.JoinedAt)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <p class="text-muted">No callers waiting.</p>
+    }
+
+    <h3>Add Member</h3>
+    <div class="inline-form">
+        <input @bind="_addInterface" placeholder="PJSIP/3000" class="input" />
+        <input @bind="_addMemberName" placeholder="Agent Name" class="input" />
+        <input @bind="_addPenalty" type="number" placeholder="Penalty" class="input input-sm" />
+        <button class="btn btn-blue" @onclick="AddMember">Add</button>
+    </div>
+    @if (_actionMessage is not null)
+    {
+        <p class="action-result">@_actionMessage</p>
+    }
+}
+
+@code {
+    [Parameter] public string ServerId { get; set; } = "";
+    [Parameter] public string QueueName { get; set; } = "";
+
+    private Timer? _timer;
+    private AsteriskQueue? _queue;
+    private string _addInterface = "";
+    private string _addMemberName = "";
+    private int _addPenalty;
+    private string? _actionMessage;
+
+    protected override void OnInitialized()
+    {
+        _timer = new Timer(_ => { RefreshQueue(); InvokeAsync(StateHasChanged); },
+            null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+    }
+
+    private void RefreshQueue()
+    {
+        var entry = Monitor.GetServer(ServerId);
+        _queue = entry?.Server.Queues.GetByName(QueueName);
+    }
+
+    private async Task TogglePause(AsteriskQueueMember member, bool pause)
+    {
+        var entry = Monitor.GetServer(ServerId);
+        if (entry is null) return;
+
+        var response = await entry.Connection.SendActionAsync(new QueuePauseAction
+        {
+            Queue = QueueName,
+            Interface = member.Interface,
+            Paused = pause
+        });
+        _actionMessage = $"Pause {(pause ? "on" : "off")}: {response.Response} — {response.Message}";
+    }
+
+    private async Task RemoveMember(AsteriskQueueMember member)
+    {
+        var entry = Monitor.GetServer(ServerId);
+        if (entry is null) return;
+
+        var response = await entry.Connection.SendActionAsync(new QueueRemoveAction
+        {
+            Queue = QueueName,
+            Interface = member.Interface
+        });
+        _actionMessage = $"Remove: {response.Response} — {response.Message}";
+    }
+
+    private async Task AddMember()
+    {
+        if (string.IsNullOrWhiteSpace(_addInterface)) return;
+
+        var entry = Monitor.GetServer(ServerId);
+        if (entry is null) return;
+
+        var response = await entry.Connection.SendActionAsync(new QueueAddAction
+        {
+            Queue = QueueName,
+            Interface = _addInterface,
+            MemberName = string.IsNullOrWhiteSpace(_addMemberName) ? null : _addMemberName,
+            Penalty = _addPenalty
+        });
+        _actionMessage = $"Add: {response.Response} — {response.Message}";
+        _addInterface = "";
+        _addMemberName = "";
+        _addPenalty = 0;
+    }
+
+    private static (string dotClass, string icon) GetMemberStyle(AsteriskQueueMember member)
+    {
+        if (member.Paused) return ("status-paused", "\u23F8");
+        return member.Status switch
+        {
+            QueueMemberState.DeviceNotInUse => ("status-available", "\u2713"),
+            QueueMemberState.DeviceInUse => ("status-incall", "\uD83D\uDCDE"),
+            QueueMemberState.DeviceBusy => ("status-busy", "\u26D4"),
+            QueueMemberState.DeviceRinging or QueueMemberState.DeviceRingInUse => ("status-ringing", "\uD83D\uDD14"),
+            QueueMemberState.DeviceOnHold => ("status-hold", "\u23F3"),
+            QueueMemberState.DeviceUnavailable => ("status-offline", "\u2715"),
+            _ => ("status-unknown", "?")
+        };
+    }
+
+    private static string FormatSeconds(int seconds)
+    {
+        var ts = TimeSpan.FromSeconds(seconds);
+        return ts.TotalMinutes >= 1 ? $"{(int)ts.TotalMinutes}m{ts.Seconds:D2}s" : $"{ts.Seconds}s";
+    }
+
+    private static string FormatDuration(TimeSpan ts) =>
+        ts.TotalMinutes >= 1 ? $"{(int)ts.TotalMinutes}:{ts.Seconds:D2}" : $"0:{ts.Seconds:D2}";
+
+    public void Dispose() => _timer?.Dispose();
+}

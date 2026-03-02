@@ -1,0 +1,128 @@
+@page "/agents"
+@using DashboardExample.Services
+@using DashboardExample.Components.Shared
+@using Asterisk.Sdk.Live.Agents
+@inject AsteriskMonitorService Monitor
+@implements IDisposable
+
+<PageTitle>Agents — Asterisk Dashboard</PageTitle>
+
+<h2>Agents</h2>
+<ServerSelector @bind-SelectedServerId="_selectedServer" />
+
+<div class="kpi-grid kpi-grid-sm">
+    <div class="kpi-card kpi-green">
+        <div class="kpi-value">@CountByState(AgentState.Available)</div>
+        <div class="kpi-label">Available</div>
+    </div>
+    <div class="kpi-card kpi-red">
+        <div class="kpi-value">@CountByState(AgentState.OnCall)</div>
+        <div class="kpi-label">On Call</div>
+    </div>
+    <div class="kpi-card kpi-yellow">
+        <div class="kpi-value">@CountByState(AgentState.Paused)</div>
+        <div class="kpi-label">Paused</div>
+    </div>
+    <div class="kpi-card kpi-gray">
+        <div class="kpi-value">@CountByState(AgentState.LoggedOff)</div>
+        <div class="kpi-label">Logged Off</div>
+    </div>
+</div>
+
+<div class="chip-bar">
+    <button class="chip @(_stateFilter is null ? "chip-active" : "")" @onclick="() => _stateFilter = null">All</button>
+    <button class="chip @(_stateFilter == AgentState.Available ? "chip-active" : "")" @onclick="() => _stateFilter = AgentState.Available">Available</button>
+    <button class="chip @(_stateFilter == AgentState.OnCall ? "chip-active" : "")" @onclick="() => _stateFilter = AgentState.OnCall">On Call</button>
+    <button class="chip @(_stateFilter == AgentState.Paused ? "chip-active" : "")" @onclick="() => _stateFilter = AgentState.Paused">Paused</button>
+    <button class="chip @(_stateFilter == AgentState.LoggedOff ? "chip-active" : "")" @onclick="() => _stateFilter = AgentState.LoggedOff">Logged Off</button>
+</div>
+
+<div class="card-grid">
+    @foreach (var (serverId, entry) in GetServers())
+    {
+        var agents = _stateFilter.HasValue
+            ? entry.Server.Agents.GetAgentsByState(_stateFilter.Value)
+            : entry.Server.Agents.Agents;
+
+        foreach (var agent in agents)
+        {
+            var (bgClass, dotClass) = GetAgentStyle(agent.State);
+            <div class="agent-card @bgClass">
+                <div class="agent-card-header">
+                    <span class="status-dot @dotClass"></span>
+                    <strong>@agent.AgentId</strong>
+                    @if (agent.Name is not null)
+                    {
+                        <span> — @agent.Name</span>
+                    }
+                    <span class="badge badge-muted">@serverId</span>
+                </div>
+                <div class="agent-card-body">
+                    <div>State: @agent.State</div>
+                    @if (agent.Channel is not null)
+                    {
+                        <div>Channel: @agent.Channel</div>
+                    }
+                    @if (agent.TalkingTo is not null)
+                    {
+                        <div>Talking to: @agent.TalkingTo</div>
+                    }
+                    @if (agent.LoggedInAt.HasValue)
+                    {
+                        <div>Logged in: @FormatTimeAgo(agent.LoggedInAt.Value)</div>
+                    }
+                    @{
+                        var queues = agent.Channel is not null
+                            ? entry.Server.Queues.GetQueuesForMember(agent.Channel).ToList()
+                            : [];
+                    }
+                    @if (queues.Count > 0)
+                    {
+                        <div>Queues: @string.Join(", ", queues)</div>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private Timer? _timer;
+    private string? _selectedServer;
+    private AgentState? _stateFilter;
+
+    protected override void OnInitialized()
+    {
+        _timer = new Timer(_ => InvokeAsync(StateHasChanged),
+            null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+    }
+
+    private IEnumerable<KeyValuePair<string, AsteriskMonitorService.ServerEntry>> GetServers() =>
+        string.IsNullOrEmpty(_selectedServer)
+            ? Monitor.Servers
+            : Monitor.Servers.Where(s => s.Key == _selectedServer);
+
+    private int CountByState(AgentState state) =>
+        GetServers().SelectMany(s => s.Value.Server.Agents.GetAgentsByState(state)).Count();
+
+    private static (string bgClass, string dotClass) GetAgentStyle(AgentState state) => state switch
+    {
+        AgentState.Available => ("bg-green-light", "dot-green"),
+        AgentState.OnCall => ("bg-red-light", "dot-red"),
+        AgentState.Paused => ("bg-yellow-light", "dot-yellow"),
+        AgentState.LoggedOff => ("bg-gray-light", "dot-gray"),
+        _ => ("bg-gray-lighter", "dot-gray-light")
+    };
+
+    private static string FormatTimeAgo(DateTimeOffset since)
+    {
+        var elapsed = DateTimeOffset.UtcNow - since;
+        if (elapsed.TotalHours >= 1)
+            return $"{(int)elapsed.TotalHours}h {elapsed.Minutes}m ago";
+        if (elapsed.TotalMinutes >= 1)
+            return $"{(int)elapsed.TotalMinutes}m ago";
+        return "just now";
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

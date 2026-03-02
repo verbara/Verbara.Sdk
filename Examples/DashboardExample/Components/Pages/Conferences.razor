@@ -1,0 +1,92 @@
+@page "/conferences"
+@using DashboardExample.Services
+@using DashboardExample.Components.Shared
+@using Asterisk.Sdk.Live
+@using Asterisk.Sdk.Live.MeetMe
+@inject AsteriskMonitorService Monitor
+@implements IDisposable
+
+<PageTitle>Conferences — Asterisk Dashboard</PageTitle>
+
+<h2>Conference Rooms</h2>
+<ServerSelector @bind-SelectedServerId="_selectedServer" />
+
+@{
+    var hasRooms = false;
+}
+@foreach (var (serverId, entry) in GetServers())
+{
+    foreach (var room in entry.Server.MeetMe.Rooms)
+    {
+        hasRooms = true;
+        <div class="conference-card">
+            <div class="conference-header">
+                <strong>Room @room.RoomNumber</strong>
+                <span class="badge badge-muted">@serverId</span>
+                <span class="badge badge-blue">@room.UserCount participants</span>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Channel</th>
+                        <th>State</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var user in room.Users.Values)
+                    {
+                        var (dotClass, label) = GetUserStyle(user);
+                        <tr>
+                            <td>@user.UserNum</td>
+                            <td>@user.Channel</td>
+                            <td>
+                                <span class="status-dot @dotClass"></span>
+                                @label
+                                @if (user.Muted)
+                                {
+                                    <span class="badge badge-muted">Muted</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@if (!hasRooms)
+{
+    <p class="text-muted">No active conference rooms.</p>
+}
+
+@code {
+    private Timer? _timer;
+    private string? _selectedServer;
+
+    protected override void OnInitialized()
+    {
+        _timer = new Timer(_ => InvokeAsync(StateHasChanged),
+            null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+    }
+
+    private IEnumerable<KeyValuePair<string, AsteriskMonitorService.ServerEntry>> GetServers() =>
+        string.IsNullOrEmpty(_selectedServer)
+            ? Monitor.Servers
+            : Monitor.Servers.Where(s => s.Key == _selectedServer);
+
+    private static (string dotClass, string label) GetUserStyle(MeetMeUser user)
+    {
+        if (user.Talking) return ("dot-green", "Talking");
+        return user.State switch
+        {
+            MeetMeUserState.Joined => ("dot-blue", "Joined"),
+            MeetMeUserState.Left => ("dot-gray", "Left"),
+            MeetMeUserState.Talking => ("dot-green", "Talking"),
+            _ => ("dot-gray-light", "Unknown")
+        };
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}
