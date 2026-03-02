@@ -252,6 +252,42 @@ public sealed class AsteriskServerTests : IAsyncDisposable
         _sut.Agents.AgentCount.Should().Be(1);
     }
 
+    [Fact]
+    public async Task StartAsync_ShouldPopulateChannelsAndQueues_WhenAgentsActionReturnsEmpty()
+    {
+        var statusEvent = new Asterisk.Sdk.Ami.Events.StatusEvent
+        {
+            UniqueId = "500.1",
+            Channel = "PJSIP/5000-001",
+            State = "Up"
+        };
+        var queueParams = new Asterisk.Sdk.Ami.Events.QueueParamsEvent
+        {
+            Queue = "support",
+            Max = 5,
+            Strategy = "ringall"
+        };
+        var callCount = 0;
+        _connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                callCount++;
+                return callCount switch
+                {
+                    1 => ToAsyncEnumerable(statusEvent),  // StatusAction
+                    2 => ToAsyncEnumerable(queueParams),   // QueueStatusAction
+                    _ => EmptyAsyncEnumerable()            // AgentsAction → empty
+                };
+            });
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        await _sut.StartAsync(cts.Token);
+
+        _sut.Channels.ChannelCount.Should().Be(1);
+        _sut.Queues.QueueCount.Should().Be(1);
+        _sut.Agents.AgentCount.Should().Be(0);
+    }
+
     private static async IAsyncEnumerable<ManagerEvent> ToAsyncEnumerable(ManagerEvent evt)
     {
         await Task.CompletedTask;
