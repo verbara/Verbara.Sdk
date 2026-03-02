@@ -1,0 +1,30 @@
+services:
+  asterisk:
+    image: andrius/asterisk:20-alpine
+    container_name: demo-pbx
+    ports:
+      - "5038:5038"
+    volumes:
+      - ./dashboard-config:/etc/asterisk
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show version"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dashboard
+    container_name: asterisk-dashboard
+    ports:
+      - "8080:8080"
+    depends_on:
+      asterisk:
+        condition: service_healthy
+    environment:
+      - Asterisk__Servers__0__Id=demo-pbx
+      - Asterisk__Servers__0__Hostname=asterisk
+      - Asterisk__Servers__0__Port=5038
+      - Asterisk__Servers__0__Username=dashboard
+      - Asterisk__Servers__0__Password=dashboard
