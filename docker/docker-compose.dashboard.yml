@@ -1,6 +1,6 @@
 services:
   asterisk:
-    image: andrius/asterisk:20-alpine
+    image: andrius/asterisk:20
     container_name: demo-pbx
     ports:
       - "5038:5038"

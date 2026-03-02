@@ -28,7 +28,7 @@ COPY src/ src/
 COPY Examples/DashboardExample/ Examples/DashboardExample/
 
 # Publish
-RUN dotnet publish Examples/DashboardExample/ -c Release -o /app --no-restore
+RUN dotnet publish Examples/DashboardExample/ -c Release -o /app
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
