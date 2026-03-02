@@ -26,4 +26,13 @@ public sealed class AriClientOptions
 
     /// <summary>Auto-reconnect WebSocket on disconnect. Default: true.</summary>
     public bool AutoReconnect { get; set; } = true;
+
+    /// <summary>Initial delay before first reconnection attempt. Default: 1 second.</summary>
+    public TimeSpan ReconnectInitialDelay { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>Maximum delay between reconnection attempts. Default: 30 seconds.</summary>
+    public TimeSpan ReconnectMaxDelay { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Multiplier applied to the delay after each failed reconnection attempt. Default: 2.0.</summary>
+    public double ReconnectMultiplier { get; set; } = 2.0;
 }

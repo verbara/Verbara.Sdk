@@ -414,14 +414,17 @@ public sealed class AmiConnection : IAmiConnection
     private async Task ReconnectLoopAsync()
     {
         var attempt = 0;
+        var delay = _options.ReconnectInitialDelay;
+        var maxDelay = _options.ReconnectMaxDelay;
+
         while (_state == AmiConnectionState.Reconnecting)
         {
             attempt++;
-            var delay = attempt <= 10 ? 50 : 5000;
+            var delayMs = (int)Math.Min(delay.TotalMilliseconds, int.MaxValue);
 
             AmiMetrics.ReconnectionAttempts.Add(1);
-            AmiConnectionLog.Reconnecting(_logger, delay, attempt);
-            await Task.Delay(delay);
+            AmiConnectionLog.Reconnecting(_logger, delayMs, attempt);
+            await Task.Delay(delayMs);
 
             if (_options.MaxReconnectAttempts > 0 && attempt >= _options.MaxReconnectAttempts)
             {
@@ -433,13 +436,39 @@ public sealed class AmiConnection : IAmiConnection
             {
                 await CleanupAsync();
                 await ConnectAsync();
-                Reconnected?.Invoke();
+                OnReconnected();
                 return; // Success
             }
             catch
             {
-                // Retry
+                // Retry with exponential backoff
             }
+
+            delay = TimeSpan.FromMilliseconds(
+                Math.Min(delay.TotalMilliseconds * _options.ReconnectMultiplier, maxDelay.TotalMilliseconds));
+        }
+    }
+
+    /// <summary>
+    /// Fires the Reconnected event safely. Any async work triggered by subscribers
+    /// runs via Task.Run to avoid async-void hazards on the reconnect path.
+    /// </summary>
+    private void OnReconnected()
+    {
+        var handler = Reconnected;
+        if (handler is not null)
+        {
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    handler.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    AmiConnectionLog.ReaderError(_logger, ex);
+                }
+            });
         }
     }
 

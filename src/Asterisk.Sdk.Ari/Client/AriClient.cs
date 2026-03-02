@@ -24,6 +24,12 @@ internal static partial class AriClientLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "ARI WebSocket error")]
     public static partial void WebSocketError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ARI WebSocket reconnecting in {DelayMs}ms (attempt {Attempt})")]
+    public static partial void Reconnecting(ILogger logger, long delayMs, int attempt);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "ARI WebSocket reconnected after {Attempt} attempts")]
+    public static partial void ReconnectedSuccess(ILogger logger, int attempt);
 }
 
 /// <summary>
@@ -43,6 +49,11 @@ public sealed class AriClient : IAriClient
 
     public IAriChannelsResource Channels { get; }
     public IAriBridgesResource Bridges { get; }
+    public IAriPlaybacksResource Playbacks { get; }
+    public IAriRecordingsResource Recordings { get; }
+    public IAriEndpointsResource Endpoints { get; }
+    public IAriApplicationsResource Applications { get; }
+    public IAriSoundsResource Sounds { get; }
 
     public AriClient(IOptions<AriClientOptions> options, ILogger<AriClient> logger)
     {
@@ -56,6 +67,11 @@ public sealed class AriClient : IAriClient
 
         Channels = new AriChannelsResource(_httpClient, _options);
         Bridges = new AriBridgesResource(_httpClient, _options);
+        Playbacks = new AriPlaybacksResource(_httpClient);
+        Recordings = new AriRecordingsResource(_httpClient);
+        Endpoints = new AriEndpointsResource(_httpClient);
+        Applications = new AriApplicationsResource(_httpClient);
+        Sounds = new AriSoundsResource(_httpClient);
     }
 
     public async ValueTask ConnectAsync(CancellationToken cancellationToken = default)
@@ -70,7 +86,7 @@ public sealed class AriClient : IAriClient
         var wsUrl = _options.BaseUrl.TrimEnd('/')
             .Replace("http://", "ws://", StringComparison.OrdinalIgnoreCase)
             .Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase);
-        var uri = new Uri($"{wsUrl}/ari/events?api_key={_options.Username}:{_options.Password}&app={_options.Application}");
+        var uri = new Uri($"{wsUrl}/ari/events?api_key={Uri.EscapeDataString(_options.Username)}:{Uri.EscapeDataString(_options.Password)}&app={Uri.EscapeDataString(_options.Application)}");
 
         await _webSocket.ConnectAsync(uri, cancellationToken);
         _eventLoop = Task.Run(() => EventLoopAsync(_cts.Token), CancellationToken.None);
@@ -80,20 +96,30 @@ public sealed class AriClient : IAriClient
 
     private async Task EventLoopAsync(CancellationToken ct)
     {
-        var buffer = ArrayPool<byte>.Shared.Rent(8192);
+        var bufferWriter = new ArrayBufferWriter<byte>(8192);
 
         try
         {
             while (!ct.IsCancellationRequested && _webSocket?.State == WebSocketState.Open)
             {
-                var result = await _webSocket.ReceiveAsync(buffer.AsMemory(), ct);
+                bufferWriter.Clear();
+                ValueWebSocketReceiveResult result;
+
+                // Read potentially fragmented message segments into the buffer writer
+                do
+                {
+                    var memory = bufferWriter.GetMemory(4096);
+                    result = await _webSocket.ReceiveAsync(memory, ct);
+                    bufferWriter.Advance(result.Count);
+                }
+                while (!result.EndOfMessage);
 
                 if (result.MessageType == WebSocketMessageType.Close)
                     break;
 
-                if (result.MessageType == WebSocketMessageType.Text)
+                if (result.MessageType == WebSocketMessageType.Text && bufferWriter.WrittenCount > 0)
                 {
-                    var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    var json = Encoding.UTF8.GetString(bufferWriter.WrittenSpan);
                     var evt = ParseEvent(json);
                     if (evt is not null)
                     {
@@ -108,9 +134,69 @@ public sealed class AriClient : IAriClient
         {
             AriClientLog.WebSocketError(_logger, ex);
         }
-        finally
+
+        // Auto-reconnect with exponential backoff
+        if (_options.AutoReconnect && !ct.IsCancellationRequested)
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            await ReconnectLoopAsync(ct);
+        }
+    }
+
+    private async Task ReconnectLoopAsync(CancellationToken ct)
+    {
+        var attempt = 0;
+        var delay = _options.ReconnectInitialDelay;
+        var maxDelay = _options.ReconnectMaxDelay;
+
+        while (!ct.IsCancellationRequested)
+        {
+            attempt++;
+            var delayMs = (long)delay.TotalMilliseconds;
+            AriClientLog.Reconnecting(_logger, delayMs, attempt);
+
+            try
+            {
+                await Task.Delay(delay, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            try
+            {
+                // Dispose old WebSocket
+                _webSocket?.Dispose();
+                _webSocket = new ClientWebSocket();
+
+                var authBytes = Encoding.UTF8.GetBytes($"{_options.Username}:{_options.Password}");
+                _webSocket.Options.SetRequestHeader("Authorization",
+                    "Basic " + Convert.ToBase64String(authBytes));
+
+                var wsUrl = _options.BaseUrl.TrimEnd('/')
+                    .Replace("http://", "ws://", StringComparison.OrdinalIgnoreCase)
+                    .Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase);
+                var uri = new Uri($"{wsUrl}/ari/events?api_key={Uri.EscapeDataString(_options.Username)}:{Uri.EscapeDataString(_options.Password)}&app={Uri.EscapeDataString(_options.Application)}");
+
+                await _webSocket.ConnectAsync(uri, ct);
+                AriClientLog.ReconnectedSuccess(_logger, attempt);
+
+                // Restart event loop (recursive but tail-position — runs the receive loop again)
+                await EventLoopAsync(ct);
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                AriClientLog.WebSocketError(_logger, ex);
+            }
+
+            // Exponential backoff: delay * multiplier, capped at maxDelay
+            delay = TimeSpan.FromMilliseconds(
+                Math.Min(delay.TotalMilliseconds * _options.ReconnectMultiplier, maxDelay.TotalMilliseconds));
         }
     }
 

@@ -82,11 +82,4 @@ public sealed class DialEvent : AriEvent
     public string? Dialstatus { get; set; }
 }
 
-/// <summary>ARI Playback model.</summary>
-public sealed class AriPlayback
-{
-    public string Id { get; set; } = string.Empty;
-    public string MediaUri { get; set; } = string.Empty;
-    public string State { get; set; } = string.Empty;
-    public string TargetUri { get; set; } = string.Empty;
-}
+// AriPlayback model is defined in Asterisk.Sdk (IAriClient.cs)
