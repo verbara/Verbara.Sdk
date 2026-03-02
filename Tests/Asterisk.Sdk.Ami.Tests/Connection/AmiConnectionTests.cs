@@ -289,5 +289,122 @@ public sealed class AmiConnectionTests : IAsyncDisposable
         _sut.State.Should().Be(AmiConnectionState.Disconnected);
     }
 
+    // ── Event-generating action helpers ────────────────────────────────────────
+
+    private static async Task WriteEventAsync(PipeWriter writer, string eventType, string actionId,
+        List<KeyValuePair<string, string>>? fields = null)
+    {
+        var sb = new StringBuilder();
+        sb.Append(CultureInfo.InvariantCulture, $"Event: {eventType}\r\n");
+        sb.Append(CultureInfo.InvariantCulture, $"ActionID: {actionId}\r\n");
+        if (fields is not null)
+        {
+            foreach (var kv in fields)
+                sb.Append(CultureInfo.InvariantCulture, $"{kv.Key}: {kv.Value}\r\n");
+        }
+        sb.Append("\r\n");
+        await WriteBytesAsync(writer, sb.ToString());
+    }
+
+    // ── Event-generating action regression tests (Bug 2: Error response) ────────
+
+    [Fact]
+    public async Task SendEventGeneratingActionAsync_ShouldComplete_WhenServerReturnsError()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var writer = _serverToClient.Writer;
+        var reader = _clientToServer.Reader;
+
+        // Simulate login + server responds with error to next action
+        _ = Task.Run(async () =>
+        {
+            await SimulateSuccessfulLoginAsync(cts.Token);
+
+            // Read the StatusAction sent by the SUT
+            var actionText = await ReadActionAsync(reader, cts.Token);
+            var actionId = ExtractActionId(actionText);
+
+            // Server returns error instead of events
+            await WriteResponseAsync(writer, "Error", actionId,
+                [new("Message", "No such command")]);
+        }, cts.Token);
+
+        await _sut.ConnectAsync(cts.Token);
+
+        var events = new List<ManagerEvent>();
+        await foreach (var evt in _sut.SendEventGeneratingActionAsync(
+            new Asterisk.Sdk.Ami.Actions.StatusAction(), cts.Token))
+        {
+            events.Add(evt);
+        }
+
+        events.Should().BeEmpty("error response should complete the collector with 0 events");
+    }
+
+    [Fact]
+    public async Task SendEventGeneratingActionAsync_ShouldYieldEvents_ThenComplete()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var writer = _serverToClient.Writer;
+        var reader = _clientToServer.Reader;
+
+        _ = Task.Run(async () =>
+        {
+            await SimulateSuccessfulLoginAsync(cts.Token);
+
+            var actionText = await ReadActionAsync(reader, cts.Token);
+            var actionId = ExtractActionId(actionText);
+
+            // Server sends 2 status events + StatusComplete
+            await WriteEventAsync(writer, "Status", actionId,
+                [new("Channel", "PJSIP/2000-001"), new("State", "Up")]);
+            await WriteEventAsync(writer, "Status", actionId,
+                [new("Channel", "PJSIP/3000-001"), new("State", "Ring")]);
+            await WriteEventAsync(writer, "StatusComplete", actionId,
+                [new("Items", "2")]);
+        }, cts.Token);
+
+        await _sut.ConnectAsync(cts.Token);
+
+        var events = new List<ManagerEvent>();
+        await foreach (var evt in _sut.SendEventGeneratingActionAsync(
+            new Asterisk.Sdk.Ami.Actions.StatusAction(), cts.Token))
+        {
+            events.Add(evt);
+        }
+
+        events.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task SendEventGeneratingActionAsync_ShouldComplete_WhenServerReturnsErrorWithMessage()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var writer = _serverToClient.Writer;
+        var reader = _clientToServer.Reader;
+
+        _ = Task.Run(async () =>
+        {
+            await SimulateSuccessfulLoginAsync(cts.Token);
+
+            var actionText = await ReadActionAsync(reader, cts.Token);
+            var actionId = ExtractActionId(actionText);
+
+            await WriteResponseAsync(writer, "Error", actionId,
+                [new("Message", "Permission denied")]);
+        }, cts.Token);
+
+        await _sut.ConnectAsync(cts.Token);
+
+        var events = new List<ManagerEvent>();
+        await foreach (var evt in _sut.SendEventGeneratingActionAsync(
+            new Asterisk.Sdk.Ami.Actions.StatusAction(), cts.Token))
+        {
+            events.Add(evt);
+        }
+
+        events.Should().BeEmpty("error with message should complete the collector without blocking");
+    }
+
     private sealed class TestAction : ManagerAction;
 }

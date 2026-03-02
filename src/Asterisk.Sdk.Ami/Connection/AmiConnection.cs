@@ -358,6 +358,15 @@ public sealed class AmiConnection : IAmiConnection
                     {
                         tcs.TrySetResult(msg);
                     }
+
+                    // If an event-generating action receives an error response,
+                    // complete its collector so the await foreach doesn't hang forever.
+                    if (msg.ActionId is not null
+                        && string.Equals(msg.ResponseStatus, "Error", StringComparison.OrdinalIgnoreCase)
+                        && _pendingEventActions.TryRemove(msg.ActionId, out var errorCollector))
+                    {
+                        errorCollector.Complete();
+                    }
                 }
                 else if (msg.IsEvent)
                 {
