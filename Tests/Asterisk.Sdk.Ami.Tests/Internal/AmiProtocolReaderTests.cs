@@ -119,4 +119,119 @@ public class AmiProtocolReaderTests
         msg.Should().NotBeNull();
         msg!["Var"].Should().Be("second");
     }
+
+    // ── PipeReader buffer regression tests (Bug 1: AdvanceTo examined) ──────────
+    // These tests keep the pipe writer open (no CompleteAsync) to simulate a live
+    // TCP stream. Without the fix, the second ReadMessageAsync blocks because the
+    // PipeReader considers remaining bytes "already examined".
+
+    [Fact]
+    public async Task ReadMessageAsync_ShouldParseSecondMessage_WhenTwoMessagesInSingleWrite()
+    {
+        var pipe = new Pipe();
+        var reader = new AmiProtocolReader(pipe.Reader);
+
+        var data = "Response: Success\r\nActionID: 1\r\n\r\n"
+            + "Event: FullyBooted\r\nStatus: Fully Booted\r\n\r\n";
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes(data));
+        // Writer NOT completed — simulates live TCP stream
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
+        var msg1 = await reader.ReadMessageAsync(cts.Token);
+        msg1.Should().NotBeNull();
+        msg1!.IsResponse.Should().BeTrue();
+        msg1.ActionId.Should().Be("1");
+
+        var msg2 = await reader.ReadMessageAsync(cts.Token);
+        msg2.Should().NotBeNull();
+        msg2!.IsEvent.Should().BeTrue();
+        msg2.EventType.Should().Be("FullyBooted");
+
+        await pipe.Writer.CompleteAsync();
+    }
+
+    [Fact]
+    public async Task ReadMessageAsync_ShouldParseThreeMessages_WhenAllInSingleWrite()
+    {
+        var pipe = new Pipe();
+        var reader = new AmiProtocolReader(pipe.Reader);
+
+        var data = "Response: Success\r\nActionID: 1\r\n\r\n"
+            + "Event: Newchannel\r\nChannel: SIP/2000\r\n\r\n"
+            + "Event: Hangup\r\nChannel: SIP/2000\r\nCause: 16\r\n\r\n";
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes(data));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
+        var msg1 = await reader.ReadMessageAsync(cts.Token);
+        msg1.Should().NotBeNull();
+        msg1!.IsResponse.Should().BeTrue();
+
+        var msg2 = await reader.ReadMessageAsync(cts.Token);
+        msg2.Should().NotBeNull();
+        msg2!.IsEvent.Should().BeTrue();
+        msg2.EventType.Should().Be("Newchannel");
+
+        var msg3 = await reader.ReadMessageAsync(cts.Token);
+        msg3.Should().NotBeNull();
+        msg3!.IsEvent.Should().BeTrue();
+        msg3.EventType.Should().Be("Hangup");
+        msg3["Cause"].Should().Be("16");
+
+        await pipe.Writer.CompleteAsync();
+    }
+
+    [Fact]
+    public async Task ReadMessageAsync_ShouldParseResponseAfterProtocolIdentifier_WhenBothInSingleWrite()
+    {
+        var pipe = new Pipe();
+        var reader = new AmiProtocolReader(pipe.Reader);
+
+        var data = "Asterisk Call Manager/6.0.0\r\n"
+            + "Response: Success\r\nActionID: 1\r\nMessage: OK\r\n\r\n";
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes(data));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
+        var msg1 = await reader.ReadMessageAsync(cts.Token);
+        msg1.Should().NotBeNull();
+        msg1!.IsProtocolIdentifier.Should().BeTrue();
+        msg1.ProtocolIdentifier.Should().Be("Asterisk Call Manager/6.0.0");
+
+        var msg2 = await reader.ReadMessageAsync(cts.Token);
+        msg2.Should().NotBeNull();
+        msg2!.IsResponse.Should().BeTrue();
+        msg2["Message"].Should().Be("OK");
+
+        await pipe.Writer.CompleteAsync();
+    }
+
+    [Fact]
+    public async Task ReadMessageAsync_ShouldWaitForMoreData_WhenMessageIsFragmented()
+    {
+        var pipe = new Pipe();
+        var reader = new AmiProtocolReader(pipe.Reader);
+
+        // Write only the first half of a message (no terminating \r\n\r\n)
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("Event: Newchannel\r\nChannel: SIP/2000\r\n"));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+
+        // Read should NOT complete yet — message is incomplete
+        var readTask = reader.ReadMessageAsync(cts.Token).AsTask();
+        var completed = await Task.WhenAny(readTask, Task.Delay(200)) == readTask;
+        completed.Should().BeFalse("reader should block waiting for more data");
+
+        // Now write the terminating blank line
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("\r\n"));
+
+        using var cts2 = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var msg = await readTask;
+        msg.Should().NotBeNull();
+        msg!.IsEvent.Should().BeTrue();
+        msg.EventType.Should().Be("Newchannel");
+
+        await pipe.Writer.CompleteAsync();
+    }
 }

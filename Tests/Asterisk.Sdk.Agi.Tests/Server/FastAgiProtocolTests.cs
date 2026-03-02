@@ -88,4 +88,74 @@ public class FastAgiProtocolTests
 
         await cmdPipe.Writer.CompleteAsync();
     }
+
+    // ── PipeReader buffer regression tests (Bug 3: AdvanceTo examined) ──────────
+    // Same root cause as the AMI PipeReader bug: when a line is found,
+    // AdvanceTo(buffer.Start, buffer.End) marks remaining bytes as "examined",
+    // so the PipeReader won't return them until new data arrives from the network.
+
+    [Fact]
+    public async Task ReadLineAsync_ShouldReadSecondLine_WhenTwoLinesInSingleWrite()
+    {
+        var pipe = new Pipe();
+        var reader = new FastAgiReader(pipe.Reader);
+
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("200 result=0\n200 result=1\n"));
+        // Writer NOT completed — simulates live TCP stream
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
+        var line1 = await reader.ReadLineAsync(cts.Token);
+        line1.Should().Be("200 result=0");
+
+        var line2 = await reader.ReadLineAsync(cts.Token);
+        line2.Should().Be("200 result=1");
+
+        await pipe.Writer.CompleteAsync();
+    }
+
+    [Fact]
+    public async Task ReadRequestAsync_ShouldParseAllHeaders_WhenEntireRequestInSingleWrite()
+    {
+        var pipe = new Pipe();
+        var reader = new FastAgiReader(pipe.Reader);
+
+        var data = "agi_network: yes\n"
+            + "agi_network_script: Hello\n"
+            + "agi_channel: SIP/2000\n"
+            + "agi_uniqueid: 123.1\n"
+            + "\n";
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes(data));
+        // Writer NOT completed
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var request = await reader.ReadRequestAsync(cts.Token);
+
+        request.IsNetwork.Should().BeTrue();
+        request.Script.Should().Be("Hello");
+        request.Channel.Should().Be("SIP/2000");
+        request.UniqueId.Should().Be("123.1");
+
+        await pipe.Writer.CompleteAsync();
+    }
+
+    [Fact]
+    public async Task ReadLineAsync_ShouldHandleCrLf_WhenTwoLinesInSingleWrite()
+    {
+        var pipe = new Pipe();
+        var reader = new FastAgiReader(pipe.Reader);
+
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("200 result=0\r\n200 result=1\r\n"));
+        // Writer NOT completed
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
+        var line1 = await reader.ReadLineAsync(cts.Token);
+        line1.Should().Be("200 result=0");
+
+        var line2 = await reader.ReadLineAsync(cts.Token);
+        line2.Should().Be("200 result=1");
+
+        await pipe.Writer.CompleteAsync();
+    }
 }
