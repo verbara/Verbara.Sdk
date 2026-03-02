@@ -55,7 +55,7 @@ public sealed class AmiProtocolReader
                             fields["__CommandOutput"] = commandOutput.ToString();
                         }
 
-                        _reader.AdvanceTo(buffer.Start, buffer.End);
+                        _reader.AdvanceTo(buffer.Start);
                         return new AmiMessage(fields);
                     }
 
@@ -117,7 +117,7 @@ public sealed class AmiProtocolReader
                         || lineStr.Contains("OpenPBX Call Manager", StringComparison.OrdinalIgnoreCase))
                     {
                         fields["__ProtocolIdentifier"] = lineStr;
-                        _reader.AdvanceTo(buffer.Start, buffer.End);
+                        _reader.AdvanceTo(buffer.Start);
                         return new AmiMessage(fields);
                     }
                 }

@@ -58,7 +58,7 @@ public sealed class FastAgiReader
 
             if (TryReadLine(ref buffer, out var line))
             {
-                _reader.AdvanceTo(buffer.Start, buffer.End);
+                _reader.AdvanceTo(buffer.Start);
                 return line;
             }
 
