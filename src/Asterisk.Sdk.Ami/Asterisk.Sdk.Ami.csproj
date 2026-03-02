@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Asterisk.Sdk.Ami.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Asterisk.Sdk\Asterisk.Sdk.csproj" />
     <ProjectReference Include="..\Asterisk.Sdk.Ami.SourceGenerators\Asterisk.Sdk.Ami.SourceGenerators.csproj"
                       OutputItemType="Analyzer"

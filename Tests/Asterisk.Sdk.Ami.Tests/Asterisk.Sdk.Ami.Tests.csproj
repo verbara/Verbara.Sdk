@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Asterisk.Sdk.Ami\Asterisk.Sdk.Ami.csproj" />
+    <ProjectReference Include="..\..\src\Asterisk.Sdk.Ari\Asterisk.Sdk.Ari.csproj" />
   </ItemGroup>
 
   <ItemGroup>
