@@ -2,6 +2,8 @@
 
   <PropertyGroup>
     <Description>Asterisk.Sdk.Hosting - DI extensions and meta-package referencing all Asterisk SDK sub-packages</Description>
+    <!-- ValidateDataAnnotations uses reflection at startup only; suppress AOT trim warnings -->
+    <NoWarn>$(NoWarn);IL2026;IL3050</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,6 +19,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
   </ItemGroup>
 
 </Project>

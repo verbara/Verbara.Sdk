@@ -17,7 +17,7 @@ public static class ServiceCollectionExtensions
 {
     /// <summary>
     /// Add all Asterisk SDK services (AMI, AGI, ARI, Live) to the service collection.
-    /// Configures a single Asterisk server connection.
+    /// Configures a single Asterisk server connection with options validation on startup.
     /// </summary>
     public static IServiceCollection AddAsterisk(
         this IServiceCollection services,
@@ -29,16 +29,19 @@ public static class ServiceCollectionExtensions
         // Transport
         services.TryAddSingleton<ISocketConnectionFactory, PipelineSocketConnectionFactory>();
 
-        // AMI (single-server)
-        services.Configure<AmiConnectionOptions>(o =>
-        {
-            o.Hostname = options.Ami.Hostname;
-            o.Port = options.Ami.Port;
-            o.Username = options.Ami.Username;
-            o.Password = options.Ami.Password;
-            o.UseSsl = options.Ami.UseSsl;
-            o.AutoReconnect = options.Ami.AutoReconnect;
-        });
+        // AMI (single-server) with validation
+        services.AddOptions<AmiConnectionOptions>()
+            .Configure(o =>
+            {
+                o.Hostname = options.Ami.Hostname;
+                o.Port = options.Ami.Port;
+                o.Username = options.Ami.Username;
+                o.Password = options.Ami.Password;
+                o.UseSsl = options.Ami.UseSsl;
+                o.AutoReconnect = options.Ami.AutoReconnect;
+            })
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
         services.TryAddSingleton<IAmiConnection, AmiConnection>();
 
         // AMI Factory (always available for creating additional connections)
@@ -57,16 +60,19 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<AsteriskServer>();
         services.TryAddSingleton<IAsteriskServer>(sp => sp.GetRequiredService<AsteriskServer>());
 
-        // ARI
+        // ARI with validation
         if (options.Ari is not null)
         {
-            services.Configure<AriClientOptions>(o =>
-            {
-                o.BaseUrl = options.Ari.BaseUrl;
-                o.Username = options.Ari.Username;
-                o.Password = options.Ari.Password;
-                o.Application = options.Ari.Application;
-            });
+            services.AddOptions<AriClientOptions>()
+                .Configure(o =>
+                {
+                    o.BaseUrl = options.Ari.BaseUrl;
+                    o.Username = options.Ari.Username;
+                    o.Password = options.Ari.Password;
+                    o.Application = options.Ari.Application;
+                })
+                .ValidateDataAnnotations()
+                .ValidateOnStart();
             services.TryAddSingleton<IAriClient, AriClient>();
         }
 

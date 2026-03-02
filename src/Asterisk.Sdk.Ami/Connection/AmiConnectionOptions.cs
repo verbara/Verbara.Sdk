@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Asterisk.Sdk.Ami.Connection;
 
 /// <summary>
@@ -6,15 +8,19 @@ namespace Asterisk.Sdk.Ami.Connection;
 public sealed class AmiConnectionOptions
 {
     /// <summary>Asterisk server hostname or IP. Default: "localhost".</summary>
+    [Required]
     public string Hostname { get; set; } = "localhost";
 
     /// <summary>AMI port. Default: 5038.</summary>
+    [Range(1, 65535)]
     public int Port { get; set; } = 5038;
 
     /// <summary>AMI username.</summary>
+    [Required]
     public string Username { get; set; } = string.Empty;
 
     /// <summary>AMI password (used for MD5 challenge-response).</summary>
+    [Required]
     public string Password { get; set; } = string.Empty;
 
     /// <summary>Enable SSL/TLS. Default: false.</summary>
@@ -36,8 +42,10 @@ public sealed class AmiConnectionOptions
     public bool AutoReconnect { get; set; } = true;
 
     /// <summary>Maximum reconnection attempts. 0 = unlimited. Default: 0.</summary>
+    [Range(0, int.MaxValue)]
     public int MaxReconnectAttempts { get; set; }
 
     /// <summary>Event pump buffer capacity. Default: 20,000.</summary>
+    [Range(1, int.MaxValue)]
     public int EventPumpCapacity { get; set; } = Internal.AsyncEventPump.DefaultCapacity;
 }
