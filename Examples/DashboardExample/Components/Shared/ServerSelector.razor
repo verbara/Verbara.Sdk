@@ -1,0 +1,20 @@
+@using DashboardExample.Services
+@inject AsteriskMonitorService Monitor
+
+<div class="server-selector">
+    <select @bind="SelectedServerId" @bind:after="OnSelectionChanged">
+        <option value="">All Servers</option>
+        @foreach (var (id, _) in Monitor.Servers)
+        {
+            <option value="@id">@id</option>
+        }
+    </select>
+</div>
+
+@code {
+    [Parameter] public string? SelectedServerId { get; set; }
+    [Parameter] public EventCallback<string?> SelectedServerIdChanged { get; set; }
+
+    private Task OnSelectionChanged() =>
+        SelectedServerIdChanged.InvokeAsync(SelectedServerId);
+}

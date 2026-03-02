@@ -1,0 +1,109 @@
+@page "/"
+@using DashboardExample.Services
+@using Asterisk.Sdk.Live.Agents
+@inject AsteriskMonitorService Monitor
+@implements IDisposable
+
+<PageTitle>Home — Asterisk Dashboard</PageTitle>
+
+<h2>Dashboard</h2>
+
+<div class="kpi-grid">
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@_activeCalls</div>
+        <div class="kpi-label">Active Calls</div>
+    </div>
+    <div class="kpi-card kpi-purple">
+        <div class="kpi-value">@_queueCount</div>
+        <div class="kpi-label">Queues</div>
+    </div>
+    <div class="kpi-card @(_waitingCallers > 0 ? "kpi-red" : "kpi-gray")">
+        <div class="kpi-value">@_waitingCallers</div>
+        <div class="kpi-label">Waiting Callers</div>
+    </div>
+    <div class="kpi-card kpi-green">
+        <div class="kpi-value">@_availableAgents</div>
+        <div class="kpi-label">Available</div>
+    </div>
+    <div class="kpi-card kpi-red">
+        <div class="kpi-value">@_onCallAgents</div>
+        <div class="kpi-label">On Call</div>
+    </div>
+    <div class="kpi-card kpi-yellow">
+        <div class="kpi-value">@_pausedAgents</div>
+        <div class="kpi-label">Paused</div>
+    </div>
+</div>
+
+<h3>Queue Summary</h3>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Server</th>
+            <th>Queue</th>
+            <th>Members</th>
+            <th>Waiting</th>
+            <th>Completed</th>
+            <th>Abandoned</th>
+            <th>Avg Hold</th>
+            <th>Avg Talk</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var (serverId, entry) in Monitor.Servers)
+        {
+            foreach (var queue in entry.Server.Queues.Queues)
+            {
+                <tr>
+                    <td>@serverId</td>
+                    <td><a href="/queue/@serverId/@queue.Name">@queue.Name</a></td>
+                    <td>@queue.MemberCount</td>
+                    <td class="@(queue.EntryCount > 0 ? "text-red" : "")">@queue.EntryCount</td>
+                    <td>@queue.Completed</td>
+                    <td>@queue.Abandoned</td>
+                    <td>@FormatSeconds(queue.HoldTime)</td>
+                    <td>@FormatSeconds(queue.TalkTime)</td>
+                </tr>
+            }
+        }
+    </tbody>
+</table>
+
+@code {
+    private Timer? _timer;
+    private int _activeCalls, _queueCount, _waitingCallers;
+    private int _availableAgents, _onCallAgents, _pausedAgents;
+
+    protected override void OnInitialized()
+    {
+        _timer = new Timer(_ => { Refresh(); InvokeAsync(StateHasChanged); },
+            null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+    }
+
+    private void Refresh()
+    {
+        _activeCalls = Monitor.Servers.Sum(s => s.Value.Server.Channels.ChannelCount);
+        _queueCount = Monitor.Servers.Sum(s => s.Value.Server.Queues.QueueCount);
+        _waitingCallers = Monitor.Servers
+            .SelectMany(s => s.Value.Server.Queues.Queues)
+            .Sum(q => q.EntryCount);
+        _availableAgents = Monitor.Servers
+            .SelectMany(s => s.Value.Server.Agents.GetAgentsByState(AgentState.Available))
+            .Count();
+        _onCallAgents = Monitor.Servers
+            .SelectMany(s => s.Value.Server.Agents.GetAgentsByState(AgentState.OnCall))
+            .Count();
+        _pausedAgents = Monitor.Servers
+            .SelectMany(s => s.Value.Server.Agents.GetAgentsByState(AgentState.Paused))
+            .Count();
+    }
+
+    private static string FormatSeconds(int seconds)
+    {
+        var ts = TimeSpan.FromSeconds(seconds);
+        return ts.TotalMinutes >= 1 ? $"{(int)ts.TotalMinutes}m{ts.Seconds:D2}s" : $"{ts.Seconds}s";
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

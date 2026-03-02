@@ -1,10 +1,15 @@
 <Solution>
   <Folder Name="/Examples/">
+    <Project Path="Examples/AgiIvrExample/AgiIvrExample.csproj" />
+    <Project Path="Examples/AmiAdvancedExample/AmiAdvancedExample.csproj" />
+    <Project Path="Examples/AriChannelControlExample/AriChannelControlExample.csproj" />
     <Project Path="Examples/AriStasisExample/AriStasisExample.csproj" />
     <Project Path="Examples/BasicAmiExample/BasicAmiExample.csproj" />
     <Project Path="Examples/FastAgiServerExample/FastAgiServerExample.csproj" />
     <Project Path="Examples/LiveApiExample/LiveApiExample.csproj" />
+    <Project Path="Examples/MultiServerExample/MultiServerExample.csproj" />
     <Project Path="Examples/PbxActivitiesExample/PbxActivitiesExample.csproj" />
+    <Project Path="Examples/DashboardExample/DashboardExample.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Asterisk.Sdk.Agi/Asterisk.Sdk.Agi.csproj" />
