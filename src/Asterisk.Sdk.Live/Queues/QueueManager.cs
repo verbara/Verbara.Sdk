@@ -143,6 +143,36 @@ public sealed class QueueManager
         }
     }
 
+    /// <summary>Handle DeviceStateChange event. Updates member status in all queues where the device is registered.</summary>
+    public void OnDeviceStateChanged(string device, string state)
+    {
+        var memberState = MapDeviceState(state);
+        if (!_queuesByMember.TryGetValue(device, out var queueNames))
+            return;
+        foreach (var queueName in queueNames.Keys)
+        {
+            if (_queues.TryGetValue(queueName, out var queue)
+                && queue.Members.TryGetValue(device, out var member))
+            {
+                member.Status = memberState;
+                MemberStatusChanged?.Invoke(queueName, member);
+            }
+        }
+    }
+
+    private static QueueMemberState MapDeviceState(string state) => state.ToUpperInvariant() switch
+    {
+        "NOT_INUSE" => QueueMemberState.DeviceNotInUse,
+        "INUSE" => QueueMemberState.DeviceInUse,
+        "BUSY" => QueueMemberState.DeviceBusy,
+        "INVALID" => QueueMemberState.DeviceInvalid,
+        "UNAVAILABLE" => QueueMemberState.DeviceUnavailable,
+        "RINGING" => QueueMemberState.DeviceRinging,
+        "RINGINUSE" => QueueMemberState.DeviceRingInUse,
+        "ONHOLD" => QueueMemberState.DeviceOnHold,
+        _ => QueueMemberState.DeviceUnknown
+    };
+
     /// <summary>Get members of a queue matching a predicate (lazy, zero-alloc).</summary>
     public IEnumerable<AsteriskQueueMember> GetMembersWhere(
         string queueName, Func<AsteriskQueueMember, bool> predicate)

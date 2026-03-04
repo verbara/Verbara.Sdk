@@ -1,0 +1,455 @@
+@page "/calls/{CallId}"
+@using DashboardExample.Services
+@inject CallFlowTracker Tracker
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>Call @CallId — Asterisk Dashboard</PageTitle>
+
+<a href="/calls" class="back-link">&larr; Back to Calls</a>
+
+@if (_call is null)
+{
+    <p class="text-muted" style="margin-top:1rem">Call not found.</p>
+}
+else
+{
+    var (borderClass, stateLabel, _) = GetCallStyle(_call);
+
+    <div style="display:flex; align-items:center; gap:0.75rem; margin:1rem 0">
+        <h2 style="margin:0">Call Detail</h2>
+        <span class="call-state-badge @borderClass">@stateLabel</span>
+        <span class="call-duration">@FormatDuration(_call.Duration)</span>
+    </div>
+
+    <!-- Summary panel -->
+    <div class="call-detail-summary">
+        <div class="call-detail-field">
+            <span class="call-detail-label">Call ID</span>
+            <span class="call-detail-value mono">@_call.CallId</span>
+        </div>
+        <div class="call-detail-field">
+            <span class="call-detail-label">Server</span>
+            <span class="call-detail-value">@_call.ServerId</span>
+        </div>
+        <div class="call-detail-field">
+            <span class="call-detail-label">Technology</span>
+            <span class="call-detail-value">
+                @if (_call.Caller?.Technology is not null)
+                {
+                    <span class="badge @TechBadgeClass(_call.Caller.Technology)">@_call.Caller.Technology</span>
+                }
+                @if (_call.Destination?.Technology is not null && _call.Destination.Technology != _call.Caller?.Technology)
+                {
+                    <span class="badge @TechBadgeClass(_call.Destination.Technology)">@_call.Destination.Technology</span>
+                }
+            </span>
+        </div>
+        <div class="call-detail-field">
+            <span class="call-detail-label">Caller</span>
+            <span class="call-detail-value">@(_call.Caller?.CallerIdNum ?? "unknown")</span>
+            @if (_call.Caller?.CallerIdName is not null)
+            {
+                <span class="text-muted" style="font-size:0.75rem">@_call.Caller.CallerIdName</span>
+            }
+        </div>
+        <div class="call-detail-field">
+            <span class="call-detail-label">Caller Channel</span>
+            <span class="call-detail-value mono">@(_call.Caller?.Channel ?? "—")</span>
+        </div>
+        <div class="call-detail-field">
+            <span class="call-detail-label">Destination</span>
+            <span class="call-detail-value">@(_call.Destination?.CallerIdNum ?? _call.Destination?.Channel ?? "—")</span>
+        </div>
+        @if (_call.QueueName is not null)
+        {
+            <div class="call-detail-field">
+                <span class="call-detail-label">Queue</span>
+                <span class="call-detail-value">@_call.QueueName</span>
+            </div>
+        }
+        @if (_call.AgentName is not null)
+        {
+            <div class="call-detail-field">
+                <span class="call-detail-label">Agent</span>
+                <span class="call-detail-value">@_call.AgentName</span>
+                @if (_call.AgentInterface is not null)
+                {
+                    <span class="text-muted" style="font-size:0.75rem">@_call.AgentInterface</span>
+                }
+            </div>
+        }
+        <div class="call-detail-field">
+            <span class="call-detail-label">Start Time</span>
+            <span class="call-detail-value mono">@_call.StartTime.ToLocalTime().ToString("HH:mm:ss.fff")</span>
+        </div>
+        @if (_call.EndTime.HasValue)
+        {
+            <div class="call-detail-field">
+                <span class="call-detail-label">End Time</span>
+                <span class="call-detail-value mono">@_call.EndTime.Value.ToLocalTime().ToString("HH:mm:ss.fff")</span>
+            </div>
+        }
+        @if (_call.HangupCause.HasValue)
+        {
+            <div class="call-detail-field">
+                <span class="call-detail-label">Hangup Cause</span>
+                <span class="call-detail-value">@_call.HangupCause</span>
+            </div>
+        }
+        @if (_call.AgentName is not null || _call.QueueName is not null)
+        {
+            <div class="call-detail-field">
+                <span class="call-detail-label">Queue/Agent</span>
+                <span class="call-detail-value">
+                    @if (_call.QueueName is not null)
+                    {
+                        <a href="/queue/@_call.ServerId/@_call.QueueName" class="badge badge-blue">@_call.QueueName</a>
+                    }
+                    @if (_call.AgentName is not null)
+                    {
+                        <span class="badge badge-muted">@_call.AgentName</span>
+                    }
+                    @if (_call.AgentInterface is not null)
+                    {
+                        <span class="text-muted" style="font-size:0.75rem">@_call.AgentInterface</span>
+                    }
+                </span>
+            </div>
+            var waitTime = GetQueueWaitTime();
+            if (waitTime.HasValue)
+            {
+                <div class="call-detail-field">
+                    <span class="call-detail-label">Queue Wait</span>
+                    <span class="call-detail-value">@FormatDuration(waitTime.Value)</span>
+                </div>
+            }
+        }
+    </div>
+
+    <!-- View tabs: Timeline / Flow / Events -->
+    <div class="view-tabs">
+        <button class="view-tab @(_view == "timeline" ? "view-tab-active" : "")" @onclick='() => _view = "timeline"'>Timeline</button>
+        <button class="view-tab @(_view == "flow" ? "view-tab-active" : "")" @onclick='() => _view = "flow"'>Flow</button>
+        <button class="view-tab @(_view == "events" ? "view-tab-active" : "")" @onclick='() => _view = "events"'>Events (@_call.Events.Count)</button>
+    </div>
+
+    @if (_view == "timeline")
+    {
+        <!-- Gantt Timeline -->
+        @if (_call.Participants.Count > 0)
+        {
+            <div class="timeline-container">
+                <div class="timeline-header">
+                    <h3 style="font-size:1rem; margin:0">Timeline</h3>
+                    <span class="text-muted" style="font-size:0.75rem">@FormatDuration(_call.Duration) total</span>
+                </div>
+
+                <div class="timeline-track">
+                    @foreach (var participant in _call.Participants)
+                    {
+                        var segments = BuildSegments(participant);
+                        <div class="timeline-row">
+                            <div class="timeline-label">
+                                @ShortChannel(participant.Channel)
+                                <span class="timeline-label-sub">
+                                    @(participant.CallerIdNum ?? "")
+                                    @if (participant.Technology != "Unknown")
+                                    {
+                                        <text> (@participant.Technology)</text>
+                                    }
+                                </span>
+                            </div>
+                            <div class="timeline-bar-area">
+                                @foreach (var seg in segments)
+                                {
+                                    <div class="timeline-segment @seg.CssClass"
+                                         style="left:@(seg.LeftPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; width:@(seg.WidthPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%"
+                                         title="@seg.Label: @FormatDuration(seg.Duration)">
+                                        @if (seg.WidthPct > 8)
+                                        {
+                                            @seg.Label
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Axis with tick marks -->
+                    <div class="timeline-axis">
+                        @foreach (var tick in BuildAxisTicks())
+                        {
+                            <span class="timeline-tick" style="left:@(tick.LeftPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%">
+                                @tick.Label
+                            </span>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else if (_view == "flow")
+    {
+        <!-- Ladder Diagram (sngrep-style) -->
+        <LadderDiagram Call="_call" />
+    }
+
+    @if (_view == "events")
+    {
+    <!-- Event Log -->
+    <div class="event-timeline">
+        <h3 style="font-size:1rem; margin:0 0 0.75rem">Events (@_call.Events.Count)</h3>
+        @if (!_call.Events.Any())
+        {
+            <p class="text-muted">No events recorded.</p>
+        }
+        else
+        {
+            @foreach (var evt in _call.Events)
+            {
+                var (icon, typeClass) = GetEventStyle(evt.Type);
+                var relativeTime = evt.Timestamp - _call.StartTime;
+                <div class="event-entry @typeClass">
+                    <span class="event-time">+@FormatDuration(relativeTime)</span>
+                    <span class="event-icon">@icon</span>
+                    <span class="event-desc">
+                        <strong>@evt.Type</strong>
+                        @if (evt.Source is not null)
+                        {
+                            <text> @ShortChannel(evt.Source)</text>
+                        }
+                        @if (evt.Target is not null)
+                        {
+                            <text> &rarr; @ShortChannel(evt.Target)</text>
+                        }
+                        @if (evt.Detail is not null)
+                        {
+                            <text> (@evt.Detail)</text>
+                        }
+                    </span>
+                </div>
+            }
+        }
+    </div>
+    }
+}
+
+@code {
+    [Parameter] public string CallId { get; set; } = "";
+
+    private Timer? _timer;
+    private CallFlow? _call;
+    private string _view = "timeline";
+
+    protected override void OnInitialized()
+    {
+        _call = Tracker.GetById(Uri.UnescapeDataString(CallId));
+
+        // Auto-refresh for active calls
+        _timer = new Timer(_ =>
+        {
+            _call = Tracker.GetById(Uri.UnescapeDataString(CallId));
+            InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    protected override void OnParametersSet()
+    {
+        _call = Tracker.GetById(Uri.UnescapeDataString(CallId));
+    }
+
+    // -- Timeline segment builder --
+
+    private List<TimelineSegment> BuildSegments(CallParticipant participant)
+    {
+        var segments = new List<TimelineSegment>();
+        if (_call is null) return segments;
+
+        var callDuration = _call.Duration.TotalSeconds;
+        if (callDuration <= 0) callDuration = 1;
+
+        var callStart = _call.StartTime;
+        var participantJoin = participant.JoinedAt ?? callStart;
+        var participantEnd = participant.LeftAt ?? (_call.EndTime ?? DateTimeOffset.UtcNow);
+
+        // Collect state transitions relevant to this participant's channel
+        var transitions = new List<(DateTimeOffset Time, string State)>
+        {
+            (participantJoin, "Dialing")
+        };
+
+        foreach (var evt in _call.Events.Where(e => IsForParticipant(e, participant.Channel)))
+        {
+            var state = evt.Type switch
+            {
+                CallFlowEventType.Dial => "Ringing",
+                CallFlowEventType.Ring => "Ringing",
+                CallFlowEventType.Answer => "Connected",
+                CallFlowEventType.Bridge => "Connected",
+                CallFlowEventType.QueueJoin => "Queued",
+                CallFlowEventType.AgentConnect => "Connected",
+                CallFlowEventType.Hold => "Hold",
+                CallFlowEventType.Unhold => "Connected",
+                CallFlowEventType.Hangup => "Hangup",
+                _ => (string?)null
+            };
+
+            if (state is not null)
+                transitions.Add((evt.Timestamp, state));
+        }
+
+        // If no specific events, use the call's current state
+        if (transitions.Count == 1)
+        {
+            transitions.Add((participantEnd, _call.State.ToString()));
+        }
+
+        transitions.Sort((a, b) => a.Time.CompareTo(b.Time));
+
+        for (var i = 0; i < transitions.Count; i++)
+        {
+            var start = transitions[i].Time;
+            var end = i + 1 < transitions.Count ? transitions[i + 1].Time : participantEnd;
+            var state = transitions[i].State;
+
+            if (state == "Hangup") continue; // Don't render hangup as a segment
+
+            var leftPct = ((start - callStart).TotalSeconds / callDuration) * 100;
+            var widthPct = ((end - start).TotalSeconds / callDuration) * 100;
+
+            if (widthPct < 0.1) continue;
+
+            segments.Add(new TimelineSegment
+            {
+                LeftPct = Math.Max(0, Math.Min(100, leftPct)),
+                WidthPct = Math.Max(0.5, Math.Min(100 - leftPct, widthPct)),
+                CssClass = $"segment-{state.ToLowerInvariant()}",
+                Label = state,
+                Duration = end - start
+            });
+        }
+
+        return segments;
+    }
+
+    private static bool IsForParticipant(CallFlowEvent evt, string channel)
+    {
+        var shortCh = ShortChannel(channel);
+        return (evt.Source is not null && ShortChannel(evt.Source) == shortCh)
+            || (evt.Target is not null && ShortChannel(evt.Target) == shortCh)
+            || evt.Type is CallFlowEventType.QueueJoin or CallFlowEventType.AgentConnect;
+    }
+
+    private List<AxisTick> BuildAxisTicks()
+    {
+        var ticks = new List<AxisTick>();
+        if (_call is null) return ticks;
+
+        var total = _call.Duration.TotalSeconds;
+        if (total <= 0) total = 1;
+
+        // Pick interval: 1s, 5s, 10s, 30s, 60s, 5m
+        double interval = total switch
+        {
+            <= 10 => 1,
+            <= 30 => 5,
+            <= 120 => 10,
+            <= 300 => 30,
+            <= 600 => 60,
+            _ => 300
+        };
+
+        for (double t = 0; t <= total; t += interval)
+        {
+            ticks.Add(new AxisTick
+            {
+                LeftPct = (t / total) * 100,
+                Label = FormatDuration(TimeSpan.FromSeconds(t))
+            });
+        }
+
+        return ticks;
+    }
+
+    // -- Helpers --
+
+    private TimeSpan? GetQueueWaitTime()
+    {
+        if (_call is null) return null;
+        var joinEvt = _call.Events.FirstOrDefault(e => e.Type == CallFlowEventType.QueueJoin);
+        var connectEvt = _call.Events.FirstOrDefault(e => e.Type == CallFlowEventType.AgentConnect);
+        if (joinEvt is null || connectEvt is null) return null;
+        return connectEvt.Timestamp - joinEvt.Timestamp;
+    }
+
+    private static string TechBadgeClass(string tech) => tech switch
+    {
+        "PJSIP" => "badge-blue",
+        "SIP" => "badge-yellow",
+        _ => "badge-muted"
+    };
+
+    private static (string borderClass, string stateLabel, string stateIcon) GetCallStyle(CallFlow call) =>
+        call.State switch
+        {
+            CallFlowState.Dialing => ("call-dialing", "Dialing", "~"),
+            CallFlowState.Ringing => ("call-ringing", "Ringing", ">>"),
+            CallFlowState.Queued => ("call-queued", "Queued", "#"),
+            CallFlowState.Connected => ("call-connected", "Connected", "<<>>"),
+            CallFlowState.Hold => ("call-hold", "On Hold", "||"),
+            CallFlowState.Completed => ("call-completed", "Completed", "--"),
+            _ => ("call-unknown", "Unknown", "?")
+        };
+
+    private static (string icon, string typeClass) GetEventStyle(CallFlowEventType type) =>
+        type switch
+        {
+            CallFlowEventType.NewChannel => ("+", ""),
+            CallFlowEventType.Dial => (">>", "event-type-dial"),
+            CallFlowEventType.Ring => (">>", "event-type-dial"),
+            CallFlowEventType.Answer => ("<<>>", "event-type-bridge"),
+            CallFlowEventType.Bridge => ("<<>>", "event-type-bridge"),
+            CallFlowEventType.Hold => ("||", "event-type-hold"),
+            CallFlowEventType.Unhold => (">>", "event-type-bridge"),
+            CallFlowEventType.Dtmf => ("#", "event-type-dtmf"),
+            CallFlowEventType.QueueJoin => ("Q", "event-type-queue"),
+            CallFlowEventType.AgentConnect => ("A", "event-type-agent"),
+            CallFlowEventType.Transfer => (">>|", "event-type-dial"),
+            CallFlowEventType.Hangup => ("X", "event-type-hangup"),
+            _ => ("?", "")
+        };
+
+    private static string ShortChannel(string? channel)
+    {
+        if (channel is null) return "";
+        var dash = channel.LastIndexOf('-');
+        return dash > 0 ? channel[..dash] : channel;
+    }
+
+    private static string FormatDuration(TimeSpan ts)
+    {
+        if (ts.TotalHours >= 1)
+            return $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+        if (ts.TotalMinutes >= 1)
+            return $"{(int)ts.TotalMinutes}:{ts.Seconds:D2}";
+        return $"0:{ts.Seconds:D2}.{ts.Milliseconds / 100}";
+    }
+
+    public void Dispose() => _timer?.Dispose();
+
+    private sealed record TimelineSegment
+    {
+        public double LeftPct { get; init; }
+        public double WidthPct { get; init; }
+        public string CssClass { get; init; } = "";
+        public string Label { get; init; } = "";
+        public TimeSpan Duration { get; init; }
+    }
+
+    private sealed record AxisTick
+    {
+        public double LeftPct { get; init; }
+        public string Label { get; init; } = "";
+    }
+}

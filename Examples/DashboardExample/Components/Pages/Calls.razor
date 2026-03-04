@@ -1,0 +1,218 @@
+@page "/calls"
+@using DashboardExample.Services
+@inject CallFlowTracker Tracker
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>Calls — Asterisk Dashboard</PageTitle>
+
+<h2>Calls</h2>
+
+<div class="kpi-grid kpi-grid-sm">
+    <div class="kpi-card kpi-green">
+        <div class="kpi-value">@CountByState(CallFlowState.Connected)</div>
+        <div class="kpi-label">Connected</div>
+    </div>
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@CountByState(CallFlowState.Ringing)</div>
+        <div class="kpi-label">Ringing</div>
+    </div>
+    <div class="kpi-card kpi-yellow">
+        <div class="kpi-value">@CountByState(CallFlowState.Queued)</div>
+        <div class="kpi-label">Queued</div>
+    </div>
+    <div class="kpi-card kpi-orange">
+        <div class="kpi-value">@CountByState(CallFlowState.Hold)</div>
+        <div class="kpi-label">On Hold</div>
+    </div>
+    <div class="kpi-card kpi-gray">
+        <div class="kpi-value">@_recentCompleted</div>
+        <div class="kpi-label">Completed</div>
+    </div>
+</div>
+
+<div class="chip-bar">
+    <button class="chip @(_filter is null ? "chip-active" : "")" @onclick="() => _filter = null">All</button>
+    <button class="chip @(_filter == CallFlowState.Connected ? "chip-active" : "")" @onclick="() => _filter = CallFlowState.Connected">Connected</button>
+    <button class="chip @(_filter == CallFlowState.Ringing ? "chip-active" : "")" @onclick="() => _filter = CallFlowState.Ringing">Ringing</button>
+    <button class="chip @(_filter == CallFlowState.Queued ? "chip-active" : "")" @onclick="() => _filter = CallFlowState.Queued">Queued</button>
+    <button class="chip @(_filter == CallFlowState.Hold ? "chip-active" : "")" @onclick="() => _filter = CallFlowState.Hold">On Hold</button>
+    <button class="chip @(_filter == CallFlowState.Completed ? "chip-active" : "")" @onclick="() => _filter = CallFlowState.Completed">Completed</button>
+</div>
+
+<div class="inline-form" style="margin:0.75rem 0">
+    <input @bind="_searchQuery" @bind:event="oninput" placeholder="Search: caller ID, agent, queue..." class="input" style="max-width:320px" />
+    @if (!string.IsNullOrEmpty(_searchQuery))
+    {
+        <button class="btn btn-sm btn-muted" @onclick='() => _searchQuery = ""'>Clear</button>
+    }
+</div>
+
+@if (!_calls.Any())
+{
+    <p class="text-muted">No calls to display.</p>
+}
+else
+{
+    <div class="card-grid">
+        @foreach (var call in _calls)
+        {
+            var (borderClass, stateLabel, stateIcon) = GetCallStyle(call);
+            <div class="call-card @borderClass" @onclick="() => NavigateToDetail(call.CallId)">
+                <div class="call-card-header">
+                    <span class="call-state-badge @borderClass">@stateIcon @stateLabel</span>
+                    <span class="call-duration">@FormatDuration(call.Duration)</span>
+                </div>
+                <div class="call-participants">
+                    <div class="call-endpoint">
+                        <div class="call-endpoint-label">Caller</div>
+                        <div class="call-endpoint-id">@(call.Caller?.CallerIdNum ?? "unknown")</div>
+                        <div class="call-endpoint-channel text-muted">@ShortChannel(call.Caller?.Channel)</div>
+                    </div>
+                    <div class="call-arrow">
+                        @if (call.State == CallFlowState.Connected)
+                        {
+                            <span class="arrow-connected">&harr;</span>
+                        }
+                        else if (call.State == CallFlowState.Hold)
+                        {
+                            <span class="arrow-hold">| |</span>
+                        }
+                        else
+                        {
+                            <span class="arrow-dialing">&rarr;</span>
+                        }
+                    </div>
+                    <div class="call-endpoint">
+                        @if (call.AgentName is not null)
+                        {
+                            <div class="call-endpoint-label">Agent</div>
+                            <div class="call-endpoint-id">@call.AgentName</div>
+                            <div class="call-endpoint-channel text-muted">@ShortChannel(call.AgentInterface)</div>
+                        }
+                        else if (call.QueueName is not null)
+                        {
+                            <div class="call-endpoint-label">Queue</div>
+                            <div class="call-endpoint-id">@call.QueueName</div>
+                        }
+                        else if (call.Destination is not null)
+                        {
+                            <div class="call-endpoint-label">Destination</div>
+                            <div class="call-endpoint-id">@(call.Destination.CallerIdNum ?? ShortChannel(call.Destination.Channel))</div>
+                            <div class="call-endpoint-channel text-muted">@ShortChannel(call.Destination.Channel)</div>
+                        }
+                        else
+                        {
+                            <div class="call-endpoint-label">Destination</div>
+                            <div class="call-endpoint-id text-muted">...</div>
+                        }
+                    </div>
+                </div>
+                <div class="call-card-footer">
+                    @if (call.Caller?.Technology is not null)
+                    {
+                        <span class="badge @TechBadgeClass(call.Caller.Technology)">@call.Caller.Technology</span>
+                    }
+                    @if (call.QueueName is not null && call.AgentName is not null)
+                    {
+                        <span class="badge badge-muted">@call.QueueName</span>
+                    }
+                    <span class="badge badge-muted">@call.ServerId</span>
+                    @if (call.HangupCause.HasValue)
+                    {
+                        <span class="badge badge-muted">@call.HangupCause</span>
+                    }
+                    <span class="text-muted call-events-count">@call.Events.Count events</span>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private Timer? _timer;
+    private CallFlowState? _filter;
+    private string _searchQuery = "";
+    private IReadOnlyList<CallFlow> _calls = [];
+    private int _recentCompleted;
+
+    protected override void OnInitialized()
+    {
+        RefreshCalls();
+        _timer = new Timer(_ => { RefreshCalls(); InvokeAsync(StateHasChanged); },
+            null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+    }
+
+    private void RefreshCalls()
+    {
+        _recentCompleted = Tracker.GetRecentCompleted(100).Count();
+
+        // Search mode: search across all calls (active + completed)
+        if (!string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            _calls = Tracker.Search(_searchQuery, 100).ToList();
+            return;
+        }
+
+        if (_filter.HasValue)
+        {
+            if (_filter == CallFlowState.Completed)
+                _calls = Tracker.GetRecentCompleted(50).ToList();
+            else
+                _calls = Tracker.ActiveCalls
+                    .Where(c => c.State == _filter.Value)
+                    .OrderByDescending(c => c.StartTime)
+                    .ToList();
+        }
+        else
+        {
+            _calls = Tracker.ActiveCalls
+                .OrderByDescending(c => c.StartTime)
+                .ToList();
+        }
+    }
+
+    private int CountByState(CallFlowState state) =>
+        state == CallFlowState.Completed
+            ? _recentCompleted
+            : Tracker.ActiveCalls.Count(c => c.State == state);
+
+    private void NavigateToDetail(string callId) =>
+        Nav.NavigateTo($"/calls/{Uri.EscapeDataString(callId)}");
+
+    private static (string borderClass, string stateLabel, string stateIcon) GetCallStyle(CallFlow call) =>
+        call.State switch
+        {
+            CallFlowState.Dialing => ("call-dialing", "Dialing", "~"),
+            CallFlowState.Ringing => ("call-ringing", "Ringing", ">>"),
+            CallFlowState.Queued => ("call-queued", "Queued", "#"),
+            CallFlowState.Connected => ("call-connected", "Connected", "<<>>"),
+            CallFlowState.Hold => ("call-hold", "On Hold", "||"),
+            CallFlowState.Completed => ("call-completed", "Completed", "--"),
+            _ => ("call-unknown", "Unknown", "?")
+        };
+
+    private static string TechBadgeClass(string tech) => tech switch
+    {
+        "PJSIP" => "badge-blue",
+        "SIP" => "badge-yellow",
+        _ => "badge-muted"
+    };
+
+    private static string ShortChannel(string? channel)
+    {
+        if (channel is null) return "";
+        // PJSIP/2001-00000042 -> PJSIP/2001
+        var dash = channel.LastIndexOf('-');
+        return dash > 0 ? channel[..dash] : channel;
+    }
+
+    private static string FormatDuration(TimeSpan ts)
+    {
+        if (ts.TotalHours >= 1)
+            return $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+        return $"{(int)ts.TotalMinutes}:{ts.Seconds:D2}";
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

@@ -1,0 +1,8 @@
+FROM andrius/asterisk:20
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends unixodbc odbc-postgresql \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY dashboard-config/odbcinst.ini /etc/odbcinst.ini
+COPY dashboard-config/odbc.ini /etc/odbc.ini

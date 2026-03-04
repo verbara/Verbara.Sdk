@@ -1,11 +1,32 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: demo-postgres
+    environment:
+      POSTGRES_DB: asterisk
+      POSTGRES_USER: asterisk
+      POSTGRES_PASSWORD: asterisk
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asterisk"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   asterisk:
-    image: andrius/asterisk:20
+    build:
+      context: .
+      dockerfile: Dockerfile.asterisk-realtime
     container_name: demo-pbx
     ports:
       - "5038:5038"
     volumes:
       - ./dashboard-config:/etc/asterisk
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "asterisk", "-rx", "core show version"]
       interval: 5s
@@ -28,3 +49,8 @@ services:
       - Asterisk__Servers__0__Port=5038
       - Asterisk__Servers__0__Username=dashboard
       - Asterisk__Servers__0__Password=dashboard
+      - ConfigProvider__Type=Database
+      - ConfigProvider__ConnectionString=Host=postgres;Database=asterisk;Username=asterisk;Password=asterisk
+
+volumes:
+  pgdata:
