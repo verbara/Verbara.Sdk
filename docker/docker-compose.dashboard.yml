@@ -22,8 +22,6 @@ services:
     container_name: demo-pbx-realtime
     ports:
       - "5038:5038"
-    volumes:
-      - ./dashboard-config:/etc/asterisk
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,8 +38,6 @@ services:
     container_name: demo-pbx-file
     ports:
       - "5039:5038"
-    volumes:
-      - ./dashboard-config-file:/etc/asterisk
     healthcheck:
       test: ["CMD", "asterisk", "-rx", "core show version"]
       interval: 5s
@@ -62,6 +58,8 @@ services:
         condition: service_healthy
     environment:
       - DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE=false
+      - Auth__Username=admin
+      - Auth__Password=admin
       - Asterisk__Servers__0__Id=pbx-file
       - Asterisk__Servers__0__Hostname=asterisk-file
       - Asterisk__Servers__0__Port=5038
