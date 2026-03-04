@@ -60,8 +60,9 @@ public sealed class AriClient : IAriClient
     public IAriEndpointsResource Endpoints { get; }
     public IAriApplicationsResource Applications { get; }
     public IAriSoundsResource Sounds { get; }
+    public IAudioServer? AudioServer { get; }
 
-    public AriClient(IOptions<AriClientOptions> options, ILogger<AriClient> logger)
+    public AriClient(IOptions<AriClientOptions> options, ILogger<AriClient> logger, IAudioServer? audioServer = null)
     {
         _options = options.Value;
         _logger = logger;
@@ -71,6 +72,7 @@ public sealed class AriClient : IAriClient
         _httpClient.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
 
+        AudioServer = audioServer;
         Channels = new AriChannelsResource(_httpClient, _options);
         Bridges = new AriBridgesResource(_httpClient, _options);
         Playbacks = new AriPlaybacksResource(_httpClient);

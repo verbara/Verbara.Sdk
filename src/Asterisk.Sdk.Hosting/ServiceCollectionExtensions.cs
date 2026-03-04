@@ -3,6 +3,7 @@ using Asterisk.Sdk.Agi.Mapping;
 using Asterisk.Sdk.Agi.Server;
 using Asterisk.Sdk.Ami.Connection;
 using Asterisk.Sdk.Ami.Transport;
+using Asterisk.Sdk.Ari.Audio;
 using Asterisk.Sdk.Ari.Client;
 using Asterisk.Sdk.Live.Server;
 using Microsoft.Extensions.DependencyInjection;
@@ -74,7 +75,32 @@ public static class ServiceCollectionExtensions
                 })
                 .ValidateOnStart();
             services.AddSingleton<IValidateOptions<AriClientOptions>, AriClientOptionsValidator>();
-            services.TryAddSingleton<IAriClient, AriClient>();
+
+            // Audio servers (AudioSocket + WebSocket)
+            if (options.Ari.ConfigureAudioServer is not null)
+            {
+                var audioOpts = new AudioServerOptions();
+                options.Ari.ConfigureAudioServer(audioOpts);
+                services.AddSingleton(audioOpts);
+                services.TryAddSingleton<AudioSocketServer>();
+
+                if (audioOpts.WebSocketPort > 0)
+                    services.TryAddSingleton<WebSocketAudioServer>();
+
+                services.TryAddSingleton<IAudioServer>(sp =>
+                {
+                    var servers = new List<IAudioServer> { sp.GetRequiredService<AudioSocketServer>() };
+                    var ws = sp.GetService<WebSocketAudioServer>();
+                    if (ws is not null) servers.Add(ws);
+                    return new CompositeAudioServer(servers);
+                });
+            }
+
+            // Use factory to safely inject optional IAudioServer
+            services.TryAddSingleton<IAriClient>(sp => new AriClient(
+                sp.GetRequiredService<IOptions<AriClientOptions>>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<AriClient>>(),
+                sp.GetService<IAudioServer>()));
         }
 
         return services;

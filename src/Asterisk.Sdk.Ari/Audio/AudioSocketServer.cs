@@ -25,7 +25,7 @@ internal static partial class AudioSocketServerLog
 /// Listens for incoming AudioSocket TCP connections from Asterisk ExternalMedia channels.
 /// Each connection becomes an IAudioStream.
 /// </summary>
-public sealed class AudioSocketServer : IAsyncDisposable
+public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
 {
     private readonly AudioServerOptions _options;
     private readonly ILogger<AudioSocketServer> _logger;

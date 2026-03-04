@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Asterisk.Sdk.Ari.Audio;
 
 namespace Asterisk.Sdk.Ari.Client;
 
@@ -7,6 +8,9 @@ namespace Asterisk.Sdk.Ari.Client;
 /// </summary>
 public sealed class AriClientOptions
 {
+    /// <summary>Optional audio server configuration. Set to enable AudioSocket/WebSocket audio streaming.</summary>
+    public Action<AudioServerOptions>? ConfigureAudioServer { get; set; }
+
     /// <summary>ARI base URL. Default: "http://localhost:8088".</summary>
     [Required]
     [Url]
