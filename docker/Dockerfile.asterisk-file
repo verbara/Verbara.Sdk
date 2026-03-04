@@ -4,7 +4,7 @@ USER root
 
 # Install libopus runtime dependency
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libopus0 \
+    && apt-get install -y --no-install-recommends ca-certificates libopus0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Digium codec_opus binary for Asterisk 20
@@ -14,5 +14,8 @@ RUN cd /tmp \
     && cp codec_opus-20.0_1.3.0-x86_64/codec_opus.so /usr/lib/asterisk/modules/ \
     && cp codec_opus-20.0_1.3.0-x86_64/format_ogg_opus.so /usr/lib/asterisk/modules/ \
     && rm -rf codec_opus.tar.gz codec_opus-20.0_1.3.0-x86_64
+
+# Overlay custom configs on top of base image defaults
+COPY dashboard-config-file/ /etc/asterisk/
 
 USER asterisk
