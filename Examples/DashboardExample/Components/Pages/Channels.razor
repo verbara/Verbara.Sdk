@@ -1,15 +1,13 @@
 @page "/channels"
 @using DashboardExample.Services
-@using DashboardExample.Components.Shared
 @using Asterisk.Sdk.Enums
 @using Asterisk.Sdk.Live.Channels
-@inject AsteriskMonitorService Monitor
+@inject SelectedServerService ServerSvc
 @implements IDisposable
 
 <PageTitle>Channels — Asterisk Dashboard</PageTitle>
 
 <h2>Active Channels</h2>
-<ServerSelector @bind-SelectedServerId="_selectedServer" />
 
 <div class="chip-bar">
     <button class="chip @(_stateFilter is null ? "chip-active" : "")" @onclick="() => _stateFilter = null">All</button>
@@ -22,7 +20,6 @@
 <table class="data-table">
     <thead>
         <tr>
-            <th>Server</th>
             <th>UniqueId</th>
             <th>Channel</th>
             <th>State</th>
@@ -34,7 +31,7 @@
         </tr>
     </thead>
     <tbody>
-        @foreach (var (serverId, entry) in GetServers())
+        @foreach (var (serverId, entry) in ServerSvc.GetServers())
         {
             var channels = _stateFilter.HasValue
                 ? entry.Server.Channels.GetChannelsByState(_stateFilter.Value)
@@ -43,7 +40,6 @@
             foreach (var ch in channels)
             {
                 <tr>
-                    <td>@serverId</td>
                     <td class="mono">@ch.UniqueId</td>
                     <td>@ch.Name</td>
                     <td>
@@ -63,13 +59,6 @@
 
 <h3>Originate Call</h3>
 <div class="inline-form">
-    <select @bind="_originateServer" class="input">
-        <option value="">Select server</option>
-        @foreach (var (id, _) in Monitor.Servers)
-        {
-            <option value="@id">@id</option>
-        }
-    </select>
     <input @bind="_originateChannel" placeholder="PJSIP/2000" class="input" />
     <input @bind="_originateContext" placeholder="default" class="input" />
     <input @bind="_originateExtension" placeholder="100" class="input" />
@@ -84,10 +73,8 @@
 
 @code {
     private Timer? _timer;
-    private string? _selectedServer;
     private ChannelState? _stateFilter;
 
-    private string _originateServer = "";
     private string _originateChannel = "";
     private string _originateContext = "default";
     private string _originateExtension = "";
@@ -101,17 +88,12 @@
             null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
     }
 
-    private IEnumerable<KeyValuePair<string, AsteriskMonitorService.ServerEntry>> GetServers() =>
-        string.IsNullOrEmpty(_selectedServer)
-            ? Monitor.Servers
-            : Monitor.Servers.Where(s => s.Key == _selectedServer);
-
     private async Task Originate()
     {
-        if (string.IsNullOrWhiteSpace(_originateServer) || string.IsNullOrWhiteSpace(_originateChannel))
+        if (string.IsNullOrWhiteSpace(_originateChannel))
             return;
 
-        var entry = Monitor.GetServer(_originateServer);
+        var entry = ServerSvc.GetSelectedServer();
         if (entry is null) return;
 
         var result = await entry.Server.OriginateAsync(

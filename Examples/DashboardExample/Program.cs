@@ -1,5 +1,7 @@
 using Asterisk.Sdk.Hosting;
 using DashboardExample.Services;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using System.Globalization;
 using Serilog;
 using Serilog.Events;
@@ -24,6 +26,19 @@ builder.Host.UseSerilog();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/login";
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+    });
+builder.Services.AddAuthorization(options =>
+    options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build());
+builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddAsteriskMultiServer();
 builder.Services.AddSingleton<EventLogService>();
 builder.Services.AddSingleton<CallFlowTracker>();
@@ -34,6 +49,8 @@ builder.Services.AddSingleton<PbxConfigManager>();
 builder.Services.AddSingleton<IConfigProviderResolver, ConfigProviderResolver>();
 builder.Services.AddSingleton<TrunkService>();
 
+builder.Services.AddScoped<SelectedServerService>();
+
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
@@ -42,7 +59,15 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseStaticFiles();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
+
+app.MapPost("/logout", async (HttpContext context) =>
+{
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.Redirect("/login");
+}).AllowAnonymous();
 
 app.MapRazorComponents<DashboardExample.Components.App>()
     .AddInteractiveServerRenderMode();
