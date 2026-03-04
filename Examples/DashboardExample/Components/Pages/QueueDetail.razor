@@ -5,15 +5,28 @@
 @using Asterisk.Sdk.Ami.Actions
 @inject AsteriskMonitorService Monitor
 @inject CallFlowTracker Tracker
+@inject QueueService QueueSvc
 @inject NavigationManager Nav
 @implements IDisposable
 
 <PageTitle>@QueueName — Asterisk Dashboard</PageTitle>
 
-<h2>
-    <a href="/queues" class="back-link">Queues</a> / @QueueName
-    <span class="badge badge-muted">@ServerId</span>
-</h2>
+<div class="page-header-row">
+    <h2>
+        <a href="/queues" class="back-link">Queues</a> / @QueueName
+        <span class="badge badge-muted">@ServerId</span>
+    </h2>
+    <button class="btn btn-sm btn-red" @onclick="ConfirmDelete">Delete Queue</button>
+</div>
+
+@if (_showDeleteConfirm)
+{
+    <div class="confirm-bar confirm-bar-danger">
+        <span>Delete queue <strong>@QueueName</strong> and all its members? This cannot be undone.</span>
+        <button class="btn btn-sm btn-red" @onclick="DeleteQueue">Confirm Delete</button>
+        <button class="btn btn-sm btn-muted" @onclick="() => _showDeleteConfirm = false">Cancel</button>
+    </div>
+}
 
 @if (_queue is null)
 {
@@ -134,6 +147,7 @@ else
     private string _addMemberName = "";
     private int _addPenalty;
     private string? _actionMessage;
+    private bool _showDeleteConfirm;
 
     protected override void OnInitialized()
     {
@@ -172,6 +186,22 @@ else
             Interface = member.Interface
         });
         _actionMessage = $"Remove: {response.Response} — {response.Message}";
+    }
+
+    private void ConfirmDelete() => _showDeleteConfirm = true;
+
+    private async Task DeleteQueue()
+    {
+        var success = await QueueSvc.DeleteQueueAsync(ServerId, QueueName);
+        if (success)
+        {
+            Nav.NavigateTo("/queues");
+        }
+        else
+        {
+            _actionMessage = "Failed to delete queue.";
+            _showDeleteConfirm = false;
+        }
     }
 
     private async Task AddMember()

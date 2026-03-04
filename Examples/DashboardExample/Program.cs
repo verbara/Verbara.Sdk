@@ -48,6 +48,7 @@ builder.Services.AddSingleton<PbxConfigManager>();
 
 builder.Services.AddSingleton<IConfigProviderResolver, ConfigProviderResolver>();
 builder.Services.AddSingleton<TrunkService>();
+builder.Services.AddSingleton<QueueService>();
 
 builder.Services.AddScoped<SelectedServerService>();
 
