@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Asterisk.Sdk;
 using Asterisk.Sdk.Ami.Connection;
 using Asterisk.Sdk.Live.Server;
+using DashboardExample.Models;
 
 namespace DashboardExample.Services;
 
@@ -52,6 +53,10 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
         foreach (var section in servers)
         {
             var id = section["Id"] ?? "default";
+            var configModeStr = section["ConfigMode"] ?? "File";
+            var configMode = string.Equals(configModeStr, "Realtime", StringComparison.OrdinalIgnoreCase)
+                ? ConfigMode.Realtime
+                : ConfigMode.File;
             var options = new AmiConnectionOptions
             {
                 Hostname = section["Hostname"] ?? "localhost",
@@ -75,7 +80,7 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
 
                 await server.StartAsync(cancellationToken);
 
-                _servers[id] = new ServerEntry(connection, server, eventLogSub, callFlowSub);
+                _servers[id] = new ServerEntry(connection, server, eventLogSub, callFlowSub, configMode);
                 MonitorServiceLog.Connected(_logger, id, options.Hostname, options.Port, server.AsteriskVersion);
             }
             catch (Exception ex)
@@ -109,7 +114,8 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
         IAmiConnection Connection,
         AsteriskServer Server,
         IDisposable Subscription,
-        IDisposable CallFlowSubscription);
+        IDisposable CallFlowSubscription,
+        ConfigMode ConfigMode);
 
     private sealed class EventLogObserver(string serverId, EventLogService eventLog)
         : IObserver<ManagerEvent>

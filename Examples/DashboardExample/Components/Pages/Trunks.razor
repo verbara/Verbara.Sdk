@@ -4,6 +4,7 @@
 @using DashboardExample.Components.Shared
 @inject AsteriskMonitorService Monitor
 @inject TrunkService TrunkSvc
+@inject IConfigProviderResolver ConfigResolver
 @inject NavigationManager Nav
 @implements IDisposable
 
@@ -11,6 +12,15 @@
 
 <h2>Trunks</h2>
 <ServerSelector @bind-SelectedServerId="_selectedServer" />
+@{
+    var activeServer = _selectedServer ?? GetFirstServerId();
+    if (activeServer is not null)
+    {
+        var mode = ConfigResolver.GetConfigMode(activeServer);
+        var modeBadge = mode == ConfigMode.Realtime ? "badge-realtime" : "badge-file";
+        <p class="text-muted" style="margin-top: 0.25rem;">Config backend: <span class="badge @modeBadge">@mode</span></p>
+    }
+}
 
 <div class="kpi-grid kpi-grid-sm">
     <div class="kpi-card kpi-green">
