@@ -14,19 +14,19 @@ namespace Asterisk.Sdk.Live.Server;
 
 internal static partial class AsteriskServerLog
 {
-    [LoggerMessage(Level = LogLevel.Information, Message = "Initial state loaded: {Channels} channels, {Queues} queues, {Agents} agents")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "[LIVE] State loaded: channels={Channels} queues={Queues} agents={Agents}")]
     public static partial void InitialStateLoaded(ILogger logger, int channels, int queues, int agents);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "AMI connection error in Live API tracking")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "[LIVE] Connection error")]
     public static partial void ConnectionError(ILogger logger, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "AMI connection closed, Live API tracking stopped")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "[LIVE] Connection closed")]
     public static partial void ConnectionClosed(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "AMI reconnected, reloading Live API state")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "[LIVE] Reconnected: reloading state")]
     public static partial void Reconnected(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to reload state after AMI reconnection")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "[LIVE] Reconnect reload failed")]
     public static partial void ReconnectReloadFailed(ILogger logger, Exception exception);
 }
 

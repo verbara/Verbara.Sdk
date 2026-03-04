@@ -5,6 +5,27 @@ using Microsoft.Extensions.Logging;
 
 namespace Asterisk.Sdk.Live.Channels;
 
+internal static partial class ChannelManagerLog
+{
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CHANNEL] New: unique_id={UniqueId} name={ChannelName} state={State}")]
+    public static partial void NewChannel(ILogger logger, string uniqueId, string channelName, ChannelState state);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CHANNEL] State changed: unique_id={UniqueId} state={NewState}")]
+    public static partial void StateChanged(ILogger logger, string uniqueId, ChannelState newState);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CHANNEL] Hangup: unique_id={UniqueId} cause={Cause}")]
+    public static partial void Hangup(ILogger logger, string uniqueId, HangupCause cause);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CHANNEL] Renamed: unique_id={UniqueId} new_name={NewName}")]
+    public static partial void Renamed(ILogger logger, string uniqueId, string newName);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CHANNEL] Linked: unique_id_1={UniqueId1} unique_id_2={UniqueId2}")]
+    public static partial void Linked(ILogger logger, string uniqueId1, string uniqueId2);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CHANNEL] Unlinked: unique_id_1={UniqueId1} unique_id_2={UniqueId2}")]
+    public static partial void Unlinked(ILogger logger, string uniqueId1, string uniqueId2);
+}
+
 /// <summary>
 /// Tracks all active Asterisk channels in real-time from AMI events.
 /// Uses dual indices (UniqueId + Name) for O(1) lookups.
@@ -52,6 +73,7 @@ public sealed class ChannelManager
 
         _channelsByUniqueId[uniqueId] = channel;
         _channelsByName[channelName] = channel;
+        ChannelManagerLog.NewChannel(_logger, uniqueId, channelName, state);
         ChannelAdded?.Invoke(channel);
     }
 
@@ -70,6 +92,7 @@ public sealed class ChannelManager
                     _channelsByName[channelName] = channel;
                 }
             }
+            ChannelManagerLog.StateChanged(_logger, uniqueId, newState);
             ChannelStateChanged?.Invoke(channel);
         }
     }
@@ -85,6 +108,7 @@ public sealed class ChannelManager
                 channel.HangupCause = cause;
                 channel.State = ChannelState.Down;
             }
+            ChannelManagerLog.Hangup(_logger, uniqueId, cause);
             ChannelRemoved?.Invoke(channel);
         }
     }
@@ -100,6 +124,7 @@ public sealed class ChannelManager
                 channel.Name = newName;
                 _channelsByName[newName] = channel;
             }
+            ChannelManagerLog.Renamed(_logger, uniqueId, newName);
         }
     }
 
@@ -112,6 +137,7 @@ public sealed class ChannelManager
         {
             ch1.LinkedChannel = ch2;
             ch2.LinkedChannel = ch1;
+            ChannelManagerLog.Linked(_logger, uniqueId1, uniqueId2);
         }
     }
 
@@ -122,6 +148,7 @@ public sealed class ChannelManager
         var ch2 = GetByUniqueId(uniqueId2);
         if (ch1 is not null) ch1.LinkedChannel = null;
         if (ch2 is not null) ch2.LinkedChannel = null;
+        ChannelManagerLog.Unlinked(_logger, uniqueId1, uniqueId2);
     }
 
     /// <summary>Get channels filtered by state (lazy, zero-alloc).</summary>

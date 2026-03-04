@@ -13,22 +13,22 @@ namespace Asterisk.Sdk.Ari.Client;
 
 internal static partial class AriClientLog
 {
-    [LoggerMessage(Level = LogLevel.Information, Message = "ARI connected to {BaseUrl} app={Application}")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "[ARI] Connected: base_url={BaseUrl} app={Application}")]
     public static partial void Connected(ILogger logger, string baseUrl, string application);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "ARI disconnected")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "[ARI] Disconnected")]
     public static partial void Disconnected(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "ARI event received: {EventType}")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[ARI] Event received: event_type={EventType}")]
     public static partial void EventReceived(ILogger logger, string? eventType);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "ARI WebSocket error")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "[ARI] WebSocket error")]
     public static partial void WebSocketError(ILogger logger, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "ARI WebSocket reconnecting in {DelayMs}ms (attempt {Attempt})")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[ARI] Reconnecting: delay_ms={DelayMs} attempt={Attempt}")]
     public static partial void Reconnecting(ILogger logger, long delayMs, int attempt);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "ARI WebSocket reconnected after {Attempt} attempts")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "[ARI] Reconnected: attempts={Attempt}")]
     public static partial void ReconnectedSuccess(ILogger logger, int attempt);
 }
 

@@ -9,22 +9,22 @@ namespace Asterisk.Sdk.Agi.Server;
 
 internal static partial class FastAgiServerLog
 {
-    [LoggerMessage(Level = LogLevel.Information, Message = "FastAGI server started on port {Port}")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "[AGI] Server started: port={Port}")]
     public static partial void ServerStarted(ILogger logger, int port);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "FastAGI server stopped")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "[AGI] Server stopped")]
     public static partial void ServerStopped(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "AGI connection accepted from {RemoteEndpoint}")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AGI] Connection accepted: remote={RemoteEndpoint}")]
     public static partial void ConnectionAccepted(ILogger logger, string? remoteEndpoint);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "AGI script '{Script}' executing for channel {Channel}")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AGI] Script executing: script={Script} channel={Channel}")]
     public static partial void ScriptExecuting(ILogger logger, string? script, string? channel);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "No AGI script mapped for request: {Script}")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AGI] No script mapped: script={Script}")]
     public static partial void NoScriptMapped(ILogger logger, string? script);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "AGI connection handler error")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "[AGI] Connection error")]
     public static partial void ConnectionError(ILogger logger, Exception exception);
 }
 

@@ -3,6 +3,27 @@ using Microsoft.Extensions.Logging;
 
 namespace Asterisk.Sdk.Live.Agents;
 
+internal static partial class AgentManagerLog
+{
+    [LoggerMessage(Level = LogLevel.Information, Message = "[AGENT] Login: agent_id={AgentId} channel={Channel}")]
+    public static partial void Login(ILogger logger, string agentId, string? channel);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "[AGENT] Logoff: agent_id={AgentId}")]
+    public static partial void Logoff(ILogger logger, string agentId);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AGENT] Connect: agent_id={AgentId} talking_to={TalkingTo}")]
+    public static partial void Connect(ILogger logger, string agentId, string? talkingTo);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AGENT] Complete: agent_id={AgentId} talk_secs={TalkTimeSecs} hold_secs={HoldTimeSecs} calls_taken={CallsTaken}")]
+    public static partial void Complete(ILogger logger, string agentId, long talkTimeSecs, long holdTimeSecs, int callsTaken);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AGENT] Paused: agent_id={AgentId} paused={Paused}")]
+    public static partial void PauseChanged(ILogger logger, string agentId, bool paused);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AGENT] Unknown agent: agent_id={AgentId}")]
+    public static partial void UnknownAgent(ILogger logger, string agentId);
+}
+
 /// <summary>
 /// Tracks Asterisk agents in real-time from AMI events.
 /// All state mutations are protected by per-entity locks for atomic updates.
@@ -39,6 +60,7 @@ public sealed class AgentManager
             agent.TotalHoldTimeSecs = 0;
             agent.LastCallTalkTimeSecs = 0;
         }
+        AgentManagerLog.Login(_logger, agentId, channel);
         AgentLoggedIn?.Invoke(agent);
     }
 
@@ -53,7 +75,12 @@ public sealed class AgentManager
                 agent.Channel = null;
                 agent.LastStateChangeAt = DateTimeOffset.UtcNow;
             }
+            AgentManagerLog.Logoff(_logger, agentId);
             AgentLoggedOff?.Invoke(agent);
+        }
+        else
+        {
+            AgentManagerLog.UnknownAgent(_logger, agentId);
         }
     }
 
@@ -68,6 +95,7 @@ public sealed class AgentManager
                 agent.TalkingTo = talkingTo;
                 agent.LastStateChangeAt = DateTimeOffset.UtcNow;
             }
+            AgentManagerLog.Connect(_logger, agentId, talkingTo);
             AgentStateChanged?.Invoke(agent);
         }
     }
@@ -87,6 +115,7 @@ public sealed class AgentManager
                 agent.TotalTalkTimeSecs += talkTimeSecs;
                 agent.TotalHoldTimeSecs += holdTimeSecs;
             }
+            AgentManagerLog.Complete(_logger, agentId, talkTimeSecs, holdTimeSecs, agent.CallsTaken);
             AgentStateChanged?.Invoke(agent);
         }
     }
@@ -101,6 +130,7 @@ public sealed class AgentManager
                 agent.State = paused ? AgentState.Paused : AgentState.Available;
                 agent.LastStateChangeAt = DateTimeOffset.UtcNow;
             }
+            AgentManagerLog.PauseChanged(_logger, agentId, paused);
             AgentStateChanged?.Invoke(agent);
         }
     }

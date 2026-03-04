@@ -16,25 +16,25 @@ namespace Asterisk.Sdk.Ami.Connection;
 
 internal static partial class AmiConnectionLog
 {
-    [LoggerMessage(Level = LogLevel.Information, Message = "Connected to Asterisk AMI at {Host}:{Port} - {Version}")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "[AMI] Connected: host={Host} port={Port} version={Version}")]
     public static partial void Connected(ILogger logger, string host, int port, string? version);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Disconnected from AMI")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "[AMI] Disconnected")]
     public static partial void Disconnected(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "AMI connection lost, reconnecting in {Delay}ms (attempt {Attempt})")]
-    public static partial void Reconnecting(ILogger logger, int delay, int attempt);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI] Reconnecting: delay_ms={DelayMs} attempt={Attempt}")]
+    public static partial void Reconnecting(ILogger logger, int delayMs, int attempt);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "AMI event received: {EventType}")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI_EVENT] Received: event_type={EventType}")]
     public static partial void EventReceived(ILogger logger, string? eventType);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "AMI response received: ActionId={ActionId} Response={Response}")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI_ACTION] Response: action_id={ActionId} response={Response}")]
     public static partial void ResponseReceived(ILogger logger, string? actionId, string? response);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "AMI reader loop error")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Reader error")]
     public static partial void ReaderError(ILogger logger, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "AMI event dropped (buffer full): {EventType}")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] Dropped: event_type={EventType}")]
     public static partial void EventDropped(ILogger logger, string? eventType);
 }
 
@@ -432,7 +432,7 @@ public sealed class AmiConnection : IAmiConnection
             var delayMs = (int)Math.Min(delay.TotalMilliseconds, int.MaxValue);
 
             AmiMetrics.ReconnectionAttempts.Add(1);
-            AmiConnectionLog.Reconnecting(_logger, delayMs, attempt);
+            AmiConnectionLog.Reconnecting(_logger, delayMs: delayMs, attempt);
             await Task.Delay(delayMs);
 
             if (_options.MaxReconnectAttempts > 0 && attempt >= _options.MaxReconnectAttempts)
