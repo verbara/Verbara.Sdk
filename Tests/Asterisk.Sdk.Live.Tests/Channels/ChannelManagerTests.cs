@@ -115,4 +115,30 @@ public class ChannelManagerTests
 
         _sut.GetByName("PJSIP/2000-001").Should().BeNull();
     }
+
+    [Fact]
+    public void GetChannelsByTechnology_ShouldFilterByPrefix()
+    {
+        _sut.OnNewChannel("1.1", "PJSIP/2000-001", ChannelState.Up);
+        _sut.OnNewChannel("2.1", "PJSIP/3000-001", ChannelState.Up);
+        _sut.OnNewChannel("3.1", "WebSocket/ws-001", ChannelState.Up);
+        _sut.OnNewChannel("4.1", "AudioSocket/as-001", ChannelState.Up);
+
+        _sut.GetChannelsByTechnology("PJSIP").Should().HaveCount(2);
+        _sut.GetChannelsByTechnology("WebSocket").Should().HaveCount(1);
+        _sut.GetChannelsByTechnology("AudioSocket").Should().HaveCount(1);
+        _sut.GetChannelsByTechnology("IAX2").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CountChannelsByTechnology_ShouldReturnCorrectCount()
+    {
+        _sut.OnNewChannel("1.1", "PJSIP/2000-001", ChannelState.Up);
+        _sut.OnNewChannel("2.1", "PJSIP/3000-001", ChannelState.Ringing);
+        _sut.OnNewChannel("3.1", "WebSocket/ws-001", ChannelState.Up);
+
+        _sut.CountChannelsByTechnology("PJSIP").Should().Be(2);
+        _sut.CountChannelsByTechnology("WebSocket").Should().Be(1);
+        _sut.CountChannelsByTechnology("SIP").Should().Be(0);
+    }
 }

@@ -155,6 +155,33 @@ public sealed class ChannelManager
     public IEnumerable<AsteriskChannel> GetChannelsByState(ChannelState state) =>
         _channelsByUniqueId.Values.Where(c => c.State == state);
 
+    /// <summary>
+    /// Get channels filtered by technology prefix (lazy, zero-alloc).
+    /// Example: "WebSocket", "PJSIP", "AudioSocket".
+    /// </summary>
+    public IEnumerable<AsteriskChannel> GetChannelsByTechnology(string technology)
+    {
+        var prefix = string.Concat(technology, "/");
+        foreach (var kvp in _channelsByName)
+        {
+            if (kvp.Key.StartsWith(prefix, StringComparison.Ordinal))
+                yield return kvp.Value;
+        }
+    }
+
+    /// <summary>Count channels by technology without materializing a collection.</summary>
+    public int CountChannelsByTechnology(string technology)
+    {
+        var prefix = string.Concat(technology, "/");
+        var count = 0;
+        foreach (var kvp in _channelsByName)
+        {
+            if (kvp.Key.StartsWith(prefix, StringComparison.Ordinal))
+                count++;
+        }
+        return count;
+    }
+
     public void Clear()
     {
         _channelsByUniqueId.Clear();
