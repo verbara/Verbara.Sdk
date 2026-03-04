@@ -11,7 +11,7 @@
 <div class="login-card">
     <div class="login-header">
         <h2>Asterisk Dashboard</h2>
-        <p class="text-muted">Sign in to continue</p>
+        <p>Sign in to continue</p>
     </div>
 
     @if (!string.IsNullOrEmpty(_error))
@@ -22,11 +22,11 @@
     <EditForm Model="_model" OnValidSubmit="HandleLogin" FormName="login">
         <div class="form-field" style="margin-bottom: 1rem;">
             <label class="form-label">Username</label>
-            <InputText @bind-Value="_model.Username" class="input" style="width: 100%;" placeholder="Username" />
+            <InputText @bind-Value="_model.Username" class="input" style="width: 100%;" placeholder="admin" />
         </div>
-        <div class="form-field" style="margin-bottom: 1.25rem;">
+        <div class="form-field" style="margin-bottom: 1.5rem;">
             <label class="form-label">Password</label>
-            <InputText @bind-Value="_model.Password" type="password" class="input" style="width: 100%;" placeholder="Password" />
+            <InputText @bind-Value="_model.Password" type="password" class="input" style="width: 100%;" placeholder="••••••••" />
         </div>
         <button type="submit" class="btn btn-blue" style="width: 100%;">Sign In</button>
     </EditForm>
