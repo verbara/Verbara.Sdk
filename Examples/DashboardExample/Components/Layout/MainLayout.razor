@@ -36,8 +36,10 @@
                         AmiConnectionState.Reconnecting or AmiConnectionState.Connecting => "dot-yellow",
                         _ => "dot-red"
                     };
+                    var modeBadge = entry.ConfigMode == ConfigMode.Realtime ? "badge-realtime" : "badge-file";
                     <span class="connection-dot @dotClass" title="@id: @state"></span>
                     <span class="connection-label">@id</span>
+                    <span class="badge @modeBadge">@entry.ConfigMode</span>
                 }
             </div>
             <div class="header-right">

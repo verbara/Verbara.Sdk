@@ -21,13 +21,13 @@ internal static partial class TrunkServiceLog
 /// </summary>
 public sealed class TrunkService
 {
-    private readonly IConfigProvider _configProvider;
+    private readonly IConfigProviderResolver _resolver;
     private readonly AsteriskMonitorService _monitor;
     private readonly ILogger<TrunkService> _logger;
 
-    public TrunkService(IConfigProvider configProvider, AsteriskMonitorService monitor, ILogger<TrunkService> logger)
+    public TrunkService(IConfigProviderResolver resolver, AsteriskMonitorService monitor, ILogger<TrunkService> logger)
     {
-        _configProvider = configProvider;
+        _resolver = resolver;
         _monitor = monitor;
         _logger = logger;
     }
@@ -38,7 +38,8 @@ public sealed class TrunkService
         var trunks = new List<TrunkViewModel>();
 
         // Load PJSIP trunks
-        var pjsipCategories = await _configProvider.GetCategoriesAsync(serverId, "pjsip.conf", ct);
+        var configProvider = _resolver.GetProvider(serverId);
+        var pjsipCategories = await configProvider.GetCategoriesAsync(serverId, "pjsip.conf", ct);
         var pjsipEndpoints = pjsipCategories
             .Where(c => c.Variables.GetValueOrDefault("type") == "endpoint")
             .ToList();
@@ -57,7 +58,7 @@ public sealed class TrunkService
         }
 
         // Load SIP trunks
-        var sipCategories = await _configProvider.GetCategoriesAsync(serverId, "sip.conf", ct);
+        var sipCategories = await configProvider.GetCategoriesAsync(serverId, "sip.conf", ct);
         foreach (var cat in sipCategories)
         {
             if (cat.Variables.GetValueOrDefault("type") != "peer" || cat.Name == "general")
@@ -75,7 +76,7 @@ public sealed class TrunkService
         }
 
         // Load IAX2 trunks
-        var iaxCategories = await _configProvider.GetCategoriesAsync(serverId, "iax.conf", ct);
+        var iaxCategories = await configProvider.GetCategoriesAsync(serverId, "iax.conf", ct);
         foreach (var cat in iaxCategories)
         {
             if (cat.Variables.GetValueOrDefault("type") != "peer" || cat.Name == "general")
@@ -119,7 +120,7 @@ public sealed class TrunkService
         // Get detailed status
         if (technology == TrunkTechnology.PjSip)
         {
-            var output = await _configProvider.ExecuteCommandAsync(serverId, $"pjsip show endpoint {name}", ct);
+            var output = await _resolver.GetProvider(serverId).ExecuteCommandAsync(serverId, $"pjsip show endpoint {name}", ct);
             if (output is not null)
             {
                 vm.ContactUri = ExtractField(output, "Contact:");
@@ -135,37 +136,38 @@ public sealed class TrunkService
     /// <summary>Creates a trunk with all required config sections.</summary>
     public async Task<bool> CreateTrunkAsync(string serverId, TrunkConfig config, CancellationToken ct = default)
     {
+        var configProvider = _resolver.GetProvider(serverId);
         var filename = GetConfigFilename(config.Technology);
         bool success;
 
         if (config.Technology == TrunkTechnology.PjSip)
         {
             // Create 4 PJSIP sections: endpoint, auth, aor, registration
-            success = await _configProvider.CreateSectionAsync(serverId, filename, config.Name, config.ToPjsipEndpoint(), ct: ct);
+            success = await configProvider.CreateSectionAsync(serverId, filename, config.Name, config.ToPjsipEndpoint(), ct: ct);
             if (!success) return false;
 
-            success = await _configProvider.CreateSectionAsync(serverId, filename, $"{config.Name}-auth", config.ToPjsipAuth(), ct: ct);
+            success = await configProvider.CreateSectionAsync(serverId, filename, $"{config.Name}-auth", config.ToPjsipAuth(), ct: ct);
             if (!success) return false;
 
-            success = await _configProvider.CreateSectionAsync(serverId, filename, $"{config.Name}-aor", config.ToPjsipAor(), ct: ct);
+            success = await configProvider.CreateSectionAsync(serverId, filename, $"{config.Name}-aor", config.ToPjsipAor(), ct: ct);
             if (!success) return false;
 
             var regVars = config.ToPjsipRegistration();
             if (regVars is not null)
             {
-                success = await _configProvider.CreateSectionAsync(serverId, filename, $"{config.Name}-reg", regVars, ct: ct);
+                success = await configProvider.CreateSectionAsync(serverId, filename, $"{config.Name}-reg", regVars, ct: ct);
                 if (!success) return false;
             }
         }
         else
         {
             var vars = config.Technology == TrunkTechnology.Sip ? config.ToSipPeer() : config.ToIaxPeer();
-            success = await _configProvider.CreateSectionAsync(serverId, filename, config.Name, vars, ct: ct);
+            success = await configProvider.CreateSectionAsync(serverId, filename, config.Name, vars, ct: ct);
             if (!success) return false;
         }
 
         // Reload the appropriate module
-        await _configProvider.ReloadModuleAsync(serverId, GetReloadModule(config.Technology), ct);
+        await configProvider.ReloadModuleAsync(serverId, GetReloadModule(config.Technology), ct);
 
         TrunkServiceLog.Created(_logger, serverId, config.Name, config.Technology);
         return true;
@@ -188,35 +190,37 @@ public sealed class TrunkService
         if (!await DeleteSectionsAsync(serverId, name, technology, ct))
             return false;
 
-        await _configProvider.ReloadModuleAsync(serverId, GetReloadModule(technology), ct);
+        await _resolver.GetProvider(serverId).ReloadModuleAsync(serverId, GetReloadModule(technology), ct);
         TrunkServiceLog.Deleted(_logger, serverId, name, technology);
         return true;
     }
 
     private async Task<bool> DeleteSectionsAsync(string serverId, string name, TrunkTechnology technology, CancellationToken ct)
     {
+        var configProvider = _resolver.GetProvider(serverId);
         var filename = GetConfigFilename(technology);
 
         if (technology == TrunkTechnology.PjSip)
         {
             // Delete all 4 possible PJSIP sections
-            await _configProvider.DeleteSectionAsync(serverId, filename, name, ct);
-            await _configProvider.DeleteSectionAsync(serverId, filename, $"{name}-auth", ct);
-            await _configProvider.DeleteSectionAsync(serverId, filename, $"{name}-aor", ct);
-            await _configProvider.DeleteSectionAsync(serverId, filename, $"{name}-reg", ct);
+            await configProvider.DeleteSectionAsync(serverId, filename, name, ct);
+            await configProvider.DeleteSectionAsync(serverId, filename, $"{name}-auth", ct);
+            await configProvider.DeleteSectionAsync(serverId, filename, $"{name}-aor", ct);
+            await configProvider.DeleteSectionAsync(serverId, filename, $"{name}-reg", ct);
             return true;
         }
 
-        return await _configProvider.DeleteSectionAsync(serverId, filename, name, ct);
+        return await configProvider.DeleteSectionAsync(serverId, filename, name, ct);
     }
 
     private async Task<TrunkConfig?> LoadTrunkConfigAsync(string serverId, string name, TrunkTechnology technology, CancellationToken ct)
     {
+        var configProvider = _resolver.GetProvider(serverId);
         var filename = GetConfigFilename(technology);
 
         if (technology == TrunkTechnology.PjSip)
         {
-            var categories = await _configProvider.GetCategoriesAsync(serverId, filename, ct);
+            var categories = await configProvider.GetCategoriesAsync(serverId, filename, ct);
             var catDict = categories.ToDictionary(c => c.Name, c => c.Variables, StringComparer.OrdinalIgnoreCase);
 
             catDict.TryGetValue(name, out var endpoint);
@@ -229,7 +233,7 @@ public sealed class TrunkService
             return TrunkConfig.FromPjsipSections(name, endpoint, auth, aor, reg);
         }
 
-        var section = await _configProvider.GetSectionAsync(serverId, filename, name, ct);
+        var section = await configProvider.GetSectionAsync(serverId, filename, name, ct);
         if (section is null) return null;
 
         return technology == TrunkTechnology.Sip
@@ -241,8 +245,10 @@ public sealed class TrunkService
     {
         try
         {
+            var configProvider = _resolver.GetProvider(serverId);
+
             // Get PJSIP endpoint statuses
-            var pjsipOutput = await _configProvider.ExecuteCommandAsync(serverId, "pjsip show endpoints", ct);
+            var pjsipOutput = await configProvider.ExecuteCommandAsync(serverId, "pjsip show endpoints", ct);
             if (pjsipOutput is not null)
             {
                 foreach (var trunk in trunks.Where(t => t.Technology == TrunkTechnology.PjSip))
@@ -252,7 +258,7 @@ public sealed class TrunkService
             }
 
             // Get SIP peer statuses
-            var sipOutput = await _configProvider.ExecuteCommandAsync(serverId, "sip show peers", ct);
+            var sipOutput = await configProvider.ExecuteCommandAsync(serverId, "sip show peers", ct);
             if (sipOutput is not null)
             {
                 foreach (var trunk in trunks.Where(t => t.Technology == TrunkTechnology.Sip))
@@ -262,7 +268,7 @@ public sealed class TrunkService
             }
 
             // Get IAX2 peer statuses
-            var iaxOutput = await _configProvider.ExecuteCommandAsync(serverId, "iax2 show peers", ct);
+            var iaxOutput = await configProvider.ExecuteCommandAsync(serverId, "iax2 show peers", ct);
             if (iaxOutput is not null)
             {
                 foreach (var trunk in trunks.Where(t => t.Technology == TrunkTechnology.Iax2))

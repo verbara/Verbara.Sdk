@@ -4,9 +4,9 @@
 <div class="server-selector">
     <select @bind="SelectedServerId" @bind:after="OnSelectionChanged">
         <option value="">All Servers</option>
-        @foreach (var (id, _) in Monitor.Servers)
+        @foreach (var (id, entry) in Monitor.Servers)
         {
-            <option value="@id">@id</option>
+            <option value="@id">@id (@entry.ConfigMode)</option>
         }
     </select>
 </div>

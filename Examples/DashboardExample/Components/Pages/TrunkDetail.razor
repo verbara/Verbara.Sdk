@@ -3,7 +3,7 @@
 @using DashboardExample.Models
 @inject AsteriskMonitorService Monitor
 @inject TrunkService TrunkSvc
-@inject PbxConfigManager ConfigMgr
+@inject IConfigProviderResolver ConfigResolver
 @inject NavigationManager Nav
 
 <PageTitle>@TrunkName — Asterisk Dashboard</PageTitle>
@@ -150,12 +150,14 @@ else
 
     private async Task LoadRawConfig(TrunkTechnology technology)
     {
+        var configProvider = ConfigResolver.GetProvider(ServerId);
+
         if (technology == TrunkTechnology.PjSip)
         {
             var sections = new[] { TrunkName, $"{TrunkName}-auth", $"{TrunkName}-aor", $"{TrunkName}-reg" };
             foreach (var sectionName in sections)
             {
-                var vars = await ConfigMgr.GetSectionAsync(ServerId, "pjsip.conf", sectionName);
+                var vars = await configProvider.GetSectionAsync(ServerId, "pjsip.conf", sectionName);
                 if (vars is not null)
                 {
                     _configSections.Add((sectionName, vars));
@@ -166,7 +168,7 @@ else
         else
         {
             var filename = TrunkService.GetConfigFilename(technology);
-            _singleSection = await ConfigMgr.GetSectionAsync(ServerId, filename, TrunkName);
+            _singleSection = await configProvider.GetSectionAsync(ServerId, filename, TrunkName);
         }
     }
 

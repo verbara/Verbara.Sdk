@@ -1186,6 +1186,10 @@ body {
 .badge-sip { background: #dcfce7; color: #166534; }
 .badge-iax { background: #fef3c7; color: #92400e; }
 
+/* Config mode badges */
+.badge-file { background: #f0fdf4; color: #166534; }
+.badge-realtime { background: #eff6ff; color: #1e40af; }
+
 /* Form sections */
 .form-section {
     background: var(--bg-card);
