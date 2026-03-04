@@ -29,4 +29,5 @@ namespace Asterisk.Sdk.Ari.Resources;
 [JsonSerializable(typeof(AriSound[]))]
 [JsonSerializable(typeof(AriFormatLang))]
 [JsonSerializable(typeof(AriFormatLang[]))]
+[JsonSerializable(typeof(Asterisk.Sdk.Ari.Events.ChannelToneDetectedEvent))]
 public sealed partial class AriJsonContext : JsonSerializerContext;

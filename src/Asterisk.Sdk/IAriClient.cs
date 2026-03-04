@@ -66,6 +66,20 @@ public interface IAriChannelsResource
     ValueTask<AriChannel> GetAsync(string channelId, CancellationToken cancellationToken = default);
     ValueTask HangupAsync(string channelId, CancellationToken cancellationToken = default);
     ValueTask<AriChannel> OriginateAsync(string endpoint, string? extension = null, string? context = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Indicate ringing to a channel. POST /channels/{channelId}/ring</summary>
+    ValueTask RingAsync(string channelId, CancellationToken cancellationToken = default);
+
+    /// <summary>Indicate call progress. POST /channels/{channelId}/progress</summary>
+    ValueTask ProgressAsync(string channelId, CancellationToken cancellationToken = default);
+
+    /// <summary>Answer a channel. POST /channels/{channelId}/answer</summary>
+    ValueTask AnswerAsync(string channelId, CancellationToken cancellationToken = default);
+
+    /// <summary>Create an external media channel. POST /channels/externalMedia</summary>
+    ValueTask<AriChannel> CreateExternalMediaAsync(string app, string externalHost, string format,
+        string? encapsulation = null, string? transport = null, string? connectionType = null,
+        string? direction = null, string? data = null, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

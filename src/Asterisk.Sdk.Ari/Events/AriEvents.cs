@@ -82,4 +82,10 @@ public sealed class DialEvent : AriEvent
     public string? Dialstatus { get; set; }
 }
 
+/// <summary>ChannelToneDetected - tone detected on channel (Asterisk 22+).</summary>
+public sealed class ChannelToneDetectedEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+}
+
 // AriPlayback model is defined in Asterisk.Sdk (IAriClient.cs)

@@ -69,6 +69,26 @@ public class CallTests
     }
 
     [Fact]
+    public void EndPoint_Parse_ShouldHandleWebSocketChannel()
+    {
+        var ep = EndPoint.Parse("WebSocket/audio-stream-001");
+
+        ep.Should().NotBeNull();
+        ep!.Tech.Should().Be(TechType.WebSocket);
+        ep.Resource.Should().Be("audio");
+    }
+
+    [Fact]
+    public void EndPoint_Parse_ShouldHandleWebSocketWithSuffix()
+    {
+        var ep = EndPoint.Parse("WebSocket/ws-session-00000001");
+
+        ep.Should().NotBeNull();
+        ep!.Tech.Should().Be(TechType.WebSocket);
+        ep.Resource.Should().Be("ws");
+    }
+
+    [Fact]
     public void PhoneNumber_ToString_WithName()
     {
         var pn = new PhoneNumber("5551234", "John Doe");

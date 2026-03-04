@@ -109,6 +109,67 @@ public class AriResourceTests
         handler.LastRequestUri.Should().Contain("context=default");
     }
 
+    [Fact]
+    public async Task Channels_RingAsync_ShouldPostRing()
+    {
+        using var handler = new FakeHttpHandler("");
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.RingAsync("ch-1");
+
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/ring");
+    }
+
+    [Fact]
+    public async Task Channels_ProgressAsync_ShouldPostProgress()
+    {
+        using var handler = new FakeHttpHandler("");
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.ProgressAsync("ch-1");
+
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/progress");
+    }
+
+    [Fact]
+    public async Task Channels_AnswerAsync_ShouldPostAnswer()
+    {
+        using var handler = new FakeHttpHandler("");
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.AnswerAsync("ch-1");
+
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/answer");
+    }
+
+    [Fact]
+    public async Task Channels_CreateExternalMediaAsync_ShouldPostWithParams()
+    {
+        var json = JsonSerializer.Serialize(
+            new AriChannel { Id = "ch-ext", Name = "UnicastRTP/127.0.0.1:8000" },
+            AriJsonContext.Default.AriChannel);
+        using var handler = new FakeHttpHandler(json);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        var result = await sut.CreateExternalMediaAsync("myapp", "127.0.0.1:8000", "slin16",
+            encapsulation: "rtp", transport: "udp");
+
+        result.Id.Should().Be("ch-ext");
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastRequestUri.Should().Contain("externalMedia");
+        handler.LastRequestUri.Should().Contain("app=myapp");
+        handler.LastRequestUri.Should().Contain("format=slin16");
+        handler.LastRequestUri.Should().Contain("encapsulation=rtp");
+        handler.LastRequestUri.Should().Contain("transport=udp");
+    }
+
     // --- Bridges ---
 
     [Fact]

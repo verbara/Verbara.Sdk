@@ -49,7 +49,7 @@ public sealed record EndPoint(TechType Tech, string Resource)
 }
 
 /// <summary>Channel technology type.</summary>
-public enum TechType { SIP, PJSIP, IAX2, DAHDI, Local, Agent }
+public enum TechType { SIP, PJSIP, IAX2, DAHDI, Local, Agent, WebSocket }
 
 /// <summary>DTMF tone.</summary>
 public enum DtmfTone
