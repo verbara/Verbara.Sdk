@@ -1,10 +1,15 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Reactive.Subjects;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using Asterisk.Sdk;
+using Asterisk.Sdk.Ari.Diagnostics;
+using Asterisk.Sdk.Ari.Events;
+using Asterisk.Sdk.Ari.Internal;
 using Asterisk.Sdk.Ari.Resources;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -44,6 +49,7 @@ public sealed class AriClient : IAriClient
     private CancellationTokenSource? _cts;
     private Task? _eventLoop;
     private readonly Subject<AriEvent> _eventSubject = new();
+    private readonly AriEventPump _pump = new();
 
     public bool IsConnected => _webSocket?.State == WebSocketState.Open;
 
@@ -89,6 +95,17 @@ public sealed class AriClient : IAriClient
         var uri = new Uri($"{wsUrl}/ari/events?api_key={Uri.EscapeDataString(_options.Username)}:{Uri.EscapeDataString(_options.Password)}&app={Uri.EscapeDataString(_options.Application)}");
 
         await _webSocket.ConnectAsync(uri, cancellationToken);
+
+        _pump.OnEventDropped = evt => AriMetrics.EventsDropped.Add(1);
+        _pump.Start(evt =>
+        {
+            var sw = Stopwatch.StartNew();
+            _eventSubject.OnNext(evt);
+            AriMetrics.EventsDispatched.Add(1);
+            AriMetrics.EventDispatchMs.Record(sw.Elapsed.TotalMilliseconds);
+            return ValueTask.CompletedTask;
+        });
+
         _eventLoop = Task.Run(() => EventLoopAsync(_cts.Token), CancellationToken.None);
 
         AriClientLog.Connected(_logger, _options.BaseUrl, _options.Application);
@@ -123,8 +140,9 @@ public sealed class AriClient : IAriClient
                     var evt = ParseEvent(json);
                     if (evt is not null)
                     {
+                        AriMetrics.EventsReceived.Add(1);
                         AriClientLog.EventReceived(_logger, evt.Type);
-                        _eventSubject.OnNext(evt);
+                        _pump.TryEnqueue(evt);
                     }
                 }
             }
@@ -151,6 +169,7 @@ public sealed class AriClient : IAriClient
         while (!ct.IsCancellationRequested)
         {
             attempt++;
+            AriMetrics.Reconnections.Add(1);
             var delayMs = (long)delay.TotalMilliseconds;
             AriClientLog.Reconnecting(_logger, delayMs, attempt);
 
@@ -200,20 +219,63 @@ public sealed class AriClient : IAriClient
         }
     }
 
-    private static AriEvent? ParseEvent(string json)
+    // Registry mapping ARI event type names to their AOT-safe JsonTypeInfo.
+    // Uses a helper to cast JsonTypeInfo<T> → JsonTypeInfo<AriEvent> via the untyped base.
+    private static readonly Dictionary<string, JsonTypeInfo> s_eventParsers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["StasisStart"] = AriJsonContext.Default.StasisStartEvent,
+        ["StasisEnd"] = AriJsonContext.Default.StasisEndEvent,
+        ["ChannelStateChange"] = AriJsonContext.Default.ChannelStateChangeEvent,
+        ["ChannelDtmfReceived"] = AriJsonContext.Default.ChannelDtmfReceivedEvent,
+        ["ChannelHangupRequest"] = AriJsonContext.Default.ChannelHangupRequestEvent,
+        ["BridgeCreated"] = AriJsonContext.Default.BridgeCreatedEvent,
+        ["BridgeDestroyed"] = AriJsonContext.Default.BridgeDestroyedEvent,
+        ["ChannelEnteredBridge"] = AriJsonContext.Default.ChannelEnteredBridgeEvent,
+        ["ChannelLeftBridge"] = AriJsonContext.Default.ChannelLeftBridgeEvent,
+        ["PlaybackStarted"] = AriJsonContext.Default.PlaybackStartedEvent,
+        ["PlaybackFinished"] = AriJsonContext.Default.PlaybackFinishedEvent,
+        ["Dial"] = AriJsonContext.Default.DialEvent,
+        ["ChannelToneDetected"] = AriJsonContext.Default.ChannelToneDetectedEvent,
+        ["ChannelCreated"] = AriJsonContext.Default.ChannelCreatedEvent,
+        ["ChannelDestroyed"] = AriJsonContext.Default.ChannelDestroyedEvent,
+        ["ChannelVarset"] = AriJsonContext.Default.ChannelVarsetEvent,
+        ["ChannelHold"] = AriJsonContext.Default.ChannelHoldEvent,
+        ["ChannelUnhold"] = AriJsonContext.Default.ChannelUnholdEvent,
+        ["ChannelTalkingStarted"] = AriJsonContext.Default.ChannelTalkingStartedEvent,
+        ["ChannelTalkingFinished"] = AriJsonContext.Default.ChannelTalkingFinishedEvent,
+        ["ChannelConnectedLine"] = AriJsonContext.Default.ChannelConnectedLineEvent,
+        ["RecordingStarted"] = AriJsonContext.Default.RecordingStartedEvent,
+        ["RecordingFinished"] = AriJsonContext.Default.RecordingFinishedEvent,
+        ["EndpointStateChange"] = AriJsonContext.Default.EndpointStateChangeEvent,
+    };
+
+    internal static AriEvent? ParseEvent(string json)
     {
         try
         {
+            // Quick-parse to extract "type" field
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+            var type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
 
-            return new AriEvent
+            AriEvent? evt = null;
+
+            // Typed deserialization if we have a registered parser
+            if (type is not null && s_eventParsers.TryGetValue(type, out var typeInfo))
             {
-                Type = root.TryGetProperty("type", out var t) ? t.GetString() : null,
+                evt = (AriEvent?)JsonSerializer.Deserialize(json, typeInfo);
+            }
+
+            // Fallback to base AriEvent for unknown types
+            evt ??= new AriEvent
+            {
+                Type = type,
                 Application = root.TryGetProperty("application", out var a) ? a.GetString() : null,
                 Timestamp = root.TryGetProperty("timestamp", out var ts) && DateTimeOffset.TryParse(ts.GetString(), out var dto) ? dto : null,
-                RawJson = json
             };
+
+            evt.RawJson = json;
+            return evt;
         }
         catch
         {
@@ -245,6 +307,7 @@ public sealed class AriClient : IAriClient
     public async ValueTask DisposeAsync()
     {
         if (IsConnected) await DisconnectAsync();
+        await _pump.DisposeAsync();
         _eventSubject.OnCompleted();
         _eventSubject.Dispose();
         _webSocket?.Dispose();
