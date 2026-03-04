@@ -6,8 +6,14 @@ namespace DashboardExample.Services;
 
 internal static partial class TrunkServiceLog
 {
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to merge trunk status for {ServerId}")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[TRUNK] Status merge failed: server={ServerId}")]
     public static partial void MergeStatusFailed(ILogger logger, Exception exception, string serverId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "[TRUNK] Created: server={ServerId} name={Name} technology={Technology}")]
+    public static partial void Created(ILogger logger, string serverId, string name, TrunkTechnology technology);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "[TRUNK] Deleted: server={ServerId} name={Name} technology={Technology}")]
+    public static partial void Deleted(ILogger logger, string serverId, string name, TrunkTechnology technology);
 }
 
 /// <summary>
@@ -161,6 +167,7 @@ public sealed class TrunkService
         // Reload the appropriate module
         await _configProvider.ReloadModuleAsync(serverId, GetReloadModule(config.Technology), ct);
 
+        TrunkServiceLog.Created(_logger, serverId, config.Name, config.Technology);
         return true;
     }
 
@@ -182,6 +189,7 @@ public sealed class TrunkService
             return false;
 
         await _configProvider.ReloadModuleAsync(serverId, GetReloadModule(technology), ct);
+        TrunkServiceLog.Deleted(_logger, serverId, name, technology);
         return true;
     }
 

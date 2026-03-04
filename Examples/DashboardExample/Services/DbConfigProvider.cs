@@ -7,22 +7,22 @@ namespace DashboardExample.Services;
 
 internal static partial class DbConfigLog
 {
-    [LoggerMessage(Level = LogLevel.Debug, Message = "DB GetCategories: {Filename} → {TableCount} tables, {RowCount} rows")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CONFIG_DB] GetCategories: filename={Filename} tables={TableCount} rows={RowCount}")]
     public static partial void GetCategories(ILogger logger, string filename, int tableCount, int rowCount);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "DB CreateSection: {Table}.{Id}")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CONFIG_DB] CreateSection: table={Table} id={Id}")]
     public static partial void CreateSection(ILogger logger, string table, string id);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "DB UpdateSection: {Table}.{Id} ({RowsAffected} rows)")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CONFIG_DB] UpdateSection: table={Table} id={Id} rows_affected={RowsAffected}")]
     public static partial void UpdateSection(ILogger logger, string table, string id, int rowsAffected);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "DB DeleteSection: {Id} across {TableCount} tables")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CONFIG_DB] DeleteSection: id={Id} tables={TableCount}")]
     public static partial void DeleteSection(ILogger logger, string id, int tableCount);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "No Realtime table mapping for filename: {Filename}")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[CONFIG_DB] No table mapping: filename={Filename}")]
     public static partial void NoTableMapping(ILogger logger, string filename);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "DB operation failed for {Filename}/{Section}")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFIG_DB] Operation failed: filename={Filename} section={Section}")]
     public static partial void OperationFailed(ILogger logger, Exception exception, string filename, string? section);
 }
 

@@ -1,7 +1,25 @@
 using Asterisk.Sdk.Hosting;
 using DashboardExample.Services;
+using System.Globalization;
+using Serilog;
+using Serilog.Events;
+
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Debug()
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .WriteTo.Console(
+        outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}",
+        formatProvider: CultureInfo.InvariantCulture)
+    .WriteTo.File(
+        new Serilog.Formatting.Json.JsonFormatter(),
+        path: "logs/dashboard-.json",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30)
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

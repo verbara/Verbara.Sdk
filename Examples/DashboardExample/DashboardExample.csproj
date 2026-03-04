@@ -18,6 +18,10 @@
   <ItemGroup>
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Dapper" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Sinks.File" />
+    <PackageReference Include="Serilog.Expressions" />
   </ItemGroup>
 
 </Project>

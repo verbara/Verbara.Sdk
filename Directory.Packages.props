@@ -17,6 +17,15 @@
     <PackageVersion Include="System.Reactive" Version="6.0.1" />
   </ItemGroup>
 
+  <!-- Serilog (Dashboard only — SDK uses pure LoggerMessage) -->
+  <ItemGroup>
+    <PackageVersion Include="Serilog" Version="4.2.0" />
+    <PackageVersion Include="Serilog.Extensions.Hosting" Version="9.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageVersion Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageVersion Include="Serilog.Expressions" Version="5.0.0" />
+  </ItemGroup>
+
   <!-- Database dependencies -->
   <ItemGroup>
     <PackageVersion Include="Npgsql" Version="9.0.3" />
