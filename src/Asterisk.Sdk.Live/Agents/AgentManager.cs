@@ -33,6 +33,11 @@ public sealed class AgentManager
             agent.State = AgentState.Available;
             agent.Channel = channel;
             agent.LoggedInAt = DateTimeOffset.UtcNow;
+            agent.LastStateChangeAt = DateTimeOffset.UtcNow;
+            agent.CallsTaken = 0;
+            agent.TotalTalkTimeSecs = 0;
+            agent.TotalHoldTimeSecs = 0;
+            agent.LastCallTalkTimeSecs = 0;
         }
         AgentLoggedIn?.Invoke(agent);
     }
@@ -46,6 +51,7 @@ public sealed class AgentManager
             {
                 agent.State = AgentState.LoggedOff;
                 agent.Channel = null;
+                agent.LastStateChangeAt = DateTimeOffset.UtcNow;
             }
             AgentLoggedOff?.Invoke(agent);
         }
@@ -60,13 +66,14 @@ public sealed class AgentManager
             {
                 agent.State = AgentState.OnCall;
                 agent.TalkingTo = talkingTo;
+                agent.LastStateChangeAt = DateTimeOffset.UtcNow;
             }
             AgentStateChanged?.Invoke(agent);
         }
     }
 
     /// <summary>Handle AgentComplete event (agent finished a queue call).</summary>
-    public void OnAgentComplete(string agentId)
+    public void OnAgentComplete(string agentId, long talkTimeSecs = 0, long holdTimeSecs = 0)
     {
         if (_agents.TryGetValue(agentId, out var agent))
         {
@@ -74,6 +81,11 @@ public sealed class AgentManager
             {
                 agent.State = AgentState.Available;
                 agent.TalkingTo = null;
+                agent.LastStateChangeAt = DateTimeOffset.UtcNow;
+                agent.CallsTaken++;
+                agent.LastCallTalkTimeSecs = talkTimeSecs;
+                agent.TotalTalkTimeSecs += talkTimeSecs;
+                agent.TotalHoldTimeSecs += holdTimeSecs;
             }
             AgentStateChanged?.Invoke(agent);
         }
@@ -87,6 +99,7 @@ public sealed class AgentManager
             lock (agent.SyncRoot)
             {
                 agent.State = paused ? AgentState.Paused : AgentState.Available;
+                agent.LastStateChangeAt = DateTimeOffset.UtcNow;
             }
             AgentStateChanged?.Invoke(agent);
         }
@@ -115,6 +128,31 @@ public sealed class AsteriskAgent : LiveObjectBase
     public string? Channel { get; set; }
     public string? TalkingTo { get; set; }
     public DateTimeOffset? LoggedInAt { get; set; }
+
+    /// <summary>Timestamp of the last state transition.</summary>
+    public DateTimeOffset? LastStateChangeAt { get; set; }
+
+    /// <summary>Total calls answered by this agent since login.</summary>
+    public int CallsTaken { get; set; }
+
+    /// <summary>Total talk time in seconds accumulated since login.</summary>
+    public long TotalTalkTimeSecs { get; set; }
+
+    /// <summary>Total hold time in seconds accumulated since login.</summary>
+    public long TotalHoldTimeSecs { get; set; }
+
+    /// <summary>Talk time of the last completed call in seconds.</summary>
+    public long LastCallTalkTimeSecs { get; set; }
+
+    /// <summary>Duration the agent has been in the current state.</summary>
+    public TimeSpan StateElapsed => LastStateChangeAt.HasValue
+        ? DateTimeOffset.UtcNow - LastStateChangeAt.Value
+        : TimeSpan.Zero;
+
+    /// <summary>Average talk time per call in seconds.</summary>
+    public double AvgTalkTimeSecs => CallsTaken > 0
+        ? (double)TotalTalkTimeSecs / CallsTaken
+        : 0;
 }
 
 /// <summary>Agent state.</summary>

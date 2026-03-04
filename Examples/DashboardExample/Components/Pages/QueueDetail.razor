@@ -4,6 +4,8 @@
 @using Asterisk.Sdk.Live.Queues
 @using Asterisk.Sdk.Ami.Actions
 @inject AsteriskMonitorService Monitor
+@inject CallFlowTracker Tracker
+@inject NavigationManager Nav
 @implements IDisposable
 
 <PageTitle>@QueueName — Asterisk Dashboard</PageTitle>
@@ -42,10 +44,18 @@ else
                 </div>
                 <div class="agent-card-body">
                     <div>@member.Interface</div>
+                    <div>Status: @member.Status</div>
                     <div>Calls: @member.CallsTaken | Penalty: @member.Penalty</div>
                     @if (member.Paused)
                     {
                         <div class="badge badge-yellow">Paused @(member.PausedReason is not null ? $"— {member.PausedReason}" : "")</div>
+                    }
+                    @{
+                        var memberCall = Tracker.FindActiveCallByChannel(member.Interface);
+                    }
+                    @if (memberCall is not null)
+                    {
+                        <a href="/calls/@Uri.EscapeDataString(memberCall.CallId)" class="badge badge-blue">Active Call</a>
                     }
                 </div>
                 <div class="agent-card-actions">
@@ -73,16 +83,24 @@ else
                     <th>Caller ID</th>
                     <th>Channel</th>
                     <th>Wait Time</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var entry in _queue.Entries.Values.OrderBy(e => e.Position))
                 {
+                    var callerCall = Tracker.FindActiveCallByChannel(entry.Channel);
                     <tr>
                         <td>@entry.Position</td>
                         <td>@entry.CallerId</td>
                         <td>@entry.Channel</td>
                         <td class="caller-timer">@FormatDuration(DateTimeOffset.UtcNow - entry.JoinedAt)</td>
+                        <td>
+                            @if (callerCall is not null)
+                            {
+                                <a href="/calls/@Uri.EscapeDataString(callerCall.CallId)" class="badge badge-blue">View Call</a>
+                            }
+                        </td>
                     </tr>
                 }
             </tbody>

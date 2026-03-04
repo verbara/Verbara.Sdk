@@ -1,0 +1,313 @@
+@using DashboardExample.Services
+
+@if (Call is null || Call.Events.Count == 0)
+{
+    <p class="text-muted">No events to display.</p>
+}
+else
+{
+    var participants = GetParticipants();
+    var rows = BuildRows(participants);
+    var colCount = participants.Count;
+
+    <div class="ladder-container" style="min-width:@(colCount * 140)px">
+        <!-- Participant headers -->
+        <div class="ladder-participants">
+            @foreach (var p in participants)
+            {
+                <div class="ladder-participant">
+                    <div class="ladder-participant-name" title="@p.Channel">@p.Label</div>
+                    <div class="ladder-participant-tech">@p.Technology</div>
+                </div>
+            }
+        </div>
+
+        <!-- Diagram body -->
+        <div class="ladder-body" style="padding-left:52px">
+            <!-- Lifelines -->
+            <div class="ladder-lifelines">
+                @for (var i = 0; i < colCount; i++)
+                {
+                    <div class="ladder-lifeline"></div>
+                }
+            </div>
+
+            <!-- Bridge blocks -->
+            @foreach (var bridge in BuildBridgeBlocks(participants, rows))
+            {
+                <div class="ladder-bridge-block @bridge.CssClass"
+                     style="left:@Pct(bridge.LeftCol, colCount); width:@ColSpan(bridge.LeftCol, bridge.RightCol, colCount); top:@(bridge.TopPx)px; height:@(bridge.HeightPx)px">
+                </div>
+            }
+
+            <!-- Event rows -->
+            @foreach (var row in rows)
+            {
+                <div class="ladder-row">
+                    <span class="ladder-time">@row.TimeLabel</span>
+
+                    @if (row.SourceIdx == row.TargetIdx)
+                    {
+                        <!-- Self-arrow (DTMF, Hold on same channel, etc.) -->
+                        <div class="ladder-self-arrow @row.ArrowClass"
+                             style="left:@ColCenter(row.SourceIdx, colCount)">
+                            <span class="ladder-self-arrow-icon">@row.Icon</span>
+                            <span class="ladder-self-arrow-label">@row.Label</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Arrow between participants -->
+                        var leftIdx = Math.Min(row.SourceIdx, row.TargetIdx);
+                        var rightIdx = Math.Max(row.SourceIdx, row.TargetIdx);
+                        var goesRight = row.SourceIdx < row.TargetIdx;
+                        <div class="ladder-arrow @row.ArrowClass"
+                             style="left:@ColCenter(leftIdx, colCount); width:@ColSpan(leftIdx, rightIdx, colCount)">
+                            @if (!goesRight)
+                            {
+                                <span class="ladder-arrow-head ladder-arrow-head-left"></span>
+                            }
+                            <div class="ladder-arrow-line"></div>
+                            @if (goesRight)
+                            {
+                                <span class="ladder-arrow-head ladder-arrow-head-right"></span>
+                            }
+                            <span class="ladder-arrow-label">@row.Label</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public CallFlow? Call { get; set; }
+
+    private sealed record ParticipantColumn(string Key, string Label, string Channel, string Technology, int Index);
+
+    private sealed record LadderRow(
+        int SourceIdx, int TargetIdx,
+        string Label, string Icon,
+        string ArrowClass, string TimeLabel,
+        int RowIndex);
+
+    private sealed record BridgeBlock(
+        int LeftCol, int RightCol,
+        int TopPx, int HeightPx,
+        string CssClass);
+
+    private const int RowHeight = 36;
+
+    private List<ParticipantColumn> GetParticipants()
+    {
+        if (Call is null) return [];
+
+        var seen = new Dictionary<string, ParticipantColumn>(StringComparer.OrdinalIgnoreCase);
+        var index = 0;
+
+        // Add caller first
+        if (Call.Caller is not null)
+        {
+            var key = ShortChannel(Call.Caller.Channel);
+            seen[key] = new ParticipantColumn(key, key, Call.Caller.Channel, Call.Caller.Technology, index++);
+        }
+
+        // Add "Asterisk" as the central PBX column
+        const string pbxKey = "Asterisk";
+        seen[pbxKey] = new ParticipantColumn(pbxKey, "Asterisk", "", "PBX", index++);
+
+        // Add queue if present
+        if (Call.QueueName is not null)
+        {
+            var key = $"Queue/{Call.QueueName}";
+            seen[key] = new ParticipantColumn(key, key, "", "Queue", index++);
+        }
+
+        // Add destination / agent
+        if (Call.Destination is not null)
+        {
+            var key = ShortChannel(Call.Destination.Channel);
+            if (!seen.ContainsKey(key))
+                seen[key] = new ParticipantColumn(key, key, Call.Destination.Channel, Call.Destination.Technology, index++);
+        }
+
+        // Add any other participants
+        foreach (var p in Call.Participants)
+        {
+            var key = ShortChannel(p.Channel);
+            if (!string.IsNullOrEmpty(key) && !seen.ContainsKey(key))
+                seen[key] = new ParticipantColumn(key, key, p.Channel, p.Technology, index++);
+        }
+
+        return seen.Values.OrderBy(p => p.Index).ToList();
+    }
+
+    private List<LadderRow> BuildRows(List<ParticipantColumn> participants)
+    {
+        if (Call is null) return [];
+
+        var rows = new List<LadderRow>();
+        var callStart = Call.StartTime;
+        var rowIndex = 0;
+
+        foreach (var evt in Call.Events)
+        {
+            var relTime = evt.Timestamp - callStart;
+            var timeLabel = FormatTime(relTime);
+
+            var sourceIdx = ResolveColumn(participants, evt.Source, evt.Type, isSource: true);
+            var targetIdx = ResolveColumn(participants, evt.Target, evt.Type, isSource: false);
+
+            // For events without clear source/target, show as self-arrow on PBX
+            if (sourceIdx == -1) sourceIdx = FindColumn(participants, "Asterisk");
+            if (targetIdx == -1) targetIdx = sourceIdx;
+
+            var (label, icon, arrowClass) = GetEventStyle(evt);
+
+            rows.Add(new LadderRow(sourceIdx, targetIdx, label, icon, arrowClass, timeLabel, rowIndex++));
+        }
+
+        return rows;
+    }
+
+    private static int ResolveColumn(List<ParticipantColumn> participants, string? channel, CallFlowEventType eventType, bool isSource)
+    {
+        if (channel is null) return -1;
+
+        // Check if it's a queue name
+        var queueKey = $"Queue/{channel}";
+        var queueMatch = FindColumn(participants, queueKey);
+        if (queueMatch >= 0) return queueMatch;
+
+        // Check if it's a bridge ID (return PBX)
+        if (channel.Contains('.') && !channel.Contains('/'))
+            return FindColumn(participants, "Asterisk");
+
+        // Match by short channel name
+        var shortCh = ShortChannel(channel);
+        return FindColumn(participants, shortCh);
+    }
+
+    private static int FindColumn(List<ParticipantColumn> participants, string key)
+    {
+        for (var i = 0; i < participants.Count; i++)
+        {
+            if (string.Equals(participants[i].Key, key, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+        return -1;
+    }
+
+    private List<BridgeBlock> BuildBridgeBlocks(List<ParticipantColumn> participants, List<LadderRow> rows)
+    {
+        var blocks = new List<BridgeBlock>();
+        int? bridgeStart = null;
+        int bridgeLeft = 0, bridgeRight = 0;
+        var isHold = false;
+
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+
+            if (row.ArrowClass.Contains("bridge") || row.ArrowClass.Contains("answer"))
+            {
+                if (bridgeStart is null)
+                {
+                    bridgeStart = i;
+                    bridgeLeft = Math.Min(row.SourceIdx, row.TargetIdx);
+                    bridgeRight = Math.Max(row.SourceIdx, row.TargetIdx);
+                    isHold = false;
+                }
+            }
+            else if (row.ArrowClass.Contains("hold") && bridgeStart is not null)
+            {
+                // End connected block, start hold block
+                blocks.Add(new BridgeBlock(bridgeLeft, bridgeRight,
+                    bridgeStart.Value * RowHeight, (i - bridgeStart.Value) * RowHeight,
+                    "ladder-bridge-block-connected"));
+                bridgeStart = i;
+                isHold = true;
+            }
+            else if (row.ArrowClass.Contains("unhold") && bridgeStart is not null)
+            {
+                blocks.Add(new BridgeBlock(bridgeLeft, bridgeRight,
+                    bridgeStart.Value * RowHeight, (i - bridgeStart.Value) * RowHeight,
+                    "ladder-bridge-block-hold"));
+                bridgeStart = i;
+                isHold = false;
+            }
+            else if (row.ArrowClass.Contains("hangup") && bridgeStart is not null)
+            {
+                blocks.Add(new BridgeBlock(bridgeLeft, bridgeRight,
+                    bridgeStart.Value * RowHeight, (i - bridgeStart.Value) * RowHeight,
+                    isHold ? "ladder-bridge-block-hold" : "ladder-bridge-block-connected"));
+                bridgeStart = null;
+            }
+        }
+
+        // Close unclosed bridge (call still active)
+        if (bridgeStart is not null)
+        {
+            blocks.Add(new BridgeBlock(bridgeLeft, bridgeRight,
+                bridgeStart.Value * RowHeight, (rows.Count - bridgeStart.Value) * RowHeight,
+                isHold ? "ladder-bridge-block-hold" : "ladder-bridge-block-connected"));
+        }
+
+        return blocks;
+    }
+
+    private static (string label, string icon, string arrowClass) GetEventStyle(CallFlowEvent evt) =>
+        evt.Type switch
+        {
+            CallFlowEventType.NewChannel => ($"NewChannel", "+", "ladder-arrow-newchannel"),
+            CallFlowEventType.Dial => ($"DIAL {evt.Detail ?? ""}", ">>", "ladder-arrow-dial"),
+            CallFlowEventType.Ring => ($"RINGING", ">>", "ladder-arrow-ring"),
+            CallFlowEventType.Answer => ($"ANSWER {evt.Detail ?? ""}", "OK", "ladder-arrow-answer"),
+            CallFlowEventType.Bridge => ($"BRIDGE {evt.Detail ?? ""}", "=", "ladder-arrow-bridge"),
+            CallFlowEventType.Hold => ("HOLD", "||", "ladder-arrow-hold"),
+            CallFlowEventType.Unhold => ("UNHOLD", ">>", "ladder-arrow-unhold"),
+            CallFlowEventType.Dtmf => ($"DTMF '{evt.Detail}'", "#", "ladder-arrow-dtmf"),
+            CallFlowEventType.QueueJoin => ($"JOIN {evt.Target ?? ""}", "Q", "ladder-arrow-queue"),
+            CallFlowEventType.AgentConnect => ($"AGENT {evt.Detail ?? ""}", "A", "ladder-arrow-agent"),
+            CallFlowEventType.Transfer => ($"TRANSFER", ">>|", "ladder-arrow-dial"),
+            CallFlowEventType.Hangup => ($"HANGUP {evt.Detail ?? ""}", "X", "ladder-arrow-hangup"),
+            _ => (evt.Type.ToString(), "?", "ladder-arrow-newchannel")
+        };
+
+    // Column positioning helpers
+    private static string ColCenter(int colIdx, int totalCols)
+    {
+        if (totalCols <= 0) return "0%";
+        var pct = ((colIdx + 0.5) / totalCols) * 100;
+        return $"{pct:F1}%";
+    }
+
+    private static string ColSpan(int leftIdx, int rightIdx, int totalCols)
+    {
+        if (totalCols <= 0) return "0%";
+        var pct = ((double)(rightIdx - leftIdx) / totalCols) * 100;
+        return $"{pct:F1}%";
+    }
+
+    private static string Pct(int colIdx, int totalCols)
+    {
+        if (totalCols <= 0) return "0%";
+        var pct = ((colIdx + 0.5) / totalCols) * 100;
+        return $"{pct:F1}%";
+    }
+
+    private static string ShortChannel(string? channel)
+    {
+        if (channel is null) return "";
+        var dash = channel.LastIndexOf('-');
+        return dash > 0 ? channel[..dash] : channel;
+    }
+
+    private static string FormatTime(TimeSpan ts)
+    {
+        if (ts.TotalMinutes >= 1)
+            return $"{(int)ts.TotalMinutes}:{ts.Seconds:D2}.{ts.Milliseconds / 100}";
+        return $"{ts.Seconds}.{ts.Milliseconds / 100:D1}s";
+    }
+}

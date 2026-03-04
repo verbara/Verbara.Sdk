@@ -22,6 +22,7 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
     private readonly IAmiConnectionFactory _factory;
     private readonly ILoggerFactory _loggerFactory;
     private readonly EventLogService _eventLog;
+    private readonly CallFlowTracker _callFlowTracker;
     private readonly IConfiguration _config;
     private readonly ILogger<AsteriskMonitorService> _logger;
     private readonly ConcurrentDictionary<string, ServerEntry> _servers = new();
@@ -32,12 +33,14 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
         IAmiConnectionFactory factory,
         ILoggerFactory loggerFactory,
         EventLogService eventLog,
+        CallFlowTracker callFlowTracker,
         IConfiguration config,
         ILogger<AsteriskMonitorService> logger)
     {
         _factory = factory;
         _loggerFactory = loggerFactory;
         _eventLog = eventLog;
+        _callFlowTracker = callFlowTracker;
         _config = config;
         _logger = logger;
     }
@@ -67,11 +70,12 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
                 server.ConnectionLost += ex =>
                     MonitorServiceLog.ConnectionLost(_logger, ex, id);
 
-                var subscription = connection.Subscribe(new EventLogObserver(id, _eventLog));
+                var eventLogSub = connection.Subscribe(new EventLogObserver(id, _eventLog));
+                var callFlowSub = connection.Subscribe(_callFlowTracker.CreateObserver(id));
 
                 await server.StartAsync(cancellationToken);
 
-                _servers[id] = new ServerEntry(connection, server, subscription);
+                _servers[id] = new ServerEntry(connection, server, eventLogSub, callFlowSub);
                 MonitorServiceLog.Connected(_logger, id, options.Hostname, options.Port, server.AsteriskVersion);
             }
             catch (Exception ex)
@@ -91,6 +95,7 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
         foreach (var (_, entry) in _servers)
         {
             entry.Subscription.Dispose();
+            entry.CallFlowSubscription.Dispose();
             await entry.Server.DisposeAsync();
             await entry.Connection.DisposeAsync();
         }
@@ -103,7 +108,8 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
     public sealed record ServerEntry(
         IAmiConnection Connection,
         AsteriskServer Server,
-        IDisposable Subscription);
+        IDisposable Subscription,
+        IDisposable CallFlowSubscription);
 
     private sealed class EventLogObserver(string serverId, EventLogService eventLog)
         : IObserver<ManagerEvent>

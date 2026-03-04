@@ -286,9 +286,9 @@ public sealed class AsteriskServer : IAsteriskServer
 
                 case QueueMemberStatusEvent qms:
                     server.Queues.OnMemberStatusChanged(
-                        qms.RawFields?.GetValueOrDefault("Queue") ?? "",
-                        qms.RawFields?.GetValueOrDefault("Interface") ?? "",
-                        qms.Wrapuptime ?? 0);
+                        qms.Queue ?? "",
+                        qms.Interface ?? "",
+                        qms.Status ?? 0);
                     break;
 
                 case QueueMemberPauseEvent qmpe:
@@ -327,7 +327,16 @@ public sealed class AsteriskServer : IAsteriskServer
                     break;
 
                 case AgentCompleteEvent acoe:
-                    server.Agents.OnAgentComplete(acoe.Agent ?? "");
+                    server.Agents.OnAgentComplete(
+                        acoe.Agent ?? "",
+                        acoe.TalkTime ?? 0,
+                        acoe.HoldTime ?? 0);
+                    break;
+
+                // Device state events
+                case DeviceStateChangeEvent dsc:
+                    if (dsc.Device is not null && dsc.State is not null)
+                        server.Queues.OnDeviceStateChanged(dsc.Device, dsc.State);
                     break;
 
                 // MeetMe/ConfBridge events

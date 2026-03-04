@@ -3,6 +3,8 @@
 @using DashboardExample.Components.Shared
 @using Asterisk.Sdk.Live.Agents
 @inject AsteriskMonitorService Monitor
+@inject CallFlowTracker CallTracker
+@inject NavigationManager Nav
 @implements IDisposable
 
 <PageTitle>Agents — Asterisk Dashboard</PageTitle>
@@ -26,6 +28,10 @@
     <div class="kpi-card kpi-gray">
         <div class="kpi-value">@CountByState(AgentState.LoggedOff)</div>
         <div class="kpi-label">Logged Off</div>
+    </div>
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@TotalCallsTaken()</div>
+        <div class="kpi-label">Calls Taken</div>
     </div>
 </div>
 
@@ -58,14 +64,34 @@
                     <span class="badge badge-muted">@serverId</span>
                 </div>
                 <div class="agent-card-body">
-                    <div>State: @agent.State</div>
+                    <div>State: @agent.State
+                        @if (agent.LastStateChangeAt.HasValue)
+                        {
+                            <span class="text-muted">(@FormatDuration(agent.StateElapsed))</span>
+                        }
+                    </div>
+                    @if (agent.State != AgentState.LoggedOff)
+                    {
+                        <div>Calls: @agent.CallsTaken
+                            @if (agent.CallsTaken > 0)
+                            {
+                                <span class="text-muted">(avg @FormatSeconds((int)agent.AvgTalkTimeSecs))</span>
+                            }
+                        </div>
+                    }
                     @if (agent.Channel is not null)
                     {
                         <div>Channel: @agent.Channel</div>
                     }
-                    @if (agent.TalkingTo is not null)
+                    @if (agent.State == AgentState.OnCall && agent.TalkingTo is not null)
                     {
-                        <div>Talking to: @agent.TalkingTo</div>
+                        var activeCall = CallTracker.FindActiveCallByChannel(agent.Channel ?? agent.TalkingTo);
+                        <div>Talking to: @agent.TalkingTo
+                            @if (activeCall is not null)
+                            {
+                                <a href="/calls/@Uri.EscapeDataString(activeCall.CallId)" class="badge badge-blue" @onclick:stopPropagation="true">View Call</a>
+                            }
+                        </div>
                     }
                     @if (agent.LoggedInAt.HasValue)
                     {
@@ -105,6 +131,11 @@
     private int CountByState(AgentState state) =>
         GetServers().SelectMany(s => s.Value.Server.Agents.GetAgentsByState(state)).Count();
 
+    private int TotalCallsTaken() =>
+        GetServers().SelectMany(s => s.Value.Server.Agents.Agents)
+            .Where(a => a.State != AgentState.LoggedOff)
+            .Sum(a => a.CallsTaken);
+
     private static (string bgClass, string dotClass) GetAgentStyle(AgentState state) => state switch
     {
         AgentState.Available => ("bg-green-light", "dot-green"),
@@ -122,6 +153,21 @@
         if (elapsed.TotalMinutes >= 1)
             return $"{(int)elapsed.TotalMinutes}m ago";
         return "just now";
+    }
+
+    private static string FormatDuration(TimeSpan ts)
+    {
+        if (ts.TotalHours >= 1)
+            return $"{(int)ts.TotalHours}h {ts.Minutes:D2}m";
+        if (ts.TotalMinutes >= 1)
+            return $"{(int)ts.TotalMinutes}m {ts.Seconds:D2}s";
+        return $"{ts.Seconds}s";
+    }
+
+    private static string FormatSeconds(int seconds)
+    {
+        var ts = TimeSpan.FromSeconds(seconds);
+        return ts.TotalMinutes >= 1 ? $"{(int)ts.TotalMinutes}m {ts.Seconds:D2}s" : $"{ts.Seconds}s";
     }
 
     public void Dispose() => _timer?.Dispose();

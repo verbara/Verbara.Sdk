@@ -2,6 +2,7 @@
 @using DashboardExample.Services
 @using Asterisk.Sdk.Live.Agents
 @inject AsteriskMonitorService Monitor
+@inject CallFlowTracker CallTracker
 @implements IDisposable
 
 <PageTitle>Home — Asterisk Dashboard</PageTitle>
@@ -32,6 +33,26 @@
     <div class="kpi-card kpi-yellow">
         <div class="kpi-value">@_pausedAgents</div>
         <div class="kpi-label">Paused</div>
+    </div>
+</div>
+
+<h3>Call Flow Metrics</h3>
+<div class="kpi-grid kpi-grid-sm">
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@_callsTracked</div>
+        <div class="kpi-label">Calls Tracked</div>
+    </div>
+    <div class="kpi-card kpi-orange">
+        <div class="kpi-value">@_avgWaitTime</div>
+        <div class="kpi-label">Avg Wait</div>
+    </div>
+    <div class="kpi-card kpi-green">
+        <div class="kpi-value">@_avgTalkTime</div>
+        <div class="kpi-label">Avg Talk</div>
+    </div>
+    <div class="kpi-card kpi-red">
+        <div class="kpi-value">@_abandonRate</div>
+        <div class="kpi-label">Abandon %</div>
     </div>
 </div>
 
@@ -74,6 +95,8 @@
     private Timer? _timer;
     private int _activeCalls, _queueCount, _waitingCallers;
     private int _availableAgents, _onCallAgents, _pausedAgents;
+    private int _callsTracked;
+    private string _avgWaitTime = "—", _avgTalkTime = "—", _abandonRate = "—";
 
     protected override void OnInitialized()
     {
@@ -97,6 +120,50 @@
         _pausedAgents = Monitor.Servers
             .SelectMany(s => s.Value.Server.Agents.GetAgentsByState(AgentState.Paused))
             .Count();
+
+        // Call flow metrics from CallFlowTracker
+        var recentCalls = CallTracker.GetRecentCompleted(200).ToList();
+        _callsTracked = CallTracker.ActiveCalls.Count() + recentCalls.Count;
+
+        var queueCalls = recentCalls.Where(c => c.QueueName is not null).ToList();
+        if (queueCalls.Count > 0)
+        {
+            // Wait time: QueueJoin → AgentConnect
+            var waitTimes = queueCalls
+                .Select(c =>
+                {
+                    var join = c.Events.FirstOrDefault(e => e.Type == CallFlowEventType.QueueJoin);
+                    var connect = c.Events.FirstOrDefault(e => e.Type == CallFlowEventType.AgentConnect);
+                    return join is not null && connect is not null ? (TimeSpan?)(connect.Timestamp - join.Timestamp) : null;
+                })
+                .Where(t => t.HasValue)
+                .Select(t => t!.Value)
+                .ToList();
+
+            _avgWaitTime = waitTimes.Count > 0
+                ? FormatSeconds((int)waitTimes.Average(t => t.TotalSeconds))
+                : "—";
+
+            // Talk time: total call duration for answered queue calls
+            var talkTimes = queueCalls
+                .Where(c => c.AgentName is not null)
+                .Select(c => c.Duration.TotalSeconds)
+                .ToList();
+            _avgTalkTime = talkTimes.Count > 0
+                ? FormatSeconds((int)talkTimes.Average())
+                : "—";
+
+            // Abandon rate: queued calls without agent connect
+            var abandoned = queueCalls.Count(c => c.AgentName is null);
+            var rate = (double)abandoned / queueCalls.Count * 100;
+            _abandonRate = $"{rate:F0}%";
+        }
+        else
+        {
+            _avgWaitTime = "—";
+            _avgTalkTime = "—";
+            _abandonRate = "—";
+        }
     }
 
     private static string FormatSeconds(int seconds)

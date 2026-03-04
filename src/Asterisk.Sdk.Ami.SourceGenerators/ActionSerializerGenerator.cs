@@ -22,6 +22,9 @@ public sealed class ActionSerializerGenerator : IIncrementalGenerator
     private const string ManagerActionFqn =
         "Asterisk.Sdk.ManagerAction";
 
+    private const string HasExtraFieldsFqn =
+        "Asterisk.Sdk.IHasExtraFields";
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var actionInfos = context.SyntaxProvider
@@ -72,11 +75,14 @@ public sealed class ActionSerializerGenerator : IIncrementalGenerator
         var properties = new List<PropertyInfo>();
         CollectProperties(symbol, properties, ct);
 
+        var hasExtraFields = symbol.AllInterfaces.Any(i => i.ToDisplayString() == HasExtraFieldsFqn);
+
         return new ActionInfo(
             mappingName!,
             fullyQualifiedName,
             symbol.Name,
-            properties.ToArray());
+            properties.ToArray(),
+            hasExtraFields);
     }
 
     private static void CollectProperties(
@@ -227,7 +233,7 @@ public sealed class ActionSerializerGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
         foreach (var action in sorted)
         {
-            if (action.Properties.Length == 0)
+            if (action.Properties.Length == 0 && !action.HasExtraFields)
             {
                 sb.AppendLine($"        {action.FullyQualifiedTypeName} => Array.Empty<KeyValuePair<string, string>>(),");
             }
@@ -243,7 +249,7 @@ public sealed class ActionSerializerGenerator : IIncrementalGenerator
         // Per-action serialization methods
         foreach (var action in sorted)
         {
-            if (action.Properties.Length == 0)
+            if (action.Properties.Length == 0 && !action.HasExtraFields)
                 continue;
 
             sb.AppendLine($"    private static IEnumerable<KeyValuePair<string, string>> Serialize{action.ClassName}({action.FullyQualifiedTypeName} a)");
@@ -269,6 +275,12 @@ public sealed class ActionSerializerGenerator : IIncrementalGenerator
                         sb.AppendLine($"        if (a.{prop.Name} is not null) yield return new(\"{EscapeString(prop.FieldName)}\", a.{prop.Name}.Value ? \"true\" : \"false\");");
                         break;
                 }
+            }
+
+            if (action.HasExtraFields)
+            {
+                sb.AppendLine("        foreach (var kvp in ((global::Asterisk.Sdk.IHasExtraFields)a).GetExtraFields())");
+                sb.AppendLine("            yield return kvp;");
             }
 
             sb.AppendLine("    }");
@@ -315,13 +327,15 @@ public sealed class ActionSerializerGenerator : IIncrementalGenerator
         public readonly string FullyQualifiedTypeName;
         public readonly string ClassName;
         public readonly PropertyInfo[] Properties;
+        public readonly bool HasExtraFields;
 
-        public ActionInfo(string mappingName, string fullyQualifiedTypeName, string className, PropertyInfo[] properties)
+        public ActionInfo(string mappingName, string fullyQualifiedTypeName, string className, PropertyInfo[] properties, bool hasExtraFields)
         {
             MappingName = mappingName;
             FullyQualifiedTypeName = fullyQualifiedTypeName;
             ClassName = className;
             Properties = properties;
+            HasExtraFields = hasExtraFields;
         }
     }
 }
