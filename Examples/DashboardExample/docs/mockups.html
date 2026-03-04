@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asterisk PBX Admin — Visual Mockups</title>
+<style>
+/* ===== Design System (from dashboard.css) ===== */
+:root {
+    --color-available: #22c55e;
+    --color-incall: #ef4444;
+    --color-busy: #dc2626;
+    --color-ringing: #3b82f6;
+    --color-hold: #f97316;
+    --color-paused: #eab308;
+    --color-offline: #9ca3af;
+    --color-unknown: #d1d5db;
+    --sidebar-width: 220px;
+    --header-height: 56px;
+    --bg: #f8fafc;
+    --bg-card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+}
+
+/* Mockup navigation */
+.mockup-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #0f172a;
+    color: #f1f5f9;
+    padding: 0.75rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    z-index: 1000;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+}
+
+.mockup-nav h1 {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #38bdf8;
+    white-space: nowrap;
+    margin-right: 1rem;
+}
+
+.mockup-nav a {
+    color: #94a3b8;
+    text-decoration: none;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    transition: all 0.15s;
+}
+
+.mockup-nav a:hover {
+    color: #f1f5f9;
+    background: #334155;
+}
+
+.mockup-section {
+    padding: 4rem 0 2rem;
+    scroll-margin-top: 60px;
+}
+
+.mockup-title {
+    background: #1e293b;
+    color: #f1f5f9;
+    padding: 1rem 1.5rem;
+    margin-bottom: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.mockup-title span {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: #94a3b8;
+    font-family: "SF Mono", "Cascadia Code", monospace;
+}
+
+/* === Layout === */
+.layout {
+    display: flex;
+    min-height: 600px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin: 0 1rem;
+    box-shadow: 0 4px 24px rgba(0,0,0,.08);
+}
+
+.sidebar {
+    width: var(--sidebar-width);
+    background: #1e293b;
+    color: #f1f5f9;
+    padding: 1rem 0;
+    flex-shrink: 0;
+}
+
+.sidebar-header {
+    padding: 0.5rem 1.25rem 1.5rem;
+    border-bottom: 1px solid #334155;
+    margin-bottom: 0.5rem;
+}
+
+.sidebar-header h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #38bdf8;
+}
+.sidebar-header p {
+    font-size: 0.7rem;
+    color: #64748b;
+}
+
+.nav-item {
+    display: block;
+    padding: 0.625rem 1.25rem;
+    color: #94a3b8;
+    text-decoration: none;
+    font-size: 0.85rem;
+    transition: background 0.15s, color 0.15s;
+    cursor: default;
+}
+
+.nav-item:hover { background: #334155; color: #f1f5f9; }
+.nav-item.active { background: #334155; color: #38bdf8; border-left: 3px solid #38bdf8; }
+
+.nav-section {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #475569;
+    padding: 1rem 1.25rem 0.375rem;
+    font-weight: 600;
+}
+
+.main-area { flex: 1; display: flex; flex-direction: column; background: var(--bg); }
+
+.header {
+    height: var(--header-height);
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.5rem;
+}
+
+.header h1 { font-size: 1rem; font-weight: 600; }
+
+.header-right { display: flex; gap: 1rem; align-items: center; }
+.header-stat { font-size: 0.8rem; color: var(--text-muted); font-weight: 500; }
+
+.connection-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+.connection-label { font-size: 0.75rem; color: var(--text-muted); margin-right: 0.25rem; }
+
+.content { padding: 1.5rem; flex: 1; }
+.content h2 { font-size: 1.35rem; margin-bottom: 1rem; }
+.content h3 { font-size: 1.05rem; margin: 1.5rem 0 0.75rem; color: var(--text-muted); }
+
+/* KPI */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+.kpi-card {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 1rem;
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--border);
+    text-align: center;
+}
+.kpi-value { font-size: 1.75rem; font-weight: 700; line-height: 1.2; }
+.kpi-label { font-size: 0.7rem; color: var(--text-muted); margin-top: 0.125rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.kpi-blue { border-left-color: var(--color-ringing); }
+.kpi-blue .kpi-value { color: var(--color-ringing); }
+.kpi-green { border-left-color: var(--color-available); }
+.kpi-green .kpi-value { color: var(--color-available); }
+.kpi-red { border-left-color: var(--color-incall); }
+.kpi-red .kpi-value { color: var(--color-incall); }
+.kpi-yellow { border-left-color: var(--color-paused); }
+.kpi-yellow .kpi-value { color: var(--color-paused); }
+.kpi-purple { border-left-color: #8b5cf6; }
+.kpi-purple .kpi-value { color: #8b5cf6; }
+.kpi-gray { border-left-color: var(--color-offline); }
+.kpi-gray .kpi-value { color: var(--color-offline); }
+.kpi-orange { border-left-color: var(--color-hold); }
+.kpi-orange .kpi-value { color: var(--color-hold); }
+
+/* Card grid */
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+/* Queue cards */
+.queue-card {
+    display: block;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 0.875rem;
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--border);
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    transition: box-shadow 0.15s;
+}
+.queue-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.12); }
+.health-green { border-left-color: var(--color-available); }
+.health-yellow { border-left-color: var(--color-paused); }
+.health-red { border-left-color: var(--color-incall); }
+.health-gray { border-left-color: var(--color-offline); }
+.queue-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.375rem; }
+.queue-card-header strong { font-size: 0.95rem; }
+.queue-card-meta { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+.queue-card-stats { display: flex; gap: 0.75rem; }
+.stat { text-align: center; }
+.stat-value { font-size: 1.1rem; font-weight: 700; }
+.stat-label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; }
+
+/* Agent cards */
+.agent-card {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 0.875rem;
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--border);
+}
+.agent-card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.375rem; flex-wrap: wrap; }
+.agent-card-body { font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.2rem; }
+.agent-card-actions { margin-top: 0.5rem; display: flex; gap: 0.375rem; }
+.status-available { border-left-color: var(--color-available); }
+.status-incall { border-left-color: var(--color-incall); }
+.status-paused { border-left-color: var(--color-paused); }
+.status-offline { border-left-color: var(--color-offline); }
+.bg-green-light { background: #f0fdf4; }
+.bg-red-light { background: #fef2f2; }
+.bg-yellow-light { background: #fefce8; }
+.bg-gray-light { background: #f9fafb; }
+
+/* Status dots */
+.status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.dot-green { background: var(--color-available); }
+.dot-red { background: var(--color-incall); }
+.dot-blue { background: var(--color-ringing); }
+.dot-yellow { background: var(--color-paused); }
+.dot-gray { background: var(--color-offline); }
+
+/* Badges */
+.badge { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 999px; font-size: 0.65rem; font-weight: 600; }
+.badge-muted { background: #f1f5f9; color: var(--text-muted); }
+.badge-blue { background: #dbeafe; color: #1d4ed8; }
+.badge-yellow { background: #fef3c7; color: #92400e; }
+.badge-green { background: #dcfce7; color: #166534; }
+.badge-red { background: #fef2f2; color: #b91c1c; }
+.badge-pulse { animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+.badge-pjsip { background: #dbeafe; color: #1d4ed8; }
+.badge-sip { background: #dcfce7; color: #166534; }
+.badge-iax { background: #fef3c7; color: #92400e; }
+.badge-file { background: #f0fdf4; color: #166534; }
+.badge-realtime { background: #eff6ff; color: #1e40af; }
+
+/* Chip filter */
+.chip-bar { display: flex; gap: 0.375rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+.chip {
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+.chip:hover { border-color: #94a3b8; color: var(--text); }
+.chip-active { background: #1e293b; color: #f1f5f9; border-color: #1e293b; }
+
+/* Data tables */
+.data-table { width: 100%; border-collapse: collapse; background: var(--bg-card); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+.data-table th { background: #f8fafc; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600; padding: 0.5rem 0.625rem; text-align: left; border-bottom: 1px solid var(--border); }
+.data-table td { padding: 0.4rem 0.625rem; border-bottom: 1px solid #f1f5f9; font-size: 0.8rem; }
+.data-table tbody tr:hover { background: #f8fafc; }
+
+/* Stats bar */
+.stats-bar { display: flex; gap: 1.25rem; background: var(--bg-card); border-radius: var(--radius); padding: 0.75rem 1rem; box-shadow: var(--shadow); margin-bottom: 1.25rem; flex-wrap: wrap; }
+.stat-item { font-size: 0.8rem; color: var(--text-muted); }
+.stat-item strong { color: var(--text); }
+
+/* Call cards */
+.call-card {
+    background: var(--bg-card); border-radius: var(--radius); padding: 0.875rem;
+    box-shadow: var(--shadow); border-left: 4px solid var(--border); cursor: pointer;
+    transition: box-shadow 0.15s, transform 0.1s;
+}
+.call-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.12); transform: translateY(-1px); }
+.call-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.call-state-badge { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.15rem 0.4rem; border-radius: 4px; }
+.call-duration { font-family: "SF Mono", "Cascadia Code", monospace; font-size: 0.85rem; font-weight: 600; }
+.call-participants { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+.call-endpoint { flex: 1; min-width: 0; }
+.call-endpoint-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.call-endpoint-id { font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.call-endpoint-channel { font-size: 0.7rem; font-family: "SF Mono", monospace; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.call-arrow { font-size: 1.2rem; font-weight: 700; flex-shrink: 0; width: 36px; text-align: center; }
+.arrow-connected { color: var(--color-available); }
+.arrow-dialing { color: var(--color-ringing); }
+.arrow-hold { color: var(--color-hold); }
+.call-connected { border-left-color: var(--color-available); }
+.call-connected .call-state-badge { background: #dcfce7; color: #166534; }
+.call-ringing { border-left-color: var(--color-ringing); }
+.call-ringing .call-state-badge { background: #dbeafe; color: #1d4ed8; }
+.call-queued { border-left-color: var(--color-paused); }
+.call-queued .call-state-badge { background: #fef3c7; color: #92400e; }
+.call-hold { border-left-color: var(--color-hold); }
+.call-hold .call-state-badge { background: #ffedd5; color: #9a3412; }
+.call-completed { border-left-color: var(--color-offline); opacity: 0.7; }
+.call-completed .call-state-badge { background: #f1f5f9; color: var(--text-muted); }
+.call-card-footer { display: flex; align-items: center; gap: 0.375rem; flex-wrap: wrap; }
+
+/* Trunk cards */
+.trunk-card { background: var(--bg-card); border-radius: var(--radius); padding: 0.875rem; box-shadow: var(--shadow); border-left: 4px solid var(--border); }
+.trunk-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.12); }
+.trunk-card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.375rem; flex-wrap: wrap; }
+.trunk-card-body { font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.2rem; }
+.trunk-card-actions { margin-top: 0.5rem; display: flex; gap: 0.375rem; }
+.trunk-registered { border-left-color: var(--color-available); }
+.trunk-unreachable { border-left-color: var(--color-incall); }
+.trunk-unknown { border-left-color: var(--color-unknown); }
+
+/* Forms */
+.form-section { background: var(--bg-card); border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow); margin-bottom: 0.75rem; }
+.form-section h3 { font-size: 0.95rem; margin: 0 0 0.75rem; color: var(--text); padding-bottom: 0.375rem; border-bottom: 1px solid var(--border); }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem; }
+.form-field { display: flex; flex-direction: column; gap: 0.2rem; }
+.form-label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.input { padding: 0.45rem 0.625rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8rem; background: var(--bg-card); color: var(--text); width: 100%; }
+.select { padding: 0.45rem 0.625rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8rem; background: var(--bg-card); color: var(--text); width: 100%; }
+.form-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+
+/* Buttons */
+.btn { padding: 0.4rem 0.875rem; border: none; border-radius: var(--radius); font-size: 0.8rem; font-weight: 500; cursor: pointer; }
+.btn:hover { opacity: 0.85; }
+.btn-sm { padding: 0.25rem 0.5rem; font-size: 0.7rem; }
+.btn-blue { background: var(--color-ringing); color: white; }
+.btn-green { background: var(--color-available); color: white; }
+.btn-yellow { background: var(--color-paused); color: white; }
+.btn-red { background: var(--color-incall); color: white; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
+
+.text-muted { color: var(--text-muted); }
+.mono { font-family: "SF Mono", "Cascadia Code", monospace; font-size: 0.75rem; }
+
+/* Ladder diagram */
+.ladder-container { background: var(--bg-card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 1rem; margin-bottom: 1rem; overflow-x: auto; }
+.ladder-participants { display: flex; border-bottom: 2px solid var(--border); padding-bottom: 0.4rem; margin-bottom: 0.4rem; }
+.ladder-participant { flex: 1; min-width: 110px; text-align: center; padding: 0.25rem; }
+.ladder-participant-name { font-size: 0.75rem; font-weight: 700; }
+.ladder-participant-tech { font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; }
+.ladder-body { position: relative; min-height: 200px; }
+.ladder-lifelines { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; pointer-events: none; z-index: 0; }
+.ladder-lifeline { flex: 1; min-width: 110px; display: flex; justify-content: center; }
+.ladder-lifeline::after { content: ''; width: 1px; height: 100%; border-left: 2px dashed #e2e8f0; }
+.ladder-row { position: relative; display: flex; align-items: center; min-height: 32px; z-index: 1; padding-left: 50px; }
+.ladder-time { position: absolute; left: 0; font-family: "SF Mono", monospace; font-size: 0.6rem; color: var(--text-muted); }
+.ladder-arrow-block { position: relative; flex: 1; display: flex; align-items: center; height: 2px; }
+.ladder-arrow-line { height: 2px; flex: 1; }
+.ladder-arrow-label { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); font-size: 0.6rem; font-weight: 600; white-space: nowrap; background: var(--bg-card); padding: 0 3px; border-radius: 2px; }
+.ladder-arrow-head { width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; }
+.ladder-arrow-head-right { border-left: 7px solid currentColor; }
+
+/* Login page */
+.login-page { min-height: 500px; display: flex; align-items: center; justify-content: center; background: var(--bg); }
+.login-card { background: var(--bg-card); border-radius: var(--radius); box-shadow: 0 4px 24px rgba(0,0,0,.1); padding: 2rem; width: 100%; max-width: 340px; }
+.login-header { text-align: center; margin-bottom: 1.5rem; }
+.login-header h2 { font-size: 1.35rem; font-weight: 700; color: #1e293b; margin-bottom: 0.25rem; }
+.login-header p { font-size: 0.8rem; color: var(--text-muted); }
+
+/* Server select */
+.server-select-page { max-width: 560px; margin: 0 auto; padding: 1.5rem 1rem; }
+.server-select-header { text-align: center; margin-bottom: 1.5rem; }
+.server-select-header h2 { font-size: 1.35rem; font-weight: 700; }
+.server-select-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem; }
+.server-select-card { background: var(--bg-card); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); border: 2px solid var(--border); cursor: pointer; transition: all 0.15s; }
+.server-select-card:hover { border-color: var(--color-ringing); box-shadow: 0 4px 16px rgba(59,130,246,.15); transform: translateY(-2px); }
+.server-select-card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; font-weight: 600; }
+.server-select-card-body { font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.2rem; }
+
+/* Config display */
+.config-section { background: #f8fafc; border-radius: var(--radius); padding: 0.75rem; margin-bottom: 0.5rem; border: 1px solid var(--border); }
+.config-section-header { font-weight: 600; font-size: 0.8rem; cursor: pointer; }
+.config-section-body { margin-top: 0.5rem; font-family: "SF Mono", monospace; font-size: 0.75rem; line-height: 1.6; white-space: pre-wrap; color: var(--text-muted); }
+
+/* Conference */
+.conference-card { background: var(--bg-card); border-radius: var(--radius); padding: 0.875rem; box-shadow: var(--shadow); margin-bottom: 0.75rem; }
+.conference-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+
+/* Radio group */
+.radio-group { display: flex; gap: 0.75rem; }
+.radio-option { display: flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; cursor: pointer; }
+.radio-option input[type="radio"] { accent-color: var(--color-ringing); }
+
+/* Inline form */
+.inline-form { display: flex; gap: 0.375rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem; }
+
+/* Campaign */
+.kpi-sub { font-size: 0.65rem; color: var(--text-muted); margin-top: 0.125rem; }
+
+/* Metric card special */
+.metric-alert-red { border-left-color: var(--color-incall); background: #fef2f2; }
+.metric-alert-yellow { border-left-color: var(--color-paused); background: #fefce8; }
+
+/* Search */
+.search-box { padding: 0.45rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8rem; width: 220px; background: var(--bg-card); }
+
+/* Section separator */
+.page-sep { border: none; border-top: 3px solid var(--border); margin: 0; }
+</style>
+</head>
+<body>
+
+<!-- Top navigation -->
+<nav class="mockup-nav">
+    <h1>Mockups</h1>
+    <a href="#login">Login</a>
+    <a href="#select-server">Server</a>
+    <a href="#home">Home</a>
+    <a href="#queues">Queues</a>
+    <a href="#queue-detail">Queue Detail</a>
+    <a href="#channels">Channels</a>
+    <a href="#agents">Agents</a>
+    <a href="#calls">Calls</a>
+    <a href="#call-detail">Call Detail</a>
+    <a href="#trunks">Trunks</a>
+    <a href="#trunk-detail">Trunk Detail</a>
+    <a href="#trunk-edit">Trunk Edit</a>
+    <a href="#campaigns">Campaigns</a>
+    <a href="#conferences">Conferences</a>
+    <a href="#metrics">Metrics</a>
+    <a href="#events">Events</a>
+</nav>
+
+<!-- ==================== LOGIN ==================== -->
+<section class="mockup-section" id="login">
+<div class="mockup-title">Login <span>/login</span></div>
+<div class="layout" style="min-height:500px;">
+    <div class="login-page" style="width:100%;">
+        <div class="login-card">
+            <div class="login-header">
+                <h2>Asterisk PBX Admin</h2>
+                <p class="text-muted">Sign in to manage your PBX servers</p>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.75rem;">
+                <div class="form-field">
+                    <label class="form-label">Username</label>
+                    <input class="input" type="text" value="admin" />
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Password</label>
+                    <input class="input" type="password" value="********" />
+                </div>
+                <button class="btn btn-blue" style="width:100%;padding:0.6rem;margin-top:0.25rem;">Sign In</button>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== SELECT SERVER ==================== -->
+<section class="mockup-section" id="select-server">
+<div class="mockup-title">Select Server <span>/select-server</span></div>
+<div class="layout" style="min-height:400px;">
+    <div style="width:100%;background:var(--bg);">
+        <div class="server-select-page">
+            <div class="server-select-header">
+                <h2>Select Server</h2>
+                <p class="text-muted" style="font-size:0.85rem;">Choose an Asterisk PBX to manage</p>
+            </div>
+            <div class="server-select-grid">
+                <div class="server-select-card">
+                    <div class="server-select-card-header">
+                        <span class="connection-dot" style="background:var(--color-available);"></span>
+                        <strong>pbx-production</strong>
+                    </div>
+                    <div class="server-select-card-body">
+                        <span><span class="badge badge-file">File</span> &nbsp;192.168.1.10:5038</span>
+                        <span style="color:var(--color-available);font-size:0.75rem;">Connected</span>
+                    </div>
+                </div>
+                <div class="server-select-card">
+                    <div class="server-select-card-header">
+                        <span class="connection-dot" style="background:var(--color-available);"></span>
+                        <strong>pbx-staging</strong>
+                    </div>
+                    <div class="server-select-card-body">
+                        <span><span class="badge badge-realtime">Realtime</span> &nbsp;10.0.5.20:5038</span>
+                        <span style="color:var(--color-available);font-size:0.75rem;">Connected</span>
+                    </div>
+                </div>
+                <div class="server-select-card" style="opacity:0.6;">
+                    <div class="server-select-card-header">
+                        <span class="connection-dot" style="background:var(--color-incall);"></span>
+                        <strong>pbx-dr</strong>
+                    </div>
+                    <div class="server-select-card-body">
+                        <span><span class="badge badge-file">File</span> &nbsp;10.20.30.40:5038</span>
+                        <span style="color:var(--color-incall);font-size:0.75rem;">Disconnected</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== HOME ==================== -->
+<section class="mockup-section" id="home">
+<div class="mockup-title">Home — KPI Dashboard <span>/</span></div>
+<div class="layout">
+    <div class="sidebar">
+        <div class="sidebar-header"><h2>PBX Admin</h2><p>Asterisk.Sdk</p></div>
+        <div class="nav-section">Monitoring</div>
+        <a class="nav-item active">&#9632; Home</a>
+        <a class="nav-item">&#9654; Queues</a>
+        <a class="nav-item">&#9742; Channels</a>
+        <a class="nav-item">&#9787; Agents</a>
+        <a class="nav-item">&#8644; Calls</a>
+        <div class="nav-section">Management</div>
+        <a class="nav-item">&#9776; Trunks</a>
+        <a class="nav-item">&#9650; Campaigns</a>
+        <div class="nav-section">System</div>
+        <a class="nav-item">&#9881; Conferences</a>
+        <a class="nav-item">&#9733; Metrics</a>
+        <a class="nav-item">&#9998; Events</a>
+    </div>
+    <div class="main-area">
+        <div class="header">
+            <h1>Dashboard</h1>
+            <div class="header-right">
+                <span class="header-stat"><span class="connection-label">pbx-production</span><span class="connection-dot" style="background:var(--color-available);"></span></span>
+                <span class="header-stat"><span class="connection-label">pbx-staging</span><span class="connection-dot" style="background:var(--color-available);"></span></span>
+            </div>
+        </div>
+        <div class="content">
+            <h2>Overview</h2>
+            <div class="kpi-grid">
+                <div class="kpi-card kpi-blue"><div class="kpi-value">24</div><div class="kpi-label">Active Calls</div></div>
+                <div class="kpi-card kpi-purple"><div class="kpi-value">5</div><div class="kpi-label">Queues</div></div>
+                <div class="kpi-card kpi-red"><div class="kpi-value">3</div><div class="kpi-label">Waiting</div></div>
+                <div class="kpi-card kpi-green"><div class="kpi-value">12</div><div class="kpi-label">Available</div></div>
+                <div class="kpi-card kpi-red"><div class="kpi-value">8</div><div class="kpi-label">On Call</div></div>
+                <div class="kpi-card kpi-yellow"><div class="kpi-value">4</div><div class="kpi-label">Paused</div></div>
+            </div>
+            <h3>Call Flow Metrics</h3>
+            <div class="kpi-grid">
+                <div class="kpi-card kpi-blue"><div class="kpi-value">147</div><div class="kpi-label">Calls Tracked</div></div>
+                <div class="kpi-card kpi-yellow"><div class="kpi-value">0:32</div><div class="kpi-label">Avg Wait</div></div>
+                <div class="kpi-card kpi-green"><div class="kpi-value">4:15</div><div class="kpi-label">Avg Talk</div></div>
+                <div class="kpi-card kpi-red"><div class="kpi-value">6.2%</div><div class="kpi-label">Abandon Rate</div></div>
+            </div>
+            <h3>Queue Summary</h3>
+            <table class="data-table">
+                <thead><tr><th>Queue</th><th>Members</th><th>Waiting</th><th>Completed</th><th>Abandoned</th><th>Avg Hold</th><th>Avg Talk</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>sales</strong></td><td>6</td><td style="color:var(--color-incall);font-weight:600;">2</td><td>89</td><td>5</td><td>0:28</td><td>3:42</td></tr>
+                    <tr><td><strong>support</strong></td><td>8</td><td>1</td><td>134</td><td>8</td><td>0:45</td><td>5:10</td></tr>
+                    <tr><td><strong>billing</strong></td><td>3</td><td style="color:var(--text-muted);">0</td><td>42</td><td>2</td><td>0:15</td><td>2:30</td></tr>
+                    <tr><td><strong>tech</strong></td><td>4</td><td style="color:var(--text-muted);">0</td><td>67</td><td>3</td><td>0:38</td><td>6:20</td></tr>
+                    <tr><td><strong>vip</strong></td><td>2</td><td style="color:var(--text-muted);">0</td><td>18</td><td>0</td><td>0:08</td><td>4:55</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== QUEUES ==================== -->
+<section class="mockup-section" id="queues">
+<div class="mockup-title">Queues <span>/queues</span></div>
+<div class="layout" style="min-height:500px;">
+    <div class="sidebar">
+        <div class="sidebar-header"><h2>PBX Admin</h2></div>
+        <div class="nav-section">Monitoring</div>
+        <a class="nav-item">&#9632; Home</a>
+        <a class="nav-item active">&#9654; Queues</a>
+        <a class="nav-item">&#9742; Channels</a>
+        <a class="nav-item">&#9787; Agents</a>
+    </div>
+    <div class="main-area">
+        <div class="header"><h1>Queues</h1><div class="header-right"><span class="header-stat"><span class="connection-label">pbx-production</span><span class="connection-dot" style="background:var(--color-available);"></span></span></div></div>
+        <div class="content">
+            <div class="card-grid">
+                <div class="queue-card health-red">
+                    <div class="queue-card-header"><strong>sales</strong><span class="badge badge-red badge-pulse">4 waiting</span></div>
+                    <div class="queue-card-meta">ringall &middot; pbx-production</div>
+                    <div class="queue-card-stats">
+                        <div class="stat"><div class="stat-value">6</div><div class="stat-label">Members</div></div>
+                        <div class="stat"><div class="stat-value" style="color:var(--color-incall);">4</div><div class="stat-label">Waiting</div></div>
+                        <div class="stat"><div class="stat-value">89</div><div class="stat-label">Completed</div></div>
+                        <div class="stat"><div class="stat-value">5</div><div class="stat-label">Abandoned</div></div>
+                    </div>
+                </div>
+                <div class="queue-card health-yellow">
+                    <div class="queue-card-header"><strong>support</strong><span class="badge badge-yellow">1 waiting</span></div>
+                    <div class="queue-card-meta">leastrecent &middot; pbx-production</div>
+                    <div class="queue-card-stats">
+                        <div class="stat"><div class="stat-value">8</div><div class="stat-label">Members</div></div>
+                        <div class="stat"><div class="stat-value">1</div><div class="stat-label">Waiting</div></div>
+                        <div class="stat"><div class="stat-value">134</div><div class="stat-label">Completed</div></div>
+                        <div class="stat"><div class="stat-value">8</div><div class="stat-label">Abandoned</div></div>
+                    </div>
+                </div>
+                <div class="queue-card health-green">
+                    <div class="queue-card-header"><strong>billing</strong></div>
+                    <div class="queue-card-meta">roundrobin &middot; pbx-staging</div>
+                    <div class="queue-card-stats">
+                        <div class="stat"><div class="stat-value">3</div><div class="stat-label">Members</div></div>
+                        <div class="stat"><div class="stat-value" style="color:var(--text-muted);">0</div><div class="stat-label">Waiting</div></div>
+                        <div class="stat"><div class="stat-value">42</div><div class="stat-label">Completed</div></div>
+                        <div class="stat"><div class="stat-value">2</div><div class="stat-label">Abandoned</div></div>
+                    </div>
+                </div>
+                <div class="queue-card health-green">
+                    <div class="queue-card-header"><strong>tech</strong></div>
+                    <div class="queue-card-meta">rrmemory &middot; pbx-production</div>
+                    <div class="queue-card-stats">
+                        <div class="stat"><div class="stat-value">4</div><div class="stat-label">Members</div></div>
+                        <div class="stat"><div class="stat-value" style="color:var(--text-muted);">0</div><div class="stat-label">Waiting</div></div>
+                        <div class="stat"><div class="stat-value">67</div><div class="stat-label">Completed</div></div>
+                        <div class="stat"><div class="stat-value">3</div><div class="stat-label">Abandoned</div></div>
+                    </div>
+                </div>
+                <div class="queue-card health-gray">
+                    <div class="queue-card-header"><strong>overflow</strong></div>
+                    <div class="queue-card-meta">ringall &middot; pbx-staging</div>
+                    <div class="queue-card-stats">
+                        <div class="stat"><div class="stat-value" style="color:var(--color-offline);">0</div><div class="stat-label">Members</div></div>
+                        <div class="stat"><div class="stat-value" style="color:var(--text-muted);">0</div><div class="stat-label">Waiting</div></div>
+                        <div class="stat"><div class="stat-value">0</div><div class="stat-label">Completed</div></div>
+                        <div class="stat"><div class="stat-value">0</div><div class="stat-label">Abandoned</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== QUEUE DETAIL ==================== -->
+<section class="mockup-section" id="queue-detail">
+<div class="mockup-title">Queue Detail <span>/queue/pbx-production/sales</span></div>
+<div class="layout">
+    <div class="sidebar"><div class="sidebar-header"><h2>PBX Admin</h2></div><a class="nav-item active">&#9654; Queues</a></div>
+    <div class="main-area">
+        <div class="header"><h1>Queue: sales</h1></div>
+        <div class="content">
+            <div class="stats-bar">
+                <div class="stat-item">Strategy: <strong>ringall</strong></div>
+                <div class="stat-item">Max: <strong>unlimited</strong></div>
+                <div class="stat-item">Current Calls: <strong>4</strong></div>
+                <div class="stat-item">Avg Hold: <strong>0:28</strong></div>
+                <div class="stat-item">Avg Talk: <strong>3:42</strong></div>
+                <div class="stat-item">Completed: <strong>89</strong></div>
+                <div class="stat-item">Abandoned: <strong style="color:var(--color-incall);">5</strong></div>
+            </div>
+            <h3>Agents</h3>
+            <div class="card-grid">
+                <div class="agent-card status-available bg-green-light">
+                    <div class="agent-card-header"><span class="status-dot dot-green"></span><strong>Agent 2001</strong><span class="badge badge-muted">PJSIP/2001</span></div>
+                    <div class="agent-card-body"><span>Calls: 15 &middot; Penalty: 0</span></div>
+                    <div class="agent-card-actions"><button class="btn btn-sm btn-yellow">Pause</button><button class="btn btn-sm btn-red">Remove</button></div>
+                </div>
+                <div class="agent-card status-incall bg-red-light">
+                    <div class="agent-card-header"><span class="status-dot dot-red"></span><strong>Agent 2002</strong><span class="badge badge-muted">PJSIP/2002</span></div>
+                    <div class="agent-card-body"><span>Calls: 22 &middot; Penalty: 0</span><span class="mono">Talking to: PJSIP/trunk-out-004</span></div>
+                    <div class="agent-card-actions"><button class="btn btn-sm btn-yellow">Pause</button><button class="btn btn-sm btn-red">Remove</button></div>
+                </div>
+                <div class="agent-card status-paused bg-yellow-light">
+                    <div class="agent-card-header"><span class="status-dot dot-yellow"></span><strong>Agent 2003</strong><span class="badge badge-yellow">Paused: Break</span></div>
+                    <div class="agent-card-body"><span>Calls: 18 &middot; Penalty: 0</span></div>
+                    <div class="agent-card-actions"><button class="btn btn-sm btn-green">Unpause</button><button class="btn btn-sm btn-red">Remove</button></div>
+                </div>
+            </div>
+            <h3>Callers Waiting</h3>
+            <table class="data-table">
+                <thead><tr><th>#</th><th>Caller ID</th><th>Channel</th><th>Wait Time</th></tr></thead>
+                <tbody>
+                    <tr><td>1</td><td><strong>+1 555-0101</strong></td><td class="mono">PJSIP/trunk-in-007</td><td style="font-family:monospace;color:var(--color-incall);">1:42</td></tr>
+                    <tr><td>2</td><td><strong>+1 555-0234</strong></td><td class="mono">PJSIP/trunk-in-008</td><td style="font-family:monospace;">0:38</td></tr>
+                </tbody>
+            </table>
+            <h3>Add Member</h3>
+            <div class="inline-form">
+                <input class="input" style="width:180px;" placeholder="PJSIP/2004" />
+                <input class="input" style="width:120px;" placeholder="Agent Name" />
+                <input class="input" style="width:60px;" placeholder="0" />
+                <button class="btn btn-sm btn-green">Add</button>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== CHANNELS ==================== -->
+<section class="mockup-section" id="channels">
+<div class="mockup-title">Channels — Active Calls <span>/channels</span></div>
+<div class="layout" style="min-height:520px;">
+    <div class="sidebar"><div class="sidebar-header"><h2>PBX Admin</h2></div><a class="nav-item">&#9632; Home</a><a class="nav-item active">&#9742; Channels</a></div>
+    <div class="main-area">
+        <div class="header"><h1>Channels</h1></div>
+        <div class="content">
+            <div class="chip-bar">
+                <span class="chip chip-active">All (24)</span>
+                <span class="chip">Dialing (2)</span>
+                <span class="chip">Ringing (3)</span>
+                <span class="chip">Up (18)</span>
+                <span class="chip">Busy (1)</span>
+            </div>
+            <table class="data-table">
+                <thead><tr><th>UniqueId</th><th>Channel</th><th>State</th><th>Caller ID</th><th>Context</th><th>Ext</th><th>Duration</th><th>Linked</th></tr></thead>
+                <tbody>
+                    <tr><td class="mono">1709.45</td><td class="mono">PJSIP/2001-0001</td><td><span class="status-dot dot-green" style="width:8px;height:8px;"></span> Up</td><td>2001</td><td>default</td><td>100</td><td style="font-family:monospace;">4:32</td><td class="mono">PJSIP/trunk-001</td></tr>
+                    <tr><td class="mono">1709.46</td><td class="mono">PJSIP/trunk-001</td><td><span class="status-dot dot-green" style="width:8px;height:8px;"></span> Up</td><td>+15550101</td><td>from-ext</td><td>2001</td><td style="font-family:monospace;">4:32</td><td class="mono">PJSIP/2001-0001</td></tr>
+                    <tr><td class="mono">1709.47</td><td class="mono">PJSIP/3002-0003</td><td><span class="status-dot dot-blue" style="width:8px;height:8px;"></span> Ringing</td><td>3002</td><td>default</td><td>101</td><td style="font-family:monospace;">0:08</td><td></td></tr>
+                    <tr><td class="mono">1709.48</td><td class="mono">PJSIP/trunk-002</td><td><span class="status-dot dot-yellow" style="width:8px;height:8px;"></span> Dialing</td><td>+15550234</td><td>from-ext</td><td>3002</td><td style="font-family:monospace;">0:12</td><td></td></tr>
+                    <tr><td class="mono">1709.49</td><td class="mono">PJSIP/4001-0005</td><td><span class="status-dot dot-red" style="width:8px;height:8px;"></span> Busy</td><td>4001</td><td>default</td><td>102</td><td style="font-family:monospace;">0:02</td><td></td></tr>
+                </tbody>
+            </table>
+            <h3>Originate Call</h3>
+            <div class="inline-form">
+                <input class="input" style="width:160px;" placeholder="PJSIP/2000" />
+                <input class="input" style="width:100px;" placeholder="default" />
+                <input class="input" style="width:80px;" placeholder="100" />
+                <input class="input" style="width:120px;" placeholder="Caller ID" />
+                <button class="btn btn-sm btn-blue">Originate</button>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== AGENTS ==================== -->
+<section class="mockup-section" id="agents">
+<div class="mockup-title">Agents <span>/agents</span></div>
+<div class="layout" style="min-height:520px;">
+    <div class="sidebar"><div class="sidebar-header"><h2>PBX Admin</h2></div><a class="nav-item active">&#9787; Agents</a></div>
+    <div class="main-area">
+        <div class="header"><h1>Agents</h1></div>
+        <div class="content">
+            <div class="kpi-grid">
+                <div class="kpi-card kpi-green"><div class="kpi-value">12</div><div class="kpi-label">Available</div></div>
+                <div class="kpi-card kpi-red"><div class="kpi-value">8</div><div class="kpi-label">On Call</div></div>
+                <div class="kpi-card kpi-yellow"><div class="kpi-value">4</div><div class="kpi-label">Paused</div></div>
+                <div class="kpi-card kpi-gray"><div class="kpi-value">2</div><div class="kpi-label">Logged Off</div></div>
+            </div>
+            <div class="chip-bar">
+                <span class="chip chip-active">All (26)</span>
+                <span class="chip">Available</span>
+                <span class="chip">On Call</span>
+                <span class="chip">Paused</span>
+                <span class="chip">Logged Off</span>
+            </div>
+            <div class="card-grid">
+                <div class="agent-card status-available bg-green-light">
+                    <div class="agent-card-header"><span class="status-dot dot-green"></span><strong>1001 — John Smith</strong></div>
+                    <div class="agent-card-body">
+                        <span>Available &middot; Login: 3h 15m ago</span>
+                        <span>Queues: <span class="badge badge-muted">sales</span> <span class="badge badge-muted">vip</span></span>
+                        <span>Calls: 24 &middot; Avg Talk: 3:45</span>
+                    </div>
+                </div>
+                <div class="agent-card status-incall bg-red-light">
+                    <div class="agent-card-header"><span class="status-dot dot-red"></span><strong>1002 — Jane Doe</strong></div>
+                    <div class="agent-card-body">
+                        <span class="mono">PJSIP/2002-0003 &rarr; +15550101</span>
+                        <span>On Call &middot; Login: 5h 02m ago</span>
+                        <span>Queues: <span class="badge badge-muted">sales</span> <span class="badge badge-muted">support</span></span>
+                        <span>Calls: 31 &middot; Avg Talk: 4:12</span>
+                    </div>
+                </div>
+                <div class="agent-card status-paused bg-yellow-light">
+                    <div class="agent-card-header"><span class="status-dot dot-yellow"></span><strong>1003 — Bob Wilson</strong><span class="badge badge-yellow">Lunch</span></div>
+                    <div class="agent-card-body">
+                        <span>Paused &middot; Login: 6h 30m ago</span>
+                        <span>Queues: <span class="badge badge-muted">support</span> <span class="badge badge-muted">tech</span></span>
+                        <span>Calls: 18 &middot; Avg Talk: 5:30</span>
+                    </div>
+                </div>
+                <div class="agent-card status-offline bg-gray-light">
+                    <div class="agent-card-header"><span class="status-dot dot-gray"></span><strong>1004 — Alice Brown</strong></div>
+                    <div class="agent-card-body"><span>Logged Off</span><span>Calls: 0</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== CALLS ==================== -->
+<section class="mockup-section" id="calls">
+<div class="mockup-title">Calls — Call Flow Tracking <span>/calls</span></div>
+<div class="layout" style="min-height:580px;">
+    <div class="sidebar"><div class="sidebar-header"><h2>PBX Admin</h2></div><a class="nav-item active">&#8644; Calls</a></div>
+    <div class="main-area">
+        <div class="header"><h1>Calls</h1><div class="header-right"><input class="search-box" placeholder="Search caller, agent, queue..." /></div></div>
+        <div class="content">
+            <div class="kpi-grid">
+                <div class="kpi-card kpi-green"><div class="kpi-value">8</div><div class="kpi-label">Connected</div></div>
+                <div class="kpi-card kpi-blue"><div class="kpi-value">3</div><div class="kpi-label">Ringing</div></div>
+                <div class="kpi-card kpi-yellow"><div class="kpi-value">2</div><div class="kpi-label">Queued</div></div>
+                <div class="kpi-card kpi-orange"><div class="kpi-value">1</div><div class="kpi-label">On Hold</div></div>
+                <div class="kpi-card kpi-gray"><div class="kpi-value">42</div><div class="kpi-label">Completed</div></div>
+            </div>
+            <div class="chip-bar">
+                <span class="chip chip-active">All</span>
+                <span class="chip">Connected</span>
+                <span class="chip">Ringing</span>
+                <span class="chip">Queued</span>
+                <span class="chip">Hold</span>
+                <span class="chip">Completed</span>
+            </div>
+            <div class="card-grid">
+                <div class="call-card call-connected">
+                    <div class="call-card-header"><span class="call-state-badge">Connected</span><span class="call-duration">4:32</span></div>
+                    <div class="call-participants">
+                        <div class="call-endpoint"><div class="call-endpoint-label">Caller</div><div class="call-endpoint-id">+1 555-0101</div><div class="call-endpoint-channel">PJSIP/trunk-in-007</div></div>
+                        <div class="call-arrow arrow-connected">&harr;</div>
+                        <div class="call-endpoint" style="text-align:right;"><div class="call-endpoint-label">Agent</div><div class="call-endpoint-id">Jane Doe</div><div class="call-endpoint-channel">PJSIP/2002-0003</div></div>
+                    </div>
+                    <div class="call-card-footer"><span class="badge badge-muted">sales</span><span class="badge badge-muted">pbx-production</span></div>
+                </div>
+                <div class="call-card call-ringing">
+                    <div class="call-card-header"><span class="call-state-badge">Ringing</span><span class="call-duration">0:08</span></div>
+                    <div class="call-participants">
+                        <div class="call-endpoint"><div class="call-endpoint-label">Caller</div><div class="call-endpoint-id">+1 555-0234</div><div class="call-endpoint-channel">PJSIP/trunk-in-008</div></div>
+                        <div class="call-arrow arrow-dialing">&rarr;</div>
+                        <div class="call-endpoint" style="text-align:right;"><div class="call-endpoint-label">Destination</div><div class="call-endpoint-id">Support 3002</div><div class="call-endpoint-channel">PJSIP/3002-0005</div></div>
+                    </div>
+                    <div class="call-card-footer"><span class="badge badge-muted">support</span></div>
+                </div>
+                <div class="call-card call-queued">
+                    <div class="call-card-header"><span class="call-state-badge">Queued</span><span class="call-duration">1:42</span></div>
+                    <div class="call-participants">
+                        <div class="call-endpoint"><div class="call-endpoint-label">Caller</div><div class="call-endpoint-id">+1 555-0789</div><div class="call-endpoint-channel">PJSIP/trunk-in-009</div></div>
+                        <div class="call-arrow" style="color:var(--color-paused);">&hellip;</div>
+                        <div class="call-endpoint" style="text-align:right;"><div class="call-endpoint-label">Queue</div><div class="call-endpoint-id">sales</div><div class="call-endpoint-channel">Position #3</div></div>
+                    </div>
+                </div>
+                <div class="call-card call-hold">
+                    <div class="call-card-header"><span class="call-state-badge">On Hold</span><span class="call-duration">6:15</span></div>
+                    <div class="call-participants">
+                        <div class="call-endpoint"><div class="call-endpoint-label">Caller</div><div class="call-endpoint-id">+1 555-0456</div><div class="call-endpoint-channel">PJSIP/trunk-in-006</div></div>
+                        <div class="call-arrow arrow-hold">&#9646;&#9646;</div>
+                        <div class="call-endpoint" style="text-align:right;"><div class="call-endpoint-label">Agent</div><div class="call-endpoint-id">John Smith</div><div class="call-endpoint-channel">PJSIP/2001-0001</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== CALL DETAIL ==================== -->
+<section class="mockup-section" id="call-detail">
+<div class="mockup-title">Call Detail — Ladder Diagram <span>/calls/1709.45</span></div>
+<div class="layout">
+    <div class="sidebar"><div class="sidebar-header"><h2>PBX Admin</h2></div><a class="nav-item active">&#8644; Calls</a></div>
+    <div class="main-area">
+        <div class="header"><h1>Call: 1709.45</h1></div>
+        <div class="content">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:0.75rem;background:var(--bg-card);border-radius:var(--radius);padding:1rem;box-shadow:var(--shadow);margin-bottom:1.25rem;">
+                <div><div class="form-label">Call ID</div><div style="font-weight:600;" class="mono">1709.45</div></div>
+                <div><div class="form-label">Server</div><div style="font-weight:600;">pbx-production</div></div>
+                <div><div class="form-label">Caller</div><div style="font-weight:600;">+1 555-0101</div></div>
+                <div><div class="form-label">Agent</div><div style="font-weight:600;">Jane Doe (2002)</div></div>
+                <div><div class="form-label">Queue</div><div style="font-weight:600;">sales</div></div>
+                <div><div class="form-label">Duration</div><div style="font-weight:600;font-family:monospace;">4:32</div></div>
+                <div><div class="form-label">State</div><div><span class="badge badge-green">Connected</span></div></div>
+            </div>
+            <h3>Ladder Diagram</h3>
+            <div class="ladder-container">
+                <div class="ladder-participants">
+                    <div class="ladder-participant"><div class="ladder-participant-name">trunk-in-007</div><div class="ladder-participant-tech">PJSIP</div></div>
+                    <div class="ladder-participant"><div class="ladder-participant-name">Asterisk</div><div class="ladder-participant-tech">PBX</div></div>
+                    <div class="ladder-participant"><div class="ladder-participant-name">2002-0003</div><div class="ladder-participant-tech">PJSIP</div></div>
+                </div>
+                <div class="ladder-body" style="min-height:250px;">
+                    <div class="ladder-lifelines"><div class="ladder-lifeline"></div><div class="ladder-lifeline"></div><div class="ladder-lifeline"></div></div>
+                    <!-- Row 1: INVITE -->
+                    <div class="ladder-row"><span class="ladder-time">+0.0s</span>
+                        <div class="ladder-arrow-block" style="margin-left:17%;margin-right:50%;">
+                            <div class="ladder-arrow-label" style="color:var(--color-ringing);">NewChannel</div>
+                            <div class="ladder-arrow-line" style="background:var(--color-ringing);height:2px;"></div>
+                            <div class="ladder-arrow-head ladder-arrow-head-right" style="color:var(--color-ringing);"></div>
+                        </div>
+                    </div>
+                    <!-- Row 2: Queue -->
+                    <div class="ladder-row"><span class="ladder-time">+0.1s</span>
+                        <div class="ladder-arrow-block" style="margin-left:17%;margin-right:17%;">
+                            <div class="ladder-arrow-label" style="color:var(--color-paused);">QueueJoin (sales)</div>
+                            <div class="ladder-arrow-line" style="background:var(--color-paused);height:2px;"></div>
+                        </div>
+                    </div>
+                    <!-- Row 3: Ring agent -->
+                    <div class="ladder-row"><span class="ladder-time">+0.2s</span>
+                        <div class="ladder-arrow-block" style="margin-left:50%;margin-right:17%;">
+                            <div class="ladder-arrow-label" style="color:var(--color-ringing);">Dial &rarr; 2002</div>
+                            <div class="ladder-arrow-line" style="background:var(--color-ringing);height:2px;"></div>
+                            <div class="ladder-arrow-head ladder-arrow-head-right" style="color:var(--color-ringing);"></div>
+                        </div>
+                    </div>
+                    <!-- Row 4: Agent answers -->
+                    <div class="ladder-row"><span class="ladder-time">+28s</span>
+                        <div class="ladder-arrow-block" style="margin-left:50%;margin-right:17%;">
+                            <div class="ladder-arrow-label" style="color:var(--color-available);">AgentConnect</div>
+                            <div class="ladder-arrow-line" style="background:var(--color-available);height:3px;"></div>
+                        </div>
+                    </div>
+                    <!-- Row 5: Bridge -->
+                    <div class="ladder-row"><span class="ladder-time">+28s</span>
+                        <div class="ladder-arrow-block" style="margin-left:17%;margin-right:17%;">
+                            <div class="ladder-arrow-label" style="color:var(--color-available);">Bridge</div>
+                            <div class="ladder-arrow-line" style="background:var(--color-available);height:3px;border-radius:2px;"></div>
+                        </div>
+                    </div>
+                    <!-- Row 6: DTMF -->
+                    <div class="ladder-row"><span class="ladder-time">+2:10</span>
+                        <div class="ladder-arrow-block" style="margin-left:60%;margin-right:25%;">
+                            <div class="ladder-arrow-label" style="color:#8b5cf6;">DTMF: #</div>
+                            <div class="ladder-arrow-line" style="border-top:1px dashed #8b5cf6;height:0;"></div>
+                        </div>
+                    </div>
+                    <!-- Ongoing indicator -->
+                    <div class="ladder-row"><span class="ladder-time">+4:32</span>
+                        <div style="margin-left:17%;margin-right:17%;text-align:center;">
+                            <span class="badge badge-green" style="font-size:0.65rem;">&#9679; Connected — ongoing</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== TRUNKS ==================== -->
+<section class="mockup-section" id="trunks">
+<div class="mockup-title">Trunks — SIP Trunk Management <span>/trunks</span></div>
+<div class="layout" style="min-height:520px;">
+    <div class="sidebar"><div class="sidebar-header"><h2>PBX Admin</h2></div><div class="nav-section">Management</div><a class="nav-item active">&#9776; Trunks</a></div>
+    <div class="main-area">
+        <div class="header"><h1>Trunks <span class="badge badge-file" style="margin-left:0.5rem;">File</span></h1><div class="header-right"><button class="btn btn-sm btn-blue">+ New Trunk</button></div></div>
+        <div class="content">
+            <div class="kpi-grid">
+                <div class="kpi-card kpi-green"><div class="kpi-value">3</div><div class="kpi-label">Registered</div></div>
+                <div class="kpi-card kpi-red"><div class="kpi-value">1</div><div class="kpi-label">Unreachable</div></div>
+                <div class="kpi-card kpi-blue"><div class="kpi-value">12</div><div class="kpi-label">Active Calls</div></div>
+                <div class="kpi-card kpi-gray"><div class="kpi-value">5</div><div class="kpi-label">Total</div></div>
+            </div>
+            <div class="chip-bar">
+                <span class="chip chip-active">All (5)</span>
+                <span class="chip">Registered (3)</span>
+                <span class="chip">Unreachable (1)</span>
+                <span class="chip">Unknown (1)</span>
+            </div>
+            <div class="card-grid">
+                <div class="trunk-card trunk-registered">
+                    <div class="trunk-card-header"><span class="status-dot dot-green"></span><strong>carrier-primary</strong><span class="badge badge-pjsip">PJSIP</span></div>
+                    <div class="trunk-card-body">
+                        <span>sip.carrier.com:5060 &middot; UDP</span>
+                        <span>Codecs: g729, alaw, ulaw</span>
+                        <span>Active: 8 / 30 channels</span>
+                    </div>
+                    <div class="trunk-card-actions"><button class="btn btn-sm btn-outline">Detail</button><button class="btn btn-sm btn-outline">Edit</button></div>
+                </div>
+                <div class="trunk-card trunk-registered">
+                    <div class="trunk-card-header"><span class="status-dot dot-green"></span><strong>carrier-backup</strong><span class="badge badge-pjsip">PJSIP</span></div>
+                    <div class="trunk-card-body">
+                        <span>sip2.carrier.com:5060 &middot; TLS</span>
+                        <span>Codecs: opus, alaw</span>
+                        <span>Active: 2 / 10 channels</span>
+                    </div>
+                    <div class="trunk-card-actions"><button class="btn btn-sm btn-outline">Detail</button><button class="btn btn-sm btn-outline">Edit</button></div>
+                </div>
+                <div class="trunk-card trunk-registered">
+                    <div class="trunk-card-header"><span class="status-dot dot-green"></span><strong>internal-link</strong><span class="badge badge-iax">IAX2</span></div>
+                    <div class="trunk-card-body">
+                        <span>10.0.5.20:4569 &middot; UDP</span>
+                        <span>Codecs: alaw, ulaw</span>
+                        <span>Active: 2 / unlimited</span>
+                    </div>
+                    <div class="trunk-card-actions"><button class="btn btn-sm btn-outline">Detail</button><button class="btn btn-sm btn-outline">Edit</button></div>
+                </div>
+                <div class="trunk-card trunk-unreachable">
+                    <div class="trunk-card-header"><span class="status-dot dot-red"></span><strong>voip-provider</strong><span class="badge badge-sip">SIP</span></div>
+                    <div class="trunk-card-body">
+                        <span>sip.voip-provider.net:5060 &middot; UDP</span>
+                        <span>Codecs: g729, alaw</span>
+                        <span style="color:var(--color-incall);">Unreachable — last seen 15m ago</span>
+                    </div>
+                    <div class="trunk-card-actions"><button class="btn btn-sm btn-outline">Detail</button><button class="btn btn-sm btn-outline">Edit</button><button class="btn btn-sm btn-red">Delete</button></div>
+                </div>
+                <div class="trunk-card trunk-unknown">
+                    <div class="trunk-card-header"><span class="status-dot dot-gray"></span><strong>test-trunk</strong><span class="badge badge-pjsip">PJSIP</span></div>
+                    <div class="trunk-card-body">
+                        <span>192.168.1.50:5060 &middot; UDP</span>
+                        <span>Active: 0 / 5 channels</span>
+                    </div>
+                    <div class="trunk-card-actions"><button class="btn btn-sm btn-outline">Detail</button><button class="btn btn-sm btn-outline">Edit</button></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== TRUNK DETAIL ==================== -->
+<section class="mockup-section" id="trunk-detail">
+<div class="mockup-title">Trunk Detail <span>/trunks/pbx-production/carrier-primary</span></div>
+<div class="layout" style="min-height:500px;">
+    <div class="sidebar"><div class="sidebar-header"><h2>PBX Admin</h2></div><a class="nav-item active">&#9776; Trunks</a></div>
+    <div class="main-area">
+        <div class="header"><h1>Trunk: carrier-primary</h1><div class="header-right"><button class="btn btn-sm btn-blue">Edit</button><button class="btn btn-sm btn-red">Delete</button></div></div>
+        <div class="content">
+            <div class="stats-bar">
+                <div class="stat-item">Status: <strong style="color:var(--color-available);">Registered</strong></div>
+                <div class="stat-item">Host: <strong>sip.carrier.com:5060</strong></div>
+                <div class="stat-item">Transport: <strong>UDP</strong></div>
+                <div class="stat-item">Codecs: <strong>g729, alaw, ulaw</strong></div>
+                <div class="stat-item">Qualify: <strong>60s</strong></div>
+                <div class="stat-item">Active: <strong>8 calls</strong></div>
+            </div>
+            <h3>Registration</h3>
+            <div style="background:var(--bg-card);border-radius:var(--radius);padding:1rem;box-shadow:var(--shadow);margin-bottom:1rem;">
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0.75rem;">
+                    <div><div class="form-label">Contact URI</div><div class="mono" style="font-size:0.8rem;">sip:myaccount@sip.carrier.com:5060</div></div>
+                    <div><div class="form-label">User Agent</div><div style="font-size:0.85rem;">Asterisk PBX 20.5.1</div></div>
+                    <div><div class="form-label">Roundtrip</div><div style="font-size:0.85rem;">24 ms</div></div>
+                </div>
+            </div>
+            <h3>Configuration</h3>
+            <div class="config-section">
+                <div class="config-section-header">[endpoint] carrier-primary</div>
+                <div class="config-section-body">type = endpoint
+transport = transport-udp
+context = from-trunk
+disallow = all
+allow = g729,alaw,ulaw
+outbound_auth = carrier-primary-auth
+aors = carrier-primary
+direct_media = no</div>
+            </div>
+            <div class="config-section">
+                <div class="config-section-header">[aor] carrier-primary</div>
+                <div class="config-section-body">type = aor
+contact = sip:sip.carrier.com:5060
+qualify_frequency = 60
+max_contacts = 1</div>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== TRUNK EDIT ==================== -->
+<section class="mockup-section" id="trunk-edit">
+<div class="mockup-title">Trunk Edit <span>/trunks/edit/pbx-production/carrier-primary</span></div>
+<div class="layout" style="min-height:520px;">
+    <div class="sidebar"><div class="sidebar-header"><h2>PBX Admin</h2></div><a class="nav-item active">&#9776; Trunks</a></div>
+    <div class="main-area">
+        <div class="header"><h1>Edit Trunk: carrier-primary</h1></div>
+        <div class="content">
+            <div class="form-section">
+                <h3>Technology</h3>
+                <div class="radio-group">
+                    <label class="radio-option"><input type="radio" name="tech" checked /> PJSIP</label>
+                    <label class="radio-option"><input type="radio" name="tech" /> SIP</label>
+                    <label class="radio-option"><input type="radio" name="tech" /> IAX2</label>
+                </div>
+            </div>
+            <div class="form-section">
+                <h3>Connection</h3>
+                <div class="form-grid">
+                    <div class="form-field"><label class="form-label">Trunk Name</label><input class="input" value="carrier-primary" /></div>
+                    <div class="form-field"><label class="form-label">Host</label><input class="input" value="sip.carrier.com" /></div>
+                    <div class="form-field"><label class="form-label">Port</label><input class="input" value="5060" /></div>
+                    <div class="form-field"><label class="form-label">Transport</label><select class="select"><option selected>UDP</option><option>TCP</option><option>TLS</option><option>WS</option><option>WSS</option></select></div>
+                    <div class="form-field"><label class="form-label">Context</label><input class="input" value="from-trunk" /></div>
+                    <div class="form-field"><label class="form-label">Max Channels</label><input class="input" value="30" /></div>
+                </div>
+            </div>
+            <div class="form-section">
+                <h3>Authentication</h3>
+                <div class="form-grid">
+                    <div class="form-field"><label class="form-label">Username</label><input class="input" value="myaccount" /></div>
+                    <div class="form-field"><label class="form-label">Password</label><input class="input" type="password" value="********" /></div>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-green">Save Changes</button>
+                <button class="btn btn-outline">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== CAMPAIGN METRICS ==================== -->
+<section class="mockup-section" id="campaigns">
+<div class="mockup-title">Campaign Metrics <span>/campaign-metrics</span></div>
+<div class="layout" style="min-height:480px;">
+    <div class="sidebar"><div class="sidebar-header"><h2>PBX Admin</h2></div><a class="nav-item active">&#9650; Campaigns</a></div>
+    <div class="main-area">
+        <div class="header"><h1>Campaign Metrics</h1></div>
+        <div class="content">
+            <div class="kpi-grid">
+                <div class="kpi-card kpi-blue"><div class="kpi-value">1,247</div><div class="kpi-label">Originated</div></div>
+                <div class="kpi-card kpi-green"><div class="kpi-value">892</div><div class="kpi-label">Answered</div><div class="kpi-sub">71.5%</div></div>
+                <div class="kpi-card kpi-red"><div class="kpi-value">355</div><div class="kpi-label">Unanswered</div><div class="kpi-sub">28.5%</div></div>
+                <div class="kpi-card kpi-purple"><div class="kpi-value">734</div><div class="kpi-label">Bridged to Agent</div><div class="kpi-sub">58.9%</div></div>
+            </div>
+            <div class="kpi-grid">
+                <div class="kpi-card kpi-blue"><div class="kpi-value">14</div><div class="kpi-label">Active Now</div></div>
+                <div class="kpi-card kpi-gray"><div class="kpi-value">1,233</div><div class="kpi-label">Completed</div></div>
+                <div class="kpi-card kpi-green"><div class="kpi-value">3:28</div><div class="kpi-label">Avg Duration</div></div>
+                <div class="kpi-card kpi-yellow"><div class="kpi-value">0:45</div><div class="kpi-label">Avg Wait</div></div>
+            </div>
+            <h3>Top Queues</h3>
+            <table class="data-table">
+                <thead><tr><th>Queue</th><th>Calls</th><th>Avg Duration</th><th>Avg Hold</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>sales</strong></td><td>523</td><td>3:42</td><td>0:28</td></tr>
+                    <tr><td><strong>support</strong></td><td>412</td><td>5:10</td><td>0:45</td></tr>
+                    <tr><td><strong>billing</strong></td><td>189</td><td>2:30</td><td>0:15</td></tr>
+                    <tr><td><strong>tech</strong></td><td>123</td><td>6:20</td><td>0:38</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== CONFERENCES ==================== -->
+<section class="mockup-section" id="conferences">
+<div class="mockup-title">Conferences <span>/conferences</span></div>
+<div class="layout" style="min-height:400px;">
+    <div class="sidebar"><div class="sidebar-header"><h2>PBX Admin</h2></div><a class="nav-item active">&#9881; Conferences</a></div>
+    <div class="main-area">
+        <div class="header"><h1>Conference Rooms</h1></div>
+        <div class="content">
+            <div class="conference-card">
+                <div class="conference-header"><strong style="font-size:1.1rem;">Room 800</strong><span class="badge badge-blue">3 participants</span></div>
+                <table class="data-table">
+                    <thead><tr><th>#</th><th>Channel</th><th>State</th><th>Flags</th></tr></thead>
+                    <tbody>
+                        <tr><td>1</td><td class="mono">PJSIP/2001-0001</td><td><span class="status-dot dot-green" style="width:8px;height:8px;"></span> Talking</td><td></td></tr>
+                        <tr><td>2</td><td class="mono">PJSIP/3001-0004</td><td><span class="status-dot dot-blue" style="width:8px;height:8px;"></span> Joined</td><td><span class="badge badge-yellow">Muted</span></td></tr>
+                        <tr><td>3</td><td class="mono">PJSIP/4001-0007</td><td><span class="status-dot dot-green" style="width:8px;height:8px;"></span> Talking</td><td></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="conference-card">
+                <div class="conference-header"><strong style="font-size:1.1rem;">Room 801</strong><span class="badge badge-blue">2 participants</span></div>
+                <table class="data-table">
+                    <thead><tr><th>#</th><th>Channel</th><th>State</th><th>Flags</th></tr></thead>
+                    <tbody>
+                        <tr><td>1</td><td class="mono">PJSIP/2003-0002</td><td><span class="status-dot dot-green" style="width:8px;height:8px;"></span> Talking</td><td></td></tr>
+                        <tr><td>2</td><td class="mono">PJSIP/3003-0006</td><td><span class="status-dot dot-green" style="width:8px;height:8px;"></span> Talking</td><td></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== METRICS ==================== -->
+<section class="mockup-section" id="metrics">
+<div class="mockup-title">Metrics — SDK Instrumentation <span>/metrics</span></div>
+<div class="layout" style="min-height:480px;">
+    <div class="sidebar"><div class="sidebar-header"><h2>PBX Admin</h2></div><a class="nav-item active">&#9733; Metrics</a></div>
+    <div class="main-area">
+        <div class="header"><h1>SDK Metrics</h1></div>
+        <div class="content">
+            <h3>AMI Connection Health</h3>
+            <div class="kpi-grid">
+                <div class="kpi-card kpi-blue"><div class="kpi-value">12,847</div><div class="kpi-label">Events Received</div></div>
+                <div class="kpi-card kpi-red" style="background:#fef2f2;"><div class="kpi-value" style="color:var(--color-incall);">3</div><div class="kpi-label">Events Dropped</div></div>
+                <div class="kpi-card kpi-green"><div class="kpi-value">12,844</div><div class="kpi-label">Events Dispatched</div></div>
+                <div class="kpi-card kpi-blue"><div class="kpi-value">1,456</div><div class="kpi-label">Actions Sent</div></div>
+                <div class="kpi-card kpi-blue"><div class="kpi-value">1,456</div><div class="kpi-label">Responses</div></div>
+                <div class="kpi-card kpi-yellow" style="background:#fefce8;"><div class="kpi-value" style="color:var(--color-paused);">1</div><div class="kpi-label">Reconnections</div></div>
+            </div>
+            <h3>AMI Histograms</h3>
+            <div class="kpi-grid">
+                <div class="kpi-card kpi-blue"><div class="kpi-value">2.4</div><div class="kpi-label">Avg Roundtrip (ms)</div></div>
+                <div class="kpi-card kpi-blue"><div class="kpi-value">0.8</div><div class="kpi-label">Avg Dispatch (ms)</div></div>
+            </div>
+            <h3>Live State Gauges</h3>
+            <div class="kpi-grid">
+                <div class="kpi-card kpi-blue"><div class="kpi-value">24</div><div class="kpi-label">Active Channels</div></div>
+                <div class="kpi-card kpi-purple"><div class="kpi-value">5</div><div class="kpi-label">Queues</div></div>
+                <div class="kpi-card kpi-gray"><div class="kpi-value">26</div><div class="kpi-label">Total Agents</div></div>
+                <div class="kpi-card kpi-green"><div class="kpi-value">12</div><div class="kpi-label">Available</div></div>
+                <div class="kpi-card kpi-red"><div class="kpi-value">8</div><div class="kpi-label">On Call</div></div>
+                <div class="kpi-card kpi-yellow"><div class="kpi-value">4</div><div class="kpi-label">Paused</div></div>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- ==================== EVENTS ==================== -->
+<section class="mockup-section" id="events">
+<div class="mockup-title">Events — Live AMI Log <span>/events</span></div>
+<div class="layout" style="min-height:450px;">
+    <div class="sidebar"><div class="sidebar-header"><h2>PBX Admin</h2></div><a class="nav-item active">&#9998; Events</a></div>
+    <div class="main-area">
+        <div class="header"><h1>Live Events</h1></div>
+        <div class="content">
+            <div class="chip-bar">
+                <span class="chip chip-active">All</span>
+                <span class="chip">Channel</span>
+                <span class="chip">Queue</span>
+                <span class="chip">Agent</span>
+            </div>
+            <table class="data-table">
+                <thead><tr><th>Time</th><th>Server</th><th>Event</th><th>UniqueId</th><th>Channel</th></tr></thead>
+                <tbody>
+                    <tr><td class="mono" style="font-size:0.75rem;">14:32:05</td><td>pbx-prod</td><td><span class="badge badge-green">Newstate</span></td><td class="mono">1709.45</td><td class="mono">PJSIP/2002-0003</td></tr>
+                    <tr><td class="mono" style="font-size:0.75rem;">14:32:04</td><td>pbx-prod</td><td><span class="badge badge-blue">Bridge</span></td><td class="mono">1709.45</td><td class="mono">PJSIP/2002-0003</td></tr>
+                    <tr><td class="mono" style="font-size:0.75rem;">14:31:58</td><td>pbx-prod</td><td><span class="badge badge-yellow">QueueMemberPaused</span></td><td class="mono"></td><td class="mono">PJSIP/2003</td></tr>
+                    <tr><td class="mono" style="font-size:0.75rem;">14:31:42</td><td>pbx-stg</td><td><span class="badge badge-muted">NewChannel</span></td><td class="mono">1710.12</td><td class="mono">PJSIP/trunk-in-008</td></tr>
+                    <tr><td class="mono" style="font-size:0.75rem;">14:31:30</td><td>pbx-prod</td><td><span class="badge badge-red">Hangup</span></td><td class="mono">1709.40</td><td class="mono">PJSIP/3001-0004</td></tr>
+                    <tr><td class="mono" style="font-size:0.75rem;">14:31:28</td><td>pbx-prod</td><td><span class="badge badge-muted">AgentComplete</span></td><td class="mono">1709.40</td><td class="mono">PJSIP/3001-0004</td></tr>
+                    <tr><td class="mono" style="font-size:0.75rem;">14:31:15</td><td>pbx-stg</td><td><span class="badge badge-yellow">QueueCallerJoin</span></td><td class="mono">1710.11</td><td class="mono">PJSIP/trunk-in-007</td></tr>
+                    <tr><td class="mono" style="font-size:0.75rem;">14:31:02</td><td>pbx-prod</td><td><span class="badge badge-muted">NewChannel</span></td><td class="mono">1709.49</td><td class="mono">PJSIP/4001-0005</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</section>
+
+<div style="height:3rem;"></div>
+</body>
+</html>
