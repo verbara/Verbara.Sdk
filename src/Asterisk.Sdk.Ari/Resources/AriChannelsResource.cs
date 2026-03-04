@@ -59,4 +59,39 @@ public sealed class AriChannelsResource : IAriChannelsResource
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriChannel)!;
     }
+
+    public async ValueTask RingAsync(string channelId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PostAsync($"channels/{Uri.EscapeDataString(channelId)}/ring", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async ValueTask ProgressAsync(string channelId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PostAsync($"channels/{Uri.EscapeDataString(channelId)}/progress", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async ValueTask AnswerAsync(string channelId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PostAsync($"channels/{Uri.EscapeDataString(channelId)}/answer", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async ValueTask<AriChannel> CreateExternalMediaAsync(string app, string externalHost, string format,
+        string? encapsulation = null, string? transport = null, string? connectionType = null,
+        string? direction = null, string? data = null, CancellationToken cancellationToken = default)
+    {
+        var url = $"channels/externalMedia?app={Uri.EscapeDataString(app)}&external_host={Uri.EscapeDataString(externalHost)}&format={Uri.EscapeDataString(format)}";
+        if (encapsulation is not null) url += $"&encapsulation={Uri.EscapeDataString(encapsulation)}";
+        if (transport is not null) url += $"&transport={Uri.EscapeDataString(transport)}";
+        if (connectionType is not null) url += $"&connection_type={Uri.EscapeDataString(connectionType)}";
+        if (direction is not null) url += $"&direction={Uri.EscapeDataString(direction)}";
+        if (data is not null) url += $"&data={Uri.EscapeDataString(data)}";
+
+        var response = await _http.PostAsync(url, null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriChannel)!;
+    }
 }
