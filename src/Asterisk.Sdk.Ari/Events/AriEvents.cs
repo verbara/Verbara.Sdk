@@ -88,4 +88,74 @@ public sealed class ChannelToneDetectedEvent : AriEvent
     public AriChannel? Channel { get; set; }
 }
 
-// AriPlayback model is defined in Asterisk.Sdk (IAriClient.cs)
+/// <summary>ChannelCreated - a new channel was created.</summary>
+public sealed class ChannelCreatedEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+}
+
+/// <summary>ChannelDestroyed - a channel was destroyed.</summary>
+public sealed class ChannelDestroyedEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+    public int? Cause { get; set; }
+    public string? CauseTxt { get; set; }
+}
+
+/// <summary>ChannelVarset - a channel variable was set.</summary>
+public sealed class ChannelVarsetEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+    public string? Variable { get; set; }
+    public string? Value { get; set; }
+}
+
+/// <summary>ChannelHold - a channel was placed on hold.</summary>
+public sealed class ChannelHoldEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+    public string? MusicClass { get; set; }
+}
+
+/// <summary>ChannelUnhold - a channel was removed from hold.</summary>
+public sealed class ChannelUnholdEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+}
+
+/// <summary>ChannelTalkingStarted - talking was detected on a channel.</summary>
+public sealed class ChannelTalkingStartedEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+}
+
+/// <summary>ChannelTalkingFinished - talking stopped on a channel.</summary>
+public sealed class ChannelTalkingFinishedEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+    public int? Duration { get; set; }
+}
+
+/// <summary>ChannelConnectedLine - channel connected line information changed.</summary>
+public sealed class ChannelConnectedLineEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+}
+
+/// <summary>RecordingStarted - a recording has started.</summary>
+public sealed class RecordingStartedEvent : AriEvent
+{
+    public AriLiveRecording? Recording { get; set; }
+}
+
+/// <summary>RecordingFinished - a recording has finished.</summary>
+public sealed class RecordingFinishedEvent : AriEvent
+{
+    public AriLiveRecording? Recording { get; set; }
+}
+
+/// <summary>EndpointStateChange - an endpoint's state changed.</summary>
+public sealed class EndpointStateChangeEvent : AriEvent
+{
+    public AriEndpoint? Endpoint { get; set; }
+}

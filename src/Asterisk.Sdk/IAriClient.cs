@@ -80,6 +80,45 @@ public interface IAriChannelsResource
     ValueTask<AriChannel> CreateExternalMediaAsync(string app, string externalHost, string format,
         string? encapsulation = null, string? transport = null, string? connectionType = null,
         string? direction = null, string? data = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Get a channel variable. GET /channels/{channelId}/variable</summary>
+    ValueTask<AriVariable> GetVariableAsync(string channelId, string variable, CancellationToken cancellationToken = default);
+
+    /// <summary>Set a channel variable. POST /channels/{channelId}/variable</summary>
+    ValueTask SetVariableAsync(string channelId, string variable, string value, CancellationToken cancellationToken = default);
+
+    /// <summary>Hold a channel. PUT /channels/{channelId}/hold</summary>
+    ValueTask HoldAsync(string channelId, CancellationToken cancellationToken = default);
+
+    /// <summary>Remove a channel from hold. DELETE /channels/{channelId}/hold</summary>
+    ValueTask UnholdAsync(string channelId, CancellationToken cancellationToken = default);
+
+    /// <summary>Mute a channel. PUT /channels/{channelId}/mute</summary>
+    ValueTask MuteAsync(string channelId, string? direction = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Unmute a channel. DELETE /channels/{channelId}/mute</summary>
+    ValueTask UnmuteAsync(string channelId, string? direction = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Send DTMF to a channel. POST /channels/{channelId}/dtmf</summary>
+    ValueTask SendDtmfAsync(string channelId, string dtmf, int? before = null, int? between = null, int? duration = null, int? after = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Play media to a channel. POST /channels/{channelId}/play</summary>
+    ValueTask<AriPlayback> PlayAsync(string channelId, string media, string? lang = null, int? offsetms = null, int? skipms = null, string? playbackId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Record a channel. POST /channels/{channelId}/record</summary>
+    ValueTask<AriLiveRecording> RecordAsync(string channelId, string name, string format, int? maxDurationSeconds = null, int? maxSilenceSeconds = null, string? ifExists = null, bool? beep = null, string? terminateOn = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Snoop on a channel. POST /channels/{channelId}/snoop</summary>
+    ValueTask<AriChannel> SnoopAsync(string channelId, string app, string? spy = null, string? whisper = null, string? snoopId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Redirect a channel to a different extension. POST /channels/{channelId}/redirect</summary>
+    ValueTask RedirectAsync(string channelId, string endpoint, CancellationToken cancellationToken = default);
+
+    /// <summary>Continue dialplan execution on a channel. POST /channels/{channelId}/continue</summary>
+    ValueTask ContinueAsync(string channelId, string? context = null, string? extension = null, int? priority = null, string? label = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Create a channel without dialing. POST /channels/create</summary>
+    ValueTask<AriChannel> CreateWithoutDialAsync(string endpoint, string app, string? channelId = null, string? otherChannelId = null, string? originator = null, IReadOnlyDictionary<string, string>? variables = null, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -199,6 +238,14 @@ public sealed class AriChannel
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public AriChannelState State { get; set; } = AriChannelState.Unknown;
+    public AriCallerId? Caller { get; set; }
+    public AriCallerId? Connected { get; set; }
+    public string? Accountcode { get; set; }
+    public AriDialplanCep? Dialplan { get; set; }
+    public string? Language { get; set; }
+    public DateTimeOffset? Creationtime { get; set; }
+    public string? Protocol { get; set; }
+    public Dictionary<string, string>? ChannelVars { get; set; }
 }
 
 /// <summary>ARI bridge model.</summary>
@@ -271,4 +318,27 @@ public sealed class AriFormatLang
 {
     public string Language { get; set; } = string.Empty;
     public string Format { get; set; } = string.Empty;
+}
+
+/// <summary>ARI caller identification.</summary>
+public sealed class AriCallerId
+{
+    public string Name { get; set; } = string.Empty;
+    public string Number { get; set; } = string.Empty;
+}
+
+/// <summary>ARI dialplan context/extension/priority.</summary>
+public sealed class AriDialplanCep
+{
+    public string Context { get; set; } = string.Empty;
+    public string Exten { get; set; } = string.Empty;
+    public int Priority { get; set; }
+    public string? AppName { get; set; }
+    public string? AppData { get; set; }
+}
+
+/// <summary>ARI channel variable.</summary>
+public sealed class AriVariable
+{
+    public string Value { get; set; } = string.Empty;
 }

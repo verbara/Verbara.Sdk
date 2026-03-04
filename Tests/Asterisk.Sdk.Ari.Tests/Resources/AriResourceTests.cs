@@ -170,6 +170,259 @@ public class AriResourceTests
         handler.LastRequestUri.Should().Contain("transport=udp");
     }
 
+    [Fact]
+    public async Task Channels_GetAsync_ShouldDeserializeFullModel()
+    {
+        const string json = """
+        {
+            "id": "ch-full",
+            "name": "PJSIP/2000-00000001",
+            "state": "Up",
+            "caller": { "name": "Alice", "number": "2000" },
+            "connected": { "name": "Bob", "number": "3000" },
+            "accountcode": "sales",
+            "dialplan": { "context": "default", "exten": "100", "priority": 1, "app_name": "Stasis", "app_data": "myapp" },
+            "language": "en",
+            "creationtime": "2026-03-04T10:30:00+00:00",
+            "protocol": "PJSIP",
+            "channel_vars": { "CDR(src)": "2000" }
+        }
+        """;
+        using var handler = new FakeHttpHandler(json);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        var result = await sut.GetAsync("ch-full");
+
+        result.Id.Should().Be("ch-full");
+        result.State.Should().Be(AriChannelState.Up);
+        result.Caller.Should().NotBeNull();
+        result.Caller!.Name.Should().Be("Alice");
+        result.Caller.Number.Should().Be("2000");
+        result.Connected.Should().NotBeNull();
+        result.Connected!.Number.Should().Be("3000");
+        result.Accountcode.Should().Be("sales");
+        result.Dialplan.Should().NotBeNull();
+        result.Dialplan!.Context.Should().Be("default");
+        result.Dialplan.Exten.Should().Be("100");
+        result.Dialplan.Priority.Should().Be(1);
+        result.Dialplan.AppName.Should().Be("Stasis");
+        result.Language.Should().Be("en");
+        result.Creationtime.Should().NotBeNull();
+        result.Protocol.Should().Be("PJSIP");
+        result.ChannelVars.Should().ContainKey("CDR(src)");
+    }
+
+    [Fact]
+    public async Task Channels_GetAsync_ShouldHandleNullOptionalFields()
+    {
+        var json = JsonSerializer.Serialize(
+            new AriChannel { Id = "ch-min", Name = "PJSIP/1000", State = AriChannelState.Down },
+            AriJsonContext.Default.AriChannel);
+        using var handler = new FakeHttpHandler(json);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        var result = await sut.GetAsync("ch-min");
+
+        result.Id.Should().Be("ch-min");
+        result.Caller.Should().BeNull();
+        result.Connected.Should().BeNull();
+        result.Dialplan.Should().BeNull();
+        result.ChannelVars.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Channels_GetVariableAsync_ShouldReturnVariable()
+    {
+        var json = JsonSerializer.Serialize(
+            new AriVariable { Value = "bar" },
+            AriJsonContext.Default.AriVariable);
+        using var handler = new FakeHttpHandler(json);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        var result = await sut.GetVariableAsync("ch-1", "foo");
+
+        result.Value.Should().Be("bar");
+        handler.LastMethod.Should().Be(HttpMethod.Get);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/variable");
+        handler.LastRequestUri.Should().Contain("variable=foo");
+    }
+
+    [Fact]
+    public async Task Channels_SetVariableAsync_ShouldPostVariable()
+    {
+        using var handler = new FakeHttpHandler("");
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.SetVariableAsync("ch-1", "foo", "bar");
+
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/variable");
+        handler.LastRequestUri.Should().Contain("variable=foo");
+        handler.LastRequestUri.Should().Contain("value=bar");
+    }
+
+    [Fact]
+    public async Task Channels_HoldAsync_ShouldSendPut()
+    {
+        using var handler = new FakeHttpHandler("");
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.HoldAsync("ch-1");
+
+        handler.LastMethod.Should().Be(HttpMethod.Put);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/hold");
+    }
+
+    [Fact]
+    public async Task Channels_UnholdAsync_ShouldSendDelete()
+    {
+        using var handler = new FakeHttpHandler("");
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.UnholdAsync("ch-1");
+
+        handler.LastMethod.Should().Be(HttpMethod.Delete);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/hold");
+    }
+
+    [Fact]
+    public async Task Channels_MuteAsync_ShouldSendPutWithDirection()
+    {
+        using var handler = new FakeHttpHandler("");
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.MuteAsync("ch-1", "in");
+
+        handler.LastMethod.Should().Be(HttpMethod.Put);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/mute");
+        handler.LastRequestUri.Should().Contain("direction=in");
+    }
+
+    [Fact]
+    public async Task Channels_UnmuteAsync_ShouldSendDelete()
+    {
+        using var handler = new FakeHttpHandler("");
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.UnmuteAsync("ch-1");
+
+        handler.LastMethod.Should().Be(HttpMethod.Delete);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/mute");
+    }
+
+    [Fact]
+    public async Task Channels_SendDtmfAsync_ShouldPostDtmf()
+    {
+        using var handler = new FakeHttpHandler("");
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.SendDtmfAsync("ch-1", "1234#", between: 100, duration: 200);
+
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/dtmf");
+        handler.LastRequestUri.Should().Contain("dtmf=1234%23");
+        handler.LastRequestUri.Should().Contain("between=100");
+        handler.LastRequestUri.Should().Contain("duration=200");
+    }
+
+    [Fact]
+    public async Task Channels_PlayAsync_ShouldPostAndReturnPlayback()
+    {
+        var json = JsonSerializer.Serialize(
+            new AriPlayback { Id = "pb-1", MediaUri = "sound:hello", State = "playing" },
+            AriJsonContext.Default.AriPlayback);
+        using var handler = new FakeHttpHandler(json);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        var result = await sut.PlayAsync("ch-1", "sound:hello", lang: "en");
+
+        result.Id.Should().Be("pb-1");
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/play");
+        handler.LastRequestUri.Should().Contain("media=sound%3Ahello");
+        handler.LastRequestUri.Should().Contain("lang=en");
+    }
+
+    [Fact]
+    public async Task Channels_RecordAsync_ShouldPostAndReturnRecording()
+    {
+        var json = JsonSerializer.Serialize(
+            new AriLiveRecording { Name = "rec-1", Format = "wav", State = "recording" },
+            AriJsonContext.Default.AriLiveRecording);
+        using var handler = new FakeHttpHandler(json);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        var result = await sut.RecordAsync("ch-1", "rec-1", "wav", maxDurationSeconds: 60, beep: true);
+
+        result.Name.Should().Be("rec-1");
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/record");
+        handler.LastRequestUri.Should().Contain("name=rec-1");
+        handler.LastRequestUri.Should().Contain("format=wav");
+        handler.LastRequestUri.Should().Contain("maxDurationSeconds=60");
+        handler.LastRequestUri.Should().Contain("beep=true");
+    }
+
+    [Fact]
+    public async Task Channels_SnoopAsync_ShouldPostAndReturnChannel()
+    {
+        var json = JsonSerializer.Serialize(
+            new AriChannel { Id = "ch-snoop", Name = "Snoop/ch-1" },
+            AriJsonContext.Default.AriChannel);
+        using var handler = new FakeHttpHandler(json);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        var result = await sut.SnoopAsync("ch-1", "myapp", spy: "both");
+
+        result.Id.Should().Be("ch-snoop");
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/snoop");
+        handler.LastRequestUri.Should().Contain("app=myapp");
+        handler.LastRequestUri.Should().Contain("spy=both");
+    }
+
+    [Fact]
+    public async Task Channels_RedirectAsync_ShouldPostRedirect()
+    {
+        using var handler = new FakeHttpHandler("");
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.RedirectAsync("ch-1", "PJSIP/5000");
+
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/redirect");
+        handler.LastRequestUri.Should().Contain("endpoint=PJSIP%2F5000");
+    }
+
+    [Fact]
+    public async Task Channels_ContinueAsync_ShouldPostContinue()
+    {
+        using var handler = new FakeHttpHandler("");
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.ContinueAsync("ch-1", context: "from-internal", extension: "200", priority: 1);
+
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastRequestUri.Should().Contain("channels/ch-1/continue");
+        handler.LastRequestUri.Should().Contain("context=from-internal");
+        handler.LastRequestUri.Should().Contain("extension=200");
+        handler.LastRequestUri.Should().Contain("priority=1");
+    }
+
     // --- Bridges ---
 
     [Fact]
