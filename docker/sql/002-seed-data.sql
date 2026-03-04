@@ -37,6 +37,13 @@ INSERT INTO queue_table (name, strategy, timeout, ringinuse, wrapuptime, service
     ('sales', 'ringall', 15, 'no', 5, 60, 0),
     ('support', 'leastrecent', 20, 'no', 10, 90, 0);
 
+-- Trunk to file-mode PBX (IP-based identification)
+INSERT INTO ps_endpoints (id, transport, context, disallow, allow, direct_media, callerid) VALUES
+    ('trunk-file', 'transport-udp', 'from-trunk', 'all', 'ulaw,alaw,opus', 'no', '"Realtime PBX" <8888>');
+
+INSERT INTO ps_endpoint_id_ips (id, endpoint, match) VALUES
+    ('trunk-file-ip', 'trunk-file', 'asterisk-file');
+
 -- Queue members
 INSERT INTO queue_members (queue_name, interface, membername, penalty) VALUES
     ('sales', 'PJSIP/2001', 'Sales Agent 1', 0),

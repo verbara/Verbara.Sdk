@@ -21,7 +21,9 @@ services:
       dockerfile: Dockerfile.asterisk-realtime
     container_name: demo-pbx-realtime
     ports:
-      - "5038:5038"
+      - "5038:5038"       # AMI
+      - "8088:8088"       # ARI HTTP
+      - "5060:5060/udp"   # SIP
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,7 +39,9 @@ services:
       dockerfile: Dockerfile.asterisk-file
     container_name: demo-pbx-file
     ports:
-      - "5039:5038"
+      - "5039:5038"       # AMI
+      - "8089:8088"       # ARI HTTP
+      - "5061:5060/udp"   # SIP
     healthcheck:
       test: ["CMD", "asterisk", "-rx", "core show version"]
       interval: 5s
@@ -60,12 +64,14 @@ services:
       - DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE=false
       - Auth__Username=admin
       - Auth__Password=admin
+      # File-mode PBX (extensions 4XXX/5XXX, queues sales2/support2)
       - Asterisk__Servers__0__Id=pbx-file
       - Asterisk__Servers__0__Hostname=asterisk-file
       - Asterisk__Servers__0__Port=5038
       - Asterisk__Servers__0__Username=dashboard
       - Asterisk__Servers__0__Password=dashboard
       - Asterisk__Servers__0__ConfigMode=File
+      # Realtime PBX (extensions 2XXX/3XXX, queues sales/support)
       - Asterisk__Servers__1__Id=pbx-realtime
       - Asterisk__Servers__1__Hostname=asterisk-realtime
       - Asterisk__Servers__1__Port=5038
