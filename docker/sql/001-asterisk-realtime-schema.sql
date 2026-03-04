@@ -197,3 +197,78 @@ CREATE TABLE IF NOT EXISTS voicemail (
     UNIQUE (context, mailbox)
 );
 CREATE INDEX IF NOT EXISTS idx_voicemail_mailbox ON voicemail (context, mailbox);
+
+-- CDR (Call Detail Records)
+CREATE TABLE IF NOT EXISTS cdr (
+    id              BIGSERIAL PRIMARY KEY,
+    calldate        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    clid            VARCHAR(80),
+    src             VARCHAR(80),
+    dst             VARCHAR(80),
+    dcontext        VARCHAR(80),
+    channel         VARCHAR(80),
+    dstchannel      VARCHAR(80),
+    lastapp         VARCHAR(80),
+    lastdata        VARCHAR(80),
+    duration        INTEGER DEFAULT 0,
+    billsec         INTEGER DEFAULT 0,
+    disposition     VARCHAR(45),
+    amaflags        INTEGER DEFAULT 0,
+    accountcode     VARCHAR(20),
+    uniqueid        VARCHAR(150),
+    linkedid        VARCHAR(150),
+    userfield       VARCHAR(255),
+    peeraccount     VARCHAR(20),
+    sequence        INTEGER DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_cdr_calldate ON cdr (calldate);
+CREATE INDEX IF NOT EXISTS idx_cdr_src ON cdr (src);
+CREATE INDEX IF NOT EXISTS idx_cdr_dst ON cdr (dst);
+CREATE INDEX IF NOT EXISTS idx_cdr_uniqueid ON cdr (uniqueid);
+CREATE INDEX IF NOT EXISTS idx_cdr_linkedid ON cdr (linkedid);
+
+-- CEL (Channel Event Logging)
+CREATE TABLE IF NOT EXISTS cel (
+    id              BIGSERIAL PRIMARY KEY,
+    eventtype       VARCHAR(30) NOT NULL,
+    eventtime       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    cid_name        VARCHAR(80),
+    cid_num         VARCHAR(80),
+    cid_ani         VARCHAR(80),
+    cid_rdnis       VARCHAR(80),
+    cid_dnid        VARCHAR(80),
+    exten           VARCHAR(80),
+    context         VARCHAR(80),
+    channame        VARCHAR(80),
+    appname         VARCHAR(80),
+    appdata         VARCHAR(80),
+    amaflags        INTEGER DEFAULT 0,
+    accountcode     VARCHAR(20),
+    uniqueid        VARCHAR(150),
+    linkedid        VARCHAR(150),
+    peer            VARCHAR(80),
+    userdeftype     VARCHAR(255),
+    extra           TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_cel_eventtime ON cel (eventtime);
+CREATE INDEX IF NOT EXISTS idx_cel_uniqueid ON cel (uniqueid);
+CREATE INDEX IF NOT EXISTS idx_cel_linkedid ON cel (linkedid);
+
+-- Queue Log
+CREATE TABLE IF NOT EXISTS queue_log (
+    id              BIGSERIAL PRIMARY KEY,
+    time            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    callid          VARCHAR(80),
+    queuename       VARCHAR(80),
+    agent           VARCHAR(80),
+    event           VARCHAR(80),
+    data1           VARCHAR(100),
+    data2           VARCHAR(100),
+    data3           VARCHAR(100),
+    data4           VARCHAR(100),
+    data5           VARCHAR(100)
+);
+CREATE INDEX IF NOT EXISTS idx_queue_log_time ON queue_log (time);
+CREATE INDEX IF NOT EXISTS idx_queue_log_queuename ON queue_log (queuename);
+CREATE INDEX IF NOT EXISTS idx_queue_log_agent ON queue_log (agent);
+CREATE INDEX IF NOT EXISTS idx_queue_log_event ON queue_log (event);
