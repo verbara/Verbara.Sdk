@@ -1,0 +1,78 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@layout LoginLayout
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using System.Security.Claims
+@inject IConfiguration Configuration
+@inject NavigationManager Navigation
+@inject IHttpContextAccessor HttpContextAccessor
+
+<div class="login-card">
+    <div class="login-header">
+        <h2>Asterisk Dashboard</h2>
+        <p class="text-muted">Sign in to continue</p>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="login-error">@_error</div>
+    }
+
+    <EditForm Model="_model" OnValidSubmit="HandleLogin" FormName="login">
+        <div class="form-field" style="margin-bottom: 1rem;">
+            <label class="form-label">Username</label>
+            <InputText @bind-Value="_model.Username" class="input" style="width: 100%;" placeholder="Username" />
+        </div>
+        <div class="form-field" style="margin-bottom: 1.25rem;">
+            <label class="form-label">Password</label>
+            <InputText @bind-Value="_model.Password" type="password" class="input" style="width: 100%;" placeholder="Password" />
+        </div>
+        <button type="submit" class="btn btn-blue" style="width: 100%;">Sign In</button>
+    </EditForm>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private LoginModel _model { get; set; } = null!;
+
+    protected override void OnInitialized()
+    {
+        _model ??= new();
+    }
+
+    private string? _error;
+
+    private async Task HandleLogin()
+    {
+        var expectedUsername = Configuration["Auth:Username"] ?? "admin";
+        var expectedPassword = Configuration["Auth:Password"] ?? "admin";
+
+        if (_model.Username != expectedUsername || _model.Password != expectedPassword)
+        {
+            _error = "Invalid username or password.";
+            return;
+        }
+
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.Name, _model.Username!)
+        };
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var principal = new ClaimsPrincipal(identity);
+
+        var httpContext = HttpContextAccessor.HttpContext!;
+        await httpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            principal,
+            new AuthenticationProperties { IsPersistent = true });
+
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+
+    private sealed class LoginModel
+    {
+        public string? Username { get; set; }
+        public string? Password { get; set; }
+    }
+}
