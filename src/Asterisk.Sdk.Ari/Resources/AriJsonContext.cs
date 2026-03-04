@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Asterisk.Sdk;
+using Asterisk.Sdk.Ari.Events;
 
 namespace Asterisk.Sdk.Ari.Resources;
 
@@ -29,5 +30,34 @@ namespace Asterisk.Sdk.Ari.Resources;
 [JsonSerializable(typeof(AriSound[]))]
 [JsonSerializable(typeof(AriFormatLang))]
 [JsonSerializable(typeof(AriFormatLang[]))]
-[JsonSerializable(typeof(Asterisk.Sdk.Ari.Events.ChannelToneDetectedEvent))]
+[JsonSerializable(typeof(AriCallerId))]
+[JsonSerializable(typeof(AriDialplanCep))]
+[JsonSerializable(typeof(AriVariable))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
+// Existing events
+[JsonSerializable(typeof(StasisStartEvent))]
+[JsonSerializable(typeof(StasisEndEvent))]
+[JsonSerializable(typeof(ChannelStateChangeEvent))]
+[JsonSerializable(typeof(ChannelDtmfReceivedEvent))]
+[JsonSerializable(typeof(ChannelHangupRequestEvent))]
+[JsonSerializable(typeof(BridgeCreatedEvent))]
+[JsonSerializable(typeof(BridgeDestroyedEvent))]
+[JsonSerializable(typeof(ChannelEnteredBridgeEvent))]
+[JsonSerializable(typeof(ChannelLeftBridgeEvent))]
+[JsonSerializable(typeof(PlaybackStartedEvent))]
+[JsonSerializable(typeof(PlaybackFinishedEvent))]
+[JsonSerializable(typeof(DialEvent))]
+[JsonSerializable(typeof(ChannelToneDetectedEvent))]
+// New events
+[JsonSerializable(typeof(ChannelCreatedEvent))]
+[JsonSerializable(typeof(ChannelDestroyedEvent))]
+[JsonSerializable(typeof(ChannelVarsetEvent))]
+[JsonSerializable(typeof(ChannelHoldEvent))]
+[JsonSerializable(typeof(ChannelUnholdEvent))]
+[JsonSerializable(typeof(ChannelTalkingStartedEvent))]
+[JsonSerializable(typeof(ChannelTalkingFinishedEvent))]
+[JsonSerializable(typeof(ChannelConnectedLineEvent))]
+[JsonSerializable(typeof(RecordingStartedEvent))]
+[JsonSerializable(typeof(RecordingFinishedEvent))]
+[JsonSerializable(typeof(EndpointStateChangeEvent))]
 public sealed partial class AriJsonContext : JsonSerializerContext;
