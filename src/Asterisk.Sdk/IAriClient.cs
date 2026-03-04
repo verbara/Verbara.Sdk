@@ -37,6 +37,9 @@ public interface IAriClient : IAsyncDisposable
 
     /// <summary>Access sound operations.</summary>
     IAriSoundsResource Sounds { get; }
+
+    /// <summary>Access the audio server (null if not configured).</summary>
+    IAudioServer? AudioServer { get; }
 }
 
 /// <summary>
@@ -341,4 +344,62 @@ public sealed class AriDialplanCep
 public sealed class AriVariable
 {
     public string Value { get; set; } = string.Empty;
+}
+
+// ---------------------------------------------------------------------------
+// Audio streaming
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// Represents a bidirectional audio stream from Asterisk.
+/// Implemented by both AudioSocketSession and WebSocketAudioSession.
+/// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "IAudioStream is the correct domain name for this abstraction")]
+public interface IAudioStream : IAsyncDisposable
+{
+    /// <summary>Unique ID of the external media channel in Asterisk.</summary>
+    string ChannelId { get; }
+
+    /// <summary>Audio format (e.g., "slin16", "ulaw", "alaw").</summary>
+    string Format { get; }
+
+    /// <summary>Sample rate in Hz derived from format.</summary>
+    int SampleRate { get; }
+
+    /// <summary>Whether the stream is actively connected.</summary>
+    bool IsConnected { get; }
+
+    /// <summary>Observable for connection state changes.</summary>
+    IObservable<AudioStreamState> StateChanges { get; }
+
+    /// <summary>Read the next audio frame. Returns empty when stream ends.</summary>
+    ValueTask<ReadOnlyMemory<byte>> ReadFrameAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Write an audio frame to Asterisk.</summary>
+    ValueTask WriteFrameAsync(ReadOnlyMemory<byte> audioData, CancellationToken cancellationToken = default);
+}
+
+/// <summary>Audio stream connection state.</summary>
+public enum AudioStreamState
+{
+    Connecting,
+    Connected,
+    Disconnected,
+    Error
+}
+
+/// <summary>Unified audio server interface (AudioSocket + WebSocket).</summary>
+public interface IAudioServer
+{
+    /// <summary>Observable that emits each new audio stream when a connection is established.</summary>
+    IObservable<IAudioStream> OnStreamConnected { get; }
+
+    /// <summary>Get an active stream by channel ID.</summary>
+    IAudioStream? GetStream(string channelId);
+
+    /// <summary>All currently active audio streams.</summary>
+    IEnumerable<IAudioStream> ActiveStreams { get; }
+
+    /// <summary>Number of currently active audio streams.</summary>
+    int ActiveStreamCount { get; }
 }

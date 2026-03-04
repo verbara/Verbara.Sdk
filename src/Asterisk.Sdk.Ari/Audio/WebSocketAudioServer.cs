@@ -31,7 +31,7 @@ internal static partial class WebSocketAudioServerLog
 /// Listens for incoming WebSocket connections from Asterisk ExternalMedia channels.
 /// Uses TcpListener + manual HTTP upgrade + WebSocket.CreateFromStream() (ADR-1).
 /// </summary>
-public sealed class WebSocketAudioServer : IAsyncDisposable
+public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
 {
     private const string WebSocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
