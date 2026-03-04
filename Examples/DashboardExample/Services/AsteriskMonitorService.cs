@@ -7,13 +7,13 @@ namespace DashboardExample.Services;
 
 internal static partial class MonitorServiceLog
 {
-    [LoggerMessage(Level = LogLevel.Information, Message = "Connected to {ServerId} ({Host}:{Port}) — Asterisk {Version}")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "[MONITOR] Connected: server={ServerId} host={Host} port={Port} version={Version}")]
     public static partial void Connected(ILogger logger, string serverId, string host, int port, string? version);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Connection lost to server {ServerId}")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[MONITOR] Connection lost: server={ServerId}")]
     public static partial void ConnectionLost(ILogger logger, Exception? exception, string serverId);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to connect to server {ServerId}")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "[MONITOR] Connect failed: server={ServerId}")]
     public static partial void ConnectFailed(ILogger logger, Exception exception, string serverId);
 }
 

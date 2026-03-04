@@ -3,8 +3,24 @@ using Asterisk.Sdk;
 using Asterisk.Sdk.Ami.Events;
 using Asterisk.Sdk.Ami.Events.Base;
 using Asterisk.Sdk.Enums;
+using Microsoft.Extensions.Logging;
 
 namespace DashboardExample.Services;
+
+internal static partial class CallFlowLog
+{
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CALL_FLOW] New call: call_id={CallId} server={ServerId} caller={CallerChannel}")]
+    public static partial void NewCall(ILogger logger, string callId, string serverId, string? callerChannel);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CALL_FLOW] State changed: call_id={CallId} state={State}")]
+    public static partial void StateChanged(ILogger logger, string callId, CallFlowState state);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CALL_FLOW] Completed: call_id={CallId} duration_secs={DurationSecs} cause={Cause}")]
+    public static partial void Completed(ILogger logger, string callId, double durationSecs, HangupCause? cause);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[CALL_FLOW] Evicted stale: call_id={CallId}")]
+    public static partial void Evicted(ILogger logger, string callId);
+}
 
 /// <summary>
 /// Tracks call flows in real-time by correlating AMI events via LinkedId/UniqueId.
@@ -15,8 +31,11 @@ public sealed class CallFlowTracker
 {
     private readonly ConcurrentDictionary<string, CallFlow> _calls = new();
     private readonly ConcurrentQueue<string> _completedOrder = new();
+    private readonly ILogger<CallFlowTracker> _logger;
     private const int MaxCompletedCalls = 500;
     private static readonly TimeSpan CompletedRetention = TimeSpan.FromMinutes(5);
+
+    public CallFlowTracker(ILogger<CallFlowTracker> logger) => _logger = logger;
 
     public IEnumerable<CallFlow> ActiveCalls =>
         _calls.Values.Where(c => c.State != CallFlowState.Completed);
@@ -95,14 +114,22 @@ public sealed class CallFlowTracker
         return evt.UniqueId ?? "";
     }
 
-    private CallFlow GetOrCreateCall(string callId, string serverId)
+    private CallFlow GetOrCreateCall(string callId, string serverId, string? callerChannel = null)
     {
-        return _calls.GetOrAdd(callId, _ => new CallFlow
+        var isNew = false;
+        var call = _calls.GetOrAdd(callId, _ =>
         {
-            CallId = callId,
-            ServerId = serverId,
-            StartTime = DateTimeOffset.UtcNow
+            isNew = true;
+            return new CallFlow
+            {
+                CallId = callId,
+                ServerId = serverId,
+                StartTime = DateTimeOffset.UtcNow
+            };
         });
+        if (isNew)
+            CallFlowLog.NewCall(_logger, callId, serverId, callerChannel);
+        return call;
     }
 
     private static void AddEvent(CallFlow call, CallFlowEventType type, string? source, string? target, string? detail)
@@ -127,6 +154,8 @@ public sealed class CallFlowTracker
         if (cause.HasValue)
             call.HangupCause = cause.Value;
 
+        CallFlowLog.Completed(_logger, call.CallId, call.Duration.TotalSeconds, cause);
+
         _completedOrder.Enqueue(call.CallId);
         EvictStaleCompleted();
     }
@@ -141,6 +170,7 @@ public sealed class CallFlowTracker
                 && old.EndTime < cutoff)
             {
                 _calls.TryRemove(oldId, out _);
+                CallFlowLog.Evicted(_logger, oldId);
             }
         }
     }
@@ -245,7 +275,7 @@ public sealed class CallFlowTracker
             var callId = ResolveCallId(nce);
             if (string.IsNullOrEmpty(callId)) return;
 
-            var call = tracker.GetOrCreateCall(callId, serverId);
+            var call = tracker.GetOrCreateCall(callId, serverId, nce.Channel);
             var channel = nce.Channel ?? "";
             var uniqueId = nce.UniqueId ?? "";
 

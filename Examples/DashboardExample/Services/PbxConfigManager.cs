@@ -6,16 +6,16 @@ namespace DashboardExample.Services;
 
 internal static partial class PbxConfigLog
 {
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to create section {Section} in {Filename} on {ServerId}")]
-    public static partial void CreateSectionFailed(ILogger logger, Exception exception, string section, string filename, string serverId);
+    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFIG_AMI] Create failed: server={ServerId} filename={Filename} section={Section}")]
+    public static partial void CreateSectionFailed(ILogger logger, Exception exception, string serverId, string filename, string section);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to update section {Section} in {Filename} on {ServerId}")]
-    public static partial void UpdateSectionFailed(ILogger logger, Exception exception, string section, string filename, string serverId);
+    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFIG_AMI] Update failed: server={ServerId} filename={Filename} section={Section}")]
+    public static partial void UpdateSectionFailed(ILogger logger, Exception exception, string serverId, string filename, string section);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to delete section {Section} in {Filename} on {ServerId}")]
-    public static partial void DeleteSectionFailed(ILogger logger, Exception exception, string section, string filename, string serverId);
+    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFIG_AMI] Delete failed: server={ServerId} filename={Filename} section={Section}")]
+    public static partial void DeleteSectionFailed(ILogger logger, Exception exception, string serverId, string filename, string section);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to execute command on {ServerId}: {Command}")]
+    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFIG_AMI] Command failed: server={ServerId} command={Command}")]
     public static partial void ExecuteCommandFailed(ILogger logger, Exception exception, string serverId, string command);
 }
 
@@ -86,7 +86,7 @@ public sealed class PbxConfigManager : IConfigProvider
         }
         catch (Exception ex)
         {
-            PbxConfigLog.CreateSectionFailed(_logger, ex, section, filename, serverId);
+            PbxConfigLog.CreateSectionFailed(_logger, ex, serverId, filename, section);
             return false;
         }
     }
@@ -119,7 +119,7 @@ public sealed class PbxConfigManager : IConfigProvider
         }
         catch (Exception ex)
         {
-            PbxConfigLog.UpdateSectionFailed(_logger, ex, section, filename, serverId);
+            PbxConfigLog.UpdateSectionFailed(_logger, ex, serverId, filename, section);
             return false;
         }
     }
@@ -143,7 +143,7 @@ public sealed class PbxConfigManager : IConfigProvider
         }
         catch (Exception ex)
         {
-            PbxConfigLog.DeleteSectionFailed(_logger, ex, section, filename, serverId);
+            PbxConfigLog.DeleteSectionFailed(_logger, ex, serverId, filename, section);
             return false;
         }
     }
