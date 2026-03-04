@@ -3,6 +3,15 @@ using Microsoft.Extensions.Logging;
 
 namespace Asterisk.Sdk.Live.MeetMe;
 
+internal static partial class MeetMeManagerLog
+{
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CONFERENCE] User joined: room={RoomNumber} channel={Channel} user_num={UserNum}")]
+    public static partial void UserJoined(ILogger logger, string roomNumber, string channel, int userNum);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CONFERENCE] User left: room={RoomNumber} channel={Channel} user_num={UserNum}")]
+    public static partial void UserLeft(ILogger logger, string roomNumber, string channel, int userNum);
+}
+
 /// <summary>
 /// Tracks MeetMe/ConfBridge conference rooms in real-time.
 /// </summary>
@@ -25,6 +34,7 @@ public sealed class MeetMeManager
         var room = _rooms.GetOrAdd(roomNumber, _ => new MeetMeRoom { RoomNumber = roomNumber });
         var user = new MeetMeUser { UserNum = userNum, Channel = channel, State = MeetMeUserState.Joined };
         room.Users[userNum] = user;
+        MeetMeManagerLog.UserJoined(_logger, roomNumber, channel, userNum);
         UserJoined?.Invoke(room, user);
     }
 
@@ -33,6 +43,7 @@ public sealed class MeetMeManager
         if (_rooms.TryGetValue(roomNumber, out var room) && room.Users.TryRemove(userNum, out var user))
         {
             user.State = MeetMeUserState.Left;
+            MeetMeManagerLog.UserLeft(_logger, roomNumber, user.Channel, userNum);
             UserLeft?.Invoke(room, user);
             if (room.Users.IsEmpty)
             {

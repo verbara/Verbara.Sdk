@@ -3,6 +3,30 @@ using Microsoft.Extensions.Logging;
 
 namespace Asterisk.Sdk.Live.Queues;
 
+internal static partial class QueueManagerLog
+{
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[QUEUE] Params: queue={QueueName} strategy={Strategy} calls={Calls} completed={Completed} abandoned={Abandoned}")]
+    public static partial void Params(ILogger logger, string queueName, string? strategy, int calls, int completed, int abandoned);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "[QUEUE] Member added: queue={QueueName} interface={Interface} penalty={Penalty}")]
+    public static partial void MemberAdded(ILogger logger, string queueName, string @interface, int penalty);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "[QUEUE] Member removed: queue={QueueName} interface={Interface}")]
+    public static partial void MemberRemoved(ILogger logger, string queueName, string @interface);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[QUEUE] Member paused: queue={QueueName} interface={Interface} paused={Paused} reason={Reason}")]
+    public static partial void MemberPaused(ILogger logger, string queueName, string @interface, bool paused, string? reason);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[QUEUE] Member status: queue={QueueName} interface={Interface} status={Status}")]
+    public static partial void MemberStatus(ILogger logger, string queueName, string @interface, int status);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[QUEUE] Caller joined: queue={QueueName} channel={Channel} position={Position}")]
+    public static partial void CallerJoined(ILogger logger, string queueName, string channel, int position);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[QUEUE] Caller left: queue={QueueName} channel={Channel}")]
+    public static partial void CallerLeft(ILogger logger, string queueName, string channel);
+}
+
 /// <summary>
 /// Tracks all Asterisk queues, members and callers in real-time.
 /// All collections use ConcurrentDictionary for thread-safe concurrent access.
@@ -64,6 +88,7 @@ public sealed class QueueManager
             queue.Completed = completed;
             queue.Abandoned = abandoned;
         }
+        QueueManagerLog.Params(_logger, queueName, strategy, calls, completed, abandoned);
         QueueUpdated?.Invoke(queue);
     }
 
@@ -81,6 +106,7 @@ public sealed class QueueManager
         };
         queue.Members[iface] = member;
         _queuesByMember.GetOrAdd(iface, _ => new()).TryAdd(queueName, 0);
+        QueueManagerLog.MemberAdded(_logger, queueName, iface, penalty);
         MemberAdded?.Invoke(queueName, member);
     }
 
@@ -92,6 +118,7 @@ public sealed class QueueManager
         {
             if (_queuesByMember.TryGetValue(iface, out var queues))
                 queues.TryRemove(queueName, out _);
+            QueueManagerLog.MemberRemoved(_logger, queueName, iface);
             MemberRemoved?.Invoke(queueName, member);
         }
     }
@@ -104,6 +131,7 @@ public sealed class QueueManager
         {
             member.Paused = paused;
             member.PausedReason = reason;
+            QueueManagerLog.MemberPaused(_logger, queueName, iface, paused, reason);
         }
     }
 
@@ -114,6 +142,7 @@ public sealed class QueueManager
             && queue.Members.TryGetValue(iface, out var member))
         {
             member.Status = (QueueMemberState)status;
+            QueueManagerLog.MemberStatus(_logger, queueName, iface, status);
             MemberStatusChanged?.Invoke(queueName, member);
         }
     }
@@ -130,6 +159,7 @@ public sealed class QueueManager
             JoinedAt = DateTimeOffset.UtcNow
         };
         queue.Entries[channel] = entry;
+        QueueManagerLog.CallerJoined(_logger, queueName, channel, position);
         CallerJoined?.Invoke(queueName, entry);
     }
 
@@ -139,6 +169,7 @@ public sealed class QueueManager
         if (_queues.TryGetValue(queueName, out var queue)
             && queue.Entries.TryRemove(channel, out var entry))
         {
+            QueueManagerLog.CallerLeft(_logger, queueName, channel);
             CallerLeft?.Invoke(queueName, entry);
         }
     }
