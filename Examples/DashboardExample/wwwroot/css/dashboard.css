@@ -1619,12 +1619,32 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #080a0e;
+    background: #060810;
+    background-image:
+        radial-gradient(ellipse 120% 80% at 50% 40%, rgba(34, 211, 238, 0.06) 0%, transparent 60%),
+        radial-gradient(ellipse 80% 60% at 20% 80%, rgba(96, 165, 250, 0.04) 0%, transparent 50%),
+        radial-gradient(ellipse 60% 50% at 85% 20%, rgba(52, 211, 153, 0.03) 0%, transparent 50%);
     position: relative;
     overflow: hidden;
 }
 
-/* Animated horizontal signal lines */
+/* CRT scanline overlay */
+.login-scene::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.03) 2px,
+        rgba(0, 0, 0, 0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* Animated horizontal signal lines — much more visible */
 .login-bg-signals {
     position: absolute;
     inset: 0;
@@ -1636,66 +1656,90 @@ body {
     position: absolute;
     left: 0;
     right: 0;
-    height: 1px;
+    height: 2px;
     opacity: 0;
-    animation: signalSweep 8s ease-in-out infinite;
+    animation: signalSweep 6s ease-in-out infinite;
+}
+
+.signal-line::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 0;
+    right: 0;
+    height: 18px;
+    opacity: 0.15;
+    filter: blur(8px);
+    animation: signalPulse 6s linear infinite;
 }
 
 .signal-line::after {
     content: '';
     position: absolute;
     top: 0;
-    height: 1px;
-    width: 120px;
-    animation: signalPulse 8s ease-in-out infinite;
+    height: 2px;
+    width: 200px;
+    filter: blur(0.5px);
+    animation: signalPulse 6s linear infinite;
 }
 
-.signal-line-1 { top: 18%; animation-delay: 0s; }
-.signal-line-1::after { background: linear-gradient(90deg, transparent, var(--accent), transparent); animation-delay: 0s; }
+.signal-line-1 { top: 15%; animation-delay: 0s; }
+.signal-line-1::after { background: linear-gradient(90deg, transparent, var(--accent), var(--accent), transparent); animation-delay: 0s; width: 250px; }
+.signal-line-1::before { background: linear-gradient(90deg, transparent, var(--accent), transparent); animation-delay: 0s; }
 
-.signal-line-2 { top: 35%; animation-delay: 1.6s; }
-.signal-line-2::after { background: linear-gradient(90deg, transparent, var(--color-ringing), transparent); animation-delay: 1.6s; }
+.signal-line-2 { top: 32%; animation-delay: 1.2s; }
+.signal-line-2::after { background: linear-gradient(90deg, transparent, var(--color-ringing), var(--color-ringing), transparent); animation-delay: 1.2s; width: 180px; }
+.signal-line-2::before { background: linear-gradient(90deg, transparent, var(--color-ringing), transparent); animation-delay: 1.2s; }
 
-.signal-line-3 { top: 55%; animation-delay: 3.2s; }
-.signal-line-3::after { background: linear-gradient(90deg, transparent, var(--accent), transparent); animation-delay: 3.2s; width: 80px; }
+.signal-line-3 { top: 52%; animation-delay: 2.8s; }
+.signal-line-3::after { background: linear-gradient(90deg, transparent, var(--accent), transparent); animation-delay: 2.8s; width: 140px; }
+.signal-line-3::before { background: linear-gradient(90deg, transparent, var(--accent), transparent); animation-delay: 2.8s; }
 
-.signal-line-4 { top: 72%; animation-delay: 4.8s; }
-.signal-line-4::after { background: linear-gradient(90deg, transparent, var(--color-available), transparent); animation-delay: 4.8s; width: 160px; }
+.signal-line-4 { top: 70%; animation-delay: 4s; }
+.signal-line-4::after { background: linear-gradient(90deg, transparent, var(--color-available), var(--color-available), transparent); animation-delay: 4s; width: 220px; }
+.signal-line-4::before { background: linear-gradient(90deg, transparent, var(--color-available), transparent); animation-delay: 4s; }
 
-.signal-line-5 { top: 88%; animation-delay: 6.4s; }
-.signal-line-5::after { background: linear-gradient(90deg, transparent, var(--color-ringing), transparent); animation-delay: 6.4s; width: 60px; }
+.signal-line-5 { top: 86%; animation-delay: 5.2s; }
+.signal-line-5::after { background: linear-gradient(90deg, transparent, #a78bfa, transparent); animation-delay: 5.2s; width: 160px; }
+.signal-line-5::before { background: linear-gradient(90deg, transparent, #a78bfa, transparent); animation-delay: 5.2s; }
 
 @keyframes signalSweep {
     0%, 100% { opacity: 0; }
     5% { opacity: 1; }
-    30% { opacity: 0.6; }
-    50% { opacity: 0; }
+    40% { opacity: 0.7; }
+    60% { opacity: 0; }
 }
 
 @keyframes signalPulse {
-    0% { left: -120px; }
-    100% { left: 100%; }
+    0% { left: -250px; }
+    100% { left: 110%; }
 }
 
-/* Perspective grid floor */
+/* Perspective grid floor — brighter, more visible */
 .login-bg-grid {
     position: absolute;
     inset: 0;
     background-image:
-        linear-gradient(rgba(34, 211, 238, 0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(34, 211, 238, 0.025) 1px, transparent 1px);
-    background-size: 48px 48px;
-    mask-image: radial-gradient(ellipse 70% 50% at 50% 50%, black 20%, transparent 70%);
-    -webkit-mask-image: radial-gradient(ellipse 70% 50% at 50% 50%, black 20%, transparent 70%);
+        linear-gradient(rgba(34, 211, 238, 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(34, 211, 238, 0.06) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(ellipse 80% 70% at 50% 50%, black 10%, transparent 60%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 50%, black 10%, transparent 60%);
     pointer-events: none;
     z-index: 0;
+    animation: gridPulse 4s ease-in-out infinite alternate;
+}
+
+@keyframes gridPulse {
+    0% { opacity: 0.5; }
+    100% { opacity: 1; }
 }
 
 /* Edge vignette */
 .login-bg-vignette {
     position: absolute;
     inset: 0;
-    background: radial-gradient(ellipse at center, transparent 30%, #080a0e 85%);
+    background: radial-gradient(ellipse at center, transparent 20%, rgba(6, 8, 16, 0.6) 60%, #060810 90%);
     pointer-events: none;
     z-index: 1;
 }
@@ -1703,17 +1747,17 @@ body {
 /* Content layer */
 .login-scene-content {
     position: relative;
-    z-index: 2;
+    z-index: 5;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2rem;
-    animation: terminalBoot 0.6s ease-out;
+    gap: 2.5rem;
+    animation: terminalBoot 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes terminalBoot {
-    0% { opacity: 0; transform: scale(0.96) translateY(12px); filter: blur(4px); }
-    40% { opacity: 1; filter: blur(0px); }
+    0% { opacity: 0; transform: scale(0.92) translateY(20px); filter: blur(6px); }
+    50% { opacity: 1; filter: blur(0px); }
     100% { transform: scale(1) translateY(0); }
 }
 
@@ -1721,30 +1765,32 @@ body {
 .login-brand {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.75rem;
     animation: brandGlow 3s ease-in-out infinite alternate;
 }
 
 @keyframes brandGlow {
-    0% { filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.2)); }
-    100% { filter: drop-shadow(0 0 16px rgba(34, 211, 238, 0.35)); }
+    0% { filter: drop-shadow(0 0 12px rgba(34, 211, 238, 0.3)); }
+    100% { filter: drop-shadow(0 0 24px rgba(34, 211, 238, 0.5)); }
 }
 
 .login-brand-icon {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 1.8rem;
+    font-size: 2.4rem;
     font-weight: 700;
     color: var(--accent);
     line-height: 1;
+    text-shadow: 0 0 20px rgba(34, 211, 238, 0.5), 0 0 40px rgba(34, 211, 238, 0.2);
 }
 
 .login-brand-text {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     font-weight: 700;
-    color: var(--text-secondary);
-    letter-spacing: 0.2em;
+    color: var(--text);
+    letter-spacing: 0.25em;
     text-transform: uppercase;
+    text-shadow: 0 0 10px rgba(34, 211, 238, 0.15);
 }
 
 /* ================================================================
@@ -1753,70 +1799,86 @@ body {
 
 .access-popup {
     width: 100%;
-    max-width: 400px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
+    max-width: 420px;
+    background: linear-gradient(180deg, rgba(24, 27, 34, 0.95) 0%, rgba(17, 19, 24, 0.98) 100%);
+    border: 1px solid rgba(34, 211, 238, 0.15);
     border-radius: var(--radius-lg);
     overflow: hidden;
     box-shadow:
-        0 0 0 1px rgba(34, 211, 238, 0.06),
-        0 4px 30px rgba(0,0,0,.5),
-        0 0 80px rgba(34, 211, 238, 0.04);
+        0 0 0 1px rgba(34, 211, 238, 0.08),
+        0 8px 40px rgba(0, 0, 0, 0.6),
+        0 0 100px rgba(34, 211, 238, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
 }
 
 /* Top accent bar — colored strip like a system dialog */
 .access-popup-bar {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.55rem 1rem;
-    background: var(--bg-deep);
-    border-bottom: 1px solid var(--border);
+    gap: 0.6rem;
+    padding: 0.65rem 1.2rem;
+    background: linear-gradient(90deg, rgba(34, 211, 238, 0.08) 0%, transparent 50%, rgba(34, 211, 238, 0.04) 100%);
+    border-bottom: 1px solid rgba(34, 211, 238, 0.1);
+    position: relative;
+}
+
+.access-popup-bar::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 60px;
+    height: 1px;
+    background: linear-gradient(90deg, var(--accent), transparent);
 }
 
 .access-popup-dot {
-    width: 7px;
-    height: 7px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: var(--accent);
-    box-shadow: 0 0 8px var(--accent);
+    box-shadow: 0 0 10px var(--accent), 0 0 20px rgba(34, 211, 238, 0.3);
     animation: dotBlink 2s ease-in-out infinite;
 }
 
 @keyframes dotBlink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+    0%, 100% { opacity: 1; box-shadow: 0 0 10px var(--accent), 0 0 20px rgba(34, 211, 238, 0.3); }
+    50% { opacity: 0.4; box-shadow: 0 0 4px var(--accent); }
 }
 
 .access-popup-title {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.68rem;
+    font-size: 0.72rem;
     font-weight: 700;
-    color: var(--text);
-    letter-spacing: 0.06em;
+    color: var(--accent);
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     flex: 1;
+    text-shadow: 0 0 8px rgba(34, 211, 238, 0.2);
 }
 
 .access-popup-id {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.58rem;
+    font-size: 0.6rem;
     font-weight: 500;
-    color: var(--text-dim);
+    color: var(--text-muted);
     letter-spacing: 0.04em;
+    opacity: 0.7;
 }
 
 /* Body */
 .access-popup-body {
-    padding: 1.5rem 1.5rem 1.25rem;
+    padding: 1.75rem 1.75rem 1.5rem;
 }
 
 /* Terminal prompt line */
 .access-popup-prompt {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    margin-bottom: 1.5rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 1.75rem;
     line-height: 1.6;
     display: flex;
     align-items: flex-start;
@@ -1828,6 +1890,7 @@ body {
     font-weight: 700;
     flex-shrink: 0;
     animation: caretBlink 1s step-end infinite;
+    text-shadow: 0 0 6px rgba(34, 211, 238, 0.4);
 }
 
 @keyframes caretBlink {
@@ -1840,15 +1903,16 @@ body {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    background: rgba(248, 113, 113, 0.08);
+    background: rgba(248, 113, 113, 0.1);
     color: var(--color-incall);
-    border: 1px solid rgba(248, 113, 113, 0.15);
+    border: 1px solid rgba(248, 113, 113, 0.2);
     border-radius: var(--radius);
-    padding: 0.55rem 0.75rem;
+    padding: 0.6rem 0.85rem;
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.72rem;
     margin-bottom: 1.25rem;
     animation: errorShake 0.3s ease-out;
+    box-shadow: 0 0 20px rgba(248, 113, 113, 0.06);
 }
 
 @keyframes errorShake {
@@ -1866,7 +1930,7 @@ body {
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    background: rgba(248, 113, 113, 0.15);
+    background: rgba(248, 113, 113, 0.2);
     font-weight: 700;
     font-size: 0.65rem;
     flex-shrink: 0;
@@ -1874,54 +1938,60 @@ body {
 
 /* Form fields */
 .access-field {
-    margin-bottom: 1rem;
+    margin-bottom: 1.1rem;
 }
 
 .access-label {
     display: block;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.6rem;
+    font-size: 0.62rem;
     font-weight: 600;
-    color: var(--text-dim);
+    color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 0.35rem;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.4rem;
 }
 
 .access-input-wrap {
     display: flex;
     align-items: center;
-    background: var(--bg-input);
-    border: 1px solid var(--border);
+    background: rgba(10, 12, 18, 0.8);
+    border: 1px solid rgba(42, 47, 58, 0.8);
     border-radius: var(--radius);
     overflow: hidden;
-    transition: all 0.15s;
+    transition: all 0.2s;
 }
 
 .access-input-wrap:focus-within {
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px var(--accent-dim), 0 0 20px rgba(34, 211, 238, 0.06);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.1), 0 0 30px rgba(34, 211, 238, 0.08);
+    background: rgba(10, 12, 18, 1);
 }
 
 .access-input-prefix {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.68rem;
-    font-weight: 500;
-    color: var(--text-dim);
-    padding: 0 0 0 0.65rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--accent);
+    padding: 0 0 0 0.75rem;
     flex-shrink: 0;
     user-select: none;
+    opacity: 0.6;
+}
+
+.access-input-wrap:focus-within .access-input-prefix {
+    opacity: 1;
 }
 
 .access-input {
     flex: 1;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.82rem;
+    font-size: 0.85rem;
     font-weight: 500;
     color: var(--text);
     background: transparent;
     border: none;
-    padding: 0.55rem 0.65rem;
+    padding: 0.65rem 0.75rem;
     outline: none;
 }
 
@@ -1930,22 +2000,23 @@ body {
     font-weight: 400;
 }
 
-/* Submit button */
+/* Submit button — much more vivid */
 .access-submit {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
+    gap: 0.6rem;
     width: 100%;
-    margin-top: 1.25rem;
-    padding: 0.6rem 1rem;
-    background: linear-gradient(135deg, rgba(34, 211, 238, 0.12) 0%, rgba(96, 165, 250, 0.08) 100%);
-    border: 1px solid rgba(34, 211, 238, 0.25);
+    margin-top: 1.5rem;
+    padding: 0.75rem 1.2rem;
+    background: linear-gradient(135deg, rgba(34, 211, 238, 0.2) 0%, rgba(34, 211, 238, 0.08) 100%);
+    border: 1px solid rgba(34, 211, 238, 0.35);
     border-radius: var(--radius);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.25s;
     position: relative;
     overflow: hidden;
+    box-shadow: 0 0 20px rgba(34, 211, 238, 0.06);
 }
 
 .access-submit::before {
@@ -1955,14 +2026,15 @@ body {
     left: -100%;
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.08), transparent);
-    transition: left 0.4s ease;
+    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.12), transparent);
+    transition: left 0.5s ease;
 }
 
 .access-submit:hover {
-    background: linear-gradient(135deg, rgba(34, 211, 238, 0.2) 0%, rgba(96, 165, 250, 0.12) 100%);
+    background: linear-gradient(135deg, rgba(34, 211, 238, 0.3) 0%, rgba(34, 211, 238, 0.15) 100%);
     border-color: var(--accent);
-    box-shadow: 0 0 30px rgba(34, 211, 238, 0.1);
+    box-shadow: 0 0 40px rgba(34, 211, 238, 0.15), 0 0 80px rgba(34, 211, 238, 0.06);
+    transform: translateY(-1px);
 }
 
 .access-submit:hover::before {
@@ -1970,26 +2042,28 @@ body {
 }
 
 .access-submit:active {
-    transform: scale(0.98);
+    transform: scale(0.98) translateY(0);
 }
 
 .access-submit-text {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
+    font-size: 0.78rem;
     font-weight: 700;
     color: var(--accent);
-    letter-spacing: 0.08em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
+    text-shadow: 0 0 8px rgba(34, 211, 238, 0.3);
 }
 
 .access-submit-arrow {
-    font-size: 1rem;
+    font-size: 1.1rem;
     color: var(--accent);
     transition: transform 0.2s;
+    text-shadow: 0 0 8px rgba(34, 211, 238, 0.3);
 }
 
 .access-submit:hover .access-submit-arrow {
-    transform: translateX(3px);
+    transform: translateX(4px);
 }
 
 /* Footer — security info strip */
@@ -1997,14 +2071,18 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 1.25rem;
-    padding: 0.5rem 1rem;
-    background: var(--bg-deep);
-    border-top: 1px solid var(--border);
+    gap: 1.5rem;
+    padding: 0.6rem 1.2rem;
+    background: rgba(6, 8, 16, 0.5);
+    border-top: 1px solid rgba(34, 211, 238, 0.06);
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.55rem;
+    font-size: 0.58rem;
     color: var(--text-dim);
     letter-spacing: 0.04em;
+}
+
+.access-popup-footer span:first-child {
+    color: var(--color-available);
 }
 
 /* ================================================================
