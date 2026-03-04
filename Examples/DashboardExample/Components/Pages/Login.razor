@@ -8,28 +8,54 @@
 @inject NavigationManager Navigation
 @inject IHttpContextAccessor HttpContextAccessor
 
-<div class="login-card">
-    <div class="login-header">
-        <h2>Asterisk Dashboard</h2>
-        <p>Sign in to continue</p>
+<div class="access-popup">
+    <div class="access-popup-bar">
+        <span class="access-popup-dot"></span>
+        <span class="access-popup-title">Access Required</span>
+        <span class="access-popup-id">SEC-01</span>
     </div>
 
-    @if (!string.IsNullOrEmpty(_error))
-    {
-        <div class="login-error">@_error</div>
-    }
+    <div class="access-popup-body">
+        <div class="access-popup-prompt">
+            <span class="access-prompt-caret">&gt;</span>
+            Authenticate to access the monitoring console
+        </div>
 
-    <EditForm Model="_model" OnValidSubmit="HandleLogin" FormName="login">
-        <div class="form-field" style="margin-bottom: 1rem;">
-            <label class="form-label">Username</label>
-            <InputText @bind-Value="_model.Username" class="input" style="width: 100%;" placeholder="admin" />
-        </div>
-        <div class="form-field" style="margin-bottom: 1.5rem;">
-            <label class="form-label">Password</label>
-            <InputText @bind-Value="_model.Password" type="password" class="input" style="width: 100%;" placeholder="••••••••" />
-        </div>
-        <button type="submit" class="btn btn-blue" style="width: 100%;">Sign In</button>
-    </EditForm>
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="login-error">
+                <span class="login-error-icon">!</span>
+                @_error
+            </div>
+        }
+
+        <EditForm Model="_model" OnValidSubmit="HandleLogin" FormName="login">
+            <div class="access-field">
+                <label class="access-label">Operator</label>
+                <div class="access-input-wrap">
+                    <span class="access-input-prefix">usr://</span>
+                    <InputText @bind-Value="_model.Username" class="access-input" placeholder="admin" />
+                </div>
+            </div>
+            <div class="access-field">
+                <label class="access-label">Passphrase</label>
+                <div class="access-input-wrap">
+                    <span class="access-input-prefix">key://</span>
+                    <InputText @bind-Value="_model.Password" type="password" class="access-input" placeholder="••••••••" />
+                </div>
+            </div>
+            <button type="submit" class="access-submit">
+                <span class="access-submit-text">Authorize</span>
+                <span class="access-submit-arrow">&rarr;</span>
+            </button>
+        </EditForm>
+    </div>
+
+    <div class="access-popup-footer">
+        <span>TLS 1.3</span>
+        <span>Session: ephemeral</span>
+        <span>v0.1.0-beta</span>
+    </div>
 </div>
 
 @code {
@@ -50,7 +76,7 @@
 
         if (_model.Username != expectedUsername || _model.Password != expectedPassword)
         {
-            _error = "Invalid username or password.";
+            _error = "Invalid credentials. Access denied.";
             return;
         }
 
