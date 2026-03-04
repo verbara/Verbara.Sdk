@@ -1,6 +1,7 @@
 @page "/calls"
 @using DashboardExample.Services
 @inject CallFlowTracker Tracker
+@inject SelectedServerService ServerSvc
 @inject NavigationManager Nav
 @implements IDisposable
 
@@ -117,7 +118,6 @@ else
                     {
                         <span class="badge badge-muted">@call.QueueName</span>
                     }
-                    <span class="badge badge-muted">@call.ServerId</span>
                     @if (call.HangupCause.HasValue)
                     {
                         <span class="badge badge-muted">@call.HangupCause</span>
@@ -143,30 +143,32 @@ else
             null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
     }
 
+    private IEnumerable<CallFlow> FilterByServer(IEnumerable<CallFlow> calls) =>
+        calls.Where(c => c.ServerId == ServerSvc.SelectedServerId);
+
     private void RefreshCalls()
     {
-        _recentCompleted = Tracker.GetRecentCompleted(100).Count();
+        _recentCompleted = FilterByServer(Tracker.GetRecentCompleted(100)).Count();
 
-        // Search mode: search across all calls (active + completed)
         if (!string.IsNullOrWhiteSpace(_searchQuery))
         {
-            _calls = Tracker.Search(_searchQuery, 100).ToList();
+            _calls = FilterByServer(Tracker.Search(_searchQuery, 100)).ToList();
             return;
         }
 
         if (_filter.HasValue)
         {
             if (_filter == CallFlowState.Completed)
-                _calls = Tracker.GetRecentCompleted(50).ToList();
+                _calls = FilterByServer(Tracker.GetRecentCompleted(50)).ToList();
             else
-                _calls = Tracker.ActiveCalls
+                _calls = FilterByServer(Tracker.ActiveCalls)
                     .Where(c => c.State == _filter.Value)
                     .OrderByDescending(c => c.StartTime)
                     .ToList();
         }
         else
         {
-            _calls = Tracker.ActiveCalls
+            _calls = FilterByServer(Tracker.ActiveCalls)
                 .OrderByDescending(c => c.StartTime)
                 .ToList();
         }
@@ -175,7 +177,7 @@ else
     private int CountByState(CallFlowState state) =>
         state == CallFlowState.Completed
             ? _recentCompleted
-            : Tracker.ActiveCalls.Count(c => c.State == state);
+            : FilterByServer(Tracker.ActiveCalls).Count(c => c.State == state);
 
     private void NavigateToDetail(string callId) =>
         Nav.NavigateTo($"/calls/{Uri.EscapeDataString(callId)}");
@@ -202,7 +204,6 @@ else
     private static string ShortChannel(string? channel)
     {
         if (channel is null) return "";
-        // PJSIP/2001-00000042 -> PJSIP/2001
         var dash = channel.LastIndexOf('-');
         return dash > 0 ? channel[..dash] : channel;
     }

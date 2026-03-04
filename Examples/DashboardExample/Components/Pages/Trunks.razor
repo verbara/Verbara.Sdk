@@ -1,8 +1,7 @@
 @page "/trunks"
 @using DashboardExample.Services
 @using DashboardExample.Models
-@using DashboardExample.Components.Shared
-@inject AsteriskMonitorService Monitor
+@inject SelectedServerService ServerSvc
 @inject TrunkService TrunkSvc
 @inject IConfigProviderResolver ConfigResolver
 @inject NavigationManager Nav
@@ -11,9 +10,8 @@
 <PageTitle>Trunks — Asterisk Dashboard</PageTitle>
 
 <h2>Trunks</h2>
-<ServerSelector @bind-SelectedServerId="_selectedServer" />
 @{
-    var activeServer = _selectedServer ?? GetFirstServerId();
+    var activeServer = ServerSvc.SelectedServerId;
     if (activeServer is not null)
     {
         var mode = ConfigResolver.GetConfigMode(activeServer);
@@ -105,7 +103,6 @@
 
 @code {
     private Timer? _timer;
-    private string? _selectedServer;
     private TrunkStatus? _statusFilter;
     private List<TrunkViewModel> _trunks = [];
     private bool _showDeleteConfirm;
@@ -128,7 +125,7 @@
     {
         try
         {
-            var serverId = _selectedServer ?? GetFirstServerId();
+            var serverId = ServerSvc.SelectedServerId;
             if (serverId is null) return;
             _trunks = await TrunkSvc.GetTrunksAsync(serverId);
         }
@@ -138,17 +135,14 @@
         }
     }
 
-    private string? GetFirstServerId() =>
-        Monitor.Servers.Select(s => s.Key).FirstOrDefault();
-
     private void NavigateNew() =>
-        Nav.NavigateTo($"/trunks/new?server={_selectedServer ?? GetFirstServerId()}");
+        Nav.NavigateTo($"/trunks/new?server={ServerSvc.SelectedServerId}");
 
     private void NavigateDetail(TrunkViewModel trunk) =>
-        Nav.NavigateTo($"/trunks/{_selectedServer ?? GetFirstServerId()}/{trunk.Name}?tech={trunk.Technology}");
+        Nav.NavigateTo($"/trunks/{ServerSvc.SelectedServerId}/{trunk.Name}?tech={trunk.Technology}");
 
     private void NavigateEdit(TrunkViewModel trunk) =>
-        Nav.NavigateTo($"/trunks/edit/{_selectedServer ?? GetFirstServerId()}/{trunk.Name}?tech={trunk.Technology}");
+        Nav.NavigateTo($"/trunks/edit/{ServerSvc.SelectedServerId}/{trunk.Name}?tech={trunk.Technology}");
 
     private void ConfirmDelete(TrunkViewModel trunk)
     {
@@ -166,7 +160,7 @@
     {
         if (_deletingTrunk is null) return;
 
-        var serverId = _selectedServer ?? GetFirstServerId();
+        var serverId = ServerSvc.SelectedServerId;
         if (serverId is null) return;
 
         var success = await TrunkSvc.DeleteTrunkAsync(serverId, _deletingTrunk.Name, _deletingTrunk.Technology);

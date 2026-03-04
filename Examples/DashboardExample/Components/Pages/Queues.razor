@@ -1,16 +1,14 @@
 @page "/queues"
 @using DashboardExample.Services
-@using DashboardExample.Components.Shared
-@inject AsteriskMonitorService Monitor
+@inject SelectedServerService ServerSvc
 @implements IDisposable
 
 <PageTitle>Queues — Asterisk Dashboard</PageTitle>
 
 <h2>Queues</h2>
-<ServerSelector @bind-SelectedServerId="_selectedServer" />
 
 <div class="card-grid">
-    @foreach (var (serverId, entry) in GetServers())
+    @foreach (var (serverId, entry) in ServerSvc.GetServers())
     {
         foreach (var queue in entry.Server.Queues.Queues)
         {
@@ -25,7 +23,6 @@
             <a href="/queue/@serverId/@queue.Name" class="queue-card @healthClass">
                 <div class="queue-card-header">
                     <strong>@queue.Name</strong>
-                    <span class="badge badge-muted">@serverId</span>
                 </div>
                 <div class="queue-card-meta">
                     @if (queue.Strategy is not null)
@@ -58,18 +55,12 @@
 
 @code {
     private Timer? _timer;
-    private string? _selectedServer;
 
     protected override void OnInitialized()
     {
         _timer = new Timer(_ => InvokeAsync(StateHasChanged),
             null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
     }
-
-    private IEnumerable<KeyValuePair<string, AsteriskMonitorService.ServerEntry>> GetServers() =>
-        string.IsNullOrEmpty(_selectedServer)
-            ? Monitor.Servers
-            : Monitor.Servers.Where(s => s.Key == _selectedServer);
 
     public void Dispose() => _timer?.Dispose();
 }

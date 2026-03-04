@@ -1,13 +1,12 @@
 @page "/campaign-metrics"
 @using DashboardExample.Services
-@using DashboardExample.Components.Shared
 @inject CallFlowTracker CallTracker
+@inject SelectedServerService ServerSvc
 @implements IDisposable
 
 <PageTitle>Campaign Metrics — Asterisk Dashboard</PageTitle>
 
 <h2>Campaign Metrics</h2>
-<ServerSelector @bind-SelectedServerId="_selectedServer" />
 
 <div class="kpi-grid">
     <div class="kpi-card kpi-blue">
@@ -122,7 +121,6 @@
 
 @code {
     private Timer? _timer;
-    private string? _selectedServer;
     private bool _showAdvanced;
 
     private int _originated, _answered, _unanswered, _bridged, _activeNow, _completed;
@@ -141,11 +139,9 @@
 
     private void Refresh()
     {
-        var allCalls = CallTracker.AllCalls;
-        if (!string.IsNullOrEmpty(_selectedServer))
-            allCalls = allCalls.Where(c => c.ServerId == _selectedServer);
-
-        var calls = allCalls.ToList();
+        var calls = CallTracker.AllCalls
+            .Where(c => c.ServerId == ServerSvc.SelectedServerId)
+            .ToList();
 
         _originated = calls.Count;
         _answered = calls.Count(WasAnswered);
@@ -184,7 +180,6 @@
 
     private void RefreshAdvanced(List<CallFlow> calls)
     {
-        // State breakdown
         _stateBreakdown = Enum.GetValues<CallFlowState>()
             .Select(s =>
             {
@@ -199,7 +194,6 @@
             .Where(r => r.Count > 0)
             .ToList();
 
-        // Top queues
         _topQueues = calls
             .Where(c => c.QueueName is not null)
             .GroupBy(c => c.QueueName!)
@@ -219,7 +213,6 @@
             .Take(10)
             .ToList();
 
-        // Top agents
         _topAgents = calls
             .Where(c => c.AgentName is not null)
             .GroupBy(c => c.AgentName!)

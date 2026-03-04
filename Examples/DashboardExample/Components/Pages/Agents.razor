@@ -1,8 +1,7 @@
 @page "/agents"
 @using DashboardExample.Services
-@using DashboardExample.Components.Shared
 @using Asterisk.Sdk.Live.Agents
-@inject AsteriskMonitorService Monitor
+@inject SelectedServerService ServerSvc
 @inject CallFlowTracker CallTracker
 @inject NavigationManager Nav
 @implements IDisposable
@@ -10,7 +9,6 @@
 <PageTitle>Agents — Asterisk Dashboard</PageTitle>
 
 <h2>Agents</h2>
-<ServerSelector @bind-SelectedServerId="_selectedServer" />
 
 <div class="kpi-grid kpi-grid-sm">
     <div class="kpi-card kpi-green">
@@ -44,7 +42,7 @@
 </div>
 
 <div class="card-grid">
-    @foreach (var (serverId, entry) in GetServers())
+    @foreach (var (serverId, entry) in ServerSvc.GetServers())
     {
         var agents = _stateFilter.HasValue
             ? entry.Server.Agents.GetAgentsByState(_stateFilter.Value)
@@ -61,7 +59,6 @@
                     {
                         <span> — @agent.Name</span>
                     }
-                    <span class="badge badge-muted">@serverId</span>
                 </div>
                 <div class="agent-card-body">
                     <div>State: @agent.State
@@ -114,7 +111,6 @@
 
 @code {
     private Timer? _timer;
-    private string? _selectedServer;
     private AgentState? _stateFilter;
 
     protected override void OnInitialized()
@@ -123,16 +119,11 @@
             null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
     }
 
-    private IEnumerable<KeyValuePair<string, AsteriskMonitorService.ServerEntry>> GetServers() =>
-        string.IsNullOrEmpty(_selectedServer)
-            ? Monitor.Servers
-            : Monitor.Servers.Where(s => s.Key == _selectedServer);
-
     private int CountByState(AgentState state) =>
-        GetServers().SelectMany(s => s.Value.Server.Agents.GetAgentsByState(state)).Count();
+        ServerSvc.GetServers().SelectMany(s => s.Value.Server.Agents.GetAgentsByState(state)).Count();
 
     private int TotalCallsTaken() =>
-        GetServers().SelectMany(s => s.Value.Server.Agents.Agents)
+        ServerSvc.GetServers().SelectMany(s => s.Value.Server.Agents.Agents)
             .Where(a => a.State != AgentState.LoggedOff)
             .Sum(a => a.CallsTaken);
 
