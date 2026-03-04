@@ -15,11 +15,11 @@ services:
       timeout: 3s
       retries: 10
 
-  asterisk:
+  asterisk-realtime:
     build:
       context: .
       dockerfile: Dockerfile.asterisk-realtime
-    container_name: demo-pbx
+    container_name: demo-pbx-realtime
     ports:
       - "5038:5038"
     volumes:
@@ -27,6 +27,21 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show version"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  asterisk-file:
+    build:
+      context: .
+      dockerfile: Dockerfile.asterisk-file
+    container_name: demo-pbx-file
+    ports:
+      - "5039:5038"
+    volumes:
+      - ./dashboard-config-file:/etc/asterisk
     healthcheck:
       test: ["CMD", "asterisk", "-rx", "core show version"]
       interval: 5s
@@ -41,16 +56,25 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      asterisk:
+      asterisk-realtime:
+        condition: service_healthy
+      asterisk-file:
         condition: service_healthy
     environment:
-      - Asterisk__Servers__0__Id=demo-pbx
-      - Asterisk__Servers__0__Hostname=asterisk
+      - DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE=false
+      - Asterisk__Servers__0__Id=pbx-file
+      - Asterisk__Servers__0__Hostname=asterisk-file
       - Asterisk__Servers__0__Port=5038
       - Asterisk__Servers__0__Username=dashboard
       - Asterisk__Servers__0__Password=dashboard
-      - ConfigProvider__Type=Database
-      - ConfigProvider__ConnectionString=Host=postgres;Database=asterisk;Username=asterisk;Password=asterisk
+      - Asterisk__Servers__0__ConfigMode=File
+      - Asterisk__Servers__1__Id=pbx-realtime
+      - Asterisk__Servers__1__Hostname=asterisk-realtime
+      - Asterisk__Servers__1__Port=5038
+      - Asterisk__Servers__1__Username=dashboard
+      - Asterisk__Servers__1__Password=dashboard
+      - Asterisk__Servers__1__ConfigMode=Realtime
+      - Asterisk__Servers__1__RealtimeConnectionString=Host=postgres;Database=asterisk;Username=asterisk;Password=asterisk
 
 volumes:
   pgdata:
