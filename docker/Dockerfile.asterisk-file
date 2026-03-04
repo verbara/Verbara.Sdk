@@ -2,9 +2,9 @@ FROM andrius/asterisk:20
 
 USER root
 
-# Install ODBC drivers for realtime
+# Install libopus runtime dependency
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends unixodbc odbc-postgresql libopus0 \
+    && apt-get install -y --no-install-recommends libopus0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Digium codec_opus binary for Asterisk 20
@@ -15,6 +15,4 @@ RUN cd /tmp \
     && cp codec_opus-20.0_1.3.0-x86_64/format_ogg_opus.so /usr/lib/asterisk/modules/ \
     && rm -rf codec_opus.tar.gz codec_opus-20.0_1.3.0-x86_64
 
-COPY dashboard-config/odbcinst.ini /etc/odbcinst.ini
-COPY dashboard-config/odbc.ini /etc/odbc.ini
 USER asterisk
