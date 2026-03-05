@@ -1,7 +1,7 @@
 -- Asterisk Realtime schema for PostgreSQL
 -- Compatible with res_config_odbc / Sorcery
 
--- PJSIP Endpoints (full Asterisk 20 schema)
+-- PJSIP Endpoints (full Asterisk 22 schema)
 CREATE TABLE IF NOT EXISTS ps_endpoints (
     id                              VARCHAR(40) NOT NULL PRIMARY KEY,
     transport                       VARCHAR(40),
@@ -308,7 +308,8 @@ CREATE TABLE IF NOT EXISTS queue_members (
     state_interface VARCHAR(128),
     penalty     INTEGER DEFAULT 0,
     paused      INTEGER DEFAULT 0,
-    uniqueid    VARCHAR(40),
+    uniqueid    VARCHAR(40) NOT NULL DEFAULT gen_random_uuid()::VARCHAR(40),
+    reason_paused VARCHAR(80),
     PRIMARY KEY (queue_name, interface)
 );
 CREATE INDEX IF NOT EXISTS idx_queue_members_queue ON queue_members (queue_name);

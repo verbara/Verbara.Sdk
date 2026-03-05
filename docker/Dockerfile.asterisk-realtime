@@ -1,24 +1,16 @@
-FROM andrius/asterisk:20
+FROM andrius/asterisk:22
 
 USER root
 
-# Install ODBC drivers for realtime
+# Install ODBC drivers for realtime, libopus, and codec_opus binary
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates unixodbc odbc-postgresql libopus0 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Digium codec_opus binary for Asterisk 20
-RUN cd /tmp \
-    && curl -fsSL https://downloads.digium.com/pub/telephony/codec_opus/asterisk-20.0/x86-64/codec_opus-20.0_1.3.0-x86_64.tar.gz -o codec_opus.tar.gz \
+    && rm -rf /var/lib/apt/lists/* \
+    && cd /tmp \
+    && curl -fsSL https://downloads.digium.com/pub/telephony/codec_opus/asterisk-22.0/x86-64/codec_opus-22.0_1.3.0-x86_64.tar.gz -o codec_opus.tar.gz \
     && tar xzf codec_opus.tar.gz \
-    && cp codec_opus-20.0_1.3.0-x86_64/codec_opus.so /usr/lib/asterisk/modules/ \
-    && cp codec_opus-20.0_1.3.0-x86_64/format_ogg_opus.so /usr/lib/asterisk/modules/ \
-    && rm -rf codec_opus.tar.gz codec_opus-20.0_1.3.0-x86_64
-
-COPY dashboard-config/odbcinst.ini /etc/odbcinst.ini
-COPY dashboard-config/odbc.ini /etc/odbc.ini
-
-# Overlay custom configs on top of base image defaults
-COPY dashboard-config/ /etc/asterisk/
+    && cp codec_opus-22.0_1.3.0-x86_64/codec_opus.so /usr/lib/asterisk/modules/ \
+    && cp codec_opus-22.0_1.3.0-x86_64/format_ogg_opus.so /usr/lib/asterisk/modules/ \
+    && rm -rf codec_opus.tar.gz codec_opus-22.0_1.3.0-x86_64
 
 USER asterisk
