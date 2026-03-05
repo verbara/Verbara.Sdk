@@ -142,4 +142,83 @@ public sealed class AsteriskServerPoolTests : IAsyncDisposable
 
         _sut.GetServerForAgent("any-agent").Should().BeNull();
     }
+
+    [Fact]
+    public async Task MultiServer_ShouldTrackMultipleServers()
+    {
+        var s1 = await _sut.AddServerAsync("pbx-east", new AmiConnectionOptions
+        {
+            Hostname = "pbx-east.local", Username = "admin", Password = "secret"
+        });
+        var s2 = await _sut.AddServerAsync("pbx-west", new AmiConnectionOptions
+        {
+            Hostname = "pbx-west.local", Username = "admin", Password = "secret"
+        });
+
+        _sut.ServerCount.Should().Be(2);
+        _sut.GetServer("pbx-east").Should().BeSameAs(s1);
+        _sut.GetServer("pbx-west").Should().BeSameAs(s2);
+    }
+
+    [Fact]
+    public async Task Servers_ShouldEnumerateAllServers()
+    {
+        var options = new AmiConnectionOptions { Username = "admin", Password = "secret" };
+        await _sut.AddServerAsync("s1", options);
+        await _sut.AddServerAsync("s2", options);
+        await _sut.AddServerAsync("s3", options);
+
+        var servers = _sut.Servers.ToList();
+
+        servers.Should().HaveCount(3);
+        servers.Select(kvp => kvp.Key).Should().Contain(["s1", "s2", "s3"]);
+    }
+
+    [Fact]
+    public async Task RemoveServerAsync_ShouldBeIdempotent_WhenServerNotFound()
+    {
+        // Removing a non-existent server should not throw
+        await _sut.RemoveServerAsync("nonexistent");
+
+        _sut.ServerCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task AgentRouting_ShouldTrackAgentLogin()
+    {
+        var options = new AmiConnectionOptions { Username = "admin", Password = "secret" };
+        var server = await _sut.AddServerAsync("pbx1", options);
+
+        // Simulate agent login through the AgentManager
+        server.Agents.OnAgentLogin("Agent/1001");
+
+        _sut.GetServerForAgent("Agent/1001").Should().BeSameAs(server);
+    }
+
+    [Fact]
+    public async Task AgentRouting_ShouldRemoveOnLogoff()
+    {
+        var options = new AmiConnectionOptions { Username = "admin", Password = "secret" };
+        var server = await _sut.AddServerAsync("pbx1", options);
+
+        server.Agents.OnAgentLogin("Agent/2001");
+        _sut.GetServerForAgent("Agent/2001").Should().NotBeNull();
+
+        server.Agents.OnAgentLogoff("Agent/2001");
+        _sut.GetServerForAgent("Agent/2001").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AgentRouting_ShouldRouteToCorrectServer()
+    {
+        var options = new AmiConnectionOptions { Username = "admin", Password = "secret" };
+        var east = await _sut.AddServerAsync("east", options);
+        var west = await _sut.AddServerAsync("west", options);
+
+        east.Agents.OnAgentLogin("Agent/1001");
+        west.Agents.OnAgentLogin("Agent/2001");
+
+        _sut.GetServerForAgent("Agent/1001").Should().BeSameAs(east);
+        _sut.GetServerForAgent("Agent/2001").Should().BeSameAs(west);
+    }
 }
