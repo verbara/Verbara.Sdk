@@ -1,3 +1,4 @@
+#pragma warning disable CS0618 // Tests intentionally verify obsolete event types
 using Asterisk.Sdk;
 using Asterisk.Sdk.Attributes;
 using Asterisk.Sdk.Ami.Events;

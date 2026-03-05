@@ -340,6 +340,7 @@ public sealed class AsteriskServer : IAsteriskServer
                     break;
 
                 // MeetMe/ConfBridge events
+#pragma warning disable CS0618 // MeetMe events still received from Asterisk 18-20
                 case MeetMeJoinEvent mmj:
                     server.MeetMe.OnUserJoined(mmj.Meetme ?? "", mmj.Usernum ?? 0, mmj.Channel ?? "");
                     break;
@@ -351,6 +352,7 @@ public sealed class AsteriskServer : IAsteriskServer
                 case MeetMeLeaveEvent mml:
                     server.MeetMe.OnUserLeft(mml.Meetme ?? "", mml.Usernum ?? 0);
                     break;
+#pragma warning restore CS0618
 
                 case ConfbridgeLeaveEvent cbl:
                     server.MeetMe.OnUserLeft(cbl.Conference ?? "", 0);

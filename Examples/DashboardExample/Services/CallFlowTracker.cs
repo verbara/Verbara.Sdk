@@ -1,3 +1,4 @@
+#pragma warning disable CS0618 // Legacy DialEvent still used for Asterisk < 12 backwards compat
 using System.Collections.Concurrent;
 using Asterisk.Sdk;
 using Asterisk.Sdk.Ami.Events;
