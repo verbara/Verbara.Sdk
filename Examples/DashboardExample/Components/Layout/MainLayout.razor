@@ -93,8 +93,16 @@ else
     {
         if (!ServerSvc.HasSelection)
         {
-            Nav.NavigateTo("/select-server", replace: true);
-            return;
+            var servers = Monitor.Servers.ToList();
+            if (servers.Count == 1)
+            {
+                ServerSvc.Select(servers[0].Key);
+            }
+            else
+            {
+                Nav.NavigateTo("/select-server", replace: true);
+                return;
+            }
         }
 
         ServerSvc.OnChanged += OnServerChanged;
