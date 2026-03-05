@@ -67,4 +67,18 @@ namespace Asterisk.Sdk.Ari.Resources;
 [JsonSerializable(typeof(BridgeMergedEvent))]
 [JsonSerializable(typeof(BridgeVideoSourceChangedEvent))]
 [JsonSerializable(typeof(RecordingFailedEvent))]
+// Sprint 3 — Complementary ARI events
+[JsonSerializable(typeof(ChannelCallerIdEvent))]
+[JsonSerializable(typeof(ChannelDialplanEvent))]
+[JsonSerializable(typeof(ChannelUsereventEvent))]
+[JsonSerializable(typeof(DeviceStateChangedEvent))]
+[JsonSerializable(typeof(PlaybackContinuingEvent))]
+[JsonSerializable(typeof(ContactStatusChangeEvent))]
+[JsonSerializable(typeof(PeerStatusChangeEvent))]
+[JsonSerializable(typeof(TextMessageReceivedEvent))]
+// Auxiliary models
+[JsonSerializable(typeof(AriDeviceState))]
+[JsonSerializable(typeof(AriContactInfo))]
+[JsonSerializable(typeof(AriPeer))]
+[JsonSerializable(typeof(AriTextMessage))]
 public sealed partial class AriJsonContext : JsonSerializerContext;

@@ -280,4 +280,132 @@ public class AriClientParseEventTests
         rec.Recording!.Name.Should().Be("rec-fail");
         rec.Recording.State.Should().Be("failed");
     }
+
+    // Sprint 3 — Complementary ARI events and TechCause field
+
+    [Fact]
+    public void ParseEvent_ShouldReturnChannelCallerIdEvent()
+    {
+        const string json = """{"type":"ChannelCallerId","channel":{"id":"ch-1"},"caller_presentation":0,"caller_presentation_txt":"Allowed"}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ChannelCallerIdEvent>();
+        var cid = (ChannelCallerIdEvent)evt!;
+        cid.CallerPresentation.Should().Be(0);
+        cid.CallerPresentationTxt.Should().Be("Allowed");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnChannelDialplanEvent()
+    {
+        const string json = """{"type":"ChannelDialplan","channel":{"id":"ch-1"},"dialplan_app":"Dial","dialplan_app_data":"PJSIP/3000"}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ChannelDialplanEvent>();
+        var dp = (ChannelDialplanEvent)evt!;
+        dp.DialplanApp.Should().Be("Dial");
+        dp.DialplanAppData.Should().Be("PJSIP/3000");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnChannelUsereventEvent()
+    {
+        const string json = """{"type":"ChannelUserevent","eventname":"MyCustomEvent","channel":{"id":"ch-1"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ChannelUsereventEvent>();
+        ((ChannelUsereventEvent)evt!).Eventname.Should().Be("MyCustomEvent");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnDeviceStateChangedEvent()
+    {
+        const string json = """{"type":"DeviceStateChanged","device_state":{"name":"PJSIP/2000","state":"NOT_INUSE"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<DeviceStateChangedEvent>();
+        var ds = (DeviceStateChangedEvent)evt!;
+        ds.DeviceState!.Name.Should().Be("PJSIP/2000");
+        ds.DeviceState.State.Should().Be("NOT_INUSE");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnPlaybackContinuingEvent()
+    {
+        const string json = """{"type":"PlaybackContinuing","playback":{"id":"pb-1","media_uri":"sound:hello","state":"continuing","target_uri":"channel:ch-1"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<PlaybackContinuingEvent>();
+        ((PlaybackContinuingEvent)evt!).Playback!.Id.Should().Be("pb-1");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnContactStatusChangeEvent()
+    {
+        const string json = """{"type":"ContactStatusChange","contact_info":{"uri":"sip:2000@192.168.1.10","contact_status":"Reachable","aor":"2000"},"endpoint":{"technology":"PJSIP","resource":"2000"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ContactStatusChangeEvent>();
+        var cs = (ContactStatusChangeEvent)evt!;
+        cs.ContactInfo!.ContactStatus.Should().Be("Reachable");
+        cs.Endpoint!.Resource.Should().Be("2000");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnPeerStatusChangeEvent()
+    {
+        const string json = """{"type":"PeerStatusChange","peer":{"peer_status":"Reachable","address":"192.168.1.10","port":"5060"},"endpoint":{"technology":"PJSIP","resource":"2000"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<PeerStatusChangeEvent>();
+        var ps = (PeerStatusChangeEvent)evt!;
+        ps.Peer!.PeerStatus.Should().Be("Reachable");
+        ps.Peer.Address.Should().Be("192.168.1.10");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnTextMessageReceivedEvent()
+    {
+        const string json = """{"type":"TextMessageReceived","message":{"from":"pjsip:2000","to":"pjsip:3000","body":"Hello"},"endpoint":{"technology":"PJSIP","resource":"2000"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<TextMessageReceivedEvent>();
+        var msg = (TextMessageReceivedEvent)evt!;
+        msg.Message!.Body.Should().Be("Hello");
+        msg.Message.From.Should().Be("pjsip:2000");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldParseTechCause_OnChannelHangupRequest()
+    {
+        const string json = """{"type":"ChannelHangupRequest","channel":{"id":"ch-1"},"cause":16,"tech_cause":"487"}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ChannelHangupRequestEvent>();
+        var hr = (ChannelHangupRequestEvent)evt!;
+        hr.Cause.Should().Be(16);
+        hr.TechCause.Should().Be("487");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldParseTechCause_OnChannelDestroyed()
+    {
+        const string json = """{"type":"ChannelDestroyed","channel":{"id":"ch-1"},"cause":16,"cause_txt":"Normal Clearing","tech_cause":"200"}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ChannelDestroyedEvent>();
+        var cd = (ChannelDestroyedEvent)evt!;
+        cd.TechCause.Should().Be("200");
+        cd.CauseTxt.Should().Be("Normal Clearing");
+    }
 }

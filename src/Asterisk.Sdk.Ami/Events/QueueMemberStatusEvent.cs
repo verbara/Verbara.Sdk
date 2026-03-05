@@ -11,5 +11,7 @@ public sealed class QueueMemberStatusEvent : ManagerEvent
     public int? Status { get; set; }
     public string? Ringinuse { get; set; }
     public int? Wrapuptime { get; set; }
+    /// <summary>Time when the member entered the queue (seconds). Asterisk 20+.</summary>
+    public int? LoginTime { get; set; }
 }
 
