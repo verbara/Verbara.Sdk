@@ -193,4 +193,91 @@ public class AriClientParseEventTests
 
         evt.Should().BeNull();
     }
+
+    // Sprint 1 — Transfer and recording events
+
+    [Fact]
+    public void ParseEvent_ShouldReturnBridgeAttendedTransferEvent()
+    {
+        const string json = """{"type":"BridgeAttendedTransfer","result":"Success","transferer_first_leg":{"id":"ch-1"},"transferer_second_leg":{"id":"ch-2"},"transferee":{"id":"ch-3"},"transfer_target":{"id":"ch-4"},"destination_type":"bridge","is_external":false}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<BridgeAttendedTransferEvent>();
+        var xfer = (BridgeAttendedTransferEvent)evt!;
+        xfer.Result.Should().Be("Success");
+        xfer.TransfererFirstLeg!.Id.Should().Be("ch-1");
+        xfer.TransfererSecondLeg!.Id.Should().Be("ch-2");
+        xfer.Transferee!.Id.Should().Be("ch-3");
+        xfer.TransferTarget!.Id.Should().Be("ch-4");
+        xfer.DestinationType.Should().Be("bridge");
+        xfer.IsExternal.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnBridgeBlindTransferEvent()
+    {
+        const string json = """{"type":"BridgeBlindTransfer","result":"Success","transferer":{"id":"ch-1"},"bridge":{"id":"br-1"},"context":"default","exten":"5000","is_external":true}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<BridgeBlindTransferEvent>();
+        var xfer = (BridgeBlindTransferEvent)evt!;
+        xfer.Result.Should().Be("Success");
+        xfer.Transferer!.Id.Should().Be("ch-1");
+        xfer.Bridge!.Id.Should().Be("br-1");
+        xfer.Context.Should().Be("default");
+        xfer.Exten.Should().Be("5000");
+        xfer.IsExternal.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnChannelTransferEvent()
+    {
+        const string json = """{"type":"ChannelTransfer","channel":{"id":"ch-1","name":"PJSIP/2000","state":"Up"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ChannelTransferEvent>();
+        ((ChannelTransferEvent)evt!).Channel!.Id.Should().Be("ch-1");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnBridgeMergedEvent()
+    {
+        const string json = """{"type":"BridgeMerged","bridge":{"id":"br-1","technology":"simple_bridge","bridge_type":"mixing"},"bridge_from":{"id":"br-2","technology":"simple_bridge","bridge_type":"mixing"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<BridgeMergedEvent>();
+        var merged = (BridgeMergedEvent)evt!;
+        merged.Bridge!.Id.Should().Be("br-1");
+        merged.BridgeFrom!.Id.Should().Be("br-2");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnBridgeVideoSourceChangedEvent()
+    {
+        const string json = """{"type":"BridgeVideoSourceChanged","bridge":{"id":"br-1"},"old_video_source_id":"ch-old"}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<BridgeVideoSourceChangedEvent>();
+        var video = (BridgeVideoSourceChangedEvent)evt!;
+        video.Bridge!.Id.Should().Be("br-1");
+        video.OldVideoSourceId.Should().Be("ch-old");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnRecordingFailedEvent()
+    {
+        const string json = """{"type":"RecordingFailed","recording":{"name":"rec-fail","format":"wav","state":"failed"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<RecordingFailedEvent>();
+        var rec = (RecordingFailedEvent)evt!;
+        rec.Recording!.Name.Should().Be("rec-fail");
+        rec.Recording.State.Should().Be("failed");
+    }
 }

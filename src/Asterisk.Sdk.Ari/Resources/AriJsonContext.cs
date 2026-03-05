@@ -60,4 +60,11 @@ namespace Asterisk.Sdk.Ari.Resources;
 [JsonSerializable(typeof(RecordingStartedEvent))]
 [JsonSerializable(typeof(RecordingFinishedEvent))]
 [JsonSerializable(typeof(EndpointStateChangeEvent))]
+// Sprint 1 — Transfer and recording events
+[JsonSerializable(typeof(BridgeAttendedTransferEvent))]
+[JsonSerializable(typeof(BridgeBlindTransferEvent))]
+[JsonSerializable(typeof(ChannelTransferEvent))]
+[JsonSerializable(typeof(BridgeMergedEvent))]
+[JsonSerializable(typeof(BridgeVideoSourceChangedEvent))]
+[JsonSerializable(typeof(RecordingFailedEvent))]
 public sealed partial class AriJsonContext : JsonSerializerContext;
