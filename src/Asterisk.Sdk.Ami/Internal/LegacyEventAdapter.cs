@@ -1,3 +1,4 @@
+#pragma warning disable CS0618 // Obsolete members — this adapter intentionally creates legacy events
 using Asterisk.Sdk.Ami.Events;
 
 namespace Asterisk.Sdk.Ami.Internal;

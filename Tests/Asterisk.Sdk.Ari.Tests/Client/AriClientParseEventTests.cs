@@ -408,4 +408,92 @@ public class AriClientParseEventTests
         cd.TechCause.Should().Be("200");
         cd.CauseTxt.Should().Be("Normal Clearing");
     }
+
+    // Sprint 5 — ARI events for Asterisk 16-22+
+
+    [Fact]
+    public void ParseEvent_ShouldReturnApplicationMoveFailedEvent()
+    {
+        const string json = """{"type":"ApplicationMoveFailed","channel":{"id":"ch-1"},"destination":"other-app","args":["a1"]}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ApplicationMoveFailedEvent>();
+        var amf = (ApplicationMoveFailedEvent)evt!;
+        amf.Channel!.Id.Should().Be("ch-1");
+        amf.Destination.Should().Be("other-app");
+        amf.Args.Should().Contain("a1");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnApplicationRegisteredEvent()
+    {
+        const string json = """{"type":"ApplicationRegistered","registered_application":{"name":"my-app"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ApplicationRegisteredEvent>();
+        var ar = (ApplicationRegisteredEvent)evt!;
+        ar.RegisteredApplication!.Name.Should().Be("my-app");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnApplicationUnregisteredEvent()
+    {
+        const string json = """{"type":"ApplicationUnregistered","unregistered_application":{"name":"old-app"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ApplicationUnregisteredEvent>();
+        ((ApplicationUnregisteredEvent)evt!).UnregisteredApplication!.Name.Should().Be("old-app");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnMissingParamsEvent()
+    {
+        const string json = """{"type":"MissingParams","params":["channelId","endpoint"]}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<MissingParamsEvent>();
+        var mp = (MissingParamsEvent)evt!;
+        mp.Params.Should().HaveCount(2);
+        mp.Params.Should().Contain("channelId");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnReferToEvent()
+    {
+        const string json = """{"type":"ReferTo","channel":{"id":"ch-1"},"refer_to":"sip:3000@pbx","referred_by":"sip:2000@pbx"}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ReferToEvent>();
+        var rt = (ReferToEvent)evt!;
+        rt.Channel!.Id.Should().Be("ch-1");
+        rt.ReferTo.Should().Be("sip:3000@pbx");
+        rt.ReferredBy.Should().Be("sip:2000@pbx");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnReferredByEvent()
+    {
+        const string json = """{"type":"ReferredBy","channel":{"id":"ch-2"},"referred_by":"sip:2000@pbx"}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ReferredByEvent>();
+        ((ReferredByEvent)evt!).ReferredBy.Should().Be("sip:2000@pbx");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnRequiredDestinationEvent()
+    {
+        const string json = """{"type":"RequiredDestination","channel":{"id":"ch-3"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<RequiredDestinationEvent>();
+        ((RequiredDestinationEvent)evt!).Channel!.Id.Should().Be("ch-3");
+    }
 }

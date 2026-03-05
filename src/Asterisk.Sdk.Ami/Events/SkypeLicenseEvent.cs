@@ -4,6 +4,7 @@ using Asterisk.Sdk.Attributes;
 namespace Asterisk.Sdk.Ami.Events;
 
 [AsteriskMapping("SkypeLicense")]
+[Obsolete("Skype for Asterisk discontinued. No replacement available.")]
 public sealed class SkypeLicenseEvent : ResponseEvent
 {
     public string? Key { get; set; }

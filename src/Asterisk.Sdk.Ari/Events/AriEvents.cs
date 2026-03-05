@@ -289,3 +289,54 @@ public sealed class TextMessageReceivedEvent : AriEvent
     public AriTextMessage? Message { get; set; }
     public AriEndpoint? Endpoint { get; set; }
 }
+
+// ---------------------------------------------------------------------------
+// Sprint 5 — ARI events for Asterisk 16-22+ and missing standard events
+// ---------------------------------------------------------------------------
+
+/// <summary>ApplicationMoveFailed - application move between Stasis apps failed (Asterisk 16+).</summary>
+public sealed class ApplicationMoveFailedEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+    public string? Destination { get; set; }
+    public string[]? Args { get; set; }
+}
+
+/// <summary>ApplicationRegistered - Stasis application registered (Asterisk 21+).</summary>
+public sealed class ApplicationRegisteredEvent : AriEvent
+{
+    public AriApplication? RegisteredApplication { get; set; }
+}
+
+/// <summary>ApplicationUnregistered - Stasis application unregistered (Asterisk 21+).</summary>
+public sealed class ApplicationUnregisteredEvent : AriEvent
+{
+    public AriApplication? UnregisteredApplication { get; set; }
+}
+
+/// <summary>MissingParams - required parameters missing for ARI request (Asterisk 12+).</summary>
+public sealed class MissingParamsEvent : AriEvent
+{
+    public string[]? Params { get; set; }
+}
+
+/// <summary>ReferTo - a REFER was received on a channel (Asterisk 22+).</summary>
+public sealed class ReferToEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+    public string? ReferTo { get; set; }
+    public string? ReferredBy { get; set; }
+}
+
+/// <summary>ReferredBy - channel was created by a REFER (Asterisk 22+).</summary>
+public sealed class ReferredByEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+    public string? ReferredBy { get; set; }
+}
+
+/// <summary>RequiredDestination - channel requires an explicit destination (Asterisk 22+).</summary>
+public sealed class RequiredDestinationEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+}

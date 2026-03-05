@@ -268,6 +268,14 @@ public sealed class AriClient : IAriClient
         ["ContactStatusChange"] = AriJsonContext.Default.ContactStatusChangeEvent,
         ["PeerStatusChange"] = AriJsonContext.Default.PeerStatusChangeEvent,
         ["TextMessageReceived"] = AriJsonContext.Default.TextMessageReceivedEvent,
+        // Sprint 5 — ARI events for Asterisk 16-22+
+        ["ApplicationMoveFailed"] = AriJsonContext.Default.ApplicationMoveFailedEvent,
+        ["ApplicationRegistered"] = AriJsonContext.Default.ApplicationRegisteredEvent,
+        ["ApplicationUnregistered"] = AriJsonContext.Default.ApplicationUnregisteredEvent,
+        ["MissingParams"] = AriJsonContext.Default.MissingParamsEvent,
+        ["ReferTo"] = AriJsonContext.Default.ReferToEvent,
+        ["ReferredBy"] = AriJsonContext.Default.ReferredByEvent,
+        ["RequiredDestination"] = AriJsonContext.Default.RequiredDestinationEvent,
     };
 
     internal static AriEvent? ParseEvent(string json, ILogger? logger = null)

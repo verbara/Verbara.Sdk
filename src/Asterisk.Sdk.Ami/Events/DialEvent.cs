@@ -4,6 +4,7 @@ using Asterisk.Sdk.Attributes;
 namespace Asterisk.Sdk.Ami.Events;
 
 [AsteriskMapping("Dial")]
+[Obsolete("Legacy Dial event removed in Asterisk 12. Use DialBeginEvent/DialEndEvent instead.")]
 public sealed class DialEvent : ManagerEvent
 {
     public string? SubEvent { get; set; }

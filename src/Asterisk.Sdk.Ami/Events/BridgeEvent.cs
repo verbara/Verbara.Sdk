@@ -4,6 +4,7 @@ using Asterisk.Sdk.Attributes;
 namespace Asterisk.Sdk.Ami.Events;
 
 [AsteriskMapping("Bridge")]
+[Obsolete("Legacy Bridge event removed in Asterisk 12. Use BridgeCreateEvent/BridgeEnterEvent instead.")]
 public sealed class BridgeEvent : ManagerEvent
 {
     public string? BridgeState { get; set; }
