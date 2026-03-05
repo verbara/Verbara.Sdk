@@ -39,4 +39,7 @@ public sealed class AriClientOptions
 
     /// <summary>Multiplier applied to the delay after each failed reconnection attempt. Default: 2.0.</summary>
     public double ReconnectMultiplier { get; set; } = 2.0;
+
+    /// <summary>Maximum reconnection attempts. 0 = unlimited. Default: 0.</summary>
+    public int MaxReconnectAttempts { get; set; }
 }

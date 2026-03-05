@@ -38,6 +38,9 @@ internal static partial class AriClientLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "[ARI] Event parse failed: json_length={JsonLength}")]
     public static partial void EventParseFailed(ILogger logger, Exception exception, int jsonLength);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[ARI] Reconnect gave up: max_attempts={MaxAttempts}")]
+    public static partial void ReconnectGaveUp(ILogger logger, int maxAttempts);
 }
 
 /// <summary>
@@ -174,6 +177,13 @@ public sealed class AriClient : IAriClient
         while (!ct.IsCancellationRequested)
         {
             attempt++;
+
+            if (_options.MaxReconnectAttempts > 0 && attempt > _options.MaxReconnectAttempts)
+            {
+                AriClientLog.ReconnectGaveUp(_logger, _options.MaxReconnectAttempts);
+                return;
+            }
+
             AriMetrics.Reconnections.Add(1);
             var delayMs = (long)delay.TotalMilliseconds;
             AriClientLog.Reconnecting(_logger, delayMs, attempt);
