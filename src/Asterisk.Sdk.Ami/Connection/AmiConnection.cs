@@ -25,17 +25,26 @@ internal static partial class AmiConnectionLog
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI] Reconnecting: delay_ms={DelayMs} attempt={Attempt}")]
     public static partial void Reconnecting(ILogger logger, int delayMs, int attempt);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI_EVENT] Received: event_type={EventType}")]
-    public static partial void EventReceived(ILogger logger, string? eventType);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI_EVENT] Received: event_type={EventType} channel={Channel} unique_id={UniqueId}")]
+    public static partial void EventReceived(ILogger logger, string? eventType, string? channel, string? uniqueId);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI_ACTION] Response: action_id={ActionId} response={Response}")]
-    public static partial void ResponseReceived(ILogger logger, string? actionId, string? response);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI_ACTION] Sending: action_id={ActionId} action={ActionName}")]
+    public static partial void ActionSending(ILogger logger, string actionId, string actionName);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI_ACTION] Response: action_id={ActionId} action={ActionName} response={Response} message={Message}")]
+    public static partial void ResponseReceived(ILogger logger, string? actionId, string? actionName, string? response, string? message);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Reader error")]
     public static partial void ReaderError(ILogger logger, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] Dropped: event_type={EventType}")]
-    public static partial void EventDropped(ILogger logger, string? eventType);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] Dropped: event_type={EventType} channel={Channel}")]
+    public static partial void EventDropped(ILogger logger, string? eventType, string? channel);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI] Reconnect attempt failed")]
+    public static partial void ReconnectAttemptFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Reconnect handler error")]
+    public static partial void ReconnectHandlerError(ILogger logger, Exception exception);
 }
 
 /// <summary>
@@ -61,6 +70,7 @@ public sealed class AmiConnection : IAmiConnection
 
     private long _actionIdCounter;
     private readonly ConcurrentDictionary<string, TaskCompletionSource<AmiMessage>> _pendingActions = new();
+    private readonly ConcurrentDictionary<string, string> _actionNames = new();
     private readonly ConcurrentDictionary<string, ResponseEventCollector> _pendingEventActions = new();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private volatile IObserver<ManagerEvent>[] _observers = [];
@@ -116,7 +126,8 @@ public sealed class AmiConnection : IAmiConnection
         _eventPump.OnEventDropped = evt =>
         {
             AmiMetrics.EventsDropped.Add(1);
-            AmiConnectionLog.EventDropped(_logger, evt.EventType);
+            var channel = evt.RawFields is not null && evt.RawFields.TryGetValue("Channel", out var ch) ? ch : null;
+            AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
         };
         _eventPump.Start(DispatchEventAsync);
         _readerLoop = Task.Run(() => ReaderLoopAsync(_cts.Token), CancellationToken.None);
@@ -231,6 +242,8 @@ public sealed class AmiConnection : IAmiConnection
             var actionName = GeneratedActionSerializer.GetActionName(action);
             var fields = GeneratedActionSerializer.Serialize(action);
 
+            _actionNames[actionId] = actionName;
+            AmiConnectionLog.ActionSending(_logger, actionId, actionName);
             await WriteActionLockedAsync(actionName, actionId, fields, cancellationToken);
             AmiMetrics.ActionsSent.Add(1);
 
@@ -247,6 +260,7 @@ public sealed class AmiConnection : IAmiConnection
         finally
         {
             _pendingActions.TryRemove(actionId, out _);
+            _actionNames.TryRemove(actionId, out _);
         }
     }
 
@@ -266,6 +280,8 @@ public sealed class AmiConnection : IAmiConnection
             var actionName = GeneratedActionSerializer.GetActionName(action);
             var fields = GeneratedActionSerializer.Serialize(action);
 
+            _actionNames[actionId] = actionName;
+            AmiConnectionLog.ActionSending(_logger, actionId, actionName);
             await WriteActionLockedAsync(actionName, actionId, fields, cancellationToken);
             AmiMetrics.ActionsSent.Add(1);
 
@@ -283,6 +299,7 @@ public sealed class AmiConnection : IAmiConnection
         finally
         {
             _pendingActions.TryRemove(actionId, out _);
+            _actionNames.TryRemove(actionId, out _);
         }
     }
 
@@ -302,6 +319,8 @@ public sealed class AmiConnection : IAmiConnection
             var actionName = GeneratedActionSerializer.GetActionName(action);
             var fields = GeneratedActionSerializer.Serialize(action);
 
+            _actionNames[actionId] = actionName;
+            AmiConnectionLog.ActionSending(_logger, actionId, actionName);
             await WriteActionLockedAsync(actionName, actionId, fields, cancellationToken);
 
             await foreach (var evt in collector.ReadAllAsync(cancellationToken))
@@ -312,6 +331,7 @@ public sealed class AmiConnection : IAmiConnection
         finally
         {
             _pendingEventActions.TryRemove(actionId, out _);
+            _actionNames.TryRemove(actionId, out _);
         }
     }
 
@@ -352,7 +372,8 @@ public sealed class AmiConnection : IAmiConnection
                 if (msg.IsResponse)
                 {
                     AmiMetrics.ResponsesReceived.Add(1);
-                    AmiConnectionLog.ResponseReceived(_logger, msg.ActionId, msg.ResponseStatus);
+                    _actionNames.TryGetValue(msg.ActionId ?? "", out var respActionName);
+                    AmiConnectionLog.ResponseReceived(_logger, msg.ActionId, respActionName, msg.ResponseStatus, msg["Message"]);
 
                     if (msg.ActionId is not null && _pendingActions.TryRemove(msg.ActionId, out var tcs))
                     {
@@ -371,7 +392,7 @@ public sealed class AmiConnection : IAmiConnection
                 else if (msg.IsEvent)
                 {
                     AmiMetrics.EventsReceived.Add(1);
-                    AmiConnectionLog.EventReceived(_logger, msg.EventType);
+                    AmiConnectionLog.EventReceived(_logger, msg.EventType, msg["Channel"], msg["Uniqueid"]);
 
                     // Use source-generated deserializer for typed events
                     var evt = GeneratedEventDeserializer.Deserialize(msg);
@@ -448,9 +469,9 @@ public sealed class AmiConnection : IAmiConnection
                 OnReconnected();
                 return; // Success
             }
-            catch
+            catch (Exception ex)
             {
-                // Retry with exponential backoff
+                AmiConnectionLog.ReconnectAttemptFailed(_logger, ex);
             }
 
             delay = TimeSpan.FromMilliseconds(
@@ -475,7 +496,7 @@ public sealed class AmiConnection : IAmiConnection
                 }
                 catch (Exception ex)
                 {
-                    AmiConnectionLog.ReaderError(_logger, ex);
+                    AmiConnectionLog.ReconnectHandlerError(_logger, ex);
                 }
             });
         }

@@ -1,7 +1,20 @@
 using Asterisk.Sdk;
 using Asterisk.Sdk.Agi.Commands;
+using Microsoft.Extensions.Logging;
 
 namespace Asterisk.Sdk.Agi.Server;
+
+internal static partial class AgiChannelLog
+{
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AGI_CMD] Sending: command={Command}")]
+    public static partial void CommandSending(ILogger logger, string command);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AGI_CMD] Reply: command={Command} status_code={StatusCode} result={Result} raw={RawLine}")]
+    public static partial void ReplyReceived(ILogger logger, string command, int statusCode, string result, string rawLine);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AGI_CMD] Failed: command={Command} status_code={StatusCode} raw={RawLine}")]
+    public static partial void CommandFailed(ILogger logger, string command, int statusCode, string rawLine);
+}
 
 /// <summary>
 /// AGI channel implementation. Sends commands via writer and reads replies via reader.
@@ -10,29 +23,50 @@ public sealed class AgiChannel : IAgiChannel
 {
     private readonly FastAgiWriter _writer;
     private readonly FastAgiReader _reader;
+    private readonly ILogger? _logger;
 
-    public AgiChannel(FastAgiWriter writer, FastAgiReader reader)
+    public AgiChannel(FastAgiWriter writer, FastAgiReader reader, ILogger? logger = null)
     {
         _writer = writer;
         _reader = reader;
+        _logger = logger;
     }
 
     /// <summary>Send an AGI command and wait for the reply.</summary>
     public async ValueTask<AgiReply> SendCommandAsync(AgiCommandBase command, CancellationToken cancellationToken = default)
     {
-        await _writer.SendCommandAsync(command.BuildCommand(), cancellationToken);
+        var cmd = command.BuildCommand();
+        if (_logger is not null) AgiChannelLog.CommandSending(_logger, cmd);
+
+        await _writer.SendCommandAsync(cmd, cancellationToken);
         var reply = await _reader.ReadReplyAsync(cancellationToken)
             ?? throw new AgiException("Connection closed while waiting for reply");
+
+        LogReply(cmd, reply);
         return reply;
     }
 
     /// <summary>Send a raw command string and wait for the reply.</summary>
     public async ValueTask<AgiReply> SendCommandAsync(string command, CancellationToken cancellationToken = default)
     {
+        if (_logger is not null) AgiChannelLog.CommandSending(_logger, command);
+
         await _writer.SendCommandAsync(command, cancellationToken);
         var reply = await _reader.ReadReplyAsync(cancellationToken)
             ?? throw new AgiException("Connection closed while waiting for reply");
+
+        LogReply(command, reply);
         return reply;
+    }
+
+    private void LogReply(string command, AgiReply reply)
+    {
+        if (_logger is null) return;
+
+        if (reply.IsSuccess)
+            AgiChannelLog.ReplyReceived(_logger, command, reply.StatusCode, reply.Result, reply.RawLine);
+        else
+            AgiChannelLog.CommandFailed(_logger, command, reply.StatusCode, reply.RawLine);
     }
 
     public async ValueTask AnswerAsync(CancellationToken cancellationToken = default)

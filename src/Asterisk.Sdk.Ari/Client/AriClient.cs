@@ -35,6 +35,9 @@ internal static partial class AriClientLog
 
     [LoggerMessage(Level = LogLevel.Information, Message = "[ARI] Reconnected: attempts={Attempt}")]
     public static partial void ReconnectedSuccess(ILogger logger, int attempt);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[ARI] Event parse failed: json_length={JsonLength}")]
+    public static partial void EventParseFailed(ILogger logger, Exception exception, int jsonLength);
 }
 
 /// <summary>
@@ -67,7 +70,7 @@ public sealed class AriClient : IAriClient
         _options = options.Value;
         _logger = logger;
 
-        _httpClient = new HttpClient { BaseAddress = new Uri(_options.BaseUrl.TrimEnd('/') + "/ari/") };
+        _httpClient = new HttpClient(new AriLoggingHandler(logger)) { BaseAddress = new Uri(_options.BaseUrl.TrimEnd('/') + "/ari/") };
         var authBytes = Encoding.UTF8.GetBytes($"{_options.Username}:{_options.Password}");
         _httpClient.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
@@ -139,7 +142,7 @@ public sealed class AriClient : IAriClient
                 if (result.MessageType == WebSocketMessageType.Text && bufferWriter.WrittenCount > 0)
                 {
                     var json = Encoding.UTF8.GetString(bufferWriter.WrittenSpan);
-                    var evt = ParseEvent(json);
+                    var evt = ParseEvent(json, _logger);
                     if (evt is not null)
                     {
                         AriMetrics.EventsReceived.Add(1);
@@ -251,7 +254,7 @@ public sealed class AriClient : IAriClient
         ["EndpointStateChange"] = AriJsonContext.Default.EndpointStateChangeEvent,
     };
 
-    internal static AriEvent? ParseEvent(string json)
+    internal static AriEvent? ParseEvent(string json, ILogger? logger = null)
     {
         try
         {
@@ -279,8 +282,10 @@ public sealed class AriClient : IAriClient
             evt.RawJson = json;
             return evt;
         }
-        catch
+        catch (Exception ex)
         {
+            if (logger is not null)
+                AriClientLog.EventParseFailed(logger, ex, json.Length);
             return null;
         }
     }
