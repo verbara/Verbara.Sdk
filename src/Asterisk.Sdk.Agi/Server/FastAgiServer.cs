@@ -111,7 +111,7 @@ public sealed class FastAgiServer : IAgiServer
             }
 
             // Create channel and execute script
-            var channel = new AgiChannel(writer, reader);
+            var channel = new AgiChannel(writer, reader, _logger);
             await script.ExecuteAsync(channel, request, ct);
         }
         catch (AgiHangupException)
