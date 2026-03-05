@@ -604,6 +604,70 @@ public class AriResourceTests
         handler.LastRequestUri.Should().Contain("recordings/stored/rec-stored");
     }
 
+    // --- DeviceStates ---
+
+    [Fact]
+    public async Task DeviceStates_ListAsync_ShouldReturnDeviceStates()
+    {
+        var json = JsonSerializer.Serialize(
+            new[] { new AriDeviceState { Name = "PJSIP/2000", State = "NOT_INUSE" } },
+            AriJsonContext.Default.AriDeviceStateArray);
+        using var handler = new FakeHttpHandler(json);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriDeviceStatesResource(http);
+
+        var result = await sut.ListAsync();
+
+        result.Should().HaveCount(1);
+        result[0].Name.Should().Be("PJSIP/2000");
+        result[0].State.Should().Be("NOT_INUSE");
+        handler.LastRequestUri.Should().Contain("deviceStates");
+    }
+
+    [Fact]
+    public async Task DeviceStates_GetAsync_ShouldReturnDeviceState()
+    {
+        var json = JsonSerializer.Serialize(
+            new AriDeviceState { Name = "PJSIP/3000", State = "INUSE" },
+            AriJsonContext.Default.AriDeviceState);
+        using var handler = new FakeHttpHandler(json);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriDeviceStatesResource(http);
+
+        var result = await sut.GetAsync("PJSIP/3000");
+
+        result.Name.Should().Be("PJSIP/3000");
+        result.State.Should().Be("INUSE");
+        handler.LastRequestUri.Should().Contain("deviceStates/PJSIP%2F3000");
+    }
+
+    [Fact]
+    public async Task DeviceStates_UpdateAsync_ShouldSendPut()
+    {
+        using var handler = new FakeHttpHandler("");
+        using var http = CreateHttpClient(handler);
+        var sut = new AriDeviceStatesResource(http);
+
+        await sut.UpdateAsync("Custom:lamp1", "INUSE");
+
+        handler.LastMethod.Should().Be(HttpMethod.Put);
+        handler.LastRequestUri.Should().Contain("deviceStates/Custom%3Alamp1");
+        handler.LastRequestUri.Should().Contain("deviceState=INUSE");
+    }
+
+    [Fact]
+    public async Task DeviceStates_DeleteAsync_ShouldSendDelete()
+    {
+        using var handler = new FakeHttpHandler("");
+        using var http = CreateHttpClient(handler);
+        var sut = new AriDeviceStatesResource(http);
+
+        await sut.DeleteAsync("Custom:lamp1");
+
+        handler.LastMethod.Should().Be(HttpMethod.Delete);
+        handler.LastRequestUri.Should().Contain("deviceStates/Custom%3Alamp1");
+    }
+
     // --- Endpoints ---
 
     [Fact]

@@ -78,6 +78,7 @@ namespace Asterisk.Sdk.Ari.Resources;
 [JsonSerializable(typeof(TextMessageReceivedEvent))]
 // Auxiliary models
 [JsonSerializable(typeof(AriDeviceState))]
+[JsonSerializable(typeof(AriDeviceState[]))]
 [JsonSerializable(typeof(AriContactInfo))]
 [JsonSerializable(typeof(AriPeer))]
 [JsonSerializable(typeof(AriTextMessage))]
