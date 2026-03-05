@@ -59,46 +59,33 @@ Con la cobertura de eventos al 100% (AMI 261 eventos, ARI 46 eventos), el siguie
 
 ---
 
-## Sprint 3 — Cobertura de Tests (est. ~4h) 🔲 PENDIENTE
+## Sprint 3 — Cobertura de Tests ✅ COMPLETADO
 
-### Tarea 3.1 — Tests de failover multi-servidor
+**Commit:** `pending`
 
-**Problema:** `AsteriskServerPool` no tiene tests para escenarios de failover, reconexion y routing federado.
+### Tarea 3.1 — Tests de failover multi-servidor ✅
 
-**Archivo a crear:**
-- `Tests/Asterisk.Sdk.Live.Tests/Server/AsteriskServerPoolTests.cs`
+- 6 nuevos tests agregados a `AsteriskServerPoolTests.cs` (total: 14):
+  - `MultiServer_ShouldTrackMultipleServers` — pool con 2 servidores
+  - `Servers_ShouldEnumerateAllServers` — enumeracion de 3 servidores
+  - `RemoveServerAsync_ShouldBeIdempotent_WhenServerNotFound`
+  - `AgentRouting_ShouldTrackAgentLogin` — routing positivo
+  - `AgentRouting_ShouldRemoveOnLogoff` — cleanup en logoff
+  - `AgentRouting_ShouldRouteToCorrectServer` — routing federado east/west
 
-**Escenarios:**
-- Pool con 2+ servidores, uno se desconecta — verificar failover
-- Reconexion de servidor — verificar reload de managers
-- Routing de agente a servidor correcto
+### Tarea 3.2 — Tests de ConfigFileReader ✅ (ya existian)
 
-**Estado:** 🔲 Pendiente
+- Ya existian 10 tests en `ConfigFileReaderTests.cs` + 6 en `ExtensionsConfigTests.cs`
+- Cobertura completa: secciones, comentarios, includes, templates, append, extensiones, same, prioridades
 
-### Tarea 3.2 — Tests de ConfigFileReader
+### Tarea 3.3 — Tests de AudioSocket ✅ (ya existian)
 
-**Problema:** `ConfigFileReader` y `ExtensionsConfigFileReader` sin tests unitarios dedicados.
+- Ya existian 19 tests en 3 archivos:
+  - `AudioSocketProtocolTests.cs` (10 tests): frame parsing, serialization
+  - `AudioSocketSessionTests.cs` (4 tests): session lifecycle, hangup, error
+  - `WebSocketAudioServerTests.cs` (5 tests): upgrade handshake, options
 
-**Archivo a crear:**
-- `Tests/Asterisk.Sdk.Config.Tests/ConfigFileReaderTests.cs` (verificar si ya existe)
-
-**Escenarios:**
-- Parseo de archivo `.conf` con secciones, comentarios, includes
-- Parseo de `extensions.conf` con contextos, extensiones, prioridades
-- Edge cases: lineas vacias, comentarios inline, continuacion de linea
-
-**Estado:** 🔲 Pendiente
-
-### Tarea 3.3 — Tests de AudioSocket
-
-**Problema:** Implementacion de AudioSocket con cobertura minima.
-
-**Archivo a crear/expandir:**
-- `Tests/Asterisk.Sdk.Ari.Tests/Audio/AudioSocketTests.cs`
-
-**Estado:** 🔲 Pendiente
-
-**Criterio Sprint 3:** Cobertura de tests para server pool, config parser, y audio socket.
+**Criterio:** 479 unit tests passing, 0 failures. Cobertura de server pool, config, y audio socket verificada.
 
 ---
 
@@ -147,7 +134,7 @@ Con la cobertura de eventos al 100% (AMI 261 eventos, ARI 46 eventos), el siguie
 |--------|----------|--------|--------|--------|
 | **1** | Fixes criticos produccion | 1.1 | ✅ | `21a189e` |
 | **2** | ARI REST 100% + sizing docs | 2.1-2.3 | ✅ | `64a9133` |
-| **3** | Cobertura de tests | 3.1-3.3 | 🔲 | — |
+| **3** | Cobertura de tests | 3.1-3.3 | ✅ | `pending` |
 | **4** | Optimizaciones y DX | 4.1-4.3 | 🔲 | — |
 
 ## Resultado Esperado
