@@ -625,7 +625,15 @@ public sealed class AmiConnection : IAmiConnection
         {
             lock (connection._observerLock)
             {
-                connection._observers = connection._observers.Where(o => o != observer).ToArray();
+                var current = connection._observers;
+                var index = Array.IndexOf(current, observer);
+                if (index >= 0)
+                {
+                    var newArr = new IObserver<ManagerEvent>[current.Length - 1];
+                    Array.Copy(current, 0, newArr, 0, index);
+                    Array.Copy(current, index + 1, newArr, index, current.Length - index - 1);
+                    connection._observers = newArr;
+                }
             }
         }
     }

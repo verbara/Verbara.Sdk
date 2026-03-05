@@ -61,7 +61,7 @@ Con la cobertura de eventos al 100% (AMI 261 eventos, ARI 46 eventos), el siguie
 
 ## Sprint 3 — Cobertura de Tests ✅ COMPLETADO
 
-**Commit:** `pending`
+**Commit:** `d08e268`
 
 ### Tarea 3.1 — Tests de failover multi-servidor ✅
 
@@ -89,42 +89,31 @@ Con la cobertura de eventos al 100% (AMI 261 eventos, ARI 46 eventos), el siguie
 
 ---
 
-## Sprint 4 — Optimizaciones y DX (est. ~2h) 🔲 PENDIENTE
+## Sprint 4 — Optimizaciones y DX ✅ COMPLETADO
 
-### Tarea 4.1 — Fix micro-allocation en observer unsubscribe
+**Commit:** `9c8f65e`
 
-**Problema:** `_observers.Where(o => o != observer).ToArray()` en `AmiConnection.cs` crea array nuevo en cada unsubscribe.
+### Tarea 4.1 — Fix micro-allocation en observer unsubscribe ✅
 
-**Solucion:** Usar `ImmutableArray<T>` o `lock` + `List<T>.Remove()` para evitar allocacion.
+- Reemplazado `.Where().ToArray()` con `Array.IndexOf` + `Array.Copy`
+- Elimina allocaciones de closure LINQ, iterador, y buffer intermedio
+- Copy-on-write volatile pattern mantiene hot path (dispatch) zero-alloc
 
-**Estado:** 🔲 Pendiente
+### Tarea 4.2 — READMEs por proyecto ✅
 
-### Tarea 4.2 — READMEs por proyecto
+- Creados 4 READMEs: Ami, Agi, Ari, Live
+- Cada uno con: descripcion, features, quick start, links a docs
 
-**Archivos a crear:**
-- `src/Asterisk.Sdk.Ami/README.md`
-- `src/Asterisk.Sdk.Agi/README.md`
-- `src/Asterisk.Sdk.Ari/README.md`
-- `src/Asterisk.Sdk.Live/README.md`
+### Tarea 4.3 — Troubleshooting guide ✅
 
-**Contenido:** Descripcion breve, ejemplo de uso minimo, link a docs principales.
+- Creado `docs/troubleshooting.md` con:
+  - Problemas de conexion AMI/ARI (refused, auth, firewall)
+  - Diagnostico de eventos perdidos (buffer sizing)
+  - Reconexion (infinite loop, state loss)
+  - AOT/trimming issues (JsonSerializer, source generators, trim warnings)
+  - Configuracion de logging para debug
 
-**Estado:** 🔲 Pendiente
-
-### Tarea 4.3 — Troubleshooting guide
-
-**Archivo a crear:**
-- `docs/troubleshooting.md`
-
-**Contenido:**
-- Problemas comunes de conexion AMI/ARI (timeout, auth, firewall)
-- Diagnostico de eventos perdidos (EventPump lleno)
-- Errores de AOT trimming
-- Configuracion de logging para debug
-
-**Estado:** 🔲 Pendiente
-
-**Criterio Sprint 4:** Zero allocations innecesarias en hot path, documentacion DX completa.
+**Criterio:** Zero LINQ allocations en unsubscribe ✅, docs DX completa ✅, 479 tests passing ✅.
 
 ---
 
@@ -133,9 +122,9 @@ Con la cobertura de eventos al 100% (AMI 261 eventos, ARI 46 eventos), el siguie
 | Sprint | Objetivo | Tareas | Estado | Commit |
 |--------|----------|--------|--------|--------|
 | **1** | Fixes criticos produccion | 1.1 | ✅ | `21a189e` |
-| **2** | ARI REST 100% + sizing docs | 2.1-2.3 | ✅ | `64a9133` |
-| **3** | Cobertura de tests | 3.1-3.3 | ✅ | `pending` |
-| **4** | Optimizaciones y DX | 4.1-4.3 | 🔲 | — |
+| **2** | ARI REST 100% + sizing docs | 2.1-2.3 | ✅ | `34fe206` |
+| **3** | Cobertura de tests | 3.1-3.3 | ✅ | `d08e268` |
+| **4** | Optimizaciones y DX | 4.1-4.3 | ✅ | `9c8f65e` |
 
 ## Resultado Esperado
 
