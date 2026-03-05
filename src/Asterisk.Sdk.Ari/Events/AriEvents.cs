@@ -159,3 +159,67 @@ public sealed class EndpointStateChangeEvent : AriEvent
 {
     public AriEndpoint? Endpoint { get; set; }
 }
+
+// ---------------------------------------------------------------------------
+// Sprint 1 — Transfer and recording events (Asterisk 12+)
+// ---------------------------------------------------------------------------
+
+/// <summary>BridgeAttendedTransfer - an attended transfer was completed.</summary>
+public sealed class BridgeAttendedTransferEvent : AriEvent
+{
+    public string? Result { get; set; }
+    public AriChannel? TransfererFirstLeg { get; set; }
+    public AriBridge? TransfererFirstLegBridge { get; set; }
+    public AriChannel? TransfererSecondLeg { get; set; }
+    public AriBridge? TransfererSecondLegBridge { get; set; }
+    public AriChannel? Transferee { get; set; }
+    public AriChannel? TransferTarget { get; set; }
+    public string? DestinationType { get; set; }
+    public string? DestinationBridge { get; set; }
+    public string? DestinationApplication { get; set; }
+    public AriChannel? DestinationLinkFirstLeg { get; set; }
+    public AriChannel? DestinationLinkSecondLeg { get; set; }
+    public AriChannel? DestinationThreewayChannel { get; set; }
+    public AriBridge? DestinationThreewayBridge { get; set; }
+    public bool IsExternal { get; set; }
+    public AriChannel? ReplaceChannel { get; set; }
+}
+
+/// <summary>BridgeBlindTransfer - a blind transfer was completed.</summary>
+public sealed class BridgeBlindTransferEvent : AriEvent
+{
+    public string? Result { get; set; }
+    public AriChannel? Transferer { get; set; }
+    public AriBridge? Bridge { get; set; }
+    public AriChannel? Transferee { get; set; }
+    public AriChannel? ReplaceChannel { get; set; }
+    public string? Context { get; set; }
+    public string? Exten { get; set; }
+    public bool IsExternal { get; set; }
+}
+
+/// <summary>ChannelTransfer - a transfer was initiated (Asterisk 21+).</summary>
+public sealed class ChannelTransferEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+}
+
+/// <summary>BridgeMerged - two bridges were merged.</summary>
+public sealed class BridgeMergedEvent : AriEvent
+{
+    public AriBridge? Bridge { get; set; }
+    public AriBridge? BridgeFrom { get; set; }
+}
+
+/// <summary>BridgeVideoSourceChanged - video source changed in bridge.</summary>
+public sealed class BridgeVideoSourceChangedEvent : AriEvent
+{
+    public AriBridge? Bridge { get; set; }
+    public string? OldVideoSourceId { get; set; }
+}
+
+/// <summary>RecordingFailed - a recording has failed.</summary>
+public sealed class RecordingFailedEvent : AriEvent
+{
+    public AriLiveRecording? Recording { get; set; }
+}

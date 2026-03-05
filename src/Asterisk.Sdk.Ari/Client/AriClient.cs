@@ -252,6 +252,13 @@ public sealed class AriClient : IAriClient
         ["RecordingStarted"] = AriJsonContext.Default.RecordingStartedEvent,
         ["RecordingFinished"] = AriJsonContext.Default.RecordingFinishedEvent,
         ["EndpointStateChange"] = AriJsonContext.Default.EndpointStateChangeEvent,
+        // Sprint 1 — Transfer and recording events
+        ["BridgeAttendedTransfer"] = AriJsonContext.Default.BridgeAttendedTransferEvent,
+        ["BridgeBlindTransfer"] = AriJsonContext.Default.BridgeBlindTransferEvent,
+        ["ChannelTransfer"] = AriJsonContext.Default.ChannelTransferEvent,
+        ["BridgeMerged"] = AriJsonContext.Default.BridgeMergedEvent,
+        ["BridgeVideoSourceChanged"] = AriJsonContext.Default.BridgeVideoSourceChangedEvent,
+        ["RecordingFailed"] = AriJsonContext.Default.RecordingFailedEvent,
     };
 
     internal static AriEvent? ParseEvent(string json, ILogger? logger = null)
