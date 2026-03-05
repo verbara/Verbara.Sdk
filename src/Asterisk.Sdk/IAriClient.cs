@@ -38,6 +38,9 @@ public interface IAriClient : IAsyncDisposable
     /// <summary>Access sound operations.</summary>
     IAriSoundsResource Sounds { get; }
 
+    /// <summary>Access device state operations.</summary>
+    IAriDeviceStatesResource DeviceStates { get; }
+
     /// <summary>Access the audio server (null if not configured).</summary>
     IAudioServer? AudioServer { get; }
 }
@@ -213,6 +216,26 @@ public interface IAriSoundsResource
 
     /// <summary>Get a sound by ID. GET /sounds/{soundId}</summary>
     ValueTask<AriSound> GetAsync(string soundId, CancellationToken cancellationToken = default);
+}
+
+// ---------------------------------------------------------------------------
+// Device state resource
+// ---------------------------------------------------------------------------
+
+/// <summary>ARI device state operations.</summary>
+public interface IAriDeviceStatesResource
+{
+    /// <summary>List all device states. GET /deviceStates</summary>
+    ValueTask<AriDeviceState[]> ListAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Get a device state by name. GET /deviceStates/{deviceName}</summary>
+    ValueTask<AriDeviceState> GetAsync(string deviceName, CancellationToken cancellationToken = default);
+
+    /// <summary>Set or create a device state. PUT /deviceStates/{deviceName}</summary>
+    ValueTask UpdateAsync(string deviceName, string deviceState, CancellationToken cancellationToken = default);
+
+    /// <summary>Delete a custom device state. DELETE /deviceStates/{deviceName}</summary>
+    ValueTask DeleteAsync(string deviceName, CancellationToken cancellationToken = default);
 }
 
 // ---------------------------------------------------------------------------

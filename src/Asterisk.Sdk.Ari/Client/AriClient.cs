@@ -66,6 +66,7 @@ public sealed class AriClient : IAriClient
     public IAriEndpointsResource Endpoints { get; }
     public IAriApplicationsResource Applications { get; }
     public IAriSoundsResource Sounds { get; }
+    public IAriDeviceStatesResource DeviceStates { get; }
     public IAudioServer? AudioServer { get; }
 
     public AriClient(IOptions<AriClientOptions> options, ILogger<AriClient> logger, IAudioServer? audioServer = null)
@@ -86,6 +87,7 @@ public sealed class AriClient : IAriClient
         Endpoints = new AriEndpointsResource(_httpClient);
         Applications = new AriApplicationsResource(_httpClient);
         Sounds = new AriSoundsResource(_httpClient);
+        DeviceStates = new AriDeviceStatesResource(_httpClient);
     }
 
     public async ValueTask ConnectAsync(CancellationToken cancellationToken = default)
