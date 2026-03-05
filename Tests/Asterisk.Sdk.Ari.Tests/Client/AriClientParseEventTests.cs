@@ -409,7 +409,18 @@ public class AriClientParseEventTests
         cd.CauseTxt.Should().Be("Normal Clearing");
     }
 
-    // Sprint 5 — ARI events for Asterisk 16-22+
+    // Sprint 5 — ARI events for Asterisk 12-22+
+
+    [Fact]
+    public void ParseEvent_ShouldReturnApplicationReplacedEvent()
+    {
+        const string json = """{"type":"ApplicationReplaced","application":"myapp"}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ApplicationReplacedEvent>();
+        evt!.Application.Should().Be("myapp");
+    }
 
     [Fact]
     public void ParseEvent_ShouldReturnApplicationMoveFailedEvent()

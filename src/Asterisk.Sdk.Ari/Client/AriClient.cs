@@ -268,7 +268,8 @@ public sealed class AriClient : IAriClient
         ["ContactStatusChange"] = AriJsonContext.Default.ContactStatusChangeEvent,
         ["PeerStatusChange"] = AriJsonContext.Default.PeerStatusChangeEvent,
         ["TextMessageReceived"] = AriJsonContext.Default.TextMessageReceivedEvent,
-        // Sprint 5 — ARI events for Asterisk 16-22+
+        // Sprint 5 — ARI events for Asterisk 12-22+
+        ["ApplicationReplaced"] = AriJsonContext.Default.ApplicationReplacedEvent,
         ["ApplicationMoveFailed"] = AriJsonContext.Default.ApplicationMoveFailedEvent,
         ["ApplicationRegistered"] = AriJsonContext.Default.ApplicationRegisteredEvent,
         ["ApplicationUnregistered"] = AriJsonContext.Default.ApplicationUnregisteredEvent,

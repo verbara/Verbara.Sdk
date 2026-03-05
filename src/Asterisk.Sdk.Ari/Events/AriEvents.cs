@@ -294,6 +294,9 @@ public sealed class TextMessageReceivedEvent : AriEvent
 // Sprint 5 — ARI events for Asterisk 16-22+ and missing standard events
 // ---------------------------------------------------------------------------
 
+/// <summary>ApplicationReplaced - another WebSocket took over this application's subscription (Asterisk 12+).</summary>
+public sealed class ApplicationReplacedEvent : AriEvent;
+
 /// <summary>ApplicationMoveFailed - application move between Stasis apps failed (Asterisk 16+).</summary>
 public sealed class ApplicationMoveFailedEvent : AriEvent
 {

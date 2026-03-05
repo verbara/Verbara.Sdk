@@ -81,7 +81,8 @@ namespace Asterisk.Sdk.Ari.Resources;
 [JsonSerializable(typeof(AriContactInfo))]
 [JsonSerializable(typeof(AriPeer))]
 [JsonSerializable(typeof(AriTextMessage))]
-// Sprint 5 — ARI events for Asterisk 16-22+
+// Sprint 5 — ARI events for Asterisk 12-22+
+[JsonSerializable(typeof(ApplicationReplacedEvent))]
 [JsonSerializable(typeof(ApplicationMoveFailedEvent))]
 [JsonSerializable(typeof(ApplicationRegisteredEvent))]
 [JsonSerializable(typeof(ApplicationUnregisteredEvent))]
