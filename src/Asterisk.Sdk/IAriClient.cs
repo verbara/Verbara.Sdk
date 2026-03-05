@@ -346,6 +346,41 @@ public sealed class AriVariable
     public string Value { get; set; } = string.Empty;
 }
 
+/// <summary>ARI device state model.</summary>
+public sealed class AriDeviceState
+{
+    public string? Name { get; set; }
+    public string? State { get; set; }
+}
+
+/// <summary>ARI contact info model.</summary>
+public sealed class AriContactInfo
+{
+    public string? Uri { get; set; }
+    public string? ContactStatus { get; set; }
+    public string? Aor { get; set; }
+    public string? RoundtripUsec { get; set; }
+}
+
+/// <summary>ARI peer model.</summary>
+public sealed class AriPeer
+{
+    public string? PeerStatus { get; set; }
+    public string? Cause { get; set; }
+    public string? Address { get; set; }
+    public string? Port { get; set; }
+    public string? Time { get; set; }
+}
+
+/// <summary>ARI text message model.</summary>
+public sealed class AriTextMessage
+{
+    public string? From { get; set; }
+    public string? To { get; set; }
+    public string? Body { get; set; }
+    public Dictionary<string, string>? Variables { get; set; }
+}
+
 // ---------------------------------------------------------------------------
 // Audio streaming
 // ---------------------------------------------------------------------------

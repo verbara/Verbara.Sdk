@@ -34,6 +34,8 @@ public sealed class ChannelHangupRequestEvent : AriEvent
 {
     public AriChannel? Channel { get; set; }
     public int? Cause { get; set; }
+    /// <summary>Technology-specific cause code (e.g. SIP response code). Asterisk 22.7+/23+.</summary>
+    public string? TechCause { get; set; }
 }
 
 /// <summary>BridgeCreated - bridge was created.</summary>
@@ -100,6 +102,8 @@ public sealed class ChannelDestroyedEvent : AriEvent
     public AriChannel? Channel { get; set; }
     public int? Cause { get; set; }
     public string? CauseTxt { get; set; }
+    /// <summary>Technology-specific cause code (e.g. SIP response code). Asterisk 22.7+/23+.</summary>
+    public string? TechCause { get; set; }
 }
 
 /// <summary>ChannelVarset - a channel variable was set.</summary>
@@ -222,4 +226,66 @@ public sealed class BridgeVideoSourceChangedEvent : AriEvent
 public sealed class RecordingFailedEvent : AriEvent
 {
     public AriLiveRecording? Recording { get; set; }
+}
+
+// ---------------------------------------------------------------------------
+// Sprint 3 — Complementary ARI events (Asterisk 12-22+)
+// ---------------------------------------------------------------------------
+
+/// <summary>ChannelCallerId - caller ID changed on a channel.</summary>
+public sealed class ChannelCallerIdEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+    public int? CallerPresentation { get; set; }
+    public string? CallerPresentationTxt { get; set; }
+}
+
+/// <summary>ChannelDialplan - channel entered a new dialplan location.</summary>
+public sealed class ChannelDialplanEvent : AriEvent
+{
+    public AriChannel? Channel { get; set; }
+    public string? DialplanApp { get; set; }
+    public string? DialplanAppData { get; set; }
+}
+
+/// <summary>ChannelUserevent - user-defined event from dialplan.</summary>
+public sealed class ChannelUsereventEvent : AriEvent
+{
+    public string? Eventname { get; set; }
+    public AriChannel? Channel { get; set; }
+    public AriBridge? Bridge { get; set; }
+    public AriEndpoint? Endpoint { get; set; }
+}
+
+/// <summary>DeviceStateChanged - a device state changed.</summary>
+public sealed class DeviceStateChangedEvent : AriEvent
+{
+    public AriDeviceState? DeviceState { get; set; }
+}
+
+/// <summary>PlaybackContinuing - playback continuing to next media URI.</summary>
+public sealed class PlaybackContinuingEvent : AriEvent
+{
+    public AriPlayback? Playback { get; set; }
+}
+
+/// <summary>ContactStatusChange - endpoint contact status changed (Asterisk 13+).</summary>
+public sealed class ContactStatusChangeEvent : AriEvent
+{
+    public AriContactInfo? ContactInfo { get; set; }
+    public AriEndpoint? Endpoint { get; set; }
+}
+
+/// <summary>PeerStatusChange - peer status changed (Asterisk 13+).</summary>
+public sealed class PeerStatusChangeEvent : AriEvent
+{
+    public AriPeer? Peer { get; set; }
+    public AriEndpoint? Endpoint { get; set; }
+}
+
+/// <summary>TextMessageReceived - out-of-call text message received (Asterisk 12+).</summary>
+public sealed class TextMessageReceivedEvent : AriEvent
+{
+    public AriTextMessage? Message { get; set; }
+    public AriEndpoint? Endpoint { get; set; }
 }

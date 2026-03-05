@@ -157,4 +157,41 @@ public class Sprint2EventTests
         evt.Direction.Should().Be(1);
         evt.State.Should().Be("1");
     }
+
+    // --- Sprint 3: TechCause and LoginTime fields ---
+
+    [Fact]
+    public void HangupEvent_ShouldHaveTechCause()
+    {
+        var evt = new HangupEvent { Cause = 16, CauseTxt = "Normal Clearing", TechCause = "200" };
+        evt.TechCause.Should().Be("200");
+    }
+
+    [Fact]
+    public void HangupEvent_TechCause_ShouldBeNullForOlderAsterisk()
+    {
+        var evt = new HangupEvent { Cause = 16 };
+        evt.TechCause.Should().BeNull();
+    }
+
+    [Fact]
+    public void HangupRequestEvent_ShouldHaveTechCause()
+    {
+        var evt = new HangupRequestEvent { Cause = 16, TechCause = "487" };
+        evt.TechCause.Should().Be("487");
+    }
+
+    [Fact]
+    public void SoftHangupRequestEvent_ShouldHaveTechCause()
+    {
+        var evt = new SoftHangupRequestEvent { Cause = 16, TechCause = "503" };
+        evt.TechCause.Should().Be("503");
+    }
+
+    [Fact]
+    public void QueueMemberStatusEvent_ShouldHaveLoginTime()
+    {
+        var evt = new QueueMemberStatusEvent { Queue = "support", LoginTime = 3600 };
+        evt.LoginTime.Should().Be(3600);
+    }
 }
