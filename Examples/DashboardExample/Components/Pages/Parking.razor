@@ -1,0 +1,143 @@
+@page "/parking"
+@using DashboardExample.Services
+@using Asterisk.Sdk.Ami.Actions
+@using Asterisk.Sdk.Ami.Events
+@inject SelectedServerService ServerSvc
+@implements IDisposable
+
+<PageTitle>Parking — Asterisk Dashboard</PageTitle>
+
+<h2>Parked Calls</h2>
+
+<div class="kpi-grid">
+    <div class="kpi-card kpi-blue">
+        <span class="kpi-value">@_parkedCalls.Count</span>
+        <span class="kpi-label">Total Parked</span>
+    </div>
+</div>
+
+@if (_error is not null)
+{
+    <p class="text-muted">@_error</p>
+}
+else if (_parkedCalls.Count == 0)
+{
+    <p class="text-muted">No parked calls</p>
+}
+else
+{
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Space</th>
+                <th>Channel</th>
+                <th>Caller ID</th>
+                <th>Context</th>
+                <th>Timeout (s)</th>
+                <th>Duration</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var call in _parkedCalls)
+            {
+                <tr>
+                    <td><span class="badge badge-blue">@call.Exten</span></td>
+                    <td class="mono">@call.Channel</td>
+                    <td>
+                        @if (!string.IsNullOrEmpty(call.CallerIdName))
+                        {
+                            <span>@call.CallerIdName</span>
+                            <span class="text-muted"> &lt;@call.CallerIdNum&gt;</span>
+                        }
+                        else
+                        {
+                            <span>@call.CallerIdNum</span>
+                        }
+                    </td>
+                    <td>@call.Context</td>
+                    <td class="mono">@call.Timeout</td>
+                    <td class="caller-timer">@FormatDuration(call.ParkedSince)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private Timer? _timer;
+    private List<ParkedCallViewModel> _parkedCalls = [];
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        _timer = new Timer(_ => InvokeAsync(RefreshAsync),
+            null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+    }
+
+    private async Task RefreshAsync()
+    {
+        try
+        {
+            var entry = ServerSvc.GetSelectedServer();
+            if (entry is null)
+            {
+                _parkedCalls = [];
+                _error = null;
+                StateHasChanged();
+                return;
+            }
+
+            var connection = entry.Connection;
+            var action = new ParkedCallsAction();
+            var calls = new List<ParkedCallViewModel>();
+            var now = DateTimeOffset.UtcNow;
+
+            await foreach (var evt in connection.SendEventGeneratingActionAsync(action))
+            {
+                if (evt is ParkedCallEvent parked)
+                {
+                    calls.Add(new ParkedCallViewModel
+                    {
+                        Exten = parked.Exten ?? "?",
+                        Channel = parked.Channel ?? "",
+                        CallerIdNum = parked.CallerIdNum ?? "",
+                        CallerIdName = parked.CallerIdName,
+                        Context = parked.Context ?? "",
+                        Timeout = parked.Timeout,
+                        ParkedSince = parked.Timestamp.HasValue
+                            ? now - DateTimeOffset.FromUnixTimeSeconds((long)parked.Timestamp.Value)
+                            : TimeSpan.Zero,
+                    });
+                }
+            }
+
+            _parkedCalls = calls;
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to retrieve parked calls: {ex.Message}";
+            _parkedCalls = [];
+        }
+
+        StateHasChanged();
+    }
+
+    private static string FormatDuration(TimeSpan ts) =>
+        ts.TotalHours >= 1
+            ? $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}"
+            : $"{(int)ts.TotalMinutes}:{ts.Seconds:D2}";
+
+    private sealed class ParkedCallViewModel
+    {
+        public string Exten { get; init; } = "";
+        public string Channel { get; init; } = "";
+        public string CallerIdNum { get; init; } = "";
+        public string? CallerIdName { get; init; }
+        public string Context { get; init; } = "";
+        public int? Timeout { get; init; }
+        public TimeSpan ParkedSince { get; init; }
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

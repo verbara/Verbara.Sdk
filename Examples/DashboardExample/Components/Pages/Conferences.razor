@@ -2,12 +2,19 @@
 @using DashboardExample.Services
 @using Asterisk.Sdk.Live
 @using Asterisk.Sdk.Live.MeetMe
+@using Asterisk.Sdk
+@using Asterisk.Sdk.Ami.Actions
+@using Asterisk.Sdk.Ami.Events
 @inject SelectedServerService ServerSvc
 @implements IDisposable
 
 <PageTitle>Conferences — Asterisk Dashboard</PageTitle>
 
 <h2>Conference Rooms</h2>
+
+@* ---------- MeetMe Section (Live Layer) ---------- *@
+
+<h3>MeetMe Rooms</h3>
 
 @{
     var hasRooms = false;
@@ -55,17 +62,306 @@
 
 @if (!hasRooms)
 {
-    <p class="text-muted">No active conference rooms.</p>
+    <p class="text-muted">No active MeetMe rooms.</p>
+}
+
+@* ---------- ConfBridge Section (AMI Actions) ---------- *@
+
+<h3>ConfBridge Rooms</h3>
+
+@if (_loading)
+{
+    <p class="text-muted">Loading ConfBridge rooms...</p>
+}
+else if (_confbridgeError is not null)
+{
+    <p class="text-muted">@_confbridgeError</p>
+}
+else if (_confbridgeRooms.Count == 0)
+{
+    <p class="text-muted">No active ConfBridge rooms.</p>
+}
+else
+{
+    foreach (var room in _confbridgeRooms)
+    {
+        <div class="conference-card">
+            <div class="conference-header">
+                <div>
+                    <strong>Bridge @room.Conference</strong>
+                    <span class="badge badge-blue">@room.Parties participants</span>
+                    @if (room.Marked > 0)
+                    {
+                        <span class="badge badge-yellow">@room.Marked marked</span>
+                    }
+                    @if (room.Locked)
+                    {
+                        <span class="badge badge-red">Locked</span>
+                    }
+                </div>
+                <div>
+                    @if (room.Locked)
+                    {
+                        <button class="btn btn-sm btn-blue" @onclick="() => UnlockRoom(room.Conference)" disabled="@_actionInProgress">
+                            Unlock
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-sm btn-yellow" @onclick="() => LockRoom(room.Conference)" disabled="@_actionInProgress">
+                            Lock
+                        </button>
+                    }
+
+                    @if (_recordingRooms.Contains(room.Conference))
+                    {
+                        <button class="btn btn-sm btn-red" @onclick="() => StopRecording(room.Conference)" disabled="@_actionInProgress">
+                            Stop Rec
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-sm btn-blue" @onclick="() => StartRecording(room.Conference)" disabled="@_actionInProgress">
+                            Start Rec
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @if (room.Participants.Count > 0)
+            {
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Channel</th>
+                            <th>Admin</th>
+                            <th>Muted</th>
+                            <th>Talking</th>
+                            <th>Duration</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in room.Participants)
+                        {
+                            <tr>
+                                <td>@p.Channel</td>
+                                <td>
+                                    @if (p.Admin)
+                                    {
+                                        <span class="badge badge-yellow">Admin</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (p.Muted)
+                                    {
+                                        <span class="badge badge-muted">Muted</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge badge-green">Open</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (p.Talking)
+                                    {
+                                        <span class="status-dot dot-green"></span> <text>Talking</text>
+                                    }
+                                    else
+                                    {
+                                        <span class="status-dot dot-gray"></span> <text>Silent</text>
+                                    }
+                                </td>
+                                <td class="caller-timer">@FormatDuration(p.AnsweredTime)</td>
+                                <td>
+                                    @if (p.Muted)
+                                    {
+                                        <button class="btn btn-sm btn-blue" @onclick="() => UnmuteParticipant(room.Conference, p.Channel)" disabled="@_actionInProgress">
+                                            Unmute
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-sm btn-yellow" @onclick="() => MuteParticipant(room.Conference, p.Channel)" disabled="@_actionInProgress">
+                                            Mute
+                                        </button>
+                                    }
+                                    <button class="btn btn-sm btn-red" @onclick="() => KickParticipant(room.Conference, p.Channel)" disabled="@_actionInProgress">
+                                        Kick
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    }
+}
+
+@if (_actionResult is not null)
+{
+    <p class="action-result">@_actionResult</p>
 }
 
 @code {
     private Timer? _timer;
+    private bool _loading;
+    private bool _actionInProgress;
+    private string? _confbridgeError;
+    private string? _actionResult;
+    private List<ConfBridgeRoom> _confbridgeRooms = [];
+    private readonly HashSet<string> _recordingRooms = new(StringComparer.Ordinal);
 
     protected override void OnInitialized()
     {
-        _timer = new Timer(_ => InvokeAsync(StateHasChanged),
-            null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+        _timer = new Timer(async _ =>
+        {
+            await RefreshConfBridgeAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(3));
     }
+
+    private async Task RefreshConfBridgeAsync()
+    {
+        var entry = ServerSvc.GetSelectedServer();
+        if (entry is null)
+        {
+            _confbridgeRooms = [];
+            _confbridgeError = null;
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            _loading = _confbridgeRooms.Count == 0;
+
+            // Step 1: Get all rooms
+            var rooms = new List<ConfBridgeRoom>();
+            await foreach (var evt in entry.Connection.SendEventGeneratingActionAsync(new ConfbridgeListRoomsAction()))
+            {
+                if (evt is ConfbridgeListRoomsEvent roomEvt && roomEvt.Conference is not null)
+                {
+                    rooms.Add(new ConfBridgeRoom
+                    {
+                        Conference = roomEvt.Conference,
+                        Parties = roomEvt.Parties ?? 0,
+                        Marked = roomEvt.Marked ?? 0,
+                        Locked = roomEvt.Locked ?? false,
+                    });
+                }
+            }
+
+            // Step 2: For each room, get participants
+            foreach (var room in rooms)
+            {
+                var action = new ConfbridgeListAction { Conference = room.Conference };
+                await foreach (var evt in entry.Connection.SendEventGeneratingActionAsync(action))
+                {
+                    if (evt is ConfbridgeListEvent listEvt && listEvt.Channel is not null)
+                    {
+                        room.Participants.Add(new ConfBridgeParticipant
+                        {
+                            Channel = listEvt.Channel,
+                            Admin = listEvt.Admin ?? false,
+                            Muted = string.Equals(listEvt.Muted, "Yes", StringComparison.OrdinalIgnoreCase),
+                            Talking = string.Equals(listEvt.Talking, "Yes", StringComparison.OrdinalIgnoreCase),
+                            MarkedUser = listEvt.MarkedUser ?? false,
+                            AnsweredTime = listEvt.Answeredtime ?? 0,
+                            UniqueId = listEvt.Uniqueid,
+                        });
+                    }
+                }
+            }
+
+            _confbridgeRooms = rooms;
+            _confbridgeError = null;
+        }
+        catch (Exception ex)
+        {
+            _confbridgeError = $"Failed to load ConfBridge rooms: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    // ---------- Participant Actions ----------
+
+    private async Task MuteParticipant(string conference, string channel)
+    {
+        await ExecuteActionAsync(new ConfbridgeMuteAction { Conference = conference, Channel = channel },
+            $"Muted {channel} in {conference}");
+    }
+
+    private async Task UnmuteParticipant(string conference, string channel)
+    {
+        await ExecuteActionAsync(new ConfbridgeUnmuteAction { Conference = conference, Channel = channel },
+            $"Unmuted {channel} in {conference}");
+    }
+
+    private async Task KickParticipant(string conference, string channel)
+    {
+        await ExecuteActionAsync(new ConfbridgeKickAction { Conference = conference, Channel = channel },
+            $"Kicked {channel} from {conference}");
+    }
+
+    // ---------- Room Actions ----------
+
+    private async Task LockRoom(string conference)
+    {
+        await ExecuteActionAsync(new ConfbridgeLockAction { Conference = conference },
+            $"Locked room {conference}");
+    }
+
+    private async Task UnlockRoom(string conference)
+    {
+        await ExecuteActionAsync(new ConfbridgeUnlockAction { Conference = conference },
+            $"Unlocked room {conference}");
+    }
+
+    private async Task StartRecording(string conference)
+    {
+        await ExecuteActionAsync(new ConfbridgeStartRecordAction { Conference = conference },
+            $"Started recording room {conference}");
+        _recordingRooms.Add(conference);
+    }
+
+    private async Task StopRecording(string conference)
+    {
+        await ExecuteActionAsync(new ConfbridgeStopRecordAction { Conference = conference },
+            $"Stopped recording room {conference}");
+        _recordingRooms.Remove(conference);
+    }
+
+    private async Task ExecuteActionAsync(ManagerAction action, string successMessage)
+    {
+        var entry = ServerSvc.GetSelectedServer();
+        if (entry is null) return;
+
+        _actionInProgress = true;
+        _actionResult = null;
+
+        try
+        {
+            var response = await entry.Connection.SendActionAsync(action);
+            _actionResult = string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase)
+                ? successMessage
+                : $"Failed: {response.Response} — {response.Message}";
+        }
+        catch (Exception ex)
+        {
+            _actionResult = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
+    }
+
+    // ---------- MeetMe Helpers ----------
 
     private static (string dotClass, string label) GetUserStyle(MeetMeUser user)
     {
@@ -77,6 +373,38 @@
             MeetMeUserState.Talking => ("dot-green", "Talking"),
             _ => ("dot-gray-light", "Unknown")
         };
+    }
+
+    // ---------- ConfBridge Helpers ----------
+
+    private static string FormatDuration(int totalSeconds)
+    {
+        var ts = TimeSpan.FromSeconds(totalSeconds);
+        return ts.TotalHours >= 1
+            ? $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}"
+            : $"{(int)ts.TotalMinutes}:{ts.Seconds:D2}";
+    }
+
+    // ---------- Models ----------
+
+    private sealed class ConfBridgeRoom
+    {
+        public string Conference { get; set; } = "";
+        public int Parties { get; set; }
+        public int Marked { get; set; }
+        public bool Locked { get; set; }
+        public List<ConfBridgeParticipant> Participants { get; } = [];
+    }
+
+    private sealed class ConfBridgeParticipant
+    {
+        public string Channel { get; set; } = "";
+        public bool Admin { get; set; }
+        public bool Muted { get; set; }
+        public bool Talking { get; set; }
+        public bool MarkedUser { get; set; }
+        public int AnsweredTime { get; set; }
+        public string? UniqueId { get; set; }
     }
 
     public void Dispose() => _timer?.Dispose();
