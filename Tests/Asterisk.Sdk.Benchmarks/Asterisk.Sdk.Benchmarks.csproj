@@ -10,6 +10,7 @@
     <ProjectReference Include="..\..\src\Asterisk.Sdk.Ami\Asterisk.Sdk.Ami.csproj" />
     <ProjectReference Include="..\..\src\Asterisk.Sdk.Agi\Asterisk.Sdk.Agi.csproj" />
     <ProjectReference Include="..\..\src\Asterisk.Sdk.Ari\Asterisk.Sdk.Ari.csproj" />
+    <ProjectReference Include="..\..\src\Asterisk.Sdk.Live\Asterisk.Sdk.Live.csproj" />
   </ItemGroup>
 
   <ItemGroup>
