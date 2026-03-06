@@ -73,16 +73,42 @@ Suite original: 5 clases, 15 benchmarks. Cubrian AMI reader/writer, event pump, 
 
 | Sprint | Objetivo | Tareas | Estado | Commit |
 |--------|----------|--------|--------|--------|
-| **1** | Fixes + ARI + AudioSocket | 1.1-1.3 | ✅ | `pending` |
-| **2** | Observer + Event Pipeline | 2.1-2.2 | ✅ | `pending` |
-| **3** | Live Layer + Correlation | 3.1-3.2 | ✅ | `pending` |
+| **1** | Fixes + ARI + AudioSocket | 1.1-1.3 | ✅ | `733578b` |
+| **2** | Observer + Event Pipeline | 2.1-2.2 | ✅ | `733578b` |
+| **3** | Live Layer + Correlation | 3.1-3.2 | ✅ | `733578b` |
+| **Fix** | Pipe deadlock en async benchmarks | — | ✅ | `df5203d` |
 
 ## Resultado
 
 | Metrica | Antes | Despues |
 |---------|-------|---------|
-| Clases de benchmark | 5 | **10** |
-| Benchmarks totales | 15 | **30** |
+| Clases de benchmark | 5 | **11** |
+| Benchmarks totales | 15 | **36** |
 | Hot paths cubiertos | 5/9 | **9/9** |
-| Benchmarks con `[Baseline]` | 0 | **10** |
+| Benchmarks con `[Baseline]` | 0 | **11** |
 | Metodologia correcta | Parcial | **Todos corregidos** |
+| Tiempo total de ejecucion | — | **4m 28s** |
+
+---
+
+## Resultados de Ejecucion (2026-03-06)
+
+> AMD Ryzen 9 9900X, .NET 10.0.3, BenchmarkDotNet v0.14.0, ShortRunJob
+
+### Hot Path Performance
+
+| Hot Path | Benchmark | Latencia | Alloc |
+|----------|-----------|----------|-------|
+| Observer dispatch | 1 observer | **0.26 ns** | 0 B |
+| Observer dispatch | 100 observers | **21 ns** | 0 B |
+| AudioSocket parse | Single frame | **11 ns** | 0 B |
+| AMI writer | Simple action | **118 ns** | 0 B |
+| AMI reader | Single event | **743 ns** | 3.15 KB |
+| AMI reader | Response | **487 ns** | 1.94 KB |
+| Event deserializer | 15-field event | **984 ns** | 4.13 KB |
+| ARI JSON | Deserialize channel | **289 ns** | 232 B |
+| ARI parse event | StasisStart | **4.5 μs** | 3 KB |
+| Channel lookup | By UniqueId | **6.3 ns** | 0 B |
+| Channel lookup | By Name | **7.0 ns** | 0 B |
+| Action correlation | 1000 add+correlate | **62 μs** | 140 KB |
+| Event pump | 1000 enqueue+consume | **69 μs** | 14 KB |
