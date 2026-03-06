@@ -1,0 +1,331 @@
+@page "/voicemail"
+@using DashboardExample.Services
+@using Asterisk.Sdk
+@using Asterisk.Sdk.Ami.Actions
+@using Asterisk.Sdk.Ami.Events
+@inject SelectedServerService ServerSvc
+@implements IDisposable
+
+<PageTitle>Voicemail — Asterisk Dashboard</PageTitle>
+
+<h2>Voicemail Management</h2>
+
+@if (_loading)
+{
+    <p class="text-muted">Loading voicemail users...</p>
+}
+else if (_error is not null)
+{
+    <p class="action-result">@_error</p>
+}
+else
+{
+    <div class="kpi-grid">
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-value">@_users.Count</div>
+            <div class="kpi-label">Mailboxes</div>
+        </div>
+        <div class="kpi-card kpi-green">
+            <div class="kpi-value">@_users.Sum(u => u.NewMessageCount ?? 0)</div>
+            <div class="kpi-label">New Messages</div>
+        </div>
+        <div class="kpi-card kpi-gray">
+            <div class="kpi-value">@_users.Sum(u => u.OldMessageCount ?? 0)</div>
+            <div class="kpi-label">Old Messages</div>
+        </div>
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th></th>
+                <th>Mailbox</th>
+                <th>Context</th>
+                <th>Full Name</th>
+                <th>Email</th>
+                <th>New</th>
+                <th>Old</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var user in _users)
+            {
+                var isExpanded = _expandedMailbox == GetMailboxKey(user);
+                <tr @onclick="() => ToggleExpand(user)" style="cursor: pointer;">
+                    <td>@(isExpanded ? "\u25BC" : "\u25B6")</td>
+                    <td class="mono">@user.Voicemailbox</td>
+                    <td>@user.VmContext</td>
+                    <td>@user.Fullname</td>
+                    <td class="text-muted">@user.Email</td>
+                    <td>
+                        @if ((user.NewMessageCount ?? 0) > 0)
+                        {
+                            <span class="badge badge-green">@user.NewMessageCount</span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">0</span>
+                        }
+                    </td>
+                    <td>
+                        @if ((user.OldMessageCount ?? 0) > 0)
+                        {
+                            <span class="badge badge-blue">@user.OldMessageCount</span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">0</span>
+                        }
+                    </td>
+                </tr>
+
+                @if (isExpanded)
+                {
+                    <tr>
+                        <td colspan="7">
+                            @if (_messagesLoading)
+                            {
+                                <p class="text-muted">Loading messages...</p>
+                            }
+                            else if (_messages.Count == 0)
+                            {
+                                <p class="text-muted">No messages in this mailbox.</p>
+                            }
+                            else
+                            {
+                                <table class="data-table" style="margin: 0.5rem 0;">
+                                    <thead>
+                                        <tr>
+                                            <th>Folder</th>
+                                            <th>ID</th>
+                                            <th>Caller</th>
+                                            <th>Date</th>
+                                            <th>Duration</th>
+                                            <th>Flag</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var msg in _messages)
+                                        {
+                                            <tr>
+                                                <td>@msg.Folder</td>
+                                                <td class="mono">@msg.ID</td>
+                                                <td>@FormatCaller(msg)</td>
+                                                <td class="text-muted">@FormatOrigtime(msg.Origtime)</td>
+                                                <td>@FormatDuration(msg.Duration)</td>
+                                                <td>
+                                                    @if (!string.IsNullOrEmpty(msg.Flag) && !string.Equals(msg.Flag, "0", StringComparison.Ordinal))
+                                                    {
+                                                        <span class="badge badge-red">@msg.Flag</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    <button class="btn btn-red btn-sm"
+                                                            @onclick:stopPropagation="true"
+                                                            @onclick="() => DeleteMessage(user, msg)">
+                                                        Delete
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            }
+                            @if (_deleteResult is not null)
+                            {
+                                <p class="action-result">@_deleteResult</p>
+                            }
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private Timer? _timer;
+    private bool _loading = true;
+    private string? _error;
+    private List<VoicemailUserEntryEvent> _users = [];
+    private string? _expandedMailbox;
+    private bool _messagesLoading;
+    private List<VoicemailBoxSummaryEvent> _messages = [];
+    private string? _deleteResult;
+
+    protected override void OnInitialized()
+    {
+        _ = LoadUsersAsync();
+        _timer = new Timer(_ => InvokeAsync(RefreshAsync),
+            null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+    }
+
+    private async Task RefreshAsync()
+    {
+        await LoadUsersAsync();
+        StateHasChanged();
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        var entry = ServerSvc.GetSelectedServer();
+        if (entry is null)
+        {
+            _error = "No server selected.";
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            var users = new List<VoicemailUserEntryEvent>();
+            var action = new VoicemailUsersListAction();
+
+            await foreach (var evt in entry.Connection.SendEventGeneratingActionAsync(action))
+            {
+                if (evt is VoicemailUserEntryEvent userEntry)
+                {
+                    users.Add(userEntry);
+                }
+            }
+
+            _users = users;
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load voicemail users: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string GetMailboxKey(VoicemailUserEntryEvent user) =>
+        $"{user.Voicemailbox}@{user.VmContext}";
+
+    private async Task ToggleExpand(VoicemailUserEntryEvent user)
+    {
+        var key = GetMailboxKey(user);
+        if (_expandedMailbox == key)
+        {
+            _expandedMailbox = null;
+            _messages = [];
+            _deleteResult = null;
+            return;
+        }
+
+        _expandedMailbox = key;
+        _deleteResult = null;
+        await LoadMessagesAsync(user);
+    }
+
+    private async Task LoadMessagesAsync(VoicemailUserEntryEvent user)
+    {
+        _messagesLoading = true;
+        _messages = [];
+
+        var entry = ServerSvc.GetSelectedServer();
+        if (entry is null) return;
+
+        try
+        {
+            var action = new VoicemailBoxSummaryAction
+            {
+                Mailbox = user.Voicemailbox,
+                Context = user.VmContext
+            };
+
+            var messages = new List<VoicemailBoxSummaryEvent>();
+            await foreach (var evt in entry.Connection.SendEventGeneratingActionAsync(action))
+            {
+                if (evt is VoicemailBoxSummaryEvent summaryEvent)
+                {
+                    messages.Add(summaryEvent);
+                }
+            }
+
+            _messages = messages;
+        }
+        catch (Exception ex)
+        {
+            _deleteResult = $"Failed to load messages: {ex.Message}";
+        }
+        finally
+        {
+            _messagesLoading = false;
+        }
+    }
+
+    private async Task DeleteMessage(VoicemailUserEntryEvent user, VoicemailBoxSummaryEvent msg)
+    {
+        var entry = ServerSvc.GetSelectedServer();
+        if (entry is null) return;
+
+        try
+        {
+            var action = new VoicemailRemoveAction
+            {
+                Mailbox = user.Voicemailbox,
+                Context = user.VmContext,
+                Folder = msg.Folder,
+                ID = msg.ID
+            };
+
+            var response = await entry.Connection.SendActionAsync(action);
+
+            if (string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase))
+            {
+                _deleteResult = $"Deleted message {msg.ID} from {msg.Folder}.";
+                await LoadMessagesAsync(user);
+                await LoadUsersAsync();
+            }
+            else
+            {
+                _deleteResult = $"Delete failed: {response.Message}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _deleteResult = $"Delete error: {ex.Message}";
+        }
+    }
+
+    private static string FormatCaller(VoicemailBoxSummaryEvent msg)
+    {
+        if (!string.IsNullOrEmpty(msg.CallerIDName) && !string.IsNullOrEmpty(msg.CallerIDNum))
+            return $"{msg.CallerIDName} <{msg.CallerIDNum}>";
+        if (!string.IsNullOrEmpty(msg.CallerIDNum))
+            return msg.CallerIDNum;
+        if (!string.IsNullOrEmpty(msg.CallerIDName))
+            return msg.CallerIDName;
+        return "Unknown";
+    }
+
+    private static string FormatOrigtime(string? origtime)
+    {
+        if (string.IsNullOrEmpty(origtime))
+            return "";
+        if (long.TryParse(origtime, out var epoch))
+            return DateTimeOffset.FromUnixTimeSeconds(epoch).ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        return origtime;
+    }
+
+    private static string FormatDuration(string? duration)
+    {
+        if (string.IsNullOrEmpty(duration))
+            return "";
+        if (int.TryParse(duration, out var seconds))
+        {
+            var ts = TimeSpan.FromSeconds(seconds);
+            return ts.TotalHours >= 1
+                ? $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}"
+                : $"{(int)ts.TotalMinutes}:{ts.Seconds:D2}";
+        }
+        return duration;
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

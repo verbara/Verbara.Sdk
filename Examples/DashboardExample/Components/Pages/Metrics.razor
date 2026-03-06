@@ -1,13 +1,59 @@
 @page "/metrics"
 @using System.Collections.Concurrent
 @using System.Diagnostics.Metrics
+@using Asterisk.Sdk.Ami.Actions
 @using Asterisk.Sdk.Ami.Diagnostics
+@using Asterisk.Sdk.Ami.Responses
 @using Asterisk.Sdk.Live.Diagnostics
+@using DashboardExample.Services
+@inject SelectedServerService ServerSvc
 @implements IDisposable
 
 <PageTitle>Metrics — Asterisk Dashboard</PageTitle>
 
 <h2>SDK Metrics</h2>
+
+<h3>System Info</h3>
+<div class="kpi-grid">
+    <div class="kpi-card kpi-purple">
+        <div class="kpi-value">@(_asteriskVersion ?? "—")</div>
+        <div class="kpi-label">Asterisk Version</div>
+    </div>
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@(_amiVersion ?? "—")</div>
+        <div class="kpi-label">AMI Version</div>
+    </div>
+    <div class="kpi-card kpi-gray">
+        <div class="kpi-value">@(_systemName ?? "—")</div>
+        <div class="kpi-label">System Name</div>
+    </div>
+    <div class="kpi-card kpi-green">
+        <div class="kpi-value">@(_currentCalls?.ToString() ?? "—")</div>
+        <div class="kpi-label">Current Calls</div>
+    </div>
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@(_maxCalls?.ToString() ?? "—")</div>
+        <div class="kpi-label">Max Calls</div>
+    </div>
+    <div class="kpi-card kpi-yellow">
+        <div class="kpi-value">@(_uptime ?? "—")</div>
+        <div class="kpi-label">Uptime</div>
+    </div>
+</div>
+<div class="kpi-grid kpi-grid-sm">
+    <div class="kpi-card kpi-gray">
+        <div class="kpi-value">@(_runUser ?? "—")</div>
+        <div class="kpi-label">Run User</div>
+    </div>
+    <div class="kpi-card kpi-gray">
+        <div class="kpi-value">@(_maxLoadAvg?.ToString("F1") ?? "—")</div>
+        <div class="kpi-label">Max Load Avg</div>
+    </div>
+    <div class="kpi-card kpi-gray">
+        <div class="kpi-value">@(_maxFilehandles?.ToString() ?? "—")</div>
+        <div class="kpi-label">Max Filehandles</div>
+    </div>
+</div>
 
 <h3>AMI Connection Health</h3>
 <div class="kpi-grid">
@@ -85,6 +131,12 @@
     private readonly ConcurrentDictionary<string, long> _histogramCounts = new();
     private readonly ConcurrentDictionary<string, double> _gauges = new();
 
+    // System info
+    private string? _asteriskVersion, _amiVersion, _systemName, _runUser, _uptime;
+    private int? _currentCalls, _maxCalls, _maxFilehandles;
+    private double? _maxLoadAvg;
+    private bool _systemInfoLoaded;
+
     protected override void OnInitialized()
     {
         _listener = new MeterListener();
@@ -125,11 +177,57 @@
 
         _listener.Start();
 
-        _refreshTimer = new Timer(_ =>
+        _refreshTimer = new Timer(async _ =>
         {
             _listener.RecordObservableInstruments();
-            InvokeAsync(StateHasChanged);
+            if (!_systemInfoLoaded) await LoadSystemInfoAsync();
+            await InvokeAsync(StateHasChanged);
         }, null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+    }
+
+    private async Task LoadSystemInfoAsync()
+    {
+        try
+        {
+            var connection = ServerSvc.GetSelectedServer()?.Connection;
+            if (connection is null) return;
+
+            var settingsResponse = await connection.SendActionAsync<CoreSettingsResponse>(new CoreSettingsAction());
+            if (settingsResponse.Response == "Success")
+            {
+                _asteriskVersion = settingsResponse.AsteriskVersion;
+                _amiVersion = settingsResponse.AmiVersion;
+                _systemName = settingsResponse.SystemName;
+                _maxCalls = settingsResponse.CoreMaxCalls;
+                _maxLoadAvg = settingsResponse.CoreMaxLoadAvg;
+                _runUser = settingsResponse.CoreRunUser;
+                _maxFilehandles = settingsResponse.CoreMaxFilehandles;
+            }
+
+            var statusResponse = await connection.SendActionAsync<CoreStatusResponse>(new CoreStatusAction());
+            if (statusResponse.Response == "Success")
+            {
+                _currentCalls = statusResponse.CoreCurrentCalls;
+
+                if (statusResponse.CoreStartupDate is not null && statusResponse.CoreStartupTime is not null)
+                {
+                    var startupStr = $"{statusResponse.CoreStartupDate} {statusResponse.CoreStartupTime}";
+                    if (DateTime.TryParse(startupStr, out var startup))
+                    {
+                        var uptime = DateTime.Now - startup;
+                        _uptime = uptime.TotalDays >= 1
+                            ? $"{(int)uptime.TotalDays}d {uptime.Hours}h"
+                            : $"{(int)uptime.TotalHours}h {uptime.Minutes}m";
+                    }
+                }
+            }
+
+            _systemInfoLoaded = true;
+        }
+        catch
+        {
+            // System info is best-effort; don't fail the page
+        }
     }
 
     private long GetCounter(string name) =>
