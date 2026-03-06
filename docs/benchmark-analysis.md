@@ -15,9 +15,9 @@ Convertimos latencias a operaciones/segundo para entender capacidad real:
 | Observer dispatch (100 obs) | 21 ns | **47.6 M ops/s** | Escala linealmente (~0.21ns/observer) |
 | AudioSocket parse frame | 11 ns | **90.9 M frames/s** | SequenceReader, zero-alloc |
 | AMI write action | 118 ns | **8.47 M actions/s** | PipeWriter, zero-alloc |
-| AMI read response | 487 ns | **2.05 M msgs/s** | PipeReader + string parsing |
-| AMI read event | 743 ns | **1.35 M events/s** | PipeReader + Dictionary alloc |
-| Event deserializer (15 fields) | 984 ns | **1.02 M events/s** | Full pipeline: bytes→Pipe→AmiMessage |
+| AMI read response | 412 ns | **2.43 M msgs/s** | PipeReader + span-based parsing |
+| AMI read event | 582 ns | **1.72 M events/s** | PipeReader + AmiStringPool |
+| Event deserializer (15 fields) | 791 ns | **1.26 M events/s** | Full pipeline: bytes→Pipe→AmiMessage |
 | ARI JSON deserialize | 289 ns | **3.46 M ops/s** | System.Text.Json source-gen |
 | ARI parse StasisStart | 4.5 us | **222 K events/s** | JSON parse + event dispatch |
 | Channel lookup (UniqueId) | 6.3 ns | **158.7 M lookups/s** | ConcurrentDictionary O(1) |
@@ -93,10 +93,10 @@ Convertimos latencias a operaciones/segundo para entender capacidad real:
 
 | Componente | Alloc | Fuente | Optimizable? |
 |-----------|-------|--------|-------------|
-| AMI read event | 3.15 KB | Dictionary + string keys/values | Dificil sin pooling |
+| AMI read event | 1.83 KB | Dictionary + interned keys/values | Optimizado con AmiStringPool |
 | ARI JSON deserialize | 232 B | Objetos de dominio (Channel, etc) | No — son el resultado |
 | ARI parse event | 3 KB | JSON + event object + dispatch | Aceptable para ARI |
-| Event deserializer (15 fields) | 4.13 KB | Dictionary(15 entries) + strings | Podria usar StringPool |
+| Event deserializer (15 fields) | 1.90 KB | Dictionary(15 entries) + interned strings | Optimizado con AmiStringPool |
 
 ### Analisis GC por Escenario
 
@@ -127,9 +127,7 @@ TCP recv → PipeReader.ReadAsync()     ~50-200 ns (kernel)
          TOTAL                        ~743-984 ns per event
 ```
 
-**Bottleneck principal**: String allocation en el parsing de AMI fields. Cada campo requiere `Encoding.UTF8.GetString()` que alloca un nuevo string. En un escenario de 100K events/sec, esto genera ~300MB/s de strings efimeros.
-
-**Optimizacion posible** (futuro): `Utf8StringPool` o `Span<byte>` keys con lazy string materialization.
+**Bottleneck principal**: String allocation en el parsing de AMI fields — mitigado con `AmiStringPool` (key/value interning) y span-based parsing que eliminó ~42-54% de allocations. Reducido de 3.15 KB a 1.83 KB por evento.
 
 ### Pipeline ARI: WebSocket → evento dispatcheado
 
@@ -164,11 +162,11 @@ TOTAL                                ~4.5 us per event
 
 La libreria esta en el rango de **high-performance** para un SDK de Asterisk. Los numeros criticos:
 
-- **1.35M AMI events/sec** en single-thread — suficiente para un cluster de 100K+ agentes
+- **1.72M AMI events/sec** en single-thread — suficiente para un cluster de 100K+ agentes
 - **6.3ns channel lookups** — ConcurrentDictionary O(1) con secondary indices
 - **Zero-alloc observer dispatch** — el hot path mas critico no genera GC pressure
 - **289ns ARI JSON** — source-generated STJ es el estado del arte para .NET
 
 ### Area de mejora principal
 
-El unico punto debil medible es el **string allocation en AMI parsing** (3.15KB/event). Para escenarios de 100K+ events/sec, considerar implementar un `StringPool` para keys comunes ("Event", "Channel", "Uniqueid", etc.) que reduciria allocations ~40%.
+El string allocation en AMI parsing fue optimizado de 3.15 KB a 1.83 KB/event (-42%) mediante `AmiStringPool` (key/value interning) y span-based parsing. Ver `docs/plan-ami-string-optimization.md` para detalles.
