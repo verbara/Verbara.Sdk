@@ -31,6 +31,12 @@ internal static partial class AmiConnectionLog
     [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI_ACTION] Sending: action_id={ActionId} action={ActionName}")]
     public static partial void ActionSending(ILogger logger, string actionId, string actionName);
 
+    [LoggerMessage(Level = LogLevel.Trace, Message = "[AMI_ACTION] Field: action_id={ActionId} {Key}={Value}")]
+    public static partial void ActionField(ILogger logger, string actionId, string key, string value);
+
+    [LoggerMessage(Level = LogLevel.Trace, Message = "[AMI_ACTION] No fields for action_id={ActionId} action={ActionName}")]
+    public static partial void ActionNoFields(ILogger logger, string actionId, string actionName);
+
     [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI_ACTION] Response: action_id={ActionId} action={ActionName} response={Response} message={Message}")]
     public static partial void ResponseReceived(ILogger logger, string? actionId, string? actionName, string? response, string? message);
 
@@ -240,7 +246,7 @@ public sealed class AmiConnection : IAmiConnection
         {
             // Use source-generated serializer for AOT-compatible action dispatch
             var actionName = GeneratedActionSerializer.GetActionName(action);
-            var fields = GeneratedActionSerializer.Serialize(action);
+            var fields = MaterializeAndLogFields(actionId, actionName, GeneratedActionSerializer.Serialize(action));
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
@@ -278,7 +284,7 @@ public sealed class AmiConnection : IAmiConnection
         try
         {
             var actionName = GeneratedActionSerializer.GetActionName(action);
-            var fields = GeneratedActionSerializer.Serialize(action);
+            var fields = MaterializeAndLogFields(actionId, actionName, GeneratedActionSerializer.Serialize(action));
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
@@ -317,7 +323,7 @@ public sealed class AmiConnection : IAmiConnection
         try
         {
             var actionName = GeneratedActionSerializer.GetActionName(action);
-            var fields = GeneratedActionSerializer.Serialize(action);
+            var fields = MaterializeAndLogFields(actionId, actionName, GeneratedActionSerializer.Serialize(action));
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
@@ -333,6 +339,22 @@ public sealed class AmiConnection : IAmiConnection
             _pendingEventActions.TryRemove(actionId, out _);
             _actionNames.TryRemove(actionId, out _);
         }
+    }
+
+    private IEnumerable<KeyValuePair<string, string>> MaterializeAndLogFields(
+        string actionId, string actionName, IEnumerable<KeyValuePair<string, string>> fields)
+    {
+        if (!_logger.IsEnabled(LogLevel.Trace))
+            return fields;
+
+        var list = fields as IList<KeyValuePair<string, string>> ?? [.. fields];
+        foreach (var field in list)
+            AmiConnectionLog.ActionField(_logger, actionId, field.Key, field.Value);
+
+        if (list.Count == 0)
+            AmiConnectionLog.ActionNoFields(_logger, actionId, actionName);
+
+        return list;
     }
 
     /// <summary>Serialize writes to the PipeWriter to prevent interleaving from concurrent callers.</summary>
