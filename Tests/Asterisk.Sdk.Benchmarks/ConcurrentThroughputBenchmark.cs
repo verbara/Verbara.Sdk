@@ -15,7 +15,7 @@ public class ConcurrentThroughputBenchmark
     public void Setup()
     {
         var sb = new StringBuilder();
-        for (int i = 0; i < 500; i++)
+        for (int i = 0; i < 100; i++)
         {
             // Alternate between events and responses
             if (i % 2 == 0)
@@ -33,19 +33,20 @@ public class ConcurrentThroughputBenchmark
         _mixedMessages = Encoding.UTF8.GetBytes(sb.ToString());
     }
 
-    [Benchmark(Description = "Parse 500 mixed messages (events + responses)")]
-    public async Task<int> Parse500MixedMessages()
+    [Benchmark(Baseline = true, Description = "Parse 100 mixed messages (events + responses)")]
+    public async Task<int> Parse100MixedMessages()
     {
         var pipe = new Pipe();
-        var reader = new AmiProtocolReader(pipe.Reader);
         await pipe.Writer.WriteAsync(_mixedMessages);
-        await pipe.Writer.CompleteAsync();
+        pipe.Writer.Complete();
 
+        var reader = new AmiProtocolReader(pipe.Reader);
         int count = 0;
         while (await reader.ReadMessageAsync() is not null)
         {
             count++;
         }
+        pipe.Reader.Complete();
         return count;
     }
 
@@ -54,21 +55,22 @@ public class ConcurrentThroughputBenchmark
     {
         var pipe = new Pipe();
         var writer = new AmiProtocolWriter(pipe.Writer);
-        var reader = new AmiProtocolReader(pipe.Reader);
 
         // Write 100 actions
         for (int i = 0; i < 100; i++)
         {
             await writer.WriteActionAsync("Ping", $"id-{i}");
         }
-        await pipe.Writer.CompleteAsync();
+        pipe.Writer.Complete();
 
         // Read them back
+        var reader = new AmiProtocolReader(pipe.Reader);
         int count = 0;
         while (await reader.ReadMessageAsync() is not null)
         {
             count++;
         }
+        pipe.Reader.Complete();
         return count;
     }
 }

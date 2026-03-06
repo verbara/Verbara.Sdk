@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.IO.Pipelines;
 using System.Text;
 using Asterisk.Sdk.Ami.Internal;
@@ -26,7 +27,7 @@ public class AmiProtocolReaderBenchmark
             "Ping: Pong\r\nTimestamp: 1234567890.000\r\n\r\n");
 
         var sb = new StringBuilder();
-        for (int i = 0; i < 1000; i++)
+        for (int i = 0; i < 100; i++)
         {
             sb.Append(System.Globalization.CultureInfo.InvariantCulture,
                 $"Event: Newchannel\r\nChannel: SIP/2000-{i:D8}\r\nUniqueid: {i}.1\r\n" +
@@ -35,39 +36,33 @@ public class AmiProtocolReaderBenchmark
         _batchEventsBytes = Encoding.UTF8.GetBytes(sb.ToString());
     }
 
-    [Benchmark]
-    public async Task<AmiMessage?> ParseSingleEvent()
+    private static async Task<AmiMessage?> ParseBytes(byte[] data)
     {
         var pipe = new Pipe();
+        await pipe.Writer.WriteAsync(data);
+        pipe.Writer.Complete();
         var reader = new AmiProtocolReader(pipe.Reader);
-        await pipe.Writer.WriteAsync(_singleEventBytes);
-        await pipe.Writer.CompleteAsync();
-        return await reader.ReadMessageAsync();
+        var result = await reader.ReadMessageAsync();
+        pipe.Reader.Complete();
+        return result;
     }
 
-    [Benchmark]
-    public async Task<AmiMessage?> ParseResponse()
-    {
-        var pipe = new Pipe();
-        var reader = new AmiProtocolReader(pipe.Reader);
-        await pipe.Writer.WriteAsync(_responseBytes);
-        await pipe.Writer.CompleteAsync();
-        return await reader.ReadMessageAsync();
-    }
+    [Benchmark(Baseline = true)]
+    public Task<AmiMessage?> ParseSingleEvent() => ParseBytes(_singleEventBytes);
 
     [Benchmark]
-    public async Task<int> Parse1000Events()
+    public Task<AmiMessage?> ParseResponse() => ParseBytes(_responseBytes);
+
+    [Benchmark]
+    public async Task<int> Parse100EventBatch()
     {
         var pipe = new Pipe();
-        var reader = new AmiProtocolReader(pipe.Reader);
         await pipe.Writer.WriteAsync(_batchEventsBytes);
-        await pipe.Writer.CompleteAsync();
-
+        pipe.Writer.Complete();
+        var reader = new AmiProtocolReader(pipe.Reader);
         int count = 0;
-        while (await reader.ReadMessageAsync() is not null)
-        {
-            count++;
-        }
+        while (await reader.ReadMessageAsync() is not null) { count++; }
+        pipe.Reader.Complete();
         return count;
     }
 }
