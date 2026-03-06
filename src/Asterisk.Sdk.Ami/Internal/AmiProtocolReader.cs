@@ -15,11 +15,14 @@ namespace Asterisk.Sdk.Ami.Internal;
 ///   - "Response: Follows" → multiline body until "--END COMMAND--"
 ///   - Duplicate keys → last value wins (consistent with asterisk-java)
 ///   - Protocol identifier line: "Asterisk Call Manager/X.Y.Z"
+///
+/// String optimization: keys and common values are interned via AmiStringPool.
+/// Field parsing uses span-based byte scanning to avoid intermediate string allocations.
 /// </summary>
 public sealed class AmiProtocolReader
 {
     private static readonly byte[] CrLf = "\r\n"u8.ToArray();
-    private static readonly byte[] EndCommand = "--END COMMAND--"u8.ToArray();
+    private static readonly byte[] EndCommandMarker = "--END COMMAND--"u8.ToArray();
 
     private readonly PipeReader _reader;
 
@@ -63,56 +66,55 @@ public sealed class AmiProtocolReader
                     continue;
                 }
 
-                var lineStr = GetString(line);
-
-                // Handle multiline command response body (after all headers are parsed)
+                // Command response body: all lines are body until --END COMMAND--
                 if (isCommandResponse)
                 {
-                    if (lineStr.StartsWith("--END COMMAND--", StringComparison.Ordinal))
+                    if (StartsWithEndCommand(line))
                     {
                         isCommandResponse = false;
                     }
                     else
                     {
                         commandOutput ??= new StringBuilder();
-                        commandOutput.AppendLine(lineStr);
+                        commandOutput.AppendLine(GetString(line));
                     }
 
                     continue;
                 }
 
-                // Try to parse as "Key: Value"
-                var colonIndex = lineStr.IndexOf(':');
-                if (colonIndex > 0)
+                // Fast path: parse field directly from bytes (no intermediate string allocation)
+                if (TryParseFieldBytes(line, out var key, out var value))
                 {
-                    var key = lineStr[..colonIndex].Trim();
-                    var value = lineStr[(colonIndex + 1)..].Trim();
                     fields[key] = value;
 
-                    // Detect "Response: Follows" — headers continue normally,
-                    // command output starts when we see a non-header line
-                    if (key.Equals("Response", StringComparison.OrdinalIgnoreCase)
+                    if (commandOutput is null
+                        && key.Equals("Response", StringComparison.OrdinalIgnoreCase)
                         && value.Equals("Follows", StringComparison.OrdinalIgnoreCase))
                     {
                         commandOutput = new StringBuilder();
                     }
+
+                    continue;
                 }
-                else if (commandOutput is not null)
+
+                // Slow path: no colon found — command output start or protocol identifier
+                if (commandOutput is not null)
                 {
-                    // Non-header line in a Follows response — this is command output
+                    // First non-header line after Response: Follows
                     isCommandResponse = true;
-                    if (lineStr.StartsWith("--END COMMAND--", StringComparison.Ordinal))
+                    if (StartsWithEndCommand(line))
                     {
                         isCommandResponse = false;
                     }
                     else
                     {
-                        commandOutput.AppendLine(lineStr);
+                        commandOutput.AppendLine(GetString(line));
                     }
                 }
                 else
                 {
                     // Protocol identifier or unparseable line
+                    var lineStr = GetString(line);
                     if (lineStr.Contains("Asterisk Call Manager", StringComparison.OrdinalIgnoreCase)
                         || lineStr.Contains("OpenPBX Call Manager", StringComparison.OrdinalIgnoreCase))
                     {
@@ -136,6 +138,79 @@ public sealed class AmiProtocolReader
                 return null;
             }
         }
+    }
+
+    /// <summary>
+    /// Parse a "Key: Value" field directly from bytes without materializing the full line string.
+    /// Key is resolved via AmiStringPool (interned for known keys).
+    /// Value is resolved via AmiStringPool (interned for common values).
+    /// </summary>
+    private static bool TryParseFieldBytes(ReadOnlySequence<byte> line, out string key, out string value)
+    {
+        if (line.IsSingleSegment)
+            return ParseFieldSpan(line.FirstSpan, out key, out value);
+
+        if (line.Length <= 512)
+        {
+            Span<byte> buf = stackalloc byte[(int)line.Length];
+            line.CopyTo(buf);
+            return ParseFieldSpan(buf, out key, out value);
+        }
+
+        key = default!;
+        value = default!;
+        return false;
+    }
+
+    private static bool ParseFieldSpan(ReadOnlySpan<byte> span, out string key, out string value)
+    {
+        const byte Colon = (byte)':';
+        const byte Space = (byte)' ';
+
+        var colonIdx = span.IndexOf(Colon);
+        if (colonIdx <= 0)
+        {
+            key = default!;
+            value = default!;
+            return false;
+        }
+
+        // Extract key (before colon, trim trailing spaces)
+        var keySpan = span[..colonIdx];
+        while (keySpan.Length > 0 && keySpan[^1] == Space)
+            keySpan = keySpan[..^1];
+
+        // Extract value (after colon, trim leading/trailing spaces)
+        var valueSpan = span[(colonIdx + 1)..];
+        while (valueSpan.Length > 0 && valueSpan[0] == Space)
+            valueSpan = valueSpan[1..];
+        while (valueSpan.Length > 0 && valueSpan[^1] == Space)
+            valueSpan = valueSpan[..^1];
+
+        key = AmiStringPool.GetKey(keySpan);
+        value = AmiStringPool.GetValue(valueSpan);
+        return true;
+    }
+
+    /// <summary>
+    /// Check if a line starts with "--END COMMAND--" using byte comparison.
+    /// </summary>
+    private static bool StartsWithEndCommand(ReadOnlySequence<byte> line)
+    {
+        if (line.Length < EndCommandMarker.Length)
+            return false;
+
+        if (line.IsSingleSegment)
+            return line.FirstSpan.StartsWith(EndCommandMarker);
+
+        return CheckEndCommandMultiSegment(line);
+    }
+
+    private static bool CheckEndCommandMultiSegment(ReadOnlySequence<byte> line)
+    {
+        Span<byte> buf = stackalloc byte[EndCommandMarker.Length];
+        line.Slice(0, EndCommandMarker.Length).CopyTo(buf);
+        return buf.SequenceEqual(EndCommandMarker);
     }
 
     /// <summary>
