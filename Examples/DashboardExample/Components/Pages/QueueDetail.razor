@@ -166,10 +166,17 @@ else
         var entry = Monitor.GetServer(ServerId);
         if (entry is null) return;
 
+        var iface = member.Interface;
+        if (string.IsNullOrEmpty(QueueName) || string.IsNullOrEmpty(iface))
+        {
+            _actionMessage = $"Pause failed: missing Queue=\"{QueueName}\" or Interface=\"{iface}\"";
+            return;
+        }
+
         var response = await entry.Connection.SendActionAsync(new QueuePauseAction
         {
             Queue = QueueName,
-            Interface = member.Interface,
+            Interface = iface,
             Paused = pause
         });
         _actionMessage = $"Pause {(pause ? "on" : "off")}: {response.Response} — {response.Message}";
@@ -180,10 +187,17 @@ else
         var entry = Monitor.GetServer(ServerId);
         if (entry is null) return;
 
+        var iface = member.Interface;
+        if (string.IsNullOrEmpty(QueueName) || string.IsNullOrEmpty(iface))
+        {
+            _actionMessage = $"Remove failed: missing Queue=\"{QueueName}\" or Interface=\"{iface}\"";
+            return;
+        }
+
         var response = await entry.Connection.SendActionAsync(new QueueRemoveAction
         {
             Queue = QueueName,
-            Interface = member.Interface
+            Interface = iface
         });
         _actionMessage = $"Remove: {response.Response} — {response.Message}";
     }
