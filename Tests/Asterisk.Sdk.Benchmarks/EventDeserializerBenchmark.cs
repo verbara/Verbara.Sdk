@@ -7,8 +7,8 @@ using BenchmarkDotNet.Attributes;
 namespace Asterisk.Sdk.Benchmarks;
 
 /// <summary>
-/// Benchmarks the full event pipeline: wire bytes -> AmiProtocolReader -> AmiMessage -> parse.
-/// This measures the real-world hot path from TCP bytes to typed ManagerEvent.
+/// Benchmarks the full event pipeline: wire bytes -> AmiProtocolReader -> AmiMessage.
+/// Compares events with different field counts (complexity).
 /// </summary>
 [MemoryDiagnoser]
 [ShortRunJob]
@@ -60,33 +60,23 @@ public class EventDeserializerBenchmark
             "Weight: 0\r\n\r\n");
     }
 
+    private static async Task<AmiMessage?> ParseBytes(byte[] data)
+    {
+        var pipe = new Pipe();
+        await pipe.Writer.WriteAsync(data);
+        pipe.Writer.Complete();
+        var reader = new AmiProtocolReader(pipe.Reader);
+        var result = await reader.ReadMessageAsync();
+        pipe.Reader.Complete();
+        return result;
+    }
+
     [Benchmark(Baseline = true)]
-    public async Task<AmiMessage?> ParseNewchannel()
-    {
-        var pipe = new Pipe();
-        var reader = new AmiProtocolReader(pipe.Reader);
-        await pipe.Writer.WriteAsync(_newchannelBytes);
-        await pipe.Writer.CompleteAsync();
-        return await reader.ReadMessageAsync();
-    }
+    public Task<AmiMessage?> ParseNewchannel() => ParseBytes(_newchannelBytes);
 
     [Benchmark]
-    public async Task<AmiMessage?> ParseVarSet()
-    {
-        var pipe = new Pipe();
-        var reader = new AmiProtocolReader(pipe.Reader);
-        await pipe.Writer.WriteAsync(_varsetBytes);
-        await pipe.Writer.CompleteAsync();
-        return await reader.ReadMessageAsync();
-    }
+    public Task<AmiMessage?> ParseVarSet() => ParseBytes(_varsetBytes);
 
     [Benchmark]
-    public async Task<AmiMessage?> ParseQueueParams()
-    {
-        var pipe = new Pipe();
-        var reader = new AmiProtocolReader(pipe.Reader);
-        await pipe.Writer.WriteAsync(_queueParamsBytes);
-        await pipe.Writer.CompleteAsync();
-        return await reader.ReadMessageAsync();
-    }
+    public Task<AmiMessage?> ParseQueueParams() => ParseBytes(_queueParamsBytes);
 }
