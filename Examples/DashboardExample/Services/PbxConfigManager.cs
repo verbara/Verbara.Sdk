@@ -20,7 +20,9 @@ internal static partial class PbxConfigLog
 }
 
 /// <summary>
-/// Base service for reading and modifying Asterisk configuration files via AMI.
+/// Reads and modifies Asterisk configuration files via the dedicated config AMI connection.
+/// Uses <see cref="AsteriskMonitorService.ServerEntry.ConfigConnection"/> which has a longer
+/// response timeout (30s) to handle slow config operations on non-standard paths.
 /// </summary>
 public sealed class PbxConfigManager : IConfigProvider
 {
@@ -38,7 +40,7 @@ public sealed class PbxConfigManager : IConfigProvider
         var entry = _monitor.GetServer(serverId);
         if (entry is null) return null;
 
-        var response = await entry.Connection.SendActionAsync<GetConfigResponse>(
+        var response = await entry.ConfigConnection.SendActionAsync<GetConfigResponse>(
             new GetConfigAction { Filename = filename }, ct);
 
         return response.Response == "Success" ? response : null;
@@ -81,7 +83,7 @@ public sealed class PbxConfigManager : IConfigProvider
 
         try
         {
-            var response = await entry.Connection.SendActionAsync(action, ct);
+            var response = await entry.ConfigConnection.SendActionAsync(action, ct);
             return response.Response == "Success";
         }
         catch (Exception ex)
@@ -114,7 +116,7 @@ public sealed class PbxConfigManager : IConfigProvider
 
         try
         {
-            var response = await entry.Connection.SendActionAsync(action, ct);
+            var response = await entry.ConfigConnection.SendActionAsync(action, ct);
             return response.Response == "Success";
         }
         catch (Exception ex)
@@ -138,7 +140,7 @@ public sealed class PbxConfigManager : IConfigProvider
 
         try
         {
-            var response = await entry.Connection.SendActionAsync(action, ct);
+            var response = await entry.ConfigConnection.SendActionAsync(action, ct);
             return response.Response == "Success";
         }
         catch (Exception ex)
@@ -155,7 +157,7 @@ public sealed class PbxConfigManager : IConfigProvider
 
         try
         {
-            var response = await entry.Connection.SendActionAsync<CommandResponse>(
+            var response = await entry.ConfigConnection.SendActionAsync<CommandResponse>(
                 new CommandAction { Command = command }, ct);
             return response.Output ?? response.Message;
         }
