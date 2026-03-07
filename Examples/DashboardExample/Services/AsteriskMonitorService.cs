@@ -11,6 +11,12 @@ internal static partial class MonitorServiceLog
     [LoggerMessage(Level = LogLevel.Information, Message = "[MONITOR] Connected: server={ServerId} host={Host} port={Port} version={Version}")]
     public static partial void Connected(ILogger logger, string serverId, string host, int port, string? version);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "[MONITOR] Config connection ready: server={ServerId}")]
+    public static partial void ConfigConnected(ILogger logger, string serverId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[MONITOR] Config connection failed (using event connection as fallback): server={ServerId}")]
+    public static partial void ConfigConnectFailed(ILogger logger, Exception exception, string serverId);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "[MONITOR] Connection lost: server={ServerId}")]
     public static partial void ConnectionLost(ILogger logger, Exception? exception, string serverId);
 
@@ -46,6 +52,12 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
         _logger = logger;
     }
 
+    /// <summary>
+    /// Timeout for config operations (GetConfig, UpdateConfig, Command).
+    /// Asterisk can be slow when config files are in non-standard paths or split across directories.
+    /// </summary>
+    private static readonly TimeSpan ConfigResponseTimeout = TimeSpan.FromSeconds(30);
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         var servers = _config.GetSection("Asterisk:Servers").GetChildren();
@@ -80,13 +92,44 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
 
                 await server.StartAsync(cancellationToken);
 
-                _servers[id] = new ServerEntry(connection, server, eventLogSub, callFlowSub, configMode);
+                // Create a dedicated config connection with a longer timeout.
+                // No subscriptions — this connection is silent (no event pump overhead).
+                // Falls back to the event connection if the config connection fails.
+                var configConnection = await CreateConfigConnectionAsync(id, options, cancellationToken);
+
+                _servers[id] = new ServerEntry(connection, configConnection ?? connection, server, eventLogSub, callFlowSub, configMode);
                 MonitorServiceLog.Connected(_logger, id, options.Hostname, options.Port, server.AsteriskVersion);
             }
             catch (Exception ex)
             {
                 MonitorServiceLog.ConnectFailed(_logger, ex, id);
             }
+        }
+    }
+
+    private async Task<IAmiConnection?> CreateConfigConnectionAsync(
+        string serverId, AmiConnectionOptions baseOptions, CancellationToken cancellationToken)
+    {
+        var configOptions = new AmiConnectionOptions
+        {
+            Hostname = baseOptions.Hostname,
+            Port = baseOptions.Port,
+            Username = baseOptions.Username,
+            Password = baseOptions.Password,
+            AutoReconnect = baseOptions.AutoReconnect,
+            DefaultResponseTimeout = ConfigResponseTimeout
+        };
+
+        try
+        {
+            var conn = await _factory.CreateAndConnectAsync(configOptions, cancellationToken);
+            MonitorServiceLog.ConfigConnected(_logger, serverId);
+            return conn;
+        }
+        catch (Exception ex)
+        {
+            MonitorServiceLog.ConfigConnectFailed(_logger, ex, serverId);
+            return null;
         }
     }
 
@@ -102,6 +145,8 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
             entry.Subscription.Dispose();
             entry.CallFlowSubscription.Dispose();
             await entry.Server.DisposeAsync();
+            if (!ReferenceEquals(entry.ConfigConnection, entry.Connection))
+                await entry.ConfigConnection.DisposeAsync();
             await entry.Connection.DisposeAsync();
         }
         _servers.Clear();
@@ -110,8 +155,11 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
     public ServerEntry? GetServer(string serverId) =>
         _servers.GetValueOrDefault(serverId);
 
+    /// <param name="Connection">Primary connection for real-time events (2s timeout).</param>
+    /// <param name="ConfigConnection">Dedicated connection for config operations (30s timeout). Falls back to Connection if creation failed.</param>
     public sealed record ServerEntry(
         IAmiConnection Connection,
+        IAmiConnection ConfigConnection,
         AsteriskServer Server,
         IDisposable Subscription,
         IDisposable CallFlowSubscription,
