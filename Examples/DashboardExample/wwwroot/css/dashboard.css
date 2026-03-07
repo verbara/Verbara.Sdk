@@ -951,6 +951,283 @@ body {
 .call-unknown .call-state-badge { background: rgba(75, 85, 99, 0.1); color: var(--text-dim); }
 
 /* ================================================================
+   CALLS PAGE HEADER & VIEW TOGGLE
+   ================================================================ */
+
+.calls-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.calls-header h2 { margin: 0; }
+
+.view-toggle {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.view-toggle-icon {
+    font-size: 0.7rem;
+    letter-spacing: -0.05em;
+}
+
+/* ================================================================
+   KANBAN BOARD
+   ================================================================ */
+
+.kanban-board {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.75rem;
+    align-items: start;
+}
+
+.kanban-lane {
+    background: var(--bg-deep);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 320px);
+}
+
+.kanban-lane-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.65rem 0.85rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+}
+
+.kanban-lane-icon {
+    font-size: 0.55rem;
+}
+
+.kanban-lane-count {
+    margin-left: auto;
+    background: rgba(255,255,255,0.06);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.65rem;
+}
+
+.kanban-header-green { color: var(--color-available); border-bottom-color: rgba(52, 211, 153, 0.2); }
+.kanban-header-blue { color: var(--color-ringing); border-bottom-color: rgba(96, 165, 250, 0.2); }
+.kanban-header-gray { color: var(--color-offline); border-bottom-color: rgba(107, 114, 128, 0.2); }
+
+.kanban-lane-body {
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.kanban-lane-body::-webkit-scrollbar { width: 4px; }
+.kanban-lane-body::-webkit-scrollbar-track { background: transparent; }
+.kanban-lane-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.kanban-empty {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    padding: 1.5rem 0.5rem;
+    font-style: italic;
+}
+
+/* Cards inside kanban lanes fill the lane width */
+.kanban-lane-body .call-card {
+    width: 100%;
+}
+
+/* ================================================================
+   CALLS TABLE VIEW
+   ================================================================ */
+
+.calls-table-wrap {
+    overflow-x: auto;
+    margin-bottom: 1rem;
+}
+
+.calls-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.calls-table thead th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    padding: 0.5rem 0.6rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+
+.calls-table-row {
+    cursor: pointer;
+    border-left: 3px solid var(--border);
+    transition: background 0.12s;
+}
+
+.calls-table-row:hover {
+    background: var(--bg-raised);
+}
+
+.calls-table-row td {
+    padding: 0.45rem 0.6rem;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.calls-table-row.call-connected { border-left-color: var(--color-available); }
+.calls-table-row.call-ringing { border-left-color: var(--color-ringing); }
+.calls-table-row.call-queued { border-left-color: var(--color-paused); }
+.calls-table-row.call-hold { border-left-color: var(--color-hold); }
+.calls-table-row.call-dialing { border-left-color: var(--color-offline); }
+
+.cell-caller, .cell-dest {
+    display: flex;
+    flex-direction: column;
+    gap: 0.05rem;
+}
+
+.cell-id {
+    font-weight: 700;
+    font-size: 0.82rem;
+}
+
+.cell-channel {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+}
+
+.cell-arrow {
+    text-align: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+    width: 32px;
+}
+
+.cell-duration {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-align: right;
+}
+
+.cell-events {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-align: center;
+}
+
+.col-arrow { width: 32px; }
+.col-tech { width: 60px; }
+.col-duration { width: 70px; text-align: right; }
+.col-events { width: 30px; text-align: center; }
+
+/* ================================================================
+   COMPLETED SECTION (TABLE VIEW)
+   ================================================================ */
+
+.completed-section {
+    margin-top: 1rem;
+}
+
+.completed-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin-bottom: 0.6rem;
+    padding: 0 0.15rem;
+}
+
+/* ================================================================
+   FADE-OUT ANIMATION & PROGRESS BAR
+   ================================================================ */
+
+.call-fade-bar {
+    margin-top: 0.5rem;
+    height: 2px;
+    background: rgba(107, 114, 128, 0.15);
+    border-radius: 1px;
+    overflow: hidden;
+}
+
+.call-fade-bar-fill {
+    height: 100%;
+    background: var(--color-offline);
+    border-radius: 1px;
+    transition: width 1s linear;
+}
+
+.arrow-completed {
+    color: var(--color-offline);
+    font-size: 0.85rem;
+}
+
+.call-fade-out {
+    animation: callFadeOut 1.5s ease-out forwards;
+}
+
+@keyframes callFadeOut {
+    from { opacity: 0.5; transform: scale(1); }
+    to { opacity: 0; transform: scale(0.97); }
+}
+
+/* ================================================================
+   KANBAN RESPONSIVE
+   ================================================================ */
+
+@media (max-width: 1024px) {
+    .kanban-board {
+        grid-template-columns: 1fr;
+    }
+
+    .kanban-lane {
+        max-height: none;
+    }
+
+    .kanban-lane-body {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .calls-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .calls-table { font-size: 0.72rem; }
+    .calls-table-row td { padding: 0.35rem 0.4rem; }
+}
+
+/* ================================================================
    CALL DETAIL
    ================================================================ */
 
