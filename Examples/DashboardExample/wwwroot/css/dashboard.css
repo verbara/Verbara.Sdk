@@ -2545,3 +2545,84 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+/* ================================================================
+   CONFIG OPERATION OVERLAY
+   ================================================================ */
+
+.config-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: overlayFadeIn 0.2s ease-out;
+}
+
+@keyframes overlayFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.config-overlay-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-accent);
+    border-radius: var(--radius-lg);
+    padding: 2rem 2.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    box-shadow: var(--shadow-lg), 0 0 40px rgba(34, 211, 238, 0.1);
+    min-width: 320px;
+    max-width: 500px;
+}
+
+.config-overlay-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: configSpin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes configSpin {
+    to { transform: rotate(360deg); }
+}
+
+.config-overlay-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.config-overlay-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.config-overlay-detail {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.config-overlay-elapsed {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    margin-top: 0.15rem;
+}

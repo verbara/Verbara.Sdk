@@ -4,6 +4,7 @@
 @inject AsteriskMonitorService Monitor
 @inject TrunkService TrunkSvc
 @inject IConfigProviderResolver ConfigResolver
+@inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
 
 <PageTitle>@TrunkName — Asterisk Dashboard</PageTitle>
@@ -150,6 +151,7 @@ else
 
     private async Task LoadRawConfig(TrunkTechnology technology)
     {
+        using var _ = ConfigOp.Begin("Loading Config", ServerId, TrunkName);
         var configProvider = ConfigResolver.GetProvider(ServerId);
 
         if (technology == TrunkTechnology.PjSip)
@@ -191,6 +193,7 @@ else
     {
         if (_detail is null) return;
 
+        using var _ = ConfigOp.Begin("Deleting Trunk", ServerId, TrunkName);
         await TrunkSvc.DeleteTrunkAsync(ServerId, TrunkName, _detail.Config.Technology);
         Nav.NavigateTo("/trunks");
     }

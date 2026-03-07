@@ -46,6 +46,7 @@ builder.Services.AddSingleton<AsteriskMonitorService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AsteriskMonitorService>());
 builder.Services.AddSingleton<PbxConfigManager>();
 
+builder.Services.AddSingleton<ConfigOperationState>();
 builder.Services.AddSingleton<IConfigProviderResolver, ConfigProviderResolver>();
 builder.Services.AddSingleton<TrunkService>();
 builder.Services.AddSingleton<QueueService>();

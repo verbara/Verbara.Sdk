@@ -3,6 +3,7 @@
 @using Asterisk.Sdk.Enums
 @inject AsteriskMonitorService Monitor
 @inject SelectedServerService ServerSvc
+@inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @implements IDisposable
 
@@ -84,6 +85,27 @@ else
             </main>
         </div>
     </div>
+
+    @if (ConfigOp.IsBusy)
+    {
+        var op = ConfigOp.Current!;
+        <div class="config-overlay">
+            <div class="config-overlay-card">
+                <div class="config-overlay-spinner"></div>
+                <div class="config-overlay-text">
+                    <div class="config-overlay-title">@op.Operation</div>
+                    <div class="config-overlay-detail">
+                        @op.ServerId
+                        @if (op.Detail is not null)
+                        {
+                            <span> &mdash; @op.Detail</span>
+                        }
+                    </div>
+                    <div class="config-overlay-elapsed text-muted">@FormatElapsed(op.Elapsed)</div>
+                </div>
+            </div>
+        </div>
+    }
 }
 
 @code {
@@ -109,6 +131,7 @@ else
         }
 
         ServerSvc.OnChanged += OnServerChanged;
+        ConfigOp.OnChanged += OnConfigOpChanged;
 
         _timer = new Timer(_ =>
         {
@@ -142,9 +165,15 @@ else
         InvokeAsync(StateHasChanged);
     }
 
+    private void OnConfigOpChanged() => InvokeAsync(StateHasChanged);
+
+    private static string FormatElapsed(TimeSpan ts) =>
+        ts.TotalSeconds < 1 ? "starting..." : $"{ts.TotalSeconds:F0}s elapsed";
+
     public void Dispose()
     {
         _timer?.Dispose();
         ServerSvc.OnChanged -= OnServerChanged;
+        ConfigOp.OnChanged -= OnConfigOpChanged;
     }
 }

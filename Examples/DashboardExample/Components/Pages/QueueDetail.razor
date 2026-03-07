@@ -6,6 +6,7 @@
 @inject AsteriskMonitorService Monitor
 @inject CallFlowTracker Tracker
 @inject QueueService QueueSvc
+@inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @implements IDisposable
 
@@ -215,6 +216,7 @@ else
 
         try
         {
+            using var _ = ConfigOp.Begin("Deleting Queue", ServerId, QueueName);
             var success = await QueueSvc.DeleteQueueAsync(ServerId, QueueName);
             if (success)
             {
