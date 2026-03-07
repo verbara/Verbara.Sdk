@@ -177,7 +177,8 @@ else
             return;
         }
 
-        var response = await entry.Connection.SendActionAsync(new QueuePauseAction
+        using var _ = ConfigOp.Begin(pause ? "Pausing Member" : "Unpausing Member", ServerId, $"{QueueName}/{iface}");
+        var response = await entry.ConfigConnection.SendActionAsync(new QueuePauseAction
         {
             Queue = QueueName,
             Interface = iface,
@@ -198,7 +199,8 @@ else
             return;
         }
 
-        var response = await entry.Connection.SendActionAsync(new QueueRemoveAction
+        using var _ = ConfigOp.Begin("Removing Member", ServerId, $"{QueueName}/{iface}");
+        var response = await entry.ConfigConnection.SendActionAsync(new QueueRemoveAction
         {
             Queue = QueueName,
             Interface = iface
@@ -241,7 +243,8 @@ else
         var entry = Monitor.GetServer(ServerId);
         if (entry is null) return;
 
-        var response = await entry.Connection.SendActionAsync(new QueueAddAction
+        using var _ = ConfigOp.Begin("Adding Member", ServerId, $"{QueueName}/{_addInterface}");
+        var response = await entry.ConfigConnection.SendActionAsync(new QueueAddAction
         {
             Queue = QueueName,
             Interface = _addInterface,

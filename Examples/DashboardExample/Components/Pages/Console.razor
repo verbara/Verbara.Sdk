@@ -2,7 +2,9 @@
 @using Asterisk.Sdk
 @using Asterisk.Sdk.Ami.Actions
 @using Asterisk.Sdk.Ami.Responses
+@using DashboardExample.Services
 @inject SelectedServerService ServerSvc
+@inject ConfigOperationState ConfigOp
 
 <PageTitle>Console — Asterisk Dashboard</PageTitle>
 
@@ -121,8 +123,10 @@
 
         try
         {
+            var serverId = ServerSvc.SelectedServerId ?? "unknown";
+            using var _ = ConfigOp.Begin("Running Command", serverId, commandText);
             var action = new CommandAction { Command = commandText };
-            var response = await entry.Connection.SendActionAsync<CommandResponse>(action);
+            var response = await entry.ConfigConnection.SendActionAsync<CommandResponse>(action);
 
             if (response.Output is not null)
             {
