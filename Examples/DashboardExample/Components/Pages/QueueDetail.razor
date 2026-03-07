@@ -16,15 +16,17 @@
         <a href="/queues" class="back-link">Queues</a> / @QueueName
         <span class="badge badge-muted">@ServerId</span>
     </h2>
-    <button class="btn btn-sm btn-red" @onclick="ConfirmDelete">Delete Queue</button>
+    <button class="btn btn-sm btn-red" @onclick="ConfirmDelete" disabled="@_deleteInProgress">Delete Queue</button>
 </div>
 
 @if (_showDeleteConfirm)
 {
     <div class="confirm-bar confirm-bar-danger">
         <span>Delete queue <strong>@QueueName</strong> and all its members? This cannot be undone.</span>
-        <button class="btn btn-sm btn-red" @onclick="DeleteQueue">Confirm Delete</button>
-        <button class="btn btn-sm btn-muted" @onclick="() => _showDeleteConfirm = false">Cancel</button>
+        <button class="btn btn-sm btn-red" @onclick="DeleteQueue" disabled="@_deleteInProgress">
+            @(_deleteInProgress ? "Deleting..." : "Confirm Delete")
+        </button>
+        <button class="btn btn-sm btn-muted" @onclick="() => _showDeleteConfirm = false" disabled="@_deleteInProgress">Cancel</button>
     </div>
 }
 
@@ -148,6 +150,7 @@ else
     private int _addPenalty;
     private string? _actionMessage;
     private bool _showDeleteConfirm;
+    private bool _deleteInProgress;
 
     protected override void OnInitialized()
     {
@@ -206,15 +209,26 @@ else
 
     private async Task DeleteQueue()
     {
-        var success = await QueueSvc.DeleteQueueAsync(ServerId, QueueName);
-        if (success)
+        if (_deleteInProgress) return;
+        _deleteInProgress = true;
+        _actionMessage = "Deleting queue...";
+
+        try
         {
-            Nav.NavigateTo("/queues");
+            var success = await QueueSvc.DeleteQueueAsync(ServerId, QueueName);
+            if (success)
+            {
+                Nav.NavigateTo("/queues");
+            }
+            else
+            {
+                _actionMessage = "Failed to delete queue.";
+                _showDeleteConfirm = false;
+            }
         }
-        else
+        finally
         {
-            _actionMessage = "Failed to delete queue.";
-            _showDeleteConfirm = false;
+            _deleteInProgress = false;
         }
     }
 
