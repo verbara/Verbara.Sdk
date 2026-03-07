@@ -6,6 +6,7 @@
 @using Asterisk.Sdk.Ami.Actions
 @using Asterisk.Sdk.Ami.Events
 @inject SelectedServerService ServerSvc
+@inject ConfigOperationState ConfigOp
 @implements IDisposable
 
 <PageTitle>Conferences — Asterisk Dashboard</PageTitle>
@@ -346,7 +347,9 @@ else
 
         try
         {
-            var response = await entry.Connection.SendActionAsync(action);
+            var serverId = ServerSvc.SelectedServerId ?? "unknown";
+            using var _ = ConfigOp.Begin("Conference Action", serverId, successMessage);
+            var response = await entry.ConfigConnection.SendActionAsync(action);
             _actionResult = string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase)
                 ? successMessage
                 : $"Failed: {response.Response} — {response.Message}";

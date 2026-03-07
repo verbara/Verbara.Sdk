@@ -4,6 +4,7 @@
 @using Asterisk.Sdk.Ami.Actions
 @using Asterisk.Sdk.Ami.Events
 @inject SelectedServerService ServerSvc
+@inject ConfigOperationState ConfigOp
 @implements IDisposable
 
 <PageTitle>Voicemail — Asterisk Dashboard</PageTitle>
@@ -274,7 +275,9 @@ else
                 ID = msg.ID
             };
 
-            var response = await entry.Connection.SendActionAsync(action);
+            var serverId = ServerSvc.SelectedServerId ?? "unknown";
+            using var _ = ConfigOp.Begin("Deleting Voicemail", serverId, $"{user.Voicemailbox}/{msg.Folder}/{msg.ID}");
+            var response = await entry.ConfigConnection.SendActionAsync(action);
 
             if (string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase))
             {
