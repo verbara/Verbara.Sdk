@@ -17,6 +17,9 @@ internal static partial class MonitorServiceLog
     [LoggerMessage(Level = LogLevel.Warning, Message = "[MONITOR] Config connection failed (using event connection as fallback): server={ServerId}")]
     public static partial void ConfigConnectFailed(ILogger logger, Exception exception, string serverId);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "[MONITOR] Config connection: server={ServerId} mode={ConfigMode}")]
+    public static partial void ConnectionSummary(ILogger logger, string serverId, string configMode);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "[MONITOR] Connection lost: server={ServerId}")]
     public static partial void ConnectionLost(ILogger logger, Exception? exception, string serverId);
 
@@ -97,8 +100,11 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
                 // Falls back to the event connection if the config connection fails.
                 var configConnection = await CreateConfigConnectionAsync(id, options, cancellationToken);
 
-                _servers[id] = new ServerEntry(connection, configConnection ?? connection, server, eventLogSub, callFlowSub, configMode);
+                var effectiveConfigConn = configConnection ?? connection;
+                _servers[id] = new ServerEntry(connection, effectiveConfigConn, server, eventLogSub, callFlowSub, configMode);
                 MonitorServiceLog.Connected(_logger, id, options.Hostname, options.Port, server.AsteriskVersion);
+                MonitorServiceLog.ConnectionSummary(_logger, id,
+                    configConnection is not null ? "dedicated (30s timeout)" : "shared (fallback to event connection)");
             }
             catch (Exception ex)
             {

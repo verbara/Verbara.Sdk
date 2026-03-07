@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Asterisk.Sdk;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Responses;
@@ -6,17 +7,23 @@ namespace DashboardExample.Services;
 
 internal static partial class PbxConfigLog
 {
-    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFIG_AMI] Create failed: server={ServerId} filename={Filename} section={Section}")]
-    public static partial void CreateSectionFailed(ILogger logger, Exception exception, string serverId, string filename, string section);
+    [LoggerMessage(Level = LogLevel.Information, Message = "[CONFIG_AMI] >> {Operation}: server={ServerId} filename={Filename} section={Section} connection={ConnectionMode}")]
+    public static partial void OperationStart(ILogger logger, string operation, string serverId, string filename, string? section, string connectionMode);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFIG_AMI] Update failed: server={ServerId} filename={Filename} section={Section}")]
-    public static partial void UpdateSectionFailed(ILogger logger, Exception exception, string serverId, string filename, string section);
+    [LoggerMessage(Level = LogLevel.Information, Message = "[CONFIG_AMI] << {Operation}: server={ServerId} filename={Filename} section={Section} result={Result} elapsed_ms={ElapsedMs}")]
+    public static partial void OperationEnd(ILogger logger, string operation, string serverId, string filename, string? section, string result, long elapsedMs);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFIG_AMI] Delete failed: server={ServerId} filename={Filename} section={Section}")]
-    public static partial void DeleteSectionFailed(ILogger logger, Exception exception, string serverId, string filename, string section);
+    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFIG_AMI] !! {Operation}: server={ServerId} filename={Filename} section={Section} elapsed_ms={ElapsedMs}")]
+    public static partial void OperationFailed(ILogger logger, Exception exception, string operation, string serverId, string filename, string? section, long elapsedMs);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFIG_AMI] Command failed: server={ServerId} command={Command}")]
-    public static partial void ExecuteCommandFailed(ILogger logger, Exception exception, string serverId, string command);
+    [LoggerMessage(Level = LogLevel.Information, Message = "[CONFIG_AMI] >> Command: server={ServerId} command={Command} connection={ConnectionMode}")]
+    public static partial void CommandStart(ILogger logger, string serverId, string command, string connectionMode);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "[CONFIG_AMI] << Command: server={ServerId} command={Command} result={Result} elapsed_ms={ElapsedMs}")]
+    public static partial void CommandEnd(ILogger logger, string serverId, string command, string result, long elapsedMs);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFIG_AMI] !! Command: server={ServerId} command={Command} elapsed_ms={ElapsedMs}")]
+    public static partial void CommandFailed(ILogger logger, Exception exception, string serverId, string command, long elapsedMs);
 }
 
 /// <summary>
@@ -40,10 +47,26 @@ public sealed class PbxConfigManager : IConfigProvider
         var entry = _monitor.GetServer(serverId);
         if (entry is null) return null;
 
-        var response = await entry.ConfigConnection.SendActionAsync<GetConfigResponse>(
-            new GetConfigAction { Filename = filename }, ct);
+        var mode = GetConnectionMode(entry);
+        PbxConfigLog.OperationStart(_logger, "GetConfig", serverId, filename, null, mode);
+        var sw = Stopwatch.GetTimestamp();
 
-        return response.Response == "Success" ? response : null;
+        try
+        {
+            var response = await entry.ConfigConnection.SendActionAsync<GetConfigResponse>(
+                new GetConfigAction { Filename = filename }, ct);
+
+            var ms = ElapsedMs(sw);
+            var result = response.Response ?? "null";
+            PbxConfigLog.OperationEnd(_logger, "GetConfig", serverId, filename, null, result, ms);
+            return response.Response == "Success" ? response : null;
+        }
+        catch (Exception ex)
+        {
+            var ms = ElapsedMs(sw);
+            PbxConfigLog.OperationFailed(_logger, ex, "GetConfig", serverId, filename, null, ms);
+            return null;
+        }
     }
 
     public async Task<List<ConfigCategory>> GetCategoriesAsync(string serverId, string filename, CancellationToken ct = default)
@@ -81,14 +104,22 @@ public sealed class PbxConfigManager : IConfigProvider
             action.AddAppend(section, key, value);
         }
 
+        var mode = GetConnectionMode(entry);
+        PbxConfigLog.OperationStart(_logger, "CreateSection", serverId, filename, section, mode);
+        var sw = Stopwatch.GetTimestamp();
+
         try
         {
             var response = await entry.ConfigConnection.SendActionAsync(action, ct);
+            var ms = ElapsedMs(sw);
+            var result = response.Response ?? "null";
+            PbxConfigLog.OperationEnd(_logger, "CreateSection", serverId, filename, section, result, ms);
             return response.Response == "Success";
         }
         catch (Exception ex)
         {
-            PbxConfigLog.CreateSectionFailed(_logger, ex, serverId, filename, section);
+            var ms = ElapsedMs(sw);
+            PbxConfigLog.OperationFailed(_logger, ex, "CreateSection", serverId, filename, section, ms);
             return false;
         }
     }
@@ -114,14 +145,22 @@ public sealed class PbxConfigManager : IConfigProvider
             action.AddAppend(section, key, value);
         }
 
+        var mode = GetConnectionMode(entry);
+        PbxConfigLog.OperationStart(_logger, "UpdateSection", serverId, filename, section, mode);
+        var sw = Stopwatch.GetTimestamp();
+
         try
         {
             var response = await entry.ConfigConnection.SendActionAsync(action, ct);
+            var ms = ElapsedMs(sw);
+            var result = response.Response ?? "null";
+            PbxConfigLog.OperationEnd(_logger, "UpdateSection", serverId, filename, section, result, ms);
             return response.Response == "Success";
         }
         catch (Exception ex)
         {
-            PbxConfigLog.UpdateSectionFailed(_logger, ex, serverId, filename, section);
+            var ms = ElapsedMs(sw);
+            PbxConfigLog.OperationFailed(_logger, ex, "UpdateSection", serverId, filename, section, ms);
             return false;
         }
     }
@@ -138,14 +177,22 @@ public sealed class PbxConfigManager : IConfigProvider
         };
         action.AddDeleteCategory(section);
 
+        var mode = GetConnectionMode(entry);
+        PbxConfigLog.OperationStart(_logger, "DeleteSection", serverId, filename, section, mode);
+        var sw = Stopwatch.GetTimestamp();
+
         try
         {
             var response = await entry.ConfigConnection.SendActionAsync(action, ct);
+            var ms = ElapsedMs(sw);
+            var result = response.Response ?? "null";
+            PbxConfigLog.OperationEnd(_logger, "DeleteSection", serverId, filename, section, result, ms);
             return response.Response == "Success";
         }
         catch (Exception ex)
         {
-            PbxConfigLog.DeleteSectionFailed(_logger, ex, serverId, filename, section);
+            var ms = ElapsedMs(sw);
+            PbxConfigLog.OperationFailed(_logger, ex, "DeleteSection", serverId, filename, section, ms);
             return false;
         }
     }
@@ -155,15 +202,23 @@ public sealed class PbxConfigManager : IConfigProvider
         var entry = _monitor.GetServer(serverId);
         if (entry is null) return null;
 
+        var mode = GetConnectionMode(entry);
+        PbxConfigLog.CommandStart(_logger, serverId, command, mode);
+        var sw = Stopwatch.GetTimestamp();
+
         try
         {
             var response = await entry.ConfigConnection.SendActionAsync<CommandResponse>(
                 new CommandAction { Command = command }, ct);
+            var ms = ElapsedMs(sw);
+            var result = response.Response ?? "null";
+            PbxConfigLog.CommandEnd(_logger, serverId, command, result, ms);
             return response.Output ?? response.Message;
         }
         catch (Exception ex)
         {
-            PbxConfigLog.ExecuteCommandFailed(_logger, ex, serverId, command);
+            var ms = ElapsedMs(sw);
+            PbxConfigLog.CommandFailed(_logger, ex, serverId, command, ms);
             return null;
         }
     }
@@ -173,4 +228,11 @@ public sealed class PbxConfigManager : IConfigProvider
         var result = await ExecuteCommandAsync(serverId, $"module reload {moduleName}", ct);
         return result is not null;
     }
+
+    /// <summary>Returns "dedicated" if ConfigConnection is a separate connection, "shared" if using fallback.</summary>
+    private static string GetConnectionMode(AsteriskMonitorService.ServerEntry entry) =>
+        ReferenceEquals(entry.ConfigConnection, entry.Connection) ? "shared (fallback)" : "dedicated";
+
+    private static long ElapsedMs(long startTimestamp) =>
+        (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
 }
