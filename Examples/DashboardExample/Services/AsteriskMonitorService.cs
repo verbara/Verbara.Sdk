@@ -157,6 +157,10 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
 
     /// <param name="Connection">Primary connection for real-time events (2s timeout).</param>
     /// <param name="ConfigConnection">Dedicated connection for config operations (30s timeout). Falls back to Connection if creation failed.</param>
+    /// <param name="Server">Live domain model for real-time state.</param>
+    /// <param name="Subscription">Event log observer subscription.</param>
+    /// <param name="CallFlowSubscription">Call flow tracker subscription.</param>
+    /// <param name="ConfigMode">File or Realtime config mode.</param>
     public sealed record ServerEntry(
         IAmiConnection Connection,
         IAmiConnection ConfigConnection,
