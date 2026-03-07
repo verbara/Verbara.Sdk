@@ -4,6 +4,7 @@
 @inject SelectedServerService ServerSvc
 @inject TrunkService TrunkSvc
 @inject IConfigProviderResolver ConfigResolver
+@inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @implements IDisposable
 
@@ -163,6 +164,7 @@
         var serverId = ServerSvc.SelectedServerId;
         if (serverId is null) return;
 
+        using var _ = ConfigOp.Begin("Deleting Trunk", serverId, _deletingTrunk.Name);
         var success = await TrunkSvc.DeleteTrunkAsync(serverId, _deletingTrunk.Name, _deletingTrunk.Technology);
         _actionResult = success
             ? $"Trunk '{_deletingTrunk.Name}' deleted successfully."

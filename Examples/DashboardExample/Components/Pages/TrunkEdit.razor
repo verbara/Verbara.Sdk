@@ -4,6 +4,7 @@
 @using DashboardExample.Models
 @inject AsteriskMonitorService Monitor
 @inject TrunkService TrunkSvc
+@inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
 
 <PageTitle>@(IsNew ? "New Trunk" : $"Edit {TrunkName}") — Asterisk Dashboard</PageTitle>
@@ -275,6 +276,8 @@ else
 
         try
         {
+            var opName = IsNew ? "Creating Trunk" : "Updating Trunk";
+            using var _ = ConfigOp.Begin(opName, serverId, _config.Name);
             bool success;
             if (IsNew)
             {
