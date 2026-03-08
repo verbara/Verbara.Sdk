@@ -34,6 +34,16 @@ public sealed class SimpleMappingStrategy : IMappingStrategy
             var name = script[(lastSlash + 1)..];
             if (_scripts.TryGetValue(name, out found))
                 return found;
+            script = name;
+        }
+
+        // Try stripping query string (e.g., "ScriptName.agi?param=value" -> "ScriptName.agi")
+        var queryIdx = script.IndexOf('?');
+        if (queryIdx >= 0)
+        {
+            var name = script[..queryIdx];
+            if (_scripts.TryGetValue(name, out found))
+                return found;
         }
 
         return null;
