@@ -161,14 +161,34 @@ else
                                 </span>
                             </div>
                             <div class="timeline-bar-area">
+                                @{
+                                    var queueWait = BuildQueueWaitOverlay(participant.Channel);
+                                }
+                                @if (queueWait is not null)
+                                {
+                                    <div class="timeline-segment timeline-queue-wait"
+                                         style="left:@(queueWait.Value.LeftPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; width:@(queueWait.Value.WidthPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%"
+                                         title="Queue wait: @FormatDuration(queueWait.Value.Duration)">
+                                        @if (queueWait.Value.WidthPct > 12)
+                                        {
+                                            <text>Wait @FormatDuration(queueWait.Value.Duration)</text>
+                                        }
+                                    </div>
+                                }
                                 @foreach (var seg in segments)
                                 {
-                                    <div class="timeline-segment @seg.CssClass"
+                                    var segCss = seg.CssClass;
+                                    if (segCss == "segment-hold") segCss = "segment-hold timeline-segment-hold";
+                                    <div class="timeline-segment @segCss"
                                          style="left:@(seg.LeftPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; width:@(seg.WidthPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%"
                                          title="@seg.Label: @FormatDuration(seg.Duration)">
                                         @if (seg.WidthPct > 8)
                                         {
-                                            @seg.Label
+                                            <text>@seg.Label</text>
+                                        }
+                                        @if (seg.WidthPct > 15)
+                                        {
+                                            <span class="timeline-segment-duration">@FormatDuration(seg.Duration)</span>
                                         }
                                     </div>
                                 }
@@ -373,6 +393,29 @@ else
     }
 
     // -- Helpers --
+
+    private (double LeftPct, double WidthPct, TimeSpan Duration)? BuildQueueWaitOverlay(string channel)
+    {
+        if (_call is null || _call.QueueName is null) return null;
+
+        var joinEvt = _call.Events.FirstOrDefault(e => e.Type == CallFlowEventType.QueueJoin);
+        var connectEvt = _call.Events.FirstOrDefault(e => e.Type == CallFlowEventType.AgentConnect);
+        if (joinEvt is null || connectEvt is null) return null;
+
+        var callDuration = _call.Duration.TotalSeconds;
+        if (callDuration <= 0) callDuration = 1;
+        var callStart = _call.StartTime;
+
+        var leftPct = ((joinEvt.Timestamp - callStart).TotalSeconds / callDuration) * 100;
+        var widthPct = ((connectEvt.Timestamp - joinEvt.Timestamp).TotalSeconds / callDuration) * 100;
+        if (widthPct < 0.5) return null;
+
+        return (
+            Math.Max(0, Math.Min(100, leftPct)),
+            Math.Max(0.5, Math.Min(100 - leftPct, widthPct)),
+            connectEvt.Timestamp - joinEvt.Timestamp
+        );
+    }
 
     private TimeSpan? GetQueueWaitTime()
     {

@@ -50,9 +50,10 @@ else
                     {
                         <!-- Self-arrow (DTMF, Hold on same channel, etc.) -->
                         <div class="ladder-self-arrow @row.ArrowClass"
-                             style="left:@ColCenter(row.SourceIdx, colCount)">
+                             style="left:@ColCenter(row.SourceIdx, colCount); color:@row.Color">
                             <span class="ladder-self-arrow-icon">@row.Icon</span>
                             <span class="ladder-self-arrow-label">@row.Label</span>
+                            <span class="ladder-rel-time">@row.TimeLabel</span>
                         </div>
                     }
                     else
@@ -62,17 +63,18 @@ else
                         var rightIdx = Math.Max(row.SourceIdx, row.TargetIdx);
                         var goesRight = row.SourceIdx < row.TargetIdx;
                         <div class="ladder-arrow @row.ArrowClass"
-                             style="left:@ColCenter(leftIdx, colCount); width:@ColSpan(leftIdx, rightIdx, colCount)">
+                             style="left:@ColCenter(leftIdx, colCount); width:@ColSpan(leftIdx, rightIdx, colCount); color:@row.Color">
                             @if (!goesRight)
                             {
                                 <span class="ladder-arrow-head ladder-arrow-head-left"></span>
                             }
-                            <div class="ladder-arrow-line"></div>
+                            <div class="ladder-arrow-line" style="background:@row.Color"></div>
                             @if (goesRight)
                             {
                                 <span class="ladder-arrow-head ladder-arrow-head-right"></span>
                             }
                             <span class="ladder-arrow-label">@row.Label</span>
+                            <span class="ladder-rel-time">@row.TimeLabel</span>
                         </div>
                     }
                 </div>
@@ -90,6 +92,7 @@ else
         int SourceIdx, int TargetIdx,
         string Label, string Icon,
         string ArrowClass, string TimeLabel,
+        string Color, CallFlowEventType EventType,
         int RowIndex);
 
     private sealed record BridgeBlock(
@@ -164,8 +167,9 @@ else
             if (targetIdx == -1) targetIdx = sourceIdx;
 
             var (label, icon, arrowClass) = GetEventStyle(evt);
+            var color = GetEventColor(evt.Type);
 
-            rows.Add(new LadderRow(sourceIdx, targetIdx, label, icon, arrowClass, timeLabel, rowIndex++));
+            rows.Add(new LadderRow(sourceIdx, targetIdx, label, icon, arrowClass, timeLabel, color, evt.Type, rowIndex++));
         }
 
         return rows;
@@ -249,9 +253,10 @@ else
         // Close unclosed bridge (call still active)
         if (bridgeStart is not null)
         {
+            var activeClass = isHold ? "ladder-bridge-block-hold" : "ladder-bridge-block-connected ladder-bridge-active";
             blocks.Add(new BridgeBlock(bridgeLeft, bridgeRight,
                 bridgeStart.Value * RowHeight, (rows.Count - bridgeStart.Value) * RowHeight,
-                isHold ? "ladder-bridge-block-hold" : "ladder-bridge-block-connected"));
+                activeClass));
         }
 
         return blocks;
@@ -270,9 +275,31 @@ else
             CallFlowEventType.Dtmf => ($"DTMF '{evt.Detail}'", "#", "ladder-arrow-dtmf"),
             CallFlowEventType.QueueJoin => ($"JOIN {evt.Target ?? ""}", "Q", "ladder-arrow-queue"),
             CallFlowEventType.AgentConnect => ($"AGENT {evt.Detail ?? ""}", "A", "ladder-arrow-agent"),
-            CallFlowEventType.Transfer => ($"TRANSFER", ">>|", "ladder-arrow-dial"),
+            CallFlowEventType.Transfer => ($"TRANSFER", ">>|", "ladder-arrow-transfer"),
             CallFlowEventType.Hangup => ($"HANGUP {evt.Detail ?? ""}", "X", "ladder-arrow-hangup"),
             _ => (evt.Type.ToString(), "?", "ladder-arrow-newchannel")
+        };
+
+    private static string GetEventColor(CallFlowEventType type) =>
+        type switch
+        {
+            // Green: setup events
+            CallFlowEventType.Dial => "#4caf50",
+            CallFlowEventType.Ring => "#4caf50",
+            CallFlowEventType.Answer => "#4caf50",
+            // Blue: bridge events
+            CallFlowEventType.Bridge => "#2196f3",
+            CallFlowEventType.QueueJoin => "#2196f3",
+            CallFlowEventType.AgentConnect => "#2196f3",
+            // Orange: hold events
+            CallFlowEventType.Hold => "#ff9800",
+            CallFlowEventType.Unhold => "#ff9800",
+            // Red: hangup
+            CallFlowEventType.Hangup => "#f44336",
+            // Purple: transfer
+            CallFlowEventType.Transfer => "#9c27b0",
+            // Gray: everything else
+            _ => "#9e9e9e"
         };
 
     // Column positioning helpers
