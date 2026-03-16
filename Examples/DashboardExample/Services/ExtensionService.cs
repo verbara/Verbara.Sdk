@@ -102,6 +102,20 @@ public sealed class ExtensionService
     }
 
     // -----------------------------------------------------------------------
+    // Device features (public wrapper for inline editing)
+    // -----------------------------------------------------------------------
+
+    /// <summary>Sets device features (DND, CF, CFB, CFNA) for an extension via AstDB.</summary>
+    public Task SetDeviceFeaturesAsync(
+        string serverId, string extension, bool dnd,
+        string? cfUnconditional, string? cfBusy, string? cfNoAnswer, int cfnaTimeout,
+        CancellationToken ct = default)
+    {
+        var features = new DeviceFeatures(dnd, cfUnconditional, cfBusy, cfNoAnswer, cfnaTimeout);
+        return _features.SetAsync(serverId, extension, features, ct);
+    }
+
+    // -----------------------------------------------------------------------
     // CRUD operations
     // -----------------------------------------------------------------------
 
@@ -243,6 +257,7 @@ public sealed class ExtensionService
         if (vmInfo is not null)
         {
             vm.VoicemailEnabled = true;
+            vm.VoicemailEmail = vmInfo.Email;
 
             try
             {

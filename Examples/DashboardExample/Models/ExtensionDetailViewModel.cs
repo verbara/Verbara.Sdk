@@ -12,5 +12,6 @@ public sealed class ExtensionDetailViewModel : ExtensionViewModel
     public string? CfBusy { get; set; }
     public string? CfNoAnswer { get; set; }
     public int CfNoAnswerTimeout { get; set; }
+    public string? VoicemailEmail { get; set; }
     public Dictionary<string, Dictionary<string, string>> RawConfig { get; set; } = [];
 }
