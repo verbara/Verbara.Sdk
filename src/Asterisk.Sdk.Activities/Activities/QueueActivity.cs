@@ -9,11 +9,24 @@ public sealed class QueueActivity(IAgiChannel channel) : ActivityBase(channel)
     public string? Options { get; init; }
     public TimeSpan? Timeout { get; init; }
 
+    /// <summary>QUEUESTATUS channel variable captured after Queue execution (TIMEOUT, FULL, JOINEMPTY, LEAVEEMPTY, JOINUNAVAIL, LEAVEUNAVAIL).</summary>
+    public string? QueueStatus { get; private set; }
+
     protected override async ValueTask ExecuteAsync(CancellationToken cancellationToken)
     {
+        // Queue(queuename,options,URL,announceoverride,timeout)
         var args = QueueName;
-        if (Options is not null) args += $",{Options}";
-        if (Timeout.HasValue) args += $",,{(int)Timeout.Value.TotalSeconds}";
+        if (Options is not null || Timeout.HasValue)
+        {
+            args += $",{Options ?? string.Empty}";
+            if (Timeout.HasValue)
+            {
+                // positions 3 and 4 (URL, announceoverride) are empty
+                args += $",,,{(int)Timeout.Value.TotalSeconds}";
+            }
+        }
+
         await Channel.ExecAsync("Queue", args, cancellationToken);
+        QueueStatus = await Channel.GetVariableAsync("QUEUESTATUS", cancellationToken);
     }
 }
