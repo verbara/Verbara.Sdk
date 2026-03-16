@@ -87,6 +87,7 @@ public sealed class AmiConnection : IAmiConnection
     private readonly Lock _observerLock = new();
 
     private volatile AmiConnectionState _state = AmiConnectionState.Initial;
+    private bool _gaugesRegistered;
 
     public AmiConnectionState State => _state;
     public string? AsteriskVersion { get; private set; }
@@ -142,11 +143,15 @@ public sealed class AmiConnection : IAmiConnection
         _eventPump.Start(DispatchEventAsync);
         _readerLoop = Task.Run(() => ReaderLoopAsync(_cts.Token), CancellationToken.None);
 
-        // Register observable gauges for this connection
-        AmiMetrics.Meter.CreateObservableGauge("ami.event_pump.pending",
-            () => _eventPump?.PendingCount ?? 0, description: "Events pending in the event pump buffer");
-        AmiMetrics.Meter.CreateObservableGauge("ami.pending_actions",
-            () => _pendingActions.Count, description: "Actions awaiting response");
+        // Register observable gauges only once (avoid accumulation on reconnect)
+        if (!_gaugesRegistered)
+        {
+            AmiMetrics.Meter.CreateObservableGauge("ami.event_pump.pending",
+                () => _eventPump?.PendingCount ?? 0, description: "Events pending in the event pump buffer");
+            AmiMetrics.Meter.CreateObservableGauge("ami.pending_actions",
+                () => _pendingActions.Count, description: "Actions awaiting response");
+            _gaugesRegistered = true;
+        }
 
         // Start heartbeat loop if enabled
         if (_options.EnableHeartbeat && _options.HeartbeatInterval > TimeSpan.Zero)
