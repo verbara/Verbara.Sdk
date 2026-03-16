@@ -6,6 +6,7 @@ using Asterisk.Sdk.Ami.Transport;
 using Asterisk.Sdk.Ari.Audio;
 using Asterisk.Sdk.Ari.Client;
 using Asterisk.Sdk.Live.Server;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -109,6 +110,40 @@ public static class ServiceCollectionExtensions
         }
 
         return services;
+    }
+
+    /// <summary>
+    /// Add all Asterisk SDK services binding options from <see cref="IConfiguration"/>.
+    /// Expects an "Asterisk" section with "Ami", "Ari", etc. sub-sections.
+    /// AOT-safe: manually reads configuration keys instead of using reflection-based Bind().
+    /// </summary>
+    public static IServiceCollection AddAsterisk(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var ami = configuration.GetSection("Asterisk:Ami");
+        var ari = configuration.GetSection("Asterisk:Ari");
+
+        return services.AddAsterisk(o =>
+        {
+            if (ami[nameof(o.Ami.Hostname)] is { } hostname) o.Ami.Hostname = hostname;
+            if (int.TryParse(ami[nameof(o.Ami.Port)], out var port)) o.Ami.Port = port;
+            if (ami[nameof(o.Ami.Username)] is { } username) o.Ami.Username = username;
+            if (ami[nameof(o.Ami.Password)] is { } password) o.Ami.Password = password;
+            if (bool.TryParse(ami[nameof(o.Ami.UseSsl)], out var useSsl)) o.Ami.UseSsl = useSsl;
+            if (bool.TryParse(ami[nameof(o.Ami.AutoReconnect)], out var autoReconnect)) o.Ami.AutoReconnect = autoReconnect;
+
+            if (int.TryParse(configuration["Asterisk:AgiPort"], out var agiPort)) o.AgiPort = agiPort;
+
+            if (ari.Exists())
+            {
+                o.Ari = new AriClientOptions();
+                if (ari[nameof(o.Ari.BaseUrl)] is { } baseUrl) o.Ari.BaseUrl = baseUrl;
+                if (ari[nameof(o.Ari.Username)] is { } ariUser) o.Ari.Username = ariUser;
+                if (ari[nameof(o.Ari.Password)] is { } ariPass) o.Ari.Password = ariPass;
+                if (ari[nameof(o.Ari.Application)] is { } app) o.Ari.Application = app;
+            }
+        });
     }
 
     /// <summary>
