@@ -9,6 +9,9 @@ public sealed class HangupActivity(IAgiChannel channel) : ActivityBase(channel)
 
     protected override async ValueTask ExecuteAsync(CancellationToken cancellationToken)
     {
-        await Channel.HangupAsync(cancellationToken);
+        if (CauseCode.HasValue)
+            await Channel.ExecAsync("Hangup", CauseCode.Value.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+        else
+            await Channel.HangupAsync(cancellationToken);
     }
 }
