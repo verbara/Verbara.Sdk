@@ -87,6 +87,12 @@ public sealed class AsteriskServer : IAsteriskServer
         LiveMetrics.Meter.CreateObservableGauge("live.agents.paused",
             () => Agents.Agents.Count(a => a.State == AgentState.Paused),
             description: "Agents in Paused state");
+        LiveMetrics.Meter.CreateObservableGauge("live.agents.total_hold_secs",
+            () => Agents.Agents.Sum(a => a.TotalHoldTimeSecs),
+            unit: "s", description: "Aggregate hold time across all agents since login");
+        LiveMetrics.Meter.CreateObservableGauge("live.agents.total_talk_secs",
+            () => Agents.Agents.Sum(a => a.TotalTalkTimeSecs),
+            unit: "s", description: "Aggregate talk time across all agents since login");
 
         await RequestInitialStateAsync(cancellationToken);
     }
