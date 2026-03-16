@@ -1,0 +1,272 @@
+@page "/routes"
+@using DashboardExample.Services
+@using DashboardExample.Models
+@inject SelectedServerService ServerSvc
+@inject RouteService RouteSvc
+@inject TimeConditionService TcSvc
+@inject ConfigOperationState ConfigOp
+@inject NavigationManager Nav
+
+<PageTitle>Routes — Asterisk Dashboard</PageTitle>
+
+<h2>Routes</h2>
+
+<div class="chip-bar" style="margin-bottom: 1rem;">
+    <button class="chip @(_activeTab == "inbound" ? "chip-active" : "")" @onclick="@(() => _activeTab = "inbound")">Inbound Routes</button>
+    <button class="chip @(_activeTab == "outbound" ? "chip-active" : "")" @onclick="@(() => _activeTab = "outbound")">Outbound Routes</button>
+</div>
+
+@if (_activeTab == "inbound")
+{
+    <div class="kpi-grid kpi-grid-sm">
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-value">@_inbound.Count</div>
+            <div class="kpi-label">Total</div>
+        </div>
+        <div class="kpi-card kpi-green">
+            <div class="kpi-value">@_inbound.Count(r => r.Enabled)</div>
+            <div class="kpi-label">Enabled</div>
+        </div>
+        <div class="kpi-card kpi-red">
+            <div class="kpi-value">@_inbound.Count(r => !r.Enabled)</div>
+            <div class="kpi-label">Disabled</div>
+        </div>
+    </div>
+
+    <div style="margin-bottom: 1rem;">
+        <button class="btn btn-blue" @onclick="NavigateNewInbound">New Inbound Route</button>
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Priority</th>
+                <th>Name</th>
+                <th>DID Pattern</th>
+                <th>Destination</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var route in _inbound.OrderBy(r => r.Priority))
+            {
+                <tr>
+                    <td>@route.Priority</td>
+                    <td>@route.Name</td>
+                    <td><code>@route.DidPattern</code></td>
+                    <td>
+                        <span class="badge @GetDestBadge(route.DestinationType)">@GetDestTypeLabel(route.DestinationType)</span>
+                        @(route.DestinationLabel ?? route.Destination)
+                    </td>
+                    <td>
+                        <span class="badge @(route.Enabled ? "badge-green" : "badge-muted")">@(route.Enabled ? "Enabled" : "Disabled")</span>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-yellow" @onclick="() => NavigateEditInbound(route.Id)">Edit</button>
+                        <button class="btn btn-sm btn-red" @onclick="() => ConfirmDeleteInbound(route)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else
+{
+    <div style="margin-bottom: 1rem;">
+        <button class="btn btn-blue" @onclick="NavigateNewOutbound">New Outbound Route</button>
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Priority</th>
+                <th>Name</th>
+                <th>Dial Pattern</th>
+                <th>Trunks</th>
+                <th>Prepend/Prefix</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var route in _outbound.OrderBy(r => r.Priority))
+            {
+                <tr>
+                    <td>@route.Priority</td>
+                    <td>@route.Name</td>
+                    <td><code>@route.DialPattern</code></td>
+                    <td>
+                        @foreach (var trunk in route.Trunks.OrderBy(t => t.Sequence))
+                        {
+                            <span class="badge badge-blue" style="margin-right: 0.25rem;">@trunk.TrunkName</span>
+                        }
+                    </td>
+                    <td>
+                        @{
+                            var prepend = _outboundConfigs.TryGetValue(route.Id, out var cfg) ? cfg.Prepend : null;
+                            var prefix = cfg?.Prefix;
+                        }
+                        @if (!string.IsNullOrEmpty(prepend)) { <span>P: @prepend</span> }
+                        @if (!string.IsNullOrEmpty(prefix)) { <span style="margin-left: 0.25rem;">X: @prefix</span> }
+                        @if (string.IsNullOrEmpty(prepend) && string.IsNullOrEmpty(prefix)) { <span class="text-muted">—</span> }
+                    </td>
+                    <td>
+                        <span class="badge @(route.Enabled ? "badge-green" : "badge-muted")">@(route.Enabled ? "Enabled" : "Disabled")</span>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-yellow" @onclick="() => NavigateEditOutbound(route.Id)">Edit</button>
+                        <button class="btn btn-sm btn-red" @onclick="() => ConfirmDeleteOutbound(route)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (_showDeleteConfirm)
+{
+    <div class="confirm-overlay" @onclick="CancelDelete">
+        <div class="confirm-dialog" @onclick:stopPropagation="true">
+            <h4>Delete Route</h4>
+            <p>Are you sure you want to delete route <strong>@_deletingName</strong>? This action cannot be undone.</p>
+            <div class="confirm-dialog-actions">
+                <button class="btn btn-sm" @onclick="CancelDelete">Cancel</button>
+                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">Delete</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_actionResult is not null)
+{
+    <p class="action-result">@_actionResult</p>
+}
+
+<style>
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--card-bg);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .data-table th, .data-table td {
+        padding: 0.6rem 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+    }
+    .data-table th {
+        background: rgba(255,255,255,0.04);
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: var(--text-muted);
+    }
+    .data-table tbody tr:hover {
+        background: rgba(255,255,255,0.03);
+    }
+    .badge-green { background: #22c55e22; color: #4ade80; }
+    .badge-blue { background: #3b82f622; color: #60a5fa; }
+    .badge-purple { background: #a855f722; color: #c084fc; }
+</style>
+
+@code {
+    private string _activeTab = "inbound";
+    private List<InboundRouteViewModel> _inbound = [];
+    private List<OutboundRouteViewModel> _outbound = [];
+    private Dictionary<int, OutboundRouteConfig> _outboundConfigs = new();
+    private bool _showDeleteConfirm;
+    private string? _deletingName;
+    private int _deletingId;
+    private bool _deletingIsInbound;
+    private string? _actionResult;
+
+    private void NavigateNewInbound() => Nav.NavigateTo("/routes/inbound/new");
+    private void NavigateNewOutbound() => Nav.NavigateTo("/routes/outbound/new");
+    private void NavigateEditInbound(int id) => Nav.NavigateTo($"/routes/inbound/edit/{id}");
+    private void NavigateEditOutbound(int id) => Nav.NavigateTo($"/routes/outbound/edit/{id}");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRoutes();
+    }
+
+    private async Task LoadRoutes()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        _inbound = await RouteSvc.GetInboundRoutesAsync(serverId);
+        _outbound = await RouteSvc.GetOutboundRoutesAsync(serverId);
+
+        // Load outbound configs for prepend/prefix display
+        _outboundConfigs.Clear();
+        foreach (var ob in _outbound)
+        {
+            var cfg = await RouteSvc.GetOutboundRouteAsync(ob.Id);
+            if (cfg is not null) _outboundConfigs[ob.Id] = cfg;
+        }
+    }
+
+    private void ConfirmDeleteInbound(InboundRouteViewModel route)
+    {
+        _deletingId = route.Id;
+        _deletingName = route.Name;
+        _deletingIsInbound = true;
+        _showDeleteConfirm = true;
+    }
+
+    private void ConfirmDeleteOutbound(OutboundRouteViewModel route)
+    {
+        _deletingId = route.Id;
+        _deletingName = route.Name;
+        _deletingIsInbound = false;
+        _showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        _showDeleteConfirm = false;
+        _deletingName = null;
+    }
+
+    private async Task ExecuteDelete()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        using var _ = ConfigOp.Begin("Deleting Route", serverId, _deletingName);
+        bool success;
+        if (_deletingIsInbound)
+            success = await RouteSvc.DeleteInboundRouteAsync(_deletingId, serverId);
+        else
+            success = await RouteSvc.DeleteOutboundRouteAsync(_deletingId, serverId);
+
+        _actionResult = success
+            ? $"Route '{_deletingName}' deleted successfully."
+            : $"Failed to delete route '{_deletingName}'.";
+
+        _showDeleteConfirm = false;
+        _deletingName = null;
+
+        await LoadRoutes();
+    }
+
+    private static string GetDestBadge(string type) => type switch
+    {
+        "time_condition" => "badge-green",
+        "queue" => "badge-blue",
+        "extension" => "badge-purple",
+        _ => "badge-muted"
+    };
+
+    private static string GetDestTypeLabel(string type) => type switch
+    {
+        "time_condition" => "TC",
+        "queue" => "Queue",
+        "extension" => "Ext",
+        _ => type
+    };
+}
