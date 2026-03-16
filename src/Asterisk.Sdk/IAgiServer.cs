@@ -1,3 +1,5 @@
+using Asterisk.Sdk.Enums;
+
 namespace Asterisk.Sdk;
 
 /// <summary>
@@ -10,6 +12,9 @@ public interface IAgiServer : IAsyncDisposable
 
     /// <summary>Whether the server is currently running.</summary>
     bool IsRunning { get; }
+
+    /// <summary>Current server lifecycle state.</summary>
+    AgiServerState State { get; }
 
     /// <summary>Start accepting AGI connections.</summary>
     ValueTask StartAsync(CancellationToken cancellationToken = default);

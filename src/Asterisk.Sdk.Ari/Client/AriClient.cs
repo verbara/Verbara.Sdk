@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Reactive.Subjects;
@@ -11,6 +12,7 @@ using Asterisk.Sdk.Ari.Diagnostics;
 using Asterisk.Sdk.Ari.Events;
 using Asterisk.Sdk.Ari.Internal;
 using Asterisk.Sdk.Ari.Resources;
+using Asterisk.Sdk.Enums;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -56,8 +58,13 @@ public sealed class AriClient : IAriClient
     private Task? _eventLoop;
     private readonly Subject<AriEvent> _eventSubject = new();
     private readonly AriEventPump _pump = new();
+    private int _state = (int)AriConnectionState.Initial;
 
-    public bool IsConnected => _webSocket?.State == WebSocketState.Open;
+    public AriConnectionState State => (AriConnectionState)Volatile.Read(ref _state);
+    public bool IsConnected => State == AriConnectionState.Connected;
+
+    private void SetState(AriConnectionState newState) =>
+        Interlocked.Exchange(ref _state, (int)newState);
 
     public IAriChannelsResource Channels { get; }
     public IAriBridgesResource Bridges { get; }
@@ -92,6 +99,8 @@ public sealed class AriClient : IAriClient
 
     public async ValueTask ConnectAsync(CancellationToken cancellationToken = default)
     {
+        SetState(AriConnectionState.Connecting);
+
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _webSocket = new ClientWebSocket();
 
@@ -105,6 +114,8 @@ public sealed class AriClient : IAriClient
         var uri = new Uri($"{wsUrl}/ari/events?api_key={Uri.EscapeDataString(_options.Username)}:{Uri.EscapeDataString(_options.Password)}&app={Uri.EscapeDataString(_options.Application)}");
 
         await _webSocket.ConnectAsync(uri, cancellationToken);
+
+        SetState(AriConnectionState.Connected);
 
         _pump.OnEventDropped = evt => AriMetrics.EventsDropped.Add(1);
         _pump.Start(evt =>
@@ -172,6 +183,8 @@ public sealed class AriClient : IAriClient
 
     private async Task ReconnectLoopAsync(CancellationToken ct)
     {
+        SetState(AriConnectionState.Reconnecting);
+
         var attempt = 0;
         var delay = _options.ReconnectInitialDelay;
         var maxDelay = _options.ReconnectMaxDelay;
@@ -183,6 +196,7 @@ public sealed class AriClient : IAriClient
             if (_options.MaxReconnectAttempts > 0 && attempt > _options.MaxReconnectAttempts)
             {
                 AriClientLog.ReconnectGaveUp(_logger, _options.MaxReconnectAttempts);
+                SetState(AriConnectionState.Faulted);
                 return;
             }
 
@@ -215,6 +229,7 @@ public sealed class AriClient : IAriClient
                 var uri = new Uri($"{wsUrl}/ari/events?api_key={Uri.EscapeDataString(_options.Username)}:{Uri.EscapeDataString(_options.Password)}&app={Uri.EscapeDataString(_options.Application)}");
 
                 await _webSocket.ConnectAsync(uri, ct);
+                SetState(AriConnectionState.Connected);
                 AriClientLog.ReconnectedSuccess(_logger, attempt);
 
                 // Restart event loop (recursive but tail-position — runs the receive loop again)
@@ -223,6 +238,13 @@ public sealed class AriClient : IAriClient
             }
             catch (OperationCanceledException)
             {
+                return;
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                // 401 Unauthorized — credentials are wrong, do not retry
+                AriClientLog.WebSocketError(_logger, ex);
+                SetState(AriConnectionState.Faulted);
                 return;
             }
             catch (Exception ex)

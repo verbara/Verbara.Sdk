@@ -5,6 +5,7 @@ using Asterisk.Sdk;
 using Asterisk.Sdk.Agi.Diagnostics;
 using Asterisk.Sdk.Agi.Mapping;
 using Asterisk.Sdk.Ami.Transport;
+using Asterisk.Sdk.Enums;
 using Microsoft.Extensions.Logging;
 
 namespace Asterisk.Sdk.Agi.Server;
@@ -41,9 +42,14 @@ public sealed class FastAgiServer : IAgiServer
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
+    private int _state = (int)AgiServerState.Stopped;
 
     public int Port { get; }
-    public bool IsRunning { get; private set; }
+    public AgiServerState State => (AgiServerState)Volatile.Read(ref _state);
+    public bool IsRunning => State == AgiServerState.Listening;
+
+    private void SetState(AgiServerState newState) =>
+        Interlocked.Exchange(ref _state, (int)newState);
 
     /// <summary>Maximum time allowed for a single AGI connection/script execution. Default: 5 minutes.</summary>
     public TimeSpan ConnectionTimeout { get; set; } = TimeSpan.FromMinutes(5);
@@ -57,10 +63,24 @@ public sealed class FastAgiServer : IAgiServer
 
     public async ValueTask StartAsync(CancellationToken cancellationToken = default)
     {
+        if (State == AgiServerState.Faulted)
+            throw new InvalidOperationException("Cannot start from Faulted state. Call StopAsync first.");
+
+        SetState(AgiServerState.Starting);
+
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _listener = new TcpListener(IPAddress.Any, Port);
-        _listener.Start();
-        IsRunning = true;
+
+        try
+        {
+            _listener.Start();
+            SetState(AgiServerState.Listening);
+        }
+        catch
+        {
+            SetState(AgiServerState.Faulted);
+            throw;
+        }
 
         FastAgiServerLog.ServerStarted(_logger, Port);
 
@@ -155,6 +175,8 @@ public sealed class FastAgiServer : IAgiServer
 
     public async ValueTask StopAsync(CancellationToken cancellationToken = default)
     {
+        SetState(AgiServerState.Stopping);
+
         _listener?.Stop();
 
         if (_cts is not null)
@@ -167,13 +189,15 @@ public sealed class FastAgiServer : IAgiServer
             await _acceptLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         }
 
-        IsRunning = false;
+        SetState(AgiServerState.Stopped);
         FastAgiServerLog.ServerStopped(_logger);
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (IsRunning) await StopAsync();
+        var s = State;
+        if (s is AgiServerState.Starting or AgiServerState.Listening or AgiServerState.Stopping)
+            await StopAsync();
         _cts?.Dispose();
     }
 }
