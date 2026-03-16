@@ -75,6 +75,14 @@
                                 <span class="text-muted">(avg @FormatSeconds((int)agent.AvgTalkTimeSecs))</span>
                             }
                         </div>
+                        @if (agent.TotalTalkTimeSecs > 0)
+                        {
+                            <div>Talk: @FormatSeconds((int)agent.TotalTalkTimeSecs)</div>
+                        }
+                        @if (agent.TotalHoldTimeSecs > 0)
+                        {
+                            <div>Hold: @FormatSeconds((int)agent.TotalHoldTimeSecs)</div>
+                        }
                     }
                     @if (agent.Channel is not null)
                     {
