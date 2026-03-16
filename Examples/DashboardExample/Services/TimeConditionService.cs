@@ -35,18 +35,18 @@ internal static partial class TimeConditionServiceLog
 public sealed class TimeConditionService
 {
     private readonly IRouteRepositoryResolver _repoResolver;
-    private readonly IDialplanProviderResolver _dialplanResolver;
+    private readonly DialplanRegenerator _regenerator;
     private readonly AsteriskMonitorService _monitor;
     private readonly ILogger<TimeConditionService> _logger;
 
     public TimeConditionService(
         IRouteRepositoryResolver repoResolver,
-        IDialplanProviderResolver dialplanResolver,
+        DialplanRegenerator regenerator,
         AsteriskMonitorService monitor,
         ILogger<TimeConditionService> logger)
     {
         _repoResolver = repoResolver;
-        _dialplanResolver = dialplanResolver;
+        _regenerator = regenerator;
         _monitor = monitor;
         _logger = logger;
     }
@@ -333,15 +333,6 @@ public sealed class TimeConditionService
 
     private async Task RegenerateDialplanAsync(string serverId, CancellationToken ct)
     {
-        var repo = _repoResolver.GetRepository(serverId);
-        var inbound = await repo.GetInboundRoutesAsync(serverId, ct);
-        var outbound = await repo.GetOutboundRoutesAsync(serverId, ct);
-        var timeConditions = await repo.GetTimeConditionsAsync(serverId, ct);
-
-        var data = new DialplanData(inbound, outbound, timeConditions);
-        var dialplanProvider = _dialplanResolver.GetProvider(serverId);
-
-        await dialplanProvider.GenerateDialplanAsync(serverId, data, ct);
-        await dialplanProvider.ReloadAsync(serverId, ct);
+        await _regenerator.RegenerateAsync(serverId, ct);
     }
 }
