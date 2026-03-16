@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Asterisk.Sdk.Live.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace Asterisk.Sdk.Live.Agents;
@@ -96,6 +97,7 @@ public sealed class AgentManager
                 agent.LastStateChangeAt = DateTimeOffset.UtcNow;
             }
             AgentManagerLog.Connect(_logger, agentId, talkingTo);
+            LiveMetrics.AgentStateChanges.Add(1);
             AgentStateChanged?.Invoke(agent);
         }
     }
@@ -116,6 +118,7 @@ public sealed class AgentManager
                 agent.TotalHoldTimeSecs += holdTimeSecs;
             }
             AgentManagerLog.Complete(_logger, agentId, talkTimeSecs, holdTimeSecs, agent.CallsTaken);
+            LiveMetrics.AgentStateChanges.Add(1);
             AgentStateChanged?.Invoke(agent);
         }
     }
@@ -131,6 +134,7 @@ public sealed class AgentManager
                 agent.LastStateChangeAt = DateTimeOffset.UtcNow;
             }
             AgentManagerLog.PauseChanged(_logger, agentId, paused);
+            LiveMetrics.AgentStateChanges.Add(1);
             AgentStateChanged?.Invoke(agent);
         }
     }

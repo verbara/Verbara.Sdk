@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Asterisk.Sdk;
 using Asterisk.Sdk.Enums;
+using Asterisk.Sdk.Live.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace Asterisk.Sdk.Live.Channels;
@@ -73,6 +74,7 @@ public sealed class ChannelManager
 
         _channelsByUniqueId[uniqueId] = channel;
         _channelsByName[channelName] = channel;
+        LiveMetrics.ChannelsCreated.Add(1);
         ChannelManagerLog.NewChannel(_logger, uniqueId, channelName, state);
         ChannelAdded?.Invoke(channel);
     }
@@ -108,6 +110,7 @@ public sealed class ChannelManager
                 channel.HangupCause = cause;
                 channel.State = ChannelState.Down;
             }
+            LiveMetrics.ChannelsDestroyed.Add(1);
             ChannelManagerLog.Hangup(_logger, uniqueId, cause);
             ChannelRemoved?.Invoke(channel);
         }
