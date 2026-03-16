@@ -194,4 +194,4 @@ public sealed class ExecDirective : ConfigDirective
 }
 
 /// <summary>Parsing error.</summary>
-public sealed class ConfigParseException(string message) : Exception(message);
+public sealed class ConfigParseException(string message) : Asterisk.Sdk.AsteriskException(message);
