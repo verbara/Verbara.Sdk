@@ -4,7 +4,7 @@
 
 [![NuGet](https://img.shields.io/nuget/v/Asterisk.Sdk?label=NuGet&color=blue)](https://www.nuget.org/packages/Asterisk.Sdk)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-green)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 Asterisk.Sdk is a high-performance, Native AOT-compatible .NET library for integrating with [Asterisk PBX](https://www.asterisk.org/). It provides full support for AMI (Manager Interface), AGI (Gateway Interface), ARI (REST Interface), and a real-time Live API for tracking channels, queues, and agents -- all with zero runtime reflection.
 
@@ -14,14 +14,29 @@ Ported from [asterisk-java](https://github.com/asterisk-java/asterisk-java) 3.42
 
 ## Features
 
-- **AMI Client** -- Connect to the Asterisk Manager Interface over TCP with MD5 challenge-response authentication, 111 actions, 215 events, and 17 typed responses. Auto-reconnect with configurable exponential backoff.
-- **FastAGI Server** -- Async TCP server for the Asterisk Gateway Interface with 54 AGI commands, pluggable script mapping strategies, and zero-copy I/O via `System.IO.Pipelines`.
-- **ARI Client** -- REST + WebSocket client for the Asterisk REST Interface. Manage channels, bridges, playbacks, recordings, endpoints, applications, and sounds. WebSocket reconnect with exponential backoff.
-- **Live API** -- Real-time in-memory tracking of channels, queues, agents, and conference rooms from AMI events. Secondary indices for O(1) lookups by name. Observable gauges via `System.Diagnostics.Metrics`.
-- **Activities** -- High-level telephony operations (Dial, Hold, Transfer, Park, Bridge, Conference) modeled as async state machines with `IObservable<ActivityStatus>` tracking.
-- **Config Parser** -- Read and parse Asterisk `.conf` files and `extensions.conf` dialplans.
-- **Native AOT** -- Zero reflection at runtime. Four source generators replace runtime code generation. 0 trim warnings, 1.3 MB published binary.
+- **AMI Client** -- Connect to the Asterisk Manager Interface over TCP with MD5 challenge-response authentication, 111 actions, 215 events, and 17 typed responses. Auto-reconnect with configurable exponential backoff. Configurable heartbeat/keepalive with auto-disconnect on timeout.
+- **FastAGI Server** -- Async TCP server for the Asterisk Gateway Interface with 54 AGI commands, pluggable script mapping strategies, and zero-copy I/O via `System.IO.Pipelines`. Per-connection timeout, status 511 hangup detection, and `AgiMetrics` instrumentation.
+- **ARI Client** -- REST + WebSocket client for the Asterisk REST Interface. Manage channels, bridges, playbacks, recordings, endpoints, applications, and sounds. Domain exceptions (`AriNotFoundException`, `AriConflictException`) for HTTP error mapping. WebSocket reconnect with exponential backoff.
+- **Live API** -- Real-time in-memory tracking of channels, queues, agents, and conference rooms from AMI events. Secondary indices for O(1) lookups by name. Observable gauges and event counters via `System.Diagnostics.Metrics`.
+- **Activities** -- High-level telephony operations (Dial, Hold, Transfer, Park, Bridge, Conference) modeled as async state machines with `IObservable<ActivityStatus>` tracking. Real cancellation support, re-entrance guards, and channel variable capture (`DIALSTATUS`, `QUEUESTATUS`).
+- **Config Parser** -- Read and parse Asterisk `.conf` files and `extensions.conf` dialplans. Quote-aware comment stripping.
+- **Hosting** -- `IHostedService` for AMI and Live API lifecycle. `IHealthCheck` for AMI connection state. AOT-safe `IConfiguration` binding.
+- **Native AOT** -- Zero reflection at runtime. Four source generators replace runtime code generation. 0 trim warnings.
 - **Multi-Server** -- Federate multiple Asterisk servers with `AsteriskServerPool` and agent routing.
+
+---
+
+## What's New in v0.2.0-beta
+
+- **AMI Heartbeat** -- Configurable periodic ping with auto-disconnect on timeout
+- **AMI Health Check** -- `IHealthCheck` implementation for K8s readiness/liveness probes
+- **Hosted Services** -- `IHostedService` for AMI connection and AsteriskServer lifecycle
+- **IConfiguration Binding** -- AOT-safe `AddAsterisk(IConfiguration)` overload for `appsettings.json`
+- **ARI Domain Exceptions** -- `AriNotFoundException` (404) and `AriConflictException` (409) from all resources
+- **AGI Hardening** -- Status 511 hangup detection, per-connection timeout, `AgiMetrics` instrumentation
+- **Activities Rebuild** -- Real cancellation via `CancellationTokenSource`, re-entrance guards, `DIALSTATUS`/`QUEUESTATUS` capture, corrected `Queue`/`Park`/`Hangup` arguments
+- **LiveMetrics Expansion** -- Event counters for channels, queues, agents + queue wait time histogram
+- **Config Fixes** -- `ConfigParseException` inherits `AsteriskException`, quote-aware semicolon stripping
 
 ---
 
@@ -37,7 +52,41 @@ The `Asterisk.Sdk.Hosting` meta-package includes all sub-packages and DI extensi
 
 ## Quick Start
 
-### AMI: Connect, Ping, and Listen for Events
+### AMI: Hosted Service with Automatic Lifecycle
+
+```csharp
+using Asterisk.Sdk.Hosting;
+using Microsoft.Extensions.Hosting;
+
+var builder = Host.CreateApplicationBuilder(args);
+builder.Services.AddAsterisk(options =>
+{
+    options.Ami.Hostname = "192.168.1.100";
+    options.Ami.Username = "admin";
+    options.Ami.Password = "secret";
+});
+
+var host = builder.Build();
+await host.RunAsync();
+// AMI connects on start, disconnects on shutdown via IHostedService.
+// Health check available at /health for K8s probes.
+```
+
+Or bind from `appsettings.json`:
+
+```csharp
+builder.Services.AddAsterisk(builder.Configuration);
+```
+
+```json
+{
+  "Asterisk": {
+    "Ami": { "Hostname": "pbx.example.com", "Username": "admin", "Password": "secret" }
+  }
+}
+```
+
+### AMI: Manual Connect, Ping, and Events
 
 ```csharp
 using Asterisk.Sdk;
@@ -50,7 +99,6 @@ services.AddLogging();
 services.AddAsterisk(options =>
 {
     options.Ami.Hostname = "192.168.1.100";
-    options.Ami.Port = 5038;
     options.Ami.Username = "admin";
     options.Ami.Password = "secret";
 });
@@ -248,4 +296,4 @@ await ami.DisconnectAsync();
 
 ## License
 
-This project is licensed under the [Apache License 2.0](LICENSE).
+This project is licensed under the [MIT License](LICENSE).
