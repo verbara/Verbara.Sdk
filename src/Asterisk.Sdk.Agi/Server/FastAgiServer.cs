@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using Asterisk.Sdk;
+using Asterisk.Sdk.Agi.Diagnostics;
 using Asterisk.Sdk.Agi.Mapping;
 using Asterisk.Sdk.Ami.Transport;
 using Microsoft.Extensions.Logging;
@@ -101,8 +103,11 @@ public sealed class FastAgiServer : IAgiServer
 
         var connectionCt = timeoutCts.Token;
 
+        AgiMetrics.ConnectionsAccepted.Add(1);
+
         await using var conn = PipelineSocketConnection.FromStream(client.GetStream());
 
+        var sw = Stopwatch.GetTimestamp();
         try
         {
             var reader = new FastAgiReader(conn.Input);
@@ -117,6 +122,7 @@ public sealed class FastAgiServer : IAgiServer
             var script = _mappingStrategy.Resolve(request);
             if (script is null)
             {
+                AgiMetrics.ScriptsNotFound.Add(1);
                 FastAgiServerLog.NoScriptMapped(_logger, request.Script);
                 return;
             }
@@ -124,18 +130,26 @@ public sealed class FastAgiServer : IAgiServer
             // Create channel and execute script
             var channel = new AgiChannel(writer, reader, _logger);
             await script.ExecuteAsync(channel, request, connectionCt);
+
+            AgiMetrics.ScriptsExecuted.Add(1);
         }
         catch (AgiHangupException)
         {
+            AgiMetrics.Hangups.Add(1);
             // Normal hangup during script execution
         }
         catch (OperationCanceledException)
         {
-            // Server shutting down
+            // Server shutting down or connection timeout
         }
         catch (Exception ex)
         {
+            AgiMetrics.ScriptsFailed.Add(1);
             FastAgiServerLog.ConnectionError(_logger, ex);
+        }
+        finally
+        {
+            AgiMetrics.ScriptDurationMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
         }
     }
 
