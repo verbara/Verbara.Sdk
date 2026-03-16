@@ -423,6 +423,42 @@ public class AriResourceTests
         handler.LastRequestUri.Should().Contain("priority=1");
     }
 
+    // --- ARI Domain Exceptions ---
+
+    [Fact]
+    public async Task Channels_GetAsync_ShouldThrowAriNotFoundException_WhenChannelDoesNotExist()
+    {
+        using var handler = new FakeHttpHandler("""{"message":"Channel not found"}""", HttpStatusCode.NotFound);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        var act = async () => await sut.GetAsync("nonexistent");
+        await act.Should().ThrowAsync<AriNotFoundException>();
+    }
+
+    [Fact]
+    public async Task Bridges_CreateAsync_ShouldThrowAriConflictException_When409()
+    {
+        using var handler = new FakeHttpHandler("""{"message":"Bridge already exists"}""", HttpStatusCode.Conflict);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriBridgesResource(http, DefaultOptions);
+
+        var act = async () => await sut.CreateAsync("mixing", "existing-id");
+        await act.Should().ThrowAsync<AriConflictException>();
+    }
+
+    [Fact]
+    public async Task Channels_HangupAsync_ShouldThrowAriException_When500()
+    {
+        using var handler = new FakeHttpHandler("Internal Server Error", HttpStatusCode.InternalServerError);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        var act = async () => await sut.HangupAsync("ch-1");
+        await act.Should().ThrowAsync<AriException>()
+            .Where(e => e.StatusCode == 500);
+    }
+
     // --- Bridges ---
 
     [Fact]
@@ -690,7 +726,7 @@ public class AriResourceTests
 /// <summary>
 /// Fake HTTP handler that returns predefined responses for unit testing ARI resources.
 /// </summary>
-internal sealed class FakeHttpHandler(string responseJson) : DelegatingHandler
+internal sealed class FakeHttpHandler(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK) : DelegatingHandler
 {
     public HttpMethod? LastMethod { get; private set; }
     public string? LastRequestUri { get; private set; }
@@ -701,7 +737,7 @@ internal sealed class FakeHttpHandler(string responseJson) : DelegatingHandler
         LastMethod = request.Method;
         LastRequestUri = request.RequestUri?.ToString();
 
-        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        return Task.FromResult(new HttpResponseMessage(statusCode)
         {
             Content = new StringContent(responseJson, System.Text.Encoding.UTF8, "application/json")
         });

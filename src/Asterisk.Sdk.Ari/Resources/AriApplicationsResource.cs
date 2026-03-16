@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Asterisk.Sdk;
+using Asterisk.Sdk.Ari.Client;
 
 namespace Asterisk.Sdk.Ari.Resources;
 
@@ -16,7 +17,7 @@ public sealed class AriApplicationsResource : IAriApplicationsResource
     public async ValueTask<AriApplication[]> ListAsync(CancellationToken cancellationToken = default)
     {
         var response = await _http.GetAsync("applications", cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await response.EnsureAriSuccessAsync();
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriApplicationArray) ?? [];
     }
@@ -24,7 +25,7 @@ public sealed class AriApplicationsResource : IAriApplicationsResource
     public async ValueTask<AriApplication> GetAsync(string applicationName, CancellationToken cancellationToken = default)
     {
         var response = await _http.GetAsync($"applications/{Uri.EscapeDataString(applicationName)}", cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await response.EnsureAriSuccessAsync();
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriApplication)!;
     }

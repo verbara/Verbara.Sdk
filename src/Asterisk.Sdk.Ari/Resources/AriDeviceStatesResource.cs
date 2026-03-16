@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Asterisk.Sdk;
+using Asterisk.Sdk.Ari.Client;
 
 namespace Asterisk.Sdk.Ari.Resources;
 
@@ -16,7 +17,7 @@ public sealed class AriDeviceStatesResource : IAriDeviceStatesResource
     public async ValueTask<AriDeviceState[]> ListAsync(CancellationToken cancellationToken = default)
     {
         var response = await _http.GetAsync("deviceStates", cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await response.EnsureAriSuccessAsync();
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriDeviceStateArray) ?? [];
     }
@@ -25,7 +26,7 @@ public sealed class AriDeviceStatesResource : IAriDeviceStatesResource
     {
         var url = $"deviceStates/{Uri.EscapeDataString(deviceName)}";
         var response = await _http.GetAsync(url, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await response.EnsureAriSuccessAsync();
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriDeviceState)!;
     }
@@ -34,13 +35,13 @@ public sealed class AriDeviceStatesResource : IAriDeviceStatesResource
     {
         var url = $"deviceStates/{Uri.EscapeDataString(deviceName)}?deviceState={Uri.EscapeDataString(deviceState)}";
         var response = await _http.PutAsync(url, null, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await response.EnsureAriSuccessAsync();
     }
 
     public async ValueTask DeleteAsync(string deviceName, CancellationToken cancellationToken = default)
     {
         var url = $"deviceStates/{Uri.EscapeDataString(deviceName)}";
         var response = await _http.DeleteAsync(url, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await response.EnsureAriSuccessAsync();
     }
 }
