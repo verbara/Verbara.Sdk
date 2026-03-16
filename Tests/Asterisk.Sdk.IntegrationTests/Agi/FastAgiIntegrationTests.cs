@@ -34,7 +34,7 @@ public class FastAgiIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncLif
         if (_amiConnection is not null) await _amiConnection.DisposeAsync();
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task AgiServer_ShouldAcceptConnection_WhenAsteriskCallsAgi()
     {
         var scriptExecuted = new TaskCompletionSource<bool>();
@@ -60,7 +60,7 @@ public class FastAgiIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncLif
         result.Should().BeTrue();
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task AgiScript_ShouldExecuteGetVariable()
     {
         var variableValue = new TaskCompletionSource<string>();
@@ -86,13 +86,13 @@ public class FastAgiIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncLif
         result.Should().NotBeNull();
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public void AgiServer_ShouldBeRunning_AfterStart()
     {
         _agiServer!.IsRunning.Should().BeTrue();
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task AgiServer_ShouldStop_Cleanly()
     {
         await _agiServer!.StopAsync();
