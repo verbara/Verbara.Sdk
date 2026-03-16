@@ -35,8 +35,8 @@ public sealed class ConfigFileReader
             if (line.Length == 0 || line[0] == ';' || line.StartsWith("//", StringComparison.Ordinal))
                 continue;
 
-            // Strip inline comments
-            var commentIdx = line.IndexOf(';');
+            // Strip inline comments (respecting quoted values)
+            var commentIdx = FindUnquotedSemicolon(line);
             if (commentIdx > 0)
                 line = line[..commentIdx].TrimEnd();
 
@@ -142,6 +142,23 @@ public sealed class ConfigFileReader
         }
 
         return null;
+    }
+
+    private static int FindUnquotedSemicolon(ReadOnlySpan<char> line)
+    {
+        var inQuote = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            switch (line[i])
+            {
+                case '"':
+                    inQuote = !inQuote;
+                    break;
+                case ';' when !inQuote:
+                    return i;
+            }
+        }
+        return -1;
     }
 }
 
