@@ -59,6 +59,8 @@ public static class ServiceCollectionExtensions
                 options.AgiPort,
                 sp.GetRequiredService<IMappingStrategy>(),
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<FastAgiServer>>()));
+        services.AddHealthChecks()
+            .AddCheck<Asterisk.Sdk.Agi.Diagnostics.AgiHealthCheck>("agi");
 
         // Live
         services.TryAddSingleton<AsteriskServer>();
@@ -111,6 +113,9 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IOptions<AriClientOptions>>(),
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<AriClient>>(),
                 sp.GetService<IAudioServer>()));
+
+            services.AddHealthChecks()
+                .AddCheck<Asterisk.Sdk.Ari.Diagnostics.AriHealthCheck>("ari");
         }
 
         return services;
