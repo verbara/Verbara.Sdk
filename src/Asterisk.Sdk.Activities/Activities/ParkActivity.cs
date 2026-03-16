@@ -9,7 +9,7 @@ public sealed class ParkActivity(IAgiChannel channel) : ActivityBase(channel)
 
     protected override async ValueTask ExecuteAsync(CancellationToken cancellationToken)
     {
-        var args = ParkingLot is not null ? $"default,{ParkingLot}" : "";
+        var args = ParkingLot ?? string.Empty;
         await Channel.ExecAsync("Park", args, cancellationToken);
     }
 }
