@@ -1,5 +1,7 @@
 using Asterisk.Sdk.Hosting;
 using DashboardExample.Services;
+using DashboardExample.Services.Repositories;
+using DashboardExample.Services.Dialplan;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using System.Globalization;
@@ -51,6 +53,10 @@ builder.Services.AddSingleton<IConfigProviderResolver, ConfigProviderResolver>()
 builder.Services.AddSingleton<TrunkService>();
 builder.Services.AddSingleton<ExtensionService>();
 builder.Services.AddSingleton<QueueService>();
+builder.Services.AddSingleton<IRouteRepositoryResolver, RouteRepositoryResolver>();
+builder.Services.AddSingleton<IDialplanProviderResolver, DialplanProviderResolver>();
+builder.Services.AddSingleton<RouteService>();
+builder.Services.AddSingleton<TimeConditionService>();
 
 builder.Services.AddScoped<SelectedServerService>();
 
