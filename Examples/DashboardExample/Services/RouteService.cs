@@ -35,20 +35,20 @@ internal static partial class RouteServiceLog
 public sealed partial class RouteService
 {
     private readonly IRouteRepositoryResolver _repoResolver;
-    private readonly IDialplanProviderResolver _dialplanResolver;
+    private readonly DialplanRegenerator _regenerator;
     private readonly AsteriskMonitorService _monitor;
     private readonly TrunkService _trunkService;
     private readonly ILogger<RouteService> _logger;
 
     public RouteService(
         IRouteRepositoryResolver repoResolver,
-        IDialplanProviderResolver dialplanResolver,
+        DialplanRegenerator regenerator,
         AsteriskMonitorService monitor,
         TrunkService trunkService,
         ILogger<RouteService> logger)
     {
         _repoResolver = repoResolver;
-        _dialplanResolver = dialplanResolver;
+        _regenerator = regenerator;
         _monitor = monitor;
         _trunkService = trunkService;
         _logger = logger;
@@ -275,16 +275,7 @@ public sealed partial class RouteService
     {
         try
         {
-            var repo = _repoResolver.GetRepository(serverId);
-            var inbound = await repo.GetInboundRoutesAsync(serverId, ct);
-            var outbound = await repo.GetOutboundRoutesAsync(serverId, ct);
-            var timeConditions = await repo.GetTimeConditionsAsync(serverId, ct);
-
-            var data = new DialplanData(inbound, outbound, timeConditions);
-            var dialplanProvider = _dialplanResolver.GetProvider(serverId);
-
-            await dialplanProvider.GenerateDialplanAsync(serverId, data, ct);
-            await dialplanProvider.ReloadAsync(serverId, ct);
+            await _regenerator.RegenerateAsync(serverId, ct);
         }
         catch (Exception ex)
         {
