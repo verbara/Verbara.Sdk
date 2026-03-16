@@ -1355,6 +1355,34 @@ body {
 .segment-hold { background: var(--color-hold); }
 .segment-hangup { background: var(--color-incall); }
 
+/* Queue wait overlay (hatched/striped) */
+.timeline-queue-wait {
+    background: repeating-linear-gradient(
+        45deg,
+        rgba(33, 150, 243, 0.2),
+        rgba(33, 150, 243, 0.2) 5px,
+        transparent 5px,
+        transparent 10px
+    ) !important;
+    border: 1px dashed #2196f3;
+    z-index: 1;
+    color: #2196f3;
+}
+
+/* Hold segment highlight */
+.timeline-segment-hold {
+    background: rgba(255, 152, 0, 0.3) !important;
+    border: 1px solid #ff9800;
+}
+
+/* Duration label on segments */
+.timeline-segment-duration {
+    margin-left: 0.35rem;
+    font-size: 0.5rem;
+    font-weight: 400;
+    opacity: 0.8;
+}
+
 /* Timeline markers */
 .timeline-marker {
     position: absolute;
@@ -1600,29 +1628,36 @@ body {
     border-radius: 2px;
 }
 
-/* Arrow colors */
-.ladder-arrow-dial { color: var(--color-ringing); }
-.ladder-arrow-dial .ladder-arrow-line { background: var(--color-ringing); }
-.ladder-arrow-ring { color: var(--color-ringing); }
-.ladder-arrow-ring .ladder-arrow-line { background: var(--color-ringing); opacity: 0.5; }
-.ladder-arrow-answer { color: var(--color-available); }
-.ladder-arrow-answer .ladder-arrow-line { background: var(--color-available); }
-.ladder-arrow-bridge { color: var(--color-available); }
-.ladder-arrow-bridge .ladder-arrow-line { background: var(--color-available); height: 3px; }
-.ladder-arrow-hold { color: var(--color-hold); }
-.ladder-arrow-hold .ladder-arrow-line { background: var(--color-hold); }
-.ladder-arrow-unhold { color: var(--color-available); }
-.ladder-arrow-unhold .ladder-arrow-line { background: var(--color-available); border-style: dashed; }
-.ladder-arrow-hangup { color: var(--color-incall); }
-.ladder-arrow-hangup .ladder-arrow-line { background: var(--color-incall); }
-.ladder-arrow-dtmf { color: #a78bfa; }
-.ladder-arrow-dtmf .ladder-arrow-line { height: 1px; border-top: 1px dashed #a78bfa; background: none; }
-.ladder-arrow-queue { color: var(--color-paused); }
-.ladder-arrow-queue .ladder-arrow-line { background: var(--color-paused); }
-.ladder-arrow-agent { color: var(--color-available); }
-.ladder-arrow-agent .ladder-arrow-line { background: var(--color-available); }
-.ladder-arrow-newchannel { color: var(--color-offline); }
-.ladder-arrow-newchannel .ladder-arrow-line { background: var(--color-offline); height: 1px; }
+/* Arrow colors — setup (green) */
+.ladder-arrow-dial { color: #4caf50; }
+.ladder-arrow-dial .ladder-arrow-line { background: #4caf50; }
+.ladder-arrow-ring { color: #4caf50; }
+.ladder-arrow-ring .ladder-arrow-line { background: #4caf50; opacity: 0.5; }
+.ladder-arrow-answer { color: #4caf50; }
+.ladder-arrow-answer .ladder-arrow-line { background: #4caf50; }
+/* Arrow colors — bridge (blue) */
+.ladder-arrow-bridge { color: #2196f3; }
+.ladder-arrow-bridge .ladder-arrow-line { background: #2196f3; height: 3px; }
+.ladder-arrow-queue { color: #2196f3; }
+.ladder-arrow-queue .ladder-arrow-line { background: #2196f3; }
+.ladder-arrow-agent { color: #2196f3; }
+.ladder-arrow-agent .ladder-arrow-line { background: #2196f3; }
+/* Arrow colors — hold (orange) */
+.ladder-arrow-hold { color: #ff9800; }
+.ladder-arrow-hold .ladder-arrow-line { background: #ff9800; }
+.ladder-arrow-unhold { color: #ff9800; }
+.ladder-arrow-unhold .ladder-arrow-line { background: #ff9800; border-style: dashed; }
+/* Arrow colors — hangup (red) */
+.ladder-arrow-hangup { color: #f44336; }
+.ladder-arrow-hangup .ladder-arrow-line { background: #f44336; }
+/* Arrow colors — transfer (purple) */
+.ladder-arrow-transfer { color: #9c27b0; }
+.ladder-arrow-transfer .ladder-arrow-line { background: #9c27b0; }
+/* Arrow colors — metadata (gray) */
+.ladder-arrow-dtmf { color: #9e9e9e; }
+.ladder-arrow-dtmf .ladder-arrow-line { height: 1px; border-top: 1px dashed #9e9e9e; background: none; }
+.ladder-arrow-newchannel { color: #9e9e9e; }
+.ladder-arrow-newchannel .ladder-arrow-line { background: #9e9e9e; height: 1px; }
 
 /* Bridge block */
 .ladder-bridge-block {
@@ -1633,6 +1668,28 @@ body {
 }
 .ladder-bridge-block-connected { background: var(--color-available); }
 .ladder-bridge-block-hold { background: var(--color-hold); }
+
+/* Active bridge pulsing animation */
+.ladder-bridge-active {
+    animation: bridge-pulse 2s infinite;
+}
+@keyframes bridge-pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.5; }
+}
+
+/* Relative time label on arrows */
+.ladder-rel-time {
+    position: absolute;
+    bottom: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.5rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+    opacity: 0.7;
+}
 
 /* Self-arrow */
 .ladder-self-arrow {
