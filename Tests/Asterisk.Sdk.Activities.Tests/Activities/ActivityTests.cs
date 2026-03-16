@@ -135,4 +135,50 @@ public class ActivityTests
             ActivityStatus.InProgress,
             ActivityStatus.Completed);
     }
+
+    [Fact]
+    public async Task CancelAsync_ShouldActuallyCancelRunningExecution()
+    {
+        var channel = Substitute.For<IAgiChannel>();
+
+        // Mock ExecAsync to hang until cancelled
+#pragma warning disable CA2012
+        channel.ExecAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var ct = callInfo.Arg<CancellationToken>();
+                return new ValueTask(Task.Delay(Timeout.Infinite, ct));
+            });
+#pragma warning restore CA2012
+
+        var activity = new DialActivity(channel)
+        {
+            Target = new EndPoint(TechType.PJSIP, "100"),
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+
+        var startTask = activity.StartAsync().AsTask();
+
+        // Wait for InProgress
+        await Task.Delay(50);
+        activity.Status.Should().Be(ActivityStatus.InProgress);
+
+        // Cancel
+        await activity.CancelAsync();
+
+        // Should complete (not hang)
+        await startTask;
+        activity.Status.Should().Be(ActivityStatus.Cancelled);
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldThrow_WhenCalledTwice()
+    {
+        var activity = new HangupActivity(_channel);
+        await activity.StartAsync();
+
+        var act = () => activity.StartAsync().AsTask();
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*cannot be started from Completed*");
+    }
 }

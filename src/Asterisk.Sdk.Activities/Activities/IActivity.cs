@@ -1,9 +1,12 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Asterisk.Sdk.Activities.Activities;
 
 /// <summary>
 /// Base interface for all PBX activities (Dial, Hold, Transfer, etc.).
 /// Activities are async state machines representing high-level telephony operations.
 /// </summary>
+[Experimental("ASTSDK001")]
 public interface IActivity : IAsyncDisposable
 {
     /// <summary>Current activity status.</summary>
