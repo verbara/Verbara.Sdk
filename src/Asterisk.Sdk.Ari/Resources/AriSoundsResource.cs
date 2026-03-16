@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Asterisk.Sdk;
+using Asterisk.Sdk.Ari.Client;
 
 namespace Asterisk.Sdk.Ari.Resources;
 
@@ -16,7 +17,7 @@ public sealed class AriSoundsResource : IAriSoundsResource
     public async ValueTask<AriSound[]> ListAsync(CancellationToken cancellationToken = default)
     {
         var response = await _http.GetAsync("sounds", cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await response.EnsureAriSuccessAsync();
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriSoundArray) ?? [];
     }
@@ -24,7 +25,7 @@ public sealed class AriSoundsResource : IAriSoundsResource
     public async ValueTask<AriSound> GetAsync(string soundId, CancellationToken cancellationToken = default)
     {
         var response = await _http.GetAsync($"sounds/{Uri.EscapeDataString(soundId)}", cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await response.EnsureAriSuccessAsync();
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriSound)!;
     }
