@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Asterisk.Sdk.Live.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace Asterisk.Sdk.Live.Queues;
@@ -159,6 +160,7 @@ public sealed class QueueManager
             JoinedAt = DateTimeOffset.UtcNow
         };
         queue.Entries[channel] = entry;
+        LiveMetrics.QueueCallsJoined.Add(1);
         QueueManagerLog.CallerJoined(_logger, queueName, channel, position);
         CallerJoined?.Invoke(queueName, entry);
     }
@@ -169,6 +171,9 @@ public sealed class QueueManager
         if (_queues.TryGetValue(queueName, out var queue)
             && queue.Entries.TryRemove(channel, out var entry))
         {
+            LiveMetrics.QueueCallsLeft.Add(1);
+            var waitMs = (DateTimeOffset.UtcNow - entry.JoinedAt).TotalMilliseconds;
+            LiveMetrics.QueueWaitTimeMs.Record(waitMs);
             QueueManagerLog.CallerLeft(_logger, queueName, channel);
             CallerLeft?.Invoke(queueName, entry);
         }
