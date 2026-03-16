@@ -1,3 +1,5 @@
+using Asterisk.Sdk.Enums;
+
 namespace Asterisk.Sdk;
 
 /// <summary>
@@ -5,6 +7,9 @@ namespace Asterisk.Sdk;
 /// </summary>
 public interface IAriClient : IAsyncDisposable
 {
+    /// <summary>Current connection state.</summary>
+    AriConnectionState State { get; }
+
     /// <summary>Whether the WebSocket event connection is active.</summary>
     bool IsConnected { get; }
 
