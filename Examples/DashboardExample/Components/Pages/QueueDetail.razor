@@ -2,12 +2,14 @@
 @using DashboardExample.Services
 @using Asterisk.Sdk.Live
 @using Asterisk.Sdk.Live.Queues
+@using DashboardExample.Models
 @using Asterisk.Sdk.Ami.Actions
 @inject AsteriskMonitorService Monitor
 @inject CallFlowTracker Tracker
 @inject QueueService QueueSvc
 @inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
+@inject QueueConfigService QueueCfgSvc
 @implements IDisposable
 
 <PageTitle>@QueueName — Asterisk Dashboard</PageTitle>
@@ -45,6 +47,37 @@ else
         <div class="stat-item"><strong>@FormatSeconds(_queue.TalkTime)</strong> Talk</div>
         <div class="stat-item"><strong>@_queue.Completed</strong> Done</div>
         <div class="stat-item"><strong>@_queue.Abandoned</strong> Dropped</div>
+    </div>
+
+    <div class="form-section">
+        <div class="page-header-row">
+            <h3>Configuration</h3>
+            @if (_queueConfig is not null)
+            {
+                <a href="/queue-config/@ServerId/@_queueConfig.Id" class="btn btn-sm btn-blue">Edit Config</a>
+            }
+            else
+            {
+                <a href="/queue-config/@ServerId/new?name=@QueueName" class="btn btn-sm btn-green">Configure</a>
+            }
+        </div>
+        @if (_queueConfig is not null)
+        {
+            <div class="stats-bar">
+                <div class="stat-item"><strong>@_queueConfig.Strategy</strong> Strategy</div>
+                <div class="stat-item"><strong>@_queueConfig.Timeout</strong>s Timeout</div>
+                <div class="stat-item"><strong>@_queueConfig.Retry</strong>s Retry</div>
+                <div class="stat-item"><strong>@(_queueConfig.MaxLen == 0 ? "∞" : _queueConfig.MaxLen)</strong> Max</div>
+                <div class="stat-item"><strong>@_queueConfig.WrapUpTime</strong>s Wrap-up</div>
+                <div class="stat-item"><strong>@_queueConfig.ServiceLevel</strong>s SLA</div>
+                <div class="stat-item"><strong>@_queueConfig.MusicOnHold</strong> MOH</div>
+                <div class="stat-item"><strong>@(_queueConfig.Enabled ? "Yes" : "No")</strong> Enabled</div>
+            </div>
+        }
+        else
+        {
+            <p class="text-muted">Not configured in database. Click "Configure" to set up this queue.</p>
+        }
     </div>
 
     <h3>Agents (@_queue.MemberCount)</h3>
@@ -146,6 +179,7 @@ else
 
     private Timer? _timer;
     private AsteriskQueue? _queue;
+    private QueueConfigDto? _queueConfig;
     private string _addInterface = "";
     private string _addMemberName = "";
     private int _addPenalty;
@@ -153,10 +187,14 @@ else
     private bool _showDeleteConfirm;
     private bool _deleteInProgress;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        RefreshQueue();
+        var queues = await QueueCfgSvc.GetQueuesAsync(ServerId);
+        _queueConfig = queues.FirstOrDefault(q =>
+            string.Equals(q.Name, QueueName, StringComparison.OrdinalIgnoreCase));
         _timer = new Timer(_ => { RefreshQueue(); InvokeAsync(StateHasChanged); },
-            null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+            null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
     private void RefreshQueue()
