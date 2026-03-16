@@ -21,6 +21,8 @@ public static class LiveMetrics
     //   live.agents.available
     //   live.agents.on_call
     //   live.agents.paused
+    //   live.agents.total_hold_secs  (aggregate hold time across all agents)
+    //   live.agents.total_talk_secs  (aggregate talk time across all agents)
 
     // --- Counters ---
 
