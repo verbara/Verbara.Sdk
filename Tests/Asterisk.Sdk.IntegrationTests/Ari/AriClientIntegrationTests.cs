@@ -23,13 +23,13 @@ public class AriClientIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncL
         if (_client is not null) await _client.DisposeAsync();
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public void Connect_ShouldSetIsConnectedToTrue()
     {
         _client!.IsConnected.Should().BeTrue();
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task CreateChannel_ShouldReturnChannel()
     {
         var channel = await _client!.Channels.CreateAsync("Local/100@default", _fixture.AriApp);
@@ -40,7 +40,7 @@ public class AriClientIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncL
         try { await _client.Channels.HangupAsync(channel.Id); } catch { /* best effort */ }
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task CreateBridge_ShouldReturnBridge()
     {
         var bridge = await _client!.Bridges.CreateAsync("mixing", "test-bridge");
@@ -51,7 +51,7 @@ public class AriClientIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncL
         try { await _client.Bridges.DestroyAsync(bridge.Id); } catch { /* best effort */ }
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task Subscribe_ShouldReceiveEvents()
     {
         var eventReceived = new TaskCompletionSource<AriEvent>();
@@ -72,7 +72,7 @@ public class AriClientIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncL
         }
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task Disconnect_ShouldSetIsConnectedToFalse()
     {
         await _client!.DisconnectAsync();
@@ -80,7 +80,7 @@ public class AriClientIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncL
         _client = null;
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task CreateBridgeAndAddChannel_ShouldWork()
     {
         var bridge = await _client!.Bridges.CreateAsync("mixing", "test-bridge-add");

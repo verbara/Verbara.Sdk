@@ -25,40 +25,40 @@ public class AmiConnectionIntegrationTests : IClassFixture<AsteriskFixture>, IAs
         if (_connection is not null) await _connection.DisposeAsync();
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public void Connect_ShouldSetStateToConnected()
     {
         _connection!.State.Should().Be(AmiConnectionState.Connected);
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public void Connect_ShouldDetectAsteriskVersion()
     {
         _connection!.AsteriskVersion.Should().NotBeNullOrEmpty();
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task SendPingAction_ShouldReturnSuccess()
     {
         var response = await _connection!.SendActionAsync(new PingAction());
         response.Response.Should().Be("Success");
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task SendCoreStatusAction_ShouldReturnCoreStatus()
     {
         var response = await _connection!.SendActionAsync(new CoreStatusAction());
         response.Response.Should().Be("Success");
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task SendCoreSettingsAction_ShouldReturnSettings()
     {
         var response = await _connection!.SendActionAsync(new CoreSettingsAction());
         response.Response.Should().Be("Success");
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task Subscribe_ShouldReceiveEvents()
     {
         var receivedEvent = new TaskCompletionSource<ManagerEvent>();
@@ -79,7 +79,7 @@ public class AmiConnectionIntegrationTests : IClassFixture<AsteriskFixture>, IAs
         evt.Should().NotBeNull();
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task Disconnect_ShouldSetStateToDisconnected()
     {
         await _connection!.DisconnectAsync();
@@ -87,7 +87,7 @@ public class AmiConnectionIntegrationTests : IClassFixture<AsteriskFixture>, IAs
         _connection = null; // Prevent DisposeAsync from double-disconnecting
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task SendMultipleActions_ShouldCorrelateResponses()
     {
         var task1 = _connection!.SendActionAsync(new PingAction());
@@ -98,7 +98,7 @@ public class AmiConnectionIntegrationTests : IClassFixture<AsteriskFixture>, IAs
         responses.Should().AllSatisfy(r => r.Response.Should().Be("Success"));
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task SendQueueStatusAction_ShouldReturnEvents()
     {
         var events = new List<ManagerEvent>();
@@ -111,7 +111,7 @@ public class AmiConnectionIntegrationTests : IClassFixture<AsteriskFixture>, IAs
         events.Should().NotBeNull();
     }
 
-    [Fact]
+    [AsteriskAvailableFact]
     public async Task SendCommandAction_ShouldReturnOutput()
     {
         var response = await _connection!.SendActionAsync(new CommandAction { Command = "core show version" });
