@@ -59,6 +59,21 @@ builder.Services.AddSingleton<DialplanRegenerator>();
 builder.Services.AddSingleton<RouteService>();
 builder.Services.AddSingleton<TimeConditionService>();
 
+builder.Services.AddSingleton<IQueueConfigRepository>(sp =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var connStr = cfg.GetSection("Asterisk:Servers").GetChildren()
+        .Where(s => string.Equals(s["ConfigMode"], "Realtime", StringComparison.OrdinalIgnoreCase))
+        .Select(s => s["RealtimeConnectionString"])
+        .FirstOrDefault()
+        ?? cfg.GetConnectionString("QueueConfig")
+        ?? throw new InvalidOperationException("No Realtime connection string for DbQueueConfigRepository");
+    var logger = sp.GetRequiredService<ILogger<DbQueueConfigRepository>>();
+    return new DbQueueConfigRepository(connStr, logger);
+});
+builder.Services.AddSingleton<IQueueViewManager, QueueViewManager>();
+builder.Services.AddSingleton<QueueConfigService>();
+
 builder.Services.AddScoped<SelectedServerService>();
 
 var app = builder.Build();
