@@ -353,6 +353,8 @@ public sealed class AriClient : IAriClient
 
     public async ValueTask DisconnectAsync(CancellationToken cancellationToken = default)
     {
+        SetState(AriConnectionState.Disconnecting);
+
         if (_cts is not null) await _cts.CancelAsync();
 
         if (_webSocket?.State == WebSocketState.Open)
@@ -367,6 +369,7 @@ public sealed class AriClient : IAriClient
         if (_eventLoop is not null)
             await _eventLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
+        SetState(AriConnectionState.Disconnected);
         AriClientLog.Disconnected(_logger);
     }
 
