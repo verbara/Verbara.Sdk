@@ -61,7 +61,7 @@ public sealed class DbRouteRepository : IRouteRepository
                        priority AS Priority,
                        enabled AS Enabled,
                        notes AS Notes
-                FROM inbound_routes
+                FROM routes_inbound
                 WHERE server_id = @ServerId
                 ORDER BY priority, name
                 """;
@@ -96,7 +96,7 @@ public sealed class DbRouteRepository : IRouteRepository
                        priority AS Priority,
                        enabled AS Enabled,
                        notes AS Notes
-                FROM inbound_routes
+                FROM routes_inbound
                 WHERE id = @Id
                 """;
 
@@ -118,7 +118,7 @@ public sealed class DbRouteRepository : IRouteRepository
             await conn.OpenAsync(ct);
 
             const string sql = """
-                INSERT INTO inbound_routes
+                INSERT INTO routes_inbound
                     (server_id, name, did_pattern, destination_type, destination, priority, enabled, notes)
                 VALUES
                     (@ServerId, @Name, @DidPattern, @DestinationType, @Destination, @Priority, @Enabled, @Notes)
@@ -146,7 +146,7 @@ public sealed class DbRouteRepository : IRouteRepository
             await conn.OpenAsync(ct);
 
             const string sql = """
-                UPDATE inbound_routes
+                UPDATE routes_inbound
                 SET server_id        = @ServerId,
                     name             = @Name,
                     did_pattern      = @DidPattern,
@@ -176,7 +176,7 @@ public sealed class DbRouteRepository : IRouteRepository
             await using var conn = new NpgsqlConnection(_connectionString);
             await conn.OpenAsync(ct);
 
-            const string sql = "DELETE FROM inbound_routes WHERE id = @Id";
+            const string sql = "DELETE FROM routes_inbound WHERE id = @Id";
             var rows = await conn.ExecuteAsync(
                 new CommandDefinition(sql, new { Id = id }, cancellationToken: ct));
             return rows > 0;
@@ -207,7 +207,7 @@ public sealed class DbRouteRepository : IRouteRepository
                        priority AS Priority,
                        enabled AS Enabled,
                        notes AS Notes
-                FROM outbound_routes
+                FROM routes_outbound
                 WHERE server_id = @ServerId
                 ORDER BY priority, name
                 """;
@@ -275,7 +275,7 @@ public sealed class DbRouteRepository : IRouteRepository
                        priority AS Priority,
                        enabled AS Enabled,
                        notes AS Notes
-                FROM outbound_routes
+                FROM routes_outbound
                 WHERE id = @Id
                 """;
 
@@ -315,7 +315,7 @@ public sealed class DbRouteRepository : IRouteRepository
             await using var tx = await conn.BeginTransactionAsync(ct);
 
             const string routeSql = """
-                INSERT INTO outbound_routes
+                INSERT INTO routes_outbound
                     (server_id, name, dial_pattern, prepend, prefix, priority, enabled, notes)
                 VALUES
                     (@ServerId, @Name, @DialPattern, @Prepend, @Prefix, @Priority, @Enabled, @Notes)
@@ -362,7 +362,7 @@ public sealed class DbRouteRepository : IRouteRepository
             await using var tx = await conn.BeginTransactionAsync(ct);
 
             const string routeSql = """
-                UPDATE outbound_routes
+                UPDATE routes_outbound
                 SET server_id    = @ServerId,
                     name         = @Name,
                     dial_pattern = @DialPattern,
@@ -420,7 +420,7 @@ public sealed class DbRouteRepository : IRouteRepository
             await conn.OpenAsync(ct);
 
             // route_trunks cascades via FK
-            const string sql = "DELETE FROM outbound_routes WHERE id = @Id";
+            const string sql = "DELETE FROM routes_outbound WHERE id = @Id";
             var rows = await conn.ExecuteAsync(
                 new CommandDefinition(sql, new { Id = id }, cancellationToken: ct));
             return rows > 0;
@@ -447,8 +447,8 @@ public sealed class DbRouteRepository : IRouteRepository
                        name AS Name,
                        match_dest_type AS MatchDestType,
                        match_dest AS MatchDest,
-                       no_match_dest_type AS NoMatchDestType,
-                       no_match_dest AS NoMatchDest,
+                       nomatch_dest_type AS NoMatchDestType,
+                       nomatch_dest AS NoMatchDest,
                        enabled AS Enabled
                 FROM time_conditions
                 WHERE server_id = @ServerId
@@ -540,8 +540,8 @@ public sealed class DbRouteRepository : IRouteRepository
                        name AS Name,
                        match_dest_type AS MatchDestType,
                        match_dest AS MatchDest,
-                       no_match_dest_type AS NoMatchDestType,
-                       no_match_dest AS NoMatchDest,
+                       nomatch_dest_type AS NoMatchDestType,
+                       nomatch_dest AS NoMatchDest,
                        enabled AS Enabled
                 FROM time_conditions
                 WHERE id = @Id
@@ -604,7 +604,7 @@ public sealed class DbRouteRepository : IRouteRepository
 
             const string tcSql = """
                 INSERT INTO time_conditions
-                    (server_id, name, match_dest_type, match_dest, no_match_dest_type, no_match_dest, enabled)
+                    (server_id, name, match_dest_type, match_dest, nomatch_dest_type, nomatch_dest, enabled)
                 VALUES
                     (@ServerId, @Name, @MatchDestType, @MatchDest, @NoMatchDestType, @NoMatchDest, @Enabled)
                 RETURNING id
@@ -640,8 +640,8 @@ public sealed class DbRouteRepository : IRouteRepository
                     name               = @Name,
                     match_dest_type    = @MatchDestType,
                     match_dest         = @MatchDest,
-                    no_match_dest_type = @NoMatchDestType,
-                    no_match_dest      = @NoMatchDest,
+                    nomatch_dest_type  = @NoMatchDestType,
+                    nomatch_dest       = @NoMatchDest,
                     enabled            = @Enabled
                 WHERE id = @Id
                 """;
@@ -712,7 +712,7 @@ public sealed class DbRouteRepository : IRouteRepository
             if (name is null) return false;
 
             var count = await conn.ExecuteScalarAsync<int>(new CommandDefinition(
-                "SELECT COUNT(*) FROM inbound_routes WHERE destination_type = 'time_condition' AND destination = @Name",
+                "SELECT COUNT(*) FROM routes_inbound WHERE destination_type = 'time_condition' AND destination = @Name",
                 new { Name = name },
                 cancellationToken: ct));
 

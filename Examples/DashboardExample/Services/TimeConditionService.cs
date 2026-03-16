@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Asterisk.Sdk;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Responses;
@@ -132,13 +133,27 @@ public sealed class TimeConditionService
         if (string.IsNullOrWhiteSpace(config.Name))
             return (false, "Name is required");
 
+        if (!Regex.IsMatch(config.Name, @"^[a-zA-Z0-9\-]+$"))
+            return (false, "Name must contain only letters, digits, and hyphens");
+
         if (string.IsNullOrWhiteSpace(config.MatchDestType) || string.IsNullOrWhiteSpace(config.MatchDest))
             return (false, "Match destination is required");
 
         if (string.IsNullOrWhiteSpace(config.NoMatchDestType) || string.IsNullOrWhiteSpace(config.NoMatchDest))
             return (false, "No-match destination is required");
 
+        if (config.Ranges.Count == 0)
+            return (false, "At least one time range is required");
+
+        if (config.Ranges.Any(r => r.StartTime >= r.EndTime))
+            return (false, "Start time must be before end time for all ranges");
+
         var repo = _repoResolver.GetRepository(config.ServerId);
+
+        var existing = await repo.GetTimeConditionsAsync(config.ServerId, ct);
+        if (existing.Any(tc => string.Equals(tc.Name, config.Name, StringComparison.OrdinalIgnoreCase)))
+            return (false, "A time condition with this name already exists on the server");
+
         await repo.CreateTimeConditionAsync(config, ct);
         await RegenerateDialplanAsync(config.ServerId, ct);
 
@@ -151,6 +166,15 @@ public sealed class TimeConditionService
     {
         if (string.IsNullOrWhiteSpace(config.Name))
             return (false, "Name is required");
+
+        if (!Regex.IsMatch(config.Name, @"^[a-zA-Z0-9\-]+$"))
+            return (false, "Name must contain only letters, digits, and hyphens");
+
+        if (config.Ranges.Count == 0)
+            return (false, "At least one time range is required");
+
+        if (config.Ranges.Any(r => r.StartTime >= r.EndTime))
+            return (false, "Start time must be before end time for all ranges");
 
         var repo = _repoResolver.GetRepository(config.ServerId);
         var success = await repo.UpdateTimeConditionAsync(config, ct);

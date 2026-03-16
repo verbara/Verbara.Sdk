@@ -32,6 +32,10 @@ internal static class DialplanGenerator
             if (trunks.Count == 0) continue;
 
             int prio = 1;
+
+            if (!string.IsNullOrEmpty(route.Name))
+                lines.Add(new DialplanLine("outbound-routes", route.DialPattern, prio++, "Set", $"__ROUTE={route.Name}"));
+
             var hasPrepend = !string.IsNullOrEmpty(route.Prepend) || !string.IsNullOrEmpty(route.Prefix);
 
             if (hasPrepend)
