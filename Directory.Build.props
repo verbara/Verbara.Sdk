@@ -27,11 +27,12 @@
     <Company>Asterisk.Sdk</Company>
     <Product>Asterisk.Sdk</Product>
     <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/asterisk-sdk/Asterisk.Sdk</RepositoryUrl>
-    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/Harol-Reina/Asterisk.Sdk</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/Harol-Reina/Asterisk.Sdk</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>asterisk;ami;agi;ari;voip;pbx;telephony;native-aot;sdk</PackageTags>
-    <PackageVersion>0.1.0-beta.1</PackageVersion>
+    <PackageVersion>0.2.0-beta</PackageVersion>
   </PropertyGroup>
 
   <!-- Source projects: output to src/ -->
