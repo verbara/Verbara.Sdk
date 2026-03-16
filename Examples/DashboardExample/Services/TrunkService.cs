@@ -23,12 +23,14 @@ public sealed class TrunkService
 {
     private readonly IConfigProviderResolver _resolver;
     private readonly AsteriskMonitorService _monitor;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<TrunkService> _logger;
 
-    public TrunkService(IConfigProviderResolver resolver, AsteriskMonitorService monitor, ILogger<TrunkService> logger)
+    public TrunkService(IConfigProviderResolver resolver, AsteriskMonitorService monitor, IConfiguration configuration, ILogger<TrunkService> logger)
     {
         _resolver = resolver;
         _monitor = monitor;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -36,67 +38,70 @@ public sealed class TrunkService
     public async Task<List<TrunkViewModel>> GetTrunksAsync(string serverId, CancellationToken ct = default)
     {
         var trunks = new List<TrunkViewModel>();
-
-        // Load PJSIP trunks
+        var range = ExtensionService.GetExtensionRange(_configuration, serverId);
         var configProvider = _resolver.GetProvider(serverId);
-        var pjsipCategories = await configProvider.GetCategoriesAsync(serverId, "pjsip.conf", ct);
-        var pjsipEndpoints = pjsipCategories
-            .Where(c => c.Variables.GetValueOrDefault("type") == "endpoint")
-            .ToList();
 
-        foreach (var endpoint in pjsipEndpoints)
+        await LoadPjsipTrunksAsync(serverId, configProvider, trunks, range, ct);
+        await LoadSimpleTrunksAsync(serverId, configProvider, "sip.conf", TrunkTechnology.Sip, 5060, trunks, range, ct);
+        await LoadSimpleTrunksAsync(serverId, configProvider, "iax.conf", TrunkTechnology.Iax2, 4569, trunks, range, ct);
+
+        await MergeStatusAsync(serverId, trunks, ct);
+
+        return trunks;
+    }
+
+    private static async Task LoadPjsipTrunksAsync(
+        string serverId,
+        IConfigProvider configProvider,
+        List<TrunkViewModel> trunks,
+        (int Start, int End) range,
+        CancellationToken ct)
+    {
+        var categories = await configProvider.GetCategoriesAsync(serverId, "pjsip.conf", ct);
+        foreach (var endpoint in categories.Where(c =>
+            c.Variables.GetValueOrDefault("type") == "endpoint"
+            && !ExtensionService.IsInExtensionRange(c.Name, range.Start, range.End)))
         {
             trunks.Add(new TrunkViewModel
             {
                 Name = endpoint.Name,
                 Technology = TrunkTechnology.PjSip,
-                Host = ExtractHostFromAor(pjsipCategories, $"{endpoint.Name}-aor"),
-                Port = ExtractPortFromAor(pjsipCategories, $"{endpoint.Name}-aor"),
+                Host = ExtractHostFromAor(categories, $"{endpoint.Name}-aor"),
+                Port = ExtractPortFromAor(categories, $"{endpoint.Name}-aor"),
                 Codecs = endpoint.Variables.GetValueOrDefault("allow", ""),
                 Status = TrunkStatus.Unknown,
             });
         }
+    }
 
-        // Load SIP trunks
-        var sipCategories = await configProvider.GetCategoriesAsync(serverId, "sip.conf", ct);
-        foreach (var cat in sipCategories)
+    private static async Task LoadSimpleTrunksAsync(
+        string serverId,
+        IConfigProvider configProvider,
+        string filename,
+        TrunkTechnology technology,
+        int defaultPort,
+        List<TrunkViewModel> trunks,
+        (int Start, int End) range,
+        CancellationToken ct)
+    {
+        var categories = await configProvider.GetCategoriesAsync(serverId, filename, ct);
+        foreach (var cat in categories)
         {
             if (cat.Variables.GetValueOrDefault("type") != "peer" || cat.Name == "general")
+                continue;
+            if (ExtensionService.IsInExtensionRange(cat.Name, range.Start, range.End))
                 continue;
 
             trunks.Add(new TrunkViewModel
             {
                 Name = cat.Name,
-                Technology = TrunkTechnology.Sip,
+                Technology = technology,
                 Host = cat.Variables.GetValueOrDefault("host", ""),
-                Port = int.TryParse(cat.Variables.GetValueOrDefault("port"), out var p) ? p : 5060,
+                Port = int.TryParse(cat.Variables.GetValueOrDefault("port"), out var p) ? p : defaultPort,
                 Codecs = cat.Variables.GetValueOrDefault("allow", ""),
                 Status = TrunkStatus.Unknown,
             });
         }
-
-        // Load IAX2 trunks
-        var iaxCategories = await configProvider.GetCategoriesAsync(serverId, "iax.conf", ct);
-        foreach (var cat in iaxCategories)
-        {
-            if (cat.Variables.GetValueOrDefault("type") != "peer" || cat.Name == "general")
-                continue;
-
-            trunks.Add(new TrunkViewModel
-            {
-                Name = cat.Name,
-                Technology = TrunkTechnology.Iax2,
-                Host = cat.Variables.GetValueOrDefault("host", ""),
-                Port = int.TryParse(cat.Variables.GetValueOrDefault("port"), out var p) ? p : 4569,
-                Codecs = cat.Variables.GetValueOrDefault("allow", ""),
-                Status = TrunkStatus.Unknown,
-            });
-        }
-
-        // Merge with live status via AMI commands
-        await MergeStatusAsync(serverId, trunks, ct);
-
-        return trunks;
     }
 
     /// <summary>Gets detailed trunk information including config and live status.</summary>
