@@ -1,0 +1,411 @@
+@page "/extensions/new"
+@page "/extensions/edit/{ServerId}/{Extension}"
+@using DashboardExample.Services
+@using DashboardExample.Models
+@inject ExtensionService ExtSvc
+@inject SelectedServerService ServerSvc
+@inject ConfigOperationState ConfigOp
+@inject NavigationManager Nav
+
+<PageTitle>@(_isNew ? "New Extension" : $"Edit {Extension}") — Asterisk Dashboard</PageTitle>
+
+<a href="/extensions" class="back-link">Back to Extensions</a>
+<h2>@(_isNew ? "New Extension" : $"Edit Extension: {Extension}")</h2>
+
+@if (_loading)
+{
+    <p class="text-muted">Loading...</p>
+}
+else
+{
+    <!-- Identity -->
+    <div class="form-section">
+        <h3>Identity</h3>
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="form-label">Extension Number</label>
+                <input class="input" type="number" @bind="_config.Extension" placeholder="@($"{_rangeStart}–{_rangeEnd}")" disabled="@(!_isNew)" />
+                <span class="text-muted" style="font-size:0.85rem;">Range: @_rangeStart – @_rangeEnd</span>
+            </div>
+            <div class="form-field">
+                <label class="form-label">Display Name</label>
+                <input class="input" @bind="_config.Name" placeholder="John Doe" />
+            </div>
+            <div class="form-field">
+                <label class="form-label">Technology</label>
+                <div class="radio-group">
+                    <label class="radio-option">
+                        <input type="radio" name="tech" value="@ExtensionTechnology.PjSip" checked="@(_config.Technology == ExtensionTechnology.PjSip)"
+                               @onchange="() => _config.Technology = ExtensionTechnology.PjSip" />
+                        PJSIP
+                    </label>
+                    <label class="radio-option">
+                        <input type="radio" name="tech" value="@ExtensionTechnology.Sip" checked="@(_config.Technology == ExtensionTechnology.Sip)"
+                               @onchange="() => _config.Technology = ExtensionTechnology.Sip" />
+                        SIP
+                    </label>
+                    <label class="radio-option">
+                        <input type="radio" name="tech" value="@ExtensionTechnology.Iax2" checked="@(_config.Technology == ExtensionTechnology.Iax2)"
+                               @onchange="() => _config.Technology = ExtensionTechnology.Iax2" />
+                        IAX2
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Authentication -->
+    <div class="form-section">
+        <h3>Authentication</h3>
+        <div class="form-grid">
+            @if (_isNew)
+            {
+                <div class="form-field">
+                    <label class="form-label">Password (min 8 characters)</label>
+                    <div style="display:flex;gap:0.5rem;align-items:center;">
+                        <input class="input" type="password" @bind="_config.Password" placeholder="Required" />
+                        <button class="btn" type="button" @onclick="GeneratePassword">Generate</button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="form-field">
+                    <label class="codec-check">
+                        <input type="checkbox" @bind="_changePassword" />
+                        Change Password
+                    </label>
+                    @if (_changePassword)
+                    {
+                        <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.5rem;">
+                            <input class="input" type="password" @bind="_config.Password" placeholder="New password (min 8 chars)" />
+                            <button class="btn" type="button" @onclick="GeneratePassword">Generate</button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Dialplan -->
+    <div class="form-section">
+        <h3>Dialplan</h3>
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="form-label">Context</label>
+                <input class="input" @bind="_config.Context" placeholder="from-internal" />
+            </div>
+            <div class="form-field">
+                <label class="form-label">Call Group</label>
+                <input class="input" @bind="_config.CallGroup" placeholder="1" />
+            </div>
+            <div class="form-field">
+                <label class="form-label">Pickup Group</label>
+                <input class="input" @bind="_config.PickupGroup" placeholder="1" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Media & Transport -->
+    <div class="form-section">
+        <h3>Media &amp; Transport</h3>
+        <div class="form-field" style="margin-bottom: 0.75rem;">
+            <label class="form-label">Codecs</label>
+            <div class="codec-grid">
+                @foreach (var codec in _availableCodecs)
+                {
+                    <label class="codec-check">
+                        <input type="checkbox" checked="@IsCodecEnabled(codec)"
+                               @onchange="e => ToggleCodec(codec, (bool)(e.Value ?? false))" />
+                        @codec
+                    </label>
+                }
+            </div>
+        </div>
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="form-label">DTMF Mode</label>
+                <select @bind="_config.DtmfMode">
+                    <option value="rfc4733">RFC 4733</option>
+                    <option value="inband">Inband</option>
+                    <option value="info">SIP INFO</option>
+                    <option value="auto">Auto</option>
+                </select>
+            </div>
+            @if (_config.Technology != ExtensionTechnology.Iax2)
+            {
+                <div class="form-field">
+                    <label class="form-label">Transport</label>
+                    <select @bind="_config.Transport">
+                        <option value="udp">transport-udp</option>
+                        <option value="tcp">transport-tcp</option>
+                        <option value="tls">transport-tls</option>
+                    </select>
+                </div>
+            }
+            <div class="form-field">
+                <label class="form-label">NAT Options</label>
+                <label class="codec-check">
+                    <input type="checkbox" @bind="_config.ForceRport" />
+                    Force rport
+                </label>
+                <label class="codec-check">
+                    <input type="checkbox" @bind="_config.DirectMedia" />
+                    Direct media
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Voicemail -->
+    <div class="form-section">
+        <h3>Voicemail</h3>
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="codec-check">
+                    <input type="checkbox" @bind="_config.VoicemailEnabled" />
+                    Enable Voicemail
+                </label>
+            </div>
+            @if (_config.VoicemailEnabled)
+            {
+                <div class="form-field">
+                    <label class="form-label">PIN (min 4 digits)</label>
+                    <input class="input" type="text" @bind="_config.VoicemailPin" placeholder="1234" />
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Email</label>
+                    <input class="input" type="text" @bind="_config.VoicemailEmail" placeholder="user@example.com" />
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Max Messages</label>
+                    <input class="input" type="number" @bind="_config.VoicemailMaxMessages" />
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Call Features -->
+    <div class="form-section">
+        <h3>Call Features</h3>
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="codec-check">
+                    <input type="checkbox" @bind="_config.DndEnabled" />
+                    Do Not Disturb
+                </label>
+            </div>
+            <div class="form-field">
+                <label class="form-label">CF Unconditional</label>
+                <input class="input" type="text" @bind="_config.CallForwardUnconditional" placeholder="Destination number" />
+            </div>
+            <div class="form-field">
+                <label class="form-label">CF Busy</label>
+                <input class="input" type="text" @bind="_config.CallForwardBusy" placeholder="Destination number" />
+            </div>
+            <div class="form-field">
+                <label class="form-label">CF No Answer</label>
+                <div style="display:flex;gap:0.5rem;align-items:center;">
+                    <input class="input" type="text" @bind="_config.CallForwardNoAnswer" placeholder="Destination number" />
+                    <input class="input" type="number" @bind="_config.CallForwardNoAnswerTimeout" style="width:5rem;" />
+                    <span class="text-muted">sec</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? "Saving..." : "Save")</button>
+        <button class="btn" @onclick="NavigateBack">Cancel</button>
+    </div>
+
+    @if (_result is not null)
+    {
+        <p class="action-result">@_result</p>
+    }
+}
+
+@code {
+    [Parameter] public string? ServerId { get; set; }
+    [Parameter] public string? Extension { get; set; }
+
+    [SupplyParameterFromQuery] public string? Server { get; set; }
+    [SupplyParameterFromQuery] public string? Tech { get; set; }
+
+    private bool _isNew => Extension is null;
+    private ExtensionConfig _config = new();
+    private bool _loading = true;
+    private bool _saving;
+    private string? _result;
+    private bool _changePassword;
+    private int _rangeStart = 100;
+    private int _rangeEnd = 999;
+
+    private static readonly string[] _availableCodecs = ["ulaw", "alaw", "g729", "g722", "opus"];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var serverId = ServerId ?? Server ?? ServerSvc.SelectedServerId;
+
+        if (serverId is not null)
+        {
+            var range = ExtSvc.GetExtensionRange(serverId);
+            _rangeStart = range.Start;
+            _rangeEnd = range.End;
+        }
+
+        if (!_isNew && serverId is not null)
+        {
+            var technology = Enum.TryParse<ExtensionTechnology>(Tech, true, out var t) ? t : ExtensionTechnology.PjSip;
+            var detail = await ExtSvc.GetExtensionDetailAsync(serverId, Extension!, technology);
+            if (detail is not null)
+            {
+                _config.Extension = detail.Extension;
+                _config.Name = detail.Name;
+                _config.Technology = detail.Technology;
+                _config.Context = detail.Context ?? "from-internal";
+                _config.CallGroup = detail.CallGroup;
+                _config.PickupGroup = detail.PickupGroup;
+                _config.Codecs = detail.Codecs ?? "ulaw,alaw";
+                _config.DndEnabled = detail.DndEnabled;
+                _config.CallForwardUnconditional = detail.CallForwardTo;
+                _config.CallForwardBusy = detail.CfBusy;
+                _config.CallForwardNoAnswer = detail.CfNoAnswer;
+                _config.CallForwardNoAnswerTimeout = detail.CfNoAnswerTimeout > 0 ? detail.CfNoAnswerTimeout : 20;
+                _config.VoicemailEnabled = detail.VoicemailEnabled;
+                _config.VoicemailEmail = detail.VoicemailEmail;
+            }
+        }
+
+        _loading = false;
+    }
+
+    private bool IsCodecEnabled(string codec)
+    {
+        var codecs = _config.Codecs.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return codecs.Contains(codec, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void ToggleCodec(string codec, bool enabled)
+    {
+        var codecs = _config.Codecs
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+        if (enabled && !codecs.Contains(codec, StringComparer.OrdinalIgnoreCase))
+            codecs.Add(codec);
+        else if (!enabled)
+            codecs.RemoveAll(c => string.Equals(c, codec, StringComparison.OrdinalIgnoreCase));
+
+        _config.Codecs = string.Join(",", codecs);
+    }
+
+    private void GeneratePassword()
+    {
+        const string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        _config.Password = string.Create(12, chars, static (span, chars) =>
+        {
+            for (var i = 0; i < span.Length; i++)
+                span[i] = chars[Random.Shared.Next(chars.Length)];
+        });
+    }
+
+    private async Task Save()
+    {
+        var serverId = ServerId ?? Server ?? ServerSvc.SelectedServerId;
+        if (serverId is null)
+        {
+            _result = "No server selected.";
+            return;
+        }
+
+        // Validation: extension number within range
+        if (!ExtensionService.IsInExtensionRange(_config.Extension, _rangeStart, _rangeEnd))
+        {
+            _result = $"Extension must be a number between {_rangeStart} and {_rangeEnd}.";
+            return;
+        }
+
+        // Validation: password required on create or when changing
+        if (_isNew || _changePassword)
+        {
+            if (string.IsNullOrEmpty(_config.Password) || _config.Password.Length < 8)
+            {
+                _result = "Password is required and must be at least 8 characters.";
+                return;
+            }
+        }
+        else
+        {
+            // On edit without password change, clear password so service preserves existing
+            _config.Password = null;
+        }
+
+        // Validation: at least 1 codec
+        if (string.IsNullOrWhiteSpace(_config.Codecs))
+        {
+            _result = "At least one codec must be selected.";
+            return;
+        }
+
+        // Validation: voicemail PIN
+        if (_config.VoicemailEnabled && !string.IsNullOrEmpty(_config.VoicemailPin) && _config.VoicemailPin.Length < 4)
+        {
+            _result = "Voicemail PIN must be at least 4 digits.";
+            return;
+        }
+
+        // Validation: CF destinations numeric only
+        if (!IsValidCfDestination(_config.CallForwardUnconditional)
+            || !IsValidCfDestination(_config.CallForwardBusy)
+            || !IsValidCfDestination(_config.CallForwardNoAnswer))
+        {
+            _result = "Call forward destinations must be numeric.";
+            return;
+        }
+
+        _saving = true;
+        _result = null;
+
+        try
+        {
+            var opName = _isNew ? "Creating Extension" : "Updating Extension";
+            using var _ = ConfigOp.Begin(opName, serverId, _config.Extension);
+            bool success;
+            if (_isNew)
+            {
+                success = await ExtSvc.CreateExtensionAsync(serverId, _config);
+            }
+            else
+            {
+                success = await ExtSvc.UpdateExtensionAsync(serverId, Extension!, _config);
+            }
+
+            if (success)
+            {
+                Nav.NavigateTo("/extensions");
+            }
+            else
+            {
+                _result = "Failed to save extension. Check server logs for details.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _result = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static bool IsValidCfDestination(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+        return value.Trim().All(char.IsDigit);
+    }
+
+    private void NavigateBack() => Nav.NavigateTo("/extensions");
+}
