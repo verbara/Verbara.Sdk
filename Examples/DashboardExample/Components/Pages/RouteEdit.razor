@@ -1,0 +1,380 @@
+@page "/routes/inbound/new"
+@page "/routes/inbound/edit/{Id:int}"
+@page "/routes/outbound/new"
+@page "/routes/outbound/edit/{Id:int}"
+@using DashboardExample.Services
+@using DashboardExample.Models
+@inject RouteService RouteSvc
+@inject TrunkService TrunkSvc
+@inject TimeConditionService TcSvc
+@inject SelectedServerService ServerSvc
+@inject ConfigOperationState ConfigOp
+@inject NavigationManager Nav
+
+<PageTitle>@(_isNew ? $"New {(_isInbound ? "Inbound" : "Outbound")} Route" : $"Edit {(_isInbound ? "Inbound" : "Outbound")} Route") — Asterisk Dashboard</PageTitle>
+
+<a href="/routes" class="back-link">Back to Routes</a>
+<h2>@(_isNew ? $"New {(_isInbound ? "Inbound" : "Outbound")} Route" : $"Edit {(_isInbound ? "Inbound" : "Outbound")} Route")</h2>
+
+@if (_loading)
+{
+    <p class="text-muted">Loading...</p>
+}
+else if (_isInbound)
+{
+    <!-- Inbound Route Form -->
+    <div class="form-section">
+        <h3>Route Details</h3>
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="form-label">Name</label>
+                <input class="input" @bind="_inConfig.Name" placeholder="Main Line" />
+            </div>
+            <div class="form-field">
+                <label class="form-label">DID Pattern</label>
+                <input class="input" @bind="_inConfig.DidPattern" placeholder="5551234567" />
+                <span class="text-muted" style="font-size:0.85rem;">Exact number or Asterisk pattern (e.g. _555NXXXXXX)</span>
+            </div>
+            <div class="form-field">
+                <label class="form-label">Priority</label>
+                <input class="input" type="number" @bind="_inConfig.Priority" />
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>Destination</h3>
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="form-label">Type</label>
+                <select class="input" @bind="_inConfig.DestinationType">
+                    <option value="">-- Select --</option>
+                    <option value="extension">Extension</option>
+                    <option value="queue">Queue</option>
+                    <option value="time_condition">Time Condition</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label">Target</label>
+                @if (_inConfig.DestinationType == "time_condition" && _timeConditions.Count > 0)
+                {
+                    <select class="input" @bind="_inConfig.Destination">
+                        <option value="">-- Select --</option>
+                        @foreach (var tc in _timeConditions)
+                        {
+                            <option value="@tc.Name">@tc.Name</option>
+                        }
+                    </select>
+                }
+                else
+                {
+                    <input class="input" @bind="_inConfig.Destination" placeholder="@(_inConfig.DestinationType == "queue" ? "Queue name" : "Extension number")" />
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>Options</h3>
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="codec-check">
+                    <input type="checkbox" @bind="_inConfig.Enabled" />
+                    Enabled
+                </label>
+            </div>
+            <div class="form-field">
+                <label class="form-label">Notes</label>
+                <textarea class="input" @bind="_inConfig.Notes" rows="3" placeholder="Optional notes"></textarea>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <!-- Outbound Route Form -->
+    <div class="form-section">
+        <h3>Route Details</h3>
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="form-label">Name</label>
+                <input class="input" @bind="_outConfig.Name" placeholder="Local Calls" />
+            </div>
+            <div class="form-field">
+                <label class="form-label">Dial Pattern</label>
+                <input class="input" @bind="_outConfig.DialPattern" placeholder="_NXXNXXXXXX" />
+                <span class="text-muted" style="font-size:0.85rem;">Asterisk pattern: _ prefix, X=[0-9], Z=[1-9], N=[2-9], [15-7], . (wildcard), ! (match immediately)</span>
+            </div>
+            <div class="form-field">
+                <label class="form-label">Priority</label>
+                <input class="input" type="number" @bind="_outConfig.Priority" />
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>Dial Manipulation</h3>
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="form-label">Prepend</label>
+                <input class="input" @bind="_outConfig.Prepend" placeholder="Optional digits to prepend" />
+            </div>
+            <div class="form-field">
+                <label class="form-label">Prefix</label>
+                <input class="input" @bind="_outConfig.Prefix" placeholder="Optional prefix to strip" />
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>Trunks (failover order)</h3>
+        <div style="margin-bottom: 0.75rem;">
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <select class="input" @bind="_selectedTrunk" style="flex: 1;">
+                    <option value="">-- Select trunk --</option>
+                    @foreach (var trunk in _availableTrunks.Where(t => !_outConfig.Trunks.Any(rt => rt.TrunkName == t.Name)))
+                    {
+                        <option value="@trunk.Name">@trunk.Name (@trunk.Technology)</option>
+                    }
+                </select>
+                <button class="btn btn-blue" @onclick="AddTrunk">Add</button>
+            </div>
+        </div>
+        @if (_outConfig.Trunks.Count > 0)
+        {
+            <table class="data-table" style="margin-bottom: 0.5rem;">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Trunk</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var trunk in _outConfig.Trunks.OrderBy(t => t.Sequence))
+                    {
+                        <tr>
+                            <td>@(trunk.Sequence + 1)</td>
+                            <td>@trunk.TrunkName</td>
+                            <td>
+                                <button class="btn btn-sm" @onclick="() => MoveTrunkUp(trunk)" disabled="@(trunk.Sequence == 0)">Up</button>
+                                <button class="btn btn-sm" @onclick="() => MoveTrunkDown(trunk)" disabled="@(trunk.Sequence == _outConfig.Trunks.Count - 1)">Down</button>
+                                <button class="btn btn-sm btn-red" @onclick="() => RemoveTrunk(trunk)">Remove</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <p class="text-muted">No trunks added. At least one trunk is required.</p>
+        }
+    </div>
+
+    <div class="form-section">
+        <h3>Options</h3>
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="codec-check">
+                    <input type="checkbox" @bind="_outConfig.Enabled" />
+                    Enabled
+                </label>
+            </div>
+            <div class="form-field">
+                <label class="form-label">Notes</label>
+                <textarea class="input" @bind="_outConfig.Notes" rows="3" placeholder="Optional notes"></textarea>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="form-actions">
+    <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? "Saving..." : "Save")</button>
+    <button class="btn" @onclick="NavigateBack">Cancel</button>
+</div>
+
+@if (_result is not null)
+{
+    <p class="action-result">@_result</p>
+}
+
+<style>
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--card-bg);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .data-table th, .data-table td {
+        padding: 0.6rem 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+    }
+    .data-table th {
+        background: rgba(255,255,255,0.04);
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: var(--text-muted);
+    }
+</style>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private bool _isInbound;
+    private bool _isNew;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _result;
+    private string _selectedTrunk = "";
+
+    private InboundRouteConfig _inConfig = new();
+    private OutboundRouteConfig _outConfig = new();
+    private List<TrunkViewModel> _availableTrunks = [];
+    private List<TimeConditionViewModel> _timeConditions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var uri = Nav.Uri;
+        _isInbound = uri.Contains("/inbound/", StringComparison.OrdinalIgnoreCase);
+        _isNew = uri.Contains("/new", StringComparison.OrdinalIgnoreCase);
+
+        var serverId = ServerSvc.SelectedServerId ?? "";
+
+        // Load available trunks and time conditions
+        if (!string.IsNullOrEmpty(serverId))
+        {
+            _availableTrunks = await TrunkSvc.GetTrunksAsync(serverId);
+            _timeConditions = await TcSvc.GetTimeConditionsAsync(serverId);
+        }
+
+        if (!_isNew && Id > 0)
+        {
+            if (_isInbound)
+            {
+                var existing = await RouteSvc.GetInboundRouteAsync(Id);
+                if (existing is not null) _inConfig = existing;
+            }
+            else
+            {
+                var existing = await RouteSvc.GetOutboundRouteAsync(Id);
+                if (existing is not null) _outConfig = existing;
+            }
+        }
+        else
+        {
+            _inConfig.ServerId = serverId;
+            _outConfig.ServerId = serverId;
+        }
+
+        _loading = false;
+    }
+
+    private void AddTrunk()
+    {
+        if (string.IsNullOrEmpty(_selectedTrunk)) return;
+
+        var trunk = _availableTrunks.FirstOrDefault(t => t.Name == _selectedTrunk);
+        if (trunk is null) return;
+
+        _outConfig.Trunks.Add(new RouteTrunk
+        {
+            TrunkName = trunk.Name,
+            TrunkTechnology = trunk.Technology.ToString(),
+            Sequence = _outConfig.Trunks.Count,
+        });
+        _selectedTrunk = "";
+    }
+
+    private void RemoveTrunk(RouteTrunk trunk)
+    {
+        _outConfig.Trunks.Remove(trunk);
+        ResequenceTrunks();
+    }
+
+    private void MoveTrunkUp(RouteTrunk trunk)
+    {
+        var idx = _outConfig.Trunks.IndexOf(trunk);
+        if (idx <= 0) return;
+        var other = _outConfig.Trunks.First(t => t.Sequence == trunk.Sequence - 1);
+        other.Sequence++;
+        trunk.Sequence--;
+    }
+
+    private void MoveTrunkDown(RouteTrunk trunk)
+    {
+        var idx = _outConfig.Trunks.IndexOf(trunk);
+        if (idx >= _outConfig.Trunks.Count - 1) return;
+        var other = _outConfig.Trunks.First(t => t.Sequence == trunk.Sequence + 1);
+        other.Sequence--;
+        trunk.Sequence++;
+    }
+
+    private void ResequenceTrunks()
+    {
+        var ordered = _outConfig.Trunks.OrderBy(t => t.Sequence).ToList();
+        for (var i = 0; i < ordered.Count; i++)
+            ordered[i].Sequence = i;
+    }
+
+    private async Task Save()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (string.IsNullOrEmpty(serverId))
+        {
+            _result = "No server selected.";
+            return;
+        }
+
+        _saving = true;
+        _result = null;
+
+        try
+        {
+            if (_isInbound)
+            {
+                _inConfig.ServerId = serverId;
+                var opName = _isNew ? "Creating Inbound Route" : "Updating Inbound Route";
+                using var _ = ConfigOp.Begin(opName, serverId, _inConfig.Name);
+
+                var (success, error) = _isNew
+                    ? await RouteSvc.CreateInboundRouteAsync(_inConfig)
+                    : await RouteSvc.UpdateInboundRouteAsync(_inConfig);
+
+                if (success)
+                    Nav.NavigateTo("/routes");
+                else
+                    _result = error ?? "Failed to save route.";
+            }
+            else
+            {
+                _outConfig.ServerId = serverId;
+                var opName = _isNew ? "Creating Outbound Route" : "Updating Outbound Route";
+                using var _ = ConfigOp.Begin(opName, serverId, _outConfig.Name);
+
+                var (success, error) = _isNew
+                    ? await RouteSvc.CreateOutboundRouteAsync(_outConfig)
+                    : await RouteSvc.UpdateOutboundRouteAsync(_outConfig);
+
+                if (success)
+                    Nav.NavigateTo("/routes");
+                else
+                    _result = error ?? "Failed to save route.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _result = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void NavigateBack() => Nav.NavigateTo("/routes");
+}
