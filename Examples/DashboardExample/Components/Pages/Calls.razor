@@ -1,5 +1,6 @@
 @page "/calls"
 @using DashboardExample.Services
+@using Asterisk.Sdk.Ami.Actions
 @inject CallFlowTracker Tracker
 @inject SelectedServerService ServerSvc
 @inject NavigationManager Nav
@@ -15,6 +16,9 @@
         </button>
         <button class="chip @(_viewMode == ViewMode.Table ? "chip-active" : "")" @onclick="() => _viewMode = ViewMode.Table" title="Table view — high concurrency">
             <span class="view-toggle-icon">&#9776;</span> Table
+        </button>
+        <button class="chip @(_viewMode == ViewMode.Matrix ? "chip-active" : "")" @onclick="() => _viewMode = ViewMode.Matrix" title="Matrix wallboard — supervisor overview">
+            <span class="view-toggle-icon">&#9641;&#9641;</span> Matrix
         </button>
     </div>
 </div>
@@ -126,7 +130,7 @@ else if (_viewMode == ViewMode.Kanban)
         </div>
     </div>
 }
-else
+else if (_viewMode == ViewMode.Table)
 {
     @* ═══ TABLE VIEW ═══ *@
     @if (_allActive.Count == 0 && _fadingCompleted.Count == 0)
@@ -228,6 +232,96 @@ else
             </div>
         }
     }
+}
+
+@* ═══ MATRIX VIEW ═══ *@
+else
+{
+    @if (_allActive.Count == 0)
+    {
+        <p class="text-muted">No active calls to display.</p>
+    }
+    else
+    {
+        <div class="call-matrix">
+            @foreach (var call in _allActive)
+            {
+                var (borderClass, stateLabel, stateIcon) = GetCallStyle(call);
+                var stateClass = call.State switch
+                {
+                    CallFlowState.Connected => "state-connected",
+                    CallFlowState.Ringing or CallFlowState.Dialing => "state-ringing",
+                    CallFlowState.Hold => "state-hold",
+                    CallFlowState.Queued => "state-queued",
+                    CallFlowState.Completed => "state-completed",
+                    _ => ""
+                };
+                <div class="matrix-card @stateClass">
+                    <div class="matrix-card-header">
+                        <span class="call-state-badge @borderClass">@stateIcon @stateLabel</span>
+                        <span class="call-duration">@FormatDuration(call.Duration)</span>
+                    </div>
+                    <div class="matrix-card-body" @onclick="() => NavigateToDetail(call.CallId)">
+                        <div class="matrix-flow">
+                            <span class="matrix-caller">@(call.Caller?.CallerIdNum ?? "unknown")</span>
+                            <span class="matrix-arrow">&rarr;</span>
+                            <span class="matrix-dest">
+                                @if (call.AgentName is not null)
+                                {
+                                    @call.AgentName
+                                }
+                                else if (call.Destination is not null)
+                                {
+                                    @(call.Destination.CallerIdNum ?? ShortChannel(call.Destination.Channel))
+                                }
+                                else
+                                {
+                                    <span class="text-muted">...</span>
+                                }
+                            </span>
+                        </div>
+                        @if (call.QueueName is not null)
+                        {
+                            <span class="matrix-queue-label">@call.QueueName</span>
+                        }
+                    </div>
+                    <div class="matrix-card-actions">
+                        <button class="matrix-action-btn" title="Hold / Park" @onclick="() => HoldCall(call)" @onclick:stopPropagation="true">
+                            &#9646;&#9646; Hold
+                        </button>
+                        <button class="matrix-action-btn" title="Transfer" @onclick="() => ShowTransferDialog(call)" @onclick:stopPropagation="true">
+                            &#8644; Xfer
+                        </button>
+                        <button class="matrix-action-btn matrix-action-hangup" title="Hangup" @onclick="() => HangupCall(call)" @onclick:stopPropagation="true">
+                            &#9747; Drop
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@if (_showTransferDialog)
+{
+    <div class="confirm-overlay" @onclick="CloseTransferDialog">
+        <div class="confirm-dialog" @onclick:stopPropagation="true">
+            <h4>Transfer Call</h4>
+            <p>Transfer caller <strong>@(_transferCall?.Caller?.CallerIdNum ?? "unknown")</strong> to:</p>
+            <div class="form-field" style="margin-bottom:1rem">
+                <label class="form-label">Extension</label>
+                <input @bind="_transferExtension" class="input" placeholder="e.g. 2001" />
+            </div>
+            <div class="form-field" style="margin-bottom:1rem">
+                <label class="form-label">Context (optional)</label>
+                <input @bind="_transferContext" class="input" placeholder="default" />
+            </div>
+            <div class="confirm-dialog-actions">
+                <button class="btn btn-sm btn-muted" @onclick="CloseTransferDialog">Cancel</button>
+                <button class="btn btn-sm btn-accent" @onclick="ExecuteTransfer">Transfer</button>
+            </div>
+        </div>
+    </div>
 }
 
 @* ═══ Shared card render fragments ═══ *@
@@ -357,7 +451,7 @@ else
 @code {
     private const double FadeSeconds = 5.0;
 
-    private enum ViewMode { Kanban, Table }
+    private enum ViewMode { Kanban, Table, Matrix }
 
     private Timer? _timer;
     private ViewMode _viewMode = ViewMode.Kanban;
@@ -458,6 +552,73 @@ else
         if (ts.TotalHours >= 1)
             return $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}";
         return $"{(int)ts.TotalMinutes}:{ts.Seconds:D2}";
+    }
+
+    // Matrix quick actions
+    private bool _showTransferDialog;
+    private CallFlow? _transferCall;
+    private string _transferExtension = "";
+    private string _transferContext = "";
+    private string? _actionResult;
+
+    private async Task HoldCall(CallFlow call)
+    {
+        var entry = ServerSvc.GetSelectedServer();
+        if (entry is null || call.Caller?.Channel is null) return;
+
+        var action = new ParkAction
+        {
+            Channel = call.Caller.Channel,
+            Channel2 = call.Caller.Channel,
+            Timeout = 120
+        };
+        var response = await entry.Connection.SendActionAsync(action);
+        _actionResult = string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase)
+            ? "Call parked"
+            : $"Park failed: {response.Message}";
+    }
+
+    private async Task HangupCall(CallFlow call)
+    {
+        var entry = ServerSvc.GetSelectedServer();
+        if (entry is null || call.Caller?.Channel is null) return;
+
+        var action = new HangupAction { Channel = call.Caller.Channel };
+        await entry.Connection.SendActionAsync(action);
+    }
+
+    private void ShowTransferDialog(CallFlow call)
+    {
+        _transferCall = call;
+        _transferExtension = "";
+        _transferContext = "";
+        _showTransferDialog = true;
+    }
+
+    private void CloseTransferDialog()
+    {
+        _showTransferDialog = false;
+        _transferCall = null;
+    }
+
+    private async Task ExecuteTransfer()
+    {
+        var entry = ServerSvc.GetSelectedServer();
+        if (entry is null || _transferCall?.Caller?.Channel is null || string.IsNullOrWhiteSpace(_transferExtension))
+        {
+            CloseTransferDialog();
+            return;
+        }
+
+        var action = new RedirectAction
+        {
+            Channel = _transferCall.Caller.Channel,
+            Exten = _transferExtension.Trim(),
+            Context = string.IsNullOrWhiteSpace(_transferContext) ? "default" : _transferContext.Trim(),
+            Priority = 1
+        };
+        await entry.Connection.SendActionAsync(action);
+        CloseTransferDialog();
     }
 
     public void Dispose() => _timer?.Dispose();

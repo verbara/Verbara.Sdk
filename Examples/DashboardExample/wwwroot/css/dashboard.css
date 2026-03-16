@@ -2488,6 +2488,124 @@ body {
 }
 
 /* ================================================================
+   CALL MATRIX WALLBOARD
+   ================================================================ */
+
+.call-matrix {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    padding: 16px 0;
+}
+
+.matrix-card {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--border);
+    transition: all 0.3s ease;
+}
+
+.matrix-card:hover {
+    background: var(--bg-raised);
+    border-color: var(--border-accent);
+    box-shadow: var(--shadow);
+}
+
+.matrix-card.state-connected { border-left-color: var(--color-available); }
+.matrix-card.state-ringing { border-left-color: var(--color-paused); }
+.matrix-card.state-hold { border-left-color: var(--color-hold); }
+.matrix-card.state-queued { border-left-color: var(--color-ringing); }
+.matrix-card.state-completed { border-left-color: var(--color-incall); opacity: 0.6; }
+
+.matrix-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.matrix-card-body {
+    cursor: pointer;
+    margin-bottom: 10px;
+}
+
+.matrix-flow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.matrix-caller {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+}
+
+.matrix-arrow {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.matrix-dest {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    color: var(--accent);
+}
+
+.matrix-queue-label {
+    display: inline-block;
+    margin-top: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    background: var(--bg-raised);
+    padding: 2px 8px;
+    border-radius: 3px;
+}
+
+.matrix-card-actions {
+    display: flex;
+    gap: 6px;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+}
+
+.matrix-action-btn {
+    flex: 1;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 4px 8px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.matrix-action-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.matrix-action-hangup:hover {
+    border-color: var(--color-incall);
+    color: var(--color-incall);
+    background: rgba(248, 113, 113, 0.08);
+}
+
+/* ================================================================
    RESPONSIVE
    ================================================================ */
 
