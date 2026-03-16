@@ -26,6 +26,25 @@ public class ActivityTests
     }
 
     [Fact]
+    public async Task DialActivity_ShouldCaptureDialStatus_AfterExec()
+    {
+#pragma warning disable CA2012
+        _channel.GetVariableAsync("DIALSTATUS", Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<string>("ANSWER"));
+#pragma warning restore CA2012
+
+        var activity = new DialActivity(_channel)
+        {
+            Target = new EndPoint(TechType.PJSIP, "100"),
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+
+        await activity.StartAsync();
+
+        activity.DialStatus.Should().Be("ANSWER");
+    }
+
+    [Fact]
     public async Task HoldActivity_ShouldCallMusicOnHold()
     {
         var activity = new HoldActivity(_channel) { MusicOnHoldClass = "jazz" };
@@ -56,6 +75,16 @@ public class ActivityTests
     }
 
     [Fact]
+    public async Task HangupActivity_ShouldPassCauseCode_WhenProvided()
+    {
+        var activity = new HangupActivity(_channel) { CauseCode = 16 };
+        await activity.StartAsync();
+
+        await _channel.Received(1).ExecAsync("Hangup", "16", Arg.Any<CancellationToken>());
+        await _channel.DidNotReceive().HangupAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task PlayMessageActivity_ShouldStreamFile()
     {
         var activity = new PlayMessageActivity(_channel) { FileName = "welcome" };
@@ -73,6 +102,27 @@ public class ActivityTests
         await activity.StartAsync();
 
         await _channel.Received(1).ExecAsync("Queue", "sales", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task QueueActivity_ShouldBuildCorrectArgs_WithTimeoutInPosition5()
+    {
+#pragma warning disable CA2012
+        _channel.GetVariableAsync("QUEUESTATUS", Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<string>("TIMEOUT"));
+#pragma warning restore CA2012
+
+        var activity = new QueueActivity(_channel)
+        {
+            QueueName = "sales",
+            Options = "t",
+            Timeout = TimeSpan.FromSeconds(60)
+        };
+        await activity.StartAsync();
+
+        // Queue(queuename,options,URL,announceoverride,timeout)
+        await _channel.Received(1).ExecAsync("Queue", "sales,t,,,60", Arg.Any<CancellationToken>());
+        activity.QueueStatus.Should().Be("TIMEOUT");
     }
 
     [Fact]
@@ -117,6 +167,24 @@ public class ActivityTests
 
         await _channel.Received(1).SetVariableAsync("TRANSFER_CONTEXT", "from-internal", Arg.Any<CancellationToken>());
         await _channel.Received(1).ExecAsync("Goto", "from-internal,3000,1", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ParkActivity_ShouldUseCorrectParkArgs()
+    {
+        var activity = new ParkActivity(_channel) { ParkingLot = "premium" };
+        await activity.StartAsync();
+
+        await _channel.Received(1).ExecAsync("Park", "premium", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ParkActivity_ShouldUseEmptyArgs_WhenNoParkingLot()
+    {
+        var activity = new ParkActivity(_channel);
+        await activity.StartAsync();
+
+        await _channel.Received(1).ExecAsync("Park", "", Arg.Any<CancellationToken>());
     }
 
     [Fact]

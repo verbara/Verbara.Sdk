@@ -10,6 +10,9 @@ public sealed class DialActivity(IAgiChannel channel) : ActivityBase(channel)
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(30);
     public string? Options { get; init; }
 
+    /// <summary>DIALSTATUS channel variable captured after Dial execution (ANSWER, BUSY, NOANSWER, CANCEL, CONGESTION, CHANUNAVAIL).</summary>
+    public string? DialStatus { get; private set; }
+
     protected override async ValueTask ExecuteAsync(CancellationToken cancellationToken)
     {
         var dialStr = Target.ToString();
@@ -19,5 +22,6 @@ public sealed class DialActivity(IAgiChannel channel) : ActivityBase(channel)
             : $"{dialStr},{timeoutSec}";
 
         await Channel.ExecAsync("Dial", args, cancellationToken);
+        DialStatus = await Channel.GetVariableAsync("DIALSTATUS", cancellationToken);
     }
 }
