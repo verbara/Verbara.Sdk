@@ -324,6 +324,15 @@ public sealed class AmiConnection : IAmiConnection
     {
         EnsureConnected();
 
+        // Apply DefaultEventTimeout if configured
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (_options.DefaultEventTimeout > TimeSpan.Zero)
+        {
+            timeoutCts.CancelAfter(_options.DefaultEventTimeout);
+        }
+
+        var ct = timeoutCts.Token;
+
         var actionId = action.ActionId ?? NextActionId();
         action.ActionId = actionId;
 
@@ -337,9 +346,9 @@ public sealed class AmiConnection : IAmiConnection
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
-            await WriteActionLockedAsync(actionName, actionId, fields, cancellationToken);
+            await WriteActionLockedAsync(actionName, actionId, fields, ct);
 
-            await foreach (var evt in collector.ReadAllAsync(cancellationToken))
+            await foreach (var evt in collector.ReadAllAsync(ct))
             {
                 yield return evt;
             }
