@@ -51,6 +51,9 @@ internal static partial class AmiConnectionLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Reconnect handler error")]
     public static partial void ReconnectHandlerError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI] Heartbeat timed out — connection appears dead")]
+    public static partial void HeartbeatTimeout(ILogger logger);
 }
 
 /// <summary>
@@ -72,6 +75,7 @@ public sealed class AmiConnection : IAmiConnection
     private AmiProtocolWriter? _writer;
     private AsyncEventPump? _eventPump;
     private Task? _readerLoop;
+    private Task? _heartbeatTask;
     private CancellationTokenSource? _cts;
 
     private long _actionIdCounter;
@@ -143,6 +147,12 @@ public sealed class AmiConnection : IAmiConnection
             () => _eventPump?.PendingCount ?? 0, description: "Events pending in the event pump buffer");
         AmiMetrics.Meter.CreateObservableGauge("ami.pending_actions",
             () => _pendingActions.Count, description: "Actions awaiting response");
+
+        // Start heartbeat loop if enabled
+        if (_options.EnableHeartbeat && _options.HeartbeatInterval > TimeSpan.Zero)
+        {
+            _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(_cts.Token), CancellationToken.None);
+        }
 
         AmiConnectionLog.Connected(_logger, _options.Hostname, _options.Port, AsteriskVersion);
     }
@@ -382,6 +392,34 @@ public sealed class AmiConnection : IAmiConnection
         return new Unsubscriber(this, observer);
     }
 
+    private async Task HeartbeatLoopAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(_options.HeartbeatInterval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                try
+                {
+                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    timeoutCts.CancelAfter(_options.HeartbeatTimeout);
+                    await SendActionAsync(new Actions.PingAction(), timeoutCts.Token);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    // Heartbeat timed out — connection is dead
+                    AmiConnectionLog.HeartbeatTimeout(_logger);
+                    await DisconnectAsync(CancellationToken.None);
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal shutdown
+        }
+    }
+
     private async Task ReaderLoopAsync(CancellationToken ct)
     {
         try
@@ -577,6 +615,12 @@ public sealed class AmiConnection : IAmiConnection
         if (_cts is not null)
         {
             await _cts.CancelAsync();
+        }
+
+        if (_heartbeatTask is not null)
+        {
+            await _heartbeatTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            _heartbeatTask = null;
         }
 
         if (_readerLoop is not null)

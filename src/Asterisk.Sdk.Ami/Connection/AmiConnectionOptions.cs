@@ -57,4 +57,13 @@ public sealed class AmiConnectionOptions
 
     /// <summary>Multiplier applied to the delay after each failed reconnection attempt. Default: 2.0.</summary>
     public double ReconnectMultiplier { get; set; } = 2.0;
+
+    /// <summary>Enable periodic heartbeat (Ping) to detect dead connections. Default: true.</summary>
+    public bool EnableHeartbeat { get; set; } = true;
+
+    /// <summary>Interval between heartbeat pings. Default: 30 seconds.</summary>
+    public TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Maximum time to wait for a heartbeat response before considering the connection dead. Default: 10 seconds.</summary>
+    public TimeSpan HeartbeatTimeout { get; set; } = TimeSpan.FromSeconds(10);
 }
