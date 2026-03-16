@@ -68,6 +68,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IHostedService, AmiConnectionHostedService>();
         services.AddSingleton<IHostedService, AsteriskServerHostedService>();
 
+        // Health checks
+        services.AddHealthChecks()
+            .AddCheck<Asterisk.Sdk.Ami.Diagnostics.AmiHealthCheck>("ami");
+
         // ARI with validation
         if (options.Ari is not null)
         {
