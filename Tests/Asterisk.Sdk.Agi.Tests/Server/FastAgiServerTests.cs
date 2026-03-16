@@ -88,6 +88,58 @@ public sealed class FastAgiServerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ConnectionTimeout_ShouldDefaultToFiveMinutes()
+    {
+        var port = GetAvailablePort();
+        var strategy = Substitute.For<IMappingStrategy>();
+        _sut = new FastAgiServer(port, strategy, NullLogger<FastAgiServer>.Instance);
+
+        _sut.ConnectionTimeout.Should().Be(TimeSpan.FromMinutes(5));
+    }
+
+    [Fact]
+    public async Task ConnectionTimeout_ShouldBeConfigurable()
+    {
+        var port = GetAvailablePort();
+        var strategy = Substitute.For<IMappingStrategy>();
+        _sut = new FastAgiServer(port, strategy, NullLogger<FastAgiServer>.Instance)
+        {
+            ConnectionTimeout = TimeSpan.FromSeconds(30)
+        };
+
+        _sut.ConnectionTimeout.Should().Be(TimeSpan.FromSeconds(30));
+    }
+
+    [Fact]
+    public async Task HandleConnection_ShouldTimeout_WhenScriptHangs()
+    {
+        var port = GetAvailablePort();
+        var hangingScript = new HangingScript();
+        var strategy = Substitute.For<IMappingStrategy>();
+        strategy.Resolve(Arg.Any<AgiRequest>()).Returns(hangingScript);
+
+        _sut = new FastAgiServer(port, strategy, NullLogger<FastAgiServer>.Instance)
+        {
+            ConnectionTimeout = TimeSpan.FromMilliseconds(200)
+        };
+        await _sut.StartAsync();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, port);
+
+        // Send minimal AGI request headers
+        var stream = client.GetStream();
+        var headers = "agi_network: yes\nagi_network_script: hang\nagi_channel: SIP/test\nagi_uniqueid: 1.1\n\n";
+        await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes(headers));
+
+        // Wait for connection timeout + margin
+        await Task.Delay(500);
+
+        // The hanging script should have been cancelled via timeout
+        hangingScript.WasCancelled.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task DisposeAsync_ShouldStopIfRunning()
     {
         var port = GetAvailablePort();
@@ -100,5 +152,23 @@ public sealed class FastAgiServerTests : IAsyncDisposable
         await _sut.DisposeAsync();
         _sut.IsRunning.Should().BeFalse();
         _sut = null; // Prevent double dispose in DisposeAsync
+    }
+
+    private sealed class HangingScript : IAgiScript
+    {
+        public bool WasCancelled { get; private set; }
+
+        public async ValueTask ExecuteAsync(IAgiChannel channel, IAgiRequest request, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                WasCancelled = true;
+                throw;
+            }
+        }
     }
 }

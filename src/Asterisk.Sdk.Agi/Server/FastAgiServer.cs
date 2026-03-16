@@ -43,6 +43,9 @@ public sealed class FastAgiServer : IAgiServer
     public int Port { get; }
     public bool IsRunning { get; private set; }
 
+    /// <summary>Maximum time allowed for a single AGI connection/script execution. Default: 5 minutes.</summary>
+    public TimeSpan ConnectionTimeout { get; set; } = TimeSpan.FromMinutes(5);
+
     public FastAgiServer(int port, IMappingStrategy mappingStrategy, ILogger<FastAgiServer> logger)
     {
         Port = port;
@@ -90,6 +93,14 @@ public sealed class FastAgiServer : IAgiServer
 
     private async Task HandleConnectionAsync(TcpClient client, CancellationToken ct)
     {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        if (ConnectionTimeout > TimeSpan.Zero)
+        {
+            timeoutCts.CancelAfter(ConnectionTimeout);
+        }
+
+        var connectionCt = timeoutCts.Token;
+
         await using var conn = PipelineSocketConnection.FromStream(client.GetStream());
 
         try
@@ -98,7 +109,7 @@ public sealed class FastAgiServer : IAgiServer
             var writer = new FastAgiWriter(conn.Output);
 
             // Read AGI request headers
-            var request = await reader.ReadRequestAsync(ct);
+            var request = await reader.ReadRequestAsync(connectionCt);
 
             FastAgiServerLog.ScriptExecuting(_logger, request.Script, request.Channel);
 
@@ -112,7 +123,7 @@ public sealed class FastAgiServer : IAgiServer
 
             // Create channel and execute script
             var channel = new AgiChannel(writer, reader, _logger);
-            await script.ExecuteAsync(channel, request, ct);
+            await script.ExecuteAsync(channel, request, connectionCt);
         }
         catch (AgiHangupException)
         {
