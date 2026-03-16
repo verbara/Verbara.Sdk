@@ -37,48 +37,29 @@ public class AsyncEventPumpTests
     [Fact]
     public async Task TryEnqueue_ShouldInvokeOnEventDropped_WhenBufferFull()
     {
-        // Capacity 1 with DropOldest — second write succeeds but drops the oldest
-        await using var pump = new AsyncEventPump(1);
-        var dropped = new TaskCompletionSource<ManagerEvent>();
-        pump.OnEventDropped = evt => dropped.TrySetResult(evt);
+        await using var pump = new AsyncEventPump(2);
+        var dropped = new List<ManagerEvent>();
+        pump.OnEventDropped = evt => dropped.Add(evt);
 
-        // Block the consumer so the channel fills up
-        var gate = new TaskCompletionSource();
-        pump.Start(async _ => await gate.Task);
-
-        // Fill the single-slot channel; second write should trigger DropOldest
         pump.TryEnqueue(CreateEvent("first"));
-        // The pump consumer picks up "first" and blocks on the gate.
-        // Give it a moment to start consuming:
-        await Task.Delay(50);
-
-        // Now the channel is blocked on the consumer, write two more to trigger drop
         pump.TryEnqueue(CreateEvent("second"));
-        pump.TryEnqueue(CreateEvent("third"));
+        var result = pump.TryEnqueue(CreateEvent("third")); // should drop
 
-        // One of these should have caused a drop if the channel is at capacity
-        // (DropOldest in a capacity-1 channel means the oldest queued item is discarded)
-        // Note: if the channel handles DropOldest internally without failing TryWrite,
-        // the pump's TryWrite will return true but DroppedEvents won't increment.
-        // The pump only increments DroppedEvents when TryWrite returns false.
-        // With DropOldest, TryWrite always returns true, so let's verify via DroppedEvents.
-
-        gate.SetResult();
+        result.Should().BeFalse();
+        dropped.Should().HaveCount(1);
+        dropped[0].EventType.Should().Be("third");
     }
 
     [Fact]
-    public async Task DroppedEvents_ShouldRemainZero_WhenDropOldestMode()
+    public async Task DroppedEvents_ShouldIncrement_WhenCapacityExceeded()
     {
-        // BoundedChannelFullMode.DropOldest causes TryWrite to always succeed,
-        // so DroppedEvents counter (which only increments on TryWrite == false) stays 0.
         await using var pump = new AsyncEventPump(2);
 
-        pump.TryEnqueue(CreateEvent());
-        pump.TryEnqueue(CreateEvent());
-        // Third write — DropOldest means TryWrite still returns true
-        pump.TryEnqueue(CreateEvent());
+        pump.TryEnqueue(CreateEvent("first"));
+        pump.TryEnqueue(CreateEvent("second"));
+        pump.TryEnqueue(CreateEvent("third")); // should drop
 
-        pump.DroppedEvents.Should().Be(0);
+        pump.DroppedEvents.Should().Be(1);
     }
 
     [Fact]

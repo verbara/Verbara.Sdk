@@ -36,7 +36,7 @@ public sealed class AsyncEventPump : IAsyncDisposable
     {
         _channel = Channel.CreateBounded<ManagerEvent>(new BoundedChannelOptions(capacity)
         {
-            FullMode = BoundedChannelFullMode.DropOldest,
+            FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
             SingleWriter = true
         });
