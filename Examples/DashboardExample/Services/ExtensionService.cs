@@ -90,6 +90,9 @@ public sealed class ExtensionService
         return (100, 999);
     }
 
+    /// <summary>Gets extension range for a server (instance convenience method).</summary>
+    public (int Start, int End) GetExtensionRange(string serverId) => GetExtensionRange(_configuration, serverId);
+
     /// <summary>
     /// Returns true if the name is numeric and within the given extension range (inclusive).
     /// </summary>
