@@ -5,6 +5,7 @@ using Asterisk.Sdk.Hosting;
 using Asterisk.Sdk.Live.Server;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Asterisk.Sdk.IntegrationTests.Di;
 
@@ -99,5 +100,15 @@ public class ServiceRegistrationTests
         var connection1 = provider.GetService<IAmiConnection>();
         var connection2 = provider.GetService<IAmiConnection>();
         connection1.Should().BeSameAs(connection2);
+    }
+
+    [Fact]
+    public async Task AddAsterisk_ShouldRegisterHostedServices()
+    {
+        await using var provider = BuildProvider();
+        var hostedServices = provider.GetServices<IHostedService>().ToList();
+
+        hostedServices.Should().Contain(s => s is AmiConnectionHostedService);
+        hostedServices.Should().Contain(s => s is AsteriskServerHostedService);
     }
 }
