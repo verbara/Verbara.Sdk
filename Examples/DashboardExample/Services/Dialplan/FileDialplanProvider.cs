@@ -22,25 +22,21 @@ internal sealed class FileDialplanProvider(PbxConfigManager configManager, ILogg
         {
             foreach (var group in byContext)
             {
-                await configManager.DeleteSectionAsync(serverId, "extensions.conf", group.Key, ct);
-            }
+                var kvLines = new List<KeyValuePair<string, string>>();
 
-            foreach (var group in byContext)
-            {
-                var vars = new Dictionary<string, string>();
-                foreach (var line in group.OrderBy(l => l.Priority))
+                foreach (var line in group.OrderBy(l => l.Exten).ThenBy(l => l.Priority))
                 {
                     var appWithData = string.IsNullOrEmpty(line.AppData)
                         ? line.App
                         : $"{line.App}({line.AppData})";
 
                     if (line.Priority == 1)
-                        vars[$"exten"] = $"{line.Exten},{line.Priority},{appWithData}";
+                        kvLines.Add(new KeyValuePair<string, string>("exten", $"{line.Exten},{line.Priority},{appWithData}"));
                     else
-                        vars[$"same"] = $"n,{appWithData}";
+                        kvLines.Add(new KeyValuePair<string, string>("same", $"n,{appWithData}"));
                 }
 
-                await configManager.CreateSectionAsync(serverId, "extensions.conf", group.Key, vars, ct: ct);
+                await configManager.CreateSectionWithLinesAsync(serverId, "extensions.conf", group.Key, kvLines, ct);
             }
 
             FileDialplanLog.Generated(logger, byContext.Count, serverId);

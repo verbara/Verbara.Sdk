@@ -203,6 +203,14 @@ public sealed class DbConfigProvider : IConfigProvider
         }
     }
 
+    /// <summary>
+    /// DB provider: delegates to AMI since extensions.conf with duplicate keys
+    /// (exten/same directives) is file-based only.
+    /// </summary>
+    public Task<bool> CreateSectionWithLinesAsync(string serverId, string filename, string section,
+        List<KeyValuePair<string, string>> lines, CancellationToken ct = default)
+        => _amiProvider.CreateSectionWithLinesAsync(serverId, filename, section, lines, ct);
+
     public async Task<bool> UpdateSectionAsync(string serverId, string filename, string section,
         Dictionary<string, string> variables, CancellationToken ct = default)
     {

@@ -124,6 +124,46 @@ public sealed class PbxConfigManager : IConfigProvider
         }
     }
 
+    public async Task<bool> CreateSectionWithLinesAsync(string serverId, string filename, string section,
+        List<KeyValuePair<string, string>> lines, CancellationToken ct = default)
+    {
+        var entry = _monitor.GetServer(serverId);
+        if (entry is null) return false;
+
+        var action = new UpdateConfigAction
+        {
+            SrcFilename = filename,
+            DstFilename = filename,
+        };
+
+        action.AddDeleteCategory(section);
+        action.AddNewCategory(section);
+
+        foreach (var (key, value) in lines)
+        {
+            action.AddAppend(section, key, value);
+        }
+
+        var mode = GetConnectionMode(entry);
+        PbxConfigLog.OperationStart(_logger, "CreateSectionWithLines", serverId, filename, section, mode);
+        var sw = Stopwatch.GetTimestamp();
+
+        try
+        {
+            var response = await entry.ConfigConnection.SendActionAsync(action, ct);
+            var ms = ElapsedMs(sw);
+            var result = response.Response ?? "null";
+            PbxConfigLog.OperationEnd(_logger, "CreateSectionWithLines", serverId, filename, section, result, ms);
+            return response.Response == "Success";
+        }
+        catch (Exception ex)
+        {
+            var ms = ElapsedMs(sw);
+            PbxConfigLog.OperationFailed(_logger, ex, "CreateSectionWithLines", serverId, filename, section, ms);
+            return false;
+        }
+    }
+
     public async Task<bool> UpdateSectionAsync(string serverId, string filename, string section,
         Dictionary<string, string> variables, CancellationToken ct = default)
     {
