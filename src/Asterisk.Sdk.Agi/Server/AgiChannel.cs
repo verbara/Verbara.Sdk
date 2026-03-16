@@ -43,6 +43,7 @@ public sealed class AgiChannel : IAgiChannel
             ?? throw new AgiException("Connection closed while waiting for reply");
 
         LogReply(cmd, reply);
+        ThrowIfHangup(reply);
         return reply;
     }
 
@@ -56,7 +57,14 @@ public sealed class AgiChannel : IAgiChannel
             ?? throw new AgiException("Connection closed while waiting for reply");
 
         LogReply(command, reply);
+        ThrowIfHangup(reply);
         return reply;
+    }
+
+    private static void ThrowIfHangup(AgiReply reply)
+    {
+        if (reply.StatusCode == 511)
+            throw new AgiHangupException("Channel hung up (AGI status 511)");
     }
 
     private void LogReply(string command, AgiReply reply)
