@@ -8,6 +8,7 @@ using Asterisk.Sdk.Ari.Client;
 using Asterisk.Sdk.Live.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace Asterisk.Sdk.Hosting;
@@ -61,6 +62,10 @@ public static class ServiceCollectionExtensions
         // Live
         services.TryAddSingleton<AsteriskServer>();
         services.TryAddSingleton<IAsteriskServer>(sp => sp.GetRequiredService<AsteriskServer>());
+
+        // Hosted services for automatic lifecycle management
+        services.AddSingleton<IHostedService, AmiConnectionHostedService>();
+        services.AddSingleton<IHostedService, AsteriskServerHostedService>();
 
         // ARI with validation
         if (options.Ari is not null)
