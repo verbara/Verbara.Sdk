@@ -1,4 +1,5 @@
 @page "/conferences"
+@using DashboardExample.Models
 @using DashboardExample.Services
 @using Asterisk.Sdk.Live
 @using Asterisk.Sdk.Live.MeetMe
@@ -7,206 +8,276 @@
 @using Asterisk.Sdk.Ami.Events
 @inject SelectedServerService ServerSvc
 @inject ConfigOperationState ConfigOp
+@inject ConferenceConfigService ConfConfigSvc
+@inject NavigationManager Nav
 @implements IDisposable
 
 <PageTitle>Conferences — Asterisk Dashboard</PageTitle>
 
 <h2>Conference Rooms</h2>
 
-@* ---------- MeetMe Section (Live Layer) ---------- *@
+<div class="tab-bar">
+    <button class="tab @(_activeTab == "live" ? "tab-active" : "")" @onclick='() => _activeTab = "live"'>Live Rooms</button>
+    <button class="tab @(_activeTab == "config" ? "tab-active" : "")" @onclick="SwitchToConfig">Configuration</button>
+</div>
 
-<h3>MeetMe Rooms</h3>
+@if (_activeTab == "live")
+{
+    @* ---------- MeetMe Section (Live Layer) ---------- *@
 
-@{
+    <h3>MeetMe Rooms</h3>
+
     var hasRooms = false;
-}
-@foreach (var (serverId, entry) in ServerSvc.GetServers())
-{
-    foreach (var room in entry.Server.MeetMe.Rooms)
+    @foreach (var (serverId, entry) in ServerSvc.GetServers())
     {
-        hasRooms = true;
-        <div class="conference-card">
-            <div class="conference-header">
-                <strong>Room @room.RoomNumber</strong>
-                <span class="badge badge-blue">@room.UserCount participants</span>
-            </div>
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Channel</th>
-                        <th>State</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var user in room.Users.Values)
-                    {
-                        var (dotClass, label) = GetUserStyle(user);
-                        <tr>
-                            <td>@user.UserNum</td>
-                            <td>@user.Channel</td>
-                            <td>
-                                <span class="status-dot @dotClass"></span>
-                                @label
-                                @if (user.Muted)
-                                {
-                                    <span class="badge badge-muted">Muted</span>
-                                }
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    }
-}
-
-@if (!hasRooms)
-{
-    <p class="text-muted">No active MeetMe rooms.</p>
-}
-
-@* ---------- ConfBridge Section (AMI Actions) ---------- *@
-
-<h3>ConfBridge Rooms</h3>
-
-@if (_loading)
-{
-    <p class="text-muted">Loading ConfBridge rooms...</p>
-}
-else if (_confbridgeError is not null)
-{
-    <p class="text-muted">@_confbridgeError</p>
-}
-else if (_confbridgeRooms.Count == 0)
-{
-    <p class="text-muted">No active ConfBridge rooms.</p>
-}
-else
-{
-    foreach (var room in _confbridgeRooms)
-    {
-        <div class="conference-card">
-            <div class="conference-header">
-                <div>
-                    <strong>Bridge @room.Conference</strong>
-                    <span class="badge badge-blue">@room.Parties participants</span>
-                    @if (room.Marked > 0)
-                    {
-                        <span class="badge badge-yellow">@room.Marked marked</span>
-                    }
-                    @if (room.Locked)
-                    {
-                        <span class="badge badge-red">Locked</span>
-                    }
+        foreach (var room in entry.Server.MeetMe.Rooms)
+        {
+            hasRooms = true;
+            <div class="conference-card">
+                <div class="conference-header">
+                    <strong>Room @room.RoomNumber</strong>
+                    <span class="badge badge-blue">@room.UserCount participants</span>
                 </div>
-                <div>
-                    @if (room.Locked)
-                    {
-                        <button class="btn btn-sm btn-blue" @onclick="() => UnlockRoom(room.Conference)" disabled="@_actionInProgress">
-                            Unlock
-                        </button>
-                    }
-                    else
-                    {
-                        <button class="btn btn-sm btn-yellow" @onclick="() => LockRoom(room.Conference)" disabled="@_actionInProgress">
-                            Lock
-                        </button>
-                    }
-
-                    @if (_recordingRooms.Contains(room.Conference))
-                    {
-                        <button class="btn btn-sm btn-red" @onclick="() => StopRecording(room.Conference)" disabled="@_actionInProgress">
-                            Stop Rec
-                        </button>
-                    }
-                    else
-                    {
-                        <button class="btn btn-sm btn-blue" @onclick="() => StartRecording(room.Conference)" disabled="@_actionInProgress">
-                            Start Rec
-                        </button>
-                    }
-                </div>
-            </div>
-
-            @if (room.Participants.Count > 0)
-            {
                 <table class="data-table">
                     <thead>
                         <tr>
+                            <th>#</th>
                             <th>Channel</th>
-                            <th>Admin</th>
-                            <th>Muted</th>
-                            <th>Talking</th>
-                            <th>Duration</th>
-                            <th>Actions</th>
+                            <th>State</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var p in room.Participants)
+                        @foreach (var user in room.Users.Values)
                         {
+                            var (dotClass, label) = GetUserStyle(user);
                             <tr>
-                                <td>@p.Channel</td>
+                                <td>@user.UserNum</td>
+                                <td>@user.Channel</td>
                                 <td>
-                                    @if (p.Admin)
-                                    {
-                                        <span class="badge badge-yellow">Admin</span>
-                                    }
-                                </td>
-                                <td>
-                                    @if (p.Muted)
+                                    <span class="status-dot @dotClass"></span>
+                                    @label
+                                    @if (user.Muted)
                                     {
                                         <span class="badge badge-muted">Muted</span>
                                     }
-                                    else
-                                    {
-                                        <span class="badge badge-green">Open</span>
-                                    }
-                                </td>
-                                <td>
-                                    @if (p.Talking)
-                                    {
-                                        <span class="status-dot dot-green"></span> <text>Talking</text>
-                                    }
-                                    else
-                                    {
-                                        <span class="status-dot dot-gray"></span> <text>Silent</text>
-                                    }
-                                </td>
-                                <td class="caller-timer">@FormatDuration(p.AnsweredTime)</td>
-                                <td>
-                                    @if (p.Muted)
-                                    {
-                                        <button class="btn btn-sm btn-blue" @onclick="() => UnmuteParticipant(room.Conference, p.Channel)" disabled="@_actionInProgress">
-                                            Unmute
-                                        </button>
-                                    }
-                                    else
-                                    {
-                                        <button class="btn btn-sm btn-yellow" @onclick="() => MuteParticipant(room.Conference, p.Channel)" disabled="@_actionInProgress">
-                                            Mute
-                                        </button>
-                                    }
-                                    <button class="btn btn-sm btn-red" @onclick="() => KickParticipant(room.Conference, p.Channel)" disabled="@_actionInProgress">
-                                        Kick
-                                    </button>
                                 </td>
                             </tr>
                         }
                     </tbody>
                 </table>
-            }
-        </div>
+            </div>
+        }
+    }
+
+    @if (!hasRooms)
+    {
+        <p class="text-muted">No active MeetMe rooms.</p>
+    }
+
+    @* ---------- ConfBridge Section (AMI Actions) ---------- *@
+
+    <h3>ConfBridge Rooms</h3>
+
+    @if (_loading)
+    {
+        <p class="text-muted">Loading ConfBridge rooms...</p>
+    }
+    else if (_confbridgeError is not null)
+    {
+        <p class="text-muted">@_confbridgeError</p>
+    }
+    else if (_confbridgeRooms.Count == 0)
+    {
+        <p class="text-muted">No active ConfBridge rooms.</p>
+    }
+    else
+    {
+        foreach (var room in _confbridgeRooms)
+        {
+            <div class="conference-card">
+                <div class="conference-header">
+                    <div>
+                        <strong>Bridge @room.Conference</strong>
+                        <span class="badge badge-blue">@room.Parties participants</span>
+                        @if (room.Marked > 0)
+                        {
+                            <span class="badge badge-yellow">@room.Marked marked</span>
+                        }
+                        @if (room.Locked)
+                        {
+                            <span class="badge badge-red">Locked</span>
+                        }
+                    </div>
+                    <div>
+                        @if (room.Locked)
+                        {
+                            <button class="btn btn-sm btn-blue" @onclick="() => UnlockRoom(room.Conference)" disabled="@_actionInProgress">
+                                Unlock
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-yellow" @onclick="() => LockRoom(room.Conference)" disabled="@_actionInProgress">
+                                Lock
+                            </button>
+                        }
+
+                        @if (_recordingRooms.Contains(room.Conference))
+                        {
+                            <button class="btn btn-sm btn-red" @onclick="() => StopRecording(room.Conference)" disabled="@_actionInProgress">
+                                Stop Rec
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-blue" @onclick="() => StartRecording(room.Conference)" disabled="@_actionInProgress">
+                                Start Rec
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                @if (room.Participants.Count > 0)
+                {
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Channel</th>
+                                <th>Admin</th>
+                                <th>Muted</th>
+                                <th>Talking</th>
+                                <th>Duration</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var p in room.Participants)
+                            {
+                                <tr>
+                                    <td>@p.Channel</td>
+                                    <td>
+                                        @if (p.Admin)
+                                        {
+                                            <span class="badge badge-yellow">Admin</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (p.Muted)
+                                        {
+                                            <span class="badge badge-muted">Muted</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge badge-green">Open</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (p.Talking)
+                                        {
+                                            <span class="status-dot dot-green"></span> <text>Talking</text>
+                                        }
+                                        else
+                                        {
+                                            <span class="status-dot dot-gray"></span> <text>Silent</text>
+                                        }
+                                    </td>
+                                    <td class="caller-timer">@FormatDuration(p.AnsweredTime)</td>
+                                    <td>
+                                        @if (p.Muted)
+                                        {
+                                            <button class="btn btn-sm btn-blue" @onclick="() => UnmuteParticipant(room.Conference, p.Channel)" disabled="@_actionInProgress">
+                                                Unmute
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm btn-yellow" @onclick="() => MuteParticipant(room.Conference, p.Channel)" disabled="@_actionInProgress">
+                                                Mute
+                                            </button>
+                                        }
+                                        <button class="btn btn-sm btn-red" @onclick="() => KickParticipant(room.Conference, p.Channel)" disabled="@_actionInProgress">
+                                            Kick
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        }
+    }
+
+    @if (_actionResult is not null)
+    {
+        <p class="action-result">@_actionResult</p>
     }
 }
-
-@if (_actionResult is not null)
+else
 {
-    <p class="action-result">@_actionResult</p>
+    @* ---------- Configuration Tab ---------- *@
+
+    <div class="page-header-row">
+        <h3>ConfBridge Profiles</h3>
+        <button class="btn btn-primary" @onclick="() => EditConfig(0)">+ New Profile</button>
+    </div>
+
+    @if (_configError is not null)
+    {
+        <div class="alert alert-danger">@_configError</div>
+    }
+
+    @if (_configs.Count == 0)
+    {
+        <p class="text-muted">No conference profiles configured. Create one to define ConfBridge bridge settings.</p>
+    }
+    else
+    {
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Number</th>
+                    <th>Max Members</th>
+                    <th>PIN</th>
+                    <th>Record</th>
+                    <th>MOH</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var cfg in _configs)
+                {
+                    <tr>
+                        <td><strong>@cfg.Name</strong></td>
+                        <td class="mono">@(string.IsNullOrEmpty(cfg.Number) ? "—" : cfg.Number)</td>
+                        <td>@(cfg.MaxMembers > 0 ? cfg.MaxMembers.ToString() : "Unlimited")</td>
+                        <td>@(string.IsNullOrEmpty(cfg.Pin) ? "None" : "****")</td>
+                        <td>
+                            @if (cfg.Record)
+                            {
+                                <span class="badge badge-red">REC</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">No</span>
+                            }
+                        </td>
+                        <td>@cfg.MusicOnHold</td>
+                        <td>
+                            <button class="btn btn-sm btn-blue" @onclick="() => EditConfig(cfg.Id)">Edit</button>
+                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteConfig(cfg.Id, cfg.Name)">Delete</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
 }
 
 @code {
     private Timer? _timer;
+    private string _activeTab = "live";
     private bool _loading;
     private bool _actionInProgress;
     private string? _confbridgeError;
@@ -214,13 +285,59 @@ else
     private List<ConfBridgeRoom> _confbridgeRooms = [];
     private readonly HashSet<string> _recordingRooms = new(StringComparer.Ordinal);
 
+    // Config tab state
+    private List<ConferenceConfig> _configs = [];
+    private string? _configError;
+
     protected override void OnInitialized()
     {
         _timer = new Timer(async _ =>
         {
-            await RefreshConfBridgeAsync();
-            await InvokeAsync(StateHasChanged);
+            if (_activeTab == "live")
+            {
+                await RefreshConfBridgeAsync();
+                await InvokeAsync(StateHasChanged);
+            }
         }, null, TimeSpan.Zero, TimeSpan.FromSeconds(3));
+    }
+
+    private async Task SwitchToConfig()
+    {
+        _activeTab = "config";
+        await LoadConfigsAsync();
+    }
+
+    private async Task LoadConfigsAsync()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        try
+        {
+            _configs = await ConfConfigSvc.GetConfigsAsync(serverId);
+            _configError = null;
+        }
+        catch (Exception ex)
+        {
+            _configError = $"Failed to load configs: {ex.Message}";
+        }
+    }
+
+    private void EditConfig(int id)
+    {
+        Nav.NavigateTo(id == 0 ? "/conferences/config/new" : $"/conferences/config/{id}");
+    }
+
+    private async Task DeleteConfig(int id, string name)
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        var (success, error) = await ConfConfigSvc.DeleteConfigAsync(serverId, id);
+        if (success)
+            await LoadConfigsAsync();
+        else
+            _configError = error;
     }
 
     private async Task RefreshConfBridgeAsync()

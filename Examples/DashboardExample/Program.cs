@@ -121,6 +121,20 @@ builder.Services.AddSingleton<IMohClassRepository>(sp =>
 });
 builder.Services.AddSingleton<MohService>();
 
+builder.Services.AddSingleton<IConferenceConfigRepository>(sp =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var connStr = cfg.GetSection("Asterisk:Servers").GetChildren()
+        .Where(s => string.Equals(s["ConfigMode"], "Realtime", StringComparison.OrdinalIgnoreCase))
+        .Select(s => s["RealtimeConnectionString"])
+        .FirstOrDefault()
+        ?? cfg.GetConnectionString("QueueConfig")
+        ?? throw new InvalidOperationException("No Realtime connection string for DbConferenceConfigRepository");
+    var logger = sp.GetRequiredService<ILogger<DbConferenceConfigRepository>>();
+    return new DbConferenceConfigRepository(connStr, logger);
+});
+builder.Services.AddSingleton<ConferenceConfigService>();
+
 builder.Services.AddScoped<SelectedServerService>();
 
 var app = builder.Build();
