@@ -1,0 +1,18 @@
+@inject IStringLocalizer<SharedStrings> L
+
+<span class="help-tooltip-wrap">
+    <span class="help-icon" @onclick="Toggle" @onclick:stopPropagation="true">ℹ️</span>
+    <span class="help-tooltip @(_pinned ? "pinned" : "")">
+        <span class="help-tooltip-title">@L[$"Help_{HelpKey}_Title"]</span>
+        @L[$"Help_{HelpKey}"]
+    </span>
+</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public string HelpKey { get; set; } = "";
+
+    private bool _pinned;
+
+    private void Toggle() => _pinned = !_pinned;
+}
