@@ -1,0 +1,257 @@
+@page "/moh/edit/new"
+@page "/moh/edit/{Id:int}"
+@using DashboardExample.Models
+@using DashboardExample.Services
+@inject MohService MohSvc
+@inject AudioFileService AudioSvc
+@inject SelectedServerService ServerSvc
+@inject NavigationManager Nav
+@inject IConfiguration Config
+
+<PageTitle>@(_isNew ? "New MOH Class" : $"Edit {_mohClass.Name}") — Asterisk Dashboard</PageTitle>
+
+<div class="page-header-row">
+    <button class="btn btn-sm btn-muted" @onclick="GoBack">&#8592; Back</button>
+    <h2>@(_isNew ? "New MOH Class" : $"Edit: {_mohClass.Name}")</h2>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+<div class="form-section">
+    <h3>Class Settings</h3>
+
+    <div class="form-group">
+        <label>Name</label>
+        <input type="text" @bind="_mohClass.Name" class="form-control"
+               placeholder="alphanumeric, hyphens, underscores" />
+    </div>
+
+    <div class="form-group">
+        <label>Mode</label>
+        <select @bind="_mohClass.Mode" class="form-control">
+            <option value="files">files</option>
+            <option value="mp3">mp3</option>
+            <option value="custom">custom</option>
+        </select>
+        @if (_mohClass.Mode == "mp3")
+        {
+            <div class="alert alert-warning mt-1">
+                &#9888; Mode "mp3" is deprecated since Asterisk 14+. Consider using "files" with the format_mp3 module.
+            </div>
+        }
+    </div>
+
+    @if (_mohClass.Mode == "files" || _mohClass.Mode == "mp3")
+    {
+        <div class="form-group">
+            <label>Directory</label>
+            <input type="text" @bind="_mohClass.Directory" class="form-control" />
+        </div>
+
+        <div class="form-group">
+            <label>Sort</label>
+            <div class="radio-group">
+                <label>
+                    <input type="radio" name="sort" value="random"
+                           checked="@(_mohClass.Sort == "random")"
+                           @onchange='() => _mohClass.Sort = "random"' /> Random
+                </label>
+                <label>
+                    <input type="radio" name="sort" value="alpha"
+                           checked="@(_mohClass.Sort == "alpha")"
+                           @onchange='() => _mohClass.Sort = "alpha"' /> Alphabetical
+                </label>
+            </div>
+        </div>
+    }
+
+    @if (_mohClass.Mode == "custom")
+    {
+        <div class="form-group">
+            <label>Custom Application</label>
+            <input type="text" @bind="_mohClass.CustomApplication" class="form-control"
+                   placeholder="/usr/bin/mpg123 -q -s --mono -r 8000 http://stream" />
+        </div>
+    }
+</div>
+
+@if (!_isNew)
+{
+    <div class="form-section">
+        <h3>Audio Files</h3>
+
+        @if (!_fileAccessAvailable)
+        {
+            <div class="alert alert-warning">File access unavailable for this MOH directory.</div>
+        }
+        else
+        {
+            <div class="stat-row mb-2">
+                <span class="text-muted">Usage:</span>
+                @FormatSize(_files.Sum(f => f.Size)) / @(_maxClassSizeMb) MB
+                @if (AudioSvc.IsSoxAvailable())
+                {
+                    <span class="badge badge-success ms-2">sox &#10003;</span>
+                }
+                else
+                {
+                    <span class="badge badge-muted ms-2">sox unavailable</span>
+                }
+            </div>
+
+            <div class="form-group">
+                <label>Upload Audio</label>
+                <InputFile OnChange="OnFileSelected" accept=".wav,.wav49,.gsm,.ulaw,.alaw,.sln,.mp3,.ogg" />
+                <small class="text-muted">Max @(_maxFileSizeMb)MB. Formats: wav, wav49, gsm, ulaw, alaw, sln, mp3, ogg</small>
+                @if (!AudioSvc.IsSoxAvailable())
+                {
+                    <small class="text-muted"> (mp3/ogg require sox for conversion)</small>
+                }
+            </div>
+
+            @if (_uploadError is not null)
+            {
+                <div class="alert alert-danger">@_uploadError</div>
+            }
+
+            @if (_files.Count > 0)
+            {
+                <table class="table">
+                    <thead>
+                        <tr><th>Filename</th><th>Size</th><th>Duration</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var f in _files)
+                        {
+                            <tr>
+                                <td>@f.Name</td>
+                                <td>@FormatSize(f.Size)</td>
+                                <td>@(f.Duration?.ToString(@"m\:ss") ?? "—")</td>
+                                <td>
+                                    <button class="btn btn-sm btn-muted" @onclick="() => PlayFile(f.Name)">&#9654;</button>
+                                    <button class="btn btn-sm btn-danger" @onclick="() => DeleteFile(f.Name)">&#x2715;</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                @if (_playingFile is not null)
+                {
+                    <div class="audio-player">
+                        <strong>@_playingFile</strong>
+                        <audio controls autoplay src="/api/moh/@Id/files/@_playingFile"></audio>
+                    </div>
+                }
+            }
+        }
+    </div>
+}
+
+<div class="form-actions">
+    <button class="btn btn-muted" @onclick="GoBack">Cancel</button>
+    <button class="btn btn-primary" @onclick="Save" disabled="@_saving">
+        @(_saving ? "Saving..." : "Save")
+    </button>
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private MohClass _mohClass = new() { Mode = "files", Sort = "random" };
+    private List<AudioFileInfo> _files = [];
+    private bool _isNew => Id == 0;
+    private bool _saving;
+    private bool _fileAccessAvailable;
+    private int _maxFileSizeMb = 20;
+    private int _maxClassSizeMb = 200;
+    private string? _error;
+    private string? _uploadError;
+    private string? _playingFile;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+
+        if (serverId is not null)
+        {
+            var basePath = Config[$"Asterisk:Servers:{serverId}:MohBasePath"] ?? "/var/lib/asterisk/moh";
+            _maxFileSizeMb = Config.GetValue($"Asterisk:Servers:{serverId}:MaxUploadSizeMb", 20);
+            _maxClassSizeMb = Config.GetValue($"Asterisk:Servers:{serverId}:MaxMohClassSizeMb", 200);
+
+            if (_isNew)
+            {
+                _mohClass.Directory = basePath + "/";
+            }
+            else
+            {
+                var existing = await MohSvc.GetClassAsync(Id);
+                if (existing is not null)
+                {
+                    _mohClass = existing;
+                    _fileAccessAvailable = Directory.Exists(_mohClass.Directory);
+                    if (_fileAccessAvailable)
+                        _files = await MohSvc.GetAudioFilesAsync(Id);
+                }
+            }
+        }
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _uploadError = null;
+        var file = e.File;
+
+        using var stream = file.OpenReadStream(maxAllowedSize: _maxFileSizeMb * 1024L * 1024L);
+        var (success, error) = await MohSvc.UploadAudioAsync(
+            Id, file.Name, stream, file.Size, _maxFileSizeMb, _maxClassSizeMb);
+
+        if (success)
+            _files = await MohSvc.GetAudioFilesAsync(Id);
+        else
+            _uploadError = error;
+    }
+
+    private async Task DeleteFile(string filename)
+    {
+        var (success, error) = await MohSvc.DeleteAudioAsync(Id, filename);
+        if (success)
+            _files = await MohSvc.GetAudioFilesAsync(Id);
+        else
+            _uploadError = error;
+    }
+
+    private void PlayFile(string name) => _playingFile = name;
+
+    private async Task Save()
+    {
+        _saving = true;
+        _error = null;
+
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) { _error = "No server selected"; _saving = false; return; }
+
+        var (success, error) = _isNew
+            ? await MohSvc.CreateClassAsync(serverId, _mohClass)
+            : await MohSvc.UpdateClassAsync(serverId, _mohClass);
+
+        _saving = false;
+
+        if (success)
+            Nav.NavigateTo("/moh");
+        else
+            _error = error;
+    }
+
+    private void GoBack() => Nav.NavigateTo("/moh");
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+}
