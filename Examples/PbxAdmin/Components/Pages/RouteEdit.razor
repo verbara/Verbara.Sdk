@@ -10,56 +10,57 @@
 @inject SelectedServerService ServerSvc
 @inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>@(_isNew ? $"New {(_isInbound ? "Inbound" : "Outbound")} Route" : $"Edit {(_isInbound ? "Inbound" : "Outbound")} Route") — Asterisk PBX Admin</PageTitle>
+<PageTitle>@(_isNew ? (_isInbound ? L["RouteEdit_NewInbound"] : L["RouteEdit_NewOutbound"]) : (_isInbound ? L["RouteEdit_EditInbound"] : L["RouteEdit_EditOutbound"])) — Asterisk PBX Admin</PageTitle>
 
-<a href="/routes" class="back-link">Back to Routes</a>
-<h2>@(_isNew ? $"New {(_isInbound ? "Inbound" : "Outbound")} Route" : $"Edit {(_isInbound ? "Inbound" : "Outbound")} Route")</h2>
+<a href="/routes" class="back-link">@L["RouteEdit_BackToList"]</a>
+<h2>@(_isNew ? (_isInbound ? L["RouteEdit_NewInbound"] : L["RouteEdit_NewOutbound"]) : (_isInbound ? L["RouteEdit_EditInbound"] : L["RouteEdit_EditOutbound"]))</h2>
 
 @if (_loading)
 {
-    <p class="text-muted">Loading...</p>
+    <p class="text-muted">@L["Lbl_Loading"]</p>
 }
 else if (_isInbound)
 {
     <!-- Inbound Route Form -->
     <div class="form-section">
-        <h3>Route Details</h3>
+        <h3>@L["RouteEdit_RouteDetails"]</h3>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">Name</label>
+                <label class="form-label">@L["Lbl_Name"]</label>
                 <input class="input" @bind="_inConfig.Name" placeholder="Main Line" />
             </div>
             <div class="form-field">
-                <label class="form-label">DID Pattern</label>
+                <label class="form-label">@L["RouteEdit_DIDPattern"]</label>
                 <input class="input" @bind="_inConfig.DidPattern" placeholder="5551234567" />
-                <span class="text-muted" style="font-size:0.85rem;">Exact number or Asterisk pattern (e.g. _555NXXXXXX)</span>
+                <span class="text-muted" style="font-size:0.85rem;">@L["RouteEdit_DIDHint"]</span>
             </div>
             <div class="form-field">
-                <label class="form-label">Priority</label>
+                <label class="form-label">@L["Col_Priority"]</label>
                 <input class="input" type="number" @bind="_inConfig.Priority" />
             </div>
         </div>
     </div>
 
     <div class="form-section">
-        <h3>Destination</h3>
+        <h3>@L["Lbl_Destination"]</h3>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">Type</label>
+                <label class="form-label">@L["Lbl_Type"]</label>
                 <select class="input" @bind="_inConfig.DestinationType">
-                    <option value="">-- Select --</option>
-                    <option value="extension">Extension</option>
-                    <option value="queue">Queue</option>
-                    <option value="time_condition">Time Condition</option>
+                    <option value="">@L["Lbl_SelectType"]</option>
+                    <option value="extension">@L["Lbl_Extension"]</option>
+                    <option value="queue">@L["Lbl_Queue"]</option>
+                    <option value="time_condition">@L["Lbl_TimeCondition"]</option>
                 </select>
             </div>
             <div class="form-field">
-                <label class="form-label">Target</label>
+                <label class="form-label">@L["Lbl_Target"]</label>
                 @if (_inConfig.DestinationType == "time_condition" && _timeConditions.Count > 0)
                 {
                     <select class="input" @bind="_inConfig.Destination">
-                        <option value="">-- Select --</option>
+                        <option value="">@L["Lbl_SelectType"]</option>
                         @foreach (var tc in _timeConditions)
                         {
                             <option value="@tc.Name">@tc.Name</option>
@@ -75,16 +76,16 @@ else if (_isInbound)
     </div>
 
     <div class="form-section">
-        <h3>Options</h3>
+        <h3>@L["RouteEdit_Options"]</h3>
         <div class="form-grid">
             <div class="form-field">
                 <label class="codec-check">
                     <input type="checkbox" @bind="_inConfig.Enabled" />
-                    Enabled
+                    @L["Lbl_Enabled"]
                 </label>
             </div>
             <div class="form-field">
-                <label class="form-label">Notes</label>
+                <label class="form-label">@L["Lbl_Notes"]</label>
                 <textarea class="input" @bind="_inConfig.Notes" rows="3" placeholder="Optional notes"></textarea>
             </div>
         </div>
@@ -94,50 +95,50 @@ else
 {
     <!-- Outbound Route Form -->
     <div class="form-section">
-        <h3>Route Details</h3>
+        <h3>@L["RouteEdit_RouteDetails"]</h3>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">Name</label>
+                <label class="form-label">@L["Lbl_Name"]</label>
                 <input class="input" @bind="_outConfig.Name" placeholder="Local Calls" />
             </div>
             <div class="form-field">
-                <label class="form-label">Dial Pattern</label>
+                <label class="form-label">@L["RouteEdit_DIDPattern"]</label>
                 <input class="input" @bind="_outConfig.DialPattern" placeholder="_NXXNXXXXXX" />
-                <span class="text-muted" style="font-size:0.85rem;">Asterisk pattern: _ prefix, X=[0-9], Z=[1-9], N=[2-9], [15-7], . (wildcard), ! (match immediately)</span>
+                <span class="text-muted" style="font-size:0.85rem;">@L["RouteEdit_DIDHint"]</span>
             </div>
             <div class="form-field">
-                <label class="form-label">Priority</label>
+                <label class="form-label">@L["Col_Priority"]</label>
                 <input class="input" type="number" @bind="_outConfig.Priority" />
             </div>
         </div>
     </div>
 
     <div class="form-section">
-        <h3>Dial Manipulation</h3>
+        <h3>@L["RouteEdit_DialManip"]</h3>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">Prepend</label>
-                <input class="input" @bind="_outConfig.Prepend" placeholder="Optional digits to prepend" />
+                <label class="form-label">@L["RouteEdit_Prepend"]</label>
+                <input class="input" @bind="_outConfig.Prepend" placeholder="@L["RouteEdit_PrependHint"]" />
             </div>
             <div class="form-field">
-                <label class="form-label">Prefix</label>
-                <input class="input" @bind="_outConfig.Prefix" placeholder="Optional prefix to strip" />
+                <label class="form-label">@L["RouteEdit_Prefix"]</label>
+                <input class="input" @bind="_outConfig.Prefix" placeholder="@L["RouteEdit_PrefixHint"]" />
             </div>
         </div>
     </div>
 
     <div class="form-section">
-        <h3>Trunks (failover order)</h3>
+        <h3>@L["RouteEdit_TrunksOrder"]</h3>
         <div style="margin-bottom: 0.75rem;">
             <div style="display: flex; gap: 0.5rem; align-items: center;">
                 <select class="input" @bind="_selectedTrunk" style="flex: 1;">
-                    <option value="">-- Select trunk --</option>
+                    <option value="">@L["RouteEdit_SelectTrunk"]</option>
                     @foreach (var trunk in _availableTrunks.Where(t => !_outConfig.Trunks.Any(rt => rt.TrunkName == t.Name)))
                     {
                         <option value="@trunk.Name">@trunk.Name (@trunk.Technology)</option>
                     }
                 </select>
-                <button class="btn btn-blue" @onclick="AddTrunk">Add</button>
+                <button class="btn btn-blue" @onclick="AddTrunk">@L["Btn_Add"]</button>
             </div>
         </div>
         @if (_outConfig.Trunks.Count > 0)
@@ -146,8 +147,8 @@ else
                 <thead>
                     <tr>
                         <th>#</th>
-                        <th>Trunk</th>
-                        <th>Actions</th>
+                        <th>@L["Col_Trunks"]</th>
+                        <th>@L["Lbl_Actions"]</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -157,9 +158,9 @@ else
                             <td>@(trunk.Sequence + 1)</td>
                             <td>@trunk.TrunkName</td>
                             <td>
-                                <button class="btn btn-sm" @onclick="() => MoveTrunkUp(trunk)" disabled="@(trunk.Sequence == 0)">Up</button>
-                                <button class="btn btn-sm" @onclick="() => MoveTrunkDown(trunk)" disabled="@(trunk.Sequence == _outConfig.Trunks.Count - 1)">Down</button>
-                                <button class="btn btn-sm btn-red" @onclick="() => RemoveTrunk(trunk)">Remove</button>
+                                <button class="btn btn-sm" @onclick="() => MoveTrunkUp(trunk)" disabled="@(trunk.Sequence == 0)">@L["Btn_Up"]</button>
+                                <button class="btn btn-sm" @onclick="() => MoveTrunkDown(trunk)" disabled="@(trunk.Sequence == _outConfig.Trunks.Count - 1)">@L["Btn_Down"]</button>
+                                <button class="btn btn-sm btn-red" @onclick="() => RemoveTrunk(trunk)">@L["Btn_Remove"]</button>
                             </td>
                         </tr>
                     }
@@ -168,21 +169,21 @@ else
         }
         else
         {
-            <p class="text-muted">No trunks added. At least one trunk is required.</p>
+            <p class="text-muted">@L["RouteEdit_NoTrunks"]</p>
         }
     </div>
 
     <div class="form-section">
-        <h3>Options</h3>
+        <h3>@L["RouteEdit_Options"]</h3>
         <div class="form-grid">
             <div class="form-field">
                 <label class="codec-check">
                     <input type="checkbox" @bind="_outConfig.Enabled" />
-                    Enabled
+                    @L["Lbl_Enabled"]
                 </label>
             </div>
             <div class="form-field">
-                <label class="form-label">Notes</label>
+                <label class="form-label">@L["Lbl_Notes"]</label>
                 <textarea class="input" @bind="_outConfig.Notes" rows="3" placeholder="Optional notes"></textarea>
             </div>
         </div>
@@ -190,8 +191,8 @@ else
 }
 
 <div class="form-actions">
-    <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? "Saving..." : "Save")</button>
-    <button class="btn" @onclick="NavigateBack">Cancel</button>
+    <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? L["Btn_Saving"] : L["Btn_Save"])</button>
+    <button class="btn" @onclick="NavigateBack">@L["Btn_Cancel"]</button>
 </div>
 
 @if (_result is not null)

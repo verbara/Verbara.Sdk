@@ -6,14 +6,15 @@
 @inject TimeConditionService TcSvc
 @inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>Routes — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Routes_Title"]</PageTitle>
 
-<h2>Routes</h2>
+<h2>@L["Routes_Heading"]</h2>
 
 <div class="chip-bar" style="margin-bottom: 1rem;">
-    <button class="chip @(_activeTab == "inbound" ? "chip-active" : "")" @onclick="@(() => _activeTab = "inbound")">Inbound Routes</button>
-    <button class="chip @(_activeTab == "outbound" ? "chip-active" : "")" @onclick="@(() => _activeTab = "outbound")">Outbound Routes</button>
+    <button class="chip @(_activeTab == "inbound" ? "chip-active" : "")" @onclick="@(() => _activeTab = "inbound")">@L["Routes_Inbound"]</button>
+    <button class="chip @(_activeTab == "outbound" ? "chip-active" : "")" @onclick="@(() => _activeTab = "outbound")">@L["Routes_Outbound"]</button>
 </div>
 
 @if (_activeTab == "inbound")
@@ -21,31 +22,31 @@
     <div class="kpi-grid kpi-grid-sm">
         <div class="kpi-card kpi-blue">
             <div class="kpi-value">@_inbound.Count</div>
-            <div class="kpi-label">Total</div>
+            <div class="kpi-label">@L["Ext_Total"]</div>
         </div>
         <div class="kpi-card kpi-green">
             <div class="kpi-value">@_inbound.Count(r => r.Enabled)</div>
-            <div class="kpi-label">Enabled</div>
+            <div class="kpi-label">@L["Lbl_Enabled"]</div>
         </div>
         <div class="kpi-card kpi-red">
             <div class="kpi-value">@_inbound.Count(r => !r.Enabled)</div>
-            <div class="kpi-label">Disabled</div>
+            <div class="kpi-label">@L["Lbl_Disabled"]</div>
         </div>
     </div>
 
     <div style="margin-bottom: 1rem;">
-        <button class="btn btn-blue" @onclick="NavigateNewInbound">New Inbound Route</button>
+        <button class="btn btn-blue" @onclick="NavigateNewInbound">@L["Routes_NewInbound"]</button>
     </div>
 
     <table class="data-table">
         <thead>
             <tr>
-                <th>Priority</th>
-                <th>Name</th>
-                <th>DID Pattern</th>
-                <th>Destination</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <th>@L["Col_Priority"]</th>
+                <th>@L["Lbl_Name"]</th>
+                <th>@L["Col_DIDPattern"]</th>
+                <th>@L["Lbl_Destination"]</th>
+                <th>@L["Lbl_Status"]</th>
+                <th>@L["Lbl_Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -60,11 +61,11 @@
                         @(route.DestinationLabel ?? route.Destination)
                     </td>
                     <td>
-                        <span class="badge @(route.Enabled ? "badge-green" : "badge-muted")">@(route.Enabled ? "Enabled" : "Disabled")</span>
+                        <span class="badge @(route.Enabled ? "badge-green" : "badge-muted")">@(route.Enabled ? L["Lbl_Enabled"] : L["Lbl_Disabled"])</span>
                     </td>
                     <td>
-                        <button class="btn btn-sm btn-yellow" @onclick="() => NavigateEditInbound(route.Id)">Edit</button>
-                        <button class="btn btn-sm btn-red" @onclick="() => ConfirmDeleteInbound(route)">Delete</button>
+                        <button class="btn btn-sm btn-yellow" @onclick="() => NavigateEditInbound(route.Id)">@L["Btn_Edit"]</button>
+                        <button class="btn btn-sm btn-red" @onclick="() => ConfirmDeleteInbound(route)">@L["Btn_Delete"]</button>
                     </td>
                 </tr>
             }
@@ -74,19 +75,19 @@
 else
 {
     <div style="margin-bottom: 1rem;">
-        <button class="btn btn-blue" @onclick="NavigateNewOutbound">New Outbound Route</button>
+        <button class="btn btn-blue" @onclick="NavigateNewOutbound">@L["Routes_NewOutbound"]</button>
     </div>
 
     <table class="data-table">
         <thead>
             <tr>
-                <th>Priority</th>
-                <th>Name</th>
-                <th>Dial Pattern</th>
-                <th>Trunks</th>
-                <th>Prepend/Prefix</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <th>@L["Col_Priority"]</th>
+                <th>@L["Lbl_Name"]</th>
+                <th>@L["Col_DialPattern"]</th>
+                <th>@L["Col_Trunks"]</th>
+                <th>@L["Col_PrependPrefix"]</th>
+                <th>@L["Lbl_Status"]</th>
+                <th>@L["Lbl_Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -112,11 +113,11 @@ else
                         @if (string.IsNullOrEmpty(prepend) && string.IsNullOrEmpty(prefix)) { <span class="text-muted">—</span> }
                     </td>
                     <td>
-                        <span class="badge @(route.Enabled ? "badge-green" : "badge-muted")">@(route.Enabled ? "Enabled" : "Disabled")</span>
+                        <span class="badge @(route.Enabled ? "badge-green" : "badge-muted")">@(route.Enabled ? L["Lbl_Enabled"] : L["Lbl_Disabled"])</span>
                     </td>
                     <td>
-                        <button class="btn btn-sm btn-yellow" @onclick="() => NavigateEditOutbound(route.Id)">Edit</button>
-                        <button class="btn btn-sm btn-red" @onclick="() => ConfirmDeleteOutbound(route)">Delete</button>
+                        <button class="btn btn-sm btn-yellow" @onclick="() => NavigateEditOutbound(route.Id)">@L["Btn_Edit"]</button>
+                        <button class="btn btn-sm btn-red" @onclick="() => ConfirmDeleteOutbound(route)">@L["Btn_Delete"]</button>
                     </td>
                 </tr>
             }
@@ -128,11 +129,11 @@ else
 {
     <div class="confirm-overlay" @onclick="CancelDelete">
         <div class="confirm-dialog" @onclick:stopPropagation="true">
-            <h4>Delete Route</h4>
-            <p>Are you sure you want to delete route <strong>@_deletingName</strong>? This action cannot be undone.</p>
+            <h4>@L["Routes_DeleteTitle"]</h4>
+            <p>@L["Routes_DeleteConfirm", _deletingName ?? ""] @L["Ext_CannotUndo"]</p>
             <div class="confirm-dialog-actions">
-                <button class="btn btn-sm" @onclick="CancelDelete">Cancel</button>
-                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">Delete</button>
+                <button class="btn btn-sm" @onclick="CancelDelete">@L["Btn_Cancel"]</button>
+                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">@L["Btn_Delete"]</button>
             </div>
         </div>
     </div>

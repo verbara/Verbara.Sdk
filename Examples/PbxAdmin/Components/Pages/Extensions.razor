@@ -5,58 +5,59 @@
 @inject ExtensionService ExtSvc
 @inject IConfigProviderResolver ConfigResolver
 @inject ConfigOperationState ConfigOp
+@inject IStringLocalizer<SharedStrings> L
 @inject NavigationManager Nav
 @implements IDisposable
 
-<PageTitle>Extensions — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Ext_Title"]</PageTitle>
 
-<h2>Extensions</h2>
+<h2>@L["Ext_Heading"]</h2>
 @{
     var activeServer = ServerSvc.SelectedServerId;
     if (activeServer is not null)
     {
         var mode = ConfigResolver.GetConfigMode(activeServer);
         var modeBadge = mode == ConfigMode.Realtime ? "badge-realtime" : "badge-file";
-        <p class="text-muted" style="margin-top: 0.25rem;">Config backend: <span class="badge @modeBadge">@mode</span></p>
+        <p class="text-muted" style="margin-top: 0.25rem;">@L["Ext_ConfigBackend"] <span class="badge @modeBadge">@mode</span></p>
     }
 }
 
 <div class="kpi-grid kpi-grid-sm">
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@_extensions.Count</div>
-        <div class="kpi-label">Total</div>
+        <div class="kpi-label">@L["Ext_Total"]</div>
     </div>
     <div class="kpi-card kpi-green">
         <div class="kpi-value">@_extensions.Count(e => e.Status == ExtensionStatus.Registered)</div>
-        <div class="kpi-label">Registered</div>
+        <div class="kpi-label">@L["Ext_Registered"]</div>
     </div>
     <div class="kpi-card kpi-red">
         <div class="kpi-value">@_extensions.Count(e => e.Status == ExtensionStatus.Unregistered)</div>
-        <div class="kpi-label">Unregistered</div>
+        <div class="kpi-label">@L["Ext_Unregistered"]</div>
     </div>
     <div class="kpi-card kpi-gray">
         <div class="kpi-value">@_extensions.Count(e => e.VoicemailEnabled)</div>
-        <div class="kpi-label">With Voicemail</div>
+        <div class="kpi-label">@L["Ext_WithVoicemail"]</div>
     </div>
 </div>
 
 <div class="chip-bar">
-    <span style="font-weight: 600; margin-right: 0.25rem;">Tech:</span>
-    <button class="chip @(_techFilter == "All" ? "chip-active" : "")" @onclick="@(() => SetTechFilter("All"))">All</button>
+    <span style="font-weight: 600; margin-right: 0.25rem;">@L["Lbl_Tech"]</span>
+    <button class="chip @(_techFilter == "All" ? "chip-active" : "")" @onclick="@(() => SetTechFilter("All"))">@L["Lbl_All"]</button>
     <button class="chip @(_techFilter == "PJSIP" ? "chip-active" : "")" @onclick="@(() => SetTechFilter("PJSIP"))">PJSIP</button>
     <button class="chip @(_techFilter == "SIP" ? "chip-active" : "")" @onclick="@(() => SetTechFilter("SIP"))">SIP</button>
     <button class="chip @(_techFilter == "IAX2" ? "chip-active" : "")" @onclick="@(() => SetTechFilter("IAX2"))">IAX2</button>
-    <span style="font-weight: 600; margin-left: 0.75rem; margin-right: 0.25rem;">Status:</span>
-    <button class="chip @(_statusFilter == "All" ? "chip-active" : "")" @onclick="@(() => SetStatusFilter("All"))">All</button>
-    <button class="chip @(_statusFilter == "Registered" ? "chip-active" : "")" @onclick="@(() => SetStatusFilter("Registered"))">Registered</button>
-    <button class="chip @(_statusFilter == "Unregistered" ? "chip-active" : "")" @onclick="@(() => SetStatusFilter("Unregistered"))">Unregistered</button>
-    <button class="chip @(_statusFilter == "Unreachable" ? "chip-active" : "")" @onclick="@(() => SetStatusFilter("Unreachable"))">Unreachable</button>
+    <span style="font-weight: 600; margin-left: 0.75rem; margin-right: 0.25rem;">@L["Lbl_StatusFilter"]</span>
+    <button class="chip @(_statusFilter == "All" ? "chip-active" : "")" @onclick="@(() => SetStatusFilter("All"))">@L["Lbl_All"]</button>
+    <button class="chip @(_statusFilter == "Registered" ? "chip-active" : "")" @onclick="@(() => SetStatusFilter("Registered"))">@L["Ext_Registered"]</button>
+    <button class="chip @(_statusFilter == "Unregistered" ? "chip-active" : "")" @onclick="@(() => SetStatusFilter("Unregistered"))">@L["Ext_Unregistered"]</button>
+    <button class="chip @(_statusFilter == "Unreachable" ? "chip-active" : "")" @onclick="@(() => SetStatusFilter("Unreachable"))">@L["Lbl_Unreachable"]</button>
 </div>
 
 <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem; align-items: center;">
-    <input type="text" placeholder="Search by name or number..." @bind="_searchFilter" @bind:event="oninput"
+    <input type="text" placeholder="@L["Ext_Search"]" @bind="_searchFilter" @bind:event="oninput"
            style="padding: 0.4rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--card-bg); color: var(--text);" />
-    <button class="btn btn-blue" @onclick="NavigateNew">New Extension</button>
+    <button class="btn btn-blue" @onclick="NavigateNew">@L["Ext_NewExt"]</button>
 </div>
 
 <div class="card-grid">
@@ -100,9 +101,9 @@
                 </div>
             </div>
             <div class="trunk-card-actions">
-                <button class="btn btn-sm btn-blue" @onclick="() => NavigateDetail(ext)">Detail</button>
-                <button class="btn btn-sm btn-yellow" @onclick="() => NavigateEdit(ext)">Edit</button>
-                <button class="btn btn-sm btn-red" @onclick="() => ConfirmDelete(ext)">Delete</button>
+                <button class="btn btn-sm btn-blue" @onclick="() => NavigateDetail(ext)">@L["Ext_Detail"]</button>
+                <button class="btn btn-sm btn-yellow" @onclick="() => NavigateEdit(ext)">@L["Btn_Edit"]</button>
+                <button class="btn btn-sm btn-red" @onclick="() => ConfirmDelete(ext)">@L["Btn_Delete"]</button>
             </div>
         </div>
     }
@@ -112,11 +113,11 @@
 {
     <div class="confirm-overlay" @onclick="CancelDelete">
         <div class="confirm-dialog" @onclick:stopPropagation="true">
-            <h4>Delete Extension</h4>
-            <p>Are you sure you want to delete extension <strong>@_deletingExtension?.Extension</strong>? This action cannot be undone.</p>
+            <h4>@L["Ext_DeleteTitle"]</h4>
+            <p>@L["Ext_DeleteConfirm", _deletingExtension?.Extension ?? ""] @L["Ext_CannotUndo"]</p>
             <div class="confirm-dialog-actions">
-                <button class="btn btn-sm" @onclick="CancelDelete">Cancel</button>
-                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">Delete</button>
+                <button class="btn btn-sm" @onclick="CancelDelete">@L["Btn_Cancel"]</button>
+                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">@L["Btn_Delete"]</button>
             </div>
         </div>
     </div>

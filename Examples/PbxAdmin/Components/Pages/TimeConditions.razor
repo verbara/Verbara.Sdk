@@ -5,13 +5,14 @@
 @inject SelectedServerService ServerSvc
 @inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>Time Conditions — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["TC_Title"]</PageTitle>
 
-<h2>Time Conditions</h2>
+<h2>@L["TC_Heading"]</h2>
 
 <div style="margin-bottom: 1rem;">
-    <button class="btn btn-blue" @onclick="NavigateNew">New Time Condition</button>
+    <button class="btn btn-blue" @onclick="NavigateNew">@L["TC_NewTC"]</button>
 </div>
 
 <div class="tc-grid">
@@ -24,10 +25,10 @@
             </div>
             <div class="tc-card-body">
                 <div class="text-muted" style="font-size: 0.85rem;">
-                    @tc.RangeCount day range(s)
+                    @tc.RangeCount @L["TC_DayRanges"]
                     @if (tc.HolidayCount > 0)
                     {
-                        <span> · @tc.HolidayCount holiday(s)</span>
+                        <span> · @tc.HolidayCount @L["TC_Holidays"]</span>
                     }
                 </div>
                 <div style="margin-top: 0.5rem; font-size: 0.9rem;">
@@ -36,10 +37,10 @@
                 </div>
             </div>
             <div class="tc-card-actions" @onclick:stopPropagation="true">
-                <button class="btn btn-sm btn-green" @onclick="() => SetOverride(tc, true)">Force Open</button>
-                <button class="btn btn-sm btn-red" @onclick="() => SetOverride(tc, false)">Force Closed</button>
-                <button class="btn btn-sm" @onclick="() => SetOverride(tc, null)">Reset to Auto</button>
-                <button class="btn btn-sm btn-red" style="margin-left: auto;" @onclick="() => ConfirmDelete(tc)">Delete</button>
+                <button class="btn btn-sm btn-green" @onclick="() => SetOverride(tc, true)">@L["TC_ForceOpen"]</button>
+                <button class="btn btn-sm btn-red" @onclick="() => SetOverride(tc, false)">@L["TC_ForceClosed"]</button>
+                <button class="btn btn-sm" @onclick="() => SetOverride(tc, null)">@L["TC_ResetAuto"]</button>
+                <button class="btn btn-sm btn-red" style="margin-left: auto;" @onclick="() => ConfirmDelete(tc)">@L["Btn_Delete"]</button>
             </div>
         </div>
     }
@@ -47,22 +48,22 @@
 
 @if (_conditions.Count == 0)
 {
-    <p class="text-muted">No time conditions configured.</p>
+    <p class="text-muted">@L["TC_NoConditions"]</p>
 }
 
 @if (_showDeleteConfirm)
 {
     <div class="confirm-overlay" @onclick="CancelDelete">
         <div class="confirm-dialog" @onclick:stopPropagation="true">
-            <h4>Delete Time Condition</h4>
-            <p>Are you sure you want to delete <strong>@_deletingTc?.Name</strong>? This action cannot be undone.</p>
+            <h4>@L["TC_DeleteTitle"]</h4>
+            <p>@L["TC_DeleteConfirm", _deletingTc?.Name ?? ""] @L["Ext_CannotUndo"]</p>
             @if (_deleteError is not null)
             {
                 <p class="action-result" style="color: #f87171;">@_deleteError</p>
             }
             <div class="confirm-dialog-actions">
-                <button class="btn btn-sm" @onclick="CancelDelete">Cancel</button>
-                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">Delete</button>
+                <button class="btn btn-sm" @onclick="CancelDelete">@L["Btn_Cancel"]</button>
+                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">@L["Btn_Delete"]</button>
             </div>
         </div>
     </div>

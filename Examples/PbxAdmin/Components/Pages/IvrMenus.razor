@@ -4,21 +4,22 @@
 @inject IvrMenuService IvrSvc
 @inject SelectedServerService ServerSvc
 @inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>IVR Menus — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Ivr_Title"]</PageTitle>
 
 <div class="page-header-row">
-    <h2>IVR Menus</h2>
-    <button class="btn btn-primary" @onclick="NewMenu">+ New IVR</button>
+    <h2>@L["Ivr_Heading"]</h2>
+    <button class="btn btn-primary" @onclick="NewMenu">@L["Ivr_NewIvr"]</button>
 </div>
 
 @if (_loading)
 {
-    <p>Loading...</p>
+    <p>@L["Lbl_Loading"]</p>
 }
 else if (_menus.Count == 0)
 {
-    <p class="text-muted">No IVR menus configured. Click "New IVR" to create one.</p>
+    <p class="text-muted">@L["Ivr_NoMenus"]</p>
 }
 else
 {
@@ -30,34 +31,34 @@ else
                     <strong>@menu.Label</strong>
                     @if (!menu.Enabled)
                     {
-                        <span class="badge badge-muted">Disabled</span>
+                        <span class="badge badge-muted">@L["Lbl_Disabled"]</span>
                     }
                     @if (menu.MaxDepth > 3)
                     {
-                        <span class="badge badge-warning" title="Deep nesting may frustrate callers">Depth @menu.MaxDepth</span>
+                        <span class="badge badge-warning" title="Deep nesting may frustrate callers">@L["Ivr_Depth"] @menu.MaxDepth</span>
                     }
                 </div>
                 <div class="card-body">
                     <div class="stat-row">
-                        <span class="text-muted">Name:</span> @menu.Name
+                        <span class="text-muted">@L["Ivr_NameLabel"]</span> @menu.Name
                     </div>
                     @if (menu.Greeting is not null)
                     {
                         <div class="stat-row">
-                            <span class="text-muted">Greeting:</span> @menu.Greeting
+                            <span class="text-muted">@L["Ivr_GreetingLabel"]</span> @menu.Greeting
                         </div>
                     }
                     <div class="stat-row">
-                        <span class="text-muted">Options:</span> @menu.ItemCount
+                        <span class="text-muted">@L["Ivr_OptionsLabel"]</span> @menu.ItemCount
                         @if (menu.SubMenuCount > 0)
                         {
-                            <span class="text-muted ms-2">Sub-menus:</span> @menu.SubMenuCount
+                            <span class="text-muted ms-2">@L["Ivr_SubMenusLabel"]</span> @menu.SubMenuCount
                         }
                     </div>
                 </div>
                 <div class="card-footer">
                     <button class="btn btn-sm btn-danger" @onclick:stopPropagation="true"
-                            @onclick="() => DeleteMenu(menu)">Delete</button>
+                            @onclick="() => DeleteMenu(menu)">@L["Btn_Delete"]</button>
                 </div>
             </div>
         }

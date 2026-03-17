@@ -4,23 +4,24 @@
 @using PbxAdmin.Models
 @inject AsteriskMonitorService Monitor
 @inject TrunkService TrunkSvc
+@inject IStringLocalizer<SharedStrings> L
 @inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
 
-<PageTitle>@(IsNew ? "New Trunk" : $"Edit {TrunkName}") — Asterisk PBX Admin</PageTitle>
+<PageTitle>@(IsNew ? L["TrunkEdit_NewTitle"] : L["TrunkEdit_EditTitle", TrunkName ?? ""]) — Asterisk PBX Admin</PageTitle>
 
-<a href="/trunks" class="back-link">Back to Trunks</a>
-<h2>@(IsNew ? "New Trunk" : $"Edit Trunk: {TrunkName}")</h2>
+<a href="/trunks" class="back-link">@L["TrunkEdit_BackToList"]</a>
+<h2>@(IsNew ? L["TrunkEdit_New"] : $"{L["TrunkEdit_Edit"]}: {TrunkName}")</h2>
 
 @if (_loading)
 {
-    <p class="text-muted">Loading...</p>
+    <p class="text-muted">@L["Lbl_Loading"]</p>
 }
 else
 {
     <!-- Technology -->
     <div class="form-section">
-        <h3>Technology</h3>
+        <h3>@L["ExtEdit_Technology"]</h3>
         <div class="radio-group">
             <label class="radio-option">
                 <input type="radio" name="tech" value="@TrunkTechnology.PjSip" checked="@(_config.Technology == TrunkTechnology.PjSip)"
@@ -42,10 +43,10 @@ else
 
     <!-- Connection -->
     <div class="form-section">
-        <h3>Connection</h3>
+        <h3>@L["TrunkEdit_Connection"]</h3>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">Name</label>
+                <label class="form-label">@L["Lbl_Name"]</label>
                 <input class="input" @bind="_config.Name" placeholder="my-trunk" disabled="@(!IsNew)" />
             </div>
             <div class="form-field">
@@ -53,13 +54,13 @@ else
                 <input class="input" @bind="_config.Host" placeholder="sip.provider.com" />
             </div>
             <div class="form-field">
-                <label class="form-label">Port</label>
+                <label class="form-label">@L["TrunkEdit_Port"]</label>
                 <input class="input" type="number" @bind="_config.Port" />
             </div>
             @if (_config.Technology != TrunkTechnology.Iax2)
             {
                 <div class="form-field">
-                    <label class="form-label">Transport</label>
+                    <label class="form-label">@L["ExtEdit_Transport"]</label>
                     <select @bind="_config.Transport">
                         <option value="udp">UDP</option>
                         <option value="tcp">TCP</option>
@@ -70,11 +71,11 @@ else
                 </div>
             }
             <div class="form-field">
-                <label class="form-label">Context</label>
+                <label class="form-label">@L["Lbl_Context"]</label>
                 <input class="input" @bind="_config.Context" placeholder="from-trunk" />
             </div>
             <div class="form-field">
-                <label class="form-label">Max Channels (0 = unlimited)</label>
+                <label class="form-label">@L["TrunkEdit_MaxChannels"]</label>
                 <input class="input" type="number" @bind="_config.MaxChannels" />
             </div>
         </div>
@@ -82,20 +83,20 @@ else
 
     <!-- Authentication -->
     <div class="form-section">
-        <h3>Authentication</h3>
+        <h3>@L["ExtEdit_Auth"]</h3>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">Username</label>
+                <label class="form-label">@L["TrunkEdit_Username"]</label>
                 <input class="input" @bind="_config.Username" placeholder="username" />
             </div>
             <div class="form-field">
-                <label class="form-label">Secret</label>
+                <label class="form-label">@L["TrunkEdit_Secret"]</label>
                 <input class="input" type="password" @bind="_config.Secret" placeholder="password" />
             </div>
             @if (_config.Technology == TrunkTechnology.PjSip)
             {
                 <div class="form-field">
-                    <label class="form-label">Auth Type</label>
+                    <label class="form-label">@L["TrunkEdit_AuthType"]</label>
                     <select @bind="_config.AuthType">
                         <option value="userpass">User/Pass</option>
                         <option value="md5">MD5</option>
@@ -103,10 +104,10 @@ else
                 </div>
             }
             <div class="form-field">
-                <label class="form-label">Registration</label>
+                <label class="form-label">@L["TrunkEdit_Registration"]</label>
                 <label class="codec-check">
                     <input type="checkbox" @bind="_config.RegistrationEnabled" />
-                    Enable outbound registration
+                    @L["TrunkEdit_EnableReg"]
                 </label>
             </div>
         </div>
@@ -114,9 +115,9 @@ else
 
     <!-- Media / Codecs -->
     <div class="form-section">
-        <h3>Media &amp; Codecs</h3>
+        <h3>@L["ExtEdit_Codecs"]</h3>
         <div class="form-field" style="margin-bottom: 0.75rem;">
-            <label class="form-label">Codecs</label>
+            <label class="form-label">@L["ExtEdit_Codecs"]</label>
             <div class="codec-grid">
                 @foreach (var codec in _availableCodecs)
                 {
@@ -132,7 +133,7 @@ else
         {
             <div class="form-grid">
                 <div class="form-field">
-                    <label class="form-label">DTMF Mode</label>
+                    <label class="form-label">@L["ExtEdit_DtmfMode"]</label>
                     <select @bind="_config.DtmfMode">
                         <option value="rfc4733">RFC 4733</option>
                         <option value="rfc2833">RFC 2833</option>
@@ -149,32 +150,32 @@ else
     @if (_config.Technology != TrunkTechnology.Iax2)
     {
         <div class="form-section">
-            <h3>Advanced</h3>
+            <h3>@L["TrunkEdit_Advanced"]</h3>
             <div class="form-grid">
                 @if (_config.Technology == TrunkTechnology.PjSip)
                 {
                     <div class="form-field">
-                        <label class="form-label">Qualify Frequency (seconds)</label>
+                        <label class="form-label">@L["TrunkEdit_QualifyFreq"]</label>
                         <input class="input" type="number" @bind="_config.QualifyFrequency" />
                     </div>
                 }
                 <div class="form-field">
-                    <label class="form-label">NAT Options</label>
+                    <label class="form-label">@L["ExtEdit_NatOptions"]</label>
                     <label class="codec-check">
                         <input type="checkbox" @bind="_config.ForceRport" />
-                        Force rport
+                        @L["ExtEdit_ForceRport"]
                     </label>
                     <label class="codec-check">
                         <input type="checkbox" @bind="_config.Comedia" />
-                        Comedia (rewrite contact)
+                        @L["TrunkEdit_Comedia"]
                     </label>
                 </div>
                 <div class="form-field">
-                    <label class="form-label">Caller ID Number</label>
+                    <label class="form-label">@L["TrunkEdit_CallerIdNum"]</label>
                     <input class="input" @bind="_config.CallerIdNum" placeholder="5551234567" />
                 </div>
                 <div class="form-field">
-                    <label class="form-label">Caller ID Name</label>
+                    <label class="form-label">@L["TrunkEdit_CallerIdName"]</label>
                     <input class="input" @bind="_config.CallerIdName" placeholder="My Company" />
                 </div>
             </div>
@@ -183,15 +184,15 @@ else
 
     <!-- Notes -->
     <div class="form-section">
-        <h3>Notes</h3>
+        <h3>@L["TrunkEdit_Notes"]</h3>
         <div class="form-field">
             <textarea class="input" @bind="_config.Notes" rows="3" placeholder="Optional notes about this trunk..." style="width:100%;resize:vertical;"></textarea>
         </div>
     </div>
 
     <div class="form-actions">
-        <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? "Saving..." : "Save")</button>
-        <button class="btn" @onclick="NavigateBack">Cancel</button>
+        <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? L["Btn_Saving"] : L["Btn_Save"])</button>
+        <button class="btn" @onclick="NavigateBack">@L["Btn_Cancel"]</button>
     </div>
 
     @if (_result is not null)

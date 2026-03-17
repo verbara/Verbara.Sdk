@@ -5,50 +5,51 @@
 @inject TrunkService TrunkSvc
 @inject IConfigProviderResolver ConfigResolver
 @inject ConfigOperationState ConfigOp
+@inject IStringLocalizer<SharedStrings> L
 @inject NavigationManager Nav
 @implements IDisposable
 
-<PageTitle>Trunks — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Trunk_Title"]</PageTitle>
 
-<h2>Trunks</h2>
+<h2>@L["Trunk_Heading"]</h2>
 @{
     var activeServer = ServerSvc.SelectedServerId;
     if (activeServer is not null)
     {
         var mode = ConfigResolver.GetConfigMode(activeServer);
         var modeBadge = mode == ConfigMode.Realtime ? "badge-realtime" : "badge-file";
-        <p class="text-muted" style="margin-top: 0.25rem;">Config backend: <span class="badge @modeBadge">@mode</span></p>
+        <p class="text-muted" style="margin-top: 0.25rem;">@L["Ext_ConfigBackend"] <span class="badge @modeBadge">@mode</span></p>
     }
 }
 
 <div class="kpi-grid kpi-grid-sm">
     <div class="kpi-card kpi-green">
         <div class="kpi-value">@_trunks.Count(t => t.Status == TrunkStatus.Registered)</div>
-        <div class="kpi-label">Registered</div>
+        <div class="kpi-label">@L["Ext_Registered"]</div>
     </div>
     <div class="kpi-card kpi-red">
         <div class="kpi-value">@_trunks.Count(t => t.Status is TrunkStatus.Unreachable or TrunkStatus.Rejected)</div>
-        <div class="kpi-label">Unreachable</div>
+        <div class="kpi-label">@L["Lbl_Unreachable"]</div>
     </div>
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@_trunks.Sum(t => t.ActiveCalls)</div>
-        <div class="kpi-label">Total Calls</div>
+        <div class="kpi-label">@L["Trunk_TotalCalls"]</div>
     </div>
     <div class="kpi-card kpi-gray">
         <div class="kpi-value">@_trunks.Count</div>
-        <div class="kpi-label">Total Trunks</div>
+        <div class="kpi-label">@L["Trunk_TotalTrunks"]</div>
     </div>
 </div>
 
 <div class="chip-bar">
-    <button class="chip @(_statusFilter is null ? "chip-active" : "")" @onclick="() => _statusFilter = null">All</button>
-    <button class="chip @(_statusFilter == TrunkStatus.Registered ? "chip-active" : "")" @onclick="() => _statusFilter = TrunkStatus.Registered">Registered</button>
-    <button class="chip @(_statusFilter == TrunkStatus.Unreachable ? "chip-active" : "")" @onclick="() => _statusFilter = TrunkStatus.Unreachable">Unreachable</button>
-    <button class="chip @(_statusFilter == TrunkStatus.Unknown ? "chip-active" : "")" @onclick="() => _statusFilter = TrunkStatus.Unknown">Unknown</button>
+    <button class="chip @(_statusFilter is null ? "chip-active" : "")" @onclick="() => _statusFilter = null">@L["Lbl_All"]</button>
+    <button class="chip @(_statusFilter == TrunkStatus.Registered ? "chip-active" : "")" @onclick="() => _statusFilter = TrunkStatus.Registered">@L["Ext_Registered"]</button>
+    <button class="chip @(_statusFilter == TrunkStatus.Unreachable ? "chip-active" : "")" @onclick="() => _statusFilter = TrunkStatus.Unreachable">@L["Lbl_Unreachable"]</button>
+    <button class="chip @(_statusFilter == TrunkStatus.Unknown ? "chip-active" : "")" @onclick="() => _statusFilter = TrunkStatus.Unknown">@L["Trunk_Unknown"]</button>
 </div>
 
 <div style="margin-bottom: 1rem;">
-    <button class="btn btn-blue" @onclick="NavigateNew">New Trunk</button>
+    <button class="btn btn-blue" @onclick="NavigateNew">@L["Trunk_NewTrunk"]</button>
 </div>
 
 <div class="card-grid">
@@ -64,20 +65,20 @@
                 <span class="badge badge-muted">@trunk.Status</span>
             </div>
             <div class="trunk-card-body">
-                <div>Host: @trunk.Host:@trunk.Port</div>
+                <div>@L["Trunk_Host"] @trunk.Host:@trunk.Port</div>
                 @if (!string.IsNullOrEmpty(trunk.Codecs))
                 {
-                    <div>Codecs: @trunk.Codecs</div>
+                    <div>@L["Trunk_Codecs"] @trunk.Codecs</div>
                 }
                 @if (trunk.MaxChannels > 0)
                 {
-                    <div>Calls: @trunk.ActiveCalls / @trunk.MaxChannels</div>
+                    <div>@L["Trunk_CallCount"] @trunk.ActiveCalls / @trunk.MaxChannels</div>
                 }
             </div>
             <div class="trunk-card-actions">
-                <button class="btn btn-sm btn-blue" @onclick="() => NavigateDetail(trunk)">Detail</button>
-                <button class="btn btn-sm btn-yellow" @onclick="() => NavigateEdit(trunk)">Edit</button>
-                <button class="btn btn-sm btn-red" @onclick="() => ConfirmDelete(trunk)">Delete</button>
+                <button class="btn btn-sm btn-blue" @onclick="() => NavigateDetail(trunk)">@L["Ext_Detail"]</button>
+                <button class="btn btn-sm btn-yellow" @onclick="() => NavigateEdit(trunk)">@L["Btn_Edit"]</button>
+                <button class="btn btn-sm btn-red" @onclick="() => ConfirmDelete(trunk)">@L["Btn_Delete"]</button>
             </div>
         </div>
     }
@@ -87,11 +88,11 @@
 {
     <div class="confirm-overlay" @onclick="CancelDelete">
         <div class="confirm-dialog" @onclick:stopPropagation="true">
-            <h4>Delete Trunk</h4>
-            <p>Are you sure you want to delete trunk <strong>@_deletingTrunk?.Name</strong>? This action cannot be undone.</p>
+            <h4>@L["Trunk_DeleteTitle"]</h4>
+            <p>@L["Trunk_DeleteConfirm", _deletingTrunk?.Name ?? ""] @L["Ext_CannotUndo"]</p>
             <div class="confirm-dialog-actions">
-                <button class="btn btn-sm" @onclick="CancelDelete">Cancel</button>
-                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">Delete</button>
+                <button class="btn btn-sm" @onclick="CancelDelete">@L["Btn_Cancel"]</button>
+                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">@L["Btn_Delete"]</button>
             </div>
         </div>
     </div>
