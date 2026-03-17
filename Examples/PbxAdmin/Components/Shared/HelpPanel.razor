@@ -1,0 +1,23 @@
+@inject IStringLocalizer<SharedStrings> L
+
+<h3 class="help-panel-trigger" @onclick="Toggle">
+    <span>@ChildContent</span>
+    <span class="help-panel-arrow">@(_expanded ? "▾" : "▸")</span>
+</h3>
+<div class="help-panel-content @(_expanded ? "expanded" : "")">
+    <div class="help-panel-inner">
+        @L[$"HelpPanel_{SectionKey}"]
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string SectionKey { get; set; } = "";
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private bool _expanded;
+
+    private void Toggle() => _expanded = !_expanded;
+}
