@@ -1,0 +1,81 @@
+@inject IStringLocalizer<SharedStrings> L
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="glossary-backdrop @(IsOpen ? "open" : "")" @onclick="Close"></div>
+<div id="glossary-sidebar" class="glossary-sidebar @(IsOpen ? "open" : "")" @onkeydown="OnKeyDown">
+    <div class="glossary-header">
+        <span class="glossary-title">@L["Glossary_Title"]</span>
+        <button class="glossary-close" @onclick="Close">✕</button>
+    </div>
+    <div class="glossary-search">
+        <input class="input" type="text" placeholder="@L["Glossary_SearchPlaceholder"]"
+               @bind="_search" @bind:event="oninput" />
+    </div>
+    <div class="glossary-entries">
+        @foreach (var term in FilteredTerms)
+        {
+            <div class="glossary-entry">
+                <div class="glossary-entry-header">
+                    <span class="glossary-term">@L[$"Glossary_{term}"]</span>
+                    <span class="glossary-category">@L[$"Glossary_{term}_Category"]</span>
+                </div>
+                <p class="glossary-definition">@L[$"Glossary_{term}_Def"]</p>
+                <p class="glossary-tip">@L[$"Glossary_{term}_Tip"]</p>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string _search = "";
+    private DotNetObjectReference<GlossarySidebar>? _dotNetRef;
+    private bool _jsRegistered;
+
+    private static readonly string[] AllTerms =
+    [
+        "Extension", "Context", "Codec", "DTMF", "Trunk", "DID", "Route",
+        "Queue", "Agent", "IVR", "SIP", "PJSIP", "Voicemail", "MOH", "Park"
+    ];
+
+    private IEnumerable<string> FilteredTerms =>
+        string.IsNullOrWhiteSpace(_search)
+            ? AllTerms
+            : AllTerms.Where(t =>
+                L[$"Glossary_{t}"].Value.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                L[$"Glossary_{t}_Def"].Value.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsOpen && !_jsRegistered)
+        {
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("HelpInterop.registerClickOutside", _dotNetRef, "glossary-sidebar");
+            _jsRegistered = true;
+        }
+        else if (!IsOpen && _jsRegistered)
+        {
+            await JS.InvokeVoidAsync("HelpInterop.dispose");
+            _jsRegistered = false;
+        }
+    }
+
+    [JSInvokable]
+    public async Task CloseGlossary() => await Close();
+
+    private async Task Close()
+    {
+        _search = "";
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") await Close();
+    }
+
+    public void Dispose() => _dotNetRef?.Dispose();
+}
