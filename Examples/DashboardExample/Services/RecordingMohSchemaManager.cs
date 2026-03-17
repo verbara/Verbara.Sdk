@@ -81,6 +81,23 @@ public sealed partial class RecordingMohSchemaManager : IRecordingMohSchemaManag
         );
 
         CREATE INDEX IF NOT EXISTS idx_moh_classes_server ON moh_classes(server_id);
+
+        CREATE TABLE IF NOT EXISTS conference_configs (
+            id              SERIAL PRIMARY KEY,
+            server_id       TEXT NOT NULL,
+            name            TEXT NOT NULL,
+            number          TEXT NOT NULL DEFAULT '',
+            max_members     INT NOT NULL DEFAULT 0,
+            pin             TEXT,
+            admin_pin       TEXT,
+            record          BOOLEAN NOT NULL DEFAULT false,
+            music_on_hold   TEXT NOT NULL DEFAULT 'default',
+            created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+            UNIQUE (server_id, name)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_conference_configs_server ON conference_configs(server_id);
         """;
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Recording/MOH schema created successfully")]
