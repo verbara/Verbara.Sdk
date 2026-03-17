@@ -3,10 +3,11 @@
 @using PbxAdmin.Services
 @inject FeatureCodeService FeatureSvc
 @inject SelectedServerService ServerSvc
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>Feature Codes — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["FC_Title"]</PageTitle>
 
-<h2>Feature Codes</h2>
+<h2>@L["FC_Heading"]</h2>
 
 @if (_error is not null)
 {
@@ -14,24 +15,24 @@
 }
 
 <div class="page-header-row">
-    <h3>Star Codes</h3>
-    <button class="btn btn-primary" @onclick="ShowNewCode">+ New Code</button>
+    <h3>@L["FC_StarCodes"]</h3>
+    <button class="btn btn-primary" @onclick="ShowNewCode">@L["FC_NewCode"]</button>
 </div>
 
 @if (_codes.Count == 0)
 {
-    <p class="text-muted">No feature codes configured.</p>
+    <p class="text-muted">@L["FC_NoCodes"]</p>
 }
 else
 {
     <table class="data-table">
         <thead>
             <tr>
-                <th>Code</th>
-                <th>Name</th>
-                <th>Description</th>
-                <th>Enabled</th>
-                <th>Actions</th>
+                <th>@L["Col_Code"]</th>
+                <th>@L["Lbl_Name"]</th>
+                <th>@L["Lbl_Description"]</th>
+                <th>@L["Lbl_Enabled"]</th>
+                <th>@L["Lbl_Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -44,12 +45,12 @@ else
                     <td>
                         <button class="btn btn-sm @(fc.Enabled ? "btn-green" : "btn-muted")"
                                 @onclick="() => ToggleCode(fc)">
-                            @(fc.Enabled ? "On" : "Off")
+                            @(fc.Enabled ? L["Lbl_On"] : L["Lbl_Off"])
                         </button>
                     </td>
                     <td>
-                        <button class="btn btn-sm btn-blue" @onclick="() => EditCode(fc)">Edit</button>
-                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteCode(fc.Id)">Delete</button>
+                        <button class="btn btn-sm btn-blue" @onclick="() => EditCode(fc)">@L["Btn_Edit"]</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteCode(fc.Id)">@L["Btn_Delete"]</button>
                     </td>
                 </tr>
             }
@@ -62,22 +63,22 @@ else
 @if (_editingCode is not null)
 {
     <div class="form-section mt-2">
-        <h4>@(_editingCode.Id == 0 ? "New Feature Code" : $"Edit: {_editingCode.Code}")</h4>
+        <h4>@(_editingCode.Id == 0 ? L["FC_NewFeatureCode"] : $"{L["FC_EditCode"]}: {_editingCode.Code}")</h4>
 
         <div class="form-group">
-            <label>Code</label>
+            <label>@L["Col_Code"]</label>
             <input type="text" @bind="_editingCode.Code" class="form-control"
                    placeholder="e.g. *72, #21" />
         </div>
 
         <div class="form-group">
-            <label>Name</label>
+            <label>@L["Lbl_Name"]</label>
             <input type="text" @bind="_editingCode.Name" class="form-control"
                    placeholder="Call Forward Activate" />
         </div>
 
         <div class="form-group">
-            <label>Description</label>
+            <label>@L["Lbl_Description"]</label>
             <input type="text" @bind="_editingCode.Description" class="form-control"
                    placeholder="Optional description" />
         </div>
@@ -85,14 +86,14 @@ else
         <div class="form-group">
             <label>
                 <input type="checkbox" @bind="_editingCode.Enabled" />
-                Enabled
+                @L["Lbl_Enabled"]
             </label>
         </div>
 
         <div class="form-actions">
-            <button class="btn btn-muted" @onclick="CancelEdit">Cancel</button>
+            <button class="btn btn-muted" @onclick="CancelEdit">@L["Btn_Cancel"]</button>
             <button class="btn btn-primary" @onclick="SaveCode" disabled="@_saving">
-                @(_saving ? "Saving..." : "Save")
+                @(_saving ? L["Btn_Saving"] : L["Btn_Save"])
             </button>
         </div>
     </div>

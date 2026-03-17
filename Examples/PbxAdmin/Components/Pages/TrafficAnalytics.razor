@@ -2,63 +2,64 @@
 @using PbxAdmin.Services
 @inject CallFlowTracker CallTracker
 @inject SelectedServerService ServerSvc
+@inject IStringLocalizer<SharedStrings> L
 @implements IDisposable
 
-<PageTitle>Traffic Analytics — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Traf_Title"]</PageTitle>
 
-<h2>Traffic Analytics</h2>
+<h2>@L["Traf_Heading"]</h2>
 
 <div class="kpi-grid">
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@_originated</div>
-        <div class="kpi-label">Originated</div>
+        <div class="kpi-label">@L["Traf_Originated"]</div>
     </div>
     <div class="kpi-card kpi-green">
         <div class="kpi-value">@_answered (@_answeredPct%)</div>
-        <div class="kpi-label">Answered</div>
+        <div class="kpi-label">@L["Traf_Answered"]</div>
     </div>
     <div class="kpi-card kpi-red">
         <div class="kpi-value">@_unanswered (@_unansweredPct%)</div>
-        <div class="kpi-label">Unanswered</div>
+        <div class="kpi-label">@L["Traf_Unanswered"]</div>
     </div>
     <div class="kpi-card kpi-purple">
         <div class="kpi-value">@_bridged (@_bridgedPct%)</div>
-        <div class="kpi-label">Bridged to Agent</div>
+        <div class="kpi-label">@L["Traf_BridgedToAgent"]</div>
     </div>
 </div>
 
 <div class="kpi-grid kpi-grid-sm">
     <div class="kpi-card kpi-orange">
         <div class="kpi-value">@_activeNow</div>
-        <div class="kpi-label">Active Now</div>
+        <div class="kpi-label">@L["Traf_ActiveNow"]</div>
     </div>
     <div class="kpi-card kpi-gray">
         <div class="kpi-value">@_completed</div>
-        <div class="kpi-label">Completed</div>
+        <div class="kpi-label">@L["Calls_Completed"]</div>
     </div>
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@_avgDuration</div>
-        <div class="kpi-label">Avg Duration</div>
+        <div class="kpi-label">@L["Traf_AvgDuration"]</div>
     </div>
     <div class="kpi-card kpi-yellow">
         <div class="kpi-value">@_avgWait</div>
-        <div class="kpi-label">Avg Wait</div>
+        <div class="kpi-label">@L["Home_AvgWait"]</div>
     </div>
 </div>
 
 <label style="margin: 1rem 0; display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer;">
     <input type="checkbox" @bind="_showAdvanced" />
-    Show Advanced Breakdown
+    @L["Traf_ShowAdvanced"]
 </label>
 
 @if (_showAdvanced)
 {
-    <h3>State Breakdown</h3>
+    <h3>@L["Traf_StateBreakdown"]</h3>
     <table class="data-table">
         <thead>
             <tr>
-                <th>State</th>
-                <th>Count</th>
+                <th>@L["Col_State"]</th>
+                <th>@L["Col_Count"]</th>
                 <th>%</th>
             </tr>
         </thead>
@@ -74,14 +75,14 @@
         </tbody>
     </table>
 
-    <h3>Top Queues</h3>
+    <h3>@L["Traf_TopQueues"]</h3>
     <table class="data-table">
         <thead>
             <tr>
-                <th>Queue</th>
-                <th>Calls</th>
-                <th>Answered</th>
-                <th>Answer Rate</th>
+                <th>@L["Col_Queue"]</th>
+                <th>@L["Col_Count"]</th>
+                <th>@L["Traf_Answered"]</th>
+                <th>@L["Traf_AnswerRate"]</th>
             </tr>
         </thead>
         <tbody>
@@ -97,13 +98,13 @@
         </tbody>
     </table>
 
-    <h3>Top Agents</h3>
+    <h3>@L["Traf_TopAgents"]</h3>
     <table class="data-table">
         <thead>
             <tr>
-                <th>Agent</th>
-                <th>Calls Handled</th>
-                <th>Avg Duration</th>
+                <th>@L["Calls_Agent"]</th>
+                <th>@L["Traf_CallsHandled"]</th>
+                <th>@L["Col_AvgTalk"]</th>
             </tr>
         </thead>
         <tbody>

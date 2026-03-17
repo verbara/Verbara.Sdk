@@ -7,119 +7,120 @@
 @using Asterisk.Sdk.Live.Diagnostics
 @using PbxAdmin.Services
 @inject SelectedServerService ServerSvc
+@inject IStringLocalizer<SharedStrings> L
 @implements IDisposable
 
-<PageTitle>Metrics — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Met_Title"]</PageTitle>
 
-<h2>SDK Metrics</h2>
+<h2>@L["Met_Heading"]</h2>
 
-<h3>System Info</h3>
+<h3>@L["Met_SystemInfo"]</h3>
 <div class="kpi-grid">
     <div class="kpi-card kpi-purple">
         <div class="kpi-value">@(_asteriskVersion ?? "—")</div>
-        <div class="kpi-label">Asterisk Version</div>
+        <div class="kpi-label">@L["Met_AsteriskVer"]</div>
     </div>
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@(_amiVersion ?? "—")</div>
-        <div class="kpi-label">AMI Version</div>
+        <div class="kpi-label">@L["Met_AmiVer"]</div>
     </div>
     <div class="kpi-card kpi-gray">
         <div class="kpi-value">@(_systemName ?? "—")</div>
-        <div class="kpi-label">System Name</div>
+        <div class="kpi-label">@L["Met_SystemName"]</div>
     </div>
     <div class="kpi-card kpi-green">
         <div class="kpi-value">@(_currentCalls?.ToString() ?? "—")</div>
-        <div class="kpi-label">Current Calls</div>
+        <div class="kpi-label">@L["Met_CurrentCalls"]</div>
     </div>
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@(_maxCalls?.ToString() ?? "—")</div>
-        <div class="kpi-label">Max Calls</div>
+        <div class="kpi-label">@L["Met_MaxCalls"]</div>
     </div>
     <div class="kpi-card kpi-yellow">
         <div class="kpi-value">@(_uptime ?? "—")</div>
-        <div class="kpi-label">Uptime</div>
+        <div class="kpi-label">@L["Met_Uptime"]</div>
     </div>
 </div>
 <div class="kpi-grid kpi-grid-sm">
     <div class="kpi-card kpi-gray">
         <div class="kpi-value">@(_runUser ?? "—")</div>
-        <div class="kpi-label">Run User</div>
+        <div class="kpi-label">@L["Met_RunUser"]</div>
     </div>
     <div class="kpi-card kpi-gray">
         <div class="kpi-value">@(_maxLoadAvg?.ToString("F1") ?? "—")</div>
-        <div class="kpi-label">Max Load Avg</div>
+        <div class="kpi-label">@L["Met_MaxLoadAvg"]</div>
     </div>
     <div class="kpi-card kpi-gray">
         <div class="kpi-value">@(_maxFilehandles?.ToString() ?? "—")</div>
-        <div class="kpi-label">Max Filehandles</div>
+        <div class="kpi-label">@L["Met_MaxFilehandles"]</div>
     </div>
 </div>
 
-<h3>AMI Connection Health</h3>
+<h3>@L["Met_AmiHealth"]</h3>
 <div class="kpi-grid">
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@GetCounter("ami.events.received")</div>
-        <div class="kpi-label">Events Received</div>
+        <div class="kpi-label">@L["Met_EventsReceived"]</div>
     </div>
     <div class="kpi-card @(GetCounter("ami.events.dropped") > 0 ? "kpi-red" : "kpi-gray")">
         <div class="kpi-value">@GetCounter("ami.events.dropped")</div>
-        <div class="kpi-label">Events Dropped</div>
+        <div class="kpi-label">@L["Met_EventsDropped"]</div>
     </div>
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@GetCounter("ami.events.dispatched")</div>
-        <div class="kpi-label">Dispatched</div>
+        <div class="kpi-label">@L["Met_Dispatched"]</div>
     </div>
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@GetCounter("ami.actions.sent")</div>
-        <div class="kpi-label">Actions Sent</div>
+        <div class="kpi-label">@L["Met_ActionsSent"]</div>
     </div>
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@GetCounter("ami.responses.received")</div>
-        <div class="kpi-label">Responses</div>
+        <div class="kpi-label">@L["Met_Responses"]</div>
     </div>
     <div class="kpi-card @(GetCounter("ami.reconnections") > 0 ? "kpi-yellow" : "kpi-gray")">
         <div class="kpi-value">@GetCounter("ami.reconnections")</div>
-        <div class="kpi-label">Reconnections</div>
+        <div class="kpi-label">@L["Met_Reconnections"]</div>
     </div>
 </div>
 
-<h3>AMI Histograms</h3>
+<h3>@L["Met_Histograms"]</h3>
 <div class="kpi-grid kpi-grid-sm">
     <div class="kpi-card kpi-purple">
         <div class="kpi-value">@GetHistogram("ami.action.roundtrip")</div>
-        <div class="kpi-label">Avg Roundtrip (ms)</div>
+        <div class="kpi-label">@L["Met_AvgRoundtrip"]</div>
     </div>
     <div class="kpi-card kpi-purple">
         <div class="kpi-value">@GetHistogram("ami.event.dispatch")</div>
-        <div class="kpi-label">Avg Dispatch (ms)</div>
+        <div class="kpi-label">@L["Met_AvgDispatch"]</div>
     </div>
 </div>
 
-<h3>Live State Gauges</h3>
+<h3>@L["Met_LiveGauges"]</h3>
 <div class="kpi-grid">
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@GetGauge("live.channels.active")</div>
-        <div class="kpi-label">Active Channels</div>
+        <div class="kpi-label">@L["Met_ActiveChannels"]</div>
     </div>
     <div class="kpi-card kpi-purple">
         <div class="kpi-value">@GetGauge("live.queues.count")</div>
-        <div class="kpi-label">Queues</div>
+        <div class="kpi-label">@L["Nav_Queues"]</div>
     </div>
     <div class="kpi-card kpi-gray">
         <div class="kpi-value">@GetGauge("live.agents.total")</div>
-        <div class="kpi-label">Total Agents</div>
+        <div class="kpi-label">@L["Met_TotalAgents"]</div>
     </div>
     <div class="kpi-card kpi-green">
         <div class="kpi-value">@GetGauge("live.agents.available")</div>
-        <div class="kpi-label">Available</div>
+        <div class="kpi-label">@L["Home_Available"]</div>
     </div>
     <div class="kpi-card kpi-red">
         <div class="kpi-value">@GetGauge("live.agents.on_call")</div>
-        <div class="kpi-label">On Call</div>
+        <div class="kpi-label">@L["Home_OnCall"]</div>
     </div>
     <div class="kpi-card kpi-yellow">
         <div class="kpi-value">@GetGauge("live.agents.paused")</div>
-        <div class="kpi-label">Paused</div>
+        <div class="kpi-label">@L["Home_Paused"]</div>
     </div>
 </div>
 

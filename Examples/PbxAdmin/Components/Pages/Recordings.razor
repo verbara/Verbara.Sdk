@@ -5,18 +5,19 @@
 @inject SelectedServerService ServerSvc
 @inject NavigationManager Nav
 @inject IConfiguration Config
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>Recordings — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Rec_Title"]</PageTitle>
 
 <div class="page-header-row">
-    <h2>Recordings</h2>
-    <button class="btn btn-primary" @onclick="NewPolicy">+ New Policy</button>
+    <h2>@L["Rec_Heading"]</h2>
+    <button class="btn btn-primary" @onclick="NewPolicy">@L["Rec_NewPolicy"]</button>
 </div>
 
 <div class="tab-bar">
-    <button class="tab @(_activeTab == "policies" ? "active" : "")" @onclick='() => _activeTab = "policies"'>Policies</button>
-    <button class="tab @(_activeTab == "files" ? "active" : "")" @onclick='() => _activeTab = "files"'>Files</button>
-    <button class="tab @(_activeTab == "active" ? "active" : "")" @onclick='() => _activeTab = "active"'>Active</button>
+    <button class="tab @(_activeTab == "policies" ? "active" : "")" @onclick='() => _activeTab = "policies"'>@L["Rec_Policies"]</button>
+    <button class="tab @(_activeTab == "files" ? "active" : "")" @onclick='() => _activeTab = "files"'>@L["Rec_Files"]</button>
+    <button class="tab @(_activeTab == "active" ? "active" : "")" @onclick='() => _activeTab = "active"'>@L["Rec_Active"]</button>
 </div>
 
 @if (_loading)
@@ -27,19 +28,19 @@ else if (_activeTab == "policies")
 {
     if (_policies.Count == 0)
     {
-        <p class="text-muted">No recording policies. Click "+ New Policy" to create one.</p>
+        <p class="text-muted">@L["Rec_NoPolicies"]</p>
     }
     else
     {
         <table class="table">
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Mode</th>
-                    <th>Format</th>
-                    <th>Retention</th>
-                    <th>Targets</th>
-                    <th>Actions</th>
+                    <th>@L["Lbl_Name"]</th>
+                    <th>@L["Col_Mode"]</th>
+                    <th>@L["Col_Format"]</th>
+                    <th>@L["Col_Retention"]</th>
+                    <th>@L["Col_Targets"]</th>
+                    <th>@L["Lbl_Actions"]</th>
                 </tr>
             </thead>
             <tbody>
@@ -52,8 +53,8 @@ else if (_activeTab == "policies")
                         <td>@(p.RetentionDays == 0 ? "∞" : $"{p.RetentionDays}d")</td>
                         <td><span class="badge">@p.Targets.Count</span></td>
                         <td>
-                            <button class="btn btn-sm btn-muted" @onclick="() => EditPolicy(p.Id)">Edit</button>
-                            <button class="btn btn-sm btn-danger" @onclick="() => DeletePolicy(p)">Delete</button>
+                            <button class="btn btn-sm btn-muted" @onclick="() => EditPolicy(p.Id)">@L["Btn_Edit"]</button>
+                            <button class="btn btn-sm btn-danger" @onclick="() => DeletePolicy(p)">@L["Btn_Delete"]</button>
                         </td>
                     </tr>
                 }
@@ -65,7 +66,7 @@ else if (_activeTab == "files")
 {
     if (!_fileAccessAvailable)
     {
-        <div class="alert alert-warning">Recording file access unavailable. Check RecordingsPath config for this server.</div>
+        <div class="alert alert-warning">@L["Rec_FileAccessUnavail"]</div>
     }
     else
     {
@@ -76,7 +77,7 @@ else if (_activeTab == "files")
 
         <table class="table">
             <thead>
-                <tr><th>Filename</th><th>Size</th><th>Date</th><th>Duration</th><th>Actions</th></tr>
+                <tr><th>@L["Col_Filename"]</th><th>@L["Col_Size"]</th><th>@L["Col_Date"]</th><th>@L["Col_Duration"]</th><th>@L["Lbl_Actions"]</th></tr>
             </thead>
             <tbody>
                 @foreach (var f in _files)
@@ -109,13 +110,13 @@ else if (_activeTab == "active")
     var activeList = RecSvc.GetActiveRecordings();
     if (activeList.Count == 0)
     {
-        <p class="text-muted">No active recordings.</p>
+        <p class="text-muted">@L["Rec_NoActive"]</p>
     }
     else
     {
         <table class="table">
             <thead>
-                <tr><th>Channel</th><th>File</th><th>Started</th><th>Actions</th></tr>
+                <tr><th>@L["Col_Channel"]</th><th>@L["Col_File"]</th><th>@L["Col_Started"]</th><th>@L["Lbl_Actions"]</th></tr>
             </thead>
             <tbody>
                 @foreach (var r in activeList)
@@ -124,7 +125,7 @@ else if (_activeTab == "active")
                         <td>@r.Channel</td>
                         <td>@r.FileName</td>
                         <td>@r.StartedAt.ToString("HH:mm:ss")</td>
-                        <td><button class="btn btn-sm btn-danger" @onclick="() => StopRecording(r.Channel)">Stop</button></td>
+                        <td><button class="btn btn-sm btn-danger" @onclick="() => StopRecording(r.Channel)">@L["Rec_Stop"]</button></td>
                     </tr>
                 }
             </tbody>

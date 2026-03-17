@@ -6,12 +6,13 @@
 @inject MohService MohSvc
 @inject SelectedServerService ServerSvc
 @inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>@(_isNew ? "New Conference Profile" : $"Edit {_config.Name}") — Asterisk PBX Admin</PageTitle>
+<PageTitle>@(_isNew ? L["ConfEdit_NewTitle"] : $"{L["ConfEdit_EditTitle"]} {_config.Name}")</PageTitle>
 
 <div class="page-header-row">
-    <button class="btn btn-sm btn-muted" @onclick="GoBack">&#8592; Back</button>
-    <h2>@(_isNew ? "New Conference Profile" : $"Edit: {_config.Name}")</h2>
+    <button class="btn btn-sm btn-muted" @onclick="GoBack">&#8592; @L["Btn_Back"]</button>
+    <h2>@(_isNew ? L["ConfEdit_New"] : $"{L["ConfEdit_Edit"]}: {_config.Name}")</h2>
 </div>
 
 @if (_error is not null)
@@ -20,56 +21,56 @@
 }
 
 <div class="form-section">
-    <h3>Bridge Settings</h3>
+    <h3>@L["ConfEdit_BridgeSettings"]</h3>
 
     <div class="form-group">
-        <label>Name</label>
+        <label>@L["Lbl_Name"]</label>
         <input type="text" @bind="_config.Name" class="form-control"
                placeholder="alphanumeric, hyphens, underscores" />
     </div>
 
     <div class="form-group">
-        <label>Number (Extension)</label>
+        <label>@L["ConfEdit_NumberExt"]</label>
         <input type="text" @bind="_config.Number" class="form-control"
                placeholder="e.g. 6000" />
-        <small class="text-muted">Dial-in extension for this conference room</small>
+        <small class="text-muted">@L["ConfEdit_NumberHint"]</small>
     </div>
 
     <div class="form-group">
-        <label>Max Members</label>
+        <label>@L["ConfEdit_MaxMembers"]</label>
         <input type="number" @bind="_config.MaxMembers" class="form-control" min="0" />
-        <small class="text-muted">0 = unlimited</small>
+        <small class="text-muted">@L["ConfEdit_MaxHint"]</small>
     </div>
 </div>
 
 <div class="form-section">
-    <h3>Security</h3>
+    <h3>@L["ConfEdit_Security"]</h3>
 
     <div class="form-group">
-        <label>User PIN</label>
+        <label>@L["ConfEdit_UserPin"]</label>
         <input type="text" @bind="_config.Pin" class="form-control"
                placeholder="Digits only (leave empty for no PIN)" />
     </div>
 
     <div class="form-group">
-        <label>Admin PIN</label>
+        <label>@L["ConfEdit_AdminPin"]</label>
         <input type="text" @bind="_config.AdminPin" class="form-control"
                placeholder="Digits only (leave empty for no admin PIN)" />
     </div>
 </div>
 
 <div class="form-section">
-    <h3>Options</h3>
+    <h3>@L["ConfEdit_Options"]</h3>
 
     <div class="form-group">
         <label>
             <input type="checkbox" @bind="_config.Record" />
-            Auto-record conference
+            @L["ConfEdit_AutoRecord"]
         </label>
     </div>
 
     <div class="form-group">
-        <label>Music on Hold Class</label>
+        <label>@L["ConfEdit_MohClass"]</label>
         <select @bind="_config.MusicOnHold" class="form-control">
             <option value="default">default</option>
             @foreach (var cls in _mohClasses)
@@ -81,9 +82,9 @@
 </div>
 
 <div class="form-actions">
-    <button class="btn btn-muted" @onclick="GoBack">Cancel</button>
+    <button class="btn btn-muted" @onclick="GoBack">@L["Btn_Cancel"]</button>
     <button class="btn btn-primary" @onclick="Save" disabled="@_saving">
-        @(_saving ? "Saving..." : "Save")
+        @(_saving ? L["Btn_Saving"] : L["Btn_Save"])
     </button>
 </div>
 

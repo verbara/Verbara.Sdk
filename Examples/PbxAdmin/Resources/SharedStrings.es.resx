@@ -503,4 +503,231 @@
   <data name="QDetail_NoCallers" xml:space="preserve"><value>No hay llamantes en espera.</value></data>
   <data name="QDetail_ViewCall" xml:space="preserve"><value>Ver Llamada</value></data>
   <data name="QDetail_AddMember" xml:space="preserve"><value>Agregar Miembro</value></data>
+
+  <!-- Recordings Page -->
+  <data name="Rec_Title" xml:space="preserve"><value>Grabaciones — Asterisk PBX Admin</value></data>
+  <data name="Rec_Heading" xml:space="preserve"><value>Grabaciones</value></data>
+  <data name="Rec_NewPolicy" xml:space="preserve"><value>+ Nueva Política</value></data>
+  <data name="Rec_Policies" xml:space="preserve"><value>Políticas</value></data>
+  <data name="Rec_Files" xml:space="preserve"><value>Archivos</value></data>
+  <data name="Rec_Active" xml:space="preserve"><value>Activas</value></data>
+  <data name="Rec_NoPolicies" xml:space="preserve"><value>Sin políticas de grabación. Haga clic en "+ Nueva Política" para crear una.</value></data>
+  <data name="Rec_FileAccessUnavail" xml:space="preserve"><value>Acceso a archivos de grabación no disponible. Verifique RecordingsPath para este servidor.</value></data>
+  <data name="Rec_NoActive" xml:space="preserve"><value>Sin grabaciones activas.</value></data>
+  <data name="Rec_Stop" xml:space="preserve"><value>Detener</value></data>
+  <data name="Col_Mode" xml:space="preserve"><value>Modo</value></data>
+  <data name="Col_Format" xml:space="preserve"><value>Formato</value></data>
+  <data name="Col_Retention" xml:space="preserve"><value>Retención</value></data>
+  <data name="Col_Targets" xml:space="preserve"><value>Objetivos</value></data>
+  <data name="Col_Filename" xml:space="preserve"><value>Archivo</value></data>
+  <data name="Col_Size" xml:space="preserve"><value>Tamaño</value></data>
+  <data name="Col_Date" xml:space="preserve"><value>Fecha</value></data>
+  <data name="Col_File" xml:space="preserve"><value>Archivo</value></data>
+  <data name="Col_Started" xml:space="preserve"><value>Iniciado</value></data>
+
+  <!-- Recording Edit Page -->
+  <data name="RecEdit_NewTitle" xml:space="preserve"><value>Nueva Política de Grabación — Asterisk PBX Admin</value></data>
+  <data name="RecEdit_EditTitle" xml:space="preserve"><value>Editar Política de Grabación — Asterisk PBX Admin</value></data>
+  <data name="RecEdit_New" xml:space="preserve"><value>Nueva Política de Grabación</value></data>
+  <data name="RecEdit_Edit" xml:space="preserve"><value>Editar:</value></data>
+  <data name="RecEdit_PolicySettings" xml:space="preserve"><value>Configuración de Política</value></data>
+  <data name="RecEdit_StoragePath" xml:space="preserve"><value>Ruta de Almacenamiento</value></data>
+  <data name="RecEdit_RetentionDays" xml:space="preserve"><value>Días de Retención (0 = indefinido)</value></data>
+  <data name="RecEdit_MixMonitorOpts" xml:space="preserve"><value>Opciones MixMonitor (opcional)</value></data>
+  <data name="RecEdit_Targets" xml:space="preserve"><value>Objetivos</value></data>
+  <data name="RecEdit_AddTarget" xml:space="preserve"><value>+ Agregar Objetivo</value></data>
+  <data name="Col_Value" xml:space="preserve"><value>Valor</value></data>
+  <data name="Lbl_Trunk" xml:space="preserve"><value>Troncal</value></data>
+
+  <!-- Music on Hold Page -->
+  <data name="Moh_Title" xml:space="preserve"><value>Música en Espera — Asterisk PBX Admin</value></data>
+  <data name="Moh_Heading" xml:space="preserve"><value>Música en Espera</value></data>
+  <data name="Moh_NewClass" xml:space="preserve"><value>+ Nueva Clase</value></data>
+  <data name="Moh_NoClasses" xml:space="preserve"><value>Sin clases MOH configuradas. Haga clic en "+ Nueva Clase" para crear una.</value></data>
+
+  <!-- MOH Edit Page -->
+  <data name="MohEdit_NewTitle" xml:space="preserve"><value>Nueva Clase MOH — Asterisk PBX Admin</value></data>
+  <data name="MohEdit_EditTitle" xml:space="preserve"><value>Editar Clase MOH — Asterisk PBX Admin</value></data>
+  <data name="MohEdit_New" xml:space="preserve"><value>Nueva Clase MOH</value></data>
+  <data name="MohEdit_Edit" xml:space="preserve"><value>Editar:</value></data>
+  <data name="MohEdit_ClassSettings" xml:space="preserve"><value>Configuración de Clase</value></data>
+  <data name="MohEdit_Directory" xml:space="preserve"><value>Directorio</value></data>
+  <data name="MohEdit_Sort" xml:space="preserve"><value>Orden</value></data>
+  <data name="MohEdit_Random" xml:space="preserve"><value>Aleatorio</value></data>
+  <data name="MohEdit_Alphabetical" xml:space="preserve"><value>Alfabético</value></data>
+  <data name="MohEdit_CustomApp" xml:space="preserve"><value>Aplicación Personalizada</value></data>
+  <data name="MohEdit_Mp3Deprecated" xml:space="preserve"><value>El modo "mp3" está obsoleto desde Asterisk 14+. Considere usar "files" con el módulo format_mp3.</value></data>
+  <data name="MohEdit_AudioFiles" xml:space="preserve"><value>Archivos de Audio</value></data>
+  <data name="MohEdit_FileAccessUnavail" xml:space="preserve"><value>Acceso a archivos no disponible para este directorio MOH.</value></data>
+  <data name="MohEdit_UploadAudio" xml:space="preserve"><value>Subir Audio</value></data>
+
+  <!-- Conferences Page -->
+  <data name="Conf_Title" xml:space="preserve"><value>Conferencias — Asterisk PBX Admin</value></data>
+  <data name="Conf_Heading" xml:space="preserve"><value>Salas de Conferencia</value></data>
+  <data name="Conf_LiveRooms" xml:space="preserve"><value>Salas en Vivo</value></data>
+  <data name="Conf_Configuration" xml:space="preserve"><value>Configuración</value></data>
+  <data name="Conf_MeetMe" xml:space="preserve"><value>Salas MeetMe</value></data>
+  <data name="Conf_NoMeetMe" xml:space="preserve"><value>Sin salas MeetMe activas.</value></data>
+  <data name="Conf_ConfBridge" xml:space="preserve"><value>Salas ConfBridge</value></data>
+  <data name="Conf_LoadingCB" xml:space="preserve"><value>Cargando salas ConfBridge...</value></data>
+  <data name="Conf_NoCB" xml:space="preserve"><value>Sin salas ConfBridge activas.</value></data>
+  <data name="Conf_Participants" xml:space="preserve"><value>participantes</value></data>
+  <data name="Conf_Marked" xml:space="preserve"><value>marcados</value></data>
+  <data name="Conf_Locked" xml:space="preserve"><value>Bloqueada</value></data>
+  <data name="Conf_Unlock" xml:space="preserve"><value>Desbloquear</value></data>
+  <data name="Conf_Lock" xml:space="preserve"><value>Bloquear</value></data>
+  <data name="Conf_StopRec" xml:space="preserve"><value>Parar Grab.</value></data>
+  <data name="Conf_StartRec" xml:space="preserve"><value>Iniciar Grab.</value></data>
+  <data name="Conf_Admin" xml:space="preserve"><value>Admin</value></data>
+  <data name="Conf_Muted" xml:space="preserve"><value>Silenciado</value></data>
+  <data name="Conf_Open" xml:space="preserve"><value>Abierto</value></data>
+  <data name="Conf_Talking" xml:space="preserve"><value>Hablando</value></data>
+  <data name="Conf_Silent" xml:space="preserve"><value>Silencioso</value></data>
+  <data name="Conf_Unmute" xml:space="preserve"><value>Activar Mic</value></data>
+  <data name="Conf_Mute" xml:space="preserve"><value>Silenciar</value></data>
+  <data name="Conf_Kick" xml:space="preserve"><value>Expulsar</value></data>
+  <data name="Conf_Profiles" xml:space="preserve"><value>Perfiles ConfBridge</value></data>
+  <data name="Conf_NewProfile" xml:space="preserve"><value>+ Nuevo Perfil</value></data>
+  <data name="Conf_NoProfiles" xml:space="preserve"><value>Sin perfiles de conferencia. Cree uno para definir configuración de ConfBridge.</value></data>
+  <data name="Col_Number" xml:space="preserve"><value>Número</value></data>
+  <data name="Col_MaxMembers" xml:space="preserve"><value>Máx. Miembros</value></data>
+  <data name="Col_PIN" xml:space="preserve"><value>PIN</value></data>
+  <data name="Col_Record" xml:space="preserve"><value>Grabar</value></data>
+
+  <!-- Conference Config Edit Page -->
+  <data name="ConfEdit_NewTitle" xml:space="preserve"><value>Nuevo Perfil de Conferencia — Asterisk PBX Admin</value></data>
+  <data name="ConfEdit_EditTitle" xml:space="preserve"><value>Editar Perfil de Conferencia — Asterisk PBX Admin</value></data>
+  <data name="ConfEdit_New" xml:space="preserve"><value>Nuevo Perfil de Conferencia</value></data>
+  <data name="ConfEdit_Edit" xml:space="preserve"><value>Editar:</value></data>
+  <data name="ConfEdit_BridgeSettings" xml:space="preserve"><value>Configuración del Puente</value></data>
+  <data name="ConfEdit_NumberExt" xml:space="preserve"><value>Número (Extensión)</value></data>
+  <data name="ConfEdit_NumberHint" xml:space="preserve"><value>Extensión para acceder a esta sala de conferencia</value></data>
+  <data name="ConfEdit_MaxMembers" xml:space="preserve"><value>Máximo de Miembros</value></data>
+  <data name="ConfEdit_MaxHint" xml:space="preserve"><value>0 = ilimitado</value></data>
+  <data name="ConfEdit_Security" xml:space="preserve"><value>Seguridad</value></data>
+  <data name="ConfEdit_UserPin" xml:space="preserve"><value>PIN de Usuario</value></data>
+  <data name="ConfEdit_AdminPin" xml:space="preserve"><value>PIN de Administrador</value></data>
+  <data name="ConfEdit_Options" xml:space="preserve"><value>Opciones</value></data>
+  <data name="ConfEdit_AutoRecord" xml:space="preserve"><value>Grabar conferencia automáticamente</value></data>
+  <data name="ConfEdit_MohClass" xml:space="preserve"><value>Clase de Música en Espera</value></data>
+
+  <!-- Feature Codes Page -->
+  <data name="FC_Title" xml:space="preserve"><value>Códigos — Asterisk PBX Admin</value></data>
+  <data name="FC_Heading" xml:space="preserve"><value>Códigos de Funciones</value></data>
+  <data name="FC_StarCodes" xml:space="preserve"><value>Códigos Estrella</value></data>
+  <data name="FC_NewCode" xml:space="preserve"><value>+ Nuevo Código</value></data>
+  <data name="FC_NoCodes" xml:space="preserve"><value>Sin códigos de funciones configurados.</value></data>
+  <data name="FC_NewFeatureCode" xml:space="preserve"><value>Nuevo Código de Función</value></data>
+  <data name="FC_EditCode" xml:space="preserve"><value>Editar:</value></data>
+  <data name="Col_Code" xml:space="preserve"><value>Código</value></data>
+
+  <!-- Voicemail Page -->
+  <data name="VM_Title" xml:space="preserve"><value>Buzón de Voz — Asterisk PBX Admin</value></data>
+  <data name="VM_Heading" xml:space="preserve"><value>Administración de Buzón de Voz</value></data>
+  <data name="VM_Loading" xml:space="preserve"><value>Cargando usuarios de buzón de voz...</value></data>
+  <data name="VM_Mailboxes" xml:space="preserve"><value>Buzones</value></data>
+  <data name="VM_NewMessages" xml:space="preserve"><value>Mensajes Nuevos</value></data>
+  <data name="VM_OldMessages" xml:space="preserve"><value>Mensajes Antiguos</value></data>
+  <data name="Col_Mailbox" xml:space="preserve"><value>Buzón</value></data>
+  <data name="Col_FullName" xml:space="preserve"><value>Nombre Completo</value></data>
+  <data name="Col_Email" xml:space="preserve"><value>Correo</value></data>
+  <data name="Col_New" xml:space="preserve"><value>Nuevos</value></data>
+  <data name="Col_Old" xml:space="preserve"><value>Antiguos</value></data>
+  <data name="VM_LoadingMessages" xml:space="preserve"><value>Cargando mensajes...</value></data>
+  <data name="VM_NoMessages" xml:space="preserve"><value>Sin mensajes en este buzón.</value></data>
+  <data name="Col_Folder" xml:space="preserve"><value>Carpeta</value></data>
+  <data name="Col_ID" xml:space="preserve"><value>ID</value></data>
+  <data name="Col_Flag" xml:space="preserve"><value>Marca</value></data>
+
+  <!-- Metrics Page -->
+  <data name="Met_Title" xml:space="preserve"><value>Métricas — Asterisk PBX Admin</value></data>
+  <data name="Met_Heading" xml:space="preserve"><value>Métricas del SDK</value></data>
+  <data name="Met_SystemInfo" xml:space="preserve"><value>Info del Sistema</value></data>
+  <data name="Met_AsteriskVer" xml:space="preserve"><value>Versión de Asterisk</value></data>
+  <data name="Met_AmiVer" xml:space="preserve"><value>Versión AMI</value></data>
+  <data name="Met_SystemName" xml:space="preserve"><value>Nombre del Sistema</value></data>
+  <data name="Met_CurrentCalls" xml:space="preserve"><value>Llamadas Actuales</value></data>
+  <data name="Met_MaxCalls" xml:space="preserve"><value>Máx. Llamadas</value></data>
+  <data name="Met_Uptime" xml:space="preserve"><value>Tiempo Activo</value></data>
+  <data name="Met_RunUser" xml:space="preserve"><value>Usuario de Ejecución</value></data>
+  <data name="Met_MaxLoadAvg" xml:space="preserve"><value>Carga Máx. Prom.</value></data>
+  <data name="Met_MaxFilehandles" xml:space="preserve"><value>Máx. Descriptores</value></data>
+  <data name="Met_AmiHealth" xml:space="preserve"><value>Salud de Conexión AMI</value></data>
+  <data name="Met_EventsReceived" xml:space="preserve"><value>Eventos Recibidos</value></data>
+  <data name="Met_EventsDropped" xml:space="preserve"><value>Eventos Descartados</value></data>
+  <data name="Met_Dispatched" xml:space="preserve"><value>Despachados</value></data>
+  <data name="Met_ActionsSent" xml:space="preserve"><value>Acciones Enviadas</value></data>
+  <data name="Met_Responses" xml:space="preserve"><value>Respuestas</value></data>
+  <data name="Met_Reconnections" xml:space="preserve"><value>Reconexiones</value></data>
+  <data name="Met_Histograms" xml:space="preserve"><value>Histogramas AMI</value></data>
+  <data name="Met_AvgRoundtrip" xml:space="preserve"><value>Latencia Prom. (ms)</value></data>
+  <data name="Met_AvgDispatch" xml:space="preserve"><value>Despacho Prom. (ms)</value></data>
+  <data name="Met_LiveGauges" xml:space="preserve"><value>Medidores en Vivo</value></data>
+  <data name="Met_ActiveChannels" xml:space="preserve"><value>Canales Activos</value></data>
+  <data name="Met_TotalAgents" xml:space="preserve"><value>Total Agentes</value></data>
+
+  <!-- Events Page -->
+  <data name="Evt_Title" xml:space="preserve"><value>Eventos — Asterisk PBX Admin</value></data>
+  <data name="Evt_Heading" xml:space="preserve"><value>Registro de Eventos</value></data>
+  <data name="Evt_All" xml:space="preserve"><value>Todos</value></data>
+  <data name="Col_Time" xml:space="preserve"><value>Hora</value></data>
+  <data name="Col_Event" xml:space="preserve"><value>Evento</value></data>
+
+  <!-- Console Page -->
+  <data name="Con_Title" xml:space="preserve"><value>Consola — Asterisk PBX Admin</value></data>
+  <data name="Con_Heading" xml:space="preserve"><value>Consola AMI</value></data>
+  <data name="Con_Placeholder" xml:space="preserve"><value>Ingrese comando CLI de Asterisk...</value></data>
+  <data name="Con_Running" xml:space="preserve"><value>Ejecutando...</value></data>
+  <data name="Con_Run" xml:space="preserve"><value>Ejecutar</value></data>
+  <data name="Con_History" xml:space="preserve"><value>Historial de Comandos</value></data>
+  <data name="Col_Command" xml:space="preserve"><value>Comando</value></data>
+  <data name="Col_Result" xml:space="preserve"><value>Resultado</value></data>
+  <data name="Con_View" xml:space="preserve"><value>Ver</value></data>
+
+  <!-- Traffic Analytics Page -->
+  <data name="Traf_Title" xml:space="preserve"><value>Tráfico — Asterisk PBX Admin</value></data>
+  <data name="Traf_Heading" xml:space="preserve"><value>Análisis de Tráfico</value></data>
+  <data name="Traf_Originated" xml:space="preserve"><value>Originadas</value></data>
+  <data name="Traf_Answered" xml:space="preserve"><value>Contestadas</value></data>
+  <data name="Traf_Unanswered" xml:space="preserve"><value>Sin Contestar</value></data>
+  <data name="Traf_BridgedToAgent" xml:space="preserve"><value>Conectadas a Agente</value></data>
+  <data name="Traf_ActiveNow" xml:space="preserve"><value>Activas Ahora</value></data>
+  <data name="Traf_AvgDuration" xml:space="preserve"><value>Duración Prom.</value></data>
+  <data name="Traf_ShowAdvanced" xml:space="preserve"><value>Mostrar Desglose Avanzado</value></data>
+  <data name="Traf_StateBreakdown" xml:space="preserve"><value>Desglose por Estado</value></data>
+  <data name="Col_Count" xml:space="preserve"><value>Cantidad</value></data>
+  <data name="Traf_TopQueues" xml:space="preserve"><value>Principales Colas</value></data>
+  <data name="Traf_AnswerRate" xml:space="preserve"><value>Tasa de Respuesta</value></data>
+  <data name="Traf_TopAgents" xml:space="preserve"><value>Principales Agentes</value></data>
+  <data name="Traf_CallsHandled" xml:space="preserve"><value>Llamadas Atendidas</value></data>
+
+  <!-- Call Detail Page -->
+  <data name="CD_Title" xml:space="preserve"><value>Detalle de Llamada — Asterisk PBX Admin</value></data>
+  <data name="CD_BackToCalls" xml:space="preserve"><value>Volver a Llamadas</value></data>
+  <data name="CD_NotFound" xml:space="preserve"><value>Llamada no encontrada.</value></data>
+  <data name="CD_Heading" xml:space="preserve"><value>Detalle de Llamada</value></data>
+  <data name="CD_CallId" xml:space="preserve"><value>ID de Llamada</value></data>
+  <data name="CD_Server" xml:space="preserve"><value>Servidor</value></data>
+  <data name="CD_CallerChannel" xml:space="preserve"><value>Canal del Llamante</value></data>
+  <data name="CD_StartTime" xml:space="preserve"><value>Hora de Inicio</value></data>
+  <data name="CD_EndTime" xml:space="preserve"><value>Hora de Fin</value></data>
+  <data name="CD_HangupCause" xml:space="preserve"><value>Causa de Cuelgue</value></data>
+  <data name="CD_QueueAgent" xml:space="preserve"><value>Cola/Agente</value></data>
+  <data name="CD_QueueWait" xml:space="preserve"><value>Espera en Cola</value></data>
+  <data name="CD_Timeline" xml:space="preserve"><value>Línea de Tiempo</value></data>
+  <data name="CD_Flow" xml:space="preserve"><value>Flujo</value></data>
+  <data name="CD_Events" xml:space="preserve"><value>Eventos</value></data>
+  <data name="CD_NoEvents" xml:space="preserve"><value>Sin eventos registrados.</value></data>
+
+  <!-- Login Page -->
+  <data name="Login_Title" xml:space="preserve"><value>Acceso Requerido</value></data>
+  <data name="Login_Prompt" xml:space="preserve"><value>Autentíquese para acceder a la consola de administración</value></data>
+  <data name="Login_Operator" xml:space="preserve"><value>Operador</value></data>
+  <data name="Login_Passphrase" xml:space="preserve"><value>Contraseña</value></data>
+  <data name="Login_Authorize" xml:space="preserve"><value>Autorizar</value></data>
+  <data name="Login_InvalidCreds" xml:space="preserve"><value>Credenciales inválidas. Acceso denegado.</value></data>
+
+  <!-- Select Server Page -->
+  <data name="SS_Heading" xml:space="preserve"><value>Seleccionar Servidor</value></data>
+  <data name="SS_Choose" xml:space="preserve"><value>Elija un servidor Asterisk para administrar</value></data>
 </root>

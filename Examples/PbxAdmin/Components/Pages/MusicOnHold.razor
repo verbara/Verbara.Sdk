@@ -4,12 +4,13 @@
 @inject MohService MohSvc
 @inject SelectedServerService ServerSvc
 @inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>Music on Hold — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Moh_Title"]</PageTitle>
 
 <div class="page-header-row">
-    <h2>Music on Hold</h2>
-    <button class="btn btn-primary" @onclick="NewClass">+ New Class</button>
+    <h2>@L["Moh_Heading"]</h2>
+    <button class="btn btn-primary" @onclick="NewClass">@L["Moh_NewClass"]</button>
 </div>
 
 @if (_loading)
@@ -18,7 +19,7 @@
 }
 else if (_classes.Count == 0)
 {
-    <p class="text-muted">No MOH classes configured. Click "+ New Class" to create one.</p>
+    <p class="text-muted">@L["Moh_NoClasses"]</p>
 }
 else
 {
@@ -55,7 +56,7 @@ else
                 </div>
                 <div class="card-footer">
                     <button class="btn btn-sm btn-danger" @onclick:stopPropagation="true"
-                            @onclick="() => DeleteClass(cls)">Delete</button>
+                            @onclick="() => DeleteClass(cls)">@L["Btn_Delete"]</button>
                 </div>
             </div>
         }

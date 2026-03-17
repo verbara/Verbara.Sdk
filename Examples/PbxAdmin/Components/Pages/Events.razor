@@ -2,14 +2,15 @@
 @using PbxAdmin.Services
 @inject EventLogService EventLog
 @inject SelectedServerService ServerSvc
+@inject IStringLocalizer<SharedStrings> L
 @implements IDisposable
 
-<PageTitle>Events — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Evt_Title"]</PageTitle>
 
-<h2>Event Log</h2>
+<h2>@L["Evt_Heading"]</h2>
 
 <div class="chip-bar">
-    <button class="chip @(_typeFilter is null ? "chip-active" : "")" @onclick="() => _typeFilter = null">All</button>
+    <button class="chip @(_typeFilter is null ? "chip-active" : "")" @onclick="() => _typeFilter = null">@L["Evt_All"]</button>
     <button class="chip @(_typeFilter == "Channel" ? "chip-active" : "")" @onclick='() => _typeFilter = "Channel"'>Channel</button>
     <button class="chip @(_typeFilter == "Queue" ? "chip-active" : "")" @onclick='() => _typeFilter = "Queue"'>Queue</button>
     <button class="chip @(_typeFilter == "Agent" ? "chip-active" : "")" @onclick='() => _typeFilter = "Agent"'>Agent</button>
@@ -19,10 +20,10 @@
     <table class="data-table">
         <thead>
             <tr>
-                <th>Time</th>
-                <th>Event</th>
-                <th>UniqueId</th>
-                <th>Channel</th>
+                <th>@L["Col_Time"]</th>
+                <th>@L["Col_Event"]</th>
+                <th>@L["Col_UniqueId"]</th>
+                <th>@L["Col_Channel"]</th>
             </tr>
         </thead>
         <tbody>

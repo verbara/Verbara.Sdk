@@ -7,12 +7,13 @@
 @inject SelectedServerService ServerSvc
 @inject NavigationManager Nav
 @inject IConfiguration Config
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>@(_isNew ? "New MOH Class" : $"Edit {_mohClass.Name}") — Asterisk PBX Admin</PageTitle>
+<PageTitle>@(_isNew ? L["MohEdit_NewTitle"] : $"{L["MohEdit_EditTitle"]} {_mohClass.Name}")</PageTitle>
 
 <div class="page-header-row">
-    <button class="btn btn-sm btn-muted" @onclick="GoBack">&#8592; Back</button>
-    <h2>@(_isNew ? "New MOH Class" : $"Edit: {_mohClass.Name}")</h2>
+    <button class="btn btn-sm btn-muted" @onclick="GoBack">&#8592; @L["Btn_Back"]</button>
+    <h2>@(_isNew ? L["MohEdit_New"] : $"{L["MohEdit_Edit"]}: {_mohClass.Name}")</h2>
 </div>
 
 @if (_error is not null)
@@ -21,16 +22,16 @@
 }
 
 <div class="form-section">
-    <h3>Class Settings</h3>
+    <h3>@L["MohEdit_ClassSettings"]</h3>
 
     <div class="form-group">
-        <label>Name</label>
+        <label>@L["Lbl_Name"]</label>
         <input type="text" @bind="_mohClass.Name" class="form-control"
                placeholder="alphanumeric, hyphens, underscores" />
     </div>
 
     <div class="form-group">
-        <label>Mode</label>
+        <label>@L["Col_Mode"]</label>
         <select @bind="_mohClass.Mode" class="form-control">
             <option value="files">files</option>
             <option value="mp3">mp3</option>
@@ -39,7 +40,7 @@
         @if (_mohClass.Mode == "mp3")
         {
             <div class="alert alert-warning mt-1">
-                &#9888; Mode "mp3" is deprecated since Asterisk 14+. Consider using "files" with the format_mp3 module.
+                &#9888; @L["MohEdit_Mp3Deprecated"]
             </div>
         }
     </div>
@@ -47,22 +48,22 @@
     @if (_mohClass.Mode == "files" || _mohClass.Mode == "mp3")
     {
         <div class="form-group">
-            <label>Directory</label>
+            <label>@L["MohEdit_Directory"]</label>
             <input type="text" @bind="_mohClass.Directory" class="form-control" />
         </div>
 
         <div class="form-group">
-            <label>Sort</label>
+            <label>@L["MohEdit_Sort"]</label>
             <div class="radio-group">
                 <label>
                     <input type="radio" name="sort" value="random"
                            checked="@(_mohClass.Sort == "random")"
-                           @onchange='() => _mohClass.Sort = "random"' /> Random
+                           @onchange='() => _mohClass.Sort = "random"' /> @L["MohEdit_Random"]
                 </label>
                 <label>
                     <input type="radio" name="sort" value="alpha"
                            checked="@(_mohClass.Sort == "alpha")"
-                           @onchange='() => _mohClass.Sort = "alpha"' /> Alphabetical
+                           @onchange='() => _mohClass.Sort = "alpha"' /> @L["MohEdit_Alphabetical"]
                 </label>
             </div>
         </div>
@@ -71,7 +72,7 @@
     @if (_mohClass.Mode == "custom")
     {
         <div class="form-group">
-            <label>Custom Application</label>
+            <label>@L["MohEdit_CustomApp"]</label>
             <input type="text" @bind="_mohClass.CustomApplication" class="form-control"
                    placeholder="/usr/bin/mpg123 -q -s --mono -r 8000 http://stream" />
         </div>
@@ -81,11 +82,11 @@
 @if (!_isNew)
 {
     <div class="form-section">
-        <h3>Audio Files</h3>
+        <h3>@L["MohEdit_AudioFiles"]</h3>
 
         @if (!_fileAccessAvailable)
         {
-            <div class="alert alert-warning">File access unavailable for this MOH directory.</div>
+            <div class="alert alert-warning">@L["MohEdit_FileAccessUnavail"]</div>
         }
         else
         {
@@ -103,7 +104,7 @@
             </div>
 
             <div class="form-group">
-                <label>Upload Audio</label>
+                <label>@L["MohEdit_UploadAudio"]</label>
                 <InputFile OnChange="OnFileSelected" accept=".wav,.wav49,.gsm,.ulaw,.alaw,.sln,.mp3,.ogg" />
                 <small class="text-muted">Max @(_maxFileSizeMb)MB. Formats: wav, wav49, gsm, ulaw, alaw, sln, mp3, ogg</small>
                 @if (!AudioSvc.IsSoxAvailable())
@@ -121,7 +122,7 @@
             {
                 <table class="table">
                     <thead>
-                        <tr><th>Filename</th><th>Size</th><th>Duration</th><th>Actions</th></tr>
+                        <tr><th>@L["Col_Filename"]</th><th>@L["Col_Size"]</th><th>@L["Col_Duration"]</th><th>@L["Lbl_Actions"]</th></tr>
                     </thead>
                     <tbody>
                         @foreach (var f in _files)
@@ -152,9 +153,9 @@
 }
 
 <div class="form-actions">
-    <button class="btn btn-muted" @onclick="GoBack">Cancel</button>
+    <button class="btn btn-muted" @onclick="GoBack">@L["Btn_Cancel"]</button>
     <button class="btn btn-primary" @onclick="Save" disabled="@_saving">
-        @(_saving ? "Saving..." : "Save")
+        @(_saving ? L["Btn_Saving"] : L["Btn_Save"])
     </button>
 </div>
 
