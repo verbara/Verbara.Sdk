@@ -1,0 +1,10 @@
+@if (IsTouched && !IsValid)
+{
+    <span class="validation-msg">@Message</span>
+}
+
+@code {
+    [Parameter] public bool IsValid { get; set; }
+    [Parameter] public bool IsTouched { get; set; }
+    [Parameter] public string Message { get; set; } = "";
+}
