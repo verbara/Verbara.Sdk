@@ -21,19 +21,19 @@ else
 {
     <!-- Identity -->
     <div class="form-section">
-        <h3>@L["ExtEdit_Identity"]</h3>
+        <HelpPanel SectionKey="ExtEdit_Identity">@L["ExtEdit_Identity"]</HelpPanel>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">@L["ExtEdit_ExtNumber"]</label>
+                <label class="form-label">@L["ExtEdit_ExtNumber"] <HelpIcon HelpKey="ExtNumber" /></label>
                 <input class="input" type="number" @bind="_config.Extension" placeholder="@($"{_rangeStart}–{_rangeEnd}")" disabled="@(!_isNew)" />
                 <span class="text-muted" style="font-size:0.85rem;">@L["ExtEdit_Range"] @_rangeStart – @_rangeEnd</span>
             </div>
             <div class="form-field">
-                <label class="form-label">@L["ExtEdit_DisplayName"]</label>
+                <label class="form-label">@L["ExtEdit_DisplayName"] <HelpIcon HelpKey="DisplayName" /></label>
                 <input class="input" @bind="_config.Name" placeholder="John Doe" />
             </div>
             <div class="form-field">
-                <label class="form-label">@L["ExtEdit_Technology"]</label>
+                <label class="form-label">@L["ExtEdit_Technology"] <HelpIcon HelpKey="Technology" /></label>
                 <div class="radio-group">
                     <label class="radio-option">
                         <input type="radio" name="tech" value="@ExtensionTechnology.PjSip" checked="@(_config.Technology == ExtensionTechnology.PjSip)"
@@ -57,12 +57,12 @@ else
 
     <!-- Authentication -->
     <div class="form-section">
-        <h3>@L["ExtEdit_Auth"]</h3>
+        <HelpPanel SectionKey="ExtEdit_Auth">@L["ExtEdit_Auth"]</HelpPanel>
         <div class="form-grid">
             @if (_isNew)
             {
                 <div class="form-field">
-                    <label class="form-label">@L["ExtEdit_Password"]</label>
+                    <label class="form-label">@L["ExtEdit_Password"] <HelpIcon HelpKey="Password" /></label>
                     <div style="display:flex;gap:0.5rem;align-items:center;">
                         <input class="input" type="password" @bind="_config.Password" placeholder="Required" />
                         <button class="btn" type="button" @onclick="GeneratePassword">@L["ExtEdit_Generate"]</button>
@@ -90,18 +90,18 @@ else
 
     <!-- Dialplan -->
     <div class="form-section">
-        <h3>@L["ExtEdit_Dialplan"]</h3>
+        <HelpPanel SectionKey="ExtEdit_Dialplan">@L["ExtEdit_Dialplan"]</HelpPanel>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">@L["Lbl_Context"]</label>
+                <label class="form-label">@L["Lbl_Context"] <HelpIcon HelpKey="Context" /></label>
                 <input class="input" @bind="_config.Context" placeholder="from-internal" />
             </div>
             <div class="form-field">
-                <label class="form-label">@L["ExtEdit_CallGroup"]</label>
+                <label class="form-label">@L["ExtEdit_CallGroup"] <HelpIcon HelpKey="CallGroup" /></label>
                 <input class="input" @bind="_config.CallGroup" placeholder="1" />
             </div>
             <div class="form-field">
-                <label class="form-label">@L["ExtEdit_PickupGroup"]</label>
+                <label class="form-label">@L["ExtEdit_PickupGroup"] <HelpIcon HelpKey="PickupGroup" /></label>
                 <input class="input" @bind="_config.PickupGroup" placeholder="1" />
             </div>
         </div>
@@ -109,9 +109,9 @@ else
 
     <!-- Media & Transport -->
     <div class="form-section">
-        <h3>@L["ExtEdit_MediaTransport"]</h3>
+        <HelpPanel SectionKey="ExtEdit_MediaTransport">@L["ExtEdit_MediaTransport"]</HelpPanel>
         <div class="form-field" style="margin-bottom: 0.75rem;">
-            <label class="form-label">@L["ExtEdit_Codecs"]</label>
+            <label class="form-label">@L["ExtEdit_Codecs"] <HelpIcon HelpKey="Codecs" /></label>
             <div class="codec-grid">
                 @foreach (var codec in _availableCodecs)
                 {
@@ -125,7 +125,7 @@ else
         </div>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">@L["ExtEdit_DtmfMode"]</label>
+                <label class="form-label">@L["ExtEdit_DtmfMode"] <HelpIcon HelpKey="DtmfMode" /></label>
                 <select @bind="_config.DtmfMode">
                     <option value="rfc4733">RFC 4733</option>
                     <option value="inband">Inband</option>
@@ -136,7 +136,7 @@ else
             @if (_config.Technology != ExtensionTechnology.Iax2)
             {
                 <div class="form-field">
-                    <label class="form-label">@L["ExtEdit_Transport"]</label>
+                    <label class="form-label">@L["ExtEdit_Transport"] <HelpIcon HelpKey="Transport" /></label>
                     <select @bind="_config.Transport">
                         <option value="udp">transport-udp</option>
                         <option value="tcp">transport-tcp</option>
@@ -160,7 +160,7 @@ else
 
     <!-- Voicemail -->
     <div class="form-section">
-        <h3>@L["ExtEdit_Voicemail"]</h3>
+        <HelpPanel SectionKey="ExtEdit_Voicemail">@L["ExtEdit_Voicemail"]</HelpPanel>
         <div class="form-grid">
             <div class="form-field">
                 <label class="codec-check">
@@ -188,7 +188,7 @@ else
 
     <!-- Call Features -->
     <div class="form-section">
-        <h3>@L["ExtEdit_CallFeatures"]</h3>
+        <HelpPanel SectionKey="ExtEdit_CallFeatures">@L["ExtEdit_CallFeatures"]</HelpPanel>
         <div class="form-grid">
             <div class="form-field">
                 <label class="codec-check">
