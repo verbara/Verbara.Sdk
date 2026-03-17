@@ -11,21 +11,22 @@
 @inject ConferenceConfigService ConfConfigSvc
 @inject NavigationManager Nav
 @implements IDisposable
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>Conferences — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Conf_Title"]</PageTitle>
 
-<h2>Conference Rooms</h2>
+<h2>@L["Conf_Heading"]</h2>
 
 <div class="tab-bar">
-    <button class="tab @(_activeTab == "live" ? "tab-active" : "")" @onclick='() => _activeTab = "live"'>Live Rooms</button>
-    <button class="tab @(_activeTab == "config" ? "tab-active" : "")" @onclick="SwitchToConfig">Configuration</button>
+    <button class="tab @(_activeTab == "live" ? "tab-active" : "")" @onclick='() => _activeTab = "live"'>@L["Conf_LiveRooms"]</button>
+    <button class="tab @(_activeTab == "config" ? "tab-active" : "")" @onclick="SwitchToConfig">@L["Conf_Configuration"]</button>
 </div>
 
 @if (_activeTab == "live")
 {
     @* ---------- MeetMe Section (Live Layer) ---------- *@
 
-    <h3>MeetMe Rooms</h3>
+    <h3>@L["Conf_MeetMe"]</h3>
 
     var hasRooms = false;
     @foreach (var (serverId, entry) in ServerSvc.GetServers())
@@ -36,13 +37,13 @@
             <div class="conference-card">
                 <div class="conference-header">
                     <strong>Room @room.RoomNumber</strong>
-                    <span class="badge badge-blue">@room.UserCount participants</span>
+                    <span class="badge badge-blue">@room.UserCount @L["Conf_Participants"]</span>
                 </div>
                 <table class="data-table">
                     <thead>
                         <tr>
                             <th>#</th>
-                            <th>Channel</th>
+                            <th>@L["Col_Channel"]</th>
                             <th>State</th>
                         </tr>
                     </thead>
@@ -58,7 +59,7 @@
                                     @label
                                     @if (user.Muted)
                                     {
-                                        <span class="badge badge-muted">Muted</span>
+                                        <span class="badge badge-muted">@L["Conf_Muted"]</span>
                                     }
                                 </td>
                             </tr>
@@ -71,16 +72,16 @@
 
     @if (!hasRooms)
     {
-        <p class="text-muted">No active MeetMe rooms.</p>
+        <p class="text-muted">@L["Conf_NoMeetMe"]</p>
     }
 
     @* ---------- ConfBridge Section (AMI Actions) ---------- *@
 
-    <h3>ConfBridge Rooms</h3>
+    <h3>@L["Conf_ConfBridge"]</h3>
 
     @if (_loading)
     {
-        <p class="text-muted">Loading ConfBridge rooms...</p>
+        <p class="text-muted">@L["Conf_LoadingCB"]</p>
     }
     else if (_confbridgeError is not null)
     {
@@ -88,7 +89,7 @@
     }
     else if (_confbridgeRooms.Count == 0)
     {
-        <p class="text-muted">No active ConfBridge rooms.</p>
+        <p class="text-muted">@L["Conf_NoCB"]</p>
     }
     else
     {
@@ -98,40 +99,40 @@
                 <div class="conference-header">
                     <div>
                         <strong>Bridge @room.Conference</strong>
-                        <span class="badge badge-blue">@room.Parties participants</span>
+                        <span class="badge badge-blue">@room.Parties @L["Conf_Participants"]</span>
                         @if (room.Marked > 0)
                         {
-                            <span class="badge badge-yellow">@room.Marked marked</span>
+                            <span class="badge badge-yellow">@room.Marked @L["Conf_Marked"]</span>
                         }
                         @if (room.Locked)
                         {
-                            <span class="badge badge-red">Locked</span>
+                            <span class="badge badge-red">@L["Conf_Locked"]</span>
                         }
                     </div>
                     <div>
                         @if (room.Locked)
                         {
                             <button class="btn btn-sm btn-blue" @onclick="() => UnlockRoom(room.Conference)" disabled="@_actionInProgress">
-                                Unlock
+                                @L["Conf_Unlock"]
                             </button>
                         }
                         else
                         {
                             <button class="btn btn-sm btn-yellow" @onclick="() => LockRoom(room.Conference)" disabled="@_actionInProgress">
-                                Lock
+                                @L["Conf_Lock"]
                             </button>
                         }
 
                         @if (_recordingRooms.Contains(room.Conference))
                         {
                             <button class="btn btn-sm btn-red" @onclick="() => StopRecording(room.Conference)" disabled="@_actionInProgress">
-                                Stop Rec
+                                @L["Conf_StopRec"]
                             </button>
                         }
                         else
                         {
                             <button class="btn btn-sm btn-blue" @onclick="() => StartRecording(room.Conference)" disabled="@_actionInProgress">
-                                Start Rec
+                                @L["Conf_StartRec"]
                             </button>
                         }
                     </div>
@@ -142,12 +143,12 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>Channel</th>
-                                <th>Admin</th>
-                                <th>Muted</th>
-                                <th>Talking</th>
-                                <th>Duration</th>
-                                <th>Actions</th>
+                                <th>@L["Col_Channel"]</th>
+                                <th>@L["Conf_Admin"]</th>
+                                <th>@L["Conf_Muted"]</th>
+                                <th>@L["Conf_Talking"]</th>
+                                <th>@L["Col_Duration"]</th>
+                                <th>@L["Lbl_Actions"]</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -158,27 +159,27 @@
                                     <td>
                                         @if (p.Admin)
                                         {
-                                            <span class="badge badge-yellow">Admin</span>
+                                            <span class="badge badge-yellow">@L["Conf_Admin"]</span>
                                         }
                                     </td>
                                     <td>
                                         @if (p.Muted)
                                         {
-                                            <span class="badge badge-muted">Muted</span>
+                                            <span class="badge badge-muted">@L["Conf_Muted"]</span>
                                         }
                                         else
                                         {
-                                            <span class="badge badge-green">Open</span>
+                                            <span class="badge badge-green">@L["Conf_Open"]</span>
                                         }
                                     </td>
                                     <td>
                                         @if (p.Talking)
                                         {
-                                            <span class="status-dot dot-green"></span> <text>Talking</text>
+                                            <span class="status-dot dot-green"></span> <text>@L["Conf_Talking"]</text>
                                         }
                                         else
                                         {
-                                            <span class="status-dot dot-gray"></span> <text>Silent</text>
+                                            <span class="status-dot dot-gray"></span> <text>@L["Conf_Silent"]</text>
                                         }
                                     </td>
                                     <td class="caller-timer">@FormatDuration(p.AnsweredTime)</td>
@@ -186,17 +187,17 @@
                                         @if (p.Muted)
                                         {
                                             <button class="btn btn-sm btn-blue" @onclick="() => UnmuteParticipant(room.Conference, p.Channel)" disabled="@_actionInProgress">
-                                                Unmute
+                                                @L["Conf_Unmute"]
                                             </button>
                                         }
                                         else
                                         {
                                             <button class="btn btn-sm btn-yellow" @onclick="() => MuteParticipant(room.Conference, p.Channel)" disabled="@_actionInProgress">
-                                                Mute
+                                                @L["Conf_Mute"]
                                             </button>
                                         }
                                         <button class="btn btn-sm btn-red" @onclick="() => KickParticipant(room.Conference, p.Channel)" disabled="@_actionInProgress">
-                                            Kick
+                                            @L["Conf_Kick"]
                                         </button>
                                     </td>
                                 </tr>
@@ -218,8 +219,8 @@ else
     @* ---------- Configuration Tab ---------- *@
 
     <div class="page-header-row">
-        <h3>ConfBridge Profiles</h3>
-        <button class="btn btn-primary" @onclick="() => EditConfig(0)">+ New Profile</button>
+        <h3>@L["Conf_Profiles"]</h3>
+        <button class="btn btn-primary" @onclick="() => EditConfig(0)">@L["Conf_NewProfile"]</button>
     </div>
 
     @if (_configError is not null)
@@ -229,20 +230,20 @@ else
 
     @if (_configs.Count == 0)
     {
-        <p class="text-muted">No conference profiles configured. Create one to define ConfBridge bridge settings.</p>
+        <p class="text-muted">@L["Conf_NoProfiles"]</p>
     }
     else
     {
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Number</th>
-                    <th>Max Members</th>
-                    <th>PIN</th>
-                    <th>Record</th>
-                    <th>MOH</th>
-                    <th>Actions</th>
+                    <th>@L["Lbl_Name"]</th>
+                    <th>@L["Col_Number"]</th>
+                    <th>@L["Col_MaxMembers"]</th>
+                    <th>@L["Col_PIN"]</th>
+                    <th>@L["Col_Record"]</th>
+                    <th>@L["Col_MOH"]</th>
+                    <th>@L["Lbl_Actions"]</th>
                 </tr>
             </thead>
             <tbody>
@@ -251,8 +252,8 @@ else
                     <tr>
                         <td><strong>@cfg.Name</strong></td>
                         <td class="mono">@(string.IsNullOrEmpty(cfg.Number) ? "—" : cfg.Number)</td>
-                        <td>@(cfg.MaxMembers > 0 ? cfg.MaxMembers.ToString() : "Unlimited")</td>
-                        <td>@(string.IsNullOrEmpty(cfg.Pin) ? "None" : "****")</td>
+                        <td>@(cfg.MaxMembers > 0 ? cfg.MaxMembers.ToString() : L["Lbl_Unlimited"])</td>
+                        <td>@(string.IsNullOrEmpty(cfg.Pin) ? L["Lbl_None"] : "****")</td>
                         <td>
                             @if (cfg.Record)
                             {
@@ -260,13 +261,13 @@ else
                             }
                             else
                             {
-                                <span class="text-muted">No</span>
+                                <span class="text-muted">@L["Lbl_No"]</span>
                             }
                         </td>
                         <td>@cfg.MusicOnHold</td>
                         <td>
-                            <button class="btn btn-sm btn-blue" @onclick="() => EditConfig(cfg.Id)">Edit</button>
-                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteConfig(cfg.Id, cfg.Name)">Delete</button>
+                            <button class="btn btn-sm btn-blue" @onclick="() => EditConfig(cfg.Id)">@L["Btn_Edit"]</button>
+                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteConfig(cfg.Id, cfg.Name)">@L["Btn_Delete"]</button>
                         </td>
                     </tr>
                 }

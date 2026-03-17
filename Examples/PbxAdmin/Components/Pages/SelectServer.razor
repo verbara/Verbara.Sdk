@@ -6,11 +6,12 @@
 @inject AsteriskMonitorService Monitor
 @inject SelectedServerService ServerSvc
 @inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
 
 <div class="server-select-page">
     <div class="server-select-header">
-        <h2>Select Server</h2>
-        <p class="text-muted">Choose an Asterisk server to monitor</p>
+        <h2>@L["SS_Heading"]</h2>
+        <p class="text-muted">@L["SS_Choose"]</p>
     </div>
 
     <div class="server-select-grid">

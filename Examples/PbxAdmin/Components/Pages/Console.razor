@@ -5,10 +5,11 @@
 @using PbxAdmin.Services
 @inject SelectedServerService ServerSvc
 @inject ConfigOperationState ConfigOp
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>Console — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Con_Title"]</PageTitle>
 
-<h2>AMI Console</h2>
+<h2>@L["Con_Heading"]</h2>
 
 <div class="chip-bar">
     @foreach (var cmd in _quickCommands)
@@ -22,11 +23,11 @@
     <input @bind="_command"
            @bind:event="oninput"
            @onkeydown="OnKeyDown"
-           placeholder="Enter Asterisk CLI command..."
+           placeholder="@L["Con_Placeholder"]"
            class="input"
            style="flex: 1;" />
     <button class="btn btn-blue" @onclick="RunCommand" disabled="@_running">
-        @(_running ? "Running..." : "Run")
+        @(_running ? L["Con_Running"] : L["Con_Run"])
     </button>
 </div>
 
@@ -37,13 +38,13 @@
 
 @if (_history.Count > 0)
 {
-    <h3 style="margin-top: 2rem;">Command History</h3>
+    <h3 style="margin-top: 2rem;">@L["Con_History"]</h3>
     <table class="data-table">
         <thead>
             <tr>
-                <th style="width: 160px;">Time</th>
-                <th style="width: 300px;">Command</th>
-                <th>Result</th>
+                <th style="width: 160px;">@L["Col_Time"]</th>
+                <th style="width: 300px;">@L["Col_Command"]</th>
+                <th>@L["Col_Result"]</th>
                 <th style="width: 80px;"></th>
             </tr>
         </thead>
@@ -64,7 +65,7 @@
                         }
                     </td>
                     <td>
-                        <button class="btn btn-sm" @onclick="() => ShowOutput(entry)">View</button>
+                        <button class="btn btn-sm" @onclick="() => ShowOutput(entry)">@L["Con_View"]</button>
                     </td>
                 </tr>
             }

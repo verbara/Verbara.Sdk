@@ -6,12 +6,13 @@
 @inject SelectedServerService ServerSvc
 @inject NavigationManager Nav
 @inject IConfiguration Config
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>@(_isNew ? "New Recording Policy" : $"Edit {_policy.Name}") — Asterisk PBX Admin</PageTitle>
+<PageTitle>@(_isNew ? L["RecEdit_NewTitle"] : $"{L["RecEdit_EditTitle"]} {_policy.Name}")</PageTitle>
 
 <div class="page-header-row">
-    <button class="btn btn-sm btn-muted" @onclick="GoBack">&#8592; Back</button>
-    <h2>@(_isNew ? "New Recording Policy" : $"Edit: {_policy.Name}")</h2>
+    <button class="btn btn-sm btn-muted" @onclick="GoBack">&#8592; @L["Btn_Back"]</button>
+    <h2>@(_isNew ? L["RecEdit_New"] : $"{L["RecEdit_Edit"]}: {_policy.Name}")</h2>
 </div>
 
 @if (_error is not null)
@@ -20,15 +21,15 @@
 }
 
 <div class="form-section">
-    <h3>Policy Settings</h3>
+    <h3>@L["RecEdit_PolicySettings"]</h3>
 
     <div class="form-group">
-        <label>Name</label>
+        <label>@L["Lbl_Name"]</label>
         <input type="text" @bind="_policy.Name" class="form-control" />
     </div>
 
     <div class="form-group">
-        <label>Mode</label>
+        <label>@L["Col_Mode"]</label>
         <div class="radio-group">
             @foreach (var mode in Enum.GetValues<RecordingMode>())
             {
@@ -43,7 +44,7 @@
     </div>
 
     <div class="form-group">
-        <label>Format</label>
+        <label>@L["Col_Format"]</label>
         <select @bind="_policy.Format" class="form-control">
             <option value="wav">wav</option>
             <option value="wav49">wav49</option>
@@ -52,31 +53,31 @@
     </div>
 
     <div class="form-group">
-        <label>Storage Path</label>
+        <label>@L["RecEdit_StoragePath"]</label>
         <input type="text" @bind="_policy.StoragePath" class="form-control" />
     </div>
 
     <div class="form-group">
-        <label>Retention Days (0 = indefinite)</label>
+        <label>@L["RecEdit_RetentionDays"]</label>
         <input type="number" @bind="_policy.RetentionDays" min="0" class="form-control" />
     </div>
 
     <div class="form-group">
-        <label>MixMonitor Options (optional)</label>
+        <label>@L["RecEdit_MixMonitorOpts"]</label>
         <input type="text" @bind="_policy.MixMonitorOptions" class="form-control"
                placeholder="e.g. r for read, t for write" />
     </div>
 </div>
 
 <div class="form-section">
-    <h3>Targets</h3>
-    <button class="btn btn-sm btn-primary" @onclick="AddTarget">+ Add Target</button>
+    <h3>@L["RecEdit_Targets"]</h3>
+    <button class="btn btn-sm btn-primary" @onclick="AddTarget">@L["RecEdit_AddTarget"]</button>
 
     @if (_policy.Targets.Count > 0)
     {
         <table class="table mt-2">
             <thead>
-                <tr><th>Type</th><th>Value</th><th></th></tr>
+                <tr><th>@L["Lbl_Type"]</th><th>@L["Col_Value"]</th><th></th></tr>
             </thead>
             <tbody>
                 @foreach (var target in _policy.Targets)
@@ -84,16 +85,16 @@
                     <tr>
                         <td>
                             <select @bind="target.TargetType" class="form-control">
-                                <option value="extension">Extension</option>
-                                <option value="queue">Queue</option>
-                                <option value="trunk">Trunk</option>
+                                <option value="extension">@L["Lbl_Extension"]</option>
+                                <option value="queue">@L["Lbl_Queue"]</option>
+                                <option value="trunk">@L["Lbl_Trunk"]</option>
                             </select>
                         </td>
                         <td>
                             <input type="text" @bind="target.TargetValue" class="form-control" />
                         </td>
                         <td>
-                            <button class="btn btn-sm btn-danger" @onclick="() => _policy.Targets.Remove(target)">&#x2715;</button>
+                            <button class="btn btn-sm btn-danger" @onclick="() => _policy.Targets.Remove(target)" title="@L["Btn_Remove"]">&#x2715;</button>
                         </td>
                     </tr>
                 }
@@ -103,9 +104,9 @@
 </div>
 
 <div class="form-actions">
-    <button class="btn btn-muted" @onclick="GoBack">Cancel</button>
+    <button class="btn btn-muted" @onclick="GoBack">@L["Btn_Cancel"]</button>
     <button class="btn btn-primary" @onclick="Save" disabled="@_saving">
-        @(_saving ? "Saving..." : "Save")
+        @(_saving ? L["Btn_Saving"] : L["Btn_Save"])
     </button>
 </div>
 

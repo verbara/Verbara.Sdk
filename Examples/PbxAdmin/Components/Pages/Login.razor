@@ -7,18 +7,19 @@
 @inject IConfiguration Configuration
 @inject NavigationManager Navigation
 @inject IHttpContextAccessor HttpContextAccessor
+@inject IStringLocalizer<SharedStrings> L
 
 <div class="access-popup">
     <div class="access-popup-bar">
         <span class="access-popup-dot"></span>
-        <span class="access-popup-title">Access Required</span>
+        <span class="access-popup-title">@L["Login_Title"]</span>
         <span class="access-popup-id">SEC-01</span>
     </div>
 
     <div class="access-popup-body">
         <div class="access-popup-prompt">
             <span class="access-prompt-caret">&gt;</span>
-            Authenticate to access the monitoring console
+            @L["Login_Prompt"]
         </div>
 
         @if (!string.IsNullOrEmpty(_error))
@@ -31,21 +32,21 @@
 
         <EditForm Model="_model" OnValidSubmit="HandleLogin" FormName="login">
             <div class="access-field">
-                <label class="access-label">Operator</label>
+                <label class="access-label">@L["Login_Operator"]</label>
                 <div class="access-input-wrap">
                     <span class="access-input-prefix">usr://</span>
                     <InputText @bind-Value="_model.Username" class="access-input" placeholder="admin" />
                 </div>
             </div>
             <div class="access-field">
-                <label class="access-label">Passphrase</label>
+                <label class="access-label">@L["Login_Passphrase"]</label>
                 <div class="access-input-wrap">
                     <span class="access-input-prefix">key://</span>
                     <InputText @bind-Value="_model.Password" type="password" class="access-input" placeholder="••••••••" />
                 </div>
             </div>
             <button type="submit" class="access-submit">
-                <span class="access-submit-text">Authorize</span>
+                <span class="access-submit-text">@L["Login_Authorize"]</span>
                 <span class="access-submit-arrow">&rarr;</span>
             </button>
         </EditForm>

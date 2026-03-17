@@ -2,22 +2,23 @@
 @using PbxAdmin.Services
 @inject CallFlowTracker Tracker
 @inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
 @implements IDisposable
 
-<PageTitle>Call @CallId — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["CD_Title"]</PageTitle>
 
-<a href="/calls" class="back-link">&larr; Back to Calls</a>
+<a href="/calls" class="back-link">&larr; @L["CD_BackToCalls"]</a>
 
 @if (_call is null)
 {
-    <p class="text-muted" style="margin-top:1rem">Call not found.</p>
+    <p class="text-muted" style="margin-top:1rem">@L["CD_NotFound"]</p>
 }
 else
 {
     var (borderClass, stateLabel, _) = GetCallStyle(_call);
 
     <div style="display:flex; align-items:center; gap:0.75rem; margin:1rem 0">
-        <h2 style="margin:0">Call Detail</h2>
+        <h2 style="margin:0">@L["CD_Heading"]</h2>
         <span class="call-state-badge @borderClass">@stateLabel</span>
         <span class="call-duration">@FormatDuration(_call.Duration)</span>
     </div>
@@ -25,15 +26,15 @@ else
     <!-- Summary panel -->
     <div class="call-detail-summary">
         <div class="call-detail-field">
-            <span class="call-detail-label">Call ID</span>
+            <span class="call-detail-label">@L["CD_CallId"]</span>
             <span class="call-detail-value mono">@_call.CallId</span>
         </div>
         <div class="call-detail-field">
-            <span class="call-detail-label">Server</span>
+            <span class="call-detail-label">@L["CD_Server"]</span>
             <span class="call-detail-value">@_call.ServerId</span>
         </div>
         <div class="call-detail-field">
-            <span class="call-detail-label">Technology</span>
+            <span class="call-detail-label">@L["Col_Tech"]</span>
             <span class="call-detail-value">
                 @if (_call.Caller?.Technology is not null)
                 {
@@ -46,7 +47,7 @@ else
             </span>
         </div>
         <div class="call-detail-field">
-            <span class="call-detail-label">Caller</span>
+            <span class="call-detail-label">@L["Calls_Caller"]</span>
             <span class="call-detail-value">@(_call.Caller?.CallerIdNum ?? "unknown")</span>
             @if (_call.Caller?.CallerIdName is not null)
             {
@@ -54,24 +55,24 @@ else
             }
         </div>
         <div class="call-detail-field">
-            <span class="call-detail-label">Caller Channel</span>
+            <span class="call-detail-label">@L["CD_CallerChannel"]</span>
             <span class="call-detail-value mono">@(_call.Caller?.Channel ?? "—")</span>
         </div>
         <div class="call-detail-field">
-            <span class="call-detail-label">Destination</span>
+            <span class="call-detail-label">@L["Calls_Destination"]</span>
             <span class="call-detail-value">@(_call.Destination?.CallerIdNum ?? _call.Destination?.Channel ?? "—")</span>
         </div>
         @if (_call.QueueName is not null)
         {
             <div class="call-detail-field">
-                <span class="call-detail-label">Queue</span>
+                <span class="call-detail-label">@L["Col_Queue"]</span>
                 <span class="call-detail-value">@_call.QueueName</span>
             </div>
         }
         @if (_call.AgentName is not null)
         {
             <div class="call-detail-field">
-                <span class="call-detail-label">Agent</span>
+                <span class="call-detail-label">@L["Calls_Agent"]</span>
                 <span class="call-detail-value">@_call.AgentName</span>
                 @if (_call.AgentInterface is not null)
                 {
@@ -80,27 +81,27 @@ else
             </div>
         }
         <div class="call-detail-field">
-            <span class="call-detail-label">Start Time</span>
+            <span class="call-detail-label">@L["CD_StartTime"]</span>
             <span class="call-detail-value mono">@_call.StartTime.ToLocalTime().ToString("HH:mm:ss.fff")</span>
         </div>
         @if (_call.EndTime.HasValue)
         {
             <div class="call-detail-field">
-                <span class="call-detail-label">End Time</span>
+                <span class="call-detail-label">@L["CD_EndTime"]</span>
                 <span class="call-detail-value mono">@_call.EndTime.Value.ToLocalTime().ToString("HH:mm:ss.fff")</span>
             </div>
         }
         @if (_call.HangupCause.HasValue)
         {
             <div class="call-detail-field">
-                <span class="call-detail-label">Hangup Cause</span>
+                <span class="call-detail-label">@L["CD_HangupCause"]</span>
                 <span class="call-detail-value">@_call.HangupCause</span>
             </div>
         }
         @if (_call.AgentName is not null || _call.QueueName is not null)
         {
             <div class="call-detail-field">
-                <span class="call-detail-label">Queue/Agent</span>
+                <span class="call-detail-label">@L["CD_QueueAgent"]</span>
                 <span class="call-detail-value">
                     @if (_call.QueueName is not null)
                     {
@@ -120,7 +121,7 @@ else
             if (waitTime.HasValue)
             {
                 <div class="call-detail-field">
-                    <span class="call-detail-label">Queue Wait</span>
+                    <span class="call-detail-label">@L["CD_QueueWait"]</span>
                     <span class="call-detail-value">@FormatDuration(waitTime.Value)</span>
                 </div>
             }
@@ -129,9 +130,9 @@ else
 
     <!-- View tabs: Timeline / Flow / Events -->
     <div class="view-tabs">
-        <button class="view-tab @(_view == "timeline" ? "view-tab-active" : "")" @onclick='() => _view = "timeline"'>Timeline</button>
-        <button class="view-tab @(_view == "flow" ? "view-tab-active" : "")" @onclick='() => _view = "flow"'>Flow</button>
-        <button class="view-tab @(_view == "events" ? "view-tab-active" : "")" @onclick='() => _view = "events"'>Events (@_call.Events.Count)</button>
+        <button class="view-tab @(_view == "timeline" ? "view-tab-active" : "")" @onclick='() => _view = "timeline"'>@L["CD_Timeline"]</button>
+        <button class="view-tab @(_view == "flow" ? "view-tab-active" : "")" @onclick='() => _view = "flow"'>@L["CD_Flow"]</button>
+        <button class="view-tab @(_view == "events" ? "view-tab-active" : "")" @onclick='() => _view = "events"'>@L["CD_Events"] (@_call.Events.Count)</button>
     </div>
 
     @if (_view == "timeline")
@@ -219,10 +220,10 @@ else
     {
     <!-- Event Log -->
     <div class="event-timeline">
-        <h3 style="font-size:1rem; margin:0 0 0.75rem">Events (@_call.Events.Count)</h3>
+        <h3 style="font-size:1rem; margin:0 0 0.75rem">@L["CD_Events"] (@_call.Events.Count)</h3>
         @if (!_call.Events.Any())
         {
-            <p class="text-muted">No events recorded.</p>
+            <p class="text-muted">@L["CD_NoEvents"]</p>
         }
         else
         {
