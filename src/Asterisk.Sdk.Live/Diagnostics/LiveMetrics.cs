@@ -57,4 +57,14 @@ public static class LiveMetrics
     public static readonly Histogram<double> QueueWaitTimeMs =
         Meter.CreateHistogram<double>("live.queue.wait_time", "ms",
             "Time a caller waited in queue before being answered");
+
+    // --- Bridge counters ---
+
+    /// <summary>Total bridges created.</summary>
+    public static readonly Counter<long> BridgesCreated =
+        Meter.CreateCounter<long>("live.bridges.created", "bridges", "Total bridges created");
+
+    /// <summary>Total bridges destroyed.</summary>
+    public static readonly Counter<long> BridgesDestroyed =
+        Meter.CreateCounter<long>("live.bridges.destroyed", "bridges", "Total bridges destroyed");
 }

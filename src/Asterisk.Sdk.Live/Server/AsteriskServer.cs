@@ -4,6 +4,7 @@ using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Events;
 using Asterisk.Sdk.Ami.Events.Base;
 using Asterisk.Sdk.Live.Agents;
+using Asterisk.Sdk.Live.Bridges;
 using Asterisk.Sdk.Live.Channels;
 using Asterisk.Sdk.Live.Diagnostics;
 using Asterisk.Sdk.Live.MeetMe;
@@ -45,6 +46,7 @@ public sealed class AsteriskServer : IAsteriskServer
     public QueueManager Queues { get; }
     public AgentManager Agents { get; }
     public MeetMeManager MeetMe { get; }
+    public BridgeManager Bridges { get; }
 
     /// <summary>Fired when the AMI connection is lost or completed.</summary>
     public event Action<Exception?>? ConnectionLost;
@@ -60,6 +62,7 @@ public sealed class AsteriskServer : IAsteriskServer
         Queues = new QueueManager(logger);
         Agents = new AgentManager(logger);
         MeetMe = new MeetMeManager(logger);
+        Bridges = new BridgeManager(logger);
     }
 
     /// <summary>
@@ -108,6 +111,7 @@ public sealed class AsteriskServer : IAsteriskServer
             Queues.Clear();
             Agents.Clear();
             MeetMe.Clear();
+            Bridges.Clear();
 
             // Re-subscribe observer (the connection is new after reconnect)
             _subscription?.Dispose();
@@ -242,7 +246,8 @@ public sealed class AsteriskServer : IAsteriskServer
                         nce.CallerIdName,
                         nce.Context,
                         nce.Exten,
-                        nce.Priority ?? 1);
+                        nce.Priority ?? 1,
+                        nce.Linkedid);
                     break;
 
                 case NewStateEvent nse:
@@ -362,6 +367,81 @@ public sealed class AsteriskServer : IAsteriskServer
 
                 case ConfbridgeLeaveEvent cbl:
                     server.MeetMe.OnUserLeft(cbl.Conference ?? "", 0);
+                    break;
+
+                // Bridge events
+                case BridgeCreateEvent bce:
+                    server.Bridges.OnBridgeCreated(
+                        bce.BridgeUniqueid!,
+                        bce.BridgeType,
+                        bce.BridgeTechnology,
+                        bce.BridgeCreator,
+                        bce.BridgeName);
+                    break;
+
+                case BridgeEnterEvent bee:
+                    server.Bridges.OnChannelEntered(bee.BridgeUniqueid!, bee.UniqueId!);
+                    var enterBridge = server.Bridges.GetById(bee.BridgeUniqueid!);
+                    if (enterBridge is not null && enterBridge.NumChannels == 2)
+                    {
+                        var otherUid = enterBridge.Channels.Keys.FirstOrDefault(k => k != bee.UniqueId);
+                        if (otherUid is not null)
+                            server.Channels.OnLink(bee.UniqueId!, otherUid);
+                    }
+                    break;
+
+                case BridgeLeaveEvent ble:
+                    var leaveBridge = server.Bridges.GetById(ble.BridgeUniqueid!);
+                    if (leaveBridge is not null)
+                    {
+                        var otherUid2 = leaveBridge.Channels.Keys.FirstOrDefault(k => k != ble.UniqueId);
+                        if (otherUid2 is not null)
+                            server.Channels.OnUnlink(ble.UniqueId!, otherUid2);
+                    }
+                    server.Bridges.OnChannelLeft(ble.BridgeUniqueid!, ble.UniqueId!);
+                    break;
+
+                case BridgeDestroyEvent bde:
+                    server.Bridges.OnBridgeDestroyed(bde.BridgeUniqueid!);
+                    break;
+
+                // Dial events
+                case DialBeginEvent dbe:
+                    server.Channels.OnDialBegin(
+                        dbe.UniqueId!,
+                        dbe.DestUniqueid!,
+                        dbe.DestChannel!,
+                        dbe.DialString);
+                    break;
+
+                case DialEndEvent dee:
+                    server.Channels.OnDialEnd(dee.UniqueId!, dee.DialStatus);
+                    break;
+
+                // Hold events
+                case HoldEvent hoe:
+                    server.Channels.OnHold(hoe.UniqueId!, hoe.MusicClass);
+                    break;
+
+                case UnholdEvent uhe:
+                    server.Channels.OnUnhold(uhe.UniqueId!);
+                    break;
+
+                // Transfer events
+                case BlindTransferEvent bte:
+                    server.Bridges.OnBlindTransfer(
+                        bte.BridgeUniqueid!,
+                        bte.TransfereeChannel,
+                        bte.Extension,
+                        bte.TransfereeContext);
+                    break;
+
+                case AttendedTransferEvent ate:
+                    server.Bridges.OnAttendedTransfer(
+                        ate.OrigBridgeUniqueid!,
+                        ate.SecondBridgeUniqueid,
+                        ate.DestType,
+                        ate.Result);
                     break;
             }
         }

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Session Engine - call session correlation, state machines, and domain events</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.Tests" />
+    <InternalsVisibleTo Include="Asterisk.Sdk.Hosting" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Asterisk.Sdk\Asterisk.Sdk.csproj" />
+    <ProjectReference Include="..\Asterisk.Sdk.Ami\Asterisk.Sdk.Ami.csproj" />
+    <ProjectReference Include="..\Asterisk.Sdk.Live\Asterisk.Sdk.Live.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="System.Reactive" />
+  </ItemGroup>
+</Project>

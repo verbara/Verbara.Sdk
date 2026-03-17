@@ -58,7 +58,8 @@ public sealed class ChannelManager
     /// <summary>Handle a NewChannel event.</summary>
     public void OnNewChannel(string uniqueId, string channelName, ChannelState state,
         string? callerIdNum = null, string? callerIdName = null,
-        string? context = null, string? exten = null, int priority = 1)
+        string? context = null, string? exten = null, int priority = 1,
+        string? linkedId = null)
     {
         var channel = new AsteriskChannel
         {
@@ -69,7 +70,8 @@ public sealed class ChannelManager
             CallerIdName = callerIdName,
             Context = context,
             Extension = exten,
-            Priority = priority
+            Priority = priority,
+            LinkedId = linkedId
         };
 
         _channelsByUniqueId[uniqueId] = channel;
@@ -154,6 +156,53 @@ public sealed class ChannelManager
         ChannelManagerLog.Unlinked(_logger, uniqueId1, uniqueId2);
     }
 
+    public event Action<AsteriskChannel>? ChannelDialBegin;
+    public event Action<AsteriskChannel>? ChannelDialEnd;
+    public event Action<AsteriskChannel>? ChannelHeld;
+    public event Action<AsteriskChannel>? ChannelUnheld;
+
+    public void OnDialBegin(string uniqueId, string destUniqueId, string destChannel, string? dialString)
+    {
+        if (!_channelsByUniqueId.TryGetValue(uniqueId, out var channel)) return;
+        lock (channel.SyncRoot)
+        {
+            channel.DialedChannel = destChannel;
+        }
+        ChannelDialBegin?.Invoke(channel);
+    }
+
+    public void OnDialEnd(string uniqueId, string? dialStatus)
+    {
+        if (!_channelsByUniqueId.TryGetValue(uniqueId, out var channel)) return;
+        lock (channel.SyncRoot)
+        {
+            channel.DialStatus = dialStatus;
+        }
+        ChannelDialEnd?.Invoke(channel);
+    }
+
+    public void OnHold(string uniqueId, string? musicClass)
+    {
+        if (!_channelsByUniqueId.TryGetValue(uniqueId, out var channel)) return;
+        lock (channel.SyncRoot)
+        {
+            channel.IsOnHold = true;
+            channel.HoldMusicClass = musicClass;
+        }
+        ChannelHeld?.Invoke(channel);
+    }
+
+    public void OnUnhold(string uniqueId)
+    {
+        if (!_channelsByUniqueId.TryGetValue(uniqueId, out var channel)) return;
+        lock (channel.SyncRoot)
+        {
+            channel.IsOnHold = false;
+            channel.HoldMusicClass = null;
+        }
+        ChannelUnheld?.Invoke(channel);
+    }
+
     /// <summary>Get channels filtered by state (lazy, zero-alloc).</summary>
     public IEnumerable<AsteriskChannel> GetChannelsByState(ChannelState state) =>
         _channelsByUniqueId.Values.Where(c => c.State == state);
@@ -209,6 +258,11 @@ public sealed class AsteriskChannel : LiveObjectBase
     public int Priority { get; set; }
     public AsteriskChannel? LinkedChannel { get; set; }
     public HangupCause HangupCause { get; set; }
+    public string? LinkedId { get; init; }
+    public string? DialedChannel { get; set; }
+    public string? DialStatus { get; set; }
+    public bool IsOnHold { get; set; }
+    public string? HoldMusicClass { get; set; }
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
 
     /// <summary>Extension history for this channel (bounded to last 100 entries).</summary>
