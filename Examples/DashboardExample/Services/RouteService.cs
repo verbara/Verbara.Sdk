@@ -261,6 +261,7 @@ public sealed partial class RouteService
             "extension" => $"Ext {target}",
             "queue" => $"Queue: {target}",
             "time_condition" => $"TC: {target}",
+            "ivr" => $"IVR: {target}",
             _ => target
         };
         return Task.FromResult(label);

@@ -328,6 +328,7 @@ public sealed class TimeConditionService
         "extension" => $"Ext {target}",
         "queue" => $"Queue: {target}",
         "time_condition" => $"TC: {target}",
+        "ivr" => $"IVR: {target}",
         _ => target
     };
 
