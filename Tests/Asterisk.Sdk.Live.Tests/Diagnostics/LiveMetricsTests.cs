@@ -20,5 +20,7 @@ public class LiveMetricsTests
         LiveMetrics.QueueCallsLeft.Should().NotBeNull();
         LiveMetrics.AgentStateChanges.Should().NotBeNull();
         LiveMetrics.QueueWaitTimeMs.Should().NotBeNull();
+        LiveMetrics.BridgesCreated.Should().NotBeNull();
+        LiveMetrics.BridgesDestroyed.Should().NotBeNull();
     }
 }
