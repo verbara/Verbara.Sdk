@@ -128,6 +128,7 @@ public sealed class FastAgiServer : IAgiServer
         await using var conn = PipelineSocketConnection.FromStream(client.GetStream());
 
         var sw = Stopwatch.GetTimestamp();
+        System.Diagnostics.Activity? activity = null;
         try
         {
             var reader = new FastAgiReader(conn.Input);
@@ -136,6 +137,7 @@ public sealed class FastAgiServer : IAgiServer
             // Read AGI request headers
             var request = await reader.ReadRequestAsync(connectionCt);
 
+            activity = AgiActivitySource.StartScript(request.Script, request.Channel);
             FastAgiServerLog.ScriptExecuting(_logger, request.Script, request.Channel);
 
             // Map request to script
@@ -144,6 +146,7 @@ public sealed class FastAgiServer : IAgiServer
             {
                 AgiMetrics.ScriptsNotFound.Add(1);
                 FastAgiServerLog.NoScriptMapped(_logger, request.Script);
+                AgiActivitySource.SetResult(activity, AgiScriptResult.NotFound);
                 return;
             }
 
@@ -152,24 +155,27 @@ public sealed class FastAgiServer : IAgiServer
             await script.ExecuteAsync(channel, request, connectionCt);
 
             AgiMetrics.ScriptsExecuted.Add(1);
+            AgiActivitySource.SetResult(activity, AgiScriptResult.Completed);
         }
         catch (AgiHangupException)
         {
             AgiMetrics.Hangups.Add(1);
-            // Normal hangup during script execution
+            AgiActivitySource.SetResult(activity, AgiScriptResult.Hangup);
         }
         catch (OperationCanceledException)
         {
-            // Server shutting down or connection timeout
+            AgiActivitySource.SetResult(activity, AgiScriptResult.Timeout);
         }
         catch (Exception ex)
         {
             AgiMetrics.ScriptsFailed.Add(1);
             FastAgiServerLog.ConnectionError(_logger, ex);
+            AgiActivitySource.SetResult(activity, AgiScriptResult.Failed, ex.Message);
         }
         finally
         {
             AgiMetrics.ScriptDurationMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
+            activity?.Dispose();
         }
     }
 

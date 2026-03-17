@@ -261,6 +261,8 @@ public sealed class AmiConnection : IAmiConnection
         {
             // Use source-generated serializer for AOT-compatible action dispatch
             var actionName = GeneratedActionSerializer.GetActionName(action);
+            using var activity = AmiActivitySource.StartAction(actionName, actionId);
+
             var fields = MaterializeAndLogFields(actionId, actionName, GeneratedActionSerializer.Serialize(action));
 
             _actionNames[actionId] = actionName;
@@ -276,7 +278,9 @@ public sealed class AmiConnection : IAmiConnection
             AmiMetrics.ActionRoundtripMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
 
             // Use source-generated deserializer for typed response mapping
-            return GeneratedResponseDeserializer.Deserialize(responseMsg, actionName);
+            var response = GeneratedResponseDeserializer.Deserialize(responseMsg, actionName);
+            AmiActivitySource.SetResponse(activity, responseMsg.ResponseStatus, responseMsg["Message"]);
+            return response;
         }
         finally
         {
@@ -299,6 +303,8 @@ public sealed class AmiConnection : IAmiConnection
         try
         {
             var actionName = GeneratedActionSerializer.GetActionName(action);
+            using var activity = AmiActivitySource.StartAction(actionName, actionId);
+
             var fields = MaterializeAndLogFields(actionId, actionName, GeneratedActionSerializer.Serialize(action));
 
             _actionNames[actionId] = actionName;
@@ -315,6 +321,7 @@ public sealed class AmiConnection : IAmiConnection
 
             // Use source-generated deserializer for full typed response
             var response = GeneratedResponseDeserializer.Deserialize(responseMsg, actionName);
+            AmiActivitySource.SetResponse(activity, responseMsg.ResponseStatus, responseMsg["Message"]);
             return response as TResponse ?? (TResponse)response;
         }
         finally
@@ -347,16 +354,23 @@ public sealed class AmiConnection : IAmiConnection
         try
         {
             var actionName = GeneratedActionSerializer.GetActionName(action);
+            using var activity = AmiActivitySource.StartAction(actionName, actionId);
+
             var fields = MaterializeAndLogFields(actionId, actionName, GeneratedActionSerializer.Serialize(action));
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
             await WriteActionLockedAsync(actionName, actionId, fields, ct);
 
+            var eventCount = 0;
             await foreach (var evt in collector.ReadAllAsync(ct))
             {
+                eventCount++;
                 yield return evt;
             }
+
+            activity?.SetTag("ami.event_count", eventCount);
+            activity?.SetStatus(ActivityStatusCode.Ok);
         }
         finally
         {
