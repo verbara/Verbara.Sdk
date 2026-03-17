@@ -909,4 +909,35 @@
   <data name="Sem_Online" xml:space="preserve"><value>Online</value></data>
   <data name="Sem_Available" xml:space="preserve"><value>Available</value></data>
   <data name="Sem_Active" xml:space="preserve"><value>Active</value></data>
+
+  <!-- Phase 4A: Advanced toggle -->
+  <data name="Toggle_ShowAdvanced" xml:space="preserve"><value>Show advanced settings</value></data>
+  <data name="Toggle_HideAdvanced" xml:space="preserve"><value>Hide advanced settings</value></data>
+
+  <!-- Phase 4C: Validation errors -->
+  <data name="Err_Required" xml:space="preserve"><value>This field is required.</value></data>
+  <data name="Err_ExtOutOfRange" xml:space="preserve"><value>Extension must be within the configured range.</value></data>
+  <data name="Err_PasswordTooShort" xml:space="preserve"><value>Password must be at least 8 characters.</value></data>
+  <data name="Err_InvalidHost" xml:space="preserve"><value>Enter a valid hostname or IP address.</value></data>
+  <data name="Err_InvalidPort" xml:space="preserve"><value>Port must be between 1 and 65535.</value></data>
+  <data name="Err_NoCodecs" xml:space="preserve"><value>Select at least one codec.</value></data>
+  <data name="Err_VoicemailPinRequired" xml:space="preserve"><value>PIN is required when voicemail is enabled.</value></data>
+  <data name="Err_CFNoAnswerTimeout" xml:space="preserve"><value>Timeout is required when call forward no-answer is set.</value></data>
+  <data name="Err_NoTrunks" xml:space="preserve"><value>At least one trunk is required for outbound routes.</value></data>
+  <data name="Err_NameRequired" xml:space="preserve"><value>Name is required.</value></data>
+  <data name="Err_QueueNameRequired" xml:space="preserve"><value>Queue name is required.</value></data>
+  <data name="Err_RouteNameRequired" xml:space="preserve"><value>Route name is required.</value></data>
+  <data name="Err_DIDRequired" xml:space="preserve"><value>DID pattern is required for inbound routes.</value></data>
+
+  <!-- Phase 4D: Templates -->
+  <data name="Template_StartFrom" xml:space="preserve"><value>Start from template</value></data>
+  <data name="Template_Blank" xml:space="preserve"><value>— Blank (no template) —</value></data>
+  <data name="Template_SaveAs" xml:space="preserve"><value>Save as Template</value></data>
+  <data name="Template_NamePlaceholder" xml:space="preserve"><value>Template name</value></data>
+  <data name="Template_DescPlaceholder" xml:space="preserve"><value>Short description</value></data>
+  <data name="Template_Saved" xml:space="preserve"><value>Template saved successfully.</value></data>
+  <data name="Template_StandardEmployee" xml:space="preserve"><value>Standard Employee — Basic phone with voicemail</value></data>
+  <data name="Template_LobbyPhone" xml:space="preserve"><value>Lobby Phone — Shared phone, no voicemail</value></data>
+  <data name="Template_Manager" xml:space="preserve"><value>Manager — Full features with HD audio</value></data>
+  <data name="Template_Delete" xml:space="preserve"><value>Delete</value></data>
 </root>

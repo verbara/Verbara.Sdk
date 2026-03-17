@@ -910,4 +910,35 @@
   <data name="Sem_Available" xml:space="preserve"><value>Disponible</value></data>
   <data name="Sem_Active" xml:space="preserve"><value>Activo</value></data>
 
+  <!-- Phase 4A: Advanced toggle -->
+  <data name="Toggle_ShowAdvanced" xml:space="preserve"><value>Mostrar configuración avanzada</value></data>
+  <data name="Toggle_HideAdvanced" xml:space="preserve"><value>Ocultar configuración avanzada</value></data>
+
+  <!-- Phase 4C: Validation errors -->
+  <data name="Err_Required" xml:space="preserve"><value>Este campo es requerido.</value></data>
+  <data name="Err_ExtOutOfRange" xml:space="preserve"><value>La extensión debe estar dentro del rango configurado.</value></data>
+  <data name="Err_PasswordTooShort" xml:space="preserve"><value>La contraseña debe tener al menos 8 caracteres.</value></data>
+  <data name="Err_InvalidHost" xml:space="preserve"><value>Ingrese un nombre de host o dirección IP válida.</value></data>
+  <data name="Err_InvalidPort" xml:space="preserve"><value>El puerto debe estar entre 1 y 65535.</value></data>
+  <data name="Err_NoCodecs" xml:space="preserve"><value>Seleccione al menos un códec.</value></data>
+  <data name="Err_VoicemailPinRequired" xml:space="preserve"><value>El PIN es requerido cuando el buzón de voz está habilitado.</value></data>
+  <data name="Err_CFNoAnswerTimeout" xml:space="preserve"><value>El tiempo de espera es requerido cuando el desvío por no respuesta está configurado.</value></data>
+  <data name="Err_NoTrunks" xml:space="preserve"><value>Se requiere al menos una troncal para rutas salientes.</value></data>
+  <data name="Err_NameRequired" xml:space="preserve"><value>El nombre es requerido.</value></data>
+  <data name="Err_QueueNameRequired" xml:space="preserve"><value>El nombre de la cola es requerido.</value></data>
+  <data name="Err_RouteNameRequired" xml:space="preserve"><value>El nombre de la ruta es requerido.</value></data>
+  <data name="Err_DIDRequired" xml:space="preserve"><value>El patrón DID es requerido para rutas entrantes.</value></data>
+
+  <!-- Phase 4D: Templates -->
+  <data name="Template_StartFrom" xml:space="preserve"><value>Comenzar desde plantilla</value></data>
+  <data name="Template_Blank" xml:space="preserve"><value>— En blanco (sin plantilla) —</value></data>
+  <data name="Template_SaveAs" xml:space="preserve"><value>Guardar como Plantilla</value></data>
+  <data name="Template_NamePlaceholder" xml:space="preserve"><value>Nombre de la plantilla</value></data>
+  <data name="Template_DescPlaceholder" xml:space="preserve"><value>Descripción breve</value></data>
+  <data name="Template_Saved" xml:space="preserve"><value>Plantilla guardada exitosamente.</value></data>
+  <data name="Template_StandardEmployee" xml:space="preserve"><value>Empleado Estándar — Teléfono básico con buzón de voz</value></data>
+  <data name="Template_LobbyPhone" xml:space="preserve"><value>Teléfono de Recepción — Teléfono compartido, sin buzón</value></data>
+  <data name="Template_Manager" xml:space="preserve"><value>Gerente — Todas las funciones con audio HD</value></data>
+  <data name="Template_Delete" xml:space="preserve"><value>Eliminar</value></data>
+
 </root>
