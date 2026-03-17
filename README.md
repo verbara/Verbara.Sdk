@@ -287,6 +287,18 @@ await ami.DisconnectAsync();
 
 ---
 
+## Dashboard Example
+
+The `Examples/DashboardExample` project is a Blazor Server application showcasing the full SDK in a real-world monitoring and management dashboard. It includes:
+
+**Monitoring** -- Live call matrix, queue status, agent tracking, channel list, parked calls, traffic analytics, Prometheus-style metrics, event log, and CLI console.
+
+**PBX Management** -- CRUD pages for Extensions, Trunks, Routes, IVR Menus, Queue Config, and Time Conditions. Both file-based (AMI `GetConfig`/`UpdateConfig`) and Realtime (PostgreSQL + Dapper) backends.
+
+**Media & Features** -- Recording policies with on-demand MixMonitor, Music on Hold class management with audio upload/conversion, ConfBridge profile configuration, Feature Codes with star-code CRUD, and Parking Lot slot/timeout configuration.
+
+---
+
 ## Requirements
 
 - **.NET 10.0** or later
