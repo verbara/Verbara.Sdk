@@ -730,4 +730,169 @@
   <!-- Select Server Page -->
   <data name="SS_Heading" xml:space="preserve"><value>Select Server</value></data>
   <data name="SS_Choose" xml:space="preserve"><value>Choose an Asterisk server to monitor</value></data>
+
+  <!-- ==================== HELP SYSTEM ==================== -->
+
+  <!-- Glossary UI -->
+  <data name="Glossary_Title" xml:space="preserve"><value>Glossary</value></data>
+  <data name="Glossary_SearchPlaceholder" xml:space="preserve"><value>Search terms...</value></data>
+
+  <!-- Help Tooltips: Extension -->
+  <data name="Help_ExtNumber_Title" xml:space="preserve"><value>Extension Number</value></data>
+  <data name="Help_ExtNumber" xml:space="preserve"><value>This is the internal phone number. Employees dial this to reach each other (e.g., 2001).</value></data>
+  <data name="Help_DisplayName_Title" xml:space="preserve"><value>Display Name</value></data>
+  <data name="Help_DisplayName" xml:space="preserve"><value>The name shown on caller ID when this person makes a call. Usually the employee's full name.</value></data>
+  <data name="Help_Technology_Title" xml:space="preserve"><value>Technology</value></data>
+  <data name="Help_Technology" xml:space="preserve"><value>The protocol your phone uses to connect. PJSIP is the modern standard — use it unless you have old phones that require SIP or IAX2.</value></data>
+  <data name="Help_Password_Title" xml:space="preserve"><value>Password</value></data>
+  <data name="Help_Password" xml:space="preserve"><value>The secret the phone uses to register with the PBX. Use a strong, random password (the Generate button helps). Minimum 8 characters.</value></data>
+  <data name="Help_Context_Title" xml:space="preserve"><value>Context</value></data>
+  <data name="Help_Context" xml:space="preserve"><value>Controls which calls this phone can make. 'from-internal' means it can call other extensions and outside lines. Think of it as a permission group.</value></data>
+  <data name="Help_CallGroup_Title" xml:space="preserve"><value>Call Group</value></data>
+  <data name="Help_CallGroup" xml:space="preserve"><value>Group number for call pickup. Phones in the same group can pick up each other's ringing calls. Usually '1' for the main office.</value></data>
+  <data name="Help_PickupGroup_Title" xml:space="preserve"><value>Pickup Group</value></data>
+  <data name="Help_PickupGroup" xml:space="preserve"><value>Which call groups this phone can pick up. If set to '1', this phone can answer ringing calls from group 1 by dialing the pickup code.</value></data>
+  <data name="Help_Codecs_Title" xml:space="preserve"><value>Codecs</value></data>
+  <data name="Help_Codecs" xml:space="preserve"><value>Audio quality settings. Think of it like choosing between MP3 (small, decent quality) and CD (big, perfect quality). ulaw and alaw are the safe defaults.</value></data>
+  <data name="Help_DtmfMode_Title" xml:space="preserve"><value>DTMF Mode</value></data>
+  <data name="Help_DtmfMode" xml:space="preserve"><value>How the phone sends button-press tones (the beeps when you press 1, 2, 3...). Leave as 'RFC 4733' unless your phone provider says otherwise.</value></data>
+  <data name="Help_Transport_Title" xml:space="preserve"><value>Transport</value></data>
+  <data name="Help_Transport" xml:space="preserve"><value>How data travels between the phone and PBX. UDP is fastest (default). TCP is more reliable. TLS adds encryption for security.</value></data>
+
+  <!-- Help Tooltips: Trunk -->
+  <data name="Help_TrunkName_Title" xml:space="preserve"><value>Trunk Name</value></data>
+  <data name="Help_TrunkName" xml:space="preserve"><value>A friendly name to identify this connection. Example: 'Main-Provider' or 'Backup-Line'. Only for your reference.</value></data>
+  <data name="Help_TrunkHost_Title" xml:space="preserve"><value>Host</value></data>
+  <data name="Help_TrunkHost" xml:space="preserve"><value>The address of your phone company's server. Your provider gives you this (e.g., sip.provider.com or an IP address).</value></data>
+  <data name="Help_TrunkPort_Title" xml:space="preserve"><value>Port</value></data>
+  <data name="Help_TrunkPort" xml:space="preserve"><value>Network port for the connection. Default is 5060 for SIP and 5061 for TLS. Only change if your provider specifies a different one.</value></data>
+  <data name="Help_TrunkTransport_Title" xml:space="preserve"><value>Transport</value></data>
+  <data name="Help_TrunkTransport" xml:space="preserve"><value>How data travels to your provider. UDP is standard. Use TLS if your provider requires encrypted connections.</value></data>
+  <data name="Help_TrunkUsername_Title" xml:space="preserve"><value>Username</value></data>
+  <data name="Help_TrunkUsername" xml:space="preserve"><value>The account name your phone provider gave you for authentication. Sometimes called 'Auth ID' or 'SIP Username'.</value></data>
+  <data name="Help_TrunkSecret_Title" xml:space="preserve"><value>Secret</value></data>
+  <data name="Help_TrunkSecret" xml:space="preserve"><value>The password for your trunk account. Your phone provider gives you this. Keep it secure — it controls access to your phone lines.</value></data>
+  <data name="Help_TrunkAuthType_Title" xml:space="preserve"><value>Auth Type</value></data>
+  <data name="Help_TrunkAuthType" xml:space="preserve"><value>How the PBX proves its identity to the provider. 'MD5' is the standard method. Only change if your provider requires something different.</value></data>
+  <data name="Help_TrunkCodecs_Title" xml:space="preserve"><value>Codecs</value></data>
+  <data name="Help_TrunkCodecs" xml:space="preserve"><value>Audio formats supported by this trunk. Must match what your provider supports. ulaw (North America) and alaw (Europe) are universal standards.</value></data>
+
+  <!-- Help Tooltips: Queue -->
+  <data name="Help_QueueName_Title" xml:space="preserve"><value>Queue Name</value></data>
+  <data name="Help_QueueName" xml:space="preserve"><value>A unique name for this call queue. Example: 'sales' or 'support'. Callers are placed here when they call and wait for an available agent.</value></data>
+  <data name="Help_QueueStrategy_Title" xml:space="preserve"><value>Strategy</value></data>
+  <data name="Help_QueueStrategy" xml:space="preserve"><value>How incoming calls are distributed. 'Ring All' rings everyone at once. 'Least Recent' rings the person who's been idle longest. 'Round Robin' takes turns.</value></data>
+  <data name="Help_QueueMaxCallers_Title" xml:space="preserve"><value>Max Callers</value></data>
+  <data name="Help_QueueMaxCallers" xml:space="preserve"><value>Maximum number of callers that can wait in the queue at once. When full, new callers hear a busy signal or get redirected.</value></data>
+  <data name="Help_QueueTimeout_Title" xml:space="preserve"><value>Ring Timeout</value></data>
+  <data name="Help_QueueTimeout" xml:space="preserve"><value>How many seconds to ring an agent before trying the next one (or trying again). 15-30 seconds is typical.</value></data>
+  <data name="Help_QueueMembers_Title" xml:space="preserve"><value>Members</value></data>
+  <data name="Help_QueueMembers" xml:space="preserve"><value>The extensions (agents) assigned to answer calls in this queue. Add extensions by number. They'll receive calls based on the strategy above.</value></data>
+  <data name="Help_QueueServiceLevel_Title" xml:space="preserve"><value>Service Level</value></data>
+  <data name="Help_QueueServiceLevel" xml:space="preserve"><value>Your target answer time in seconds. If you set 60, the system tracks what percentage of calls are answered within 1 minute. Used for reporting.</value></data>
+
+  <!-- Help Tooltips: Route -->
+  <data name="Help_RouteName_Title" xml:space="preserve"><value>Route Name</value></data>
+  <data name="Help_RouteName" xml:space="preserve"><value>A descriptive name for this route. Example: 'Main-Number-Inbound' or 'International-Calls'. Only for your reference.</value></data>
+  <data name="Help_RouteDIDPattern_Title" xml:space="preserve"><value>DID Pattern</value></data>
+  <data name="Help_RouteDIDPattern" xml:space="preserve"><value>The phone number that callers dial to reach you from outside. Your phone company assigns this. Use '_X.' for wildcard patterns.</value></data>
+  <data name="Help_RoutePriority_Title" xml:space="preserve"><value>Priority</value></data>
+  <data name="Help_RoutePriority" xml:space="preserve"><value>When multiple routes match, the one with the lowest priority number wins. Use 1 for your main route, 2 for backup, etc.</value></data>
+  <data name="Help_RouteDestType_Title" xml:space="preserve"><value>Destination Type</value></data>
+  <data name="Help_RouteDestType" xml:space="preserve"><value>Where to send matched calls. Extension = a specific phone. Queue = a group of agents. IVR = an automated menu ('Press 1 for...').</value></data>
+  <data name="Help_RouteTarget_Title" xml:space="preserve"><value>Target</value></data>
+  <data name="Help_RouteTarget" xml:space="preserve"><value>The specific extension number, queue name, or IVR menu that will receive the call.</value></data>
+  <data name="Help_RouteTrunk_Title" xml:space="preserve"><value>Trunk</value></data>
+  <data name="Help_RouteTrunk" xml:space="preserve"><value>Which phone line to use for outbound calls matching this route. Order matters — if the first trunk is busy, the system tries the next one.</value></data>
+
+  <!-- Help Panels: Section explanations -->
+  <data name="HelpPanel_ExtEdit_Identity" xml:space="preserve"><value>This is where you set up a new phone line for someone in your office. Enter their name and assign an extension number — think of it like giving them their own desk phone number.</value></data>
+  <data name="HelpPanel_ExtEdit_Auth" xml:space="preserve"><value>Security settings for this extension. The password is what the physical phone uses to connect to the system — like a Wi-Fi password but for the phone. Always use a strong, random password.</value></data>
+  <data name="HelpPanel_ExtEdit_Dialplan" xml:space="preserve"><value>Controls what this phone is allowed to do. The context sets permissions (who can they call?), and groups determine which colleagues can pick up their ringing phone.</value></data>
+  <data name="HelpPanel_ExtEdit_MediaTransport" xml:space="preserve"><value>Technical settings for audio quality and network connection. The defaults work for most setups. Only change these if you're experiencing audio issues or your IT team recommends specific settings.</value></data>
+  <data name="HelpPanel_ExtEdit_Voicemail" xml:space="preserve"><value>Set up a voicemail box so callers can leave messages when this person is unavailable. The PIN protects the voicemail from unauthorized access. Email notifications send new messages to the user's inbox.</value></data>
+  <data name="HelpPanel_ExtEdit_CallFeatures" xml:space="preserve"><value>Call forwarding rules. Forward calls when the user is busy, doesn't answer, or always. DND (Do Not Disturb) sends all calls straight to voicemail.</value></data>
+  <data name="HelpPanel_TrunkEdit_Connection" xml:space="preserve"><value>Connection details for your phone provider. Think of a trunk as the phone line connecting your office to the outside world. Your provider gives you the host address and port.</value></data>
+  <data name="HelpPanel_ExtEdit_Auth_Trunk" xml:space="preserve"><value>Credentials your phone provider gave you. The PBX uses these to authenticate with the provider, like logging into your phone company's service.</value></data>
+  <data name="HelpPanel_QCfg_Identity" xml:space="preserve"><value>Basic information about this call queue. A queue holds incoming callers in line and distributes them to available agents — like a waiting room with an automated receptionist.</value></data>
+  <data name="HelpPanel_QCfg_StrategyTiming" xml:space="preserve"><value>How calls are distributed to agents. The strategy decides who rings first, and the timeout controls how long to wait before trying the next agent.</value></data>
+  <data name="HelpPanel_RouteEdit_RouteDetails" xml:space="preserve"><value>Defines which calls this route handles. For inbound routes, the DID pattern matches the number callers dial. For outbound routes, the dial pattern matches what your employees dial.</value></data>
+  <data name="HelpPanel_QCfg_StaticMembers" xml:space="preserve"><value>The agents assigned to answer calls in this queue. Add them by their device address (e.g., PJSIP/2001). Penalty controls priority — lower penalty agents get calls first.</value></data>
+  <data name="HelpPanel_RouteEdit_TrunksOrder" xml:space="preserve"><value>The phone lines used for this outbound route, in priority order. If the first trunk is busy or down, the system automatically tries the next one in the list.</value></data>
+
+  <!-- Glossary Entries -->
+  <data name="Glossary_Extension" xml:space="preserve"><value>Extension</value></data>
+  <data name="Glossary_Extension_Def" xml:space="preserve"><value>An internal phone number assigned to a person or device. When someone dials 2001, the phone registered to extension 2001 rings.</value></data>
+  <data name="Glossary_Extension_Tip" xml:space="preserve"><value>Each employee typically gets one extension. Number ranges are set in system settings.</value></data>
+  <data name="Glossary_Extension_Category" xml:space="preserve"><value>Basics</value></data>
+
+  <data name="Glossary_Context" xml:space="preserve"><value>Context</value></data>
+  <data name="Glossary_Context_Def" xml:space="preserve"><value>A permission group that controls what calls a phone can make. 'from-internal' allows internal and external calls. Think of contexts as security zones.</value></data>
+  <data name="Glossary_Context_Tip" xml:space="preserve"><value>Most extensions use 'from-internal'. Lobby phones might use a restricted context.</value></data>
+  <data name="Glossary_Context_Category" xml:space="preserve"><value>Dialplan</value></data>
+
+  <data name="Glossary_Codec" xml:space="preserve"><value>Codec</value></data>
+  <data name="Glossary_Codec_Def" xml:space="preserve"><value>An audio compression format. Like choosing between MP3 and WAV — smaller files vs. better quality. Codecs determine call audio quality and bandwidth usage.</value></data>
+  <data name="Glossary_Codec_Tip" xml:space="preserve"><value>ulaw (North America) and alaw (Europe) are universal. G.722 gives HD audio if both sides support it.</value></data>
+  <data name="Glossary_Codec_Category" xml:space="preserve"><value>Audio</value></data>
+
+  <data name="Glossary_DTMF" xml:space="preserve"><value>DTMF</value></data>
+  <data name="Glossary_DTMF_Def" xml:space="preserve"><value>The tones your phone sends when you press buttons (the beeps for 1, 2, 3...). Used for phone menus ('Press 1 for sales') and entering PINs.</value></data>
+  <data name="Glossary_DTMF_Tip" xml:space="preserve"><value>RFC 4733 is the modern standard. Only change if IVR menus aren't responding to button presses.</value></data>
+  <data name="Glossary_DTMF_Category" xml:space="preserve"><value>Audio</value></data>
+
+  <data name="Glossary_Trunk" xml:space="preserve"><value>Trunk</value></data>
+  <data name="Glossary_Trunk_Def" xml:space="preserve"><value>A connection between your phone system and the outside world. Like a phone line that lets your employees make and receive external calls. You get trunks from a phone provider.</value></data>
+  <data name="Glossary_Trunk_Tip" xml:space="preserve"><value>Most offices need at least one trunk. Add a second for redundancy in case the first provider has issues.</value></data>
+  <data name="Glossary_Trunk_Category" xml:space="preserve"><value>Connectivity</value></data>
+
+  <data name="Glossary_DID" xml:space="preserve"><value>DID</value></data>
+  <data name="Glossary_DID_Def" xml:space="preserve"><value>Direct Inward Dialing — the external phone number that people call to reach your office. Your phone provider assigns DIDs, and you map them to extensions, queues, or IVRs.</value></data>
+  <data name="Glossary_DID_Tip" xml:space="preserve"><value>You can have many DIDs pointing to different departments (sales, support) on the same trunk.</value></data>
+  <data name="Glossary_DID_Category" xml:space="preserve"><value>Routing</value></data>
+
+  <data name="Glossary_Route" xml:space="preserve"><value>Route</value></data>
+  <data name="Glossary_Route_Def" xml:space="preserve"><value>A rule that tells the PBX where to send a call. Inbound routes match incoming DID numbers. Outbound routes match dialed patterns and pick which trunk to use.</value></data>
+  <data name="Glossary_Route_Tip" xml:space="preserve"><value>Lower priority number = higher importance. Route priority decides which rule wins when multiple routes match.</value></data>
+  <data name="Glossary_Route_Category" xml:space="preserve"><value>Routing</value></data>
+
+  <data name="Glossary_Queue" xml:space="preserve"><value>Queue</value></data>
+  <data name="Glossary_Queue_Def" xml:space="preserve"><value>A virtual waiting room for callers. When someone calls, they hear hold music while the system finds an available agent to answer. Queues distribute calls fairly among team members.</value></data>
+  <data name="Glossary_Queue_Tip" xml:space="preserve"><value>'Ring All' is simplest — everyone's phone rings. 'Least Recent' is fairest — idle agents get calls first.</value></data>
+  <data name="Glossary_Queue_Category" xml:space="preserve"><value>Call Center</value></data>
+
+  <data name="Glossary_Agent" xml:space="preserve"><value>Agent</value></data>
+  <data name="Glossary_Agent_Def" xml:space="preserve"><value>A person who answers calls in a queue. Agents log in and out of queues, and can pause to take a break. The system tracks their availability and call statistics.</value></data>
+  <data name="Glossary_Agent_Tip" xml:space="preserve"><value>Agents can belong to multiple queues. Their status (Available, Paused, In Call) shows on the monitoring dashboard.</value></data>
+  <data name="Glossary_Agent_Category" xml:space="preserve"><value>Call Center</value></data>
+
+  <data name="Glossary_IVR" xml:space="preserve"><value>IVR</value></data>
+  <data name="Glossary_IVR_Def" xml:space="preserve"><value>Interactive Voice Response — the automated menu callers hear ('Press 1 for sales, 2 for support'). IVRs route calls based on what buttons the caller presses.</value></data>
+  <data name="Glossary_IVR_Tip" xml:space="preserve"><value>Keep menus short (3-4 options max). Always offer 'Press 0 for operator' as an escape route.</value></data>
+  <data name="Glossary_IVR_Category" xml:space="preserve"><value>Routing</value></data>
+
+  <data name="Glossary_SIP" xml:space="preserve"><value>SIP</value></data>
+  <data name="Glossary_SIP_Def" xml:space="preserve"><value>Session Initiation Protocol — the standard language phones use to talk to the PBX. It handles call setup, ringing, answering, and hanging up. Most modern phones speak SIP.</value></data>
+  <data name="Glossary_SIP_Tip" xml:space="preserve"><value>SIP is the older implementation in Asterisk. For new setups, use PJSIP instead.</value></data>
+  <data name="Glossary_SIP_Category" xml:space="preserve"><value>Protocol</value></data>
+
+  <data name="Glossary_PJSIP" xml:space="preserve"><value>PJSIP</value></data>
+  <data name="Glossary_PJSIP_Def" xml:space="preserve"><value>The modern SIP implementation in Asterisk. Does the same thing as SIP but with better performance, more features, and active development. The recommended choice for new extensions.</value></data>
+  <data name="Glossary_PJSIP_Tip" xml:space="preserve"><value>Always choose PJSIP for new extensions unless you have legacy phones that specifically need chan_sip.</value></data>
+  <data name="Glossary_PJSIP_Category" xml:space="preserve"><value>Protocol</value></data>
+
+  <data name="Glossary_Voicemail" xml:space="preserve"><value>Voicemail</value></data>
+  <data name="Glossary_Voicemail_Def" xml:space="preserve"><value>A virtual answering machine. When someone doesn't answer their phone, callers can leave a voice message. Messages can be emailed as audio attachments.</value></data>
+  <data name="Glossary_Voicemail_Tip" xml:space="preserve"><value>Set a PIN to prevent unauthorized access. Enable email notifications so users get messages in their inbox.</value></data>
+  <data name="Glossary_Voicemail_Category" xml:space="preserve"><value>Features</value></data>
+
+  <data name="Glossary_MOH" xml:space="preserve"><value>MOH</value></data>
+  <data name="Glossary_MOH_Def" xml:space="preserve"><value>Music on Hold — what callers hear while waiting in a queue or on hold. Can be music files, promotional messages, or a mix. Different queues can have different hold music.</value></data>
+  <data name="Glossary_MOH_Tip" xml:space="preserve"><value>Use royalty-free music. Avoid silence — callers will think they've been disconnected.</value></data>
+  <data name="Glossary_MOH_Category" xml:space="preserve"><value>Audio</value></data>
+
+  <data name="Glossary_Park" xml:space="preserve"><value>Park</value></data>
+  <data name="Glossary_Park_Def" xml:space="preserve"><value>Putting a call in a 'parking lot' where anyone can pick it up by dialing the parking slot number. Useful when transferring calls in an office — 'Call for John on parking 701'.</value></data>
+  <data name="Glossary_Park_Tip" xml:space="preserve"><value>Parked calls have a timeout. If nobody picks up in time, the call rings back to the person who parked it.</value></data>
+  <data name="Glossary_Park_Category" xml:space="preserve"><value>Features</value></data>
 </root>
