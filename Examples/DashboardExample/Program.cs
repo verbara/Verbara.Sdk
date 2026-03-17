@@ -74,6 +74,20 @@ builder.Services.AddSingleton<IQueueConfigRepository>(sp =>
 builder.Services.AddSingleton<IQueueViewManager, QueueViewManager>();
 builder.Services.AddSingleton<QueueConfigService>();
 
+builder.Services.AddSingleton<IIvrMenuRepository>(sp =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var connStr = cfg.GetSection("Asterisk:Servers").GetChildren()
+        .Where(s => string.Equals(s["ConfigMode"], "Realtime", StringComparison.OrdinalIgnoreCase))
+        .Select(s => s["RealtimeConnectionString"])
+        .FirstOrDefault()
+        ?? cfg.GetConnectionString("QueueConfig")
+        ?? throw new InvalidOperationException("No Realtime connection string for DbIvrMenuRepository");
+    var logger = sp.GetRequiredService<ILogger<DbIvrMenuRepository>>();
+    return new DbIvrMenuRepository(connStr, logger);
+});
+builder.Services.AddSingleton<IvrMenuService>();
+
 builder.Services.AddScoped<SelectedServerService>();
 
 var app = builder.Build();
