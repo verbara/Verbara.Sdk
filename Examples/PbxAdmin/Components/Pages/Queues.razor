@@ -1,24 +1,25 @@
 @page "/queues"
 @using PbxAdmin.Models
 @using PbxAdmin.Services
+@inject IStringLocalizer<SharedStrings> L
 @inject SelectedServerService ServerSvc
 @inject QueueConfigService QueueCfgSvc
 @implements IDisposable
 
-<PageTitle>Queues — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Queues_Title"]</PageTitle>
 
 <div class="page-header-row">
-    <h2>Queues</h2>
+    <h2>@L["Queues_Heading"]</h2>
     @foreach (var (serverId, _) in ServerSvc.GetServers())
     {
-        <a href="/queue-config/@serverId/new" class="btn btn-blue btn-sm">+ New Queue</a>
+        <a href="/queue-config/@serverId/new" class="btn btn-blue btn-sm">@L["Queues_NewQueue"]</a>
     }
 </div>
 
 <div class="kpi-row">
     <div class="kpi-card">
         <span class="kpi-value">@_configuredQueues.Count</span>
-        <span class="kpi-label">Configured</span>
+        <span class="kpi-label">@L["Queues_Configured"]</span>
     </div>
 </div>
 
@@ -43,7 +44,7 @@
                         var hasConfig = _configuredQueues.TryGetValue(configKey, out var configId);
                     }
                     <a href="@(hasConfig ? $"/queue-config/{serverId}/{configId}" : $"/queue-config/{serverId}/new?name={queue.Name}")"
-                       class="btn btn-sm btn-muted" title="Configure">⚙</a>
+                       class="btn btn-sm btn-muted" title="Configure">&#9881;</a>
                 </div>
                 <div class="queue-card-meta">
                     @if (queue.Strategy is not null)
@@ -54,19 +55,19 @@
                 <div class="queue-card-stats">
                     <div class="stat">
                         <span class="stat-value">@queue.MemberCount</span>
-                        <span class="stat-label">Members</span>
+                        <span class="stat-label">@L["Col_Members"]</span>
                     </div>
                     <div class="stat">
                         <span class="stat-value @(queue.EntryCount > 0 ? "text-red badge-pulse" : "")">@queue.EntryCount</span>
-                        <span class="stat-label">Waiting</span>
+                        <span class="stat-label">@L["Col_Waiting"]</span>
                     </div>
                     <div class="stat">
                         <span class="stat-value">@queue.Completed</span>
-                        <span class="stat-label">Done</span>
+                        <span class="stat-label">@L["Queues_Done"]</span>
                     </div>
                     <div class="stat">
                         <span class="stat-value">@queue.Abandoned</span>
-                        <span class="stat-label">Dropped</span>
+                        <span class="stat-label">@L["Queues_Dropped"]</span>
                     </div>
                 </div>
             </div>

@@ -4,21 +4,22 @@
 @inject CallFlowTracker Tracker
 @inject SelectedServerService ServerSvc
 @inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
 @implements IDisposable
 
-<PageTitle>Calls — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Calls_Title"]</PageTitle>
 
 <div class="calls-header">
-    <h2>Calls</h2>
+    <h2>@L["Calls_Heading"]</h2>
     <div class="view-toggle">
         <button class="chip @(_viewMode == ViewMode.Kanban ? "chip-active" : "")" @onclick="() => _viewMode = ViewMode.Kanban" title="Kanban view — low concurrency">
-            <span class="view-toggle-icon">&#9638;&#9638;&#9638;</span> Kanban
+            <span class="view-toggle-icon">&#9638;&#9638;&#9638;</span> @L["Calls_Kanban"]
         </button>
         <button class="chip @(_viewMode == ViewMode.Table ? "chip-active" : "")" @onclick="() => _viewMode = ViewMode.Table" title="Table view — high concurrency">
-            <span class="view-toggle-icon">&#9776;</span> Table
+            <span class="view-toggle-icon">&#9776;</span> @L["Calls_Table"]
         </button>
         <button class="chip @(_viewMode == ViewMode.Matrix ? "chip-active" : "")" @onclick="() => _viewMode = ViewMode.Matrix" title="Matrix wallboard — supervisor overview">
-            <span class="view-toggle-icon">&#9641;&#9641;</span> Matrix
+            <span class="view-toggle-icon">&#9641;&#9641;</span> @L["Calls_Matrix"]
         </button>
     </div>
 </div>
@@ -26,31 +27,31 @@
 <div class="kpi-grid kpi-grid-sm">
     <div class="kpi-card kpi-green">
         <div class="kpi-value">@CountByState(CallFlowState.Connected)</div>
-        <div class="kpi-label">Connected</div>
+        <div class="kpi-label">@L["Calls_Connected"]</div>
     </div>
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@CountByState(CallFlowState.Ringing)</div>
-        <div class="kpi-label">Ringing</div>
+        <div class="kpi-label">@L["Calls_Ringing"]</div>
     </div>
     <div class="kpi-card kpi-yellow">
         <div class="kpi-value">@CountByState(CallFlowState.Queued)</div>
-        <div class="kpi-label">Queued</div>
+        <div class="kpi-label">@L["Calls_Queued"]</div>
     </div>
     <div class="kpi-card kpi-orange">
         <div class="kpi-value">@CountByState(CallFlowState.Hold)</div>
-        <div class="kpi-label">On Hold</div>
+        <div class="kpi-label">@L["Calls_OnHold"]</div>
     </div>
     <div class="kpi-card kpi-gray">
         <div class="kpi-value">@_recentCompleted</div>
-        <div class="kpi-label">Completed</div>
+        <div class="kpi-label">@L["Calls_Completed"]</div>
     </div>
 </div>
 
 <div class="inline-form" style="margin:0.75rem 0">
-    <input @bind="_searchQuery" @bind:event="oninput" placeholder="Search: caller ID, agent, queue..." class="input" style="max-width:320px" />
+    <input @bind="_searchQuery" @bind:event="oninput" placeholder="@L["Calls_SearchPh"]" class="input" style="max-width:320px" />
     @if (!string.IsNullOrEmpty(_searchQuery))
     {
-        <button class="btn btn-sm btn-muted" @onclick='() => _searchQuery = ""'>Clear</button>
+        <button class="btn btn-sm btn-muted" @onclick='() => _searchQuery = ""'>@L["Calls_Clear"]</button>
     }
 </div>
 
@@ -59,7 +60,7 @@
     @* Search mode — flat grid regardless of view *@
     @if (!_searchResults.Any())
     {
-        <p class="text-muted">No calls match your search.</p>
+        <p class="text-muted">@L["Calls_NoMatch"]</p>
     }
     else
     {
@@ -78,13 +79,13 @@ else if (_viewMode == ViewMode.Kanban)
         <div class="kanban-lane">
             <div class="kanban-lane-header kanban-header-green">
                 <span class="kanban-lane-icon">&#9679;</span>
-                Connected
+                @L["Calls_Connected"]
                 <span class="kanban-lane-count">@_connected.Count</span>
             </div>
             <div class="kanban-lane-body">
                 @if (_connected.Count == 0)
                 {
-                    <div class="kanban-empty">No active calls</div>
+                    <div class="kanban-empty">@L["Calls_NoActiveCalls"]</div>
                 }
                 @foreach (var call in _connected)
                 {
@@ -96,13 +97,13 @@ else if (_viewMode == ViewMode.Kanban)
         <div class="kanban-lane">
             <div class="kanban-lane-header kanban-header-blue">
                 <span class="kanban-lane-icon">&#9711;</span>
-                Ringing / Queued
+                @L["Calls_RingingQueued"]
                 <span class="kanban-lane-count">@_pending.Count</span>
             </div>
             <div class="kanban-lane-body">
                 @if (_pending.Count == 0)
                 {
-                    <div class="kanban-empty">No pending calls</div>
+                    <div class="kanban-empty">@L["Calls_NoPendingCalls"]</div>
                 }
                 @foreach (var call in _pending)
                 {
@@ -114,13 +115,13 @@ else if (_viewMode == ViewMode.Kanban)
         <div class="kanban-lane">
             <div class="kanban-lane-header kanban-header-gray">
                 <span class="kanban-lane-icon">&#9632;</span>
-                Completed
+                @L["Calls_Completed"]
                 <span class="kanban-lane-count">@_fadingCompleted.Count</span>
             </div>
             <div class="kanban-lane-body">
                 @if (_fadingCompleted.Count == 0)
                 {
-                    <div class="kanban-empty">Completed calls appear here for 5s</div>
+                    <div class="kanban-empty">@L["Calls_CompletedFade"]</div>
                 }
                 @foreach (var (call, remaining) in _fadingCompleted)
                 {
@@ -135,7 +136,7 @@ else if (_viewMode == ViewMode.Table)
     @* ═══ TABLE VIEW ═══ *@
     @if (_allActive.Count == 0 && _fadingCompleted.Count == 0)
     {
-        <p class="text-muted">No calls to display.</p>
+        <p class="text-muted">@L["Calls_NoCallsDisplay"]</p>
     }
     else
     {
@@ -145,13 +146,13 @@ else if (_viewMode == ViewMode.Table)
                 <table class="calls-table">
                     <thead>
                         <tr>
-                            <th class="col-state">State</th>
-                            <th class="col-caller">Caller</th>
+                            <th class="col-state">@L["Col_State"]</th>
+                            <th class="col-caller">@L["Col_Caller"]</th>
                             <th class="col-arrow"></th>
-                            <th class="col-dest">Destination</th>
-                            <th class="col-queue">Queue</th>
-                            <th class="col-tech">Tech</th>
-                            <th class="col-duration">Duration</th>
+                            <th class="col-dest">@L["Col_Destination"]</th>
+                            <th class="col-queue">@L["Col_Queue"]</th>
+                            <th class="col-tech">@L["Col_Tech"]</th>
+                            <th class="col-duration">@L["Col_Duration"]</th>
                             <th class="col-events">Ev</th>
                         </tr>
                     </thead>
@@ -220,7 +221,7 @@ else if (_viewMode == ViewMode.Table)
         {
             <div class="completed-section">
                 <div class="completed-section-header">
-                    <span>Recently Completed</span>
+                    <span>@L["Calls_RecentlyCompleted"]</span>
                     <span class="text-muted">@_fadingCompleted.Count</span>
                 </div>
                 <div class="card-grid">
@@ -239,7 +240,7 @@ else
 {
     @if (_allActive.Count == 0)
     {
-        <p class="text-muted">No active calls to display.</p>
+        <p class="text-muted">@L["Calls_NoActiveDisplay"]</p>
     }
     else
     {
@@ -287,13 +288,13 @@ else
                     </div>
                     <div class="matrix-card-actions">
                         <button class="matrix-action-btn" title="Hold / Park" @onclick="() => HoldCall(call)" @onclick:stopPropagation="true">
-                            &#9646;&#9646; Hold
+                            &#9646;&#9646; @L["Calls_Hold"]
                         </button>
                         <button class="matrix-action-btn" title="Transfer" @onclick="() => ShowTransferDialog(call)" @onclick:stopPropagation="true">
-                            &#8644; Xfer
+                            &#8644; @L["Calls_Xfer"]
                         </button>
                         <button class="matrix-action-btn matrix-action-hangup" title="Hangup" @onclick="() => HangupCall(call)" @onclick:stopPropagation="true">
-                            &#9747; Drop
+                            &#9747; @L["Calls_Drop"]
                         </button>
                     </div>
                 </div>
@@ -306,19 +307,19 @@ else
 {
     <div class="confirm-overlay" @onclick="CloseTransferDialog">
         <div class="confirm-dialog" @onclick:stopPropagation="true">
-            <h4>Transfer Call</h4>
-            <p>Transfer caller <strong>@(_transferCall?.Caller?.CallerIdNum ?? "unknown")</strong> to:</p>
+            <h4>@L["Calls_TransferCall"]</h4>
+            <p>@L["Calls_TransferTo"] <strong>@(_transferCall?.Caller?.CallerIdNum ?? "unknown")</strong></p>
             <div class="form-field" style="margin-bottom:1rem">
-                <label class="form-label">Extension</label>
+                <label class="form-label">@L["Calls_Extension"]</label>
                 <input @bind="_transferExtension" class="input" placeholder="e.g. 2001" />
             </div>
             <div class="form-field" style="margin-bottom:1rem">
-                <label class="form-label">Context (optional)</label>
+                <label class="form-label">@L["Calls_ContextOptional"]</label>
                 <input @bind="_transferContext" class="input" placeholder="default" />
             </div>
             <div class="confirm-dialog-actions">
-                <button class="btn btn-sm btn-muted" @onclick="CloseTransferDialog">Cancel</button>
-                <button class="btn btn-sm btn-accent" @onclick="ExecuteTransfer">Transfer</button>
+                <button class="btn btn-sm btn-muted" @onclick="CloseTransferDialog">@L["Btn_Cancel"]</button>
+                <button class="btn btn-sm btn-accent" @onclick="ExecuteTransfer">@L["Calls_Transfer"]</button>
             </div>
         </div>
     </div>
@@ -336,7 +337,7 @@ else
             </div>
             <div class="call-participants">
                 <div class="call-endpoint">
-                    <div class="call-endpoint-label">Caller</div>
+                    <div class="call-endpoint-label">@L["Calls_Caller"]</div>
                     <div class="call-endpoint-id">@(call.Caller?.CallerIdNum ?? "unknown")</div>
                     <div class="call-endpoint-channel text-muted">@ShortChannel(call.Caller?.Channel)</div>
                 </div>
@@ -357,24 +358,24 @@ else
                 <div class="call-endpoint">
                     @if (call.AgentName is not null)
                     {
-                        <div class="call-endpoint-label">Agent</div>
+                        <div class="call-endpoint-label">@L["Calls_Agent"]</div>
                         <div class="call-endpoint-id">@call.AgentName</div>
                         <div class="call-endpoint-channel text-muted">@ShortChannel(call.AgentInterface)</div>
                     }
                     else if (call.QueueName is not null)
                     {
-                        <div class="call-endpoint-label">Queue</div>
+                        <div class="call-endpoint-label">@L["Col_Queue"]</div>
                         <div class="call-endpoint-id">@call.QueueName</div>
                     }
                     else if (call.Destination is not null)
                     {
-                        <div class="call-endpoint-label">Destination</div>
+                        <div class="call-endpoint-label">@L["Calls_Destination"]</div>
                         <div class="call-endpoint-id">@(call.Destination.CallerIdNum ?? ShortChannel(call.Destination.Channel))</div>
                         <div class="call-endpoint-channel text-muted">@ShortChannel(call.Destination.Channel)</div>
                     }
                     else
                     {
-                        <div class="call-endpoint-label">Destination</div>
+                        <div class="call-endpoint-label">@L["Calls_Destination"]</div>
                         <div class="call-endpoint-id text-muted">...</div>
                     }
                 </div>
@@ -409,7 +410,7 @@ else
             </div>
             <div class="call-participants">
                 <div class="call-endpoint">
-                    <div class="call-endpoint-label">Caller</div>
+                    <div class="call-endpoint-label">@L["Calls_Caller"]</div>
                     <div class="call-endpoint-id">@(call.Caller?.CallerIdNum ?? "unknown")</div>
                     <div class="call-endpoint-channel text-muted">@ShortChannel(call.Caller?.Channel)</div>
                 </div>
@@ -419,17 +420,17 @@ else
                 <div class="call-endpoint">
                     @if (call.AgentName is not null)
                     {
-                        <div class="call-endpoint-label">Agent</div>
+                        <div class="call-endpoint-label">@L["Calls_Agent"]</div>
                         <div class="call-endpoint-id">@call.AgentName</div>
                     }
                     else if (call.Destination is not null)
                     {
-                        <div class="call-endpoint-label">Destination</div>
+                        <div class="call-endpoint-label">@L["Calls_Destination"]</div>
                         <div class="call-endpoint-id">@(call.Destination.CallerIdNum ?? ShortChannel(call.Destination.Channel))</div>
                     }
                     else
                     {
-                        <div class="call-endpoint-label">Destination</div>
+                        <div class="call-endpoint-label">@L["Calls_Destination"]</div>
                         <div class="call-endpoint-id text-muted">...</div>
                     }
                 </div>

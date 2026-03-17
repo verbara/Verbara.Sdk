@@ -1,73 +1,74 @@
 @page "/"
 @using PbxAdmin.Services
 @using Asterisk.Sdk.Live.Agents
+@inject IStringLocalizer<SharedStrings> L
 @inject SelectedServerService ServerSvc
 @inject CallFlowTracker CallTracker
 @implements IDisposable
 
-<PageTitle>Home — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Home_Title"]</PageTitle>
 
-<h2>Dashboard</h2>
+<h2>@L["Home_Heading"]</h2>
 
 <div class="kpi-grid">
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@_activeCalls</div>
-        <div class="kpi-label">Active Calls</div>
+        <div class="kpi-label">@L["Home_ActiveCalls"]</div>
     </div>
     <div class="kpi-card kpi-purple">
         <div class="kpi-value">@_queueCount</div>
-        <div class="kpi-label">Queues</div>
+        <div class="kpi-label">@L["Nav_Queues"]</div>
     </div>
     <div class="kpi-card @(_waitingCallers > 0 ? "kpi-red" : "kpi-gray")">
         <div class="kpi-value">@_waitingCallers</div>
-        <div class="kpi-label">Waiting Callers</div>
+        <div class="kpi-label">@L["Home_WaitingCallers"]</div>
     </div>
     <div class="kpi-card kpi-green">
         <div class="kpi-value">@_availableAgents</div>
-        <div class="kpi-label">Available</div>
+        <div class="kpi-label">@L["Home_Available"]</div>
     </div>
     <div class="kpi-card kpi-red">
         <div class="kpi-value">@_onCallAgents</div>
-        <div class="kpi-label">On Call</div>
+        <div class="kpi-label">@L["Home_OnCall"]</div>
     </div>
     <div class="kpi-card kpi-yellow">
         <div class="kpi-value">@_pausedAgents</div>
-        <div class="kpi-label">Paused</div>
+        <div class="kpi-label">@L["Home_Paused"]</div>
     </div>
 </div>
 
-<h3>Call Flow Metrics</h3>
+<h3>@L["Home_CallFlowMetrics"]</h3>
 <div class="kpi-grid kpi-grid-sm">
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@_callsTracked</div>
-        <div class="kpi-label">Calls Tracked</div>
+        <div class="kpi-label">@L["Home_CallsTracked"]</div>
     </div>
     <div class="kpi-card kpi-orange">
         <div class="kpi-value">@_avgWaitTime</div>
-        <div class="kpi-label">Avg Wait</div>
+        <div class="kpi-label">@L["Home_AvgWait"]</div>
     </div>
     <div class="kpi-card kpi-green">
         <div class="kpi-value">@_avgTalkTime</div>
-        <div class="kpi-label">Avg Talk</div>
+        <div class="kpi-label">@L["Home_AvgTalk"]</div>
     </div>
     <div class="kpi-card kpi-red">
         <div class="kpi-value">@_abandonRate</div>
-        <div class="kpi-label">Abandon %</div>
+        <div class="kpi-label">@L["Home_AbandonPct"]</div>
     </div>
 </div>
 
-<h3>Queue Summary</h3>
+<h3>@L["Home_QueueSummary"]</h3>
 
 <table class="data-table">
     <thead>
         <tr>
-            <th>Queue</th>
-            <th>Members</th>
-            <th>Waiting</th>
-            <th>Completed</th>
-            <th>Abandoned</th>
-            <th>Avg Hold</th>
-            <th>Avg Talk</th>
+            <th>@L["Col_Queue"]</th>
+            <th>@L["Col_Members"]</th>
+            <th>@L["Col_Waiting"]</th>
+            <th>@L["Col_Completed"]</th>
+            <th>@L["Col_Abandoned"]</th>
+            <th>@L["Col_AvgHold"]</th>
+            <th>@L["Col_AvgTalk"]</th>
         </tr>
     </thead>
     <tbody>
@@ -120,7 +121,6 @@
             .SelectMany(s => s.Value.Server.Agents.GetAgentsByState(AgentState.Paused))
             .Count();
 
-        // Call flow metrics from CallFlowTracker — filtered by selected server
         var serverId = ServerSvc.SelectedServerId;
         var recentCalls = CallTracker.GetRecentCompleted(200)
             .Where(c => c.ServerId == serverId)

@@ -90,4 +90,124 @@
   <data name="Stat_Calls" xml:space="preserve"><value>calls</value></data>
   <data name="Stat_Queues" xml:space="preserve"><value>queues</value></data>
   <data name="Stat_Agents" xml:space="preserve"><value>agents</value></data>
+
+  <!-- Home Page -->
+  <data name="Home_Title" xml:space="preserve"><value>Home — Asterisk PBX Admin</value></data>
+  <data name="Home_Heading" xml:space="preserve"><value>Dashboard</value></data>
+  <data name="Home_ActiveCalls" xml:space="preserve"><value>Active Calls</value></data>
+  <data name="Home_WaitingCallers" xml:space="preserve"><value>Waiting Callers</value></data>
+  <data name="Home_Available" xml:space="preserve"><value>Available</value></data>
+  <data name="Home_OnCall" xml:space="preserve"><value>On Call</value></data>
+  <data name="Home_Paused" xml:space="preserve"><value>Paused</value></data>
+  <data name="Home_CallFlowMetrics" xml:space="preserve"><value>Call Flow Metrics</value></data>
+  <data name="Home_CallsTracked" xml:space="preserve"><value>Calls Tracked</value></data>
+  <data name="Home_AvgWait" xml:space="preserve"><value>Avg Wait</value></data>
+  <data name="Home_AvgTalk" xml:space="preserve"><value>Avg Talk</value></data>
+  <data name="Home_AbandonPct" xml:space="preserve"><value>Abandon %</value></data>
+  <data name="Home_QueueSummary" xml:space="preserve"><value>Queue Summary</value></data>
+  <data name="Col_Queue" xml:space="preserve"><value>Queue</value></data>
+  <data name="Col_Members" xml:space="preserve"><value>Members</value></data>
+  <data name="Col_Waiting" xml:space="preserve"><value>Waiting</value></data>
+  <data name="Col_Completed" xml:space="preserve"><value>Completed</value></data>
+  <data name="Col_Abandoned" xml:space="preserve"><value>Abandoned</value></data>
+  <data name="Col_AvgHold" xml:space="preserve"><value>Avg Hold</value></data>
+  <data name="Col_AvgTalk" xml:space="preserve"><value>Avg Talk</value></data>
+
+  <!-- Calls Page -->
+  <data name="Calls_Title" xml:space="preserve"><value>Calls — Asterisk PBX Admin</value></data>
+  <data name="Calls_Heading" xml:space="preserve"><value>Calls</value></data>
+  <data name="Calls_Kanban" xml:space="preserve"><value>Kanban</value></data>
+  <data name="Calls_Table" xml:space="preserve"><value>Table</value></data>
+  <data name="Calls_Matrix" xml:space="preserve"><value>Matrix</value></data>
+  <data name="Calls_Connected" xml:space="preserve"><value>Connected</value></data>
+  <data name="Calls_Ringing" xml:space="preserve"><value>Ringing</value></data>
+  <data name="Calls_Queued" xml:space="preserve"><value>Queued</value></data>
+  <data name="Calls_OnHold" xml:space="preserve"><value>On Hold</value></data>
+  <data name="Calls_Completed" xml:space="preserve"><value>Completed</value></data>
+  <data name="Calls_SearchPh" xml:space="preserve"><value>Search: caller ID, agent, queue...</value></data>
+  <data name="Calls_Clear" xml:space="preserve"><value>Clear</value></data>
+  <data name="Calls_NoMatch" xml:space="preserve"><value>No calls match your search.</value></data>
+  <data name="Calls_NoActiveCalls" xml:space="preserve"><value>No active calls</value></data>
+  <data name="Calls_NoPendingCalls" xml:space="preserve"><value>No pending calls</value></data>
+  <data name="Calls_CompletedFade" xml:space="preserve"><value>Completed calls appear here for 5s</value></data>
+  <data name="Calls_RingingQueued" xml:space="preserve"><value>Ringing / Queued</value></data>
+  <data name="Calls_NoCallsDisplay" xml:space="preserve"><value>No calls to display.</value></data>
+  <data name="Calls_RecentlyCompleted" xml:space="preserve"><value>Recently Completed</value></data>
+  <data name="Calls_NoActiveDisplay" xml:space="preserve"><value>No active calls to display.</value></data>
+  <data name="Calls_TransferCall" xml:space="preserve"><value>Transfer Call</value></data>
+  <data name="Calls_TransferTo" xml:space="preserve"><value>Transfer caller</value></data>
+  <data name="Calls_Extension" xml:space="preserve"><value>Extension</value></data>
+  <data name="Calls_ContextOptional" xml:space="preserve"><value>Context (optional)</value></data>
+  <data name="Calls_Transfer" xml:space="preserve"><value>Transfer</value></data>
+  <data name="Calls_Hold" xml:space="preserve"><value>Hold</value></data>
+  <data name="Calls_Xfer" xml:space="preserve"><value>Xfer</value></data>
+  <data name="Calls_Drop" xml:space="preserve"><value>Drop</value></data>
+  <data name="Calls_Caller" xml:space="preserve"><value>Caller</value></data>
+  <data name="Calls_Agent" xml:space="preserve"><value>Agent</value></data>
+  <data name="Calls_Destination" xml:space="preserve"><value>Destination</value></data>
+  <data name="Col_State" xml:space="preserve"><value>State</value></data>
+  <data name="Col_Caller" xml:space="preserve"><value>Caller</value></data>
+  <data name="Col_Destination" xml:space="preserve"><value>Destination</value></data>
+  <data name="Col_Tech" xml:space="preserve"><value>Tech</value></data>
+  <data name="Col_Duration" xml:space="preserve"><value>Duration</value></data>
+
+  <!-- Agents Page -->
+  <data name="Agents_Title" xml:space="preserve"><value>Agents — Asterisk PBX Admin</value></data>
+  <data name="Agents_Heading" xml:space="preserve"><value>Agents</value></data>
+  <data name="Agents_LoggedOff" xml:space="preserve"><value>Logged Off</value></data>
+  <data name="Agents_CallsTaken" xml:space="preserve"><value>Calls Taken</value></data>
+  <data name="Agents_All" xml:space="preserve"><value>All</value></data>
+  <data name="Agents_State" xml:space="preserve"><value>State</value></data>
+  <data name="Agents_Calls" xml:space="preserve"><value>Calls</value></data>
+  <data name="Agents_Talk" xml:space="preserve"><value>Talk</value></data>
+  <data name="Agents_HoldTime" xml:space="preserve"><value>Hold</value></data>
+  <data name="Agents_Channel" xml:space="preserve"><value>Channel</value></data>
+  <data name="Agents_TalkingTo" xml:space="preserve"><value>Talking to</value></data>
+  <data name="Agents_ViewCall" xml:space="preserve"><value>View Call</value></data>
+  <data name="Agents_LoggedIn" xml:space="preserve"><value>Logged in</value></data>
+  <data name="Agents_QueuesList" xml:space="preserve"><value>Queues</value></data>
+
+  <!-- Channels Page -->
+  <data name="Channels_Title" xml:space="preserve"><value>Channels — Asterisk PBX Admin</value></data>
+  <data name="Channels_Heading" xml:space="preserve"><value>Active Channels</value></data>
+  <data name="Channels_All" xml:space="preserve"><value>All</value></data>
+  <data name="Channels_Dialing" xml:space="preserve"><value>Dialing</value></data>
+  <data name="Channels_Up" xml:space="preserve"><value>Up</value></data>
+  <data name="Channels_Busy" xml:space="preserve"><value>Busy</value></data>
+  <data name="Col_UniqueId" xml:space="preserve"><value>UniqueId</value></data>
+  <data name="Col_Channel" xml:space="preserve"><value>Channel</value></data>
+  <data name="Col_CallerID" xml:space="preserve"><value>CallerID</value></data>
+  <data name="Col_Context" xml:space="preserve"><value>Context</value></data>
+  <data name="Col_Extension" xml:space="preserve"><value>Extension</value></data>
+  <data name="Col_Linked" xml:space="preserve"><value>Linked</value></data>
+  <data name="Channels_Originate" xml:space="preserve"><value>Originate Call</value></data>
+  <data name="Btn_Originate" xml:space="preserve"><value>Originate</value></data>
+
+  <!-- Parking Page -->
+  <data name="Parking_Title" xml:space="preserve"><value>Parking — Asterisk PBX Admin</value></data>
+  <data name="Parking_Heading" xml:space="preserve"><value>Parking</value></data>
+  <data name="Parking_ParkedCalls" xml:space="preserve"><value>Parked Calls</value></data>
+  <data name="Parking_LotConfig" xml:space="preserve"><value>Lot Configuration</value></data>
+  <data name="Parking_TotalParked" xml:space="preserve"><value>Total Parked</value></data>
+  <data name="Parking_NoParked" xml:space="preserve"><value>No parked calls</value></data>
+  <data name="Parking_ParkingLots" xml:space="preserve"><value>Parking Lots</value></data>
+  <data name="Parking_NoLots" xml:space="preserve"><value>No parking lots configured. Create one to define slot ranges and timeouts.</value></data>
+  <data name="Parking_NewLot" xml:space="preserve"><value>New Parking Lot</value></data>
+  <data name="Col_Space" xml:space="preserve"><value>Space</value></data>
+  <data name="Col_Timeout" xml:space="preserve"><value>Timeout (s)</value></data>
+  <data name="Col_Slots" xml:space="preserve"><value>Slots</value></data>
+  <data name="Col_MOH" xml:space="preserve"><value>MOH</value></data>
+  <data name="Lbl_StartSlot" xml:space="preserve"><value>Start Slot</value></data>
+  <data name="Lbl_EndSlot" xml:space="preserve"><value>End Slot</value></data>
+  <data name="Lbl_Timeout" xml:space="preserve"><value>Timeout (seconds)</value></data>
+  <data name="Lbl_Context" xml:space="preserve"><value>Context</value></data>
+  <data name="Lbl_MusicOnHold" xml:space="preserve"><value>Music on Hold</value></data>
+
+  <!-- Queues Page -->
+  <data name="Queues_Title" xml:space="preserve"><value>Queues — Asterisk PBX Admin</value></data>
+  <data name="Queues_Heading" xml:space="preserve"><value>Queues</value></data>
+  <data name="Queues_NewQueue" xml:space="preserve"><value>+ New Queue</value></data>
+  <data name="Queues_Configured" xml:space="preserve"><value>Configured</value></data>
+  <data name="Queues_Done" xml:space="preserve"><value>Done</value></data>
+  <data name="Queues_Dropped" xml:space="preserve"><value>Dropped</value></data>
 </root>

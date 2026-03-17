@@ -4,41 +4,42 @@
 @inject SelectedServerService ServerSvc
 @inject CallFlowTracker CallTracker
 @inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
 @implements IDisposable
 
-<PageTitle>Agents — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Agents_Title"]</PageTitle>
 
-<h2>Agents</h2>
+<h2>@L["Agents_Heading"]</h2>
 
 <div class="kpi-grid kpi-grid-sm">
     <div class="kpi-card kpi-green">
         <div class="kpi-value">@CountByState(AgentState.Available)</div>
-        <div class="kpi-label">Available</div>
+        <div class="kpi-label">@L["Home_Available"]</div>
     </div>
     <div class="kpi-card kpi-red">
         <div class="kpi-value">@CountByState(AgentState.OnCall)</div>
-        <div class="kpi-label">On Call</div>
+        <div class="kpi-label">@L["Home_OnCall"]</div>
     </div>
     <div class="kpi-card kpi-yellow">
         <div class="kpi-value">@CountByState(AgentState.Paused)</div>
-        <div class="kpi-label">Paused</div>
+        <div class="kpi-label">@L["Home_Paused"]</div>
     </div>
     <div class="kpi-card kpi-gray">
         <div class="kpi-value">@CountByState(AgentState.LoggedOff)</div>
-        <div class="kpi-label">Logged Off</div>
+        <div class="kpi-label">@L["Agents_LoggedOff"]</div>
     </div>
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@TotalCallsTaken()</div>
-        <div class="kpi-label">Calls Taken</div>
+        <div class="kpi-label">@L["Agents_CallsTaken"]</div>
     </div>
 </div>
 
 <div class="chip-bar">
-    <button class="chip @(_stateFilter is null ? "chip-active" : "")" @onclick="() => _stateFilter = null">All</button>
-    <button class="chip @(_stateFilter == AgentState.Available ? "chip-active" : "")" @onclick="() => _stateFilter = AgentState.Available">Available</button>
-    <button class="chip @(_stateFilter == AgentState.OnCall ? "chip-active" : "")" @onclick="() => _stateFilter = AgentState.OnCall">On Call</button>
-    <button class="chip @(_stateFilter == AgentState.Paused ? "chip-active" : "")" @onclick="() => _stateFilter = AgentState.Paused">Paused</button>
-    <button class="chip @(_stateFilter == AgentState.LoggedOff ? "chip-active" : "")" @onclick="() => _stateFilter = AgentState.LoggedOff">Logged Off</button>
+    <button class="chip @(_stateFilter is null ? "chip-active" : "")" @onclick="() => _stateFilter = null">@L["Agents_All"]</button>
+    <button class="chip @(_stateFilter == AgentState.Available ? "chip-active" : "")" @onclick="() => _stateFilter = AgentState.Available">@L["Home_Available"]</button>
+    <button class="chip @(_stateFilter == AgentState.OnCall ? "chip-active" : "")" @onclick="() => _stateFilter = AgentState.OnCall">@L["Home_OnCall"]</button>
+    <button class="chip @(_stateFilter == AgentState.Paused ? "chip-active" : "")" @onclick="() => _stateFilter = AgentState.Paused">@L["Home_Paused"]</button>
+    <button class="chip @(_stateFilter == AgentState.LoggedOff ? "chip-active" : "")" @onclick="() => _stateFilter = AgentState.LoggedOff">@L["Agents_LoggedOff"]</button>
 </div>
 
 <div class="card-grid">
@@ -61,7 +62,7 @@
                     }
                 </div>
                 <div class="agent-card-body">
-                    <div>State: @agent.State
+                    <div>@L["Agents_State"]: @agent.State
                         @if (agent.LastStateChangeAt.HasValue)
                         {
                             <span class="text-muted">(@FormatDuration(agent.StateElapsed))</span>
@@ -69,7 +70,7 @@
                     </div>
                     @if (agent.State != AgentState.LoggedOff)
                     {
-                        <div>Calls: @agent.CallsTaken
+                        <div>@L["Agents_Calls"]: @agent.CallsTaken
                             @if (agent.CallsTaken > 0)
                             {
                                 <span class="text-muted">(avg @FormatSeconds((int)agent.AvgTalkTimeSecs))</span>
@@ -77,30 +78,30 @@
                         </div>
                         @if (agent.TotalTalkTimeSecs > 0)
                         {
-                            <div>Talk: @FormatSeconds((int)agent.TotalTalkTimeSecs)</div>
+                            <div>@L["Agents_Talk"]: @FormatSeconds((int)agent.TotalTalkTimeSecs)</div>
                         }
                         @if (agent.TotalHoldTimeSecs > 0)
                         {
-                            <div>Hold: @FormatSeconds((int)agent.TotalHoldTimeSecs)</div>
+                            <div>@L["Agents_HoldTime"]: @FormatSeconds((int)agent.TotalHoldTimeSecs)</div>
                         }
                     }
                     @if (agent.Channel is not null)
                     {
-                        <div>Channel: @agent.Channel</div>
+                        <div>@L["Agents_Channel"]: @agent.Channel</div>
                     }
                     @if (agent.State == AgentState.OnCall && agent.TalkingTo is not null)
                     {
                         var activeCall = CallTracker.FindActiveCallByChannel(agent.Channel ?? agent.TalkingTo);
-                        <div>Talking to: @agent.TalkingTo
+                        <div>@L["Agents_TalkingTo"]: @agent.TalkingTo
                             @if (activeCall is not null)
                             {
-                                <a href="/calls/@Uri.EscapeDataString(activeCall.CallId)" class="badge badge-blue" @onclick:stopPropagation="true">View Call</a>
+                                <a href="/calls/@Uri.EscapeDataString(activeCall.CallId)" class="badge badge-blue" @onclick:stopPropagation="true">@L["Agents_ViewCall"]</a>
                             }
                         </div>
                     }
                     @if (agent.LoggedInAt.HasValue)
                     {
-                        <div>Logged in: @FormatTimeAgo(agent.LoggedInAt.Value)</div>
+                        <div>@L["Agents_LoggedIn"]: @FormatTimeAgo(agent.LoggedInAt.Value)</div>
                     }
                     @{
                         var queues = agent.Channel is not null
@@ -109,7 +110,7 @@
                     }
                     @if (queues.Count > 0)
                     {
-                        <div>Queues: @string.Join(", ", queues)</div>
+                        <div>@L["Agents_QueuesList"]: @string.Join(", ", queues)</div>
                     }
                 </div>
             </div>
