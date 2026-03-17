@@ -1,0 +1,21 @@
+@inject IStringLocalizer<SharedStrings> L
+@inject IJSRuntime JS
+
+<div class="advanced-toggle">
+    <button class="advanced-toggle-btn" @onclick="Toggle">
+        @(IsAdvanced ? L["Toggle_HideAdvanced"] : L["Toggle_ShowAdvanced"])
+        <span class="advanced-toggle-arrow">@(IsAdvanced ? "▲" : "▼")</span>
+    </button>
+</div>
+
+@code {
+    [Parameter] public bool IsAdvanced { get; set; }
+    [Parameter] public EventCallback<bool> IsAdvancedChanged { get; set; }
+
+    private async Task Toggle()
+    {
+        IsAdvanced = !IsAdvanced;
+        await IsAdvancedChanged.InvokeAsync(IsAdvanced);
+        await JS.InvokeVoidAsync("HelpInterop.setAdvanced", IsAdvanced);
+    }
+}
