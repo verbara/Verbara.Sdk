@@ -135,6 +135,20 @@ builder.Services.AddSingleton<IConferenceConfigRepository>(sp =>
 });
 builder.Services.AddSingleton<ConferenceConfigService>();
 
+builder.Services.AddSingleton<IFeatureCodeRepository>(sp =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var connStr = cfg.GetSection("Asterisk:Servers").GetChildren()
+        .Where(s => string.Equals(s["ConfigMode"], "Realtime", StringComparison.OrdinalIgnoreCase))
+        .Select(s => s["RealtimeConnectionString"])
+        .FirstOrDefault()
+        ?? cfg.GetConnectionString("QueueConfig")
+        ?? throw new InvalidOperationException("No Realtime connection string for DbFeatureCodeRepository");
+    var logger = sp.GetRequiredService<ILogger<DbFeatureCodeRepository>>();
+    return new DbFeatureCodeRepository(connStr, logger);
+});
+builder.Services.AddSingleton<FeatureCodeService>();
+
 builder.Services.AddScoped<SelectedServerService>();
 
 var app = builder.Build();
