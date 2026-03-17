@@ -22,10 +22,10 @@
 }
 
 <div class="form-section">
-    <h3>@L["QCfg_Identity"]</h3>
+    <HelpPanel SectionKey="QCfg_Identity">@L["QCfg_Identity"]</HelpPanel>
     <div class="form-grid">
         <div class="form-field">
-            <label class="form-label">@L["Lbl_Name"]</label>
+            <label class="form-label">@L["Lbl_Name"] <HelpIcon HelpKey="QueueName" /></label>
             <input class="input" @bind="_config.Name" readonly="@(!_isNew)" />
         </div>
         <div class="form-field">
@@ -40,10 +40,10 @@
 </div>
 
 <div class="form-section">
-    <h3>@L["QCfg_StrategyTiming"]</h3>
+    <HelpPanel SectionKey="QCfg_StrategyTiming">@L["QCfg_StrategyTiming"]</HelpPanel>
     <div class="form-grid">
         <div class="form-field">
-            <label class="form-label">@L["QCfg_Strategy"]</label>
+            <label class="form-label">@L["QCfg_Strategy"] <HelpIcon HelpKey="QueueStrategy" /></label>
             <select class="input" @bind="_config.Strategy">
                 <option value="ringall">Ring All</option>
                 <option value="roundrobin">Round Robin</option>
@@ -56,7 +56,7 @@
             </select>
         </div>
         <div class="form-field">
-            <label class="form-label">@L["QCfg_RingTimeout"]</label>
+            <label class="form-label">@L["QCfg_RingTimeout"] <HelpIcon HelpKey="QueueTimeout" /></label>
             <input type="number" class="input" @bind="_config.Timeout" min="1" />
         </div>
         <div class="form-field">
@@ -74,7 +74,7 @@
     <h3>@L["QCfg_Capacity"]</h3>
     <div class="form-grid">
         <div class="form-field">
-            <label class="form-label">@L["QCfg_MaxCallers"]</label>
+            <label class="form-label">@L["QCfg_MaxCallers"] <HelpIcon HelpKey="QueueMaxCallers" /></label>
             <input type="number" class="input" @bind="_config.MaxLen" min="0" />
         </div>
         <div class="form-field">
@@ -82,7 +82,7 @@
             <input type="number" class="input" @bind="_config.WrapUpTime" min="0" />
         </div>
         <div class="form-field">
-            <label class="form-label">@L["QCfg_ServiceLevel"]</label>
+            <label class="form-label">@L["QCfg_ServiceLevel"] <HelpIcon HelpKey="QueueServiceLevel" /></label>
             <input type="number" class="input" @bind="_config.ServiceLevel" min="0" />
         </div>
         <div class="form-field">
@@ -176,7 +176,7 @@
 </div>
 
 <div class="form-section">
-    <h3>@L["QCfg_StaticMembers"] (@_config.Members.Count)</h3>
+    <HelpPanel SectionKey="QCfg_StaticMembers">@L["QCfg_StaticMembers"] (@_config.Members.Count)</HelpPanel>
     <div class="inline-form">
         <input class="input" @bind="_newMemberInterface" placeholder="PJSIP/2001" />
         <input class="input" @bind="_newMemberName" placeholder="Agent Name" />
