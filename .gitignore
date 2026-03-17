@@ -45,6 +45,15 @@ Thumbs.db
 ## Publish
 publish/
 
+## Internal docs (local only)
+docs/plans/
+docs/new/
+docs/architecture/
+docs/proposals/
+docs/specs/
+docs/superpowers/
+.superpowers/
+
 ## Claude Code
 CLAUDE.md
 .claude/
