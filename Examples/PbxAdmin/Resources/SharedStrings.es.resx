@@ -896,4 +896,18 @@
   <data name="Glossary_Park_Tip" xml:space="preserve"><value>Las llamadas estacionadas tienen un timeout. Si nadie contesta a tiempo, la llamada vuelve a timbrar a quien la estacionó.</value></data>
   <data name="Glossary_Park_Category" xml:space="preserve"><value>Funciones</value></data>
 
+  <!-- StatusSemaphore -->
+  <data name="Sem_PBX" xml:space="preserve"><value>PBX</value></data>
+  <data name="Sem_Extensions" xml:space="preserve"><value>Extensiones</value></data>
+  <data name="Sem_Queues" xml:space="preserve"><value>Colas</value></data>
+  <data name="Sem_Trunks" xml:space="preserve"><value>Troncales</value></data>
+  <data name="Sem_Parking" xml:space="preserve"><value>Estacionamiento</value></data>
+  <data name="Sem_Agents" xml:space="preserve"><value>Agentes</value></data>
+  <data name="Sem_NoServer" xml:space="preserve"><value>Sin servidor</value></data>
+  <data name="Sem_Connected" xml:space="preserve"><value>Conectado</value></data>
+  <data name="Sem_Disconnected" xml:space="preserve"><value>Desconectado</value></data>
+  <data name="Sem_Online" xml:space="preserve"><value>En línea</value></data>
+  <data name="Sem_Available" xml:space="preserve"><value>Disponible</value></data>
+  <data name="Sem_Active" xml:space="preserve"><value>Activo</value></data>
+
 </root>

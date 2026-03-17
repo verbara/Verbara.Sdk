@@ -895,4 +895,18 @@
   <data name="Glossary_Park_Def" xml:space="preserve"><value>Putting a call in a 'parking lot' where anyone can pick it up by dialing the parking slot number. Useful when transferring calls in an office — 'Call for John on parking 701'.</value></data>
   <data name="Glossary_Park_Tip" xml:space="preserve"><value>Parked calls have a timeout. If nobody picks up in time, the call rings back to the person who parked it.</value></data>
   <data name="Glossary_Park_Category" xml:space="preserve"><value>Features</value></data>
+
+  <!-- StatusSemaphore -->
+  <data name="Sem_PBX" xml:space="preserve"><value>PBX</value></data>
+  <data name="Sem_Extensions" xml:space="preserve"><value>Extensions</value></data>
+  <data name="Sem_Queues" xml:space="preserve"><value>Queues</value></data>
+  <data name="Sem_Trunks" xml:space="preserve"><value>Trunks</value></data>
+  <data name="Sem_Parking" xml:space="preserve"><value>Parking</value></data>
+  <data name="Sem_Agents" xml:space="preserve"><value>Agents</value></data>
+  <data name="Sem_NoServer" xml:space="preserve"><value>No server</value></data>
+  <data name="Sem_Connected" xml:space="preserve"><value>Connected</value></data>
+  <data name="Sem_Disconnected" xml:space="preserve"><value>Disconnected</value></data>
+  <data name="Sem_Online" xml:space="preserve"><value>Online</value></data>
+  <data name="Sem_Available" xml:space="preserve"><value>Available</value></data>
+  <data name="Sem_Active" xml:space="preserve"><value>Active</value></data>
 </root>
