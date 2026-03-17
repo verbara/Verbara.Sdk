@@ -3,31 +3,32 @@
 @using Asterisk.Sdk.Enums
 @using Asterisk.Sdk.Live.Channels
 @inject SelectedServerService ServerSvc
+@inject IStringLocalizer<SharedStrings> L
 @implements IDisposable
 
-<PageTitle>Channels — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Channels_Title"]</PageTitle>
 
-<h2>Active Channels</h2>
+<h2>@L["Channels_Heading"]</h2>
 
 <div class="chip-bar">
-    <button class="chip @(_stateFilter is null ? "chip-active" : "")" @onclick="() => _stateFilter = null">All</button>
-    <button class="chip @(_stateFilter == ChannelState.Dialing ? "chip-active" : "")" @onclick="() => _stateFilter = ChannelState.Dialing">Dialing</button>
-    <button class="chip @(_stateFilter == ChannelState.Ringing ? "chip-active" : "")" @onclick="() => _stateFilter = ChannelState.Ringing">Ringing</button>
-    <button class="chip @(_stateFilter == ChannelState.Up ? "chip-active" : "")" @onclick="() => _stateFilter = ChannelState.Up">Up</button>
-    <button class="chip @(_stateFilter == ChannelState.Busy ? "chip-active" : "")" @onclick="() => _stateFilter = ChannelState.Busy">Busy</button>
+    <button class="chip @(_stateFilter is null ? "chip-active" : "")" @onclick="() => _stateFilter = null">@L["Channels_All"]</button>
+    <button class="chip @(_stateFilter == ChannelState.Dialing ? "chip-active" : "")" @onclick="() => _stateFilter = ChannelState.Dialing">@L["Channels_Dialing"]</button>
+    <button class="chip @(_stateFilter == ChannelState.Ringing ? "chip-active" : "")" @onclick="() => _stateFilter = ChannelState.Ringing">@L["Calls_Ringing"]</button>
+    <button class="chip @(_stateFilter == ChannelState.Up ? "chip-active" : "")" @onclick="() => _stateFilter = ChannelState.Up">@L["Channels_Up"]</button>
+    <button class="chip @(_stateFilter == ChannelState.Busy ? "chip-active" : "")" @onclick="() => _stateFilter = ChannelState.Busy">@L["Channels_Busy"]</button>
 </div>
 
 <table class="data-table">
     <thead>
         <tr>
-            <th>UniqueId</th>
-            <th>Channel</th>
-            <th>State</th>
-            <th>CallerID</th>
-            <th>Context</th>
-            <th>Extension</th>
-            <th>Duration</th>
-            <th>Linked</th>
+            <th>@L["Col_UniqueId"]</th>
+            <th>@L["Col_Channel"]</th>
+            <th>@L["Col_State"]</th>
+            <th>@L["Col_CallerID"]</th>
+            <th>@L["Col_Context"]</th>
+            <th>@L["Col_Extension"]</th>
+            <th>@L["Col_Duration"]</th>
+            <th>@L["Col_Linked"]</th>
         </tr>
     </thead>
     <tbody>
@@ -57,14 +58,14 @@
     </tbody>
 </table>
 
-<h3>Originate Call</h3>
+<h3>@L["Channels_Originate"]</h3>
 <div class="inline-form">
     <input @bind="_originateChannel" placeholder="PJSIP/2000" class="input" />
     <input @bind="_originateContext" placeholder="default" class="input" />
     <input @bind="_originateExtension" placeholder="100" class="input" />
     <input @bind="_originateCallerId" placeholder="CallerID" class="input" />
     <input @bind="_originateTimeout" type="number" placeholder="30" class="input input-sm" />
-    <button class="btn btn-blue" @onclick="Originate">Originate</button>
+    <button class="btn btn-blue" @onclick="Originate">@L["Btn_Originate"]</button>
 </div>
 @if (_originateResult is not null)
 {

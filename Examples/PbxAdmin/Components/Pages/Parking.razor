@@ -5,15 +5,16 @@
 @using Asterisk.Sdk.Ami.Events
 @inject SelectedServerService ServerSvc
 @inject FeatureCodeService FeatureSvc
+@inject IStringLocalizer<SharedStrings> L
 @implements IDisposable
 
-<PageTitle>Parking — Asterisk PBX Admin</PageTitle>
+<PageTitle>@L["Parking_Title"]</PageTitle>
 
-<h2>Parking</h2>
+<h2>@L["Parking_Heading"]</h2>
 
 <div class="tab-bar">
-    <button class="tab @(_activeTab == "live" ? "tab-active" : "")" @onclick='() => _activeTab = "live"'>Parked Calls</button>
-    <button class="tab @(_activeTab == "config" ? "tab-active" : "")" @onclick="SwitchToConfig">Lot Configuration</button>
+    <button class="tab @(_activeTab == "live" ? "tab-active" : "")" @onclick='() => _activeTab = "live"'>@L["Parking_ParkedCalls"]</button>
+    <button class="tab @(_activeTab == "config" ? "tab-active" : "")" @onclick="SwitchToConfig">@L["Parking_LotConfig"]</button>
 </div>
 
 @if (_activeTab == "live")
@@ -21,7 +22,7 @@
     <div class="kpi-grid">
         <div class="kpi-card kpi-blue">
             <span class="kpi-value">@_parkedCalls.Count</span>
-            <span class="kpi-label">Total Parked</span>
+            <span class="kpi-label">@L["Parking_TotalParked"]</span>
         </div>
     </div>
 
@@ -31,19 +32,19 @@
     }
     else if (_parkedCalls.Count == 0)
     {
-        <p class="text-muted">No parked calls</p>
+        <p class="text-muted">@L["Parking_NoParked"]</p>
     }
     else
     {
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Space</th>
-                    <th>Channel</th>
-                    <th>Caller ID</th>
-                    <th>Context</th>
-                    <th>Timeout (s)</th>
-                    <th>Duration</th>
+                    <th>@L["Col_Space"]</th>
+                    <th>@L["Col_Channel"]</th>
+                    <th>@L["Col_CallerID"]</th>
+                    <th>@L["Col_Context"]</th>
+                    <th>@L["Col_Timeout"]</th>
+                    <th>@L["Col_Duration"]</th>
                 </tr>
             </thead>
             <tbody>
@@ -82,25 +83,25 @@ else
     }
 
     <div class="page-header-row">
-        <h3>Parking Lots</h3>
-        <button class="btn btn-primary" @onclick="ShowNewLot">+ New Lot</button>
+        <h3>@L["Parking_ParkingLots"]</h3>
+        <button class="btn btn-primary" @onclick="ShowNewLot">@L["Parking_NewLot"]</button>
     </div>
 
     @if (_lots.Count == 0)
     {
-        <p class="text-muted">No parking lots configured. Create one to define slot ranges and timeouts.</p>
+        <p class="text-muted">@L["Parking_NoLots"]</p>
     }
     else
     {
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Slots</th>
-                    <th>Timeout</th>
-                    <th>Context</th>
-                    <th>MOH</th>
-                    <th>Actions</th>
+                    <th>@L["Lbl_Name"]</th>
+                    <th>@L["Col_Slots"]</th>
+                    <th>@L["Col_Timeout"]</th>
+                    <th>@L["Col_Context"]</th>
+                    <th>@L["Col_MOH"]</th>
+                    <th>@L["Lbl_Actions"]</th>
                 </tr>
             </thead>
             <tbody>
@@ -113,8 +114,8 @@ else
                         <td>@lot.Context</td>
                         <td>@lot.MusicOnHold</td>
                         <td>
-                            <button class="btn btn-sm btn-blue" @onclick="() => EditLot(lot)">Edit</button>
-                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteLot(lot.Id)">Delete</button>
+                            <button class="btn btn-sm btn-blue" @onclick="() => EditLot(lot)">@L["Btn_Edit"]</button>
+                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteLot(lot.Id)">@L["Btn_Delete"]</button>
                         </td>
                     </tr>
                 }
@@ -128,39 +129,39 @@ else
             <h4>@(_editingLot.Id == 0 ? "New Parking Lot" : $"Edit: {_editingLot.Name}")</h4>
 
             <div class="form-group">
-                <label>Name</label>
+                <label>@L["Lbl_Name"]</label>
                 <input type="text" @bind="_editingLot.Name" class="form-control" placeholder="default" />
             </div>
 
             <div class="form-group">
-                <label>Start Slot</label>
+                <label>@L["Lbl_StartSlot"]</label>
                 <input type="number" @bind="_editingLot.ParkingStartSlot" class="form-control" min="1" />
             </div>
 
             <div class="form-group">
-                <label>End Slot</label>
+                <label>@L["Lbl_EndSlot"]</label>
                 <input type="number" @bind="_editingLot.ParkingEndSlot" class="form-control" min="1" />
             </div>
 
             <div class="form-group">
-                <label>Timeout (seconds)</label>
+                <label>@L["Lbl_Timeout"]</label>
                 <input type="number" @bind="_editingLot.ParkingTimeout" class="form-control" min="0" />
             </div>
 
             <div class="form-group">
-                <label>Context</label>
+                <label>@L["Lbl_Context"]</label>
                 <input type="text" @bind="_editingLot.Context" class="form-control" placeholder="parkedcalls" />
             </div>
 
             <div class="form-group">
-                <label>Music on Hold</label>
+                <label>@L["Lbl_MusicOnHold"]</label>
                 <input type="text" @bind="_editingLot.MusicOnHold" class="form-control" placeholder="default" />
             </div>
 
             <div class="form-actions">
-                <button class="btn btn-muted" @onclick="CancelLotEdit">Cancel</button>
+                <button class="btn btn-muted" @onclick="CancelLotEdit">@L["Btn_Cancel"]</button>
                 <button class="btn btn-primary" @onclick="SaveLot" disabled="@_lotSaving">
-                    @(_lotSaving ? "Saving..." : "Save")
+                    @(_lotSaving ? L["Btn_Saving"] : L["Btn_Save"])
                 </button>
             </div>
         </div>
