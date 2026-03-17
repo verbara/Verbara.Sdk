@@ -11,6 +11,7 @@
 @inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @inject IStringLocalizer<SharedStrings> L
+@inject IJSRuntime JS
 
 <PageTitle>@(_isNew ? (_isInbound ? L["RouteEdit_NewInbound"] : L["RouteEdit_NewOutbound"]) : (_isInbound ? L["RouteEdit_EditInbound"] : L["RouteEdit_EditOutbound"])) — Asterisk PBX Admin</PageTitle>
 
@@ -28,13 +29,15 @@ else if (_isInbound)
         <HelpPanel SectionKey="RouteEdit_RouteDetails">@L["RouteEdit_RouteDetails"]</HelpPanel>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">@L["Lbl_Name"] <HelpIcon HelpKey="RouteName" /></label>
-                <input class="input" @bind="_inConfig.Name" placeholder="Main Line" />
+                <label class="form-label">@L["Lbl_Name"] <span class="required-mark">*</span> <HelpIcon HelpKey="RouteName" /></label>
+                <input class="input @ValidationCss(_inNameTouched, _inNameValid)" @bind="_inConfig.Name" placeholder="Main Line" @onfocusout="@(() => { _inNameTouched = true; })" />
+                <PbxAdmin.Components.Shared.ValidationMessage IsValid="_inNameValid" IsTouched="_inNameTouched" Message="@L["Err_RouteNameRequired"]" />
             </div>
             <div class="form-field">
-                <label class="form-label">@L["RouteEdit_DIDPattern"] <HelpIcon HelpKey="RouteDIDPattern" /></label>
-                <input class="input" @bind="_inConfig.DidPattern" placeholder="5551234567" />
+                <label class="form-label">@L["RouteEdit_DIDPattern"] <span class="required-mark">*</span> <HelpIcon HelpKey="RouteDIDPattern" /></label>
+                <input class="input @ValidationCss(_inDidTouched, _inDidValid)" @bind="_inConfig.DidPattern" placeholder="5551234567" @onfocusout="@(() => { _inDidTouched = true; })" />
                 <span class="text-muted" style="font-size:0.85rem;">@L["RouteEdit_DIDHint"]</span>
+                <PbxAdmin.Components.Shared.ValidationMessage IsValid="_inDidValid" IsTouched="_inDidTouched" Message="@L["Err_DIDRequired"]" />
             </div>
             <div class="form-field">
                 <label class="form-label">@L["Col_Priority"] <HelpIcon HelpKey="RoutePriority" /></label>
@@ -75,6 +78,9 @@ else if (_isInbound)
         </div>
     </div>
 
+    <AdvancedToggle IsAdvanced="_isAdvanced" IsAdvancedChanged="v => { _isAdvanced = v; StateHasChanged(); }" />
+    @if (_isAdvanced)
+    {
     <div class="form-section">
         <h3>@L["RouteEdit_Options"]</h3>
         <div class="form-grid">
@@ -90,6 +96,7 @@ else if (_isInbound)
             </div>
         </div>
     </div>
+    }
 }
 else
 {
@@ -98,8 +105,9 @@ else
         <h3>@L["RouteEdit_RouteDetails"]</h3>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">@L["Lbl_Name"]</label>
-                <input class="input" @bind="_outConfig.Name" placeholder="Local Calls" />
+                <label class="form-label">@L["Lbl_Name"] <span class="required-mark">*</span></label>
+                <input class="input @ValidationCss(_outNameTouched, _outNameValid)" @bind="_outConfig.Name" placeholder="Local Calls" @onfocusout="@(() => { _outNameTouched = true; })" />
+                <PbxAdmin.Components.Shared.ValidationMessage IsValid="_outNameValid" IsTouched="_outNameTouched" Message="@L["Err_RouteNameRequired"]" />
             </div>
             <div class="form-field">
                 <label class="form-label">@L["RouteEdit_DIDPattern"]</label>
@@ -109,20 +117,6 @@ else
             <div class="form-field">
                 <label class="form-label">@L["Col_Priority"]</label>
                 <input class="input" type="number" @bind="_outConfig.Priority" />
-            </div>
-        </div>
-    </div>
-
-    <div class="form-section">
-        <h3>@L["RouteEdit_DialManip"]</h3>
-        <div class="form-grid">
-            <div class="form-field">
-                <label class="form-label">@L["RouteEdit_Prepend"]</label>
-                <input class="input" @bind="_outConfig.Prepend" placeholder="@L["RouteEdit_PrependHint"]" />
-            </div>
-            <div class="form-field">
-                <label class="form-label">@L["RouteEdit_Prefix"]</label>
-                <input class="input" @bind="_outConfig.Prefix" placeholder="@L["RouteEdit_PrefixHint"]" />
             </div>
         </div>
     </div>
@@ -171,6 +165,24 @@ else
         {
             <p class="text-muted">@L["RouteEdit_NoTrunks"]</p>
         }
+        <PbxAdmin.Components.Shared.ValidationMessage IsValid="_outTrunksValid" IsTouched="_outTrunksTouched" Message="@L["Err_NoTrunks"]" />
+    </div>
+
+    <AdvancedToggle IsAdvanced="_isAdvanced" IsAdvancedChanged="v => { _isAdvanced = v; StateHasChanged(); }" />
+    @if (_isAdvanced)
+    {
+    <div class="form-section">
+        <h3>@L["RouteEdit_DialManip"]</h3>
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="form-label">@L["RouteEdit_Prepend"]</label>
+                <input class="input" @bind="_outConfig.Prepend" placeholder="@L["RouteEdit_PrependHint"]" />
+            </div>
+            <div class="form-field">
+                <label class="form-label">@L["RouteEdit_Prefix"]</label>
+                <input class="input" @bind="_outConfig.Prefix" placeholder="@L["RouteEdit_PrefixHint"]" />
+            </div>
+        </div>
     </div>
 
     <div class="form-section">
@@ -188,10 +200,11 @@ else
             </div>
         </div>
     </div>
+    }
 }
 
 <div class="form-actions">
-    <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? L["Btn_Saving"] : L["Btn_Save"])</button>
+    <button class="btn btn-green" @onclick="Save" disabled="@(_saving || !IsFormValid)">@(_saving ? L["Btn_Saving"] : L["Btn_Save"])</button>
     <button class="btn" @onclick="NavigateBack">@L["Btn_Cancel"]</button>
 </div>
 
@@ -238,6 +251,25 @@ else
     private List<TrunkViewModel> _availableTrunks = [];
     private List<TimeConditionViewModel> _timeConditions = [];
 
+    private bool _isAdvanced;
+
+    // Inbound validation
+    private bool _inNameTouched, _inDidTouched;
+    private bool _inNameValid => FormValidator.IsRequired(_inConfig.Name);
+    private bool _inDidValid => FormValidator.IsRequired(_inConfig.DidPattern);
+
+    // Outbound validation
+    private bool _outNameTouched, _outTrunksTouched;
+    private bool _outNameValid => FormValidator.IsRequired(_outConfig.Name);
+    private bool _outTrunksValid => _outConfig.Trunks.Count > 0;
+
+    private bool IsFormValid => _isInbound
+        ? _inNameValid && _inDidValid
+        : _outNameValid && _outTrunksValid;
+
+    private string ValidationCss(bool touched, bool valid) =>
+        !touched ? "" : valid ? "valid" : "invalid";
+
     protected override async Task OnInitializedAsync()
     {
         var uri = Nav.Uri;
@@ -273,6 +305,15 @@ else
         }
 
         _loading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _isAdvanced = await JS.InvokeAsync<bool>("HelpInterop.getAdvanced");
+            StateHasChanged();
+        }
     }
 
     private void AddTrunk()
@@ -324,6 +365,17 @@ else
 
     private async Task Save()
     {
+        if (_isInbound)
+        {
+            _inNameTouched = _inDidTouched = true;
+        }
+        else
+        {
+            _outNameTouched = _outTrunksTouched = true;
+        }
+
+        if (!IsFormValid) return;
+
         var serverId = ServerSvc.SelectedServerId;
         if (string.IsNullOrEmpty(serverId))
         {
