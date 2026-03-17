@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 @using PbxAdmin.Services
 @using Asterisk.Sdk.Enums
+@inject IStringLocalizer<SharedStrings> L
 @inject AsteriskMonitorService Monitor
 @inject SelectedServerService ServerSvc
 @inject ConfigOperationState ConfigOp
@@ -16,41 +17,41 @@ else
     <div class="layout">
         <nav class="sidebar">
             <div class="sidebar-header">
-                <h2>Asterisk</h2>
+                <h2>@L["SidebarTitle"]</h2>
             </div>
-            <div class="nav-section">Monitoring</div>
-            <NavLink href="/" Match="NavLinkMatch.All" class="nav-item">Home</NavLink>
-            <NavLink href="/calls" class="nav-item">Calls</NavLink>
-            <NavLink href="/queues" class="nav-item">Queues</NavLink>
-            <NavLink href="/agents" class="nav-item">Agents</NavLink>
-            <NavLink href="/channels" class="nav-item">Channels</NavLink>
+            <div class="nav-section">@L["Nav_Monitoring"]</div>
+            <NavLink href="/" Match="NavLinkMatch.All" class="nav-item">@L["Nav_Home"]</NavLink>
+            <NavLink href="/calls" class="nav-item">@L["Nav_Calls"]</NavLink>
+            <NavLink href="/queues" class="nav-item">@L["Nav_Queues"]</NavLink>
+            <NavLink href="/agents" class="nav-item">@L["Nav_Agents"]</NavLink>
+            <NavLink href="/channels" class="nav-item">@L["Nav_Channels"]</NavLink>
 
-            <div class="nav-section">PBX Management</div>
-            <NavLink href="/extensions" class="nav-item">Extensions</NavLink>
-            <NavLink href="/trunks" class="nav-item">Trunks</NavLink>
-            <NavLink href="/routes" class="nav-item">Routes</NavLink>
-            <NavLink href="/ivr-menus" class="nav-item">IVR Menus</NavLink>
-            <NavLink href="/time-conditions" class="nav-item">Time Conds.</NavLink>
+            <div class="nav-section">@L["Nav_PbxManagement"]</div>
+            <NavLink href="/extensions" class="nav-item">@L["Nav_Extensions"]</NavLink>
+            <NavLink href="/trunks" class="nav-item">@L["Nav_Trunks"]</NavLink>
+            <NavLink href="/routes" class="nav-item">@L["Nav_Routes"]</NavLink>
+            <NavLink href="/ivr-menus" class="nav-item">@L["Nav_IvrMenus"]</NavLink>
+            <NavLink href="/time-conditions" class="nav-item">@L["Nav_TimeConds"]</NavLink>
 
-            <div class="nav-section">Media &amp; Features</div>
-            <NavLink href="/recordings" class="nav-item">Recordings</NavLink>
-            <NavLink href="/moh" class="nav-item">Music on Hold</NavLink>
-            <NavLink href="/conferences" class="nav-item">Conferences</NavLink>
-            <NavLink href="/feature-codes" class="nav-item">Feature Codes</NavLink>
-            <NavLink href="/parking" class="nav-item">Parking</NavLink>
-            <NavLink href="/voicemail" class="nav-item">Voicemail</NavLink>
+            <div class="nav-section">@L["Nav_MediaFeatures"]</div>
+            <NavLink href="/recordings" class="nav-item">@L["Nav_Recordings"]</NavLink>
+            <NavLink href="/moh" class="nav-item">@L["Nav_MusicOnHold"]</NavLink>
+            <NavLink href="/conferences" class="nav-item">@L["Nav_Conferences"]</NavLink>
+            <NavLink href="/feature-codes" class="nav-item">@L["Nav_FeatureCodes"]</NavLink>
+            <NavLink href="/parking" class="nav-item">@L["Nav_Parking"]</NavLink>
+            <NavLink href="/voicemail" class="nav-item">@L["Nav_Voicemail"]</NavLink>
 
-            <div class="nav-section">System</div>
-            <NavLink href="/metrics" class="nav-item">Metrics</NavLink>
-            <NavLink href="/events" class="nav-item">Events</NavLink>
-            <NavLink href="/console" class="nav-item">Console</NavLink>
-            <NavLink href="/traffic" class="nav-item">Traffic</NavLink>
+            <div class="nav-section">@L["Nav_System"]</div>
+            <NavLink href="/metrics" class="nav-item">@L["Nav_Metrics"]</NavLink>
+            <NavLink href="/events" class="nav-item">@L["Nav_Events"]</NavLink>
+            <NavLink href="/console" class="nav-item">@L["Nav_Console"]</NavLink>
+            <NavLink href="/traffic" class="nav-item">@L["Nav_Traffic"]</NavLink>
         </nav>
 
         <div class="main-area">
             <header class="header">
                 <div class="header-left">
-                    <h1>Asterisk PBX Admin</h1>
+                    <h1>@L["AppTitle"]</h1>
                 </div>
                 <div class="header-center">
                     @{
@@ -84,12 +85,15 @@ else
                     }
                 </div>
                 <div class="header-right">
-                    <span class="header-stat">@_totalChannels calls</span>
-                    <span class="header-stat">@_totalQueues queues</span>
-                    <span class="header-stat">@_totalAgents agents</span>
+                    <span class="header-stat">@_totalChannels @L["Stat_Calls"]</span>
+                    <span class="header-stat">@_totalQueues @L["Stat_Queues"]</span>
+                    <span class="header-stat">@_totalAgents @L["Stat_Agents"]</span>
+                    <a href="/set-language/@(_isSpanish ? "en" : "es")" class="btn btn-sm btn-muted lang-switch">
+                        @(_isSpanish ? "EN" : "ES")
+                    </a>
                     <form method="post" action="/logout">
                         <AntiforgeryToken />
-                        <button type="submit" class="btn btn-sm btn-muted">Logout</button>
+                        <button type="submit" class="btn btn-sm btn-muted">@L["Btn_Logout"]</button>
                     </form>
                 </div>
             </header>
@@ -127,6 +131,7 @@ else
     private int _totalChannels;
     private int _totalQueues;
     private int _totalAgents;
+    private bool _isSpanish;
 
     protected override void OnInitialized()
     {
@@ -143,6 +148,8 @@ else
                 return;
             }
         }
+
+        _isSpanish = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "es";
 
         ServerSvc.OnChanged += OnServerChanged;
         ConfigOp.OnChanged += OnConfigOpChanged;

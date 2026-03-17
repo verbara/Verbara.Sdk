@@ -4,6 +4,7 @@ using PbxAdmin.Services.Repositories;
 using PbxAdmin.Services.Dialplan;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Localization;
 using Microsoft.AspNetCore.Mvc;
 using System.Globalization;
 using Serilog;
@@ -41,6 +42,7 @@ builder.Services.AddAuthorization(options =>
         .Build());
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 
 builder.Services.AddAsteriskMultiServer();
 builder.Services.AddSingleton<EventLogService>();
@@ -159,6 +161,13 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseStaticFiles();
+
+var supportedCultures = new[] { "en", "es" };
+app.UseRequestLocalization(new RequestLocalizationOptions()
+    .SetDefaultCulture("en")
+    .AddSupportedCultures(supportedCultures)
+    .AddSupportedUICultures(supportedCultures));
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
@@ -167,6 +176,15 @@ app.MapPost("/logout", async (HttpContext context) =>
 {
     await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Redirect("/login");
+}).AllowAnonymous();
+
+app.MapGet("/set-language/{culture}", (string culture, HttpContext context) =>
+{
+    context.Response.Cookies.Append(
+        CookieRequestCultureProvider.DefaultCookieName,
+        CookieRequestCultureProvider.MakeCookieValue(new RequestCulture(culture)),
+        new CookieOptions { Expires = DateTimeOffset.UtcNow.AddYears(1) });
+    return Results.Redirect(context.Request.Headers.Referer.ToString() ?? "/");
 }).AllowAnonymous();
 
 app.MapRazorComponents<PbxAdmin.Components.App>()
