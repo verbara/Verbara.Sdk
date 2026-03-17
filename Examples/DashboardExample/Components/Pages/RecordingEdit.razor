@@ -1,0 +1,166 @@
+@page "/recordings/edit/new"
+@page "/recordings/edit/{Id:int}"
+@using DashboardExample.Models
+@using DashboardExample.Services
+@inject RecordingService RecSvc
+@inject SelectedServerService ServerSvc
+@inject NavigationManager Nav
+@inject IConfiguration Config
+
+<PageTitle>@(_isNew ? "New Recording Policy" : $"Edit {_policy.Name}") — Asterisk Dashboard</PageTitle>
+
+<div class="page-header-row">
+    <button class="btn btn-sm btn-muted" @onclick="GoBack">&#8592; Back</button>
+    <h2>@(_isNew ? "New Recording Policy" : $"Edit: {_policy.Name}")</h2>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+<div class="form-section">
+    <h3>Policy Settings</h3>
+
+    <div class="form-group">
+        <label>Name</label>
+        <input type="text" @bind="_policy.Name" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <label>Mode</label>
+        <div class="radio-group">
+            @foreach (var mode in Enum.GetValues<RecordingMode>())
+            {
+                var capturedMode = mode;
+                <label>
+                    <input type="radio" name="mode" value="@capturedMode"
+                           checked="@(_policy.Mode == capturedMode)"
+                           @onchange="() => _policy.Mode = capturedMode" /> @capturedMode
+                </label>
+            }
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Format</label>
+        <select @bind="_policy.Format" class="form-control">
+            <option value="wav">wav</option>
+            <option value="wav49">wav49</option>
+            <option value="gsm">gsm</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>Storage Path</label>
+        <input type="text" @bind="_policy.StoragePath" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <label>Retention Days (0 = indefinite)</label>
+        <input type="number" @bind="_policy.RetentionDays" min="0" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <label>MixMonitor Options (optional)</label>
+        <input type="text" @bind="_policy.MixMonitorOptions" class="form-control"
+               placeholder="e.g. r for read, t for write" />
+    </div>
+</div>
+
+<div class="form-section">
+    <h3>Targets</h3>
+    <button class="btn btn-sm btn-primary" @onclick="AddTarget">+ Add Target</button>
+
+    @if (_policy.Targets.Count > 0)
+    {
+        <table class="table mt-2">
+            <thead>
+                <tr><th>Type</th><th>Value</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var target in _policy.Targets)
+                {
+                    <tr>
+                        <td>
+                            <select @bind="target.TargetType" class="form-control">
+                                <option value="extension">Extension</option>
+                                <option value="queue">Queue</option>
+                                <option value="trunk">Trunk</option>
+                            </select>
+                        </td>
+                        <td>
+                            <input type="text" @bind="target.TargetValue" class="form-control" />
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-danger" @onclick="() => _policy.Targets.Remove(target)">&#x2715;</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+<div class="form-actions">
+    <button class="btn btn-muted" @onclick="GoBack">Cancel</button>
+    <button class="btn btn-primary" @onclick="Save" disabled="@_saving">
+        @(_saving ? "Saving..." : "Save")
+    </button>
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private RecordingPolicy _policy = new()
+    {
+        StoragePath = "/var/spool/asterisk/monitor/",
+        Targets = [new PolicyTarget { TargetType = "extension" }]
+    };
+    private bool _isNew => Id == 0;
+    private bool _saving;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!_isNew)
+        {
+            var existing = await RecSvc.GetPolicyAsync(Id);
+            if (existing is not null) _policy = existing;
+        }
+        else
+        {
+            var serverId = ServerSvc.SelectedServerId;
+            if (serverId is not null)
+            {
+                _policy.StoragePath = Config[$"Asterisk:Servers:{serverId}:RecordingsPath"]
+                    ?? "/var/spool/asterisk/monitor/";
+            }
+        }
+    }
+
+    private void AddTarget() =>
+        _policy.Targets.Add(new PolicyTarget { TargetType = "extension" });
+
+    private async Task Save()
+    {
+        _saving = true;
+        _error = null;
+
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) { _error = "No server selected"; _saving = false; return; }
+
+        var (success, error) = _isNew
+            ? await RecSvc.CreatePolicyAsync(serverId, _policy)
+            : await RecSvc.UpdatePolicyAsync(serverId, _policy);
+
+        _saving = false;
+
+        if (success)
+            Nav.NavigateTo("/recordings");
+        else
+            _error = error;
+    }
+
+    private void GoBack() => Nav.NavigateTo("/recordings");
+}
