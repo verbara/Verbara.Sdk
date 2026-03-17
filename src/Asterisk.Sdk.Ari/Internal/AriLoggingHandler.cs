@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Asterisk.Sdk.Ari.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace Asterisk.Sdk.Ari.Internal;
@@ -16,7 +17,7 @@ internal static partial class AriHttpLog
 }
 
 /// <summary>
-/// DelegatingHandler that logs all ARI HTTP requests and responses.
+/// DelegatingHandler that logs and traces all ARI HTTP requests and responses.
 /// </summary>
 internal sealed class AriLoggingHandler(ILogger logger) : DelegatingHandler(new HttpClientHandler())
 {
@@ -25,6 +26,7 @@ internal sealed class AriLoggingHandler(ILogger logger) : DelegatingHandler(new 
         var method = request.Method.Method;
         var url = request.RequestUri?.PathAndQuery;
 
+        using var activity = AriActivitySource.StartRequest(method, url);
         AriHttpLog.RequestSending(logger, method, url);
 
         var sw = Stopwatch.StartNew();
@@ -32,6 +34,7 @@ internal sealed class AriLoggingHandler(ILogger logger) : DelegatingHandler(new 
         sw.Stop();
 
         var statusCode = (int)response.StatusCode;
+        AriActivitySource.SetResponse(activity, statusCode);
 
         if (response.IsSuccessStatusCode)
         {
