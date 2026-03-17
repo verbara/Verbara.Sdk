@@ -113,7 +113,8 @@ public class RouteServiceTests
         repoResolver.GetRepository(Arg.Any<string>()).Returns(repo);
 
         var dialplanResolver = Substitute.For<IDialplanProviderResolver>();
-        var regenerator = new DialplanRegenerator(repoResolver, dialplanResolver);
+        var ivrRepo = Substitute.For<IIvrMenuRepository>();
+        var regenerator = new DialplanRegenerator(repoResolver, dialplanResolver, ivrRepo);
         var logger = Substitute.For<ILogger<RouteService>>();
 
         // AsteriskMonitorService and TrunkService are not accessed during validation
