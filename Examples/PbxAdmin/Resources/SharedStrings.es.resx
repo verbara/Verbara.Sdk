@@ -730,4 +730,170 @@
   <!-- Select Server Page -->
   <data name="SS_Heading" xml:space="preserve"><value>Seleccionar Servidor</value></data>
   <data name="SS_Choose" xml:space="preserve"><value>Elija un servidor Asterisk para administrar</value></data>
+
+  <!-- ==================== SISTEMA DE AYUDA ==================== -->
+
+  <!-- Glosario UI -->
+  <data name="Glossary_Title" xml:space="preserve"><value>Glosario</value></data>
+  <data name="Glossary_SearchPlaceholder" xml:space="preserve"><value>Buscar términos...</value></data>
+
+  <!-- Tooltips de Ayuda: Extensión -->
+  <data name="Help_ExtNumber_Title" xml:space="preserve"><value>Número de Extensión</value></data>
+  <data name="Help_ExtNumber" xml:space="preserve"><value>Este es el número telefónico interno. Los empleados marcan este número para comunicarse entre sí (ej. 2001).</value></data>
+  <data name="Help_DisplayName_Title" xml:space="preserve"><value>Nombre para Mostrar</value></data>
+  <data name="Help_DisplayName" xml:space="preserve"><value>El nombre que aparece en el identificador de llamadas cuando esta persona llama. Normalmente el nombre completo del empleado.</value></data>
+  <data name="Help_Technology_Title" xml:space="preserve"><value>Tecnología</value></data>
+  <data name="Help_Technology" xml:space="preserve"><value>El protocolo que usa su teléfono para conectarse. PJSIP es el estándar moderno — úselo a menos que tenga teléfonos antiguos que requieran SIP o IAX2.</value></data>
+  <data name="Help_Password_Title" xml:space="preserve"><value>Contraseña</value></data>
+  <data name="Help_Password" xml:space="preserve"><value>La clave que el teléfono usa para registrarse en la central. Use una contraseña fuerte y aleatoria (el botón Generar le ayuda). Mínimo 8 caracteres.</value></data>
+  <data name="Help_Context_Title" xml:space="preserve"><value>Contexto</value></data>
+  <data name="Help_Context" xml:space="preserve"><value>Controla qué llamadas puede hacer este teléfono. 'from-internal' permite llamar a otras extensiones y líneas externas. Piense en ello como un grupo de permisos.</value></data>
+  <data name="Help_CallGroup_Title" xml:space="preserve"><value>Grupo de Llamada</value></data>
+  <data name="Help_CallGroup" xml:space="preserve"><value>Número de grupo para captura de llamadas. Los teléfonos en el mismo grupo pueden contestar las llamadas de los demás. Normalmente '1' para la oficina principal.</value></data>
+  <data name="Help_PickupGroup_Title" xml:space="preserve"><value>Grupo de Captura</value></data>
+  <data name="Help_PickupGroup" xml:space="preserve"><value>Qué grupos de llamada puede capturar este teléfono. Si está en '1', puede contestar llamadas del grupo 1 marcando el código de captura.</value></data>
+  <data name="Help_Codecs_Title" xml:space="preserve"><value>Códecs</value></data>
+  <data name="Help_Codecs" xml:space="preserve"><value>Configuración de calidad de audio. Como elegir entre MP3 (pequeño, calidad decente) y CD (grande, calidad perfecta). ulaw y alaw son los valores predeterminados seguros.</value></data>
+  <data name="Help_DtmfMode_Title" xml:space="preserve"><value>Modo DTMF</value></data>
+  <data name="Help_DtmfMode" xml:space="preserve"><value>Cómo el teléfono envía los tonos de botones (los pitidos al presionar 1, 2, 3...). Deje 'RFC 4733' a menos que su proveedor indique lo contrario.</value></data>
+  <data name="Help_Transport_Title" xml:space="preserve"><value>Transporte</value></data>
+  <data name="Help_Transport" xml:space="preserve"><value>Cómo viajan los datos entre el teléfono y la central. UDP es el más rápido (predeterminado). TCP es más confiable. TLS agrega encriptación para seguridad.</value></data>
+
+  <!-- Tooltips de Ayuda: Troncal -->
+  <data name="Help_TrunkName_Title" xml:space="preserve"><value>Nombre de Troncal</value></data>
+  <data name="Help_TrunkName" xml:space="preserve"><value>Un nombre descriptivo para identificar esta conexión. Ejemplo: 'Proveedor-Principal' o 'Línea-Respaldo'. Solo para su referencia.</value></data>
+  <data name="Help_TrunkHost_Title" xml:space="preserve"><value>Host</value></data>
+  <data name="Help_TrunkHost" xml:space="preserve"><value>La dirección del servidor de su compañía telefónica. Su proveedor le da esta dirección (ej. sip.proveedor.com o una dirección IP).</value></data>
+  <data name="Help_TrunkPort_Title" xml:space="preserve"><value>Puerto</value></data>
+  <data name="Help_TrunkPort" xml:space="preserve"><value>Puerto de red para la conexión. El predeterminado es 5060 para SIP y 5061 para TLS. Solo cambie si su proveedor especifica uno diferente.</value></data>
+  <data name="Help_TrunkTransport_Title" xml:space="preserve"><value>Transporte</value></data>
+  <data name="Help_TrunkTransport" xml:space="preserve"><value>Cómo viajan los datos a su proveedor. UDP es el estándar. Use TLS si su proveedor requiere conexiones encriptadas.</value></data>
+  <data name="Help_TrunkUsername_Title" xml:space="preserve"><value>Usuario</value></data>
+  <data name="Help_TrunkUsername" xml:space="preserve"><value>El nombre de cuenta que su proveedor telefónico le dio para autenticación. A veces llamado 'Auth ID' o 'Usuario SIP'.</value></data>
+  <data name="Help_TrunkSecret_Title" xml:space="preserve"><value>Secreto</value></data>
+  <data name="Help_TrunkSecret" xml:space="preserve"><value>La contraseña de su cuenta de troncal. Su proveedor telefónico se la da. Manténgala segura — controla el acceso a sus líneas telefónicas.</value></data>
+  <data name="Help_TrunkAuthType_Title" xml:space="preserve"><value>Tipo de Autenticación</value></data>
+  <data name="Help_TrunkAuthType" xml:space="preserve"><value>Cómo la central prueba su identidad ante el proveedor. 'MD5' es el método estándar. Solo cambie si su proveedor requiere algo diferente.</value></data>
+  <data name="Help_TrunkCodecs_Title" xml:space="preserve"><value>Códecs</value></data>
+  <data name="Help_TrunkCodecs" xml:space="preserve"><value>Formatos de audio soportados por esta troncal. Deben coincidir con lo que su proveedor soporta. ulaw (Norteamérica) y alaw (Europa) son estándares universales.</value></data>
+
+  <!-- Tooltips de Ayuda: Cola -->
+  <data name="Help_QueueName_Title" xml:space="preserve"><value>Nombre de Cola</value></data>
+  <data name="Help_QueueName" xml:space="preserve"><value>Un nombre único para esta cola de llamadas. Ejemplo: 'ventas' o 'soporte'. Los llamantes se colocan aquí mientras esperan un agente disponible.</value></data>
+  <data name="Help_QueueStrategy_Title" xml:space="preserve"><value>Estrategia</value></data>
+  <data name="Help_QueueStrategy" xml:space="preserve"><value>Cómo se distribuyen las llamadas. 'Ring All' timbra a todos. 'Least Recent' timbra al que lleva más tiempo libre. 'Round Robin' toma turnos.</value></data>
+  <data name="Help_QueueMaxCallers_Title" xml:space="preserve"><value>Máximo de Llamantes</value></data>
+  <data name="Help_QueueMaxCallers" xml:space="preserve"><value>Número máximo de llamantes que pueden esperar en la cola al mismo tiempo. Cuando está llena, los nuevos llamantes escuchan señal de ocupado o se redirigen.</value></data>
+  <data name="Help_QueueTimeout_Title" xml:space="preserve"><value>Tiempo de Timbre</value></data>
+  <data name="Help_QueueTimeout" xml:space="preserve"><value>Cuántos segundos timbrar a un agente antes de intentar con el siguiente (o reintentar). 15-30 segundos es lo típico.</value></data>
+  <data name="Help_QueueMembers_Title" xml:space="preserve"><value>Miembros</value></data>
+  <data name="Help_QueueMembers" xml:space="preserve"><value>Las extensiones (agentes) asignadas para contestar llamadas en esta cola. Agregue extensiones por número. Recibirán llamadas según la estrategia configurada.</value></data>
+  <data name="Help_QueueServiceLevel_Title" xml:space="preserve"><value>Nivel de Servicio</value></data>
+  <data name="Help_QueueServiceLevel" xml:space="preserve"><value>Su tiempo objetivo de respuesta en segundos. Si pone 60, el sistema mide qué porcentaje de llamadas se contestan en menos de 1 minuto. Se usa para reportes.</value></data>
+
+  <!-- Tooltips de Ayuda: Ruta -->
+  <data name="Help_RouteName_Title" xml:space="preserve"><value>Nombre de Ruta</value></data>
+  <data name="Help_RouteName" xml:space="preserve"><value>Un nombre descriptivo para esta ruta. Ejemplo: 'Numero-Principal-Entrante' o 'Llamadas-Internacionales'. Solo para su referencia.</value></data>
+  <data name="Help_RouteDIDPattern_Title" xml:space="preserve"><value>Patrón DID</value></data>
+  <data name="Help_RouteDIDPattern" xml:space="preserve"><value>El número telefónico que los llamantes marcan para comunicarse con usted desde afuera. Su compañía telefónica lo asigna. Use '_X.' para patrones comodín.</value></data>
+  <data name="Help_RoutePriority_Title" xml:space="preserve"><value>Prioridad</value></data>
+  <data name="Help_RoutePriority" xml:space="preserve"><value>Cuando varias rutas coinciden, gana la de menor número de prioridad. Use 1 para su ruta principal, 2 para respaldo, etc.</value></data>
+  <data name="Help_RouteDestType_Title" xml:space="preserve"><value>Tipo de Destino</value></data>
+  <data name="Help_RouteDestType" xml:space="preserve"><value>Dónde enviar las llamadas coincidentes. Extensión = un teléfono específico. Cola = un grupo de agentes. IVR = un menú automático ('Presione 1 para...').</value></data>
+  <data name="Help_RouteTarget_Title" xml:space="preserve"><value>Destino</value></data>
+  <data name="Help_RouteTarget" xml:space="preserve"><value>El número de extensión, nombre de cola o menú IVR específico que recibirá la llamada.</value></data>
+  <data name="Help_RouteTrunk_Title" xml:space="preserve"><value>Troncal</value></data>
+  <data name="Help_RouteTrunk" xml:space="preserve"><value>Qué línea telefónica usar para llamadas salientes de esta ruta. El orden importa — si la primera troncal está ocupada, el sistema intenta la siguiente.</value></data>
+
+  <!-- Paneles de Ayuda: Explicaciones de sección -->
+  <data name="HelpPanel_ExtEdit_Identity" xml:space="preserve"><value>Aquí configura una nueva línea telefónica para alguien en su oficina. Ingrese su nombre y asigne un número de extensión — como darle su propio número de teléfono de escritorio.</value></data>
+  <data name="HelpPanel_ExtEdit_Auth" xml:space="preserve"><value>Configuración de seguridad para esta extensión. La contraseña es lo que el teléfono físico usa para conectarse al sistema — como una contraseña Wi-Fi pero para el teléfono. Siempre use una contraseña fuerte y aleatoria.</value></data>
+  <data name="HelpPanel_ExtEdit_Dialplan" xml:space="preserve"><value>Controla lo que este teléfono puede hacer. El contexto define permisos (¿a quién puede llamar?), y los grupos determinan qué colegas pueden contestar su teléfono cuando timbra.</value></data>
+  <data name="HelpPanel_ExtEdit_MediaTransport" xml:space="preserve"><value>Configuración técnica de calidad de audio y conexión de red. Los valores predeterminados funcionan para la mayoría de instalaciones. Solo cambie si tiene problemas de audio o su equipo de TI recomienda valores específicos.</value></data>
+  <data name="HelpPanel_ExtEdit_Voicemail" xml:space="preserve"><value>Configure un buzón de voz para que los llamantes dejen mensajes cuando esta persona no está disponible. El PIN protege el buzón de acceso no autorizado. Las notificaciones por email envían los mensajes nuevos a la bandeja del usuario.</value></data>
+  <data name="HelpPanel_ExtEdit_CallFeatures" xml:space="preserve"><value>Reglas de desvío de llamadas. Desvíe llamadas cuando el usuario está ocupado, no contesta, o siempre. DND (No Molestar) envía todas las llamadas directamente al buzón de voz.</value></data>
+  <data name="HelpPanel_TrunkEdit_Connection" xml:space="preserve"><value>Detalles de conexión con su proveedor telefónico. Una troncal es la línea telefónica que conecta su oficina con el mundo exterior. Su proveedor le da la dirección del host y el puerto.</value></data>
+  <data name="HelpPanel_ExtEdit_Auth_Trunk" xml:space="preserve"><value>Credenciales que su proveedor telefónico le dio. La central las usa para autenticarse con el proveedor, como iniciar sesión en el servicio de su compañía telefónica.</value></data>
+  <data name="HelpPanel_QCfg_Identity" xml:space="preserve"><value>Información básica de esta cola de llamadas. Una cola mantiene a los llamantes en espera y los distribuye a agentes disponibles — como una sala de espera con una recepcionista automatizada.</value></data>
+  <data name="HelpPanel_QCfg_StrategyTiming" xml:space="preserve"><value>Cómo se distribuyen las llamadas a los agentes. La estrategia decide a quién timbrar primero, y el timeout controla cuánto esperar antes de intentar con el siguiente agente.</value></data>
+  <data name="HelpPanel_RouteEdit_RouteDetails" xml:space="preserve"><value>Define qué llamadas maneja esta ruta. Para rutas entrantes, el patrón DID coincide con el número que marcan los llamantes. Para rutas salientes, el patrón de marcado coincide con lo que marcan sus empleados.</value></data>
+  <data name="HelpPanel_QCfg_StaticMembers" xml:space="preserve"><value>Los agentes asignados para contestar llamadas en esta cola. Agréguelos por su dirección de dispositivo (ej. PJSIP/2001). La penalidad controla la prioridad — agentes con menor penalidad reciben llamadas primero.</value></data>
+  <data name="HelpPanel_RouteEdit_TrunksOrder" xml:space="preserve"><value>Las líneas telefónicas usadas para esta ruta saliente, en orden de prioridad. Si la primera troncal está ocupada o caída, el sistema intenta automáticamente la siguiente en la lista.</value></data>
+
+  <!-- Entradas del Glosario -->
+  <data name="Glossary_Extension" xml:space="preserve"><value>Extensión</value></data>
+  <data name="Glossary_Extension_Def" xml:space="preserve"><value>Un número telefónico interno asignado a una persona o dispositivo. Cuando alguien marca 2001, timbra el teléfono registrado en la extensión 2001.</value></data>
+  <data name="Glossary_Extension_Tip" xml:space="preserve"><value>Cada empleado normalmente tiene una extensión. Los rangos de números se configuran en los ajustes del sistema.</value></data>
+  <data name="Glossary_Extension_Category" xml:space="preserve"><value>Básico</value></data>
+
+  <data name="Glossary_Context" xml:space="preserve"><value>Contexto</value></data>
+  <data name="Glossary_Context_Def" xml:space="preserve"><value>Un grupo de permisos que controla qué llamadas puede hacer un teléfono. 'from-internal' permite llamadas internas y externas. Piense en los contextos como zonas de seguridad.</value></data>
+  <data name="Glossary_Context_Tip" xml:space="preserve"><value>La mayoría de extensiones usan 'from-internal'. Teléfonos de recepción podrían usar un contexto restringido.</value></data>
+  <data name="Glossary_Context_Category" xml:space="preserve"><value>Dialplan</value></data>
+
+  <data name="Glossary_Codec" xml:space="preserve"><value>Códec</value></data>
+  <data name="Glossary_Codec_Def" xml:space="preserve"><value>Un formato de compresión de audio. Como elegir entre MP3 y WAV — archivos más pequeños vs. mejor calidad. Los códecs determinan la calidad del audio y el uso de ancho de banda.</value></data>
+  <data name="Glossary_Codec_Tip" xml:space="preserve"><value>ulaw (Norteamérica) y alaw (Europa) son universales. G.722 da audio HD si ambos lados lo soportan.</value></data>
+  <data name="Glossary_Codec_Category" xml:space="preserve"><value>Audio</value></data>
+
+  <data name="Glossary_DTMF" xml:space="preserve"><value>DTMF</value></data>
+  <data name="Glossary_DTMF_Def" xml:space="preserve"><value>Los tonos que su teléfono envía al presionar botones (los pitidos del 1, 2, 3...). Se usan para menús telefónicos ('Presione 1 para ventas') e ingresar PINs.</value></data>
+  <data name="Glossary_DTMF_Tip" xml:space="preserve"><value>RFC 4733 es el estándar moderno. Solo cambie si los menús IVR no responden a las teclas.</value></data>
+  <data name="Glossary_DTMF_Category" xml:space="preserve"><value>Audio</value></data>
+
+  <data name="Glossary_Trunk" xml:space="preserve"><value>Troncal</value></data>
+  <data name="Glossary_Trunk_Def" xml:space="preserve"><value>Una conexión entre su sistema telefónico y el mundo exterior. Como una línea telefónica que permite a sus empleados hacer y recibir llamadas externas. Las troncales se obtienen de un proveedor.</value></data>
+  <data name="Glossary_Trunk_Tip" xml:space="preserve"><value>La mayoría de oficinas necesitan al menos una troncal. Agregue una segunda como respaldo en caso de problemas con el primer proveedor.</value></data>
+  <data name="Glossary_Trunk_Category" xml:space="preserve"><value>Conectividad</value></data>
+
+  <data name="Glossary_DID" xml:space="preserve"><value>DID</value></data>
+  <data name="Glossary_DID_Def" xml:space="preserve"><value>Marcación Directa Entrante — el número telefónico externo que la gente marca para contactar su oficina. Su proveedor asigna los DIDs y usted los mapea a extensiones, colas o IVRs.</value></data>
+  <data name="Glossary_DID_Tip" xml:space="preserve"><value>Puede tener muchos DIDs apuntando a diferentes departamentos (ventas, soporte) en la misma troncal.</value></data>
+  <data name="Glossary_DID_Category" xml:space="preserve"><value>Enrutamiento</value></data>
+
+  <data name="Glossary_Route" xml:space="preserve"><value>Ruta</value></data>
+  <data name="Glossary_Route_Def" xml:space="preserve"><value>Una regla que le dice a la central dónde enviar una llamada. Las rutas entrantes coinciden con números DID. Las rutas salientes coinciden con patrones marcados y eligen qué troncal usar.</value></data>
+  <data name="Glossary_Route_Tip" xml:space="preserve"><value>Menor número de prioridad = mayor importancia. La prioridad decide qué regla gana cuando varias rutas coinciden.</value></data>
+  <data name="Glossary_Route_Category" xml:space="preserve"><value>Enrutamiento</value></data>
+
+  <data name="Glossary_Queue" xml:space="preserve"><value>Cola</value></data>
+  <data name="Glossary_Queue_Def" xml:space="preserve"><value>Una sala de espera virtual para llamantes. Cuando alguien llama, escucha música de espera mientras el sistema busca un agente disponible. Las colas distribuyen llamadas equitativamente entre miembros del equipo.</value></data>
+  <data name="Glossary_Queue_Tip" xml:space="preserve"><value>'Ring All' es lo más simple — timbran todos los teléfonos. 'Least Recent' es lo más justo — los agentes libres reciben llamadas primero.</value></data>
+  <data name="Glossary_Queue_Category" xml:space="preserve"><value>Call Center</value></data>
+
+  <data name="Glossary_Agent" xml:space="preserve"><value>Agente</value></data>
+  <data name="Glossary_Agent_Def" xml:space="preserve"><value>Una persona que contesta llamadas en una cola. Los agentes inician y cierran sesión en colas, y pueden pausarse para tomar un descanso. El sistema rastrea su disponibilidad y estadísticas.</value></data>
+  <data name="Glossary_Agent_Tip" xml:space="preserve"><value>Los agentes pueden pertenecer a múltiples colas. Su estado (Disponible, Pausado, En Llamada) se muestra en el panel de monitoreo.</value></data>
+  <data name="Glossary_Agent_Category" xml:space="preserve"><value>Call Center</value></data>
+
+  <data name="Glossary_IVR" xml:space="preserve"><value>IVR</value></data>
+  <data name="Glossary_IVR_Def" xml:space="preserve"><value>Respuesta de Voz Interactiva — el menú automático que escuchan los llamantes ('Presione 1 para ventas, 2 para soporte'). Los IVRs enrutan llamadas según los botones que presiona el llamante.</value></data>
+  <data name="Glossary_IVR_Tip" xml:space="preserve"><value>Mantenga los menús cortos (3-4 opciones máximo). Siempre ofrezca 'Presione 0 para operadora' como escape.</value></data>
+  <data name="Glossary_IVR_Category" xml:space="preserve"><value>Enrutamiento</value></data>
+
+  <data name="Glossary_SIP" xml:space="preserve"><value>SIP</value></data>
+  <data name="Glossary_SIP_Def" xml:space="preserve"><value>Protocolo de Inicio de Sesión — el lenguaje estándar que usan los teléfonos para comunicarse con la central. Maneja la configuración de llamadas, timbre, respuesta y colgado.</value></data>
+  <data name="Glossary_SIP_Tip" xml:space="preserve"><value>SIP es la implementación antigua en Asterisk. Para instalaciones nuevas, use PJSIP en su lugar.</value></data>
+  <data name="Glossary_SIP_Category" xml:space="preserve"><value>Protocolo</value></data>
+
+  <data name="Glossary_PJSIP" xml:space="preserve"><value>PJSIP</value></data>
+  <data name="Glossary_PJSIP_Def" xml:space="preserve"><value>La implementación moderna de SIP en Asterisk. Hace lo mismo que SIP pero con mejor rendimiento, más funciones y desarrollo activo. La opción recomendada para extensiones nuevas.</value></data>
+  <data name="Glossary_PJSIP_Tip" xml:space="preserve"><value>Siempre elija PJSIP para extensiones nuevas a menos que tenga teléfonos antiguos que específicamente necesiten chan_sip.</value></data>
+  <data name="Glossary_PJSIP_Category" xml:space="preserve"><value>Protocolo</value></data>
+
+  <data name="Glossary_Voicemail" xml:space="preserve"><value>Buzón de Voz</value></data>
+  <data name="Glossary_Voicemail_Def" xml:space="preserve"><value>Una contestadora virtual. Cuando alguien no contesta su teléfono, los llamantes pueden dejar un mensaje de voz. Los mensajes pueden enviarse por email como archivos de audio adjuntos.</value></data>
+  <data name="Glossary_Voicemail_Tip" xml:space="preserve"><value>Configure un PIN para prevenir acceso no autorizado. Active las notificaciones por email para que los usuarios reciban mensajes en su bandeja.</value></data>
+  <data name="Glossary_Voicemail_Category" xml:space="preserve"><value>Funciones</value></data>
+
+  <data name="Glossary_MOH" xml:space="preserve"><value>MOH</value></data>
+  <data name="Glossary_MOH_Def" xml:space="preserve"><value>Música en Espera — lo que escuchan los llamantes mientras esperan en una cola o en espera. Puede ser música, mensajes promocionales o una mezcla. Diferentes colas pueden tener diferente música.</value></data>
+  <data name="Glossary_MOH_Tip" xml:space="preserve"><value>Use música libre de derechos. Evite el silencio — los llamantes pensarán que se cortó la llamada.</value></data>
+  <data name="Glossary_MOH_Category" xml:space="preserve"><value>Audio</value></data>
+
+  <data name="Glossary_Park" xml:space="preserve"><value>Estacionamiento</value></data>
+  <data name="Glossary_Park_Def" xml:space="preserve"><value>Poner una llamada en un 'estacionamiento' donde cualquiera puede contestarla marcando el número de slot. Útil para transferir llamadas en la oficina — 'Llamada para Juan en estacionamiento 701'.</value></data>
+  <data name="Glossary_Park_Tip" xml:space="preserve"><value>Las llamadas estacionadas tienen un timeout. Si nadie contesta a tiempo, la llamada vuelve a timbrar a quien la estacionó.</value></data>
+  <data name="Glossary_Park_Category" xml:space="preserve"><value>Funciones</value></data>
+
 </root>
