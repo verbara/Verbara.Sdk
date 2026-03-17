@@ -15,48 +15,51 @@ services:
       timeout: 3s
       retries: 10
 
-  # asterisk-realtime:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.asterisk-realtime
-  #   container_name: demo-pbx-realtime
-  #   ports:
-  #     - "5038:5038"       # AMI
-  #     - "8088:8088"       # ARI HTTP
-  #     - "5060:5060/udp"   # SIP
-  #   volumes:
-  #     - ./dashboard-config/ari.conf:/etc/asterisk/ari.conf:ro
-  #     - ./dashboard-config/asterisk.conf:/etc/asterisk/asterisk.conf:ro
-  #     - ./dashboard-config/cdr.conf:/etc/asterisk/cdr.conf:ro
-  #     - ./dashboard-config/cdr_odbc.conf:/etc/asterisk/cdr_odbc.conf:ro
-  #     - ./dashboard-config/cel.conf:/etc/asterisk/cel.conf:ro
-  #     - ./dashboard-config/cel_odbc.conf:/etc/asterisk/cel_odbc.conf:ro
-  #     - ./dashboard-config/confbridge.conf:/etc/asterisk/confbridge.conf:ro
-  #     - ./dashboard-config/extconfig.conf:/etc/asterisk/extconfig.conf:ro
-  #     - ./dashboard-config/extensions.conf:/etc/asterisk/extensions.conf:ro
-  #     - ./dashboard-config/geolocation.conf:/etc/asterisk/geolocation.conf:ro
-  #     - ./dashboard-config/http.conf:/etc/asterisk/http.conf:ro
-  #     - ./dashboard-config/logger.conf:/etc/asterisk/logger.conf:ro
-  #     - ./dashboard-config/manager.conf:/etc/asterisk/manager.conf:ro
-  #     - ./dashboard-config/modules.conf:/etc/asterisk/modules.conf:ro
-  #     - ./dashboard-config/musiconhold.conf:/etc/asterisk/musiconhold.conf:ro
-  #     - ./dashboard-config/pjproject.conf:/etc/asterisk/pjproject.conf:ro
-  #     - ./dashboard-config/pjsip.conf:/etc/asterisk/pjsip.conf:ro
-  #     - ./dashboard-config/queues.conf:/etc/asterisk/queues.conf:ro
-  #     - ./dashboard-config/res_odbc.conf:/etc/asterisk/res_odbc.conf:ro
-  #     - ./dashboard-config/sorcery.conf:/etc/asterisk/sorcery.conf:ro
-  #     - ./dashboard-config/users.conf:/etc/asterisk/users.conf:ro
-  #     - ./dashboard-config/odbcinst.ini:/etc/odbcinst.ini:ro
-  #     - ./dashboard-config/odbc.ini:/etc/odbc.ini:ro
-  #     - ./moh:/var/lib/asterisk/moh:ro
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   healthcheck:
-  #     test: ["CMD", "asterisk", "-rx", "core show version"]
-  #     interval: 5s
-  #     timeout: 3s
-  #     retries: 10
+  asterisk-realtime:
+    build:
+      context: .
+      dockerfile: Dockerfile.asterisk-realtime
+    container_name: demo-pbx-realtime
+    ports:
+      - "5038:5038"       # AMI
+      - "8088:8088"       # ARI HTTP
+      - "5060:5060/udp"   # SIP
+    volumes:
+      - ./dashboard-config/ari.conf:/etc/asterisk/ari.conf:ro
+      - ./dashboard-config/asterisk.conf:/etc/asterisk/asterisk.conf:ro
+      - ./dashboard-config/cdr.conf:/etc/asterisk/cdr.conf:ro
+      - ./dashboard-config/cdr_odbc.conf:/etc/asterisk/cdr_odbc.conf:ro
+      - ./dashboard-config/cel.conf:/etc/asterisk/cel.conf:ro
+      - ./dashboard-config/cel_odbc.conf:/etc/asterisk/cel_odbc.conf:ro
+      - ./dashboard-config/confbridge.conf:/etc/asterisk/confbridge.conf:ro
+      - ./dashboard-config/extconfig.conf:/etc/asterisk/extconfig.conf:ro
+      - ./dashboard-config/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./dashboard-config/features.conf:/etc/asterisk/features.conf:ro
+      - ./dashboard-config/geolocation.conf:/etc/asterisk/geolocation.conf:ro
+      - ./dashboard-config/http.conf:/etc/asterisk/http.conf:ro
+      - ./dashboard-config/logger.conf:/etc/asterisk/logger.conf:ro
+      - ./dashboard-config/manager.conf:/etc/asterisk/manager.conf:ro
+      - ./dashboard-config/modules.conf:/etc/asterisk/modules.conf:ro
+      - ./dashboard-config/musiconhold.conf:/etc/asterisk/musiconhold.conf:ro
+      - ./dashboard-config/pjproject.conf:/etc/asterisk/pjproject.conf:ro
+      - ./dashboard-config/pjsip.conf:/etc/asterisk/pjsip.conf:ro
+      - ./dashboard-config/queues.conf:/etc/asterisk/queues.conf:ro
+      - ./dashboard-config/res_odbc.conf:/etc/asterisk/res_odbc.conf:ro
+      - ./dashboard-config/res_parking.conf:/etc/asterisk/res_parking.conf:ro
+      - ./dashboard-config/sorcery.conf:/etc/asterisk/sorcery.conf:ro
+      - ./dashboard-config/users.conf:/etc/asterisk/users.conf:ro
+      - ./dashboard-config/odbcinst.ini:/etc/odbcinst.ini:ro
+      - ./dashboard-config/odbc.ini:/etc/odbc.ini:ro
+      - moh-realtime:/var/lib/asterisk/moh
+      - recordings-realtime:/var/spool/asterisk/monitor
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show version"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   asterisk-file:
     build:
@@ -73,14 +76,17 @@ services:
       - ./dashboard-config-file/asterisk.conf:/etc/asterisk/asterisk.conf:ro
       - ./dashboard-config-file/confbridge.conf:/etc/asterisk/confbridge.conf:ro
       - ./dashboard-config-file/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./dashboard-config-file/features.conf:/etc/asterisk/features.conf:ro
       - ./dashboard-config-file/http.conf:/etc/asterisk/http.conf:ro
       - ./dashboard-config-file/manager.conf:/etc/asterisk/manager.conf:ro
       - ./dashboard-config-file/modules.conf:/etc/asterisk/modules.conf:ro
       - ./dashboard-config-file/musiconhold.conf:/etc/asterisk/musiconhold.conf:ro
       - ./dashboard-config-file/pjsip.conf:/etc/asterisk/pjsip.conf:ro
       - ./dashboard-config-file/queues.conf:/etc/asterisk/queues.conf:ro
+      - ./dashboard-config-file/res_parking.conf:/etc/asterisk/res_parking.conf:ro
       - ./dashboard-config-file/users.conf:/etc/asterisk/users.conf:ro
-      - ./moh:/var/lib/asterisk/moh:ro
+      - moh-file:/var/lib/asterisk/moh
+      - recordings-file:/var/spool/asterisk/monitor
     healthcheck:
       test: ["CMD", "asterisk", "-rx", "core show version"]
       interval: 5s
@@ -95,30 +101,44 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      # asterisk-realtime:
-      #   condition: service_healthy
+      asterisk-realtime:
+        condition: service_healthy
       asterisk-file:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     environment:
       - DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE=false
       - Logging__LogLevel__Default=Debug
       - Auth__Username=admin
       - Auth__Password=admin
-      # File-mode PBX (extensions 4XXX/5XXX, queues sales2/support2)
-      - Asterisk__Servers__0__Id=pbx-file
-      - Asterisk__Servers__0__Hostname=asterisk-file
+      # Realtime PBX (extensions 2XXX/3XXX, queues sales/support)
+      - Asterisk__Servers__0__Id=pbx-realtime
+      - Asterisk__Servers__0__Hostname=asterisk-realtime
       - Asterisk__Servers__0__Port=5038
       - Asterisk__Servers__0__Username=dashboard
       - Asterisk__Servers__0__Password=dashboard
-      - Asterisk__Servers__0__ConfigMode=File
-      # Realtime PBX (extensions 2XXX/3XXX, queues sales/support)
-      # - Asterisk__Servers__1__Id=pbx-realtime
-      # - Asterisk__Servers__1__Hostname=asterisk-realtime
-      # - Asterisk__Servers__1__Port=5038
-      # - Asterisk__Servers__1__Username=dashboard
-      # - Asterisk__Servers__1__Password=dashboard
-      # - Asterisk__Servers__1__ConfigMode=Realtime
-      # - Asterisk__Servers__1__RealtimeConnectionString=Host=postgres;Database=asterisk;Username=asterisk;Password=asterisk
+      - Asterisk__Servers__0__ConfigMode=Realtime
+      - Asterisk__Servers__0__RealtimeConnectionString=Host=postgres;Database=asterisk;Username=asterisk;Password=asterisk
+      - Asterisk__Servers__0__RecordingsPath=/var/spool/asterisk/monitor
+      - Asterisk__Servers__0__MohBasePath=/var/lib/asterisk/moh
+      - Asterisk__Servers__0__MaxUploadSizeMb=20
+      - Asterisk__Servers__0__MaxMohClassSizeMb=200
+      # File-mode PBX (extensions 4XXX/5XXX, queues sales2/support2)
+      - Asterisk__Servers__1__Id=pbx-file
+      - Asterisk__Servers__1__Hostname=asterisk-file
+      - Asterisk__Servers__1__Port=5038
+      - Asterisk__Servers__1__Username=dashboard
+      - Asterisk__Servers__1__Password=dashboard
+      - Asterisk__Servers__1__ConfigMode=File
+      - Asterisk__Servers__1__RecordingsPath=/var/spool/asterisk/monitor
+      - Asterisk__Servers__1__MohBasePath=/var/lib/asterisk/moh
+      - Asterisk__Servers__1__MaxUploadSizeMb=20
+      - Asterisk__Servers__1__MaxMohClassSizeMb=200
 
 volumes:
   pgdata:
+  moh-realtime:
+  moh-file:
+  recordings-realtime:
+  recordings-file:
