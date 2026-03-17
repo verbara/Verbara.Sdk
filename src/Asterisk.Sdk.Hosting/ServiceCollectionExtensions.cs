@@ -6,6 +6,9 @@ using Asterisk.Sdk.Ami.Transport;
 using Asterisk.Sdk.Ari.Audio;
 using Asterisk.Sdk.Ari.Client;
 using Asterisk.Sdk.Live.Server;
+using Asterisk.Sdk.Sessions.Extensions;
+using Asterisk.Sdk.Sessions.Internal;
+using Asterisk.Sdk.Sessions.Manager;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -153,6 +156,29 @@ public static class ServiceCollectionExtensions
                 if (ari[nameof(o.Ari.Application)] is { } app) o.Ari.Application = app;
             }
         });
+    }
+
+    /// <summary>
+    /// Add session engine services (CallSessionManager, extension points, hosted service).
+    /// Call after <see cref="AddAsterisk(IServiceCollection, Action{AsteriskOptions})"/> to enable call session correlation and domain events.
+    /// </summary>
+    public static IServiceCollection AddAsteriskSessions(
+        this IServiceCollection services,
+        Action<SessionOptions>? configure = null)
+    {
+        services.TryAddSingleton<ICallSessionManager, CallSessionManager>();
+        services.TryAddSingleton<CallRouterBase, PassthroughCallRouter>();
+        services.TryAddSingleton<AgentSelectorBase, NativeAgentSelector>();
+        services.TryAddSingleton<SessionStoreBase, InMemorySessionStore>();
+
+        if (configure is not null)
+            services.Configure(configure);
+
+        services.AddSingleton<IValidateOptions<SessionOptions>, SessionOptionsValidator>();
+        services.AddOptions<SessionOptions>().ValidateOnStart();
+        services.AddSingleton<IHostedService, SessionManagerHostedService>();
+
+        return services;
     }
 
     /// <summary>

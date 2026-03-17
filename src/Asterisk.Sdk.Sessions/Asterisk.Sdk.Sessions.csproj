@@ -4,6 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.Tests" />
+    <InternalsVisibleTo Include="Asterisk.Sdk.Hosting" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Asterisk.Sdk\Asterisk.Sdk.csproj" />
