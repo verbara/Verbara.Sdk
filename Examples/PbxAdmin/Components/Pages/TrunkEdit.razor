@@ -43,24 +43,24 @@ else
 
     <!-- Connection -->
     <div class="form-section">
-        <h3>@L["TrunkEdit_Connection"]</h3>
+        <HelpPanel SectionKey="TrunkEdit_Connection">@L["TrunkEdit_Connection"]</HelpPanel>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">@L["Lbl_Name"]</label>
+                <label class="form-label">@L["Lbl_Name"] <HelpIcon HelpKey="TrunkName" /></label>
                 <input class="input" @bind="_config.Name" placeholder="my-trunk" disabled="@(!IsNew)" />
             </div>
             <div class="form-field">
-                <label class="form-label">Host</label>
+                <label class="form-label">Host <HelpIcon HelpKey="TrunkHost" /></label>
                 <input class="input" @bind="_config.Host" placeholder="sip.provider.com" />
             </div>
             <div class="form-field">
-                <label class="form-label">@L["TrunkEdit_Port"]</label>
+                <label class="form-label">@L["TrunkEdit_Port"] <HelpIcon HelpKey="TrunkPort" /></label>
                 <input class="input" type="number" @bind="_config.Port" />
             </div>
             @if (_config.Technology != TrunkTechnology.Iax2)
             {
                 <div class="form-field">
-                    <label class="form-label">@L["ExtEdit_Transport"]</label>
+                    <label class="form-label">@L["ExtEdit_Transport"] <HelpIcon HelpKey="TrunkTransport" /></label>
                     <select @bind="_config.Transport">
                         <option value="udp">UDP</option>
                         <option value="tcp">TCP</option>
@@ -83,20 +83,20 @@ else
 
     <!-- Authentication -->
     <div class="form-section">
-        <h3>@L["ExtEdit_Auth"]</h3>
+        <HelpPanel SectionKey="ExtEdit_Auth_Trunk">@L["ExtEdit_Auth"]</HelpPanel>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">@L["TrunkEdit_Username"]</label>
+                <label class="form-label">@L["TrunkEdit_Username"] <HelpIcon HelpKey="TrunkUsername" /></label>
                 <input class="input" @bind="_config.Username" placeholder="username" />
             </div>
             <div class="form-field">
-                <label class="form-label">@L["TrunkEdit_Secret"]</label>
+                <label class="form-label">@L["TrunkEdit_Secret"] <HelpIcon HelpKey="TrunkSecret" /></label>
                 <input class="input" type="password" @bind="_config.Secret" placeholder="password" />
             </div>
             @if (_config.Technology == TrunkTechnology.PjSip)
             {
                 <div class="form-field">
-                    <label class="form-label">@L["TrunkEdit_AuthType"]</label>
+                    <label class="form-label">@L["TrunkEdit_AuthType"] <HelpIcon HelpKey="TrunkAuthType" /></label>
                     <select @bind="_config.AuthType">
                         <option value="userpass">User/Pass</option>
                         <option value="md5">MD5</option>
@@ -117,7 +117,7 @@ else
     <div class="form-section">
         <h3>@L["ExtEdit_Codecs"]</h3>
         <div class="form-field" style="margin-bottom: 0.75rem;">
-            <label class="form-label">@L["ExtEdit_Codecs"]</label>
+            <label class="form-label">@L["ExtEdit_Codecs"] <HelpIcon HelpKey="TrunkCodecs" /></label>
             <div class="codec-grid">
                 @foreach (var codec in _availableCodecs)
                 {
