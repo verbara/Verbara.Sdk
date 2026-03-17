@@ -1,0 +1,356 @@
+@page "/extensions/{ServerId}/{Extension}"
+@using PbxAdmin.Services
+@using PbxAdmin.Services.Helpers
+@using PbxAdmin.Models
+@inject ExtensionService ExtSvc
+@inject SelectedServerService ServerSvc
+@inject IConfigProviderResolver ConfigResolver
+@inject ConfigOperationState ConfigOp
+@inject NavigationManager Nav
+
+<PageTitle>@Extension — Asterisk PBX Admin</PageTitle>
+
+<a href="/extensions" class="back-link">Back to Extensions</a>
+
+@if (_loading)
+{
+    <p class="text-muted">Loading...</p>
+}
+else if (_detail is null)
+{
+    <p class="text-muted">Extension not found.</p>
+}
+else
+{
+    <h2>
+        Extension @_detail.Extension
+        @if (_detail.Name is not null)
+        {
+            <span class="text-muted" style="font-weight:normal;"> — @_detail.Name</span>
+        }
+    </h2>
+    <div style="margin-bottom:1rem;">
+        <span class="badge badge-blue">@_detail.Technology</span>
+        <span class="badge @GetStatusBadgeClass(_detail.Status)">@_detail.Status</span>
+        @if (_detail.DndEnabled)
+        {
+            <span class="badge badge-red">DND</span>
+        }
+        @if (_detail.CallForwardTo is not null)
+        {
+            <span class="badge badge-yellow">CF → @_detail.CallForwardTo</span>
+        }
+    </div>
+
+    <!-- Stats bar -->
+    <div class="stats-bar">
+        <div class="stat-item">
+            Status: <strong>
+                <span class="status-dot @GetDotClass(_detail.Status)" style="margin-right:4px;"></span>
+                @_detail.Status
+            </strong>
+        </div>
+        @if (_detail.Context is not null)
+        {
+            <div class="stat-item">Context: <strong>@_detail.Context</strong></div>
+        }
+        @if (_detail.Codecs is not null)
+        {
+            <div class="stat-item">Codecs: <strong>@_detail.Codecs</strong></div>
+        }
+        @if (_detail.CallGroup is not null)
+        {
+            <div class="stat-item">Call Group: <strong>@_detail.CallGroup</strong></div>
+        }
+        @if (_detail.PickupGroup is not null)
+        {
+            <div class="stat-item">Pickup Group: <strong>@_detail.PickupGroup</strong></div>
+        }
+    </div>
+
+    <!-- Registration info (PJSIP) -->
+    @if (_detail.IpAddress is not null || _detail.ContactUri is not null || _detail.UserAgent is not null || _detail.RoundtripMs.HasValue)
+    {
+        <div class="form-section">
+            <h3>Registration Details</h3>
+            <div class="form-grid">
+                @if (_detail.IpAddress is not null)
+                {
+                    <div class="form-field">
+                        <span class="form-label">IP Address</span>
+                        <span class="mono">@_detail.IpAddress</span>
+                    </div>
+                }
+                @if (_detail.ContactUri is not null)
+                {
+                    <div class="form-field">
+                        <span class="form-label">Contact URI</span>
+                        <span class="mono">@_detail.ContactUri</span>
+                    </div>
+                }
+                @if (_detail.UserAgent is not null)
+                {
+                    <div class="form-field">
+                        <span class="form-label">User Agent</span>
+                        <span>@_detail.UserAgent</span>
+                    </div>
+                }
+                @if (_detail.RoundtripMs.HasValue)
+                {
+                    <div class="form-field">
+                        <span class="form-label">Roundtrip</span>
+                        <span>@(_detail.RoundtripMs)ms</span>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- Features (inline editable) -->
+    <div class="form-section">
+        <h3>Features</h3>
+
+        @if (_actionResult is { } result)
+        {
+            <div class="alert @(result.Item1 ? "alert-success" : "alert-error")">@result.Item2</div>
+        }
+
+        <div class="form-grid">
+            <div class="form-field">
+                <span class="form-label">Do Not Disturb</span>
+                <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                    <input type="checkbox" checked="@_editDnd" @onchange="ToggleDnd" />
+                    @(_editDnd ? "Enabled" : "Disabled")
+                </label>
+            </div>
+
+            <div class="form-field">
+                <span class="form-label">CF Unconditional</span>
+                <div style="display:flex;gap:0.5rem;align-items:center;">
+                    <input type="text" @bind="_editCf" placeholder="Destination" class="input-sm" />
+                    <button class="btn btn-sm" @onclick="SaveFeatures">Save</button>
+                </div>
+            </div>
+
+            <div class="form-field">
+                <span class="form-label">CF Busy</span>
+                <div style="display:flex;gap:0.5rem;align-items:center;">
+                    <input type="text" @bind="_editCfb" placeholder="Destination" class="input-sm" />
+                    <button class="btn btn-sm" @onclick="SaveFeatures">Save</button>
+                </div>
+            </div>
+
+            <div class="form-field">
+                <span class="form-label">CF No Answer</span>
+                <div style="display:flex;gap:0.5rem;align-items:center;">
+                    <input type="text" @bind="_editCfna" placeholder="Destination" class="input-sm" />
+                    <input type="number" @bind="_editCfnaTimeout" style="width:5rem;" class="input-sm" />
+                    <span class="text-muted">sec</span>
+                    <button class="btn btn-sm" @onclick="SaveFeatures">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Voicemail -->
+    <div class="form-section">
+        <h3>Voicemail</h3>
+        <div class="form-grid">
+            <div class="form-field">
+                <span class="form-label">Status</span>
+                <span class="badge @(_detail.VoicemailEnabled ? "badge-green" : "badge-gray")">
+                    @(_detail.VoicemailEnabled ? "Enabled" : "Disabled")
+                </span>
+            </div>
+            @if (_detail.VoicemailEnabled)
+            {
+                <div class="form-field">
+                    <span class="form-label">Messages</span>
+                    <span>@(_detail.VoicemailMessages ?? 0)</span>
+                </div>
+                @if (_detail.VoicemailEmail is not null)
+                {
+                    <div class="form-field">
+                        <span class="form-label">Email</span>
+                        <span>@_detail.VoicemailEmail</span>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    <!-- Raw config display -->
+    @if (_detail.Technology == ExtensionTechnology.PjSip)
+    {
+        <h3>Raw Configuration (pjsip.conf)</h3>
+
+        @foreach (var (sectionName, vars) in _detail.RawConfig)
+        {
+            <div class="config-section">
+                <div class="config-section-header" @onclick="() => ToggleSection(sectionName)">
+                    <span>[@sectionName]</span>
+                    <span class="text-muted">@(IsSectionExpanded(sectionName) ? "collapse" : "expand")</span>
+                </div>
+                @if (IsSectionExpanded(sectionName))
+                {
+                    <div class="config-section-body">@foreach (var (k, v) in vars)
+                        {<text>@k = @v
+</text>}</div>
+                }
+            </div>
+        }
+    }
+    else
+    {
+        <h3>Raw Configuration (@ExtensionService.GetConfigFilename(_detail.Technology))</h3>
+        @if (_detail.RawConfig.TryGetValue(Extension, out var singleSection))
+        {
+            <div class="config-section">
+                <div class="config-section-header">[@Extension]</div>
+                <div class="config-section-body">@foreach (var (k, v) in singleSection)
+                    {<text>@k = @v
+</text>}</div>
+            </div>
+        }
+    }
+
+    <!-- Actions -->
+    <div class="form-actions">
+        <button class="btn btn-yellow" @onclick="GoEdit">Edit</button>
+        <button class="btn btn-red" @onclick="ConfirmDelete">Delete</button>
+    </div>
+
+    @if (_showDeleteConfirm)
+    {
+        <div class="confirm-overlay" @onclick="CancelDelete">
+            <div class="confirm-dialog" @onclick:stopPropagation="true">
+                <h4>Delete Extension</h4>
+                <p>Are you sure you want to delete extension <strong>@Extension</strong>?</p>
+                <div class="confirm-dialog-actions">
+                    <button class="btn btn-sm" @onclick="CancelDelete">Cancel</button>
+                    <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">Delete</button>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public string ServerId { get; set; } = "";
+    [Parameter] public string Extension { get; set; } = "";
+    [SupplyParameterFromQuery] public string? Tech { get; set; }
+
+    private ExtensionDetailViewModel? _detail;
+    private bool _loading = true;
+    private bool _showDeleteConfirm;
+    private (bool, string)? _actionResult;
+    private readonly HashSet<string> _expandedSections = [];
+
+    // Feature edit state
+    private bool _editDnd;
+    private string? _editCf;
+    private string? _editCfb;
+    private string? _editCfna;
+    private int _editCfnaTimeout = 20;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var technology = Enum.TryParse<ExtensionTechnology>(Tech, true, out var t) ? t : ExtensionTechnology.PjSip;
+        _detail = await ExtSvc.GetExtensionDetailAsync(ServerId, Extension, technology);
+
+        if (_detail is not null)
+        {
+            // Populate feature edit fields from loaded data
+            _editDnd = _detail.DndEnabled;
+            _editCf = _detail.CallForwardTo;
+            _editCfb = _detail.CfBusy;
+            _editCfna = _detail.CfNoAnswer;
+            _editCfnaTimeout = _detail.CfNoAnswerTimeout > 0 ? _detail.CfNoAnswerTimeout : 20;
+
+            // Expand all raw config sections by default
+            foreach (var key in _detail.RawConfig.Keys)
+            {
+                _expandedSections.Add(key);
+            }
+        }
+
+        _loading = false;
+    }
+
+    private async Task ToggleDnd()
+    {
+        _editDnd = !_editDnd;
+        await SaveFeatures();
+    }
+
+    private async Task SaveFeatures()
+    {
+        if (_detail is null) return;
+
+        try
+        {
+            using var _ = ConfigOp.Begin("Saving Features", ServerId, Extension);
+
+            var cfVal = string.IsNullOrWhiteSpace(_editCf) ? null : _editCf.Trim();
+            var cfbVal = string.IsNullOrWhiteSpace(_editCfb) ? null : _editCfb.Trim();
+            var cfnaVal = string.IsNullOrWhiteSpace(_editCfna) ? null : _editCfna.Trim();
+
+            await ExtSvc.SetDeviceFeaturesAsync(
+                ServerId, Extension, _editDnd,
+                cfVal, cfbVal, cfnaVal, _editCfnaTimeout);
+
+            // Update local state
+            _detail.DndEnabled = _editDnd;
+            _detail.CallForwardTo = cfVal;
+            _detail.CfBusy = cfbVal;
+            _detail.CfNoAnswer = cfnaVal;
+            _detail.CfNoAnswerTimeout = _editCfnaTimeout;
+
+            _actionResult = (true, "Features saved.");
+        }
+        catch (Exception ex)
+        {
+            _actionResult = (false, $"Failed to save features: {ex.Message}");
+        }
+    }
+
+    private void ToggleSection(string name)
+    {
+        if (!_expandedSections.Remove(name))
+            _expandedSections.Add(name);
+    }
+
+    private bool IsSectionExpanded(string name) => _expandedSections.Contains(name);
+
+    private void GoEdit() =>
+        Nav.NavigateTo($"/extensions/edit/{ServerId}/{Extension}?tech={_detail?.Technology}");
+
+    private void ConfirmDelete() => _showDeleteConfirm = true;
+
+    private void CancelDelete() => _showDeleteConfirm = false;
+
+    private async Task ExecuteDelete()
+    {
+        if (_detail is null) return;
+
+        using var _ = ConfigOp.Begin("Deleting Extension", ServerId, Extension);
+        await ExtSvc.DeleteExtensionAsync(ServerId, Extension, _detail.Technology);
+        Nav.NavigateTo("/extensions");
+    }
+
+    private static string GetDotClass(ExtensionStatus status) => status switch
+    {
+        ExtensionStatus.Registered => "dot-green",
+        ExtensionStatus.Unreachable => "dot-red",
+        ExtensionStatus.Unregistered => "dot-yellow",
+        _ => "dot-gray"
+    };
+
+    private static string GetStatusBadgeClass(ExtensionStatus status) => status switch
+    {
+        ExtensionStatus.Registered => "badge-green",
+        ExtensionStatus.Unreachable => "badge-red",
+        ExtensionStatus.Unregistered => "badge-yellow",
+        _ => "badge-gray"
+    };
+}

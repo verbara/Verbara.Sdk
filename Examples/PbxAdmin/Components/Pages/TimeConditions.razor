@@ -1,0 +1,208 @@
+@page "/time-conditions"
+@using PbxAdmin.Services
+@using PbxAdmin.Models
+@inject TimeConditionService TcSvc
+@inject SelectedServerService ServerSvc
+@inject ConfigOperationState ConfigOp
+@inject NavigationManager Nav
+
+<PageTitle>Time Conditions — Asterisk PBX Admin</PageTitle>
+
+<h2>Time Conditions</h2>
+
+<div style="margin-bottom: 1rem;">
+    <button class="btn btn-blue" @onclick="NavigateNew">New Time Condition</button>
+</div>
+
+<div class="tc-grid">
+    @foreach (var tc in _conditions)
+    {
+        <div class="tc-card" @onclick="() => NavigateEdit(tc.Id)" style="cursor: pointer;">
+            <div class="tc-card-header">
+                <strong>@tc.Name</strong>
+                <span class="badge @GetStateBadge(tc.CurrentState)">@GetStateLabel(tc.CurrentState)</span>
+            </div>
+            <div class="tc-card-body">
+                <div class="text-muted" style="font-size: 0.85rem;">
+                    @tc.RangeCount day range(s)
+                    @if (tc.HolidayCount > 0)
+                    {
+                        <span> · @tc.HolidayCount holiday(s)</span>
+                    }
+                </div>
+                <div style="margin-top: 0.5rem; font-size: 0.9rem;">
+                    <div>Match: <span class="badge badge-green" style="font-size: 0.8rem;">@(tc.MatchDestLabel ?? tc.MatchDest)</span></div>
+                    <div>No match: <span class="badge badge-muted" style="font-size: 0.8rem;">@(tc.NoMatchDestLabel ?? tc.NoMatchDest)</span></div>
+                </div>
+            </div>
+            <div class="tc-card-actions" @onclick:stopPropagation="true">
+                <button class="btn btn-sm btn-green" @onclick="() => SetOverride(tc, true)">Force Open</button>
+                <button class="btn btn-sm btn-red" @onclick="() => SetOverride(tc, false)">Force Closed</button>
+                <button class="btn btn-sm" @onclick="() => SetOverride(tc, null)">Reset to Auto</button>
+                <button class="btn btn-sm btn-red" style="margin-left: auto;" @onclick="() => ConfirmDelete(tc)">Delete</button>
+            </div>
+        </div>
+    }
+</div>
+
+@if (_conditions.Count == 0)
+{
+    <p class="text-muted">No time conditions configured.</p>
+}
+
+@if (_showDeleteConfirm)
+{
+    <div class="confirm-overlay" @onclick="CancelDelete">
+        <div class="confirm-dialog" @onclick:stopPropagation="true">
+            <h4>Delete Time Condition</h4>
+            <p>Are you sure you want to delete <strong>@_deletingTc?.Name</strong>? This action cannot be undone.</p>
+            @if (_deleteError is not null)
+            {
+                <p class="action-result" style="color: #f87171;">@_deleteError</p>
+            }
+            <div class="confirm-dialog-actions">
+                <button class="btn btn-sm" @onclick="CancelDelete">Cancel</button>
+                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">Delete</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_actionResult is not null)
+{
+    <p class="action-result">@_actionResult</p>
+}
+
+<style>
+    .tc-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+        gap: 1rem;
+    }
+    .tc-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .tc-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border);
+    }
+    .tc-card-body {
+        padding: 0.75rem 1rem;
+    }
+    .tc-card-actions {
+        display: flex;
+        gap: 0.35rem;
+        padding: 0.5rem 1rem 0.75rem;
+        flex-wrap: wrap;
+    }
+    .badge-green { background: #22c55e22; color: #4ade80; }
+    .badge-orange { background: #f9731622; color: #fb923c; }
+    .badge-red-state { background: #ef444422; color: #f87171; }
+</style>
+
+@code {
+    private List<TimeConditionViewModel> _conditions = [];
+    private bool _showDeleteConfirm;
+    private TimeConditionViewModel? _deletingTc;
+    private string? _deleteError;
+    private string? _actionResult;
+
+    private void NavigateNew() => Nav.NavigateTo("/time-conditions/new");
+    private void NavigateEdit(int id) => Nav.NavigateTo($"/time-conditions/edit/{id}");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConditions();
+    }
+
+    private async Task LoadConditions()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        _conditions = await TcSvc.GetTimeConditionsAsync(serverId);
+
+        // Enrich with override state
+        var overrides = await TcSvc.GetOverridesBatchAsync(serverId);
+        foreach (var tc in _conditions)
+        {
+            if (overrides.TryGetValue(tc.Name, out var value))
+            {
+                tc.CurrentState = string.Equals(value, "OPEN", StringComparison.OrdinalIgnoreCase)
+                    ? TimeConditionState.OverrideOpen
+                    : TimeConditionState.OverrideClosed;
+            }
+        }
+    }
+
+    private async Task SetOverride(TimeConditionViewModel tc, bool? forceOpen)
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        await TcSvc.SetOverrideAsync(serverId, tc.Name, forceOpen);
+        await LoadConditions();
+    }
+
+    private void ConfirmDelete(TimeConditionViewModel tc)
+    {
+        _deletingTc = tc;
+        _deleteError = null;
+        _showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        _showDeleteConfirm = false;
+        _deletingTc = null;
+        _deleteError = null;
+    }
+
+    private async Task ExecuteDelete()
+    {
+        if (_deletingTc is null) return;
+
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        using var _ = ConfigOp.Begin("Deleting Time Condition", serverId, _deletingTc.Name);
+        var (success, error) = await TcSvc.DeleteTimeConditionAsync(_deletingTc.Id, serverId);
+
+        if (success)
+        {
+            _actionResult = $"Time condition '{_deletingTc.Name}' deleted successfully.";
+            _showDeleteConfirm = false;
+            _deletingTc = null;
+            _deleteError = null;
+            await LoadConditions();
+        }
+        else
+        {
+            _deleteError = error ?? "Failed to delete time condition.";
+        }
+    }
+
+    private static string GetStateBadge(TimeConditionState state) => state switch
+    {
+        TimeConditionState.Open => "badge-green",
+        TimeConditionState.Closed => "badge-red-state",
+        TimeConditionState.OverrideOpen => "badge-orange",
+        TimeConditionState.OverrideClosed => "badge-orange",
+        _ => "badge-muted"
+    };
+
+    private static string GetStateLabel(TimeConditionState state) => state switch
+    {
+        TimeConditionState.Open => "Open",
+        TimeConditionState.Closed => "Closed",
+        TimeConditionState.OverrideOpen => "OVERRIDE: OPEN",
+        TimeConditionState.OverrideClosed => "OVERRIDE: CLOSED",
+        _ => "Unknown"
+    };
+}
