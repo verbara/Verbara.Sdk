@@ -6,6 +6,7 @@
 @inject NavigationManager Nav
 @inject ConfigOperationState ConfigOp
 @inject IStringLocalizer<SharedStrings> L
+@inject IJSRuntime JS
 
 <PageTitle>@(_isNew ? L["QCfg_NewTitle"] : $"{L["QCfg_EditTitle"]} {_config.Name}") — Asterisk PBX Admin</PageTitle>
 
@@ -25,8 +26,9 @@
     <HelpPanel SectionKey="QCfg_Identity">@L["QCfg_Identity"]</HelpPanel>
     <div class="form-grid">
         <div class="form-field">
-            <label class="form-label">@L["Lbl_Name"] <HelpIcon HelpKey="QueueName" /></label>
-            <input class="input" @bind="_config.Name" readonly="@(!_isNew)" />
+            <label class="form-label">@L["Lbl_Name"] <span class="required-mark">*</span> <HelpIcon HelpKey="QueueName" /></label>
+            <input class="input @ValidationCss(_nameTouched, _nameValid)" @bind="_config.Name" readonly="@(!_isNew)" @onfocusout="@(() => { _nameTouched = true; })" />
+            <PbxAdmin.Components.Shared.ValidationMessage IsValid="_nameValid" IsTouched="_nameTouched" Message="@L["Err_NameRequired"]" />
         </div>
         <div class="form-field">
             <label class="form-label">@L["Lbl_Enabled"]</label>
@@ -69,6 +71,49 @@
         </div>
     </div>
 </div>
+
+<div class="form-section">
+    <HelpPanel SectionKey="QCfg_StaticMembers">@L["QCfg_StaticMembers"] (@_config.Members.Count)</HelpPanel>
+    <div class="inline-form">
+        <input class="input" @bind="_newMemberInterface" placeholder="PJSIP/2001" />
+        <input class="input" @bind="_newMemberName" placeholder="Agent Name" />
+        <input class="input" @bind="_newMemberStateInterface" placeholder="State Interface (optional)" />
+        <input type="number" class="input input-sm" @bind="_newMemberPenalty" min="0" placeholder="Penalty" />
+        <button class="btn btn-blue" @onclick="AddMember">@L["Btn_Add"]</button>
+    </div>
+    @if (_config.Members.Count > 0)
+    {
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>@L["Col_Interface"]</th>
+                    <th>@L["Lbl_Name"]</th>
+                    <th>@L["Col_StateInterface"]</th>
+                    <th>@L["Col_Penalty"]</th>
+                    <th>@L["Col_Paused"]</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var member in _config.Members)
+                {
+                    <tr>
+                        <td>@member.Interface</td>
+                        <td>@member.MemberName</td>
+                        <td>@member.StateInterface</td>
+                        <td>@member.Penalty</td>
+                        <td>@(member.Paused == 1 ? L["Lbl_Yes"] : L["Lbl_No"])</td>
+                        <td><button class="btn btn-sm btn-red" @onclick="() => RemoveMember(member)">@L["Btn_Remove"]</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+    <AdvancedToggle IsAdvanced="_isAdvanced" IsAdvancedChanged="v => { _isAdvanced = v; StateHasChanged(); }" />
+    @if (_isAdvanced)
+    {
 
 <div class="form-section">
     <h3>@L["QCfg_Capacity"]</h3>
@@ -175,47 +220,10 @@
     </div>
 </div>
 
-<div class="form-section">
-    <HelpPanel SectionKey="QCfg_StaticMembers">@L["QCfg_StaticMembers"] (@_config.Members.Count)</HelpPanel>
-    <div class="inline-form">
-        <input class="input" @bind="_newMemberInterface" placeholder="PJSIP/2001" />
-        <input class="input" @bind="_newMemberName" placeholder="Agent Name" />
-        <input class="input" @bind="_newMemberStateInterface" placeholder="State Interface (optional)" />
-        <input type="number" class="input input-sm" @bind="_newMemberPenalty" min="0" placeholder="Penalty" />
-        <button class="btn btn-blue" @onclick="AddMember">@L["Btn_Add"]</button>
-    </div>
-    @if (_config.Members.Count > 0)
-    {
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>@L["Col_Interface"]</th>
-                    <th>@L["Lbl_Name"]</th>
-                    <th>@L["Col_StateInterface"]</th>
-                    <th>@L["Col_Penalty"]</th>
-                    <th>@L["Col_Paused"]</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var member in _config.Members)
-                {
-                    <tr>
-                        <td>@member.Interface</td>
-                        <td>@member.MemberName</td>
-                        <td>@member.StateInterface</td>
-                        <td>@member.Penalty</td>
-                        <td>@(member.Paused == 1 ? L["Lbl_Yes"] : L["Lbl_No"])</td>
-                        <td><button class="btn btn-sm btn-red" @onclick="() => RemoveMember(member)">@L["Btn_Remove"]</button></td>
-                    </tr>
-                }
-            </tbody>
-        </table>
     }
-</div>
 
 <div class="form-actions">
-    <button class="btn btn-green" @onclick="Save" disabled="@_saving">
+    <button class="btn btn-green" @onclick="Save" disabled="@(_saving || !IsFormValid)">
         @(_saving ? L["Btn_Saving"] : L["Btn_Save"])
     </button>
     <button class="btn btn-muted" @onclick="Cancel">@L["Btn_Cancel"]</button>
@@ -249,6 +257,12 @@
     private string? _newMemberStateInterface;
     private int _newMemberPenalty;
 
+    private bool _isAdvanced;
+    private bool _nameTouched;
+    private bool _nameValid => FormValidator.IsRequired(_config.Name);
+    private bool IsFormValid => _nameValid;
+    private string ValidationCss(bool touched, bool valid) => !touched ? "" : valid ? "valid" : "invalid";
+
     protected override async Task OnInitializedAsync()
     {
         _isNew = string.Equals(IdOrNew, "new", StringComparison.OrdinalIgnoreCase);
@@ -276,6 +290,11 @@
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) { _isAdvanced = await JS.InvokeAsync<bool>("HelpInterop.getAdvanced"); StateHasChanged(); }
+    }
+
     private void AddMember()
     {
         if (string.IsNullOrWhiteSpace(_newMemberInterface)) return;
@@ -299,6 +318,9 @@
 
     private async Task Save()
     {
+        _nameTouched = true;
+        if (!IsFormValid) return;
+
         _saving = true;
         _result = null;
 
