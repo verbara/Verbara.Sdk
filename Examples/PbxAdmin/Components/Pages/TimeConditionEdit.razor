@@ -6,31 +6,32 @@
 @inject SelectedServerService ServerSvc
 @inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>@(_isNew ? "New Time Condition" : $"Edit {_config.Name}") — Asterisk PBX Admin</PageTitle>
+<PageTitle>@(_isNew ? L["TCEdit_NewTitle"] : L["TCEdit_EditTitle", _config.Name]) — Asterisk PBX Admin</PageTitle>
 
-<a href="/time-conditions" class="back-link">Back to Time Conditions</a>
-<h2>@(_isNew ? "New Time Condition" : $"Edit Time Condition: {_config.Name}")</h2>
+<a href="/time-conditions" class="back-link">@L["TCEdit_BackToList"]</a>
+<h2>@(_isNew ? L["TCEdit_New"] : L["TCEdit_Edit", _config.Name])</h2>
 
 @if (_loading)
 {
-    <p class="text-muted">Loading...</p>
+    <p class="text-muted">@L["Lbl_Loading"]</p>
 }
 else
 {
     <!-- Name -->
     <div class="form-section">
-        <h3>Identity</h3>
+        <h3>@L["ExtEdit_Identity"]</h3>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">Name</label>
+                <label class="form-label">@L["Lbl_Name"]</label>
                 <input class="input" @bind="_config.Name" placeholder="business-hours" />
-                <span class="text-muted" style="font-size:0.85rem;">Will be used as dialplan context name. Alphanumeric and hyphens only.</span>
+                <span class="text-muted" style="font-size:0.85rem;">@L["TCEdit_NameHint"]</span>
             </div>
             <div class="form-field">
                 <label class="codec-check">
                     <input type="checkbox" @bind="_config.Enabled" />
-                    Enabled
+                    @L["Lbl_Enabled"]
                 </label>
             </div>
         </div>
@@ -38,14 +39,14 @@ else
 
     <!-- Schedule Builder -->
     <div class="form-section">
-        <h3>Schedule</h3>
+        <h3>@L["TCEdit_Schedule"]</h3>
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Day</th>
-                    <th>Enable</th>
-                    <th>Start</th>
-                    <th>End</th>
+                    <th>@L["Col_Day"]</th>
+                    <th>@L["Col_Enable"]</th>
+                    <th>@L["Col_Start"]</th>
+                    <th>@L["Col_End"]</th>
                 </tr>
             </thead>
             <tbody>
@@ -77,17 +78,17 @@ else
 
     <!-- Holidays -->
     <div class="form-section">
-        <h3>Holidays</h3>
+        <h3>@L["TCEdit_HolidaysSection"]</h3>
         @if (_holidays.Count > 0)
         {
             <table class="data-table" style="margin-bottom: 0.75rem;">
                 <thead>
                     <tr>
-                        <th>Name</th>
-                        <th>Month</th>
-                        <th>Day</th>
-                        <th>Recurring</th>
-                        <th>Actions</th>
+                        <th>@L["Lbl_Name"]</th>
+                        <th>@L["Col_Month"]</th>
+                        <th>@L["Col_Day"]</th>
+                        <th>@L["Col_Recurring"]</th>
+                        <th>@L["Lbl_Actions"]</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -110,31 +111,31 @@ else
                                 <input type="checkbox" @bind="holiday.Recurring" />
                             </td>
                             <td>
-                                <button class="btn btn-sm btn-red" @onclick="() => _holidays.Remove(holiday)">Remove</button>
+                                <button class="btn btn-sm btn-red" @onclick="() => _holidays.Remove(holiday)">@L["Btn_Remove"]</button>
                             </td>
                         </tr>
                     }
                 </tbody>
             </table>
         }
-        <button class="btn" @onclick="AddHoliday">Add Holiday</button>
+        <button class="btn" @onclick="AddHoliday">@L["TCEdit_AddHoliday"]</button>
     </div>
 
     <!-- Match Destination -->
     <div class="form-section">
-        <h3>Match Destination (In Hours)</h3>
+        <h3>@L["TCEdit_MatchDest"]</h3>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">Type</label>
+                <label class="form-label">@L["Lbl_Type"]</label>
                 <select class="input" @bind="_config.MatchDestType">
-                    <option value="">-- Select --</option>
-                    <option value="extension">Extension</option>
-                    <option value="queue">Queue</option>
-                    <option value="time_condition">Time Condition</option>
+                    <option value="">@L["Lbl_SelectType"]</option>
+                    <option value="extension">@L["Lbl_Extension"]</option>
+                    <option value="queue">@L["Lbl_Queue"]</option>
+                    <option value="time_condition">@L["Lbl_TimeCondition"]</option>
                 </select>
             </div>
             <div class="form-field">
-                <label class="form-label">Target</label>
+                <label class="form-label">@L["Lbl_Target"]</label>
                 <input class="input" @bind="_config.MatchDest" placeholder="Destination" />
             </div>
         </div>
@@ -142,27 +143,27 @@ else
 
     <!-- No-Match Destination -->
     <div class="form-section">
-        <h3>No-Match Destination (After Hours)</h3>
+        <h3>@L["TCEdit_NoMatchDest"]</h3>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">Type</label>
+                <label class="form-label">@L["Lbl_Type"]</label>
                 <select class="input" @bind="_config.NoMatchDestType">
-                    <option value="">-- Select --</option>
-                    <option value="extension">Extension</option>
-                    <option value="queue">Queue</option>
-                    <option value="time_condition">Time Condition</option>
+                    <option value="">@L["Lbl_SelectType"]</option>
+                    <option value="extension">@L["Lbl_Extension"]</option>
+                    <option value="queue">@L["Lbl_Queue"]</option>
+                    <option value="time_condition">@L["Lbl_TimeCondition"]</option>
                 </select>
             </div>
             <div class="form-field">
-                <label class="form-label">Target</label>
+                <label class="form-label">@L["Lbl_Target"]</label>
                 <input class="input" @bind="_config.NoMatchDest" placeholder="Destination" />
             </div>
         </div>
     </div>
 
     <div class="form-actions">
-        <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? "Saving..." : "Save")</button>
-        <button class="btn" @onclick="NavigateBack">Cancel</button>
+        <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? L["Btn_Saving"] : L["Btn_Save"])</button>
+        <button class="btn" @onclick="NavigateBack">@L["Btn_Cancel"]</button>
     </div>
 
     @if (_result is not null)

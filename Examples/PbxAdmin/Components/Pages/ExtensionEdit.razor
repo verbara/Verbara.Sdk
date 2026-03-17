@@ -4,35 +4,36 @@
 @using PbxAdmin.Models
 @inject ExtensionService ExtSvc
 @inject SelectedServerService ServerSvc
+@inject IStringLocalizer<SharedStrings> L
 @inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
 
-<PageTitle>@(_isNew ? "New Extension" : $"Edit {Extension}") — Asterisk PBX Admin</PageTitle>
+<PageTitle>@(_isNew ? L["ExtEdit_NewTitle"] : L["ExtEdit_EditTitle", Extension ?? ""]) — Asterisk PBX Admin</PageTitle>
 
-<a href="/extensions" class="back-link">Back to Extensions</a>
-<h2>@(_isNew ? "New Extension" : $"Edit Extension: {Extension}")</h2>
+<a href="/extensions" class="back-link">@L["ExtEdit_BackToList"]</a>
+<h2>@(_isNew ? L["ExtEdit_New"] : $"{L["ExtEdit_Edit"]}: {Extension}")</h2>
 
 @if (_loading)
 {
-    <p class="text-muted">Loading...</p>
+    <p class="text-muted">@L["Lbl_Loading"]</p>
 }
 else
 {
     <!-- Identity -->
     <div class="form-section">
-        <h3>Identity</h3>
+        <h3>@L["ExtEdit_Identity"]</h3>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">Extension Number</label>
+                <label class="form-label">@L["ExtEdit_ExtNumber"]</label>
                 <input class="input" type="number" @bind="_config.Extension" placeholder="@($"{_rangeStart}–{_rangeEnd}")" disabled="@(!_isNew)" />
-                <span class="text-muted" style="font-size:0.85rem;">Range: @_rangeStart – @_rangeEnd</span>
+                <span class="text-muted" style="font-size:0.85rem;">@L["ExtEdit_Range"] @_rangeStart – @_rangeEnd</span>
             </div>
             <div class="form-field">
-                <label class="form-label">Display Name</label>
+                <label class="form-label">@L["ExtEdit_DisplayName"]</label>
                 <input class="input" @bind="_config.Name" placeholder="John Doe" />
             </div>
             <div class="form-field">
-                <label class="form-label">Technology</label>
+                <label class="form-label">@L["ExtEdit_Technology"]</label>
                 <div class="radio-group">
                     <label class="radio-option">
                         <input type="radio" name="tech" value="@ExtensionTechnology.PjSip" checked="@(_config.Technology == ExtensionTechnology.PjSip)"
@@ -56,15 +57,15 @@ else
 
     <!-- Authentication -->
     <div class="form-section">
-        <h3>Authentication</h3>
+        <h3>@L["ExtEdit_Auth"]</h3>
         <div class="form-grid">
             @if (_isNew)
             {
                 <div class="form-field">
-                    <label class="form-label">Password (min 8 characters)</label>
+                    <label class="form-label">@L["ExtEdit_Password"]</label>
                     <div style="display:flex;gap:0.5rem;align-items:center;">
                         <input class="input" type="password" @bind="_config.Password" placeholder="Required" />
-                        <button class="btn" type="button" @onclick="GeneratePassword">Generate</button>
+                        <button class="btn" type="button" @onclick="GeneratePassword">@L["ExtEdit_Generate"]</button>
                     </div>
                 </div>
             }
@@ -73,13 +74,13 @@ else
                 <div class="form-field">
                     <label class="codec-check">
                         <input type="checkbox" @bind="_changePassword" />
-                        Change Password
+                        @L["ExtEdit_ChangePassword"]
                     </label>
                     @if (_changePassword)
                     {
                         <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.5rem;">
                             <input class="input" type="password" @bind="_config.Password" placeholder="New password (min 8 chars)" />
-                            <button class="btn" type="button" @onclick="GeneratePassword">Generate</button>
+                            <button class="btn" type="button" @onclick="GeneratePassword">@L["ExtEdit_Generate"]</button>
                         </div>
                     }
                 </div>
@@ -89,18 +90,18 @@ else
 
     <!-- Dialplan -->
     <div class="form-section">
-        <h3>Dialplan</h3>
+        <h3>@L["ExtEdit_Dialplan"]</h3>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">Context</label>
+                <label class="form-label">@L["Lbl_Context"]</label>
                 <input class="input" @bind="_config.Context" placeholder="from-internal" />
             </div>
             <div class="form-field">
-                <label class="form-label">Call Group</label>
+                <label class="form-label">@L["ExtEdit_CallGroup"]</label>
                 <input class="input" @bind="_config.CallGroup" placeholder="1" />
             </div>
             <div class="form-field">
-                <label class="form-label">Pickup Group</label>
+                <label class="form-label">@L["ExtEdit_PickupGroup"]</label>
                 <input class="input" @bind="_config.PickupGroup" placeholder="1" />
             </div>
         </div>
@@ -108,9 +109,9 @@ else
 
     <!-- Media & Transport -->
     <div class="form-section">
-        <h3>Media &amp; Transport</h3>
+        <h3>@L["ExtEdit_MediaTransport"]</h3>
         <div class="form-field" style="margin-bottom: 0.75rem;">
-            <label class="form-label">Codecs</label>
+            <label class="form-label">@L["ExtEdit_Codecs"]</label>
             <div class="codec-grid">
                 @foreach (var codec in _availableCodecs)
                 {
@@ -124,7 +125,7 @@ else
         </div>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">DTMF Mode</label>
+                <label class="form-label">@L["ExtEdit_DtmfMode"]</label>
                 <select @bind="_config.DtmfMode">
                     <option value="rfc4733">RFC 4733</option>
                     <option value="inband">Inband</option>
@@ -135,7 +136,7 @@ else
             @if (_config.Technology != ExtensionTechnology.Iax2)
             {
                 <div class="form-field">
-                    <label class="form-label">Transport</label>
+                    <label class="form-label">@L["ExtEdit_Transport"]</label>
                     <select @bind="_config.Transport">
                         <option value="udp">transport-udp</option>
                         <option value="tcp">transport-tcp</option>
@@ -144,14 +145,14 @@ else
                 </div>
             }
             <div class="form-field">
-                <label class="form-label">NAT Options</label>
+                <label class="form-label">@L["ExtEdit_NatOptions"]</label>
                 <label class="codec-check">
                     <input type="checkbox" @bind="_config.ForceRport" />
-                    Force rport
+                    @L["ExtEdit_ForceRport"]
                 </label>
                 <label class="codec-check">
                     <input type="checkbox" @bind="_config.DirectMedia" />
-                    Direct media
+                    @L["ExtEdit_DirectMedia"]
                 </label>
             </div>
         </div>
@@ -159,26 +160,26 @@ else
 
     <!-- Voicemail -->
     <div class="form-section">
-        <h3>Voicemail</h3>
+        <h3>@L["ExtEdit_Voicemail"]</h3>
         <div class="form-grid">
             <div class="form-field">
                 <label class="codec-check">
                     <input type="checkbox" @bind="_config.VoicemailEnabled" />
-                    Enable Voicemail
+                    @L["ExtEdit_EnableVoicemail"]
                 </label>
             </div>
             @if (_config.VoicemailEnabled)
             {
                 <div class="form-field">
-                    <label class="form-label">PIN (min 4 digits)</label>
+                    <label class="form-label">@L["ExtEdit_Pin"]</label>
                     <input class="input" type="text" @bind="_config.VoicemailPin" placeholder="1234" />
                 </div>
                 <div class="form-field">
-                    <label class="form-label">Email</label>
+                    <label class="form-label">@L["ExtEdit_Email"]</label>
                     <input class="input" type="text" @bind="_config.VoicemailEmail" placeholder="user@example.com" />
                 </div>
                 <div class="form-field">
-                    <label class="form-label">Max Messages</label>
+                    <label class="form-label">@L["ExtEdit_MaxMessages"]</label>
                     <input class="input" type="number" @bind="_config.VoicemailMaxMessages" />
                 </div>
             }
@@ -187,26 +188,26 @@ else
 
     <!-- Call Features -->
     <div class="form-section">
-        <h3>Call Features</h3>
+        <h3>@L["ExtEdit_CallFeatures"]</h3>
         <div class="form-grid">
             <div class="form-field">
                 <label class="codec-check">
                     <input type="checkbox" @bind="_config.DndEnabled" />
-                    Do Not Disturb
+                    @L["ExtEdit_DND"]
                 </label>
             </div>
             <div class="form-field">
-                <label class="form-label">CF Unconditional</label>
-                <input class="input" type="text" @bind="_config.CallForwardUnconditional" placeholder="Destination number" />
+                <label class="form-label">@L["ExtEdit_CFUnconditional"]</label>
+                <input class="input" type="text" @bind="_config.CallForwardUnconditional" placeholder="@L["ExtEdit_DestNumber"]" />
             </div>
             <div class="form-field">
-                <label class="form-label">CF Busy</label>
-                <input class="input" type="text" @bind="_config.CallForwardBusy" placeholder="Destination number" />
+                <label class="form-label">@L["ExtEdit_CFBusy"]</label>
+                <input class="input" type="text" @bind="_config.CallForwardBusy" placeholder="@L["ExtEdit_DestNumber"]" />
             </div>
             <div class="form-field">
-                <label class="form-label">CF No Answer</label>
+                <label class="form-label">@L["ExtEdit_CFNoAnswer"]</label>
                 <div style="display:flex;gap:0.5rem;align-items:center;">
-                    <input class="input" type="text" @bind="_config.CallForwardNoAnswer" placeholder="Destination number" />
+                    <input class="input" type="text" @bind="_config.CallForwardNoAnswer" placeholder="@L["ExtEdit_DestNumber"]" />
                     <input class="input" type="number" @bind="_config.CallForwardNoAnswerTimeout" style="width:5rem;" />
                     <span class="text-muted">sec</span>
                 </div>
@@ -215,8 +216,8 @@ else
     </div>
 
     <div class="form-actions">
-        <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? "Saving..." : "Save")</button>
-        <button class="btn" @onclick="NavigateBack">Cancel</button>
+        <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? L["Btn_Saving"] : L["Btn_Save"])</button>
+        <button class="btn" @onclick="NavigateBack">@L["Btn_Cancel"]</button>
     </div>
 
     @if (_result is not null)

@@ -8,12 +8,13 @@
 @inject TrunkService TrunkSvc
 @inject SelectedServerService ServerSvc
 @inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>@(_isNew ? "New IVR" : $"Edit {_config.Label}") — Asterisk PBX Admin</PageTitle>
+<PageTitle>@(_isNew ? L["IvrEdit_NewTitle"] : L["IvrEdit_EditTitle", _config.Label]) — Asterisk PBX Admin</PageTitle>
 
 <div class="page-header-row">
     <h2>
-        <a href="/ivr-menus" class="back-link">IVR Menus</a> / @(_isNew ? "New IVR" : _config.Label)
+        <a href="/ivr-menus" class="back-link">@L["Ivr_Heading"]</a> / @(_isNew ? L["IvrEdit_NewTitle"] : _config.Label)
         @if (_serverId is not null)
         {
             <span class="badge badge-muted">@_serverId</span>
@@ -28,7 +29,7 @@
 
 @if (_loading)
 {
-    <p>Loading...</p>
+    <p>@L["Lbl_Loading"]</p>
 }
 else
 {
@@ -36,62 +37,62 @@ else
     <div class="ivr-edit-form">
 
         <div class="form-section">
-            <h3>Identity</h3>
+            <h3>@L["IvrEdit_Identity"]</h3>
             <div class="form-grid">
                 <div class="form-field">
-                    <label class="form-label">Name</label>
+                    <label class="form-label">@L["Lbl_Name"]</label>
                     <input class="input" @bind="_config.Name" readonly="@(!_isNew)" />
-                    <span class="text-muted">Alphanumeric + hyphens. Used in dialplan context name.</span>
+                    <span class="text-muted">@L["IvrEdit_NameHint"]</span>
                 </div>
                 <div class="form-field">
-                    <label class="form-label">Label</label>
+                    <label class="form-label">@L["IvrEdit_Label"]</label>
                     <input class="input" @bind="_config.Label" />
                 </div>
                 <div class="form-field">
-                    <label class="form-label">Enabled</label>
+                    <label class="form-label">@L["Lbl_Enabled"]</label>
                     <input type="checkbox" @bind="_config.Enabled" />
                 </div>
             </div>
         </div>
 
         <div class="form-section">
-            <h3>Audio</h3>
+            <h3>@L["IvrEdit_Audio"]</h3>
             <div class="form-grid">
                 <div class="form-field">
-                    <label class="form-label">Greeting</label>
+                    <label class="form-label">@L["IvrEdit_Greeting"]</label>
                     <div class="input-with-indicator">
                         <input class="input" @bind="_config.Greeting" placeholder="e.g. welcome, press-1-for-sales" />
                         <span class="indicator @_greetingIndicator" title="@_greetingWarning"></span>
                     </div>
-                    <span class="text-muted">Audio filename without extension, as Asterisk expects.</span>
+                    <span class="text-muted">@L["IvrEdit_GreetingHint"]</span>
                 </div>
             </div>
         </div>
 
         <div class="form-section">
-            <h3>Behavior</h3>
+            <h3>@L["IvrEdit_Behavior"]</h3>
             <div class="form-grid">
                 <div class="form-field">
-                    <label class="form-label">Timeout (seconds)</label>
+                    <label class="form-label">@L["IvrEdit_TimeoutSec"]</label>
                     <input type="number" class="input" @bind="_config.Timeout" min="1" max="30" />
                 </div>
                 <div class="form-field">
-                    <label class="form-label">Max Retries</label>
+                    <label class="form-label">@L["IvrEdit_MaxRetries"]</label>
                     <input type="number" class="input" @bind="_config.MaxRetries" min="1" max="10" />
                 </div>
             </div>
         </div>
 
         <div class="form-section">
-            <h3>DTMF Options</h3>
+            <h3>@L["IvrEdit_DtmfOptions"]</h3>
             <table class="table">
                 <thead>
                     <tr>
-                        <th>Digit</th>
-                        <th>Label</th>
-                        <th>Type</th>
-                        <th>Destination</th>
-                        <th></th>
+                        <th>@L["Col_Digit"]</th>
+                        <th>@L["Col_Label"]</th>
+                        <th>@L["Lbl_Type"]</th>
+                        <th>@L["Lbl_Destination"]</th>
+                        <th>@L["Lbl_Actions"]</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -109,12 +110,12 @@ else
                             <td><input class="input input-sm" @bind="item.Label" placeholder="Description" /></td>
                             <td>
                                 <select class="input input-sm" @bind="item.DestType">
-                                    <option value="extension">Extension</option>
-                                    <option value="queue">Queue</option>
-                                    <option value="ivr">IVR Sub-menu</option>
-                                    <option value="voicemail">Voicemail</option>
-                                    <option value="hangup">Hangup</option>
-                                    <option value="external">External</option>
+                                    <option value="extension">@L["Lbl_Extension"]</option>
+                                    <option value="queue">@L["Lbl_Queue"]</option>
+                                    <option value="ivr">@L["Lbl_IvrSubmenu"]</option>
+                                    <option value="voicemail">@L["Lbl_Voicemail"]</option>
+                                    <option value="hangup">@L["Lbl_Hangup"]</option>
+                                    <option value="external">@L["Lbl_External"]</option>
                                 </select>
                             </td>
                             <td>
@@ -159,36 +160,36 @@ else
                     }
                 </tbody>
             </table>
-            <button class="btn btn-sm" @onclick="AddItem">+ Add Option</button>
+            <button class="btn btn-sm" @onclick="AddItem">@L["IvrEdit_AddOption"]</button>
         </div>
 
         <div class="form-section">
-            <h3>Fallbacks</h3>
+            <h3>@L["IvrEdit_Fallbacks"]</h3>
             <div class="form-grid">
                 <div class="form-field">
-                    <label class="form-label">Timeout Destination</label>
+                    <label class="form-label">@L["IvrEdit_TimeoutDest"]</label>
                     <div class="input-row">
                         <select class="input" @bind="_config.TimeoutDestType">
-                            <option value="">— None (Hangup) —</option>
-                            <option value="extension">Extension</option>
-                            <option value="queue">Queue</option>
-                            <option value="ivr">IVR</option>
-                            <option value="voicemail">Voicemail</option>
+                            <option value="">@L["IvrEdit_NoneHangup"]</option>
+                            <option value="extension">@L["Lbl_Extension"]</option>
+                            <option value="queue">@L["Lbl_Queue"]</option>
+                            <option value="ivr">@L["Lbl_IvrSubmenu"]</option>
+                            <option value="voicemail">@L["Lbl_Voicemail"]</option>
                         </select>
-                        <input class="input" @bind="_config.TimeoutDest" placeholder="Target" />
+                        <input class="input" @bind="_config.TimeoutDest" placeholder="@L["Lbl_Target"]" />
                     </div>
                 </div>
                 <div class="form-field">
-                    <label class="form-label">Invalid Input Destination</label>
+                    <label class="form-label">@L["IvrEdit_InvalidDest"]</label>
                     <div class="input-row">
                         <select class="input" @bind="_config.InvalidDestType">
-                            <option value="">— None (Hangup) —</option>
-                            <option value="extension">Extension</option>
-                            <option value="queue">Queue</option>
-                            <option value="ivr">IVR</option>
-                            <option value="voicemail">Voicemail</option>
+                            <option value="">@L["IvrEdit_NoneHangup"]</option>
+                            <option value="extension">@L["Lbl_Extension"]</option>
+                            <option value="queue">@L["Lbl_Queue"]</option>
+                            <option value="ivr">@L["Lbl_IvrSubmenu"]</option>
+                            <option value="voicemail">@L["Lbl_Voicemail"]</option>
                         </select>
-                        <input class="input" @bind="_config.InvalidDest" placeholder="Target" />
+                        <input class="input" @bind="_config.InvalidDest" placeholder="@L["Lbl_Target"]" />
                     </div>
                 </div>
             </div>
@@ -196,14 +197,14 @@ else
 
         <div class="form-section">
             <div class="form-field full-width">
-                <label class="form-label">Notes</label>
+                <label class="form-label">@L["Lbl_Notes"]</label>
                 <textarea class="input" @bind="_config.Notes" rows="2"></textarea>
             </div>
         </div>
 
         <div class="form-actions">
-            <button class="btn btn-primary" @onclick="SaveAsync">@(_isNew ? "Create" : "Save")</button>
-            <a href="/ivr-menus" class="btn">Cancel</a>
+            <button class="btn btn-primary" @onclick="SaveAsync">@(_isNew ? L["IvrEdit_Create"] : L["Btn_Save"])</button>
+            <a href="/ivr-menus" class="btn">@L["Btn_Cancel"]</a>
         </div>
 
     </div>
@@ -211,7 +212,7 @@ else
     @if (_tree is not null && _tree.Children.Count > 0)
     {
         <div class="ivr-tree-sidebar">
-            <h4>IVR Structure</h4>
+            <h4>@L["IvrEdit_Structure"]</h4>
             <div class="ivr-tree">
                 @RenderTreeNode(_tree, true)
             </div>

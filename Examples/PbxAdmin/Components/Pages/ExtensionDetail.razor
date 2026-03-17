@@ -5,20 +5,21 @@
 @inject ExtensionService ExtSvc
 @inject SelectedServerService ServerSvc
 @inject IConfigProviderResolver ConfigResolver
+@inject IStringLocalizer<SharedStrings> L
 @inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
 
 <PageTitle>@Extension — Asterisk PBX Admin</PageTitle>
 
-<a href="/extensions" class="back-link">Back to Extensions</a>
+<a href="/extensions" class="back-link">@L["ExtDetail_BackToList"]</a>
 
 @if (_loading)
 {
-    <p class="text-muted">Loading...</p>
+    <p class="text-muted">@L["Lbl_Loading"]</p>
 }
 else if (_detail is null)
 {
-    <p class="text-muted">Extension not found.</p>
+    <p class="text-muted">@L["ExtDetail_NotFound"]</p>
 }
 else
 {
@@ -52,19 +53,19 @@ else
         </div>
         @if (_detail.Context is not null)
         {
-            <div class="stat-item">Context: <strong>@_detail.Context</strong></div>
+            <div class="stat-item">@L["Lbl_Context"]: <strong>@_detail.Context</strong></div>
         }
         @if (_detail.Codecs is not null)
         {
-            <div class="stat-item">Codecs: <strong>@_detail.Codecs</strong></div>
+            <div class="stat-item">@L["ExtEdit_Codecs"]: <strong>@_detail.Codecs</strong></div>
         }
         @if (_detail.CallGroup is not null)
         {
-            <div class="stat-item">Call Group: <strong>@_detail.CallGroup</strong></div>
+            <div class="stat-item">@L["ExtEdit_CallGroup"]: <strong>@_detail.CallGroup</strong></div>
         }
         @if (_detail.PickupGroup is not null)
         {
-            <div class="stat-item">Pickup Group: <strong>@_detail.PickupGroup</strong></div>
+            <div class="stat-item">@L["ExtEdit_PickupGroup"]: <strong>@_detail.PickupGroup</strong></div>
         }
     </div>
 
@@ -72,33 +73,33 @@ else
     @if (_detail.IpAddress is not null || _detail.ContactUri is not null || _detail.UserAgent is not null || _detail.RoundtripMs.HasValue)
     {
         <div class="form-section">
-            <h3>Registration Details</h3>
+            <h3>@L["ExtDetail_RegDetails"]</h3>
             <div class="form-grid">
                 @if (_detail.IpAddress is not null)
                 {
                     <div class="form-field">
-                        <span class="form-label">IP Address</span>
+                        <span class="form-label">@L["ExtDetail_IpAddress"]</span>
                         <span class="mono">@_detail.IpAddress</span>
                     </div>
                 }
                 @if (_detail.ContactUri is not null)
                 {
                     <div class="form-field">
-                        <span class="form-label">Contact URI</span>
+                        <span class="form-label">@L["ExtDetail_ContactUri"]</span>
                         <span class="mono">@_detail.ContactUri</span>
                     </div>
                 }
                 @if (_detail.UserAgent is not null)
                 {
                     <div class="form-field">
-                        <span class="form-label">User Agent</span>
+                        <span class="form-label">@L["ExtDetail_UserAgent"]</span>
                         <span>@_detail.UserAgent</span>
                     </div>
                 }
                 @if (_detail.RoundtripMs.HasValue)
                 {
                     <div class="form-field">
-                        <span class="form-label">Roundtrip</span>
+                        <span class="form-label">@L["ExtDetail_Roundtrip"]</span>
                         <span>@(_detail.RoundtripMs)ms</span>
                     </div>
                 }
@@ -108,7 +109,7 @@ else
 
     <!-- Features (inline editable) -->
     <div class="form-section">
-        <h3>Features</h3>
+        <h3>@L["ExtDetail_Features"]</h3>
 
         @if (_actionResult is { } result)
         {
@@ -117,36 +118,36 @@ else
 
         <div class="form-grid">
             <div class="form-field">
-                <span class="form-label">Do Not Disturb</span>
+                <span class="form-label">@L["ExtEdit_DND"]</span>
                 <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
                     <input type="checkbox" checked="@_editDnd" @onchange="ToggleDnd" />
-                    @(_editDnd ? "Enabled" : "Disabled")
+                    @(_editDnd ? L["Lbl_Enabled"] : L["Lbl_Disabled"])
                 </label>
             </div>
 
             <div class="form-field">
-                <span class="form-label">CF Unconditional</span>
+                <span class="form-label">@L["ExtEdit_CFUnconditional"]</span>
                 <div style="display:flex;gap:0.5rem;align-items:center;">
                     <input type="text" @bind="_editCf" placeholder="Destination" class="input-sm" />
-                    <button class="btn btn-sm" @onclick="SaveFeatures">Save</button>
+                    <button class="btn btn-sm" @onclick="SaveFeatures">@L["Btn_Save"]</button>
                 </div>
             </div>
 
             <div class="form-field">
-                <span class="form-label">CF Busy</span>
+                <span class="form-label">@L["ExtEdit_CFBusy"]</span>
                 <div style="display:flex;gap:0.5rem;align-items:center;">
                     <input type="text" @bind="_editCfb" placeholder="Destination" class="input-sm" />
-                    <button class="btn btn-sm" @onclick="SaveFeatures">Save</button>
+                    <button class="btn btn-sm" @onclick="SaveFeatures">@L["Btn_Save"]</button>
                 </div>
             </div>
 
             <div class="form-field">
-                <span class="form-label">CF No Answer</span>
+                <span class="form-label">@L["ExtEdit_CFNoAnswer"]</span>
                 <div style="display:flex;gap:0.5rem;align-items:center;">
                     <input type="text" @bind="_editCfna" placeholder="Destination" class="input-sm" />
                     <input type="number" @bind="_editCfnaTimeout" style="width:5rem;" class="input-sm" />
                     <span class="text-muted">sec</span>
-                    <button class="btn btn-sm" @onclick="SaveFeatures">Save</button>
+                    <button class="btn btn-sm" @onclick="SaveFeatures">@L["Btn_Save"]</button>
                 </div>
             </div>
         </div>
@@ -154,24 +155,24 @@ else
 
     <!-- Voicemail -->
     <div class="form-section">
-        <h3>Voicemail</h3>
+        <h3>@L["ExtEdit_Voicemail"]</h3>
         <div class="form-grid">
             <div class="form-field">
                 <span class="form-label">Status</span>
                 <span class="badge @(_detail.VoicemailEnabled ? "badge-green" : "badge-gray")">
-                    @(_detail.VoicemailEnabled ? "Enabled" : "Disabled")
+                    @(_detail.VoicemailEnabled ? L["Lbl_Enabled"] : L["Lbl_Disabled"])
                 </span>
             </div>
             @if (_detail.VoicemailEnabled)
             {
                 <div class="form-field">
-                    <span class="form-label">Messages</span>
+                    <span class="form-label">@L["ExtDetail_Messages"]</span>
                     <span>@(_detail.VoicemailMessages ?? 0)</span>
                 </div>
                 @if (_detail.VoicemailEmail is not null)
                 {
                     <div class="form-field">
-                        <span class="form-label">Email</span>
+                        <span class="form-label">@L["ExtEdit_Email"]</span>
                         <span>@_detail.VoicemailEmail</span>
                     </div>
                 }
@@ -182,14 +183,14 @@ else
     <!-- Raw config display -->
     @if (_detail.Technology == ExtensionTechnology.PjSip)
     {
-        <h3>Raw Configuration (pjsip.conf)</h3>
+        <h3>@L["ExtDetail_RawConfig"] (pjsip.conf)</h3>
 
         @foreach (var (sectionName, vars) in _detail.RawConfig)
         {
             <div class="config-section">
                 <div class="config-section-header" @onclick="() => ToggleSection(sectionName)">
                     <span>[@sectionName]</span>
-                    <span class="text-muted">@(IsSectionExpanded(sectionName) ? "collapse" : "expand")</span>
+                    <span class="text-muted">@(IsSectionExpanded(sectionName) ? L["Lbl_Collapse"] : L["Lbl_Expand"])</span>
                 </div>
                 @if (IsSectionExpanded(sectionName))
                 {
@@ -202,7 +203,7 @@ else
     }
     else
     {
-        <h3>Raw Configuration (@ExtensionService.GetConfigFilename(_detail.Technology))</h3>
+        <h3>@L["ExtDetail_RawConfig"] (@ExtensionService.GetConfigFilename(_detail.Technology))</h3>
         @if (_detail.RawConfig.TryGetValue(Extension, out var singleSection))
         {
             <div class="config-section">
@@ -216,19 +217,19 @@ else
 
     <!-- Actions -->
     <div class="form-actions">
-        <button class="btn btn-yellow" @onclick="GoEdit">Edit</button>
-        <button class="btn btn-red" @onclick="ConfirmDelete">Delete</button>
+        <button class="btn btn-yellow" @onclick="GoEdit">@L["Btn_Edit"]</button>
+        <button class="btn btn-red" @onclick="ConfirmDelete">@L["Btn_Delete"]</button>
     </div>
 
     @if (_showDeleteConfirm)
     {
         <div class="confirm-overlay" @onclick="CancelDelete">
             <div class="confirm-dialog" @onclick:stopPropagation="true">
-                <h4>Delete Extension</h4>
-                <p>Are you sure you want to delete extension <strong>@Extension</strong>?</p>
+                <h4>@L["Ext_DeleteTitle"]</h4>
+                <p>@L["Ext_DeleteConfirm", Extension]</p>
                 <div class="confirm-dialog-actions">
-                    <button class="btn btn-sm" @onclick="CancelDelete">Cancel</button>
-                    <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">Delete</button>
+                    <button class="btn btn-sm" @onclick="CancelDelete">@L["Btn_Cancel"]</button>
+                    <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">@L["Btn_Delete"]</button>
                 </div>
             </div>
         </div>

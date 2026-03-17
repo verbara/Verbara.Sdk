@@ -4,21 +4,22 @@
 @inject AsteriskMonitorService Monitor
 @inject TrunkService TrunkSvc
 @inject IConfigProviderResolver ConfigResolver
+@inject IStringLocalizer<SharedStrings> L
 @inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
 
 <PageTitle>@TrunkName — Asterisk PBX Admin</PageTitle>
 
-<a href="/trunks" class="back-link">Back to Trunks</a>
+<a href="/trunks" class="back-link">@L["TrunkDetail_BackToList"]</a>
 <h2>Trunk: @TrunkName</h2>
 
 @if (_loading)
 {
-    <p class="text-muted">Loading...</p>
+    <p class="text-muted">@L["Lbl_Loading"]</p>
 }
 else if (_detail is null)
 {
-    <p class="text-muted">Trunk not found.</p>
+    <p class="text-muted">@L["TrunkDetail_NotFound"]</p>
 }
 else
 {
@@ -31,36 +32,36 @@ else
             </strong>
         </div>
         <div class="stat-item">Host: <strong>@_detail.Host:@_detail.Port</strong></div>
-        <div class="stat-item">Transport: <strong>@_detail.Config.Transport</strong></div>
-        <div class="stat-item">Codecs: <strong>@_detail.Codecs</strong></div>
-        <div class="stat-item">Qualify: <strong>@_detail.Config.QualifyFrequency s</strong></div>
-        <div class="stat-item">Active Calls: <strong>@_detail.ActiveCalls</strong></div>
+        <div class="stat-item">@L["ExtEdit_Transport"]: <strong>@_detail.Config.Transport</strong></div>
+        <div class="stat-item">@L["ExtEdit_Codecs"]: <strong>@_detail.Codecs</strong></div>
+        <div class="stat-item">@L["TrunkDetail_Qualify"]: <strong>@_detail.Config.QualifyFrequency s</strong></div>
+        <div class="stat-item">@L["TrunkDetail_ActiveCalls"]: <strong>@_detail.ActiveCalls</strong></div>
     </div>
 
     <!-- Registration info -->
     @if (_detail.ContactUri is not null || _detail.UserAgent is not null || _detail.RoundtripMs.HasValue)
     {
         <div class="form-section">
-            <h3>Registration Details</h3>
+            <h3>@L["ExtDetail_RegDetails"]</h3>
             <div class="form-grid">
                 @if (_detail.ContactUri is not null)
                 {
                     <div class="form-field">
-                        <span class="form-label">Contact URI</span>
+                        <span class="form-label">@L["ExtDetail_ContactUri"]</span>
                         <span class="mono">@_detail.ContactUri</span>
                     </div>
                 }
                 @if (_detail.UserAgent is not null)
                 {
                     <div class="form-field">
-                        <span class="form-label">User Agent</span>
+                        <span class="form-label">@L["ExtDetail_UserAgent"]</span>
                         <span>@_detail.UserAgent</span>
                     </div>
                 }
                 @if (_detail.RoundtripMs.HasValue)
                 {
                     <div class="form-field">
-                        <span class="form-label">Roundtrip</span>
+                        <span class="form-label">@L["ExtDetail_Roundtrip"]</span>
                         <span>@(_detail.RoundtripMs)ms</span>
                     </div>
                 }
@@ -71,14 +72,14 @@ else
     <!-- Raw config display -->
     @if (_detail.Config.Technology == TrunkTechnology.PjSip)
     {
-        <h3>Raw Configuration (pjsip.conf)</h3>
+        <h3>@L["ExtDetail_RawConfig"] (pjsip.conf)</h3>
 
         @foreach (var (sectionName, vars) in _configSections)
         {
             <div class="config-section">
                 <div class="config-section-header" @onclick="() => ToggleSection(sectionName)">
                     <span>[@sectionName]</span>
-                    <span class="text-muted">@(IsSectionExpanded(sectionName) ? "collapse" : "expand")</span>
+                    <span class="text-muted">@(IsSectionExpanded(sectionName) ? L["Lbl_Collapse"] : L["Lbl_Expand"])</span>
                 </div>
                 @if (IsSectionExpanded(sectionName))
                 {
@@ -91,7 +92,7 @@ else
     }
     else
     {
-        <h3>Raw Configuration (@TrunkService.GetConfigFilename(_detail.Config.Technology))</h3>
+        <h3>@L["ExtDetail_RawConfig"] (@TrunkService.GetConfigFilename(_detail.Config.Technology))</h3>
         @if (_singleSection is not null)
         {
             <div class="config-section">
@@ -105,19 +106,19 @@ else
 
     <!-- Actions -->
     <div class="form-actions">
-        <button class="btn btn-yellow" @onclick="GoEdit">Edit</button>
-        <button class="btn btn-red" @onclick="ConfirmDelete">Delete</button>
+        <button class="btn btn-yellow" @onclick="GoEdit">@L["Btn_Edit"]</button>
+        <button class="btn btn-red" @onclick="ConfirmDelete">@L["Btn_Delete"]</button>
     </div>
 
     @if (_showDeleteConfirm)
     {
         <div class="confirm-overlay" @onclick="CancelDelete">
             <div class="confirm-dialog" @onclick:stopPropagation="true">
-                <h4>Delete Trunk</h4>
-                <p>Are you sure you want to delete trunk <strong>@TrunkName</strong>?</p>
+                <h4>@L["Trunk_DeleteTitle"]</h4>
+                <p>@L["Trunk_DeleteConfirm", TrunkName]</p>
                 <div class="confirm-dialog-actions">
-                    <button class="btn btn-sm" @onclick="CancelDelete">Cancel</button>
-                    <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">Delete</button>
+                    <button class="btn btn-sm" @onclick="CancelDelete">@L["Btn_Cancel"]</button>
+                    <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">@L["Btn_Delete"]</button>
                 </div>
             </div>
         </div>

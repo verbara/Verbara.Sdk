@@ -10,6 +10,7 @@
 @inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @inject QueueConfigService QueueCfgSvc
+@inject IStringLocalizer<SharedStrings> L
 @implements IDisposable
 
 <PageTitle>@QueueName — Asterisk PBX Admin</PageTitle>
@@ -19,68 +20,68 @@
         <a href="/queues" class="back-link">Queues</a> / @QueueName
         <span class="badge badge-muted">@ServerId</span>
     </h2>
-    <button class="btn btn-sm btn-red" @onclick="ConfirmDelete" disabled="@_deleteInProgress">Delete Queue</button>
+    <button class="btn btn-sm btn-red" @onclick="ConfirmDelete" disabled="@_deleteInProgress">@L["QDetail_DeleteQueue"]</button>
 </div>
 
 @if (_showDeleteConfirm)
 {
     <div class="confirm-bar confirm-bar-danger">
-        <span>Delete queue <strong>@QueueName</strong> and all its members? This cannot be undone.</span>
+        <span>@L["QDetail_DeleteConfirm"] <strong>@QueueName</strong></span>
         <button class="btn btn-sm btn-red" @onclick="DeleteQueue" disabled="@_deleteInProgress">
-            @(_deleteInProgress ? "Deleting..." : "Confirm Delete")
+            @(_deleteInProgress ? L["QDetail_Deleting"] : L["QDetail_ConfirmDelete"])
         </button>
-        <button class="btn btn-sm btn-muted" @onclick="() => _showDeleteConfirm = false" disabled="@_deleteInProgress">Cancel</button>
+        <button class="btn btn-sm btn-muted" @onclick="() => _showDeleteConfirm = false" disabled="@_deleteInProgress">@L["Btn_Cancel"]</button>
     </div>
 }
 
 @if (_queue is null)
 {
-    <p>Queue not found.</p>
+    <p>@L["QDetail_NotFound"]</p>
 }
 else
 {
     <div class="stats-bar">
-        <div class="stat-item"><strong>@_queue.Max</strong> Max</div>
-        <div class="stat-item"><strong>@_queue.Strategy</strong> Strategy</div>
-        <div class="stat-item"><strong>@_queue.Calls</strong> Calls</div>
-        <div class="stat-item"><strong>@FormatSeconds(_queue.HoldTime)</strong> Hold</div>
-        <div class="stat-item"><strong>@FormatSeconds(_queue.TalkTime)</strong> Talk</div>
-        <div class="stat-item"><strong>@_queue.Completed</strong> Done</div>
-        <div class="stat-item"><strong>@_queue.Abandoned</strong> Dropped</div>
+        <div class="stat-item"><strong>@_queue.Max</strong> @L["QDetail_Max"]</div>
+        <div class="stat-item"><strong>@_queue.Strategy</strong> @L["QDetail_Strategy"]</div>
+        <div class="stat-item"><strong>@_queue.Calls</strong> @L["QDetail_Calls"]</div>
+        <div class="stat-item"><strong>@FormatSeconds(_queue.HoldTime)</strong> @L["QDetail_Hold"]</div>
+        <div class="stat-item"><strong>@FormatSeconds(_queue.TalkTime)</strong> @L["QDetail_Talk"]</div>
+        <div class="stat-item"><strong>@_queue.Completed</strong> @L["Queues_Done"]</div>
+        <div class="stat-item"><strong>@_queue.Abandoned</strong> @L["Queues_Dropped"]</div>
     </div>
 
     <div class="form-section">
         <div class="page-header-row">
-            <h3>Configuration</h3>
+            <h3>@L["QDetail_Configuration"]</h3>
             @if (_queueConfig is not null)
             {
-                <a href="/queue-config/@ServerId/@_queueConfig.Id" class="btn btn-sm btn-blue">Edit Config</a>
+                <a href="/queue-config/@ServerId/@_queueConfig.Id" class="btn btn-sm btn-blue">@L["QDetail_EditConfig"]</a>
             }
             else
             {
-                <a href="/queue-config/@ServerId/new?name=@QueueName" class="btn btn-sm btn-green">Configure</a>
+                <a href="/queue-config/@ServerId/new?name=@QueueName" class="btn btn-sm btn-green">@L["QDetail_Configure"]</a>
             }
         </div>
         @if (_queueConfig is not null)
         {
             <div class="stats-bar">
-                <div class="stat-item"><strong>@_queueConfig.Strategy</strong> Strategy</div>
+                <div class="stat-item"><strong>@_queueConfig.Strategy</strong> @L["QDetail_Strategy"]</div>
                 <div class="stat-item"><strong>@_queueConfig.Timeout</strong>s Timeout</div>
                 <div class="stat-item"><strong>@_queueConfig.Retry</strong>s Retry</div>
-                <div class="stat-item"><strong>@(_queueConfig.MaxLen == 0 ? "∞" : _queueConfig.MaxLen)</strong> Max</div>
+                <div class="stat-item"><strong>@(_queueConfig.MaxLen == 0 ? "∞" : _queueConfig.MaxLen)</strong> @L["QDetail_Max"]</div>
                 <div class="stat-item"><strong>@_queueConfig.WrapUpTime</strong>s Wrap-up</div>
                 <div class="stat-item"><strong>@_queueConfig.ServiceLevel</strong>s SLA</div>
                 <div class="stat-item"><strong>@_queueConfig.MusicOnHold</strong> MOH</div>
-                <div class="stat-item"><strong>@(_queueConfig.Enabled ? "Yes" : "No")</strong> Enabled</div>
+                <div class="stat-item"><strong>@(_queueConfig.Enabled ? L["Lbl_Yes"] : L["Lbl_No"])</strong> @L["Lbl_Enabled"]</div>
             </div>
         }
         else
         {
-            <p class="text-muted">Not configured in database. Click "Configure" to set up this queue.</p>
+            <p class="text-muted">@L["QDetail_NotConfigured"]</p>
         }
     </div>
 
-    <h3>Agents (@_queue.MemberCount)</h3>
+    <h3>@L["QDetail_AgentsSection"] (@_queue.MemberCount)</h3>
     <div class="card-grid">
         @foreach (var member in _queue.Members.Values)
         {
@@ -93,8 +94,8 @@ else
                 </div>
                 <div class="agent-card-body">
                     <div>@member.Interface</div>
-                    <div>Status: @member.Status</div>
-                    <div>Calls: @member.CallsTaken | Penalty: @member.Penalty</div>
+                    <div>@L["QDetail_AgentStatus"]: @member.Status</div>
+                    <div>@L["QDetail_AgentCalls"]: @member.CallsTaken | @L["QDetail_AgentPenalty"]: @member.Penalty</div>
                     @if (member.Paused)
                     {
                         <div class="badge badge-yellow">Paused @(member.PausedReason is not null ? $"— {member.PausedReason}" : "")</div>
@@ -110,28 +111,28 @@ else
                 <div class="agent-card-actions">
                     @if (member.Paused)
                     {
-                        <button class="btn btn-sm btn-green" @onclick="() => TogglePause(member, false)">Unpause</button>
+                        <button class="btn btn-sm btn-green" @onclick="() => TogglePause(member, false)">@L["QDetail_Unpause"]</button>
                     }
                     else
                     {
-                        <button class="btn btn-sm btn-yellow" @onclick="() => TogglePause(member, true)">Pause</button>
+                        <button class="btn btn-sm btn-yellow" @onclick="() => TogglePause(member, true)">@L["QDetail_Pause"]</button>
                     }
-                    <button class="btn btn-sm btn-red" @onclick="() => RemoveMember(member)">Remove</button>
+                    <button class="btn btn-sm btn-red" @onclick="() => RemoveMember(member)">@L["Btn_Remove"]</button>
                 </div>
             </div>
         }
     </div>
 
-    <h3>Callers Waiting (@_queue.EntryCount)</h3>
+    <h3>@L["QDetail_CallersWaiting"] (@_queue.EntryCount)</h3>
     @if (_queue.EntryCount > 0)
     {
         <table class="data-table">
             <thead>
                 <tr>
-                    <th>Pos</th>
-                    <th>Caller ID</th>
-                    <th>Channel</th>
-                    <th>Wait Time</th>
+                    <th>@L["Col_Pos"]</th>
+                    <th>@L["Col_CallerID"]</th>
+                    <th>@L["Col_Channel"]</th>
+                    <th>@L["Col_WaitTime"]</th>
                     <th></th>
                 </tr>
             </thead>
@@ -147,7 +148,7 @@ else
                         <td>
                             @if (callerCall is not null)
                             {
-                                <a href="/calls/@Uri.EscapeDataString(callerCall.CallId)" class="badge badge-blue">View Call</a>
+                                <a href="/calls/@Uri.EscapeDataString(callerCall.CallId)" class="badge badge-blue">@L["QDetail_ViewCall"]</a>
                             }
                         </td>
                     </tr>
@@ -157,15 +158,15 @@ else
     }
     else
     {
-        <p class="text-muted">No callers waiting.</p>
+        <p class="text-muted">@L["QDetail_NoCallers"]</p>
     }
 
-    <h3>Add Member</h3>
+    <h3>@L["QDetail_AddMember"]</h3>
     <div class="inline-form">
         <input @bind="_addInterface" placeholder="PJSIP/3000" class="input" />
         <input @bind="_addMemberName" placeholder="Agent Name" class="input" />
         <input @bind="_addPenalty" type="number" placeholder="Penalty" class="input input-sm" />
-        <button class="btn btn-blue" @onclick="AddMember">Add</button>
+        <button class="btn btn-blue" @onclick="AddMember">@L["Btn_Add"]</button>
     </div>
     @if (_actionMessage is not null)
     {

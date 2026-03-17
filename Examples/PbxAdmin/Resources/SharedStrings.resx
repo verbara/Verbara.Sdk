@@ -210,4 +210,297 @@
   <data name="Queues_Configured" xml:space="preserve"><value>Configured</value></data>
   <data name="Queues_Done" xml:space="preserve"><value>Done</value></data>
   <data name="Queues_Dropped" xml:space="preserve"><value>Dropped</value></data>
+
+  <!-- Extensions Page -->
+  <data name="Ext_Title" xml:space="preserve"><value>Extensions — Asterisk PBX Admin</value></data>
+  <data name="Ext_Heading" xml:space="preserve"><value>Extensions</value></data>
+  <data name="Ext_NewExt" xml:space="preserve"><value>New Extension</value></data>
+  <data name="Ext_Total" xml:space="preserve"><value>Total</value></data>
+  <data name="Ext_Registered" xml:space="preserve"><value>Registered</value></data>
+  <data name="Ext_Unregistered" xml:space="preserve"><value>Unregistered</value></data>
+  <data name="Ext_WithVoicemail" xml:space="preserve"><value>With Voicemail</value></data>
+  <data name="Ext_ConfigBackend" xml:space="preserve"><value>Config backend:</value></data>
+  <data name="Ext_Search" xml:space="preserve"><value>Search by name or number...</value></data>
+  <data name="Ext_DeleteTitle" xml:space="preserve"><value>Delete Extension</value></data>
+  <data name="Ext_DeleteConfirm" xml:space="preserve"><value>Are you sure you want to delete extension</value></data>
+  <data name="Ext_CannotUndo" xml:space="preserve"><value>This action cannot be undone.</value></data>
+  <data name="Ext_Detail" xml:space="preserve"><value>Detail</value></data>
+  <data name="Lbl_Tech" xml:space="preserve"><value>Tech:</value></data>
+  <data name="Lbl_StatusFilter" xml:space="preserve"><value>Status:</value></data>
+  <data name="Lbl_All" xml:space="preserve"><value>All</value></data>
+  <data name="Lbl_Unreachable" xml:space="preserve"><value>Unreachable</value></data>
+
+  <!-- Extension Edit Page -->
+  <data name="ExtEdit_NewTitle" xml:space="preserve"><value>New Extension — Asterisk PBX Admin</value></data>
+  <data name="ExtEdit_EditTitle" xml:space="preserve"><value>Edit Extension — Asterisk PBX Admin</value></data>
+  <data name="ExtEdit_BackToList" xml:space="preserve"><value>Back to Extensions</value></data>
+  <data name="ExtEdit_New" xml:space="preserve"><value>New Extension</value></data>
+  <data name="ExtEdit_Edit" xml:space="preserve"><value>Edit Extension:</value></data>
+  <data name="ExtEdit_Identity" xml:space="preserve"><value>Identity</value></data>
+  <data name="ExtEdit_ExtNumber" xml:space="preserve"><value>Extension Number</value></data>
+  <data name="ExtEdit_Range" xml:space="preserve"><value>Range:</value></data>
+  <data name="ExtEdit_DisplayName" xml:space="preserve"><value>Display Name</value></data>
+  <data name="ExtEdit_Technology" xml:space="preserve"><value>Technology</value></data>
+  <data name="ExtEdit_Auth" xml:space="preserve"><value>Authentication</value></data>
+  <data name="ExtEdit_Password" xml:space="preserve"><value>Password (min 8 characters)</value></data>
+  <data name="ExtEdit_Generate" xml:space="preserve"><value>Generate</value></data>
+  <data name="ExtEdit_ChangePassword" xml:space="preserve"><value>Change Password</value></data>
+  <data name="ExtEdit_Dialplan" xml:space="preserve"><value>Dialplan</value></data>
+  <data name="ExtEdit_CallGroup" xml:space="preserve"><value>Call Group</value></data>
+  <data name="ExtEdit_PickupGroup" xml:space="preserve"><value>Pickup Group</value></data>
+  <data name="ExtEdit_MediaTransport" xml:space="preserve"><value>Media &amp; Transport</value></data>
+  <data name="ExtEdit_Codecs" xml:space="preserve"><value>Codecs</value></data>
+  <data name="ExtEdit_DtmfMode" xml:space="preserve"><value>DTMF Mode</value></data>
+  <data name="ExtEdit_Transport" xml:space="preserve"><value>Transport</value></data>
+  <data name="ExtEdit_NatOptions" xml:space="preserve"><value>NAT Options</value></data>
+  <data name="ExtEdit_ForceRport" xml:space="preserve"><value>Force rport</value></data>
+  <data name="ExtEdit_DirectMedia" xml:space="preserve"><value>Direct media</value></data>
+  <data name="ExtEdit_Voicemail" xml:space="preserve"><value>Voicemail</value></data>
+  <data name="ExtEdit_EnableVoicemail" xml:space="preserve"><value>Enable Voicemail</value></data>
+  <data name="ExtEdit_Pin" xml:space="preserve"><value>PIN (min 4 digits)</value></data>
+  <data name="ExtEdit_Email" xml:space="preserve"><value>Email</value></data>
+  <data name="ExtEdit_MaxMessages" xml:space="preserve"><value>Max Messages</value></data>
+  <data name="ExtEdit_CallFeatures" xml:space="preserve"><value>Call Features</value></data>
+  <data name="ExtEdit_DND" xml:space="preserve"><value>Do Not Disturb</value></data>
+  <data name="ExtEdit_CFUnconditional" xml:space="preserve"><value>CF Unconditional</value></data>
+  <data name="ExtEdit_CFBusy" xml:space="preserve"><value>CF Busy</value></data>
+  <data name="ExtEdit_CFNoAnswer" xml:space="preserve"><value>CF No Answer</value></data>
+  <data name="ExtEdit_DestNumber" xml:space="preserve"><value>Destination number</value></data>
+
+  <!-- Extension Detail Page -->
+  <data name="ExtDetail_BackToList" xml:space="preserve"><value>Back to Extensions</value></data>
+  <data name="ExtDetail_NotFound" xml:space="preserve"><value>Extension not found.</value></data>
+  <data name="ExtDetail_RegDetails" xml:space="preserve"><value>Registration Details</value></data>
+  <data name="ExtDetail_IpAddress" xml:space="preserve"><value>IP Address</value></data>
+  <data name="ExtDetail_ContactUri" xml:space="preserve"><value>Contact URI</value></data>
+  <data name="ExtDetail_UserAgent" xml:space="preserve"><value>User Agent</value></data>
+  <data name="ExtDetail_Roundtrip" xml:space="preserve"><value>Roundtrip</value></data>
+  <data name="ExtDetail_Features" xml:space="preserve"><value>Features</value></data>
+  <data name="ExtDetail_FeaturesSaved" xml:space="preserve"><value>Features saved.</value></data>
+  <data name="ExtDetail_Messages" xml:space="preserve"><value>Messages</value></data>
+  <data name="ExtDetail_RawConfig" xml:space="preserve"><value>Raw Configuration (pjsip.conf)</value></data>
+  <data name="Lbl_Disabled" xml:space="preserve"><value>Disabled</value></data>
+  <data name="Lbl_Collapse" xml:space="preserve"><value>collapse</value></data>
+  <data name="Lbl_Expand" xml:space="preserve"><value>expand</value></data>
+
+  <!-- Trunks Page -->
+  <data name="Trunk_Title" xml:space="preserve"><value>Trunks — Asterisk PBX Admin</value></data>
+  <data name="Trunk_Heading" xml:space="preserve"><value>Trunks</value></data>
+  <data name="Trunk_NewTrunk" xml:space="preserve"><value>New Trunk</value></data>
+  <data name="Trunk_TotalCalls" xml:space="preserve"><value>Total Calls</value></data>
+  <data name="Trunk_TotalTrunks" xml:space="preserve"><value>Total Trunks</value></data>
+  <data name="Trunk_Unknown" xml:space="preserve"><value>Unknown</value></data>
+  <data name="Trunk_Host" xml:space="preserve"><value>Host:</value></data>
+  <data name="Trunk_Codecs" xml:space="preserve"><value>Codecs:</value></data>
+  <data name="Trunk_CallCount" xml:space="preserve"><value>Calls:</value></data>
+  <data name="Trunk_DeleteTitle" xml:space="preserve"><value>Delete Trunk</value></data>
+  <data name="Trunk_DeleteConfirm" xml:space="preserve"><value>Are you sure you want to delete trunk</value></data>
+
+  <!-- Trunk Edit Page -->
+  <data name="TrunkEdit_NewTitle" xml:space="preserve"><value>New Trunk — Asterisk PBX Admin</value></data>
+  <data name="TrunkEdit_EditTitle" xml:space="preserve"><value>Edit Trunk — Asterisk PBX Admin</value></data>
+  <data name="TrunkEdit_BackToList" xml:space="preserve"><value>Back to Trunks</value></data>
+  <data name="TrunkEdit_New" xml:space="preserve"><value>New Trunk</value></data>
+  <data name="TrunkEdit_Edit" xml:space="preserve"><value>Edit Trunk:</value></data>
+  <data name="TrunkEdit_Connection" xml:space="preserve"><value>Connection</value></data>
+  <data name="TrunkEdit_Port" xml:space="preserve"><value>Port</value></data>
+  <data name="TrunkEdit_MaxChannels" xml:space="preserve"><value>Max Channels (0 = unlimited)</value></data>
+  <data name="TrunkEdit_Username" xml:space="preserve"><value>Username</value></data>
+  <data name="TrunkEdit_Secret" xml:space="preserve"><value>Secret</value></data>
+  <data name="TrunkEdit_AuthType" xml:space="preserve"><value>Auth Type</value></data>
+  <data name="TrunkEdit_Registration" xml:space="preserve"><value>Registration</value></data>
+  <data name="TrunkEdit_EnableReg" xml:space="preserve"><value>Enable outbound registration</value></data>
+  <data name="TrunkEdit_Advanced" xml:space="preserve"><value>Advanced</value></data>
+  <data name="TrunkEdit_QualifyFreq" xml:space="preserve"><value>Qualify Frequency (seconds)</value></data>
+  <data name="TrunkEdit_Comedia" xml:space="preserve"><value>Comedia (rewrite contact)</value></data>
+  <data name="TrunkEdit_CallerIdNum" xml:space="preserve"><value>Caller ID Number</value></data>
+  <data name="TrunkEdit_CallerIdName" xml:space="preserve"><value>Caller ID Name</value></data>
+  <data name="TrunkEdit_Notes" xml:space="preserve"><value>Notes</value></data>
+
+  <!-- Trunk Detail Page -->
+  <data name="TrunkDetail_BackToList" xml:space="preserve"><value>Back to Trunks</value></data>
+  <data name="TrunkDetail_NotFound" xml:space="preserve"><value>Trunk not found.</value></data>
+  <data name="TrunkDetail_ActiveCalls" xml:space="preserve"><value>Active Calls:</value></data>
+  <data name="TrunkDetail_Qualify" xml:space="preserve"><value>Qualify:</value></data>
+
+  <!-- Routes Page -->
+  <data name="Routes_Title" xml:space="preserve"><value>Routes — Asterisk PBX Admin</value></data>
+  <data name="Routes_Heading" xml:space="preserve"><value>Routes</value></data>
+  <data name="Routes_Inbound" xml:space="preserve"><value>Inbound Routes</value></data>
+  <data name="Routes_Outbound" xml:space="preserve"><value>Outbound Routes</value></data>
+  <data name="Routes_NewInbound" xml:space="preserve"><value>New Inbound Route</value></data>
+  <data name="Routes_NewOutbound" xml:space="preserve"><value>New Outbound Route</value></data>
+  <data name="Routes_DeleteTitle" xml:space="preserve"><value>Delete Route</value></data>
+  <data name="Routes_DeleteConfirm" xml:space="preserve"><value>Are you sure you want to delete route</value></data>
+  <data name="Col_Priority" xml:space="preserve"><value>Priority</value></data>
+  <data name="Col_DIDPattern" xml:space="preserve"><value>DID Pattern</value></data>
+  <data name="Col_DialPattern" xml:space="preserve"><value>Dial Pattern</value></data>
+  <data name="Col_Trunks" xml:space="preserve"><value>Trunks</value></data>
+  <data name="Col_PrependPrefix" xml:space="preserve"><value>Prepend/Prefix</value></data>
+
+  <!-- Route Edit Page -->
+  <data name="RouteEdit_NewInbound" xml:space="preserve"><value>New Inbound Route — Asterisk PBX Admin</value></data>
+  <data name="RouteEdit_NewOutbound" xml:space="preserve"><value>New Outbound Route — Asterisk PBX Admin</value></data>
+  <data name="RouteEdit_EditInbound" xml:space="preserve"><value>Edit Inbound Route — Asterisk PBX Admin</value></data>
+  <data name="RouteEdit_EditOutbound" xml:space="preserve"><value>Edit Outbound Route — Asterisk PBX Admin</value></data>
+  <data name="RouteEdit_BackToList" xml:space="preserve"><value>Back to Routes</value></data>
+  <data name="RouteEdit_RouteDetails" xml:space="preserve"><value>Route Details</value></data>
+  <data name="RouteEdit_DIDPattern" xml:space="preserve"><value>DID Pattern</value></data>
+  <data name="RouteEdit_DIDHint" xml:space="preserve"><value>Exact number or Asterisk pattern (e.g. _555NXXXXXX)</value></data>
+  <data name="RouteEdit_DialManip" xml:space="preserve"><value>Dial Manipulation</value></data>
+  <data name="RouteEdit_Prepend" xml:space="preserve"><value>Prepend</value></data>
+  <data name="RouteEdit_PrependHint" xml:space="preserve"><value>Optional digits to prepend</value></data>
+  <data name="RouteEdit_Prefix" xml:space="preserve"><value>Prefix</value></data>
+  <data name="RouteEdit_PrefixHint" xml:space="preserve"><value>Optional prefix to strip</value></data>
+  <data name="RouteEdit_TrunksOrder" xml:space="preserve"><value>Trunks (failover order)</value></data>
+  <data name="RouteEdit_SelectTrunk" xml:space="preserve"><value>-- Select trunk --</value></data>
+  <data name="RouteEdit_NoTrunks" xml:space="preserve"><value>No trunks added. At least one trunk is required.</value></data>
+  <data name="RouteEdit_Options" xml:space="preserve"><value>Options</value></data>
+  <data name="Btn_Up" xml:space="preserve"><value>Up</value></data>
+  <data name="Btn_Down" xml:space="preserve"><value>Down</value></data>
+  <data name="Lbl_Destination" xml:space="preserve"><value>Destination</value></data>
+  <data name="Lbl_Target" xml:space="preserve"><value>Target</value></data>
+  <data name="Lbl_SelectType" xml:space="preserve"><value>-- Select --</value></data>
+  <data name="Lbl_Extension" xml:space="preserve"><value>Extension</value></data>
+  <data name="Lbl_Queue" xml:space="preserve"><value>Queue</value></data>
+  <data name="Lbl_TimeCondition" xml:space="preserve"><value>Time Condition</value></data>
+  <data name="Lbl_Notes" xml:space="preserve"><value>Notes</value></data>
+
+  <!-- IVR Menus Page -->
+  <data name="Ivr_Title" xml:space="preserve"><value>IVR Menus — Asterisk PBX Admin</value></data>
+  <data name="Ivr_Heading" xml:space="preserve"><value>IVR Menus</value></data>
+  <data name="Ivr_NewIvr" xml:space="preserve"><value>+ New IVR</value></data>
+  <data name="Ivr_NoMenus" xml:space="preserve"><value>No IVR menus configured. Click "New IVR" to create one.</value></data>
+  <data name="Ivr_Depth" xml:space="preserve"><value>Depth</value></data>
+  <data name="Ivr_NameLabel" xml:space="preserve"><value>Name:</value></data>
+  <data name="Ivr_GreetingLabel" xml:space="preserve"><value>Greeting:</value></data>
+  <data name="Ivr_OptionsLabel" xml:space="preserve"><value>Options:</value></data>
+  <data name="Ivr_SubMenusLabel" xml:space="preserve"><value>Sub-menus:</value></data>
+
+  <!-- IVR Edit Page -->
+  <data name="IvrEdit_NewTitle" xml:space="preserve"><value>New IVR — Asterisk PBX Admin</value></data>
+  <data name="IvrEdit_EditTitle" xml:space="preserve"><value>Edit IVR — Asterisk PBX Admin</value></data>
+  <data name="IvrEdit_Identity" xml:space="preserve"><value>Identity</value></data>
+  <data name="IvrEdit_NameHint" xml:space="preserve"><value>Alphanumeric + hyphens. Used in dialplan context name.</value></data>
+  <data name="IvrEdit_Label" xml:space="preserve"><value>Label</value></data>
+  <data name="IvrEdit_Audio" xml:space="preserve"><value>Audio</value></data>
+  <data name="IvrEdit_Greeting" xml:space="preserve"><value>Greeting</value></data>
+  <data name="IvrEdit_GreetingHint" xml:space="preserve"><value>Audio filename without extension, as Asterisk expects.</value></data>
+  <data name="IvrEdit_Behavior" xml:space="preserve"><value>Behavior</value></data>
+  <data name="IvrEdit_TimeoutSec" xml:space="preserve"><value>Timeout (seconds)</value></data>
+  <data name="IvrEdit_MaxRetries" xml:space="preserve"><value>Max Retries</value></data>
+  <data name="IvrEdit_DtmfOptions" xml:space="preserve"><value>DTMF Options</value></data>
+  <data name="IvrEdit_AddOption" xml:space="preserve"><value>+ Add Option</value></data>
+  <data name="IvrEdit_Fallbacks" xml:space="preserve"><value>Fallbacks</value></data>
+  <data name="IvrEdit_TimeoutDest" xml:space="preserve"><value>Timeout Destination</value></data>
+  <data name="IvrEdit_InvalidDest" xml:space="preserve"><value>Invalid Input Destination</value></data>
+  <data name="IvrEdit_NoneHangup" xml:space="preserve"><value>— None (Hangup) —</value></data>
+  <data name="IvrEdit_Structure" xml:space="preserve"><value>IVR Structure</value></data>
+  <data name="IvrEdit_Create" xml:space="preserve"><value>Create</value></data>
+  <data name="Col_Digit" xml:space="preserve"><value>Digit</value></data>
+  <data name="Col_Label" xml:space="preserve"><value>Label</value></data>
+  <data name="Lbl_IvrSubmenu" xml:space="preserve"><value>IVR Sub-menu</value></data>
+  <data name="Lbl_Voicemail" xml:space="preserve"><value>Voicemail</value></data>
+  <data name="Lbl_Hangup" xml:space="preserve"><value>Hangup</value></data>
+  <data name="Lbl_External" xml:space="preserve"><value>External</value></data>
+
+  <!-- Time Conditions Page -->
+  <data name="TC_Title" xml:space="preserve"><value>Time Conditions — Asterisk PBX Admin</value></data>
+  <data name="TC_Heading" xml:space="preserve"><value>Time Conditions</value></data>
+  <data name="TC_NewTC" xml:space="preserve"><value>New Time Condition</value></data>
+  <data name="TC_NoConditions" xml:space="preserve"><value>No time conditions configured.</value></data>
+  <data name="TC_DayRanges" xml:space="preserve"><value>day range(s)</value></data>
+  <data name="TC_Holidays" xml:space="preserve"><value>holiday(s)</value></data>
+  <data name="TC_ForceOpen" xml:space="preserve"><value>Force Open</value></data>
+  <data name="TC_ForceClosed" xml:space="preserve"><value>Force Closed</value></data>
+  <data name="TC_ResetAuto" xml:space="preserve"><value>Reset to Auto</value></data>
+  <data name="TC_DeleteTitle" xml:space="preserve"><value>Delete Time Condition</value></data>
+  <data name="TC_DeleteConfirm" xml:space="preserve"><value>Are you sure you want to delete</value></data>
+
+  <!-- Time Condition Edit Page -->
+  <data name="TCEdit_NewTitle" xml:space="preserve"><value>New Time Condition — Asterisk PBX Admin</value></data>
+  <data name="TCEdit_EditTitle" xml:space="preserve"><value>Edit Time Condition — Asterisk PBX Admin</value></data>
+  <data name="TCEdit_BackToList" xml:space="preserve"><value>Back to Time Conditions</value></data>
+  <data name="TCEdit_New" xml:space="preserve"><value>New Time Condition</value></data>
+  <data name="TCEdit_Edit" xml:space="preserve"><value>Edit Time Condition:</value></data>
+  <data name="TCEdit_NameHint" xml:space="preserve"><value>Will be used as dialplan context name. Alphanumeric and hyphens only.</value></data>
+  <data name="TCEdit_Schedule" xml:space="preserve"><value>Schedule</value></data>
+  <data name="Col_Day" xml:space="preserve"><value>Day</value></data>
+  <data name="Col_Enable" xml:space="preserve"><value>Enable</value></data>
+  <data name="Col_Start" xml:space="preserve"><value>Start</value></data>
+  <data name="Col_End" xml:space="preserve"><value>End</value></data>
+  <data name="TCEdit_HolidaysSection" xml:space="preserve"><value>Holidays</value></data>
+  <data name="Col_Month" xml:space="preserve"><value>Month</value></data>
+  <data name="Col_Recurring" xml:space="preserve"><value>Recurring</value></data>
+  <data name="TCEdit_AddHoliday" xml:space="preserve"><value>Add Holiday</value></data>
+  <data name="TCEdit_MatchDest" xml:space="preserve"><value>Match Destination (In Hours)</value></data>
+  <data name="TCEdit_NoMatchDest" xml:space="preserve"><value>No-Match Destination (After Hours)</value></data>
+
+  <!-- Queue Config Edit Page -->
+  <data name="QCfg_NewTitle" xml:space="preserve"><value>New Queue — Asterisk PBX Admin</value></data>
+  <data name="QCfg_EditTitle" xml:space="preserve"><value>Edit Queue — Asterisk PBX Admin</value></data>
+  <data name="QCfg_Identity" xml:space="preserve"><value>Identity</value></data>
+  <data name="QCfg_StrategyTiming" xml:space="preserve"><value>Strategy &amp; Timing</value></data>
+  <data name="QCfg_Strategy" xml:space="preserve"><value>Strategy</value></data>
+  <data name="QCfg_RingTimeout" xml:space="preserve"><value>Ring Timeout (secs)</value></data>
+  <data name="QCfg_Retry" xml:space="preserve"><value>Retry (secs)</value></data>
+  <data name="QCfg_Weight" xml:space="preserve"><value>Weight</value></data>
+  <data name="QCfg_Capacity" xml:space="preserve"><value>Capacity</value></data>
+  <data name="QCfg_MaxCallers" xml:space="preserve"><value>Max Callers (0=unlimited)</value></data>
+  <data name="QCfg_WrapupTime" xml:space="preserve"><value>Wrap-up Time (secs)</value></data>
+  <data name="QCfg_ServiceLevel" xml:space="preserve"><value>Service Level (secs)</value></data>
+  <data name="QCfg_RingInUse" xml:space="preserve"><value>Ring In Use</value></data>
+  <data name="QCfg_MusicJoinLeave" xml:space="preserve"><value>Music &amp; Join/Leave</value></data>
+  <data name="QCfg_MohClass" xml:space="preserve"><value>Music on Hold Class</value></data>
+  <data name="QCfg_JoinEmpty" xml:space="preserve"><value>Join Empty</value></data>
+  <data name="QCfg_LeaveEmpty" xml:space="preserve"><value>Leave When Empty</value></data>
+  <data name="QCfg_Strict" xml:space="preserve"><value>Strict</value></data>
+  <data name="QCfg_Loose" xml:space="preserve"><value>Loose</value></data>
+  <data name="QCfg_Announcements" xml:space="preserve"><value>Announcements</value></data>
+  <data name="QCfg_AnnounceFreq" xml:space="preserve"><value>Announce Frequency (secs, 0=off)</value></data>
+  <data name="QCfg_AnnounceHold" xml:space="preserve"><value>Announce Hold Time</value></data>
+  <data name="QCfg_AnnouncePosition" xml:space="preserve"><value>Announce Position</value></data>
+  <data name="QCfg_Once" xml:space="preserve"><value>Once</value></data>
+  <data name="QCfg_PeriodicFile" xml:space="preserve"><value>Periodic Announce File</value></data>
+  <data name="QCfg_PeriodicFreq" xml:space="preserve"><value>Periodic Announce Frequency (secs)</value></data>
+  <data name="QCfg_CustomPrompts" xml:space="preserve"><value>Custom Prompts</value></data>
+  <data name="QCfg_YouAreNext" xml:space="preserve"><value>You Are Next</value></data>
+  <data name="QCfg_ThereAre" xml:space="preserve"><value>There Are</value></data>
+  <data name="QCfg_CallsWaiting" xml:space="preserve"><value>Calls Waiting</value></data>
+  <data name="QCfg_StaticMembers" xml:space="preserve"><value>Static Members</value></data>
+  <data name="Col_Interface" xml:space="preserve"><value>Interface</value></data>
+  <data name="Col_StateInterface" xml:space="preserve"><value>State Interface</value></data>
+  <data name="Col_Penalty" xml:space="preserve"><value>Penalty</value></data>
+  <data name="Col_Paused" xml:space="preserve"><value>Paused</value></data>
+  <data name="QCfg_DeleteQueue" xml:space="preserve"><value>Delete queue</value></data>
+  <data name="QCfg_DeleteWarn" xml:space="preserve"><value>This cannot be undone.</value></data>
+  <data name="Btn_Confirm" xml:space="preserve"><value>Confirm</value></data>
+
+  <!-- Queue Detail Page -->
+  <data name="QDetail_DeleteQueue" xml:space="preserve"><value>Delete Queue</value></data>
+  <data name="QDetail_DeleteConfirm" xml:space="preserve"><value>and all its members? This cannot be undone.</value></data>
+  <data name="QDetail_ConfirmDelete" xml:space="preserve"><value>Confirm Delete</value></data>
+  <data name="QDetail_Deleting" xml:space="preserve"><value>Deleting...</value></data>
+  <data name="QDetail_NotFound" xml:space="preserve"><value>Queue not found.</value></data>
+  <data name="QDetail_Max" xml:space="preserve"><value>Max</value></data>
+  <data name="QDetail_Strategy" xml:space="preserve"><value>Strategy</value></data>
+  <data name="QDetail_Calls" xml:space="preserve"><value>Calls</value></data>
+  <data name="QDetail_Hold" xml:space="preserve"><value>Hold</value></data>
+  <data name="QDetail_Talk" xml:space="preserve"><value>Talk</value></data>
+  <data name="QDetail_Configuration" xml:space="preserve"><value>Configuration</value></data>
+  <data name="QDetail_EditConfig" xml:space="preserve"><value>Edit Config</value></data>
+  <data name="QDetail_Configure" xml:space="preserve"><value>Configure</value></data>
+  <data name="QDetail_NotConfigured" xml:space="preserve"><value>Not configured in database. Click "Configure" to set up this queue.</value></data>
+  <data name="QDetail_AgentsSection" xml:space="preserve"><value>Agents</value></data>
+  <data name="QDetail_AgentStatus" xml:space="preserve"><value>Status:</value></data>
+  <data name="QDetail_AgentCalls" xml:space="preserve"><value>Calls:</value></data>
+  <data name="QDetail_AgentPenalty" xml:space="preserve"><value>Penalty:</value></data>
+  <data name="QDetail_Pause" xml:space="preserve"><value>Pause</value></data>
+  <data name="QDetail_Unpause" xml:space="preserve"><value>Unpause</value></data>
+  <data name="QDetail_CallersWaiting" xml:space="preserve"><value>Callers Waiting</value></data>
+  <data name="Col_Pos" xml:space="preserve"><value>Pos</value></data>
+  <data name="Col_WaitTime" xml:space="preserve"><value>Wait Time</value></data>
+  <data name="QDetail_NoCallers" xml:space="preserve"><value>No callers waiting.</value></data>
+  <data name="QDetail_ViewCall" xml:space="preserve"><value>View Call</value></data>
+  <data name="QDetail_AddMember" xml:space="preserve"><value>Add Member</value></data>
 </root>
