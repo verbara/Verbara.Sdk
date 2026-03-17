@@ -1,0 +1,352 @@
+@page "/ivr-menus/edit/new"
+@page "/ivr-menus/edit/{Id:int}"
+@using DashboardExample.Models
+@using DashboardExample.Services
+@inject IvrMenuService IvrSvc
+@inject ExtensionService ExtSvc
+@inject QueueConfigService QueueSvc
+@inject TrunkService TrunkSvc
+@inject SelectedServerService ServerSvc
+@inject NavigationManager Nav
+
+<PageTitle>@(_isNew ? "New IVR" : $"Edit {_config.Label}") — Asterisk Dashboard</PageTitle>
+
+<div class="page-header-row">
+    <h2>
+        <a href="/ivr-menus" class="back-link">IVR Menus</a> / @(_isNew ? "New IVR" : _config.Label)
+        @if (_serverId is not null)
+        {
+            <span class="badge badge-muted">@_serverId</span>
+        }
+    </h2>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+@if (_loading)
+{
+    <p>Loading...</p>
+}
+else
+{
+<div class="ivr-edit-layout">
+    <div class="ivr-edit-form">
+
+        <div class="form-section">
+            <h3>Identity</h3>
+            <div class="form-grid">
+                <div class="form-field">
+                    <label class="form-label">Name</label>
+                    <input class="input" @bind="_config.Name" readonly="@(!_isNew)" />
+                    <span class="text-muted">Alphanumeric + hyphens. Used in dialplan context name.</span>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Label</label>
+                    <input class="input" @bind="_config.Label" />
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Enabled</label>
+                    <input type="checkbox" @bind="_config.Enabled" />
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h3>Audio</h3>
+            <div class="form-grid">
+                <div class="form-field">
+                    <label class="form-label">Greeting</label>
+                    <div class="input-with-indicator">
+                        <input class="input" @bind="_config.Greeting" placeholder="e.g. welcome, press-1-for-sales" />
+                        <span class="indicator @_greetingIndicator" title="@_greetingWarning"></span>
+                    </div>
+                    <span class="text-muted">Audio filename without extension, as Asterisk expects.</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h3>Behavior</h3>
+            <div class="form-grid">
+                <div class="form-field">
+                    <label class="form-label">Timeout (seconds)</label>
+                    <input type="number" class="input" @bind="_config.Timeout" min="1" max="30" />
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Max Retries</label>
+                    <input type="number" class="input" @bind="_config.MaxRetries" min="1" max="10" />
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h3>DTMF Options</h3>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Digit</th>
+                        <th>Label</th>
+                        <th>Type</th>
+                        <th>Destination</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in _config.Items)
+                    {
+                        <tr>
+                            <td>
+                                <select class="input input-sm" @bind="item.Digit">
+                                    @foreach (var d in AvailableDigits(item.Digit))
+                                    {
+                                        <option value="@d">@d</option>
+                                    }
+                                </select>
+                            </td>
+                            <td><input class="input input-sm" @bind="item.Label" placeholder="Description" /></td>
+                            <td>
+                                <select class="input input-sm" @bind="item.DestType">
+                                    <option value="extension">Extension</option>
+                                    <option value="queue">Queue</option>
+                                    <option value="ivr">IVR Sub-menu</option>
+                                    <option value="voicemail">Voicemail</option>
+                                    <option value="hangup">Hangup</option>
+                                    <option value="external">External</option>
+                                </select>
+                            </td>
+                            <td>
+                                @if (item.DestType == "hangup")
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                                else if (item.DestType == "extension")
+                                {
+                                    <select class="input input-sm" @bind="item.DestTarget">
+                                        @foreach (var ext in _extensions)
+                                        {
+                                            <option value="@ext">@ext</option>
+                                        }
+                                    </select>
+                                }
+                                else if (item.DestType == "queue")
+                                {
+                                    <select class="input input-sm" @bind="item.DestTarget">
+                                        @foreach (var q in _queues)
+                                        {
+                                            <option value="@q">@q</option>
+                                        }
+                                    </select>
+                                }
+                                else if (item.DestType == "ivr")
+                                {
+                                    <select class="input input-sm" @bind="item.DestTarget">
+                                        @foreach (var ivr in _ivrMenuNames.Where(n => n != _config.Name))
+                                        {
+                                            <option value="@ivr">@ivr</option>
+                                        }
+                                    </select>
+                                }
+                                else
+                                {
+                                    <input class="input input-sm" @bind="item.DestTarget" placeholder="@(item.DestType == "voicemail" ? "Mailbox" : "Number")" />
+                                }
+                            </td>
+                            <td><button class="btn btn-sm btn-danger" @onclick="() => RemoveItem(item)">×</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <button class="btn btn-sm" @onclick="AddItem">+ Add Option</button>
+        </div>
+
+        <div class="form-section">
+            <h3>Fallbacks</h3>
+            <div class="form-grid">
+                <div class="form-field">
+                    <label class="form-label">Timeout Destination</label>
+                    <div class="input-row">
+                        <select class="input" @bind="_config.TimeoutDestType">
+                            <option value="">— None (Hangup) —</option>
+                            <option value="extension">Extension</option>
+                            <option value="queue">Queue</option>
+                            <option value="ivr">IVR</option>
+                            <option value="voicemail">Voicemail</option>
+                        </select>
+                        <input class="input" @bind="_config.TimeoutDest" placeholder="Target" />
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Invalid Input Destination</label>
+                    <div class="input-row">
+                        <select class="input" @bind="_config.InvalidDestType">
+                            <option value="">— None (Hangup) —</option>
+                            <option value="extension">Extension</option>
+                            <option value="queue">Queue</option>
+                            <option value="ivr">IVR</option>
+                            <option value="voicemail">Voicemail</option>
+                        </select>
+                        <input class="input" @bind="_config.InvalidDest" placeholder="Target" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="form-field full-width">
+                <label class="form-label">Notes</label>
+                <textarea class="input" @bind="_config.Notes" rows="2"></textarea>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button class="btn btn-primary" @onclick="SaveAsync">@(_isNew ? "Create" : "Save")</button>
+            <a href="/ivr-menus" class="btn">Cancel</a>
+        </div>
+
+    </div>
+
+    @if (_tree is not null && _tree.Children.Count > 0)
+    {
+        <div class="ivr-tree-sidebar">
+            <h4>IVR Structure</h4>
+            <div class="ivr-tree">
+                @RenderTreeNode(_tree, true)
+            </div>
+        </div>
+    }
+</div>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    [SupplyParameterFromQuery] public int? Parent { get; set; }
+    [SupplyParameterFromQuery] public string? Digit { get; set; }
+
+    private IvrMenuConfig _config = new();
+    private IvrMenuTreeNode? _tree;
+    private bool _isNew;
+    private bool _loading = true;
+    private string? _error;
+    private string? _serverId;
+    private string _greetingIndicator = "indicator-gray";
+    private string? _greetingWarning = null;
+
+    private List<string> _extensions = [];
+    private List<string> _queues = [];
+    private List<string> _ivrMenuNames = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _serverId = ServerSvc.SelectedServerId;
+        if (_serverId is null) { _loading = false; return; }
+
+        _isNew = Id is null;
+
+        if (!_isNew)
+        {
+            var existing = await IvrSvc.GetMenuAsync(Id!.Value);
+            if (existing is null) { _error = "IVR menu not found"; _loading = false; return; }
+            _config = existing;
+            _tree = await IvrSvc.GetTreeAsync(Id!.Value);
+        }
+
+        await LoadReferenceDataAsync();
+        _loading = false;
+    }
+
+    private async Task LoadReferenceDataAsync()
+    {
+        if (_serverId is null) return;
+
+        var extensions = await ExtSvc.GetExtensionsAsync(_serverId);
+        _extensions = extensions.Select(e => e.Extension).OrderBy(e => e).ToList();
+
+        var queues = await QueueSvc.GetQueuesAsync(_serverId);
+        _queues = queues.Select(q => q.Name).OrderBy(q => q).ToList();
+
+        var allIvrMenus = await IvrSvc.GetAllMenuNamesAsync(_serverId);
+        _ivrMenuNames = allIvrMenus.OrderBy(n => n).ToList();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_serverId is null) return;
+        _error = null;
+
+        var (success, error) = _isNew
+            ? await IvrSvc.CreateMenuAsync(_serverId, _config)
+            : await IvrSvc.UpdateMenuAsync(_config);
+
+        if (success)
+        {
+            if (_isNew && Parent.HasValue && Digit is not null)
+            {
+                var parent = await IvrSvc.GetMenuAsync(Parent.Value);
+                if (parent is not null)
+                {
+                    var item = parent.Items.FirstOrDefault(i => i.Digit == Digit);
+                    if (item is not null)
+                    {
+                        item.DestType = "ivr";
+                        item.DestTarget = _config.Name;
+                        await IvrSvc.UpdateMenuAsync(parent);
+                    }
+                }
+            }
+            Nav.NavigateTo("/ivr-menus");
+        }
+        else
+        {
+            _error = error;
+        }
+    }
+
+    private void AddItem()
+    {
+        var available = AvailableDigits(null).FirstOrDefault();
+        if (available is not null)
+            _config.Items.Add(new IvrMenuItemConfig { Digit = available, DestType = "extension" });
+    }
+
+    private void RemoveItem(IvrMenuItemConfig item) => _config.Items.Remove(item);
+
+    private List<string> AvailableDigits(string? currentDigit)
+    {
+        var used = _config.Items.Select(i => i.Digit).Where(d => d != currentDigit).ToHashSet();
+        var all = new[] { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "*", "#" };
+        var available = all.Where(d => !used.Contains(d)).ToList();
+        if (currentDigit is not null && !available.Contains(currentDigit))
+            available.Insert(0, currentDigit);
+        return available;
+    }
+
+    private RenderFragment RenderTreeNode(IvrMenuTreeNode node, bool isCurrent) => __builder =>
+    {
+        <ul>
+            <li class="@(isCurrent ? "current" : "")">
+                @if (node.Digit is not null)
+                {
+                    <span class="tree-digit">@node.Digit</span>
+                }
+                @if (node.MenuId > 0 && !isCurrent)
+                {
+                    <a href="/ivr-menus/edit/@node.MenuId" class="tree-node">@node.Label</a>
+                }
+                else
+                {
+                    <span class="tree-node @(node.MenuId == 0 ? "tree-leaf" : "")">@node.Label</span>
+                }
+                @if (node.Children.Count > 0)
+                {
+                    @foreach (var child in node.Children)
+                    {
+                        @RenderTreeNode(child, false)
+                    }
+                }
+            </li>
+        </ul>
+    };
+}
