@@ -2904,3 +2904,243 @@ body {
 .input-row > * {
     flex: 1;
 }
+
+/* ============================================================
+   HELP SYSTEM
+   ============================================================ */
+
+/* --- Tier 1: HelpIcon tooltip --- */
+.help-tooltip-wrap {
+    position: relative;
+    display: inline-block;
+}
+
+.help-icon {
+    cursor: help;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    margin-left: 4px;
+    transition: color 0.15s;
+}
+
+.help-icon:hover {
+    color: var(--accent);
+}
+
+.help-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    background: var(--bg-raised);
+    border: 1px solid var(--border-accent);
+    border-radius: var(--radius);
+    padding: 0.6rem 0.8rem;
+    max-width: 280px;
+    min-width: 200px;
+    font-size: 0.78rem;
+    color: var(--text);
+    box-shadow: var(--shadow-lg);
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    line-height: 1.45;
+}
+
+.help-tooltip-title {
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.help-icon:hover ~ .help-tooltip,
+.help-tooltip.pinned {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* --- Tier 2: HelpPanel expandable --- */
+.help-panel-trigger {
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+}
+
+.help-panel-trigger:hover {
+    color: var(--accent);
+}
+
+.help-panel-arrow {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    transition: color 0.15s;
+}
+
+.help-panel-trigger:hover .help-panel-arrow {
+    color: var(--accent);
+}
+
+.help-panel-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+}
+
+.help-panel-content.expanded {
+    max-height: 500px;
+}
+
+.help-panel-inner {
+    padding: 0.5rem 0.75rem;
+    margin: 0.25rem 0 0.75rem;
+    border-left: 3px solid var(--accent);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+/* --- Tier 3: Glossary sidebar --- */
+.glossary-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+}
+
+.glossary-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.glossary-sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 320px;
+    height: 100vh;
+    background: var(--bg-card);
+    border-left: 1px solid var(--border);
+    transform: translateX(100%);
+    transition: transform 0.2s ease;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+}
+
+.glossary-sidebar.open {
+    transform: translateX(0);
+}
+
+.glossary-header {
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.glossary-title {
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.glossary-close {
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    background: none;
+    border: none;
+    padding: 0.25rem;
+    transition: color 0.15s;
+}
+
+.glossary-close:hover {
+    color: var(--text);
+}
+
+.glossary-search {
+    padding: 0.75rem 1rem;
+    flex-shrink: 0;
+}
+
+.glossary-search input {
+    width: 100%;
+    font-family: 'DM Sans', sans-serif;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.82rem;
+    background: var(--bg-input);
+    color: var(--text);
+    transition: all 0.12s;
+}
+
+.glossary-search input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+.glossary-entries {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 1rem 1rem;
+}
+
+.glossary-entry {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.glossary-entry:last-child {
+    border-bottom: none;
+}
+
+.glossary-entry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.25rem;
+}
+
+.glossary-term {
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 0.78rem;
+}
+
+.glossary-category {
+    font-size: 0.58rem;
+    color: var(--text-muted);
+    background: var(--bg-raised);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.glossary-definition {
+    color: var(--text);
+    font-size: 0.78rem;
+    margin: 0.3rem 0;
+    line-height: 1.45;
+}
+
+.glossary-tip {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-style: italic;
+    margin: 0;
+}
