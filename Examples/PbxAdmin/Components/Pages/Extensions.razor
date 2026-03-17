@@ -1,0 +1,275 @@
+@page "/extensions"
+@using PbxAdmin.Services
+@using PbxAdmin.Models
+@inject SelectedServerService ServerSvc
+@inject ExtensionService ExtSvc
+@inject IConfigProviderResolver ConfigResolver
+@inject ConfigOperationState ConfigOp
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>Extensions — Asterisk PBX Admin</PageTitle>
+
+<h2>Extensions</h2>
+@{
+    var activeServer = ServerSvc.SelectedServerId;
+    if (activeServer is not null)
+    {
+        var mode = ConfigResolver.GetConfigMode(activeServer);
+        var modeBadge = mode == ConfigMode.Realtime ? "badge-realtime" : "badge-file";
+        <p class="text-muted" style="margin-top: 0.25rem;">Config backend: <span class="badge @modeBadge">@mode</span></p>
+    }
+}
+
+<div class="kpi-grid kpi-grid-sm">
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@_extensions.Count</div>
+        <div class="kpi-label">Total</div>
+    </div>
+    <div class="kpi-card kpi-green">
+        <div class="kpi-value">@_extensions.Count(e => e.Status == ExtensionStatus.Registered)</div>
+        <div class="kpi-label">Registered</div>
+    </div>
+    <div class="kpi-card kpi-red">
+        <div class="kpi-value">@_extensions.Count(e => e.Status == ExtensionStatus.Unregistered)</div>
+        <div class="kpi-label">Unregistered</div>
+    </div>
+    <div class="kpi-card kpi-gray">
+        <div class="kpi-value">@_extensions.Count(e => e.VoicemailEnabled)</div>
+        <div class="kpi-label">With Voicemail</div>
+    </div>
+</div>
+
+<div class="chip-bar">
+    <span style="font-weight: 600; margin-right: 0.25rem;">Tech:</span>
+    <button class="chip @(_techFilter == "All" ? "chip-active" : "")" @onclick="@(() => SetTechFilter("All"))">All</button>
+    <button class="chip @(_techFilter == "PJSIP" ? "chip-active" : "")" @onclick="@(() => SetTechFilter("PJSIP"))">PJSIP</button>
+    <button class="chip @(_techFilter == "SIP" ? "chip-active" : "")" @onclick="@(() => SetTechFilter("SIP"))">SIP</button>
+    <button class="chip @(_techFilter == "IAX2" ? "chip-active" : "")" @onclick="@(() => SetTechFilter("IAX2"))">IAX2</button>
+    <span style="font-weight: 600; margin-left: 0.75rem; margin-right: 0.25rem;">Status:</span>
+    <button class="chip @(_statusFilter == "All" ? "chip-active" : "")" @onclick="@(() => SetStatusFilter("All"))">All</button>
+    <button class="chip @(_statusFilter == "Registered" ? "chip-active" : "")" @onclick="@(() => SetStatusFilter("Registered"))">Registered</button>
+    <button class="chip @(_statusFilter == "Unregistered" ? "chip-active" : "")" @onclick="@(() => SetStatusFilter("Unregistered"))">Unregistered</button>
+    <button class="chip @(_statusFilter == "Unreachable" ? "chip-active" : "")" @onclick="@(() => SetStatusFilter("Unreachable"))">Unreachable</button>
+</div>
+
+<div style="margin-bottom: 1rem; display: flex; gap: 0.5rem; align-items: center;">
+    <input type="text" placeholder="Search by name or number..." @bind="_searchFilter" @bind:event="oninput"
+           style="padding: 0.4rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--card-bg); color: var(--text);" />
+    <button class="btn btn-blue" @onclick="NavigateNew">New Extension</button>
+</div>
+
+<div class="card-grid">
+    @foreach (var ext in FilteredExtensions)
+    {
+        var statusClass = GetStatusClass(ext.Status);
+        var techBadge = GetTechBadge(ext.Technology);
+        <div class="trunk-card @statusClass">
+            <div class="trunk-card-header">
+                <span class="status-dot @GetDotClass(ext.Status)"></span>
+                <strong>@ext.Extension</strong>
+                @if (!string.IsNullOrEmpty(ext.Name))
+                {
+                    <span style="opacity: 0.7;">@ext.Name</span>
+                }
+                <span class="badge @techBadge">@ext.Technology</span>
+                <span class="badge badge-muted">@ext.Status</span>
+            </div>
+            <div class="trunk-card-body">
+                @if (!string.IsNullOrEmpty(ext.IpAddress))
+                {
+                    <div>IP: @ext.IpAddress</div>
+                }
+                @if (!string.IsNullOrEmpty(ext.UserAgent))
+                {
+                    <div>UA: @ext.UserAgent</div>
+                }
+                <div style="display: flex; gap: 0.35rem; margin-top: 0.25rem;">
+                    @if (ext.VoicemailEnabled)
+                    {
+                        <span title="Voicemail enabled">&#x1F4EC;</span>
+                    }
+                    @if (ext.DndEnabled)
+                    {
+                        <span title="Do Not Disturb">&#x1F507;</span>
+                    }
+                    @if (!string.IsNullOrEmpty(ext.CallForwardTo))
+                    {
+                        <span title="Call Forward to @ext.CallForwardTo">&#x21AA;&#xFE0F; @ext.CallForwardTo</span>
+                    }
+                </div>
+            </div>
+            <div class="trunk-card-actions">
+                <button class="btn btn-sm btn-blue" @onclick="() => NavigateDetail(ext)">Detail</button>
+                <button class="btn btn-sm btn-yellow" @onclick="() => NavigateEdit(ext)">Edit</button>
+                <button class="btn btn-sm btn-red" @onclick="() => ConfirmDelete(ext)">Delete</button>
+            </div>
+        </div>
+    }
+</div>
+
+@if (_showDeleteConfirm)
+{
+    <div class="confirm-overlay" @onclick="CancelDelete">
+        <div class="confirm-dialog" @onclick:stopPropagation="true">
+            <h4>Delete Extension</h4>
+            <p>Are you sure you want to delete extension <strong>@_deletingExtension?.Extension</strong>? This action cannot be undone.</p>
+            <div class="confirm-dialog-actions">
+                <button class="btn btn-sm" @onclick="CancelDelete">Cancel</button>
+                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">Delete</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_actionResult is not null)
+{
+    <p class="action-result">@_actionResult</p>
+}
+
+@code {
+    private Timer? _timer;
+    private string _techFilter = "All";
+    private string _statusFilter = "All";
+    private string _searchFilter = "";
+    private List<ExtensionViewModel> _extensions = [];
+    private bool _showDeleteConfirm;
+    private ExtensionViewModel? _deletingExtension;
+    private string? _actionResult;
+
+    private IEnumerable<ExtensionViewModel> FilteredExtensions
+    {
+        get
+        {
+            IEnumerable<ExtensionViewModel> result = _extensions;
+
+            if (_techFilter != "All")
+            {
+                var tech = _techFilter switch
+                {
+                    "PJSIP" => ExtensionTechnology.PjSip,
+                    "SIP" => ExtensionTechnology.Sip,
+                    "IAX2" => ExtensionTechnology.Iax2,
+                    _ => (ExtensionTechnology?)null
+                };
+                if (tech.HasValue)
+                    result = result.Where(e => e.Technology == tech.Value);
+            }
+
+            if (_statusFilter != "All")
+            {
+                var status = _statusFilter switch
+                {
+                    "Registered" => ExtensionStatus.Registered,
+                    "Unregistered" => ExtensionStatus.Unregistered,
+                    "Unreachable" => ExtensionStatus.Unreachable,
+                    _ => (ExtensionStatus?)null
+                };
+                if (status.HasValue)
+                    result = result.Where(e => e.Status == status.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(_searchFilter))
+            {
+                var search = _searchFilter.Trim();
+                result = result.Where(e =>
+                    e.Extension.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                    (e.Name is not null && e.Name.Contains(search, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            return result;
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _timer = new Timer(async _ =>
+        {
+            await LoadExtensions();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+    }
+
+    private async Task LoadExtensions()
+    {
+        try
+        {
+            var serverId = ServerSvc.SelectedServerId;
+            if (serverId is null) return;
+            _extensions = await ExtSvc.GetExtensionsAsync(serverId);
+        }
+        catch
+        {
+            // Silently handle errors during polling
+        }
+    }
+
+    private void SetTechFilter(string value) => _techFilter = value;
+    private void SetStatusFilter(string value) => _statusFilter = value;
+
+    private void NavigateNew() =>
+        Nav.NavigateTo($"/extensions/new?server={ServerSvc.SelectedServerId}");
+
+    private void NavigateDetail(ExtensionViewModel ext) =>
+        Nav.NavigateTo($"/extensions/{ServerSvc.SelectedServerId}/{ext.Extension}?tech={ext.Technology}");
+
+    private void NavigateEdit(ExtensionViewModel ext) =>
+        Nav.NavigateTo($"/extensions/edit/{ServerSvc.SelectedServerId}/{ext.Extension}?tech={ext.Technology}");
+
+    private void ConfirmDelete(ExtensionViewModel ext)
+    {
+        _deletingExtension = ext;
+        _showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        _showDeleteConfirm = false;
+        _deletingExtension = null;
+    }
+
+    private async Task ExecuteDelete()
+    {
+        if (_deletingExtension is null) return;
+
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        using var _ = ConfigOp.Begin("Deleting Extension", serverId, _deletingExtension.Extension);
+        var success = await ExtSvc.DeleteExtensionAsync(serverId, _deletingExtension.Extension, _deletingExtension.Technology);
+        _actionResult = success
+            ? $"Extension '{_deletingExtension.Extension}' deleted successfully."
+            : $"Failed to delete extension '{_deletingExtension.Extension}'.";
+
+        _showDeleteConfirm = false;
+        _deletingExtension = null;
+
+        await LoadExtensions();
+    }
+
+    private static string GetStatusClass(ExtensionStatus status) => status switch
+    {
+        ExtensionStatus.Registered => "trunk-registered",
+        ExtensionStatus.Unregistered => "trunk-unregistered",
+        ExtensionStatus.Unreachable => "trunk-unreachable",
+        _ => "trunk-unknown"
+    };
+
+    private static string GetDotClass(ExtensionStatus status) => status switch
+    {
+        ExtensionStatus.Registered => "dot-green",
+        ExtensionStatus.Unregistered => "dot-red",
+        ExtensionStatus.Unreachable => "dot-yellow",
+        _ => "dot-gray"
+    };
+
+    private static string GetTechBadge(ExtensionTechnology tech) => tech switch
+    {
+        ExtensionTechnology.PjSip => "badge-pjsip",
+        ExtensionTechnology.Sip => "badge-sip",
+        ExtensionTechnology.Iax2 => "badge-iax",
+        _ => "badge-muted"
+    };
+
+    public void Dispose() => _timer?.Dispose();
+}

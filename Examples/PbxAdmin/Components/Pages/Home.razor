@@ -1,0 +1,175 @@
+@page "/"
+@using PbxAdmin.Services
+@using Asterisk.Sdk.Live.Agents
+@inject SelectedServerService ServerSvc
+@inject CallFlowTracker CallTracker
+@implements IDisposable
+
+<PageTitle>Home — Asterisk PBX Admin</PageTitle>
+
+<h2>Dashboard</h2>
+
+<div class="kpi-grid">
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@_activeCalls</div>
+        <div class="kpi-label">Active Calls</div>
+    </div>
+    <div class="kpi-card kpi-purple">
+        <div class="kpi-value">@_queueCount</div>
+        <div class="kpi-label">Queues</div>
+    </div>
+    <div class="kpi-card @(_waitingCallers > 0 ? "kpi-red" : "kpi-gray")">
+        <div class="kpi-value">@_waitingCallers</div>
+        <div class="kpi-label">Waiting Callers</div>
+    </div>
+    <div class="kpi-card kpi-green">
+        <div class="kpi-value">@_availableAgents</div>
+        <div class="kpi-label">Available</div>
+    </div>
+    <div class="kpi-card kpi-red">
+        <div class="kpi-value">@_onCallAgents</div>
+        <div class="kpi-label">On Call</div>
+    </div>
+    <div class="kpi-card kpi-yellow">
+        <div class="kpi-value">@_pausedAgents</div>
+        <div class="kpi-label">Paused</div>
+    </div>
+</div>
+
+<h3>Call Flow Metrics</h3>
+<div class="kpi-grid kpi-grid-sm">
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@_callsTracked</div>
+        <div class="kpi-label">Calls Tracked</div>
+    </div>
+    <div class="kpi-card kpi-orange">
+        <div class="kpi-value">@_avgWaitTime</div>
+        <div class="kpi-label">Avg Wait</div>
+    </div>
+    <div class="kpi-card kpi-green">
+        <div class="kpi-value">@_avgTalkTime</div>
+        <div class="kpi-label">Avg Talk</div>
+    </div>
+    <div class="kpi-card kpi-red">
+        <div class="kpi-value">@_abandonRate</div>
+        <div class="kpi-label">Abandon %</div>
+    </div>
+</div>
+
+<h3>Queue Summary</h3>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Queue</th>
+            <th>Members</th>
+            <th>Waiting</th>
+            <th>Completed</th>
+            <th>Abandoned</th>
+            <th>Avg Hold</th>
+            <th>Avg Talk</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var (serverId, entry) in ServerSvc.GetServers())
+        {
+            foreach (var queue in entry.Server.Queues.Queues)
+            {
+                <tr>
+                    <td><a href="/queue/@serverId/@queue.Name">@queue.Name</a></td>
+                    <td>@queue.MemberCount</td>
+                    <td class="@(queue.EntryCount > 0 ? "text-red" : "")">@queue.EntryCount</td>
+                    <td>@queue.Completed</td>
+                    <td>@queue.Abandoned</td>
+                    <td>@FormatSeconds(queue.HoldTime)</td>
+                    <td>@FormatSeconds(queue.TalkTime)</td>
+                </tr>
+            }
+        }
+    </tbody>
+</table>
+
+@code {
+    private Timer? _timer;
+    private int _activeCalls, _queueCount, _waitingCallers;
+    private int _availableAgents, _onCallAgents, _pausedAgents;
+    private int _callsTracked;
+    private string _avgWaitTime = "—", _avgTalkTime = "—", _abandonRate = "—";
+
+    protected override void OnInitialized()
+    {
+        _timer = new Timer(_ => { Refresh(); InvokeAsync(StateHasChanged); },
+            null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+    }
+
+    private void Refresh()
+    {
+        var servers = ServerSvc.GetServers();
+        _activeCalls = servers.Sum(s => s.Value.Server.Channels.ChannelCount);
+        _queueCount = servers.Sum(s => s.Value.Server.Queues.QueueCount);
+        _waitingCallers = servers
+            .SelectMany(s => s.Value.Server.Queues.Queues)
+            .Sum(q => q.EntryCount);
+        _availableAgents = servers
+            .SelectMany(s => s.Value.Server.Agents.GetAgentsByState(AgentState.Available))
+            .Count();
+        _onCallAgents = servers
+            .SelectMany(s => s.Value.Server.Agents.GetAgentsByState(AgentState.OnCall))
+            .Count();
+        _pausedAgents = servers
+            .SelectMany(s => s.Value.Server.Agents.GetAgentsByState(AgentState.Paused))
+            .Count();
+
+        // Call flow metrics from CallFlowTracker — filtered by selected server
+        var serverId = ServerSvc.SelectedServerId;
+        var recentCalls = CallTracker.GetRecentCompleted(200)
+            .Where(c => c.ServerId == serverId)
+            .ToList();
+        _callsTracked = CallTracker.ActiveCalls.Count(c => c.ServerId == serverId) + recentCalls.Count;
+
+        var queueCalls = recentCalls.Where(c => c.QueueName is not null).ToList();
+        if (queueCalls.Count > 0)
+        {
+            var waitTimes = queueCalls
+                .Select(c =>
+                {
+                    var join = c.Events.FirstOrDefault(e => e.Type == CallFlowEventType.QueueJoin);
+                    var connect = c.Events.FirstOrDefault(e => e.Type == CallFlowEventType.AgentConnect);
+                    return join is not null && connect is not null ? (TimeSpan?)(connect.Timestamp - join.Timestamp) : null;
+                })
+                .Where(t => t.HasValue)
+                .Select(t => t!.Value)
+                .ToList();
+
+            _avgWaitTime = waitTimes.Count > 0
+                ? FormatSeconds((int)waitTimes.Average(t => t.TotalSeconds))
+                : "—";
+
+            var talkTimes = queueCalls
+                .Where(c => c.AgentName is not null)
+                .Select(c => c.Duration.TotalSeconds)
+                .ToList();
+            _avgTalkTime = talkTimes.Count > 0
+                ? FormatSeconds((int)talkTimes.Average())
+                : "—";
+
+            var abandoned = queueCalls.Count(c => c.AgentName is null);
+            var rate = (double)abandoned / queueCalls.Count * 100;
+            _abandonRate = $"{rate:F0}%";
+        }
+        else
+        {
+            _avgWaitTime = "—";
+            _avgTalkTime = "—";
+            _abandonRate = "—";
+        }
+    }
+
+    private static string FormatSeconds(int seconds)
+    {
+        var ts = TimeSpan.FromSeconds(seconds);
+        return ts.TotalMinutes >= 1 ? $"{(int)ts.TotalMinutes}m{ts.Seconds:D2}s" : $"{ts.Seconds}s";
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

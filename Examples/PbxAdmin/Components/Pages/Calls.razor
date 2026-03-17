@@ -1,0 +1,625 @@
+@page "/calls"
+@using PbxAdmin.Services
+@using Asterisk.Sdk.Ami.Actions
+@inject CallFlowTracker Tracker
+@inject SelectedServerService ServerSvc
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>Calls — Asterisk PBX Admin</PageTitle>
+
+<div class="calls-header">
+    <h2>Calls</h2>
+    <div class="view-toggle">
+        <button class="chip @(_viewMode == ViewMode.Kanban ? "chip-active" : "")" @onclick="() => _viewMode = ViewMode.Kanban" title="Kanban view — low concurrency">
+            <span class="view-toggle-icon">&#9638;&#9638;&#9638;</span> Kanban
+        </button>
+        <button class="chip @(_viewMode == ViewMode.Table ? "chip-active" : "")" @onclick="() => _viewMode = ViewMode.Table" title="Table view — high concurrency">
+            <span class="view-toggle-icon">&#9776;</span> Table
+        </button>
+        <button class="chip @(_viewMode == ViewMode.Matrix ? "chip-active" : "")" @onclick="() => _viewMode = ViewMode.Matrix" title="Matrix wallboard — supervisor overview">
+            <span class="view-toggle-icon">&#9641;&#9641;</span> Matrix
+        </button>
+    </div>
+</div>
+
+<div class="kpi-grid kpi-grid-sm">
+    <div class="kpi-card kpi-green">
+        <div class="kpi-value">@CountByState(CallFlowState.Connected)</div>
+        <div class="kpi-label">Connected</div>
+    </div>
+    <div class="kpi-card kpi-blue">
+        <div class="kpi-value">@CountByState(CallFlowState.Ringing)</div>
+        <div class="kpi-label">Ringing</div>
+    </div>
+    <div class="kpi-card kpi-yellow">
+        <div class="kpi-value">@CountByState(CallFlowState.Queued)</div>
+        <div class="kpi-label">Queued</div>
+    </div>
+    <div class="kpi-card kpi-orange">
+        <div class="kpi-value">@CountByState(CallFlowState.Hold)</div>
+        <div class="kpi-label">On Hold</div>
+    </div>
+    <div class="kpi-card kpi-gray">
+        <div class="kpi-value">@_recentCompleted</div>
+        <div class="kpi-label">Completed</div>
+    </div>
+</div>
+
+<div class="inline-form" style="margin:0.75rem 0">
+    <input @bind="_searchQuery" @bind:event="oninput" placeholder="Search: caller ID, agent, queue..." class="input" style="max-width:320px" />
+    @if (!string.IsNullOrEmpty(_searchQuery))
+    {
+        <button class="btn btn-sm btn-muted" @onclick='() => _searchQuery = ""'>Clear</button>
+    }
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_searchQuery))
+{
+    @* Search mode — flat grid regardless of view *@
+    @if (!_searchResults.Any())
+    {
+        <p class="text-muted">No calls match your search.</p>
+    }
+    else
+    {
+        <div class="card-grid">
+            @foreach (var call in _searchResults)
+            {
+                RenderCallCard(call);
+            }
+        </div>
+    }
+}
+else if (_viewMode == ViewMode.Kanban)
+{
+    @* ═══ KANBAN VIEW ═══ *@
+    <div class="kanban-board">
+        <div class="kanban-lane">
+            <div class="kanban-lane-header kanban-header-green">
+                <span class="kanban-lane-icon">&#9679;</span>
+                Connected
+                <span class="kanban-lane-count">@_connected.Count</span>
+            </div>
+            <div class="kanban-lane-body">
+                @if (_connected.Count == 0)
+                {
+                    <div class="kanban-empty">No active calls</div>
+                }
+                @foreach (var call in _connected)
+                {
+                    RenderCallCard(call);
+                }
+            </div>
+        </div>
+
+        <div class="kanban-lane">
+            <div class="kanban-lane-header kanban-header-blue">
+                <span class="kanban-lane-icon">&#9711;</span>
+                Ringing / Queued
+                <span class="kanban-lane-count">@_pending.Count</span>
+            </div>
+            <div class="kanban-lane-body">
+                @if (_pending.Count == 0)
+                {
+                    <div class="kanban-empty">No pending calls</div>
+                }
+                @foreach (var call in _pending)
+                {
+                    RenderCallCard(call);
+                }
+            </div>
+        </div>
+
+        <div class="kanban-lane">
+            <div class="kanban-lane-header kanban-header-gray">
+                <span class="kanban-lane-icon">&#9632;</span>
+                Completed
+                <span class="kanban-lane-count">@_fadingCompleted.Count</span>
+            </div>
+            <div class="kanban-lane-body">
+                @if (_fadingCompleted.Count == 0)
+                {
+                    <div class="kanban-empty">Completed calls appear here for 5s</div>
+                }
+                @foreach (var (call, remaining) in _fadingCompleted)
+                {
+                    RenderCompletedCard(call, remaining);
+                }
+            </div>
+        </div>
+    </div>
+}
+else if (_viewMode == ViewMode.Table)
+{
+    @* ═══ TABLE VIEW ═══ *@
+    @if (_allActive.Count == 0 && _fadingCompleted.Count == 0)
+    {
+        <p class="text-muted">No calls to display.</p>
+    }
+    else
+    {
+        @if (_allActive.Count > 0)
+        {
+            <div class="calls-table-wrap">
+                <table class="calls-table">
+                    <thead>
+                        <tr>
+                            <th class="col-state">State</th>
+                            <th class="col-caller">Caller</th>
+                            <th class="col-arrow"></th>
+                            <th class="col-dest">Destination</th>
+                            <th class="col-queue">Queue</th>
+                            <th class="col-tech">Tech</th>
+                            <th class="col-duration">Duration</th>
+                            <th class="col-events">Ev</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var call in _allActive)
+                        {
+                            var (borderClass, stateLabel, stateIcon) = GetCallStyle(call);
+                            <tr class="calls-table-row @borderClass" @onclick="() => NavigateToDetail(call.CallId)">
+                                <td><span class="call-state-badge @borderClass">@stateIcon @stateLabel</span></td>
+                                <td class="cell-caller">
+                                    <span class="cell-id">@(call.Caller?.CallerIdNum ?? "unknown")</span>
+                                    <span class="cell-channel text-muted">@ShortChannel(call.Caller?.Channel)</span>
+                                </td>
+                                <td class="cell-arrow">
+                                    @if (call.State == CallFlowState.Connected)
+                                    {
+                                        <span class="arrow-connected">&harr;</span>
+                                    }
+                                    else if (call.State == CallFlowState.Hold)
+                                    {
+                                        <span class="arrow-hold">||</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="arrow-dialing">&rarr;</span>
+                                    }
+                                </td>
+                                <td class="cell-dest">
+                                    @if (call.AgentName is not null)
+                                    {
+                                        <span class="cell-id">@call.AgentName</span>
+                                        <span class="cell-channel text-muted">@ShortChannel(call.AgentInterface)</span>
+                                    }
+                                    else if (call.Destination is not null)
+                                    {
+                                        <span class="cell-id">@(call.Destination.CallerIdNum ?? ShortChannel(call.Destination.Channel))</span>
+                                        <span class="cell-channel text-muted">@ShortChannel(call.Destination.Channel)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">...</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (call.QueueName is not null)
+                                    {
+                                        <span class="badge badge-muted">@call.QueueName</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (call.Caller?.Technology is not null)
+                                    {
+                                        <span class="badge @TechBadgeClass(call.Caller.Technology)">@call.Caller.Technology</span>
+                                    }
+                                </td>
+                                <td class="cell-duration">@FormatDuration(call.Duration)</td>
+                                <td class="cell-events text-muted">@call.Events.Count</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (_fadingCompleted.Count > 0)
+        {
+            <div class="completed-section">
+                <div class="completed-section-header">
+                    <span>Recently Completed</span>
+                    <span class="text-muted">@_fadingCompleted.Count</span>
+                </div>
+                <div class="card-grid">
+                    @foreach (var (call, remaining) in _fadingCompleted)
+                    {
+                        RenderCompletedCard(call, remaining);
+                    }
+                </div>
+            </div>
+        }
+    }
+}
+
+@* ═══ MATRIX VIEW ═══ *@
+else
+{
+    @if (_allActive.Count == 0)
+    {
+        <p class="text-muted">No active calls to display.</p>
+    }
+    else
+    {
+        <div class="call-matrix">
+            @foreach (var call in _allActive)
+            {
+                var (borderClass, stateLabel, stateIcon) = GetCallStyle(call);
+                var stateClass = call.State switch
+                {
+                    CallFlowState.Connected => "state-connected",
+                    CallFlowState.Ringing or CallFlowState.Dialing => "state-ringing",
+                    CallFlowState.Hold => "state-hold",
+                    CallFlowState.Queued => "state-queued",
+                    CallFlowState.Completed => "state-completed",
+                    _ => ""
+                };
+                <div class="matrix-card @stateClass">
+                    <div class="matrix-card-header">
+                        <span class="call-state-badge @borderClass">@stateIcon @stateLabel</span>
+                        <span class="call-duration">@FormatDuration(call.Duration)</span>
+                    </div>
+                    <div class="matrix-card-body" @onclick="() => NavigateToDetail(call.CallId)">
+                        <div class="matrix-flow">
+                            <span class="matrix-caller">@(call.Caller?.CallerIdNum ?? "unknown")</span>
+                            <span class="matrix-arrow">&rarr;</span>
+                            <span class="matrix-dest">
+                                @if (call.AgentName is not null)
+                                {
+                                    @call.AgentName
+                                }
+                                else if (call.Destination is not null)
+                                {
+                                    @(call.Destination.CallerIdNum ?? ShortChannel(call.Destination.Channel))
+                                }
+                                else
+                                {
+                                    <span class="text-muted">...</span>
+                                }
+                            </span>
+                        </div>
+                        @if (call.QueueName is not null)
+                        {
+                            <span class="matrix-queue-label">@call.QueueName</span>
+                        }
+                    </div>
+                    <div class="matrix-card-actions">
+                        <button class="matrix-action-btn" title="Hold / Park" @onclick="() => HoldCall(call)" @onclick:stopPropagation="true">
+                            &#9646;&#9646; Hold
+                        </button>
+                        <button class="matrix-action-btn" title="Transfer" @onclick="() => ShowTransferDialog(call)" @onclick:stopPropagation="true">
+                            &#8644; Xfer
+                        </button>
+                        <button class="matrix-action-btn matrix-action-hangup" title="Hangup" @onclick="() => HangupCall(call)" @onclick:stopPropagation="true">
+                            &#9747; Drop
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@if (_showTransferDialog)
+{
+    <div class="confirm-overlay" @onclick="CloseTransferDialog">
+        <div class="confirm-dialog" @onclick:stopPropagation="true">
+            <h4>Transfer Call</h4>
+            <p>Transfer caller <strong>@(_transferCall?.Caller?.CallerIdNum ?? "unknown")</strong> to:</p>
+            <div class="form-field" style="margin-bottom:1rem">
+                <label class="form-label">Extension</label>
+                <input @bind="_transferExtension" class="input" placeholder="e.g. 2001" />
+            </div>
+            <div class="form-field" style="margin-bottom:1rem">
+                <label class="form-label">Context (optional)</label>
+                <input @bind="_transferContext" class="input" placeholder="default" />
+            </div>
+            <div class="confirm-dialog-actions">
+                <button class="btn btn-sm btn-muted" @onclick="CloseTransferDialog">Cancel</button>
+                <button class="btn btn-sm btn-accent" @onclick="ExecuteTransfer">Transfer</button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ═══ Shared card render fragments ═══ *@
+
+@{ void RenderCallCard(CallFlow call)
+    {
+        var (borderClass, stateLabel, stateIcon) = GetCallStyle(call);
+        <div class="call-card @borderClass" @onclick="() => NavigateToDetail(call.CallId)">
+            <div class="call-card-header">
+                <span class="call-state-badge @borderClass">@stateIcon @stateLabel</span>
+                <span class="call-duration">@FormatDuration(call.Duration)</span>
+            </div>
+            <div class="call-participants">
+                <div class="call-endpoint">
+                    <div class="call-endpoint-label">Caller</div>
+                    <div class="call-endpoint-id">@(call.Caller?.CallerIdNum ?? "unknown")</div>
+                    <div class="call-endpoint-channel text-muted">@ShortChannel(call.Caller?.Channel)</div>
+                </div>
+                <div class="call-arrow">
+                    @if (call.State == CallFlowState.Connected)
+                    {
+                        <span class="arrow-connected">&harr;</span>
+                    }
+                    else if (call.State == CallFlowState.Hold)
+                    {
+                        <span class="arrow-hold">| |</span>
+                    }
+                    else
+                    {
+                        <span class="arrow-dialing">&rarr;</span>
+                    }
+                </div>
+                <div class="call-endpoint">
+                    @if (call.AgentName is not null)
+                    {
+                        <div class="call-endpoint-label">Agent</div>
+                        <div class="call-endpoint-id">@call.AgentName</div>
+                        <div class="call-endpoint-channel text-muted">@ShortChannel(call.AgentInterface)</div>
+                    }
+                    else if (call.QueueName is not null)
+                    {
+                        <div class="call-endpoint-label">Queue</div>
+                        <div class="call-endpoint-id">@call.QueueName</div>
+                    }
+                    else if (call.Destination is not null)
+                    {
+                        <div class="call-endpoint-label">Destination</div>
+                        <div class="call-endpoint-id">@(call.Destination.CallerIdNum ?? ShortChannel(call.Destination.Channel))</div>
+                        <div class="call-endpoint-channel text-muted">@ShortChannel(call.Destination.Channel)</div>
+                    }
+                    else
+                    {
+                        <div class="call-endpoint-label">Destination</div>
+                        <div class="call-endpoint-id text-muted">...</div>
+                    }
+                </div>
+            </div>
+            <div class="call-card-footer">
+                @if (call.Caller?.Technology is not null)
+                {
+                    <span class="badge @TechBadgeClass(call.Caller.Technology)">@call.Caller.Technology</span>
+                }
+                @if (call.QueueName is not null && call.AgentName is not null)
+                {
+                    <span class="badge badge-muted">@call.QueueName</span>
+                }
+                @if (call.HangupCause.HasValue)
+                {
+                    <span class="badge badge-muted">@call.HangupCause</span>
+                }
+                <span class="text-muted call-events-count">@call.Events.Count events</span>
+            </div>
+        </div>;
+    }
+}
+
+@{ void RenderCompletedCard(CallFlow call, double remainingSecs)
+    {
+        var pct = Math.Clamp(remainingSecs / FadeSeconds * 100, 0, 100);
+        var isFading = remainingSecs <= 1.5;
+        <div class="call-card call-completed @(isFading ? "call-fade-out" : "")" @onclick="() => NavigateToDetail(call.CallId)">
+            <div class="call-card-header">
+                <span class="call-state-badge call-completed">-- Completed</span>
+                <span class="call-duration">@FormatDuration(call.Duration)</span>
+            </div>
+            <div class="call-participants">
+                <div class="call-endpoint">
+                    <div class="call-endpoint-label">Caller</div>
+                    <div class="call-endpoint-id">@(call.Caller?.CallerIdNum ?? "unknown")</div>
+                    <div class="call-endpoint-channel text-muted">@ShortChannel(call.Caller?.Channel)</div>
+                </div>
+                <div class="call-arrow">
+                    <span class="arrow-completed">&#10005;</span>
+                </div>
+                <div class="call-endpoint">
+                    @if (call.AgentName is not null)
+                    {
+                        <div class="call-endpoint-label">Agent</div>
+                        <div class="call-endpoint-id">@call.AgentName</div>
+                    }
+                    else if (call.Destination is not null)
+                    {
+                        <div class="call-endpoint-label">Destination</div>
+                        <div class="call-endpoint-id">@(call.Destination.CallerIdNum ?? ShortChannel(call.Destination.Channel))</div>
+                    }
+                    else
+                    {
+                        <div class="call-endpoint-label">Destination</div>
+                        <div class="call-endpoint-id text-muted">...</div>
+                    }
+                </div>
+            </div>
+            <div class="call-card-footer">
+                @if (call.HangupCause.HasValue)
+                {
+                    <span class="badge badge-muted">@call.HangupCause</span>
+                }
+                <span class="text-muted call-events-count">@call.Events.Count events</span>
+            </div>
+            <div class="call-fade-bar">
+                <div class="call-fade-bar-fill" style="width:@($"{pct:F0}")%"></div>
+            </div>
+        </div>;
+    }
+}
+
+@code {
+    private const double FadeSeconds = 5.0;
+
+    private enum ViewMode { Kanban, Table, Matrix }
+
+    private Timer? _timer;
+    private ViewMode _viewMode = ViewMode.Kanban;
+    private string _searchQuery = "";
+    private int _recentCompleted;
+
+    // Kanban buckets
+    private IReadOnlyList<CallFlow> _connected = [];
+    private IReadOnlyList<CallFlow> _pending = [];
+
+    // Table bucket
+    private IReadOnlyList<CallFlow> _allActive = [];
+
+    // Shared
+    private IReadOnlyList<(CallFlow Call, double Remaining)> _fadingCompleted = [];
+    private IReadOnlyList<CallFlow> _searchResults = [];
+
+    protected override void OnInitialized()
+    {
+        RefreshCalls();
+        _timer = new Timer(_ => { RefreshCalls(); InvokeAsync(StateHasChanged); },
+            null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+    }
+
+    private IEnumerable<CallFlow> FilterByServer(IEnumerable<CallFlow> calls) =>
+        calls.Where(c => c.ServerId == ServerSvc.SelectedServerId);
+
+    private void RefreshCalls()
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        _recentCompleted = FilterByServer(Tracker.GetRecentCompleted(100)).Count();
+
+        // Recently completed with fade timer (last N seconds)
+        _fadingCompleted = FilterByServer(Tracker.GetRecentCompleted(20))
+            .Where(c => c.EndTime.HasValue && (now - c.EndTime.Value).TotalSeconds < FadeSeconds)
+            .Select(c => (Call: c, Remaining: FadeSeconds - (now - c.EndTime!.Value).TotalSeconds))
+            .OrderByDescending(x => x.Remaining)
+            .ToList();
+
+        // Search mode
+        if (!string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            _searchResults = FilterByServer(Tracker.Search(_searchQuery, 100)).ToList();
+            return;
+        }
+
+        _searchResults = [];
+
+        var active = FilterByServer(Tracker.ActiveCalls)
+            .OrderByDescending(c => c.StartTime)
+            .ToList();
+
+        // Kanban buckets
+        _connected = active.Where(c => c.State is CallFlowState.Connected or CallFlowState.Hold).ToList();
+        _pending = active.Where(c => c.State is CallFlowState.Dialing or CallFlowState.Ringing or CallFlowState.Queued).ToList();
+
+        // Table bucket (all active)
+        _allActive = active;
+    }
+
+    private int CountByState(CallFlowState state) =>
+        state == CallFlowState.Completed
+            ? _recentCompleted
+            : FilterByServer(Tracker.ActiveCalls).Count(c => c.State == state);
+
+    private void NavigateToDetail(string callId) =>
+        Nav.NavigateTo($"/calls/{Uri.EscapeDataString(callId)}");
+
+    private static (string borderClass, string stateLabel, string stateIcon) GetCallStyle(CallFlow call) =>
+        call.State switch
+        {
+            CallFlowState.Dialing => ("call-dialing", "Dialing", "~"),
+            CallFlowState.Ringing => ("call-ringing", "Ringing", ">>"),
+            CallFlowState.Queued => ("call-queued", "Queued", "#"),
+            CallFlowState.Connected => ("call-connected", "Connected", "<<>>"),
+            CallFlowState.Hold => ("call-hold", "On Hold", "||"),
+            CallFlowState.Completed => ("call-completed", "Completed", "--"),
+            _ => ("call-unknown", "Unknown", "?")
+        };
+
+    private static string TechBadgeClass(string tech) => tech switch
+    {
+        "PJSIP" => "badge-blue",
+        "SIP" => "badge-yellow",
+        _ => "badge-muted"
+    };
+
+    private static string ShortChannel(string? channel)
+    {
+        if (channel is null) return "";
+        var dash = channel.LastIndexOf('-');
+        return dash > 0 ? channel[..dash] : channel;
+    }
+
+    private static string FormatDuration(TimeSpan ts)
+    {
+        if (ts.TotalHours >= 1)
+            return $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+        return $"{(int)ts.TotalMinutes}:{ts.Seconds:D2}";
+    }
+
+    // Matrix quick actions
+    private bool _showTransferDialog;
+    private CallFlow? _transferCall;
+    private string _transferExtension = "";
+    private string _transferContext = "";
+    private string? _actionResult;
+
+    private async Task HoldCall(CallFlow call)
+    {
+        var entry = ServerSvc.GetSelectedServer();
+        if (entry is null || call.Caller?.Channel is null) return;
+
+        var action = new ParkAction
+        {
+            Channel = call.Caller.Channel,
+            Channel2 = call.Caller.Channel,
+            Timeout = 120
+        };
+        var response = await entry.Connection.SendActionAsync(action);
+        _actionResult = string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase)
+            ? "Call parked"
+            : $"Park failed: {response.Message}";
+    }
+
+    private async Task HangupCall(CallFlow call)
+    {
+        var entry = ServerSvc.GetSelectedServer();
+        if (entry is null || call.Caller?.Channel is null) return;
+
+        var action = new HangupAction { Channel = call.Caller.Channel };
+        await entry.Connection.SendActionAsync(action);
+    }
+
+    private void ShowTransferDialog(CallFlow call)
+    {
+        _transferCall = call;
+        _transferExtension = "";
+        _transferContext = "";
+        _showTransferDialog = true;
+    }
+
+    private void CloseTransferDialog()
+    {
+        _showTransferDialog = false;
+        _transferCall = null;
+    }
+
+    private async Task ExecuteTransfer()
+    {
+        var entry = ServerSvc.GetSelectedServer();
+        if (entry is null || _transferCall?.Caller?.Channel is null || string.IsNullOrWhiteSpace(_transferExtension))
+        {
+            CloseTransferDialog();
+            return;
+        }
+
+        var action = new RedirectAction
+        {
+            Channel = _transferCall.Caller.Channel,
+            Exten = _transferExtension.Trim(),
+            Context = string.IsNullOrWhiteSpace(_transferContext) ? "default" : _transferContext.Trim(),
+            Priority = 1
+        };
+        await entry.Connection.SendActionAsync(action);
+        CloseTransferDialog();
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

@@ -1,0 +1,208 @@
+@page "/trunks/{ServerId}/{TrunkName}"
+@using PbxAdmin.Services
+@using PbxAdmin.Models
+@inject AsteriskMonitorService Monitor
+@inject TrunkService TrunkSvc
+@inject IConfigProviderResolver ConfigResolver
+@inject ConfigOperationState ConfigOp
+@inject NavigationManager Nav
+
+<PageTitle>@TrunkName — Asterisk PBX Admin</PageTitle>
+
+<a href="/trunks" class="back-link">Back to Trunks</a>
+<h2>Trunk: @TrunkName</h2>
+
+@if (_loading)
+{
+    <p class="text-muted">Loading...</p>
+}
+else if (_detail is null)
+{
+    <p class="text-muted">Trunk not found.</p>
+}
+else
+{
+    <!-- Stats bar -->
+    <div class="stats-bar">
+        <div class="stat-item">
+            Status: <strong>
+                <span class="status-dot @GetDotClass(_detail.Status)" style="margin-right:4px;"></span>
+                @_detail.Status
+            </strong>
+        </div>
+        <div class="stat-item">Host: <strong>@_detail.Host:@_detail.Port</strong></div>
+        <div class="stat-item">Transport: <strong>@_detail.Config.Transport</strong></div>
+        <div class="stat-item">Codecs: <strong>@_detail.Codecs</strong></div>
+        <div class="stat-item">Qualify: <strong>@_detail.Config.QualifyFrequency s</strong></div>
+        <div class="stat-item">Active Calls: <strong>@_detail.ActiveCalls</strong></div>
+    </div>
+
+    <!-- Registration info -->
+    @if (_detail.ContactUri is not null || _detail.UserAgent is not null || _detail.RoundtripMs.HasValue)
+    {
+        <div class="form-section">
+            <h3>Registration Details</h3>
+            <div class="form-grid">
+                @if (_detail.ContactUri is not null)
+                {
+                    <div class="form-field">
+                        <span class="form-label">Contact URI</span>
+                        <span class="mono">@_detail.ContactUri</span>
+                    </div>
+                }
+                @if (_detail.UserAgent is not null)
+                {
+                    <div class="form-field">
+                        <span class="form-label">User Agent</span>
+                        <span>@_detail.UserAgent</span>
+                    </div>
+                }
+                @if (_detail.RoundtripMs.HasValue)
+                {
+                    <div class="form-field">
+                        <span class="form-label">Roundtrip</span>
+                        <span>@(_detail.RoundtripMs)ms</span>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- Raw config display -->
+    @if (_detail.Config.Technology == TrunkTechnology.PjSip)
+    {
+        <h3>Raw Configuration (pjsip.conf)</h3>
+
+        @foreach (var (sectionName, vars) in _configSections)
+        {
+            <div class="config-section">
+                <div class="config-section-header" @onclick="() => ToggleSection(sectionName)">
+                    <span>[@sectionName]</span>
+                    <span class="text-muted">@(IsSectionExpanded(sectionName) ? "collapse" : "expand")</span>
+                </div>
+                @if (IsSectionExpanded(sectionName))
+                {
+                    <div class="config-section-body">@foreach (var (k, v) in vars)
+                        {<text>@k = @v
+</text>}</div>
+                }
+            </div>
+        }
+    }
+    else
+    {
+        <h3>Raw Configuration (@TrunkService.GetConfigFilename(_detail.Config.Technology))</h3>
+        @if (_singleSection is not null)
+        {
+            <div class="config-section">
+                <div class="config-section-header">[@TrunkName]</div>
+                <div class="config-section-body">@foreach (var (k, v) in _singleSection)
+                    {<text>@k = @v
+</text>}</div>
+            </div>
+        }
+    }
+
+    <!-- Actions -->
+    <div class="form-actions">
+        <button class="btn btn-yellow" @onclick="GoEdit">Edit</button>
+        <button class="btn btn-red" @onclick="ConfirmDelete">Delete</button>
+    </div>
+
+    @if (_showDeleteConfirm)
+    {
+        <div class="confirm-overlay" @onclick="CancelDelete">
+            <div class="confirm-dialog" @onclick:stopPropagation="true">
+                <h4>Delete Trunk</h4>
+                <p>Are you sure you want to delete trunk <strong>@TrunkName</strong>?</p>
+                <div class="confirm-dialog-actions">
+                    <button class="btn btn-sm" @onclick="CancelDelete">Cancel</button>
+                    <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">Delete</button>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public string ServerId { get; set; } = "";
+    [Parameter] public string TrunkName { get; set; } = "";
+    [SupplyParameterFromQuery] public string? Tech { get; set; }
+
+    private TrunkDetailViewModel? _detail;
+    private bool _loading = true;
+    private bool _showDeleteConfirm;
+    private List<(string Name, Dictionary<string, string> Vars)> _configSections = [];
+    private Dictionary<string, string>? _singleSection;
+    private readonly HashSet<string> _expandedSections = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var technology = Enum.TryParse<TrunkTechnology>(Tech, true, out var t) ? t : TrunkTechnology.PjSip;
+        _detail = await TrunkSvc.GetTrunkDetailAsync(ServerId, TrunkName, technology);
+
+        if (_detail is not null)
+        {
+            await LoadRawConfig(technology);
+        }
+
+        _loading = false;
+    }
+
+    private async Task LoadRawConfig(TrunkTechnology technology)
+    {
+        using var _ = ConfigOp.Begin("Loading Config", ServerId, TrunkName);
+        var configProvider = ConfigResolver.GetProvider(ServerId);
+
+        if (technology == TrunkTechnology.PjSip)
+        {
+            var sections = new[] { TrunkName, $"{TrunkName}-auth", $"{TrunkName}-aor", $"{TrunkName}-reg" };
+            foreach (var sectionName in sections)
+            {
+                var vars = await configProvider.GetSectionAsync(ServerId, "pjsip.conf", sectionName);
+                if (vars is not null)
+                {
+                    _configSections.Add((sectionName, vars));
+                    _expandedSections.Add(sectionName); // Expand by default
+                }
+            }
+        }
+        else
+        {
+            var filename = TrunkService.GetConfigFilename(technology);
+            _singleSection = await configProvider.GetSectionAsync(ServerId, filename, TrunkName);
+        }
+    }
+
+    private void ToggleSection(string name)
+    {
+        if (!_expandedSections.Remove(name))
+            _expandedSections.Add(name);
+    }
+
+    private bool IsSectionExpanded(string name) => _expandedSections.Contains(name);
+
+    private void GoEdit() =>
+        Nav.NavigateTo($"/trunks/edit/{ServerId}/{TrunkName}?tech={_detail?.Config.Technology}");
+
+    private void ConfirmDelete() => _showDeleteConfirm = true;
+
+    private void CancelDelete() => _showDeleteConfirm = false;
+
+    private async Task ExecuteDelete()
+    {
+        if (_detail is null) return;
+
+        using var _ = ConfigOp.Begin("Deleting Trunk", ServerId, TrunkName);
+        await TrunkSvc.DeleteTrunkAsync(ServerId, TrunkName, _detail.Config.Technology);
+        Nav.NavigateTo("/trunks");
+    }
+
+    private static string GetDotClass(TrunkStatus status) => status switch
+    {
+        TrunkStatus.Registered => "dot-green",
+        TrunkStatus.Unreachable or TrunkStatus.Rejected => "dot-red",
+        TrunkStatus.Unregistered => "dot-yellow",
+        _ => "dot-gray"
+    };
+}

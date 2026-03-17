@@ -287,9 +287,9 @@ await ami.DisconnectAsync();
 
 ---
 
-## Dashboard Example
+## PBX Admin Example
 
-The `Examples/DashboardExample` project is a Blazor Server application showcasing the full SDK in a real-world monitoring and management dashboard. It includes:
+The `Examples/PbxAdmin` project is a Blazor Server application showcasing the full SDK in a real-world PBX administration panel. It includes:
 
 **Monitoring** -- Live call matrix, queue status, agent tracking, channel list, parked calls, traffic analytics, Prometheus-style metrics, event log, and CLI console.
 
