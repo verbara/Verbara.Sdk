@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter</value></resheader>
+
+  <!-- App -->
+  <data name="AppTitle" xml:space="preserve"><value>Asterisk PBX Admin</value></data>
+  <data name="SidebarTitle" xml:space="preserve"><value>Asterisk</value></data>
+
+  <!-- Nav Sections -->
+  <data name="Nav_Monitoring" xml:space="preserve"><value>Monitoring</value></data>
+  <data name="Nav_PbxManagement" xml:space="preserve"><value>PBX Management</value></data>
+  <data name="Nav_MediaFeatures" xml:space="preserve"><value>Media &amp; Features</value></data>
+  <data name="Nav_System" xml:space="preserve"><value>System</value></data>
+
+  <!-- Nav Links -->
+  <data name="Nav_Home" xml:space="preserve"><value>Home</value></data>
+  <data name="Nav_Calls" xml:space="preserve"><value>Calls</value></data>
+  <data name="Nav_Queues" xml:space="preserve"><value>Queues</value></data>
+  <data name="Nav_Agents" xml:space="preserve"><value>Agents</value></data>
+  <data name="Nav_Channels" xml:space="preserve"><value>Channels</value></data>
+  <data name="Nav_Extensions" xml:space="preserve"><value>Extensions</value></data>
+  <data name="Nav_Trunks" xml:space="preserve"><value>Trunks</value></data>
+  <data name="Nav_Routes" xml:space="preserve"><value>Routes</value></data>
+  <data name="Nav_IvrMenus" xml:space="preserve"><value>IVR Menus</value></data>
+  <data name="Nav_TimeConds" xml:space="preserve"><value>Time Conds.</value></data>
+  <data name="Nav_Recordings" xml:space="preserve"><value>Recordings</value></data>
+  <data name="Nav_MusicOnHold" xml:space="preserve"><value>Music on Hold</value></data>
+  <data name="Nav_Conferences" xml:space="preserve"><value>Conferences</value></data>
+  <data name="Nav_FeatureCodes" xml:space="preserve"><value>Feature Codes</value></data>
+  <data name="Nav_Parking" xml:space="preserve"><value>Parking</value></data>
+  <data name="Nav_Voicemail" xml:space="preserve"><value>Voicemail</value></data>
+  <data name="Nav_Metrics" xml:space="preserve"><value>Metrics</value></data>
+  <data name="Nav_Events" xml:space="preserve"><value>Events</value></data>
+  <data name="Nav_Console" xml:space="preserve"><value>Console</value></data>
+  <data name="Nav_Traffic" xml:space="preserve"><value>Traffic</value></data>
+
+  <!-- Common Buttons -->
+  <data name="Btn_Save" xml:space="preserve"><value>Save</value></data>
+  <data name="Btn_Saving" xml:space="preserve"><value>Saving...</value></data>
+  <data name="Btn_Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Btn_Delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="Btn_Edit" xml:space="preserve"><value>Edit</value></data>
+  <data name="Btn_Back" xml:space="preserve"><value>&#8592; Back</value></data>
+  <data name="Btn_Add" xml:space="preserve"><value>Add</value></data>
+  <data name="Btn_Remove" xml:space="preserve"><value>Remove</value></data>
+  <data name="Btn_Logout" xml:space="preserve"><value>Logout</value></data>
+  <data name="Btn_Login" xml:space="preserve"><value>Login</value></data>
+
+  <!-- Common Labels -->
+  <data name="Lbl_Name" xml:space="preserve"><value>Name</value></data>
+  <data name="Lbl_Description" xml:space="preserve"><value>Description</value></data>
+  <data name="Lbl_Status" xml:space="preserve"><value>Status</value></data>
+  <data name="Lbl_Actions" xml:space="preserve"><value>Actions</value></data>
+  <data name="Lbl_Type" xml:space="preserve"><value>Type</value></data>
+  <data name="Lbl_Enabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="Lbl_Yes" xml:space="preserve"><value>Yes</value></data>
+  <data name="Lbl_No" xml:space="preserve"><value>No</value></data>
+  <data name="Lbl_None" xml:space="preserve"><value>None</value></data>
+  <data name="Lbl_Unlimited" xml:space="preserve"><value>Unlimited</value></data>
+  <data name="Lbl_On" xml:space="preserve"><value>On</value></data>
+  <data name="Lbl_Off" xml:space="preserve"><value>Off</value></data>
+  <data name="Lbl_Loading" xml:space="preserve"><value>Loading...</value></data>
+  <data name="Lbl_Language" xml:space="preserve"><value>Language</value></data>
+
+  <!-- Common Messages -->
+  <data name="Msg_NoServerSelected" xml:space="preserve"><value>No server selected</value></data>
+  <data name="Msg_NoData" xml:space="preserve"><value>No data available</value></data>
+  <data name="Msg_ConfirmDelete" xml:space="preserve"><value>Are you sure you want to delete this item?</value></data>
+
+  <!-- Header Stats -->
+  <data name="Stat_Calls" xml:space="preserve"><value>calls</value></data>
+  <data name="Stat_Queues" xml:space="preserve"><value>queues</value></data>
+  <data name="Stat_Agents" xml:space="preserve"><value>agents</value></data>
+</root>
