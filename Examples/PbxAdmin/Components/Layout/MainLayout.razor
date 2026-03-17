@@ -88,6 +88,7 @@ else
                     <span class="header-stat">@_totalChannels @L["Stat_Calls"]</span>
                     <span class="header-stat">@_totalQueues @L["Stat_Queues"]</span>
                     <span class="header-stat">@_totalAgents @L["Stat_Agents"]</span>
+                    <button class="btn btn-sm btn-muted" @onclick="() => _glossaryOpen = !_glossaryOpen" title="@L["Glossary_Title"]">📖</button>
                     <a href="/set-language/@(_isSpanish ? "en" : "es")" class="btn btn-sm btn-muted lang-switch">
                         @(_isSpanish ? "EN" : "ES")
                     </a>
@@ -103,6 +104,8 @@ else
             </main>
         </div>
     </div>
+
+    <GlossarySidebar IsOpen="_glossaryOpen" OnClose="() => _glossaryOpen = false" />
 
     @if (ConfigOp.IsBusy)
     {
@@ -132,6 +135,7 @@ else
     private int _totalQueues;
     private int _totalAgents;
     private bool _isSpanish;
+    private bool _glossaryOpen;
 
     protected override void OnInitialized()
     {
