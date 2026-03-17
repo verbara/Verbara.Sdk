@@ -7,6 +7,8 @@
 @inject IStringLocalizer<SharedStrings> L
 @inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject ExtensionTemplateService TemplateSvc
 
 <PageTitle>@(_isNew ? L["ExtEdit_NewTitle"] : L["ExtEdit_EditTitle", Extension ?? ""]) — Asterisk PBX Admin</PageTitle>
 
@@ -19,18 +21,34 @@
 }
 else
 {
+    @if (_isNew)
+    {
+        <div class="template-selector">
+            <label class="form-label">@L["Template_StartFrom"]</label>
+            <select class="input" @onchange="OnTemplateSelected">
+                <option value="">@L["Template_Blank"]</option>
+                @foreach (var t in _templates)
+                {
+                    <option value="@t.Id">@t.Name — @t.Description</option>
+                }
+            </select>
+        </div>
+    }
+
     <!-- Identity -->
     <div class="form-section">
         <HelpPanel SectionKey="ExtEdit_Identity">@L["ExtEdit_Identity"]</HelpPanel>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">@L["ExtEdit_ExtNumber"] <HelpIcon HelpKey="ExtNumber" /></label>
-                <input class="input" type="number" @bind="_config.Extension" placeholder="@($"{_rangeStart}–{_rangeEnd}")" disabled="@(!_isNew)" />
+                <label class="form-label">@L["ExtEdit_ExtNumber"] <span class="required-mark">*</span> <HelpIcon HelpKey="ExtNumber" /></label>
+                <input class="input @ValidationCss(_extTouched, _extValid)" type="number" @bind="_config.Extension" placeholder="@($"{_rangeStart}–{_rangeEnd}")" disabled="@(!_isNew)" @onfocusout="@(() => { _extTouched = true; })" />
                 <span class="text-muted" style="font-size:0.85rem;">@L["ExtEdit_Range"] @_rangeStart – @_rangeEnd</span>
+                <PbxAdmin.Components.Shared.ValidationMessage IsValid="_extValid" IsTouched="_extTouched" Message="@L["Err_ExtOutOfRange"]" />
             </div>
             <div class="form-field">
-                <label class="form-label">@L["ExtEdit_DisplayName"] <HelpIcon HelpKey="DisplayName" /></label>
-                <input class="input" @bind="_config.Name" placeholder="John Doe" />
+                <label class="form-label">@L["ExtEdit_DisplayName"] <span class="required-mark">*</span> <HelpIcon HelpKey="DisplayName" /></label>
+                <input class="input @ValidationCss(_nameTouched, _nameValid)" @bind="_config.Name" placeholder="John Doe" @onfocusout="@(() => { _nameTouched = true; })" />
+                <PbxAdmin.Components.Shared.ValidationMessage IsValid="_nameValid" IsTouched="_nameTouched" Message="@L["Err_NameRequired"]" />
             </div>
             <div class="form-field">
                 <label class="form-label">@L["ExtEdit_Technology"] <HelpIcon HelpKey="Technology" /></label>
@@ -62,11 +80,12 @@ else
             @if (_isNew)
             {
                 <div class="form-field">
-                    <label class="form-label">@L["ExtEdit_Password"] <HelpIcon HelpKey="Password" /></label>
+                    <label class="form-label">@L["ExtEdit_Password"] <span class="required-mark">*</span> <HelpIcon HelpKey="Password" /></label>
                     <div style="display:flex;gap:0.5rem;align-items:center;">
-                        <input class="input" type="password" @bind="_config.Password" placeholder="Required" />
+                        <input class="input @ValidationCss(_pwdTouched, _pwdValid)" type="password" @bind="_config.Password" placeholder="Required" @onfocusout="@(() => { _pwdTouched = true; })" />
                         <button class="btn" type="button" @onclick="GeneratePassword">@L["ExtEdit_Generate"]</button>
                     </div>
+                    <PbxAdmin.Components.Shared.ValidationMessage IsValid="_pwdValid" IsTouched="_pwdTouched" Message="@L["Err_PasswordTooShort"]" />
                 </div>
             }
             else
@@ -87,6 +106,40 @@ else
             }
         </div>
     </div>
+
+    <!-- Voicemail -->
+    <div class="form-section">
+        <HelpPanel SectionKey="ExtEdit_Voicemail">@L["ExtEdit_Voicemail"]</HelpPanel>
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="codec-check">
+                    <input type="checkbox" @bind="_config.VoicemailEnabled" />
+                    @L["ExtEdit_EnableVoicemail"]
+                </label>
+            </div>
+            @if (_config.VoicemailEnabled)
+            {
+                <div class="form-field">
+                    <label class="form-label">@L["ExtEdit_Pin"] <span class="required-mark">*</span></label>
+                    <input class="input @ValidationCss(_vmPinTouched, _vmPinValid)" type="text" @bind="_config.VoicemailPin" placeholder="1234" @onfocusout="@(() => { _vmPinTouched = true; })" />
+                    <PbxAdmin.Components.Shared.ValidationMessage IsValid="_vmPinValid" IsTouched="_vmPinTouched" Message="@L["Err_VoicemailPinRequired"]" />
+                </div>
+                <div class="form-field">
+                    <label class="form-label">@L["ExtEdit_Email"]</label>
+                    <input class="input" type="text" @bind="_config.VoicemailEmail" placeholder="user@example.com" />
+                </div>
+                <div class="form-field">
+                    <label class="form-label">@L["ExtEdit_MaxMessages"]</label>
+                    <input class="input" type="number" @bind="_config.VoicemailMaxMessages" />
+                </div>
+            }
+        </div>
+    </div>
+
+    <AdvancedToggle IsAdvanced="_isAdvanced" IsAdvancedChanged="@(v => _isAdvanced = v)" />
+
+    @if (_isAdvanced)
+    {
 
     <!-- Dialplan -->
     <div class="form-section">
@@ -111,7 +164,7 @@ else
     <div class="form-section">
         <HelpPanel SectionKey="ExtEdit_MediaTransport">@L["ExtEdit_MediaTransport"]</HelpPanel>
         <div class="form-field" style="margin-bottom: 0.75rem;">
-            <label class="form-label">@L["ExtEdit_Codecs"] <HelpIcon HelpKey="Codecs" /></label>
+            <label class="form-label">@L["ExtEdit_Codecs"] <span class="required-mark">*</span> <HelpIcon HelpKey="Codecs" /></label>
             <div class="codec-grid">
                 @foreach (var codec in _availableCodecs)
                 {
@@ -122,6 +175,7 @@ else
                     </label>
                 }
             </div>
+            <PbxAdmin.Components.Shared.ValidationMessage IsValid="_codecValid" IsTouched="_codecTouched" Message="@L["Err_NoCodecs"]" />
         </div>
         <div class="form-grid">
             <div class="form-field">
@@ -158,34 +212,6 @@ else
         </div>
     </div>
 
-    <!-- Voicemail -->
-    <div class="form-section">
-        <HelpPanel SectionKey="ExtEdit_Voicemail">@L["ExtEdit_Voicemail"]</HelpPanel>
-        <div class="form-grid">
-            <div class="form-field">
-                <label class="codec-check">
-                    <input type="checkbox" @bind="_config.VoicemailEnabled" />
-                    @L["ExtEdit_EnableVoicemail"]
-                </label>
-            </div>
-            @if (_config.VoicemailEnabled)
-            {
-                <div class="form-field">
-                    <label class="form-label">@L["ExtEdit_Pin"]</label>
-                    <input class="input" type="text" @bind="_config.VoicemailPin" placeholder="1234" />
-                </div>
-                <div class="form-field">
-                    <label class="form-label">@L["ExtEdit_Email"]</label>
-                    <input class="input" type="text" @bind="_config.VoicemailEmail" placeholder="user@example.com" />
-                </div>
-                <div class="form-field">
-                    <label class="form-label">@L["ExtEdit_MaxMessages"]</label>
-                    <input class="input" type="number" @bind="_config.VoicemailMaxMessages" />
-                </div>
-            }
-        </div>
-    </div>
-
     <!-- Call Features -->
     <div class="form-section">
         <HelpPanel SectionKey="ExtEdit_CallFeatures">@L["ExtEdit_CallFeatures"]</HelpPanel>
@@ -208,16 +234,30 @@ else
                 <label class="form-label">@L["ExtEdit_CFNoAnswer"]</label>
                 <div style="display:flex;gap:0.5rem;align-items:center;">
                     <input class="input" type="text" @bind="_config.CallForwardNoAnswer" placeholder="@L["ExtEdit_DestNumber"]" />
-                    <input class="input" type="number" @bind="_config.CallForwardNoAnswerTimeout" style="width:5rem;" />
+                    <input class="input @ValidationCss(_cfnaTouched, _cfnaValid)" type="number" @bind="_config.CallForwardNoAnswerTimeout" style="width:5rem;" @onfocusout="@(() => { _cfnaTouched = true; })" />
                     <span class="text-muted">sec</span>
                 </div>
+                <PbxAdmin.Components.Shared.ValidationMessage IsValid="_cfnaValid" IsTouched="_cfnaTouched" Message="@L["Err_CFNoAnswerTimeout"]" />
             </div>
         </div>
     </div>
 
+    }
+
     <div class="form-actions">
-        <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? L["Btn_Saving"] : L["Btn_Save"])</button>
+        <button class="btn btn-green" @onclick="Save" disabled="@(_saving || !IsFormValid)">@(_saving ? L["Btn_Saving"] : L["Btn_Save"])</button>
         <button class="btn" @onclick="NavigateBack">@L["Btn_Cancel"]</button>
+        <button class="btn btn-muted" @onclick="() => _showSaveTemplate = true">@L["Template_SaveAs"]</button>
+
+        @if (_showSaveTemplate)
+        {
+            <div class="template-save-dialog">
+                <input class="input" @bind="_templateName" placeholder="@L["Template_NamePlaceholder"]" />
+                <input class="input" @bind="_templateDesc" placeholder="@L["Template_DescPlaceholder"]" />
+                <button class="btn btn-green" @onclick="SaveAsTemplate">@L["Btn_Save"]</button>
+                <button class="btn" @onclick="() => _showSaveTemplate = false">@L["Btn_Cancel"]</button>
+            </div>
+        }
     </div>
 
     @if (_result is not null)
@@ -241,6 +281,24 @@ else
     private bool _changePassword;
     private int _rangeStart = 100;
     private int _rangeEnd = 999;
+
+    private bool _isAdvanced;
+    private List<ExtensionTemplate> _templates = [];
+    private bool _extTouched, _nameTouched, _pwdTouched, _codecTouched, _vmPinTouched, _cfnaTouched;
+    private bool _showSaveTemplate;
+    private string _templateName = "";
+    private string _templateDesc = "";
+
+    private bool _extValid => !_isNew || FormValidator.IsValidExtension(_config.Extension, _rangeStart, _rangeEnd);
+    private bool _nameValid => FormValidator.IsRequired(_config.Name);
+    private bool _pwdValid => !_isNew || FormValidator.MinLength(_config.Password, 8);
+    private bool _codecValid => FormValidator.HasCodecs(_config.Codecs);
+    private bool _vmPinValid => !_config.VoicemailEnabled || FormValidator.IsRequired(_config.VoicemailPin);
+    private bool _cfnaValid => string.IsNullOrEmpty(_config.CallForwardNoAnswer) || _config.CallForwardNoAnswerTimeout > 0;
+    private bool IsFormValid => _extValid && _nameValid && _pwdValid && _codecValid && _vmPinValid && _cfnaValid;
+
+    private string ValidationCss(bool touched, bool valid) =>
+        !touched ? "" : valid ? "valid" : "invalid";
 
     private static readonly string[] _availableCodecs = ["ulaw", "alaw", "g729", "g722", "opus"];
 
@@ -278,7 +336,18 @@ else
             }
         }
 
+        if (_isNew) _templates = (await TemplateSvc.GetAllAsync()).ToList();
+
         _loading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _isAdvanced = await JS.InvokeAsync<bool>("HelpInterop.getAdvanced");
+            StateHasChanged();
+        }
     }
 
     private bool IsCodecEnabled(string codec)
@@ -299,6 +368,7 @@ else
             codecs.RemoveAll(c => string.Equals(c, codec, StringComparison.OrdinalIgnoreCase));
 
         _config.Codecs = string.Join(",", codecs);
+        _codecTouched = true;
     }
 
     private void GeneratePassword()
@@ -311,8 +381,27 @@ else
         });
     }
 
+    private async Task OnTemplateSelected(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var id) && id > 0)
+            _config = await TemplateSvc.ApplyTemplateAsync(id);
+    }
+
+    private async Task SaveAsTemplate()
+    {
+        if (string.IsNullOrWhiteSpace(_templateName)) return;
+        await TemplateSvc.SaveAsTemplateAsync(_templateName, _templateDesc, _config);
+        _showSaveTemplate = false;
+        _templateName = "";
+        _templateDesc = "";
+        _templates = (await TemplateSvc.GetAllAsync()).ToList();
+    }
+
     private async Task Save()
     {
+        _extTouched = _nameTouched = _pwdTouched = _codecTouched = _vmPinTouched = _cfnaTouched = true;
+        if (!IsFormValid) return;
+
         var serverId = ServerId ?? Server ?? ServerSvc.SelectedServerId;
         if (serverId is null)
         {
