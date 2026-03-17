@@ -12,6 +12,8 @@ internal static class DialplanGenerator
         GenerateInboundRoutes(data.InboundRoutes, lines);
         GenerateOutboundRoutes(data.OutboundRoutes, lines);
         GenerateTimeConditions(data.TimeConditions, lines);
+        if (data.IvrMenus is not null)
+            GenerateIvrMenus(data.IvrMenus, lines);
         return lines;
     }
 
@@ -97,11 +99,76 @@ internal static class DialplanGenerator
         }
     }
 
+    private static void GenerateIvrMenus(List<IvrMenuConfig> menus, List<DialplanLine> lines)
+    {
+        foreach (var menu in menus.Where(m => m.Enabled))
+        {
+            var ctx = $"ivr-{menu.Name}";
+            var prio = 1;
+
+            lines.Add(new DialplanLine(ctx, "s", prio++, "Answer", ""));
+            lines.Add(new DialplanLine(ctx, "s", prio++, "Set", "IVR_RETRIES=0"));
+
+            if (!string.IsNullOrWhiteSpace(menu.Greeting))
+                lines.Add(new DialplanLine(ctx, "s", prio++, "Background", menu.Greeting));
+
+            lines.Add(new DialplanLine(ctx, "s", prio, "WaitExten", menu.Timeout.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+
+            foreach (var item in menu.Items)
+            {
+                var app = ResolveIvrItemApp(item);
+                var appData = ResolveIvrItemAppData(item);
+                lines.Add(new DialplanLine(ctx, item.Digit, 1, app, appData));
+            }
+
+            var tPrio = 1;
+            lines.Add(new DialplanLine(ctx, "t", tPrio++, "Set", "IVR_RETRIES=$[${IVR_RETRIES}+1]"));
+            lines.Add(new DialplanLine(ctx, "t", tPrio++, "GotoIf", $"$[${{IVR_RETRIES}}<{menu.MaxRetries}]?s,2"));
+
+            if (!string.IsNullOrWhiteSpace(menu.TimeoutDestType) && !string.IsNullOrWhiteSpace(menu.TimeoutDest))
+                lines.Add(new DialplanLine(ctx, "t", tPrio, "Goto", ResolveDestination(menu.TimeoutDestType, menu.TimeoutDest)));
+            else
+                lines.Add(new DialplanLine(ctx, "t", tPrio, "Hangup", ""));
+
+            var iPrio = 1;
+            lines.Add(new DialplanLine(ctx, "i", iPrio++, "Playback", "option-is-invalid"));
+            lines.Add(new DialplanLine(ctx, "i", iPrio++, "Set", "IVR_RETRIES=$[${IVR_RETRIES}+1]"));
+            lines.Add(new DialplanLine(ctx, "i", iPrio++, "GotoIf", $"$[${{IVR_RETRIES}}<{menu.MaxRetries}]?s,2"));
+
+            if (!string.IsNullOrWhiteSpace(menu.InvalidDestType) && !string.IsNullOrWhiteSpace(menu.InvalidDest))
+                lines.Add(new DialplanLine(ctx, "i", iPrio, "Goto", ResolveDestination(menu.InvalidDestType, menu.InvalidDest)));
+            else
+                lines.Add(new DialplanLine(ctx, "i", iPrio, "Hangup", ""));
+        }
+    }
+
+    private static string ResolveIvrItemApp(IvrMenuItemConfig item) => item.DestType switch
+    {
+        "hangup" => "Hangup",
+        "voicemail" => "VoiceMail",
+        "external" => "Dial",
+        _ => "Goto"
+    };
+
+    private static string ResolveIvrItemAppData(IvrMenuItemConfig item) => item.DestType switch
+    {
+        "extension" => $"from-internal,{item.DestTarget},1",
+        "queue" => $"queues,{item.DestTarget},1",
+        "ivr" => $"ivr-{item.DestTarget},s,1",
+        "voicemail" => $"{item.DestTarget}@default,u",
+        "hangup" => "",
+        "external" => item.Trunk is not null
+            ? $"PJSIP/{item.DestTarget}@{item.Trunk}"
+            : $"PJSIP/{item.DestTarget}",
+        _ => $"default,s,1"
+    };
+
     internal static string ResolveDestination(string type, string target) => type switch
     {
         "extension" => $"from-internal,{target},1",
         "queue" => $"queues,{target},1",
         "time_condition" => $"tc-{target},s,1",
+        "ivr" => $"ivr-{target},s,1",
         _ => $"default,s,1"
     };
 

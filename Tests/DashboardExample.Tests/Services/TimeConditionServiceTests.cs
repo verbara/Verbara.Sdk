@@ -154,7 +154,8 @@ public class TimeConditionServiceTests
     {
         var repoResolver = Substitute.For<IRouteRepositoryResolver>();
         var dialplanResolver = Substitute.For<IDialplanProviderResolver>();
-        var regenerator = new DialplanRegenerator(repoResolver, dialplanResolver);
+        var ivrRepo = Substitute.For<IIvrMenuRepository>();
+        var regenerator = new DialplanRegenerator(repoResolver, dialplanResolver, ivrRepo);
         var logger = Substitute.For<ILogger<TimeConditionService>>();
 
         // AsteriskMonitorService is not accessed during validation
