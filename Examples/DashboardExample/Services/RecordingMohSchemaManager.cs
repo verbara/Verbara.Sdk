@@ -98,6 +98,36 @@ public sealed partial class RecordingMohSchemaManager : IRecordingMohSchemaManag
         );
 
         CREATE INDEX IF NOT EXISTS idx_conference_configs_server ON conference_configs(server_id);
+
+        CREATE TABLE IF NOT EXISTS feature_codes (
+            id              SERIAL PRIMARY KEY,
+            server_id       TEXT NOT NULL,
+            code            TEXT NOT NULL,
+            name            TEXT NOT NULL,
+            description     TEXT NOT NULL DEFAULT '',
+            enabled         BOOLEAN NOT NULL DEFAULT true,
+            created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+            UNIQUE (server_id, code)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_feature_codes_server ON feature_codes(server_id);
+
+        CREATE TABLE IF NOT EXISTS parking_lot_configs (
+            id                  SERIAL PRIMARY KEY,
+            server_id           TEXT NOT NULL,
+            name                TEXT NOT NULL,
+            parking_start_slot  INT NOT NULL DEFAULT 701,
+            parking_end_slot    INT NOT NULL DEFAULT 720,
+            parking_timeout     INT NOT NULL DEFAULT 45,
+            music_on_hold       TEXT NOT NULL DEFAULT 'default',
+            context             TEXT NOT NULL DEFAULT 'parkedcalls',
+            created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+            UNIQUE (server_id, name)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_parking_lot_configs_server ON parking_lot_configs(server_id);
         """;
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Recording/MOH schema created successfully")]
