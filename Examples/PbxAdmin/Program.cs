@@ -151,6 +151,20 @@ builder.Services.AddSingleton<IFeatureCodeRepository>(sp =>
 });
 builder.Services.AddSingleton<FeatureCodeService>();
 
+builder.Services.AddSingleton<IExtensionTemplateRepository>(sp =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var connStr = cfg.GetSection("Asterisk:Servers").GetChildren()
+        .Where(s => string.Equals(s["ConfigMode"], "Realtime", StringComparison.OrdinalIgnoreCase))
+        .Select(s => s["RealtimeConnectionString"])
+        .FirstOrDefault()
+        ?? cfg.GetConnectionString("QueueConfig")
+        ?? throw new InvalidOperationException("No Realtime connection string for DbExtensionTemplateRepository");
+    var logger = sp.GetRequiredService<ILogger<DbExtensionTemplateRepository>>();
+    return new DbExtensionTemplateRepository(connStr, logger);
+});
+builder.Services.AddSingleton<ExtensionTemplateService>();
+
 builder.Services.AddScoped<SelectedServerService>();
 
 var app = builder.Build();
