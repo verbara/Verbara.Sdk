@@ -13,4 +13,11 @@ window.HelpInterop = {
     dispose: function () {
         if (this._controller) { this._controller.abort(); this._controller = null; }
     }
+    ,
+    setAdvanced: function (value) {
+        localStorage.setItem('pbxadmin-advanced', value);
+    },
+    getAdvanced: function () {
+        return localStorage.getItem('pbxadmin-advanced') === 'true';
+    }
 };
