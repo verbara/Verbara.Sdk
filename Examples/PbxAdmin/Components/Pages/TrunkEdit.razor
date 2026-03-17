@@ -7,6 +7,7 @@
 @inject IStringLocalizer<SharedStrings> L
 @inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>@(IsNew ? L["TrunkEdit_NewTitle"] : L["TrunkEdit_EditTitle", TrunkName ?? ""]) — Asterisk PBX Admin</PageTitle>
 
@@ -46,16 +47,19 @@ else
         <HelpPanel SectionKey="TrunkEdit_Connection">@L["TrunkEdit_Connection"]</HelpPanel>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">@L["Lbl_Name"] <HelpIcon HelpKey="TrunkName" /></label>
-                <input class="input" @bind="_config.Name" placeholder="my-trunk" disabled="@(!IsNew)" />
+                <label class="form-label">@L["Lbl_Name"] <span class="required-mark">*</span> <HelpIcon HelpKey="TrunkName" /></label>
+                <input class="input @ValidationCss(_nameTouched, _nameValid)" @bind="_config.Name" placeholder="my-trunk" disabled="@(!IsNew)" @onfocusout="@(() => { _nameTouched = true; })" />
+                <PbxAdmin.Components.Shared.ValidationMessage IsValid="_nameValid" IsTouched="_nameTouched" Message="@L["Err_NameRequired"]" />
             </div>
             <div class="form-field">
-                <label class="form-label">Host <HelpIcon HelpKey="TrunkHost" /></label>
-                <input class="input" @bind="_config.Host" placeholder="sip.provider.com" />
+                <label class="form-label">Host <span class="required-mark">*</span> <HelpIcon HelpKey="TrunkHost" /></label>
+                <input class="input @ValidationCss(_hostTouched, _hostValid)" @bind="_config.Host" placeholder="sip.provider.com" @onfocusout="@(() => { _hostTouched = true; })" />
+                <PbxAdmin.Components.Shared.ValidationMessage IsValid="_hostValid" IsTouched="_hostTouched" Message="@L["Err_InvalidHost"]" />
             </div>
             <div class="form-field">
-                <label class="form-label">@L["TrunkEdit_Port"] <HelpIcon HelpKey="TrunkPort" /></label>
-                <input class="input" type="number" @bind="_config.Port" />
+                <label class="form-label">@L["TrunkEdit_Port"] <span class="required-mark">*</span> <HelpIcon HelpKey="TrunkPort" /></label>
+                <input class="input @ValidationCss(_portTouched, _portValid)" type="number" @bind="_config.Port" @onfocusout="@(() => { _portTouched = true; })" />
+                <PbxAdmin.Components.Shared.ValidationMessage IsValid="_portValid" IsTouched="_portTouched" Message="@L["Err_InvalidPort"]" />
             </div>
             @if (_config.Technology != TrunkTechnology.Iax2)
             {
@@ -86,12 +90,14 @@ else
         <HelpPanel SectionKey="ExtEdit_Auth_Trunk">@L["ExtEdit_Auth"]</HelpPanel>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">@L["TrunkEdit_Username"] <HelpIcon HelpKey="TrunkUsername" /></label>
-                <input class="input" @bind="_config.Username" placeholder="username" />
+                <label class="form-label">@L["TrunkEdit_Username"] <span class="required-mark">*</span> <HelpIcon HelpKey="TrunkUsername" /></label>
+                <input class="input @ValidationCss(_userTouched, _userValid)" @bind="_config.Username" placeholder="username" @onfocusout="@(() => { _userTouched = true; })" />
+                <PbxAdmin.Components.Shared.ValidationMessage IsValid="_userValid" IsTouched="_userTouched" Message="@L["Err_NameRequired"]" />
             </div>
             <div class="form-field">
-                <label class="form-label">@L["TrunkEdit_Secret"] <HelpIcon HelpKey="TrunkSecret" /></label>
-                <input class="input" type="password" @bind="_config.Secret" placeholder="password" />
+                <label class="form-label">@L["TrunkEdit_Secret"] <span class="required-mark">*</span> <HelpIcon HelpKey="TrunkSecret" /></label>
+                <input class="input @ValidationCss(_secretTouched, _secretValid)" type="password" @bind="_config.Secret" placeholder="password" @onfocusout="@(() => { _secretTouched = true; })" />
+                <PbxAdmin.Components.Shared.ValidationMessage IsValid="_secretValid" IsTouched="_secretTouched" Message="@L["Err_PasswordTooShort"]" />
             </div>
             @if (_config.Technology == TrunkTechnology.PjSip)
             {
@@ -113,11 +119,15 @@ else
         </div>
     </div>
 
+    <AdvancedToggle IsAdvanced="_isAdvanced" IsAdvancedChanged="v => { _isAdvanced = v; StateHasChanged(); }" />
+    @if (_isAdvanced)
+    {
+
     <!-- Media / Codecs -->
     <div class="form-section">
         <h3>@L["ExtEdit_Codecs"]</h3>
         <div class="form-field" style="margin-bottom: 0.75rem;">
-            <label class="form-label">@L["ExtEdit_Codecs"] <HelpIcon HelpKey="TrunkCodecs" /></label>
+            <label class="form-label">@L["ExtEdit_Codecs"] <span class="required-mark">*</span> <HelpIcon HelpKey="TrunkCodecs" /></label>
             <div class="codec-grid">
                 @foreach (var codec in _availableCodecs)
                 {
@@ -128,6 +138,7 @@ else
                     </label>
                 }
             </div>
+            <PbxAdmin.Components.Shared.ValidationMessage IsValid="_codecValid" IsTouched="_codecTouched" Message="@L["Err_NoCodecs"]" />
         </div>
         @if (_config.Technology != TrunkTechnology.Iax2)
         {
@@ -190,8 +201,10 @@ else
         </div>
     </div>
 
+    }
+
     <div class="form-actions">
-        <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? L["Btn_Saving"] : L["Btn_Save"])</button>
+        <button class="btn btn-green" @onclick="Save" disabled="@(_saving || !IsFormValid)">@(_saving ? L["Btn_Saving"] : L["Btn_Save"])</button>
         <button class="btn" @onclick="NavigateBack">@L["Btn_Cancel"]</button>
     </div>
 
@@ -216,6 +229,20 @@ else
 
     private static readonly string[] _availableCodecs = ["ulaw", "alaw", "g729", "opus", "gsm", "g722"];
 
+    private bool _isAdvanced;
+    private bool _nameTouched, _hostTouched, _portTouched, _userTouched, _secretTouched, _codecTouched;
+
+    private bool _nameValid => FormValidator.IsRequired(_config.Name);
+    private bool _hostValid => FormValidator.IsValidHost(_config.Host);
+    private bool _portValid => FormValidator.IsValidPort(_config.Port);
+    private bool _userValid => FormValidator.IsRequired(_config.Username);
+    private bool _secretValid => FormValidator.IsRequired(_config.Secret);
+    private bool _codecValid => FormValidator.HasCodecs(_config.Codecs);
+    private bool IsFormValid => _nameValid && _hostValid && _portValid && _userValid && _secretValid && _codecValid;
+
+    private string ValidationCss(bool touched, bool valid) =>
+        !touched ? "" : valid ? "valid" : "invalid";
+
     protected override async Task OnInitializedAsync()
     {
         var serverId = ServerId ?? Server ?? Monitor.Servers.Select(s => s.Key).FirstOrDefault();
@@ -237,6 +264,11 @@ else
         _loading = false;
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) { _isAdvanced = await JS.InvokeAsync<bool>("HelpInterop.getAdvanced"); StateHasChanged(); }
+    }
+
     private bool IsCodecEnabled(string codec)
     {
         var codecs = _config.Codecs.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -255,20 +287,18 @@ else
             codecs.RemoveAll(c => string.Equals(c, codec, StringComparison.OrdinalIgnoreCase));
 
         _config.Codecs = string.Join(",", codecs);
+        _codecTouched = true;
     }
 
     private async Task Save()
     {
+        _nameTouched = _hostTouched = _portTouched = _userTouched = _secretTouched = _codecTouched = true;
+        if (!IsFormValid) return;
+
         var serverId = ServerId ?? Server ?? Monitor.Servers.Select(s => s.Key).FirstOrDefault();
         if (serverId is null)
         {
             _result = "No server selected.";
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(_config.Name))
-        {
-            _result = "Trunk name is required.";
             return;
         }
 
