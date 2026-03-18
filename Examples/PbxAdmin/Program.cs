@@ -46,7 +46,12 @@ builder.Services.AddLocalization();
 
 builder.Services.AddAsteriskMultiServer();
 builder.Services.AddSingleton<EventLogService>();
-builder.Services.AddSingleton<CallFlowTracker>();
+builder.Services.AddAsteriskSessions(opts =>
+{
+    opts.InboundContextPatterns = ["from-trunk", "from-pstn", "from-external"];
+    opts.CompletedRetention = TimeSpan.FromMinutes(5);
+    opts.MaxCompletedSessions = 500;
+});
 builder.Services.AddSingleton<AsteriskMonitorService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AsteriskMonitorService>());
 builder.Services.AddSingleton<PbxConfigManager>();
