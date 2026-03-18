@@ -1,4 +1,5 @@
 using Asterisk.Sdk.Hosting;
+using PbxAdmin;
 using PbxAdmin.Services;
 using PbxAdmin.Services.Repositories;
 using PbxAdmin.Services.Dialplan;
@@ -179,6 +180,15 @@ builder.Services.AddScoped<SelectedServerService>();
 
 var app = builder.Build();
 
+// Validate Realtime DB schemas at startup and warn about missing tables
+if (app.Services.GetRequiredService<IConfigProviderResolver>() is ConfigProviderResolver realtimeResolver)
+{
+    var schemaIssues = await realtimeResolver.ValidateRealtimeSchemasAsync();
+    var startupLogger = app.Services.GetRequiredService<ILogger<ConfigProviderResolver>>();
+    foreach (var (sid, tables) in schemaIssues)
+        ProgramLog.RealtimeMissingTables(startupLogger, sid, string.Join(", ", tables));
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseHsts();
@@ -291,3 +301,4 @@ mohApi.MapDelete("/{classId:int}/files/{filename}", async (
 });
 
 app.Run();
+

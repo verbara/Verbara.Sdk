@@ -24,6 +24,9 @@ internal static partial class DbConfigLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[CONFIG_DB] Operation failed: filename={Filename} section={Section}")]
     public static partial void OperationFailed(ILogger logger, Exception exception, string filename, string? section);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFIG_DB] Schema validation: cannot connect to database")]
+    public static partial void SchemaValidationConnectionFailed(ILogger logger, Exception exception);
 }
 
 /// <summary>
@@ -42,6 +45,10 @@ public sealed class DbConfigProvider : IConfigProvider, IDisposable, IAsyncDispo
     {
         "id", "name", "mailbox", "queue_name",
     };
+
+    // Config filenames whose Realtime tables are validated at startup
+    private static readonly string[] RealtimeConfigFiles =
+        ["pjsip.conf", "sip.conf", "iax.conf", "queues.conf", "voicemail.conf"];
 
     public DbConfigProvider(string connectionString, PbxConfigManager amiProvider, ILogger<DbConfigProvider> logger)
     {
@@ -215,48 +222,50 @@ public sealed class DbConfigProvider : IConfigProvider, IDisposable, IAsyncDispo
         Dictionary<string, string> variables, CancellationToken ct = default)
     {
         var tables = RealtimeTableMap.GetTables(filename);
-        if (tables.Count == 0) return false;
+        var table = RealtimeTableMap.ResolveTable(tables, variables);
+        if (table is null)
+        {
+            DbConfigLog.NoTableMapping(_logger, filename);
+            return false;
+        }
 
         try
         {
             await using var conn = await _dataSource.OpenConnectionAsync(ct);
 
-            // Try to update in each table; if the row exists in one, update it there
-            foreach (var table in tables)
+            var columns = new List<string> { table.IdColumn };
+            var paramNames = new List<string> { "@p0" };
+            var setClauses = new List<string>();
+            var parameters = new DynamicParameters();
+            parameters.Add("p0", section);
+
+            var idx = 1;
+            foreach (var (key, value) in variables)
             {
-                var setClauses = new List<string>();
-                var parameters = new DynamicParameters();
-                parameters.Add("Id", section);
+                if (string.Equals(key, table.TypeColumn, StringComparison.OrdinalIgnoreCase)
+                    && table.TypeValue is not null)
+                    continue;
 
-                var idx = 0;
-                foreach (var (key, value) in variables)
-                {
-                    if (string.Equals(key, table.TypeColumn, StringComparison.OrdinalIgnoreCase)
-                        && table.TypeValue is not null)
-                        continue;
+                if (ExcludedColumns.Contains(key))
+                    continue;
 
-                    if (ExcludedColumns.Contains(key))
-                        continue;
-
-                    setClauses.Add($"{key} = @p{idx}");
-                    parameters.Add($"p{idx}", value);
-                    idx++;
-                }
-
-                if (setClauses.Count == 0) continue;
-
-                var sql = $"UPDATE {table.TableName} SET {string.Join(", ", setClauses)} WHERE {table.IdColumn} = @Id";
-                var rowsAffected = await conn.ExecuteAsync(new CommandDefinition(sql, parameters, commandTimeout: 15, cancellationToken: ct));
-
-                if (rowsAffected > 0)
-                {
-                    DbConfigLog.UpdateSection(_logger, table.TableName, section, rowsAffected);
-                    return true;
-                }
+                columns.Add(key);
+                paramNames.Add($"@p{idx}");
+                setClauses.Add($"{key} = EXCLUDED.{key}");
+                parameters.Add($"p{idx}", value);
+                idx++;
             }
 
-            // Fallback: INSERT if no existing row was found
-            return await CreateSectionAsync(serverId, filename, section, variables, ct: ct);
+            if (setClauses.Count == 0) return true;
+
+            var sql = $"INSERT INTO {table.TableName} ({string.Join(", ", columns)}) " +
+                      $"VALUES ({string.Join(", ", paramNames)}) " +
+                      $"ON CONFLICT ({table.IdColumn}) DO UPDATE SET {string.Join(", ", setClauses)}";
+
+            await conn.ExecuteAsync(new CommandDefinition(sql, parameters, commandTimeout: 15, cancellationToken: ct));
+
+            DbConfigLog.UpdateSection(_logger, table.TableName, section, 1);
+            return true;
         }
         catch (Exception ex)
         {
@@ -299,4 +308,43 @@ public sealed class DbConfigProvider : IConfigProvider, IDisposable, IAsyncDispo
     /// <summary>Delegates to AMI — module reload requires CLI access.</summary>
     public Task<bool> ReloadModuleAsync(string serverId, string moduleName, CancellationToken ct = default)
         => _amiProvider.ReloadModuleAsync(serverId, moduleName, ct);
+
+    /// <summary>
+    /// Checks that all Realtime tables referenced by <see cref="RealtimeTableMap"/> exist in the
+    /// database. Returns a list of table names that could not be queried (missing or inaccessible).
+    /// </summary>
+    public async Task<List<string>> ValidateSchemaAsync(CancellationToken ct = default)
+    {
+        var missingTables = new List<string>();
+
+        try
+        {
+            await using var conn = await _dataSource.OpenConnectionAsync(ct);
+
+            var allTables = RealtimeConfigFiles
+                .SelectMany(f => RealtimeTableMap.GetTables(f))
+                .Select(t => t.TableName)
+                .Distinct();
+
+            foreach (var tableName in allTables)
+            {
+                try
+                {
+                    await conn.ExecuteScalarAsync(new CommandDefinition(
+                        $"SELECT 1 FROM {tableName} LIMIT 0", commandTimeout: 5, cancellationToken: ct));
+                }
+                catch
+                {
+                    missingTables.Add(tableName);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            DbConfigLog.SchemaValidationConnectionFailed(_logger, ex);
+            missingTables.Add("(connection failed)");
+        }
+
+        return missingTables;
+    }
 }
