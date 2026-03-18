@@ -51,6 +51,9 @@ public sealed class AsteriskServer : IAsteriskServer
     /// <summary>Fired when the AMI connection is lost or completed.</summary>
     public event Action<Exception?>? ConnectionLost;
 
+    /// <summary>The underlying AMI connection for this server.</summary>
+    public IAmiConnection Connection => _connection;
+
     /// <summary>The Asterisk version string.</summary>
     public string? AsteriskVersion => _connection.AsteriskVersion;
 
