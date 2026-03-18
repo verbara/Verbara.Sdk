@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Configuration;
 using PbxAdmin.Models;
 using PbxAdmin.Services.Repositories;
 
@@ -12,6 +13,7 @@ public sealed partial class MohService
     private readonly IRecordingMohSchemaManager _schema;
     private readonly IConfigProviderResolver _providerResolver;
     private readonly AudioFileService _audioSvc;
+    private readonly IConfiguration _config;
     private readonly ILogger<MohService> _logger;
 
     private const string ModeFiles = "files";
@@ -25,12 +27,14 @@ public sealed partial class MohService
         IRecordingMohSchemaManager schema,
         IConfigProviderResolver providerResolver,
         AudioFileService audioSvc,
+        IConfiguration config,
         ILogger<MohService> logger)
     {
         _repo = repo;
         _schema = schema;
         _providerResolver = providerResolver;
         _audioSvc = audioSvc;
+        _config = config;
         _logger = logger;
     }
 
@@ -51,6 +55,14 @@ public sealed partial class MohService
     {
         var error = ValidateClass(mohClass);
         if (error is not null) return (false, error);
+
+        if (!string.IsNullOrEmpty(mohClass.Directory))
+        {
+            var basePath = _config[$"Asterisk:Servers:{serverId}:MohBasePath"] ?? "/var/lib/asterisk/moh";
+            var resolvedDir = Path.GetFullPath(mohClass.Directory);
+            if (!resolvedDir.StartsWith(Path.GetFullPath(basePath), StringComparison.Ordinal))
+                return (false, "Directory must be within MOH base path");
+        }
 
         await _schema.EnsureSchemaAsync(ct);
 
@@ -77,6 +89,14 @@ public sealed partial class MohService
     {
         var error = ValidateClass(mohClass);
         if (error is not null) return (false, error);
+
+        if (!string.IsNullOrEmpty(mohClass.Directory))
+        {
+            var basePath = _config[$"Asterisk:Servers:{serverId}:MohBasePath"] ?? "/var/lib/asterisk/moh";
+            var resolvedDir = Path.GetFullPath(mohClass.Directory);
+            if (!resolvedDir.StartsWith(Path.GetFullPath(basePath), StringComparison.Ordinal))
+                return (false, "Directory must be within MOH base path");
+        }
 
         await _schema.EnsureSchemaAsync(ct);
 
@@ -139,39 +159,57 @@ public sealed partial class MohService
         var needsConversion = !nativeFormats.Contains(detectedFormat);
 
         var targetPath = Path.Combine(cls.Directory, filename);
+        var resolvedTarget = Path.GetFullPath(targetPath);
+        if (!resolvedTarget.StartsWith(Path.GetFullPath(cls.Directory), StringComparison.Ordinal))
+            return (false, "Invalid file path");
 
-        if (needsConversion && _audioSvc.IsSoxAvailable())
-        {
-            var tempPath = Path.GetTempFileName();
-            try
-            {
-                await using (var tempFile = File.Create(tempPath))
-                    await stream.CopyToAsync(tempFile, ct);
+        if (needsConversion)
+            return await ConvertAndSaveAsync(cls.Directory, filename, stream, detectedFormat, existingFiles, maxClassSizeMb, ct);
 
-                var wavFilename = Path.ChangeExtension(filename, ".wav");
-                var wavPath = Path.Combine(cls.Directory, wavFilename);
-
-                var (ok, soxError) = await _audioSvc.ConvertWithSoxAsync(tempPath, wavPath, ct);
-                if (!ok) return (false, soxError);
-            }
-            finally
-            {
-                try { File.Delete(tempPath); } catch { /* best effort */ }
-            }
-        }
-        else if (needsConversion)
-        {
-            return (false, $"Format '{detectedFormat}' requires sox for conversion, but sox is not available");
-        }
-        else
-        {
-            Directory.CreateDirectory(cls.Directory);
-            await using var fs = File.Create(targetPath);
-            await stream.CopyToAsync(fs, ct);
-        }
+        Directory.CreateDirectory(cls.Directory);
+        await using var fs = File.Create(targetPath);
+        await stream.CopyToAsync(fs, ct);
 
         FileUploaded(_logger, filename, classId);
         return (true, null);
+    }
+
+    private async Task<(bool Success, string? Error)> ConvertAndSaveAsync(
+        string directory, string filename, Stream stream, string detectedFormat,
+        List<AudioFileInfo> existingFiles, int maxClassSizeMb, CancellationToken ct)
+    {
+        if (!_audioSvc.IsSoxAvailable())
+            return (false, $"Format '{detectedFormat}' requires sox for conversion, but sox is not available");
+
+        var wavFilename = Path.ChangeExtension(filename, ".wav");
+        var wavPath = Path.Combine(directory, wavFilename);
+        var wavResolved = Path.GetFullPath(wavPath);
+        if (!wavResolved.StartsWith(Path.GetFullPath(directory), StringComparison.Ordinal))
+            return (false, "Invalid file path");
+
+        var tempPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        try
+        {
+            await using (var tempFile = File.Create(tempPath))
+                await stream.CopyToAsync(tempFile, ct);
+
+            var (ok, soxError) = await _audioSvc.ConvertWithSoxAsync(tempPath, wavPath, ct);
+            if (!ok) return (false, soxError);
+
+            var convertedSize = new FileInfo(wavPath).Length;
+            var totalAfterConversion = existingFiles.Sum(f => f.Size) + convertedSize;
+            if (totalAfterConversion > maxClassSizeMb * 1024L * 1024L)
+            {
+                try { File.Delete(wavPath); } catch { /* best effort */ }
+                return (false, $"Converted file too large: class total would exceed {maxClassSizeMb}MB limit");
+            }
+
+            return (true, null);
+        }
+        finally
+        {
+            try { File.Delete(tempPath); } catch { /* best effort */ }
+        }
     }
 
     public async Task<(bool Success, string? Error)> DeleteAudioAsync(
@@ -184,6 +222,9 @@ public sealed partial class MohService
         if (cls is null) return (false, "Class not found");
 
         var path = Path.Combine(cls.Directory, filename);
+        var resolved = Path.GetFullPath(path);
+        if (!resolved.StartsWith(Path.GetFullPath(cls.Directory), StringComparison.Ordinal))
+            return (false, "Invalid file path");
         if (!File.Exists(path)) return (false, "File not found");
 
         File.Delete(path);
