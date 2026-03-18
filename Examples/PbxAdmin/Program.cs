@@ -46,12 +46,17 @@ builder.Services.AddLocalization();
 
 builder.Services.AddAsteriskMultiServer();
 builder.Services.AddSingleton<EventLogService>();
+// Register Sessions, then remove the single-server SessionManagerHostedService
+// (multi-server mode manages AttachToServer manually in AsteriskMonitorService)
 builder.Services.AddAsteriskSessions(opts =>
 {
     opts.InboundContextPatterns = ["from-trunk", "from-pstn", "from-external"];
     opts.CompletedRetention = TimeSpan.FromMinutes(5);
     opts.MaxCompletedSessions = 500;
 });
+var hostedSvc = builder.Services.FirstOrDefault(sd =>
+    sd.ImplementationType?.Name == "SessionManagerHostedService");
+if (hostedSvc is not null) builder.Services.Remove(hostedSvc);
 builder.Services.AddSingleton<AsteriskMonitorService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AsteriskMonitorService>());
 builder.Services.AddSingleton<PbxConfigManager>();
