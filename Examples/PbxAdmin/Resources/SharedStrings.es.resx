@@ -1000,4 +1000,26 @@
   <data name="Help_RecMixMonitorOpts" xml:space="preserve"><value>Opciones avanzadas de MixMonitor: 'r' lee del lado del llamante, 't' lee del lado del agente.</value></data>
   <data name="HelpPanel_RecEdit_PolicySettings" xml:space="preserve"><value>Defina qué llamadas grabar, en qué formato y por cuánto tiempo conservarlas. Piense en esto como las 'reglas' de grabación — como decir 'grabar todas las llamadas de ventas en formato WAV y conservarlas 90 días'.</value></data>
   <data name="HelpPanel_RecEdit_Targets" xml:space="preserve"><value>Seleccione extensiones, colas o troncales específicas a las que aplicar esta política. Solo las llamadas que involucren estos objetivos serán grabadas.</value></data>
+  <!-- IvrMenuEdit Help -->
+  <data name="Help_IvrName_Title" xml:space="preserve"><value>Nombre IVR</value></data>
+  <data name="Help_IvrName" xml:space="preserve"><value>Nombre interno de este menú IVR. Se usa en las reglas de enrutamiento y en los logs.</value></data>
+  <data name="Help_IvrLabel_Title" xml:space="preserve"><value>Etiqueta</value></data>
+  <data name="Help_IvrLabel" xml:space="preserve"><value>Nombre amigable que se muestra en el panel de administración.</value></data>
+  <data name="Help_IvrEnabled_Title" xml:space="preserve"><value>Habilitado</value></data>
+  <data name="Help_IvrEnabled" xml:space="preserve"><value>Cuando está habilitado, este menú IVR está activo y puede recibir llamadas. Deshabilite para desactivarlo temporalmente.</value></data>
+  <data name="Help_IvrGreeting_Title" xml:space="preserve"><value>Audio de Bienvenida</value></data>
+  <data name="Help_IvrGreeting" xml:space="preserve"><value>Archivo de audio que se reproduce cuando un llamante entra a este menú (ej. 'mensaje-bienvenida'). Debe existir en el servidor Asterisk.</value></data>
+  <data name="Help_IvrTimeout_Title" xml:space="preserve"><value>Tiempo de Espera</value></data>
+  <data name="Help_IvrTimeout" xml:space="preserve"><value>Segundos de espera para que el llamante presione una tecla antes de activar el destino por tiempo agotado.</value></data>
+  <data name="Help_IvrMaxRetries_Title" xml:space="preserve"><value>Máx. Reintentos</value></data>
+  <data name="Help_IvrMaxRetries" xml:space="preserve"><value>Cuántas veces el llamante puede presionar una tecla inválida antes de ser enviado al destino de opción inválida.</value></data>
+  <data name="Help_IvrTimeoutDest_Title" xml:space="preserve"><value>Destino por Tiempo</value></data>
+  <data name="Help_IvrTimeoutDest" xml:space="preserve"><value>A dónde enviar al llamante si no presiona ninguna tecla dentro del período de espera.</value></data>
+  <data name="Help_IvrInvalidDest_Title" xml:space="preserve"><value>Destino por Inválido</value></data>
+  <data name="Help_IvrInvalidDest" xml:space="preserve"><value>A dónde enviar al llamante después de agotar todos los reintentos con teclas inválidas.</value></data>
+  <data name="HelpPanel_IvrEdit_Identity" xml:space="preserve"><value>Identificación básica del menú IVR: nombre, etiqueta y si está activo. El nombre se usa internamente para enrutamiento, mientras que la etiqueta es lo que ve en este panel.</value></data>
+  <data name="HelpPanel_IvrEdit_Audio" xml:space="preserve"><value>El archivo de audio de bienvenida que se reproduce cuando un llamante entra a este menú — por ejemplo, 'Presione 1 para ventas, presione 2 para soporte'. El archivo debe existir en el servidor Asterisk.</value></data>
+  <data name="HelpPanel_IvrEdit_Behavior" xml:space="preserve"><value>Cuánto tiempo esperar a que el llamante presione una tecla y cuántas oportunidades tiene antes de ser redirigido. Esto evita que los llamantes se queden en silencio.</value></data>
+  <data name="HelpPanel_IvrEdit_Options" xml:space="preserve"><value>Opciones DTMF: cada tecla (0-9, *, #) puede apuntar a un destino diferente — extensión, cola, submenú, buzón de voz o colgar. Este es el árbol de navegación del llamante.</value></data>
+  <data name="HelpPanel_IvrEdit_Fallbacks" xml:space="preserve"><value>Qué sucede cuando el llamante no presiona nada (tiempo agotado) o presiona una tecla inválida. Configure siempre estos destinos para que los llamantes no se queden atascados.</value></data>
 </root>

@@ -37,29 +37,29 @@ else
     <div class="ivr-edit-form">
 
         <div class="form-section">
-            <h3>@L["IvrEdit_Identity"]</h3>
+            <HelpPanel SectionKey="IvrEdit_Identity">@L["IvrEdit_Identity"]</HelpPanel>
             <div class="form-grid">
                 <div class="form-field">
-                    <label class="form-label">@L["Lbl_Name"]</label>
+                    <label class="form-label">@L["Lbl_Name"] <HelpIcon HelpKey="IvrName" /></label>
                     <input class="input" @bind="_config.Name" readonly="@(!_isNew)" />
                     <span class="text-muted">@L["IvrEdit_NameHint"]</span>
                 </div>
                 <div class="form-field">
-                    <label class="form-label">@L["IvrEdit_Label"]</label>
+                    <label class="form-label">@L["IvrEdit_Label"] <HelpIcon HelpKey="IvrLabel" /></label>
                     <input class="input" @bind="_config.Label" />
                 </div>
                 <div class="form-field">
-                    <label class="form-label">@L["Lbl_Enabled"]</label>
+                    <label class="form-label">@L["Lbl_Enabled"] <HelpIcon HelpKey="IvrEnabled" /></label>
                     <input type="checkbox" @bind="_config.Enabled" />
                 </div>
             </div>
         </div>
 
         <div class="form-section">
-            <h3>@L["IvrEdit_Audio"]</h3>
+            <HelpPanel SectionKey="IvrEdit_Audio">@L["IvrEdit_Audio"]</HelpPanel>
             <div class="form-grid">
                 <div class="form-field">
-                    <label class="form-label">@L["IvrEdit_Greeting"]</label>
+                    <label class="form-label">@L["IvrEdit_Greeting"] <HelpIcon HelpKey="IvrGreeting" /></label>
                     <div class="input-with-indicator">
                         <input class="input" @bind="_config.Greeting" placeholder="e.g. welcome, press-1-for-sales" />
                         <span class="indicator @_greetingIndicator" title="@_greetingWarning"></span>
@@ -70,21 +70,21 @@ else
         </div>
 
         <div class="form-section">
-            <h3>@L["IvrEdit_Behavior"]</h3>
+            <HelpPanel SectionKey="IvrEdit_Behavior">@L["IvrEdit_Behavior"]</HelpPanel>
             <div class="form-grid">
                 <div class="form-field">
-                    <label class="form-label">@L["IvrEdit_TimeoutSec"]</label>
+                    <label class="form-label">@L["IvrEdit_TimeoutSec"] <HelpIcon HelpKey="IvrTimeout" /></label>
                     <input type="number" class="input" @bind="_config.Timeout" min="1" max="30" />
                 </div>
                 <div class="form-field">
-                    <label class="form-label">@L["IvrEdit_MaxRetries"]</label>
+                    <label class="form-label">@L["IvrEdit_MaxRetries"] <HelpIcon HelpKey="IvrMaxRetries" /></label>
                     <input type="number" class="input" @bind="_config.MaxRetries" min="1" max="10" />
                 </div>
             </div>
         </div>
 
         <div class="form-section">
-            <h3>@L["IvrEdit_DtmfOptions"]</h3>
+            <HelpPanel SectionKey="IvrEdit_Options">@L["IvrEdit_DtmfOptions"]</HelpPanel>
             <table class="table">
                 <thead>
                     <tr>
@@ -164,10 +164,10 @@ else
         </div>
 
         <div class="form-section">
-            <h3>@L["IvrEdit_Fallbacks"]</h3>
+            <HelpPanel SectionKey="IvrEdit_Fallbacks">@L["IvrEdit_Fallbacks"]</HelpPanel>
             <div class="form-grid">
                 <div class="form-field">
-                    <label class="form-label">@L["IvrEdit_TimeoutDest"]</label>
+                    <label class="form-label">@L["IvrEdit_TimeoutDest"] <HelpIcon HelpKey="IvrTimeoutDest" /></label>
                     <div class="input-row">
                         <select class="input" @bind="_config.TimeoutDestType">
                             <option value="">@L["IvrEdit_NoneHangup"]</option>
@@ -180,7 +180,7 @@ else
                     </div>
                 </div>
                 <div class="form-field">
-                    <label class="form-label">@L["IvrEdit_InvalidDest"]</label>
+                    <label class="form-label">@L["IvrEdit_InvalidDest"] <HelpIcon HelpKey="IvrInvalidDest" /></label>
                     <div class="input-row">
                         <select class="input" @bind="_config.InvalidDestType">
                             <option value="">@L["IvrEdit_NoneHangup"]</option>

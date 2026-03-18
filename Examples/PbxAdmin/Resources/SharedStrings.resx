@@ -1000,4 +1000,26 @@
   <data name="Help_RecMixMonitorOpts" xml:space="preserve"><value>Advanced MixMonitor flags: 'r' reads from caller side, 't' reads from agent side.</value></data>
   <data name="HelpPanel_RecEdit_PolicySettings" xml:space="preserve"><value>Define which calls to record, in what format, and how long to keep them. Think of this as the 'rules' for recording — like saying 'record all sales calls in WAV format and keep them for 90 days'.</value></data>
   <data name="HelpPanel_RecEdit_Targets" xml:space="preserve"><value>Select specific extensions, queues, or trunks to apply this recording policy to. Only calls involving these targets will be recorded.</value></data>
+  <!-- IvrMenuEdit Help -->
+  <data name="Help_IvrName_Title" xml:space="preserve"><value>IVR Name</value></data>
+  <data name="Help_IvrName" xml:space="preserve"><value>Internal name for this IVR menu. Used in routing rules and logs.</value></data>
+  <data name="Help_IvrLabel_Title" xml:space="preserve"><value>Display Label</value></data>
+  <data name="Help_IvrLabel" xml:space="preserve"><value>Friendly display name shown in the admin panel.</value></data>
+  <data name="Help_IvrEnabled_Title" xml:space="preserve"><value>Enabled</value></data>
+  <data name="Help_IvrEnabled" xml:space="preserve"><value>When enabled, this IVR menu is active and can receive calls. Disable to take it offline temporarily.</value></data>
+  <data name="Help_IvrGreeting_Title" xml:space="preserve"><value>Greeting Sound</value></data>
+  <data name="Help_IvrGreeting" xml:space="preserve"><value>Sound file that plays when a caller enters this menu (e.g., 'welcome-message'). Must exist on the Asterisk server.</value></data>
+  <data name="Help_IvrTimeout_Title" xml:space="preserve"><value>Timeout</value></data>
+  <data name="Help_IvrTimeout" xml:space="preserve"><value>Seconds to wait for the caller to press a key before triggering the timeout destination.</value></data>
+  <data name="Help_IvrMaxRetries_Title" xml:space="preserve"><value>Max Retries</value></data>
+  <data name="Help_IvrMaxRetries" xml:space="preserve"><value>How many times the caller can press an invalid key before being sent to the invalid destination.</value></data>
+  <data name="Help_IvrTimeoutDest_Title" xml:space="preserve"><value>Timeout Destination</value></data>
+  <data name="Help_IvrTimeoutDest" xml:space="preserve"><value>Where to send the caller if they don't press any key within the timeout period.</value></data>
+  <data name="Help_IvrInvalidDest_Title" xml:space="preserve"><value>Invalid Destination</value></data>
+  <data name="Help_IvrInvalidDest" xml:space="preserve"><value>Where to send the caller after exhausting all retries with invalid key presses.</value></data>
+  <data name="HelpPanel_IvrEdit_Identity" xml:space="preserve"><value>Basic IVR menu identification: name, label, and whether it's active. The name is used internally for routing, while the label is what you see in this admin panel.</value></data>
+  <data name="HelpPanel_IvrEdit_Audio" xml:space="preserve"><value>The greeting audio file that plays when a caller enters this menu — for example, 'Press 1 for sales, press 2 for support'. The file must already exist on the Asterisk server.</value></data>
+  <data name="HelpPanel_IvrEdit_Behavior" xml:space="preserve"><value>How long to wait for the caller to press a key, and how many chances they get before being redirected. These prevent callers from getting stuck in silence.</value></data>
+  <data name="HelpPanel_IvrEdit_Options" xml:space="preserve"><value>DTMF options: each key (0-9, *, #) can point to a different destination — an extension, queue, submenu, voicemail, or hangup. This is the menu tree the caller navigates.</value></data>
+  <data name="HelpPanel_IvrEdit_Fallbacks" xml:space="preserve"><value>What happens when the caller doesn't press anything (timeout) or presses an invalid key. Always set these so callers don't get stuck.</value></data>
 </root>
