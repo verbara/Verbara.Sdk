@@ -1,7 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <NoWarn>$(NoWarn);ASTSDK001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
