@@ -22,16 +22,16 @@
 }
 
 <div class="form-section">
-    <h3>@L["MohEdit_ClassSettings"]</h3>
+    <HelpPanel SectionKey="MohEdit_ClassSettings">@L["MohEdit_ClassSettings"]</HelpPanel>
 
     <div class="form-group">
-        <label>@L["Lbl_Name"]</label>
+        <label>@L["Lbl_Name"] <HelpIcon HelpKey="MohName" /></label>
         <input type="text" @bind="_mohClass.Name" class="form-control"
                placeholder="alphanumeric, hyphens, underscores" />
     </div>
 
     <div class="form-group">
-        <label>@L["Col_Mode"]</label>
+        <label>@L["Col_Mode"] <HelpIcon HelpKey="MohMode" /></label>
         <select @bind="_mohClass.Mode" class="form-control">
             <option value="files">files</option>
             <option value="mp3">mp3</option>
@@ -48,12 +48,12 @@
     @if (_mohClass.Mode == "files" || _mohClass.Mode == "mp3")
     {
         <div class="form-group">
-            <label>@L["MohEdit_Directory"]</label>
+            <label>@L["MohEdit_Directory"] <HelpIcon HelpKey="MohDirectory" /></label>
             <input type="text" @bind="_mohClass.Directory" class="form-control" />
         </div>
 
         <div class="form-group">
-            <label>@L["MohEdit_Sort"]</label>
+            <label>@L["MohEdit_Sort"] <HelpIcon HelpKey="MohSort" /></label>
             <div class="radio-group">
                 <label>
                     <input type="radio" name="sort" value="random"
@@ -72,7 +72,7 @@
     @if (_mohClass.Mode == "custom")
     {
         <div class="form-group">
-            <label>@L["MohEdit_CustomApp"]</label>
+            <label>@L["MohEdit_CustomApp"] <HelpIcon HelpKey="MohCustomApp" /></label>
             <input type="text" @bind="_mohClass.CustomApplication" class="form-control"
                    placeholder="/usr/bin/mpg123 -q -s --mono -r 8000 http://stream" />
         </div>
@@ -82,7 +82,7 @@
 @if (!_isNew)
 {
     <div class="form-section">
-        <h3>@L["MohEdit_AudioFiles"]</h3>
+        <HelpPanel SectionKey="MohEdit_AudioFiles">@L["MohEdit_AudioFiles"]</HelpPanel>
 
         @if (!_fileAccessAvailable)
         {
