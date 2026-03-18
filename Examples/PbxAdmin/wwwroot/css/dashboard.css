@@ -2897,6 +2897,12 @@ body {
 .indicator-green { background: #4caf50; }
 .indicator-yellow { background: #ff9800; }
 .indicator-gray { background: #666; }
+.indicator-red { background: #f44336; }
+
+/* Sound File Picker */
+.sound-picker-row { display: flex; align-items: center; gap: 0.35rem; }
+.sound-picker-input { flex: 1; }
+.sound-status { font-size: 0.9rem; min-width: 1.2rem; text-align: center; }
 .input-row {
     display: flex;
     gap: 0.5rem;
