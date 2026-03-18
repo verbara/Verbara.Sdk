@@ -14,7 +14,7 @@
 
 <h2>@L["Met_Heading"]</h2>
 
-<h3>@L["Met_SystemInfo"]</h3>
+<HelpPanel SectionKey="Metrics_SystemInfo">@L["Met_SystemInfo"]</HelpPanel>
 <div class="kpi-grid">
     <div class="kpi-card kpi-purple">
         <div class="kpi-value">@(_asteriskVersion ?? "—")</div>
@@ -56,7 +56,7 @@
     </div>
 </div>
 
-<h3>@L["Met_AmiHealth"]</h3>
+<HelpPanel SectionKey="Metrics_AmiHealth">@L["Met_AmiHealth"]</HelpPanel>
 <div class="kpi-grid">
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@GetCounter("ami.events.received")</div>
@@ -96,7 +96,7 @@
     </div>
 </div>
 
-<h3>@L["Met_LiveGauges"]</h3>
+<HelpPanel SectionKey="Metrics_LiveGauges">@L["Met_LiveGauges"]</HelpPanel>
 <div class="kpi-grid">
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@GetGauge("live.channels.active")</div>
@@ -124,7 +124,7 @@
     </div>
 </div>
 
-<h3 class="section-label">@L["Met_SessionEngine"]</h3>
+<HelpPanel SectionKey="Metrics_Sessions">@L["Met_SessionEngine"]</HelpPanel>
 <div class="kpi-grid">
     <div class="kpi-card"><span class="kpi-value kpi-blue">@GetCounter("sessions.created")</span><span class="kpi-label">@L["Met_SessionsCreated"]</span></div>
     <div class="kpi-card"><span class="kpi-value kpi-green">@GetCounter("sessions.completed")</span><span class="kpi-label">@L["Met_SessionsCompleted"]</span></div>
