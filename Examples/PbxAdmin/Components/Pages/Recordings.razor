@@ -26,6 +26,7 @@
 }
 else if (_activeTab == "policies")
 {
+    <HelpPanel SectionKey="Recordings_Policies">@L["Rec_Policies"]</HelpPanel>
     if (_policies.Count == 0)
     {
         <p class="text-muted">@L["Rec_NoPolicies"]</p>
@@ -64,6 +65,7 @@ else if (_activeTab == "policies")
 }
 else if (_activeTab == "files")
 {
+    <HelpPanel SectionKey="Recordings_Files">@L["Rec_Files"]</HelpPanel>
     if (!_fileAccessAvailable)
     {
         <div class="alert alert-warning">@L["Rec_FileAccessUnavail"]</div>
@@ -107,6 +109,7 @@ else if (_activeTab == "files")
 }
 else if (_activeTab == "active")
 {
+    <HelpPanel SectionKey="Recordings_Active">@L["Rec_Active"]</HelpPanel>
     var activeList = RecSvc.GetActiveRecordings();
     if (activeList.Count == 0)
     {

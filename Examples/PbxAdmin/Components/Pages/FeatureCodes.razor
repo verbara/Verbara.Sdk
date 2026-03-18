@@ -8,6 +8,7 @@
 <PageTitle>@L["FC_Title"]</PageTitle>
 
 <h2>@L["FC_Heading"]</h2>
+<HelpPanel SectionKey="FeatureCodes_Overview">@L["FC_Heading"]</HelpPanel>
 
 @if (_error is not null)
 {
@@ -66,19 +67,19 @@ else
         <h4>@(_editingCode.Id == 0 ? L["FC_NewFeatureCode"] : $"{L["FC_EditCode"]}: {_editingCode.Code}")</h4>
 
         <div class="form-group">
-            <label>@L["Col_Code"]</label>
+            <label>@L["Col_Code"] <HelpIcon HelpKey="FcCode" /></label>
             <input type="text" @bind="_editingCode.Code" class="form-control"
                    placeholder="e.g. *72, #21" />
         </div>
 
         <div class="form-group">
-            <label>@L["Lbl_Name"]</label>
+            <label>@L["Lbl_Name"] <HelpIcon HelpKey="FcName" /></label>
             <input type="text" @bind="_editingCode.Name" class="form-control"
                    placeholder="Call Forward Activate" />
         </div>
 
         <div class="form-group">
-            <label>@L["Lbl_Description"]</label>
+            <label>@L["Lbl_Description"] <HelpIcon HelpKey="FcDescription" /></label>
             <input type="text" @bind="_editingCode.Description" class="form-control"
                    placeholder="Optional description" />
         </div>
@@ -86,7 +87,7 @@ else
         <div class="form-group">
             <label>
                 <input type="checkbox" @bind="_editingCode.Enabled" />
-                @L["Lbl_Enabled"]
+                @L["Lbl_Enabled"] <HelpIcon HelpKey="FcEnabled" />
             </label>
         </div>
 
