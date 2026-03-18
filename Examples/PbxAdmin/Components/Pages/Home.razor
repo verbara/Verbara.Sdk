@@ -12,6 +12,8 @@
 
 <StatusSemaphore />
 
+<HelpPanel SectionKey="Home_KPIs">@L["Home_Heading"]</HelpPanel>
+
 <div class="kpi-grid">
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@_activeCalls</div>
@@ -39,7 +41,7 @@
     </div>
 </div>
 
-<h3>@L["Home_CallFlowMetrics"]</h3>
+<HelpPanel SectionKey="Home_CallFlowMetrics">@L["Home_CallFlowMetrics"]</HelpPanel>
 <div class="kpi-grid kpi-grid-sm">
     <div class="kpi-card kpi-blue">
         <div class="kpi-value">@_callsTracked</div>
@@ -59,7 +61,7 @@
     </div>
 </div>
 
-<h3>@L["Home_QueueSummary"]</h3>
+<HelpPanel SectionKey="Home_QueueSummary">@L["Home_QueueSummary"]</HelpPanel>
 
 <table class="data-table">
     <thead>
