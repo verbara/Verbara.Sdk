@@ -156,17 +156,28 @@ public class ActivityTests
     }
 
     [Fact]
-    public async Task BlindTransferActivity_ShouldSetContextAndGoto()
+    public async Task BlindTransferActivity_ShouldUseBlindTransferApp_NotGoto()
     {
-        var activity = new BlindTransferActivity(_channel)
-        {
-            Destination = new DialPlanExtension("from-internal", "3000", 1)
-        };
+        var channel = Substitute.For<IAgiChannel>();
+        var destination = new DialPlanExtension("from-internal", "2000", 1);
+        var activity = new BlindTransferActivity(channel) { Destination = destination };
 
         await activity.StartAsync();
 
-        await _channel.Received(1).SetVariableAsync("TRANSFER_CONTEXT", "from-internal", Arg.Any<CancellationToken>());
-        await _channel.Received(1).ExecAsync("Goto", "from-internal,3000,1", Arg.Any<CancellationToken>());
+        await channel.Received(1).ExecAsync("BlindTransfer", "2000@from-internal", Arg.Any<CancellationToken>());
+        await channel.DidNotReceive().ExecAsync("Goto", Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task BlindTransferActivity_ShouldFormatDestinationCorrectly()
+    {
+        var channel = Substitute.For<IAgiChannel>();
+        var destination = new DialPlanExtension("sales-queue", "3500", 1);
+        var activity = new BlindTransferActivity(channel) { Destination = destination };
+
+        await activity.StartAsync();
+
+        await channel.Received(1).ExecAsync("BlindTransfer", "3500@sales-queue", Arg.Any<CancellationToken>());
     }
 
     [Fact]
