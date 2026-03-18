@@ -300,4 +300,48 @@ public class ActivityTests
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*cannot be started from Completed*");
     }
+
+    [Fact]
+    public void ExternalMediaActivity_ShouldInheritFromAriActivityBase()
+    {
+        var ariClient = Substitute.For<IAriClient>();
+        var activity = new ExternalMediaActivity(ariClient) { App = "test", ExternalHost = "127.0.0.1:9092" };
+        activity.Should().BeAssignableTo<AriActivityBase>();
+        activity.Should().BeAssignableTo<IActivity>();
+    }
+
+    [Fact]
+    public void ExternalMediaActivity_ShouldSetStatusCorrectly_WhenCreated()
+    {
+        var ariClient = Substitute.For<IAriClient>();
+        var activity = new ExternalMediaActivity(ariClient) { App = "test", ExternalHost = "127.0.0.1:9092" };
+        activity.Status.Should().Be(ActivityStatus.Pending);
+    }
+
+    [Fact]
+    public async Task AriActivityBase_ShouldThrow_WhenStartedTwice()
+    {
+        var ariClient = Substitute.For<IAriClient>();
+        var channelsResource = Substitute.For<IAriChannelsResource>();
+        ariClient.Channels.Returns(channelsResource);
+#pragma warning disable CA2012
+        channelsResource.CreateExternalMediaAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(),
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<AriChannel>(new AriChannel { Id = "ch-1" }));
+#pragma warning restore CA2012
+
+        // Activity will fail at polling (no audio server) but we test the second start
+        var activity = new ExternalMediaActivity(ariClient) { App = "test", ExternalHost = "127.0.0.1:9092", ConnectionTimeout = TimeSpan.FromMilliseconds(50) };
+
+        // First start will throw TimeoutException (no audio server connected)
+        var firstStart = () => activity.StartAsync().AsTask();
+        await firstStart.Should().ThrowAsync<TimeoutException>();
+
+        // Second start should throw InvalidOperationException (status is Failed)
+        var secondStart = () => activity.StartAsync().AsTask();
+        await secondStart.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*cannot be started from Failed*");
+    }
 }
