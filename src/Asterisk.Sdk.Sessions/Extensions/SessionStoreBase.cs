@@ -8,4 +8,14 @@ public abstract class SessionStoreBase
         => ValueTask.FromResult(Enumerable.Empty<CallSession>());
     public virtual ValueTask DeleteAsync(string sessionId, CancellationToken ct)
         => ValueTask.CompletedTask;
+
+    public virtual ValueTask<CallSession?> GetByLinkedIdAsync(string linkedId, CancellationToken ct)
+        => ValueTask.FromResult<CallSession?>(null);
+
+    public virtual async ValueTask SaveBatchAsync(IReadOnlyList<CallSession> sessions, CancellationToken ct)
+    {
+        // Default: save one by one
+        foreach (var session in sessions)
+            await SaveAsync(session, ct);
+    }
 }

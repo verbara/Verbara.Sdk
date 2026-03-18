@@ -2,7 +2,6 @@
 
   <PropertyGroup>
     <Description>Activities - high-level telephony operations: Dial, Hold, Transfer, Park, Bridge, Conference</Description>
-    <NoWarn>$(NoWarn);ASTSDK001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

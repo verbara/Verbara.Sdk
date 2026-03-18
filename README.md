@@ -18,7 +18,8 @@ Ported from [asterisk-java](https://github.com/asterisk-java/asterisk-java) 3.42
 - **FastAGI Server** -- Async TCP server for the Asterisk Gateway Interface with 54 AGI commands, pluggable script mapping strategies, and zero-copy I/O via `System.IO.Pipelines`. Per-connection timeout, status 511 hangup detection, and `AgiMetrics` instrumentation.
 - **ARI Client** -- REST + WebSocket client for the Asterisk REST Interface. Manage channels, bridges, playbacks, recordings, endpoints, applications, and sounds. Domain exceptions (`AriNotFoundException`, `AriConflictException`) for HTTP error mapping. WebSocket reconnect with exponential backoff.
 - **Live API** -- Real-time in-memory tracking of channels, queues, agents, and conference rooms from AMI events. Secondary indices for O(1) lookups by name. Observable gauges and event counters via `System.Diagnostics.Metrics`.
-- **Activities** -- High-level telephony operations (Dial, Hold, Transfer, Park, Bridge, Conference) modeled as async state machines with `IObservable<ActivityStatus>` tracking. Real cancellation support, re-entrance guards, and channel variable capture (`DIALSTATUS`, `QUEUESTATUS`).
+- **Activities** -- High-level telephony operations (Dial, Hold, Transfer, Park, Bridge, Conference) modeled as async state machines with `IObservable<ActivityStatus>` tracking. Real cancellation support, re-entrance guards, and channel variable capture (`DIALSTATUS`, `QUEUESTATUS`). Now stable (no longer experimental).
+- **Session Engine** -- Correlate AMI events into unified call sessions using LinkedId grouping. State-machine lifecycle (Ringing, Answered, OnHold, Transferred, Completed), domain events (`SessionStarted`, `SessionEnded`, `SessionStateChanged`), automatic orphan detection via `SessionReconciler`, and pluggable extension points (`ISessionEnricher`, `ISessionPolicy`, `ISessionEventHandler`).
 - **Config Parser** -- Read and parse Asterisk `.conf` files and `extensions.conf` dialplans. Quote-aware comment stripping.
 - **Hosting** -- `IHostedService` for AMI and Live API lifecycle. `IHealthCheck` for AMI connection state. AOT-safe `IConfiguration` binding.
 - **Native AOT** -- Zero reflection at runtime. Four source generators replace runtime code generation. 0 trim warnings.
@@ -26,17 +27,18 @@ Ported from [asterisk-java](https://github.com/asterisk-java/asterisk-java) 3.42
 
 ---
 
-## What's New in v0.2.0-beta
+## What's New in v0.5.0-beta
 
+- **Session Engine** -- New `Asterisk.Sdk.Sessions` package: correlate AMI events into call sessions via LinkedId, with state-machine lifecycle, domain events, orphan reconciliation, and pluggable extension points
+- **Activities Stable** -- `Asterisk.Sdk.Activities` is no longer marked `[Experimental]`; the API is stable
+- **Distributed Tracing** -- `AmiActivitySource`, `AgiActivitySource`, `AriActivitySource` for OpenTelemetry-compatible distributed tracing across all protocol layers
 - **AMI Heartbeat** -- Configurable periodic ping with auto-disconnect on timeout
 - **AMI Health Check** -- `IHealthCheck` implementation for K8s readiness/liveness probes
 - **Hosted Services** -- `IHostedService` for AMI connection and AsteriskServer lifecycle
 - **IConfiguration Binding** -- AOT-safe `AddAsterisk(IConfiguration)` overload for `appsettings.json`
 - **ARI Domain Exceptions** -- `AriNotFoundException` (404) and `AriConflictException` (409) from all resources
 - **AGI Hardening** -- Status 511 hangup detection, per-connection timeout, `AgiMetrics` instrumentation
-- **Activities Rebuild** -- Real cancellation via `CancellationTokenSource`, re-entrance guards, `DIALSTATUS`/`QUEUESTATUS` capture, corrected `Queue`/`Park`/`Hangup` arguments
 - **LiveMetrics Expansion** -- Event counters for channels, queues, agents + queue wait time histogram
-- **Config Fixes** -- `ConfigParseException` inherits `AsteriskException`, quote-aware semicolon stripping
 
 ---
 
@@ -282,12 +284,13 @@ await ami.DisconnectAsync();
 | **Asterisk.Sdk.Ari** | ARI REST + WebSocket client with source-generated JSON serialization |
 | **Asterisk.Sdk.Live** | Real-time channel, queue, agent, and conference tracking from AMI events |
 | **Asterisk.Sdk.Activities** | High-level telephony activities: Dial, Hold, Transfer, Park, Bridge, Conference |
+| **Asterisk.Sdk.Sessions** | Session Engine: call session correlation, state machines, and domain events |
 | **Asterisk.Sdk.Config** | Asterisk `.conf` and `extensions.conf` file parsers |
 | **Asterisk.Sdk.Hosting** | DI extensions (`AddAsterisk`) and meta-package referencing all above |
 
 ---
 
-## PBX Admin Example
+## PBX Admin
 
 The `Examples/PbxAdmin` project is a Blazor Server application showcasing the full SDK in a real-world PBX administration panel. It includes:
 
@@ -296,6 +299,27 @@ The `Examples/PbxAdmin` project is a Blazor Server application showcasing the fu
 **PBX Management** -- CRUD pages for Extensions, Trunks, Routes, IVR Menus, Queue Config, and Time Conditions. Both file-based (AMI `GetConfig`/`UpdateConfig`) and Realtime (PostgreSQL + Dapper) backends.
 
 **Media & Features** -- Recording policies with on-demand MixMonitor, Music on Hold class management with audio upload/conversion, ConfBridge profile configuration, Feature Codes with star-code CRUD, and Parking Lot slot/timeout configuration.
+
+---
+
+## Examples
+
+The `Examples/` directory contains standalone console applications demonstrating each SDK layer:
+
+| Example | Description |
+|---------|-------------|
+| `BasicAmiExample` | Connect to AMI, send actions, subscribe to events |
+| `AmiAdvancedExample` | Advanced AMI patterns: originate, redirect, queue management |
+| `FastAgiServerExample` | FastAGI server with script handlers |
+| `AgiIvrExample` | Interactive Voice Response (IVR) menu via AGI |
+| `AriStasisExample` | ARI WebSocket connection and Stasis event handling |
+| `AriChannelControlExample` | ARI channel origination and bridge management |
+| `LiveApiExample` | Real-time channel and queue tracking via Live API |
+| `MultiServerExample` | Federated multi-server management with agent routing |
+| `PbxActivitiesExample` | High-level telephony activities (Dial, Hold, Transfer) |
+| `SessionExample` | Session Engine: call session correlation and domain events |
+| `SessionExtensionsExample` | Session Engine extension points: enrichers, policies, event handlers |
+| `PbxAdmin` | Full Blazor Server PBX administration panel (see above) |
 
 ---
 
