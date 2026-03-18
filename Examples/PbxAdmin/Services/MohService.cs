@@ -58,7 +58,8 @@ public sealed partial class MohService
 
         if (!string.IsNullOrEmpty(mohClass.Directory))
         {
-            var basePath = _config[$"Asterisk:Servers:{serverId}:MohBasePath"] ?? "/var/lib/asterisk/moh";
+            var basePath = _config[$"Asterisk:Servers:{serverId}:MohBasePath"];
+            if (string.IsNullOrEmpty(basePath)) basePath = "/var/lib/asterisk/moh";
             var resolvedDir = Path.GetFullPath(mohClass.Directory);
             if (!resolvedDir.StartsWith(Path.GetFullPath(basePath), StringComparison.Ordinal))
                 return (false, "Directory must be within MOH base path");
@@ -93,7 +94,8 @@ public sealed partial class MohService
 
         if (!string.IsNullOrEmpty(mohClass.Directory))
         {
-            var basePath = _config[$"Asterisk:Servers:{serverId}:MohBasePath"] ?? "/var/lib/asterisk/moh";
+            var basePath = _config[$"Asterisk:Servers:{serverId}:MohBasePath"];
+            if (string.IsNullOrEmpty(basePath)) basePath = "/var/lib/asterisk/moh";
             var resolvedDir = Path.GetFullPath(mohClass.Directory);
             if (!resolvedDir.StartsWith(Path.GetFullPath(basePath), StringComparison.Ordinal))
                 return (false, "Directory must be within MOH base path");
