@@ -53,6 +53,7 @@ public sealed partial class AudioFileService
     public bool IsValidFilename(string filename)
     {
         if (string.IsNullOrWhiteSpace(filename)) return false;
+        if (filename.Contains("..")) return false;
         return FilenameRegex().IsMatch(filename);
     }
 
