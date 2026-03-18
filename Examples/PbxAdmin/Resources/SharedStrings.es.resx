@@ -985,5 +985,19 @@
   <data name="Help_MohCustomApp" xml:space="preserve"><value>Comando externo para generar audio. Por ejemplo, un comando de streaming mp3. Debe producir audio mono a 8kHz.</value></data>
   <data name="HelpPanel_MohEdit_ClassSettings" xml:space="preserve"><value>Configure la clase de música: asígnele un nombre y elija cómo se reproduce el audio — desde archivos locales en el servidor o mediante un comando de streaming externo.</value></data>
   <data name="HelpPanel_MohEdit_AudioFiles" xml:space="preserve"><value>Suba y administre archivos de audio para esta clase. Los formatos soportados incluyen WAV, GSM, ulaw, alaw y más. Los archivos se reproducen para quienes esperan en espera o en cola.</value></data>
-
+  <!-- RecordingEdit Help -->
+  <data name="Help_RecName_Title" xml:space="preserve"><value>Nombre de Política</value></data>
+  <data name="Help_RecName" xml:space="preserve"><value>Nombre descriptivo para esta política de grabación (ej. 'Llamadas Ventas', 'Cola Soporte').</value></data>
+  <data name="Help_RecMode_Title" xml:space="preserve"><value>Modo de Grabación</value></data>
+  <data name="Help_RecMode" xml:space="preserve"><value>Qué llamadas grabar: todas, solo entrantes, solo salientes, o bajo demanda.</value></data>
+  <data name="Help_RecFormat_Title" xml:space="preserve"><value>Formato de Audio</value></data>
+  <data name="Help_RecFormat" xml:space="preserve"><value>Formato de audio: WAV (mejor calidad, archivos más grandes), WAV49 (WAV comprimido), GSM (más pequeño, menor calidad).</value></data>
+  <data name="Help_RecStoragePath_Title" xml:space="preserve"><value>Ruta de Almacenamiento</value></data>
+  <data name="Help_RecStoragePath" xml:space="preserve"><value>Carpeta del servidor donde se guardan las grabaciones. Por defecto: /var/spool/asterisk/monitor/</value></data>
+  <data name="Help_RecRetentionDays_Title" xml:space="preserve"><value>Días de Retención</value></data>
+  <data name="Help_RecRetentionDays" xml:space="preserve"><value>Días que se conservan las grabaciones antes de la eliminación automática. 0 significa conservar para siempre.</value></data>
+  <data name="Help_RecMixMonitorOpts_Title" xml:space="preserve"><value>Opciones MixMonitor</value></data>
+  <data name="Help_RecMixMonitorOpts" xml:space="preserve"><value>Opciones avanzadas de MixMonitor: 'r' lee del lado del llamante, 't' lee del lado del agente.</value></data>
+  <data name="HelpPanel_RecEdit_PolicySettings" xml:space="preserve"><value>Defina qué llamadas grabar, en qué formato y por cuánto tiempo conservarlas. Piense en esto como las 'reglas' de grabación — como decir 'grabar todas las llamadas de ventas en formato WAV y conservarlas 90 días'.</value></data>
+  <data name="HelpPanel_RecEdit_Targets" xml:space="preserve"><value>Seleccione extensiones, colas o troncales específicas a las que aplicar esta política. Solo las llamadas que involucren estos objetivos serán grabadas.</value></data>
 </root>
