@@ -344,4 +344,112 @@ public class ActivityTests
         await secondStart.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*cannot be started from Failed*");
     }
+
+    [Fact]
+    public async Task CancelAsync_ShouldBeIdempotent_WhenCalledTwice()
+    {
+        var channel = Substitute.For<IAgiChannel>();
+
+        // Mock ExecAsync to hang until cancelled
+#pragma warning disable CA2012
+        channel.ExecAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var ct = callInfo.Arg<CancellationToken>();
+                return new ValueTask(Task.Delay(Timeout.Infinite, ct));
+            });
+#pragma warning restore CA2012
+
+        var activity = new DialActivity(channel)
+        {
+            Target = new EndPoint(TechType.PJSIP, "100"),
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+
+        var startTask = activity.StartAsync().AsTask();
+
+        // Wait for InProgress
+        await Task.Delay(50);
+        activity.Status.Should().Be(ActivityStatus.InProgress);
+
+        // Cancel twice — second call should be a no-op
+        await activity.CancelAsync();
+        var secondCancel = async () => await activity.CancelAsync();
+        await secondCancel.Should().NotThrowAsync("calling CancelAsync a second time should be idempotent");
+
+        await startTask;
+        activity.Status.Should().Be(ActivityStatus.Cancelled);
+    }
+
+    [Fact]
+    public async Task ExternalMediaActivity_CancelAsync_ShouldHangupChannel()
+    {
+        var ariClient = Substitute.For<IAriClient>();
+        var channelsResource = Substitute.For<IAriChannelsResource>();
+        ariClient.Channels.Returns(channelsResource);
+
+#pragma warning disable CA2012
+        channelsResource.CreateExternalMediaAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(),
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                // Return a channel, then simulate the audio server never connecting
+                return new ValueTask<AriChannel>(new AriChannel { Id = "ext-ch-1" });
+            });
+#pragma warning restore CA2012
+
+        var activity = new ExternalMediaActivity(ariClient)
+        {
+            App = "test",
+            ExternalHost = "127.0.0.1:9092",
+            ConnectionTimeout = TimeSpan.FromSeconds(30)
+        };
+
+        var startTask = activity.StartAsync().AsTask();
+
+        // Wait for InProgress (the activity should be polling for audio connection)
+        await Task.Delay(100);
+        activity.Status.Should().Be(ActivityStatus.InProgress);
+
+        // Cancel — should trigger OnCancellingAsync which calls HangupAsync
+        await activity.CancelAsync();
+
+        // The start task should complete (cancelled)
+        await startTask;
+        activity.Status.Should().Be(ActivityStatus.Cancelled);
+
+        // Verify HangupAsync was called on the channel
+        await channelsResource.Received(1).HangupAsync("ext-ch-1", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CancelAsync_ShouldNotThrow_WhenActivityAlreadyCompleted()
+    {
+        var activity = new HangupActivity(_channel);
+        await activity.StartAsync();
+
+        activity.Status.Should().Be(ActivityStatus.Completed);
+
+        // Cancelling an already-completed activity should be a safe no-op
+        var act = () => activity.CancelAsync().AsTask();
+        await act.Should().NotThrowAsync("cancelling a completed activity should be a no-op");
+        activity.Status.Should().Be(ActivityStatus.Completed,
+            "status should remain Completed after a late cancel attempt");
+    }
+
+    [Fact]
+    public async Task CancelAsync_ShouldNotThrow_WhenActivityNeverStarted()
+    {
+        var activity = new HangupActivity(_channel);
+
+        activity.Status.Should().Be(ActivityStatus.Pending);
+
+        // Cancelling a Pending activity should be a safe no-op (not InProgress or Starting)
+        var act = () => activity.CancelAsync().AsTask();
+        await act.Should().NotThrowAsync("cancelling a pending activity should be a no-op");
+        activity.Status.Should().Be(ActivityStatus.Pending,
+            "status should remain Pending when cancel is called before start");
+    }
 }
