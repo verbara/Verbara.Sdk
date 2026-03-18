@@ -1,7 +1,8 @@
 @page "/calls"
 @using PbxAdmin.Services
 @using Asterisk.Sdk.Ami.Actions
-@inject CallFlowTracker Tracker
+@using Asterisk.Sdk.Sessions
+@inject ICallSessionManager Sessions
 @inject SelectedServerService ServerSvc
 @inject NavigationManager Nav
 @inject IStringLocalizer<SharedStrings> L
@@ -26,19 +27,19 @@
 
 <div class="kpi-grid kpi-grid-sm">
     <div class="kpi-card kpi-green">
-        <div class="kpi-value">@CountByState(CallFlowState.Connected)</div>
+        <div class="kpi-value">@CountConnected()</div>
         <div class="kpi-label">@L["Calls_Connected"]</div>
     </div>
     <div class="kpi-card kpi-blue">
-        <div class="kpi-value">@CountByState(CallFlowState.Ringing)</div>
+        <div class="kpi-value">@CountByState(CallSessionState.Ringing)</div>
         <div class="kpi-label">@L["Calls_Ringing"]</div>
     </div>
     <div class="kpi-card kpi-yellow">
-        <div class="kpi-value">@CountByState(CallFlowState.Queued)</div>
+        <div class="kpi-value">@CountByState(CallSessionState.Queued)</div>
         <div class="kpi-label">@L["Calls_Queued"]</div>
     </div>
     <div class="kpi-card kpi-orange">
-        <div class="kpi-value">@CountByState(CallFlowState.Hold)</div>
+        <div class="kpi-value">@CountByState(CallSessionState.OnHold)</div>
         <div class="kpi-label">@L["Calls_OnHold"]</div>
     </div>
     <div class="kpi-card kpi-gray">
@@ -65,9 +66,9 @@
     else
     {
         <div class="card-grid">
-            @foreach (var call in _searchResults)
+            @foreach (var session in _searchResults)
             {
-                RenderCallCard(call);
+                RenderCallCard(session);
             }
         </div>
     }
@@ -87,9 +88,9 @@ else if (_viewMode == ViewMode.Kanban)
                 {
                     <div class="kanban-empty">@L["Calls_NoActiveCalls"]</div>
                 }
-                @foreach (var call in _connected)
+                @foreach (var session in _connected)
                 {
-                    RenderCallCard(call);
+                    RenderCallCard(session);
                 }
             </div>
         </div>
@@ -105,9 +106,9 @@ else if (_viewMode == ViewMode.Kanban)
                 {
                     <div class="kanban-empty">@L["Calls_NoPendingCalls"]</div>
                 }
-                @foreach (var call in _pending)
+                @foreach (var session in _pending)
                 {
-                    RenderCallCard(call);
+                    RenderCallCard(session);
                 }
             </div>
         </div>
@@ -123,9 +124,9 @@ else if (_viewMode == ViewMode.Kanban)
                 {
                     <div class="kanban-empty">@L["Calls_CompletedFade"]</div>
                 }
-                @foreach (var (call, remaining) in _fadingCompleted)
+                @foreach (var (session, remaining) in _fadingCompleted)
                 {
-                    RenderCompletedCard(call, remaining);
+                    RenderCompletedCard(session, remaining);
                 }
             </div>
         </div>
@@ -157,21 +158,23 @@ else if (_viewMode == ViewMode.Table)
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var call in _allActive)
+                        @foreach (var session in _allActive)
                         {
-                            var (borderClass, stateLabel, stateIcon) = GetCallStyle(call);
-                            <tr class="calls-table-row @borderClass" @onclick="() => NavigateToDetail(call.CallId)">
+                            var caller = session.GetCaller();
+                            var dest = session.GetDestination();
+                            var (borderClass, stateLabel, stateIcon) = GetCallStyle(session);
+                            <tr class="calls-table-row @borderClass" @onclick="() => NavigateToDetail(session.SessionId)">
                                 <td><span class="call-state-badge @borderClass">@stateIcon @stateLabel</span></td>
                                 <td class="cell-caller">
-                                    <span class="cell-id">@(call.Caller?.CallerIdNum ?? "unknown")</span>
-                                    <span class="cell-channel text-muted">@ShortChannel(call.Caller?.Channel)</span>
+                                    <span class="cell-id">@(caller?.CallerIdNum ?? "unknown")</span>
+                                    <span class="cell-channel text-muted">@ShortChannel(caller?.Channel)</span>
                                 </td>
                                 <td class="cell-arrow">
-                                    @if (call.State == CallFlowState.Connected)
+                                    @if (IsConnected(session.State))
                                     {
                                         <span class="arrow-connected">&harr;</span>
                                     }
-                                    else if (call.State == CallFlowState.Hold)
+                                    else if (session.State == CallSessionState.OnHold)
                                     {
                                         <span class="arrow-hold">||</span>
                                     }
@@ -181,15 +184,15 @@ else if (_viewMode == ViewMode.Table)
                                     }
                                 </td>
                                 <td class="cell-dest">
-                                    @if (call.AgentName is not null)
+                                    @if (session.AgentId is not null)
                                     {
-                                        <span class="cell-id">@call.AgentName</span>
-                                        <span class="cell-channel text-muted">@ShortChannel(call.AgentInterface)</span>
+                                        <span class="cell-id">@session.AgentId</span>
+                                        <span class="cell-channel text-muted">@ShortChannel(session.AgentInterface)</span>
                                     }
-                                    else if (call.Destination is not null)
+                                    else if (dest is not null)
                                     {
-                                        <span class="cell-id">@(call.Destination.CallerIdNum ?? ShortChannel(call.Destination.Channel))</span>
-                                        <span class="cell-channel text-muted">@ShortChannel(call.Destination.Channel)</span>
+                                        <span class="cell-id">@(dest.CallerIdNum ?? ShortChannel(dest.Channel))</span>
+                                        <span class="cell-channel text-muted">@ShortChannel(dest.Channel)</span>
                                     }
                                     else
                                     {
@@ -197,19 +200,19 @@ else if (_viewMode == ViewMode.Table)
                                     }
                                 </td>
                                 <td>
-                                    @if (call.QueueName is not null)
+                                    @if (session.QueueName is not null)
                                     {
-                                        <span class="badge badge-muted">@call.QueueName</span>
+                                        <span class="badge badge-muted">@session.QueueName</span>
                                     }
                                 </td>
                                 <td>
-                                    @if (call.Caller?.Technology is not null)
+                                    @if (caller?.Technology is not null)
                                     {
-                                        <span class="badge @TechBadgeClass(call.Caller.Technology)">@call.Caller.Technology</span>
+                                        <span class="badge @TechBadgeClass(caller.Technology)">@caller.Technology</span>
                                     }
                                 </td>
-                                <td class="cell-duration">@FormatDuration(call.Duration)</td>
-                                <td class="cell-events text-muted">@call.Events.Count</td>
+                                <td class="cell-duration">@FormatDuration(session.Duration)</td>
+                                <td class="cell-events text-muted">@session.Events.Count</td>
                             </tr>
                         }
                     </tbody>
@@ -225,9 +228,9 @@ else if (_viewMode == ViewMode.Table)
                     <span class="text-muted">@_fadingCompleted.Count</span>
                 </div>
                 <div class="card-grid">
-                    @foreach (var (call, remaining) in _fadingCompleted)
+                    @foreach (var (session, remaining) in _fadingCompleted)
                     {
-                        RenderCompletedCard(call, remaining);
+                        RenderCompletedCard(session, remaining);
                     }
                 </div>
             </div>
@@ -245,35 +248,38 @@ else
     else
     {
         <div class="call-matrix">
-            @foreach (var call in _allActive)
+            @foreach (var session in _allActive)
             {
-                var (borderClass, stateLabel, stateIcon) = GetCallStyle(call);
-                var stateClass = call.State switch
+                var caller = session.GetCaller();
+                var dest = session.GetDestination();
+                var (borderClass, stateLabel, stateIcon) = GetCallStyle(session);
+                var stateClass = session.State switch
                 {
-                    CallFlowState.Connected => "state-connected",
-                    CallFlowState.Ringing or CallFlowState.Dialing => "state-ringing",
-                    CallFlowState.Hold => "state-hold",
-                    CallFlowState.Queued => "state-queued",
-                    CallFlowState.Completed => "state-completed",
+                    CallSessionState.Connected or CallSessionState.Conference => "state-connected",
+                    CallSessionState.Ringing or CallSessionState.Dialing or CallSessionState.Created => "state-ringing",
+                    CallSessionState.OnHold => "state-hold",
+                    CallSessionState.Queued => "state-queued",
+                    CallSessionState.Transferring => "state-ringing",
+                    CallSessionState.Completed or CallSessionState.Failed or CallSessionState.TimedOut => "state-completed",
                     _ => ""
                 };
                 <div class="matrix-card @stateClass">
                     <div class="matrix-card-header">
                         <span class="call-state-badge @borderClass">@stateIcon @stateLabel</span>
-                        <span class="call-duration">@FormatDuration(call.Duration)</span>
+                        <span class="call-duration">@FormatDuration(session.Duration)</span>
                     </div>
-                    <div class="matrix-card-body" @onclick="() => NavigateToDetail(call.CallId)">
+                    <div class="matrix-card-body" @onclick="() => NavigateToDetail(session.SessionId)">
                         <div class="matrix-flow">
-                            <span class="matrix-caller">@(call.Caller?.CallerIdNum ?? "unknown")</span>
+                            <span class="matrix-caller">@(caller?.CallerIdNum ?? "unknown")</span>
                             <span class="matrix-arrow">&rarr;</span>
                             <span class="matrix-dest">
-                                @if (call.AgentName is not null)
+                                @if (session.AgentId is not null)
                                 {
-                                    @call.AgentName
+                                    @session.AgentId
                                 }
-                                else if (call.Destination is not null)
+                                else if (dest is not null)
                                 {
-                                    @(call.Destination.CallerIdNum ?? ShortChannel(call.Destination.Channel))
+                                    @(dest.CallerIdNum ?? ShortChannel(dest.Channel))
                                 }
                                 else
                                 {
@@ -281,19 +287,19 @@ else
                                 }
                             </span>
                         </div>
-                        @if (call.QueueName is not null)
+                        @if (session.QueueName is not null)
                         {
-                            <span class="matrix-queue-label">@call.QueueName</span>
+                            <span class="matrix-queue-label">@session.QueueName</span>
                         }
                     </div>
                     <div class="matrix-card-actions">
-                        <button class="matrix-action-btn" title="Hold / Park" @onclick="() => HoldCall(call)" @onclick:stopPropagation="true">
+                        <button class="matrix-action-btn" title="Hold / Park" @onclick="() => HoldCall(session)" @onclick:stopPropagation="true">
                             &#9646;&#9646; @L["Calls_Hold"]
                         </button>
-                        <button class="matrix-action-btn" title="Transfer" @onclick="() => ShowTransferDialog(call)" @onclick:stopPropagation="true">
+                        <button class="matrix-action-btn" title="Transfer" @onclick="() => ShowTransferDialog(session)" @onclick:stopPropagation="true">
                             &#8644; @L["Calls_Xfer"]
                         </button>
-                        <button class="matrix-action-btn matrix-action-hangup" title="Hangup" @onclick="() => HangupCall(call)" @onclick:stopPropagation="true">
+                        <button class="matrix-action-btn matrix-action-hangup" title="Hangup" @onclick="() => HangupCall(session)" @onclick:stopPropagation="true">
                             &#9747; @L["Calls_Drop"]
                         </button>
                     </div>
@@ -308,7 +314,7 @@ else
     <div class="confirm-overlay" @onclick="CloseTransferDialog">
         <div class="confirm-dialog" @onclick:stopPropagation="true">
             <h4>@L["Calls_TransferCall"]</h4>
-            <p>@L["Calls_TransferTo"] <strong>@(_transferCall?.Caller?.CallerIdNum ?? "unknown")</strong></p>
+            <p>@L["Calls_TransferTo"] <strong>@(_transferSession?.GetCaller()?.CallerIdNum ?? "unknown")</strong></p>
             <div class="form-field" style="margin-bottom:1rem">
                 <label class="form-label">@L["Calls_Extension"]</label>
                 <input @bind="_transferExtension" class="input" placeholder="e.g. 2001" />
@@ -327,26 +333,28 @@ else
 
 @* ═══ Shared card render fragments ═══ *@
 
-@{ void RenderCallCard(CallFlow call)
+@{ void RenderCallCard(CallSession session)
     {
-        var (borderClass, stateLabel, stateIcon) = GetCallStyle(call);
-        <div class="call-card @borderClass" @onclick="() => NavigateToDetail(call.CallId)">
+        var caller = session.GetCaller();
+        var dest = session.GetDestination();
+        var (borderClass, stateLabel, stateIcon) = GetCallStyle(session);
+        <div class="call-card @borderClass" @onclick="() => NavigateToDetail(session.SessionId)">
             <div class="call-card-header">
                 <span class="call-state-badge @borderClass">@stateIcon @stateLabel</span>
-                <span class="call-duration">@FormatDuration(call.Duration)</span>
+                <span class="call-duration">@FormatDuration(session.Duration)</span>
             </div>
             <div class="call-participants">
                 <div class="call-endpoint">
                     <div class="call-endpoint-label">@L["Calls_Caller"]</div>
-                    <div class="call-endpoint-id">@(call.Caller?.CallerIdNum ?? "unknown")</div>
-                    <div class="call-endpoint-channel text-muted">@ShortChannel(call.Caller?.Channel)</div>
+                    <div class="call-endpoint-id">@(caller?.CallerIdNum ?? "unknown")</div>
+                    <div class="call-endpoint-channel text-muted">@ShortChannel(caller?.Channel)</div>
                 </div>
                 <div class="call-arrow">
-                    @if (call.State == CallFlowState.Connected)
+                    @if (IsConnected(session.State))
                     {
                         <span class="arrow-connected">&harr;</span>
                     }
-                    else if (call.State == CallFlowState.Hold)
+                    else if (session.State == CallSessionState.OnHold)
                     {
                         <span class="arrow-hold">| |</span>
                     }
@@ -356,22 +364,22 @@ else
                     }
                 </div>
                 <div class="call-endpoint">
-                    @if (call.AgentName is not null)
+                    @if (session.AgentId is not null)
                     {
                         <div class="call-endpoint-label">@L["Calls_Agent"]</div>
-                        <div class="call-endpoint-id">@call.AgentName</div>
-                        <div class="call-endpoint-channel text-muted">@ShortChannel(call.AgentInterface)</div>
+                        <div class="call-endpoint-id">@session.AgentId</div>
+                        <div class="call-endpoint-channel text-muted">@ShortChannel(session.AgentInterface)</div>
                     }
-                    else if (call.QueueName is not null)
+                    else if (session.QueueName is not null)
                     {
                         <div class="call-endpoint-label">@L["Col_Queue"]</div>
-                        <div class="call-endpoint-id">@call.QueueName</div>
+                        <div class="call-endpoint-id">@session.QueueName</div>
                     }
-                    else if (call.Destination is not null)
+                    else if (dest is not null)
                     {
                         <div class="call-endpoint-label">@L["Calls_Destination"]</div>
-                        <div class="call-endpoint-id">@(call.Destination.CallerIdNum ?? ShortChannel(call.Destination.Channel))</div>
-                        <div class="call-endpoint-channel text-muted">@ShortChannel(call.Destination.Channel)</div>
+                        <div class="call-endpoint-id">@(dest.CallerIdNum ?? ShortChannel(dest.Channel))</div>
+                        <div class="call-endpoint-channel text-muted">@ShortChannel(dest.Channel)</div>
                     }
                     else
                     {
@@ -381,52 +389,54 @@ else
                 </div>
             </div>
             <div class="call-card-footer">
-                @if (call.Caller?.Technology is not null)
+                @if (caller?.Technology is not null)
                 {
-                    <span class="badge @TechBadgeClass(call.Caller.Technology)">@call.Caller.Technology</span>
+                    <span class="badge @TechBadgeClass(caller.Technology)">@caller.Technology</span>
                 }
-                @if (call.QueueName is not null && call.AgentName is not null)
+                @if (session.QueueName is not null && session.AgentId is not null)
                 {
-                    <span class="badge badge-muted">@call.QueueName</span>
+                    <span class="badge badge-muted">@session.QueueName</span>
                 }
-                @if (call.HangupCause.HasValue)
+                @if (session.HangupCause.HasValue)
                 {
-                    <span class="badge badge-muted">@call.HangupCause</span>
+                    <span class="badge badge-muted">@session.HangupCause</span>
                 }
-                <span class="text-muted call-events-count">@call.Events.Count events</span>
+                <span class="text-muted call-events-count">@session.Events.Count events</span>
             </div>
         </div>;
     }
 }
 
-@{ void RenderCompletedCard(CallFlow call, double remainingSecs)
+@{ void RenderCompletedCard(CallSession session, double remainingSecs)
     {
+        var caller = session.GetCaller();
+        var dest = session.GetDestination();
         var pct = Math.Clamp(remainingSecs / FadeSeconds * 100, 0, 100);
         var isFading = remainingSecs <= 1.5;
-        <div class="call-card call-completed @(isFading ? "call-fade-out" : "")" @onclick="() => NavigateToDetail(call.CallId)">
+        <div class="call-card call-completed @(isFading ? "call-fade-out" : "")" @onclick="() => NavigateToDetail(session.SessionId)">
             <div class="call-card-header">
                 <span class="call-state-badge call-completed">-- Completed</span>
-                <span class="call-duration">@FormatDuration(call.Duration)</span>
+                <span class="call-duration">@FormatDuration(session.Duration)</span>
             </div>
             <div class="call-participants">
                 <div class="call-endpoint">
                     <div class="call-endpoint-label">@L["Calls_Caller"]</div>
-                    <div class="call-endpoint-id">@(call.Caller?.CallerIdNum ?? "unknown")</div>
-                    <div class="call-endpoint-channel text-muted">@ShortChannel(call.Caller?.Channel)</div>
+                    <div class="call-endpoint-id">@(caller?.CallerIdNum ?? "unknown")</div>
+                    <div class="call-endpoint-channel text-muted">@ShortChannel(caller?.Channel)</div>
                 </div>
                 <div class="call-arrow">
                     <span class="arrow-completed">&#10005;</span>
                 </div>
                 <div class="call-endpoint">
-                    @if (call.AgentName is not null)
+                    @if (session.AgentId is not null)
                     {
                         <div class="call-endpoint-label">@L["Calls_Agent"]</div>
-                        <div class="call-endpoint-id">@call.AgentName</div>
+                        <div class="call-endpoint-id">@session.AgentId</div>
                     }
-                    else if (call.Destination is not null)
+                    else if (dest is not null)
                     {
                         <div class="call-endpoint-label">@L["Calls_Destination"]</div>
-                        <div class="call-endpoint-id">@(call.Destination.CallerIdNum ?? ShortChannel(call.Destination.Channel))</div>
+                        <div class="call-endpoint-id">@(dest.CallerIdNum ?? ShortChannel(dest.Channel))</div>
                     }
                     else
                     {
@@ -436,11 +446,11 @@ else
                 </div>
             </div>
             <div class="call-card-footer">
-                @if (call.HangupCause.HasValue)
+                @if (session.HangupCause.HasValue)
                 {
-                    <span class="badge badge-muted">@call.HangupCause</span>
+                    <span class="badge badge-muted">@session.HangupCause</span>
                 }
-                <span class="text-muted call-events-count">@call.Events.Count events</span>
+                <span class="text-muted call-events-count">@session.Events.Count events</span>
             </div>
             <div class="call-fade-bar">
                 <div class="call-fade-bar-fill" style="width:@($"{pct:F0}")%"></div>
@@ -460,15 +470,15 @@ else
     private int _recentCompleted;
 
     // Kanban buckets
-    private IReadOnlyList<CallFlow> _connected = [];
-    private IReadOnlyList<CallFlow> _pending = [];
+    private IReadOnlyList<CallSession> _connected = [];
+    private IReadOnlyList<CallSession> _pending = [];
 
     // Table bucket
-    private IReadOnlyList<CallFlow> _allActive = [];
+    private IReadOnlyList<CallSession> _allActive = [];
 
     // Shared
-    private IReadOnlyList<(CallFlow Call, double Remaining)> _fadingCompleted = [];
-    private IReadOnlyList<CallFlow> _searchResults = [];
+    private IReadOnlyList<(CallSession Session, double Remaining)> _fadingCompleted = [];
+    private IReadOnlyList<CallSession> _searchResults = [];
 
     protected override void OnInitialized()
     {
@@ -477,60 +487,77 @@ else
             null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
     }
 
-    private IEnumerable<CallFlow> FilterByServer(IEnumerable<CallFlow> calls) =>
-        calls.Where(c => c.ServerId == ServerSvc.SelectedServerId);
+    private IEnumerable<CallSession> FilterByServer(IEnumerable<CallSession> sessions) =>
+        sessions.Where(s => s.ServerId == ServerSvc.SelectedServerId);
 
     private void RefreshCalls()
     {
         var now = DateTimeOffset.UtcNow;
 
-        _recentCompleted = FilterByServer(Tracker.GetRecentCompleted(100)).Count();
+        _recentCompleted = FilterByServer(Sessions.GetRecentCompleted(100)).Count();
 
         // Recently completed with fade timer (last N seconds)
-        _fadingCompleted = FilterByServer(Tracker.GetRecentCompleted(20))
-            .Where(c => c.EndTime.HasValue && (now - c.EndTime.Value).TotalSeconds < FadeSeconds)
-            .Select(c => (Call: c, Remaining: FadeSeconds - (now - c.EndTime!.Value).TotalSeconds))
+        _fadingCompleted = FilterByServer(Sessions.GetRecentCompleted(20))
+            .Where(s => s.CompletedAt.HasValue && (now - s.CompletedAt.Value).TotalSeconds < FadeSeconds)
+            .Select(s => (Session: s, Remaining: FadeSeconds - (now - s.CompletedAt!.Value).TotalSeconds))
             .OrderByDescending(x => x.Remaining)
             .ToList();
 
         // Search mode
         if (!string.IsNullOrWhiteSpace(_searchQuery))
         {
-            _searchResults = FilterByServer(Tracker.Search(_searchQuery, 100)).ToList();
+            _searchResults = FilterByServer(Sessions.Search(_searchQuery, 100)).ToList();
             return;
         }
 
         _searchResults = [];
 
-        var active = FilterByServer(Tracker.ActiveCalls)
-            .OrderByDescending(c => c.StartTime)
+        var active = FilterByServer(Sessions.ActiveSessions)
+            .OrderByDescending(s => s.CreatedAt)
             .ToList();
 
         // Kanban buckets
-        _connected = active.Where(c => c.State is CallFlowState.Connected or CallFlowState.Hold).ToList();
-        _pending = active.Where(c => c.State is CallFlowState.Dialing or CallFlowState.Ringing or CallFlowState.Queued).ToList();
+        _connected = active.Where(s => IsConnected(s.State)).ToList();
+        _pending = active.Where(s => IsPending(s.State)).ToList();
 
         // Table bucket (all active)
         _allActive = active;
     }
 
-    private int CountByState(CallFlowState state) =>
-        state == CallFlowState.Completed
-            ? _recentCompleted
-            : FilterByServer(Tracker.ActiveCalls).Count(c => c.State == state);
+    // State bucketing helpers
+    static bool IsConnected(CallSessionState s) =>
+        s is CallSessionState.Connected or CallSessionState.OnHold or CallSessionState.Conference;
 
-    private void NavigateToDetail(string callId) =>
-        Nav.NavigateTo($"/calls/{Uri.EscapeDataString(callId)}");
+    static bool IsPending(CallSessionState s) =>
+        s is CallSessionState.Created or CallSessionState.Dialing or CallSessionState.Ringing
+        or CallSessionState.Queued or CallSessionState.Transferring;
 
-    private static (string borderClass, string stateLabel, string stateIcon) GetCallStyle(CallFlow call) =>
-        call.State switch
+    static bool IsTerminal(CallSessionState s) =>
+        s is CallSessionState.Completed or CallSessionState.Failed or CallSessionState.TimedOut;
+
+    private int CountByState(CallSessionState state) =>
+        FilterByServer(Sessions.ActiveSessions).Count(s => s.State == state);
+
+    private int CountConnected() =>
+        FilterByServer(Sessions.ActiveSessions).Count(s => IsConnected(s.State));
+
+    private void NavigateToDetail(string sessionId) =>
+        Nav.NavigateTo($"/calls/{Uri.EscapeDataString(sessionId)}");
+
+    private static (string borderClass, string stateLabel, string stateIcon) GetCallStyle(CallSession session) =>
+        session.State switch
         {
-            CallFlowState.Dialing => ("call-dialing", "Dialing", "~"),
-            CallFlowState.Ringing => ("call-ringing", "Ringing", ">>"),
-            CallFlowState.Queued => ("call-queued", "Queued", "#"),
-            CallFlowState.Connected => ("call-connected", "Connected", "<<>>"),
-            CallFlowState.Hold => ("call-hold", "On Hold", "||"),
-            CallFlowState.Completed => ("call-completed", "Completed", "--"),
+            CallSessionState.Created => ("call-dialing", "Created", "~"),
+            CallSessionState.Dialing => ("call-dialing", "Dialing", "~"),
+            CallSessionState.Ringing => ("call-ringing", "Ringing", ">>"),
+            CallSessionState.Queued => ("call-queued", "Queued", "#"),
+            CallSessionState.Connected => ("call-connected", "Connected", "<<>>"),
+            CallSessionState.OnHold => ("call-hold", "On Hold", "||"),
+            CallSessionState.Transferring => ("call-ringing", "Transferring", "=>"),
+            CallSessionState.Conference => ("call-connected", "Conference", "<*>"),
+            CallSessionState.Completed => ("call-completed", "Completed", "--"),
+            CallSessionState.Failed => ("call-completed", "Failed", "!!"),
+            CallSessionState.TimedOut => ("call-completed", "Timed Out", ".."),
             _ => ("call-unknown", "Unknown", "?")
         };
 
@@ -557,20 +584,21 @@ else
 
     // Matrix quick actions
     private bool _showTransferDialog;
-    private CallFlow? _transferCall;
+    private CallSession? _transferSession;
     private string _transferExtension = "";
     private string _transferContext = "";
     private string? _actionResult;
 
-    private async Task HoldCall(CallFlow call)
+    private async Task HoldCall(CallSession session)
     {
         var entry = ServerSvc.GetSelectedServer();
-        if (entry is null || call.Caller?.Channel is null) return;
+        var callerChannel = session.GetCaller()?.Channel;
+        if (entry is null || callerChannel is null) return;
 
         var action = new ParkAction
         {
-            Channel = call.Caller.Channel,
-            Channel2 = call.Caller.Channel,
+            Channel = callerChannel,
+            Channel2 = callerChannel,
             Timeout = 120
         };
         var response = await entry.Connection.SendActionAsync(action);
@@ -579,18 +607,19 @@ else
             : $"Park failed: {response.Message}";
     }
 
-    private async Task HangupCall(CallFlow call)
+    private async Task HangupCall(CallSession session)
     {
         var entry = ServerSvc.GetSelectedServer();
-        if (entry is null || call.Caller?.Channel is null) return;
+        var callerChannel = session.GetCaller()?.Channel;
+        if (entry is null || callerChannel is null) return;
 
-        var action = new HangupAction { Channel = call.Caller.Channel };
+        var action = new HangupAction { Channel = callerChannel };
         await entry.Connection.SendActionAsync(action);
     }
 
-    private void ShowTransferDialog(CallFlow call)
+    private void ShowTransferDialog(CallSession session)
     {
-        _transferCall = call;
+        _transferSession = session;
         _transferExtension = "";
         _transferContext = "";
         _showTransferDialog = true;
@@ -599,13 +628,14 @@ else
     private void CloseTransferDialog()
     {
         _showTransferDialog = false;
-        _transferCall = null;
+        _transferSession = null;
     }
 
     private async Task ExecuteTransfer()
     {
         var entry = ServerSvc.GetSelectedServer();
-        if (entry is null || _transferCall?.Caller?.Channel is null || string.IsNullOrWhiteSpace(_transferExtension))
+        var callerChannel = _transferSession?.GetCaller()?.Channel;
+        if (entry is null || callerChannel is null || string.IsNullOrWhiteSpace(_transferExtension))
         {
             CloseTransferDialog();
             return;
@@ -613,7 +643,7 @@ else
 
         var action = new RedirectAction
         {
-            Channel = _transferCall.Caller.Channel,
+            Channel = callerChannel,
             Exten = _transferExtension.Trim(),
             Context = string.IsNullOrWhiteSpace(_transferContext) ? "default" : _transferContext.Trim(),
             Priority = 1
