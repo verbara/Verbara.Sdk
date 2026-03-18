@@ -124,6 +124,23 @@
     </div>
 </div>
 
+<h3 class="section-label">@L["Met_SessionEngine"]</h3>
+<div class="kpi-grid">
+    <div class="kpi-card"><span class="kpi-value kpi-blue">@GetCounter("sessions.created")</span><span class="kpi-label">@L["Met_SessionsCreated"]</span></div>
+    <div class="kpi-card"><span class="kpi-value kpi-green">@GetCounter("sessions.completed")</span><span class="kpi-label">@L["Met_SessionsCompleted"]</span></div>
+    <div class="kpi-card"><span class="kpi-value kpi-red">@GetCounter("sessions.failed")</span><span class="kpi-label">@L["Met_SessionsFailed"]</span></div>
+    <div class="kpi-card"><span class="kpi-value kpi-yellow">@GetCounter("sessions.timed_out")</span><span class="kpi-label">@L["Met_SessionsTimedOut"]</span></div>
+    <div class="kpi-card"><span class="kpi-value kpi-gray">@GetCounter("sessions.orphaned")</span><span class="kpi-label">@L["Met_SessionsOrphaned"]</span></div>
+</div>
+
+<h3 class="section-label">@L["Met_SessionHistograms"]</h3>
+<div class="kpi-grid">
+    <div class="kpi-card"><span class="kpi-value kpi-blue">@GetHistogram("sessions.wait_time")</span><span class="kpi-label">@L["Met_SessionAvgWait"]</span></div>
+    <div class="kpi-card"><span class="kpi-value kpi-green">@GetHistogram("sessions.talk_time")</span><span class="kpi-label">@L["Met_SessionAvgTalk"]</span></div>
+    <div class="kpi-card"><span class="kpi-value kpi-yellow">@GetHistogram("sessions.hold_time")</span><span class="kpi-label">@L["Met_SessionAvgHold"]</span></div>
+    <div class="kpi-card"><span class="kpi-value kpi-purple">@GetHistogram("sessions.duration")</span><span class="kpi-label">@L["Met_SessionAvgDuration"]</span></div>
+</div>
+
 @code {
     private Timer? _refreshTimer;
     private MeterListener? _listener;
@@ -144,7 +161,7 @@
 
         _listener.InstrumentPublished = (instrument, listener) =>
         {
-            if (instrument.Meter.Name is "Asterisk.Sdk.Ami" or "Asterisk.Sdk.Live")
+            if (instrument.Meter.Name is "Asterisk.Sdk.Ami" or "Asterisk.Sdk.Live" or "Asterisk.Sdk.Sessions")
             {
                 listener.EnableMeasurementEvents(instrument);
             }
