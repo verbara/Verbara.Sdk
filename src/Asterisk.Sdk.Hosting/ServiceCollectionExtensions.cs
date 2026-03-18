@@ -167,8 +167,6 @@ public static class ServiceCollectionExtensions
         Action<SessionOptions>? configure = null)
     {
         services.TryAddSingleton<ICallSessionManager, CallSessionManager>();
-        services.TryAddSingleton<CallRouterBase, PassthroughCallRouter>();
-        services.TryAddSingleton<AgentSelectorBase, NativeAgentSelector>();
         services.TryAddSingleton<SessionStoreBase, InMemorySessionStore>();
 
         if (configure is not null)
