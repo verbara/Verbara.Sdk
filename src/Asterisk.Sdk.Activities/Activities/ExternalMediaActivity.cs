@@ -1,4 +1,3 @@
-using System.Reactive.Subjects;
 using Asterisk.Sdk;
 using Asterisk.Sdk.Ari.Audio;
 
@@ -9,12 +8,10 @@ namespace Asterisk.Sdk.Activities.Activities;
 /// to connect back via AudioSocket or WebSocket, and provides an IAudioStream
 /// for bidirectional audio streaming.
 /// </summary>
-public sealed class ExternalMediaActivity : IActivity
+public sealed class ExternalMediaActivity : AriActivityBase
 {
-    private readonly IAriClient _ariClient;
     private readonly AudioSocketServer? _audioSocketServer;
     private readonly WebSocketAudioServer? _webSocketServer;
-    private readonly BehaviorSubject<ActivityStatus> _statusSubject = new(ActivityStatus.Pending);
     private IAudioStream? _audioStream;
 
     /// <summary>Stasis application name.</summary>
@@ -41,93 +38,68 @@ public sealed class ExternalMediaActivity : IActivity
     /// <summary>The ARI channel created for this ExternalMedia session.</summary>
     public AriChannel? Channel { get; private set; }
 
-    public ActivityStatus Status => _statusSubject.Value;
-    public IObservable<ActivityStatus> StatusChanges => _statusSubject;
-
     public ExternalMediaActivity(IAriClient ariClient, AudioSocketServer? audioSocketServer = null, WebSocketAudioServer? webSocketServer = null)
+        : base(ariClient)
     {
-        _ariClient = ariClient;
         _audioSocketServer = audioSocketServer;
         _webSocketServer = webSocketServer;
     }
 
-    public async ValueTask StartAsync(CancellationToken cancellationToken = default)
+    protected override async ValueTask ExecuteAsync(CancellationToken cancellationToken)
     {
-        _statusSubject.OnNext(ActivityStatus.Starting);
+        // 1. Create ExternalMedia channel via ARI
+        Channel = await AriClient.Channels.CreateExternalMediaAsync(
+            App, ExternalHost, Format,
+            encapsulation: Encapsulation,
+            transport: Transport,
+            cancellationToken: cancellationToken);
+
+        // 2. Poll for audio server connection (200ms interval)
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(ConnectionTimeout);
+
         try
         {
-            // 1. Create ExternalMedia channel via ARI
-            Channel = await _ariClient.Channels.CreateExternalMediaAsync(
-                App, ExternalHost, Format,
-                encapsulation: Encapsulation,
-                transport: Transport,
-                cancellationToken: cancellationToken);
-
-            _statusSubject.OnNext(ActivityStatus.InProgress);
-
-            // 2. Wait for Asterisk to connect to audio server
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(ConnectionTimeout);
-
-            while (_audioStream is null && !timeoutCts.Token.IsCancellationRequested)
+            while (!timeoutCts.Token.IsCancellationRequested)
             {
-                // Check AudioSocket server
                 if (_audioSocketServer is not null)
                 {
                     _audioStream = _audioSocketServer.GetStream(Channel.Id);
                     if (_audioStream is not null) break;
                 }
 
-                // Check WebSocket server
                 if (_webSocketServer is not null)
                 {
                     _audioStream = _webSocketServer.GetStream(Channel.Id);
                     if (_audioStream is not null) break;
                 }
 
-                await Task.Delay(50, timeoutCts.Token);
+                await Task.Delay(200, timeoutCts.Token);
             }
 
             if (_audioStream is null)
-            {
-                _statusSubject.OnNext(ActivityStatus.Failed);
                 throw new TimeoutException($"Asterisk did not connect to audio server within {ConnectionTimeout}");
-            }
-
-            // 3. Stream is ready
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            _statusSubject.OnNext(ActivityStatus.Cancelled);
-            throw;
-        }
-        catch (TimeoutException)
-        {
-            throw;
-        }
-        catch
-        {
-            _statusSubject.OnNext(ActivityStatus.Failed);
-            throw;
+            throw new TimeoutException($"Asterisk did not connect to audio server within {ConnectionTimeout}");
         }
     }
 
-    public async ValueTask CancelAsync(CancellationToken cancellationToken = default)
+    protected override async ValueTask OnCancellingAsync(CancellationToken cancellationToken)
     {
         if (Channel is not null)
-            await _ariClient.Channels.HangupAsync(Channel.Id, cancellationToken);
+            await AriClient.Channels.HangupAsync(Channel.Id, cancellationToken);
 
         if (_audioStream is not null)
             await _audioStream.DisposeAsync();
-
-        _statusSubject.OnNext(ActivityStatus.Cancelled);
     }
 
-    public async ValueTask DisposeAsync()
+    public override async ValueTask DisposeAsync()
     {
         if (_audioStream is not null)
             await _audioStream.DisposeAsync();
-        _statusSubject.OnCompleted();
-        _statusSubject.Dispose();
+
+        await base.DisposeAsync();
     }
 }
