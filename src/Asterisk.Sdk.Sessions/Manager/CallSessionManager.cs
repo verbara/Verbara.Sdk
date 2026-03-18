@@ -7,13 +7,14 @@ using Asterisk.Sdk.Live.Channels;
 using Asterisk.Sdk.Live.Queues;
 using Asterisk.Sdk.Live.Server;
 using Asterisk.Sdk.Sessions.Diagnostics;
+using Asterisk.Sdk.Sessions.Extensions;
 using Asterisk.Sdk.Sessions.Internal;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Asterisk.Sdk.Sessions.Manager;
 
-public sealed class CallSessionManager : ICallSessionManager
+public sealed partial class CallSessionManager : ICallSessionManager
 {
     private readonly ConcurrentDictionary<string, CallSession> _sessions = new();
     private readonly ConcurrentDictionary<string, CallSession> _byLinkedId = new();
@@ -24,13 +25,33 @@ public sealed class CallSessionManager : ICallSessionManager
     private readonly Subject<SessionDomainEvent> _events = new();
     private readonly SessionCorrelator _correlator;
     private readonly SessionOptions _options;
+    private readonly SessionStoreBase _store;
     private readonly ILogger<CallSessionManager> _logger;
 
-    public CallSessionManager(IOptions<SessionOptions> options, ILogger<CallSessionManager> logger)
+    public CallSessionManager(
+        IOptions<SessionOptions> options,
+        ILogger<CallSessionManager> logger,
+        SessionStoreBase store)
     {
         _options = options.Value;
         _logger = logger;
+        _store = store;
         _correlator = new SessionCorrelator(_options);
+    }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to persist session {SessionId}")]
+    private partial void LogPersistError(Exception ex, string sessionId);
+
+    private async Task PersistAsync(CallSession session)
+    {
+        try
+        {
+            await _store.SaveAsync(session, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            LogPersistError(ex, session.SessionId);
+        }
     }
 
     public IObservable<SessionDomainEvent> Events => _events;
@@ -120,12 +141,16 @@ public sealed class CallSessionManager : ICallSessionManager
                     CallSessionEventType.ParticipantJoined, channel.Name, null, role.ToString()));
             }
             _byChannelId[channel.UniqueId] = existing;
+            _ = PersistAsync(existing);
             return;
         }
 
         // Create new session
         var direction = _correlator.InferDirection(channel.Context, channel.Extension);
         var session = new CallSession(Guid.NewGuid().ToString("N"), linkedId, serverId, direction);
+
+        session.Context = channel.Context;
+        session.Extension = channel.Extension;
 
         var callerRole = SessionCorrelator.InferRole(channel.Name, 0);
         session.AddParticipant(new SessionParticipant
@@ -148,6 +173,8 @@ public sealed class CallSessionManager : ICallSessionManager
 
         _events.OnNext(new CallStartedEvent(session.SessionId, serverId,
             DateTimeOffset.UtcNow, direction, channel.CallerIdNum));
+
+        _ = PersistAsync(session);
     }
 
     private void OnChannelRemoved(AsteriskChannel channel)
@@ -186,6 +213,10 @@ public sealed class CallSessionManager : ICallSessionManager
 
                 OnSessionCompleted(session);
             }
+            else
+            {
+                _ = PersistAsync(session);
+            }
         }
 
         _byChannelId.TryRemove(channel.UniqueId, out _);
@@ -197,20 +228,30 @@ public sealed class CallSessionManager : ICallSessionManager
 
         lock (session.SyncRoot)
         {
+            var changed = false;
             switch (channel.State)
             {
                 case ChannelState.Ringing or ChannelState.Ring:
                     if (session.TryTransition(CallSessionState.Ringing))
+                    {
                         session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                             CallSessionEventType.Ringing, channel.Name, null, null));
+                        changed = true;
+                    }
                     break;
 
                 case ChannelState.Up:
                     if (session.TryTransition(CallSessionState.Connected))
+                    {
                         session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                             CallSessionEventType.Connected, channel.Name, null, null));
+                        changed = true;
+                    }
                     break;
             }
+
+            if (changed)
+                _ = PersistAsync(session);
         }
     }
 
@@ -226,6 +267,7 @@ public sealed class CallSessionManager : ICallSessionManager
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Hold, channel.Name, null, channel.HoldMusicClass));
                 _events.OnNext(new CallHeldEvent(session.SessionId, session.ServerId, DateTimeOffset.UtcNow));
+                _ = PersistAsync(session);
             }
         }
     }
@@ -242,6 +284,7 @@ public sealed class CallSessionManager : ICallSessionManager
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Unhold, channel.Name, null, null));
                 _events.OnNext(new CallResumedEvent(session.SessionId, session.ServerId, DateTimeOffset.UtcNow));
+                _ = PersistAsync(session);
             }
         }
     }
@@ -266,6 +309,8 @@ public sealed class CallSessionManager : ICallSessionManager
 
                 if (waitTime > TimeSpan.Zero)
                     SessionMetrics.WaitTimeMs.Record(waitTime.TotalMilliseconds);
+
+                _ = PersistAsync(session);
             }
         }
     }
@@ -283,6 +328,7 @@ public sealed class CallSessionManager : ICallSessionManager
                     CallSessionEventType.Transfer, null, info.TargetChannel, info.TransferType));
                 _events.OnNext(new CallTransferredEvent(session.SessionId, session.ServerId,
                     DateTimeOffset.UtcNow, info.TransferType, info.TargetChannel));
+                _ = PersistAsync(session);
             }
         }
     }
@@ -297,9 +343,14 @@ public sealed class CallSessionManager : ICallSessionManager
         lock (session.SyncRoot)
         {
             session.QueueName = queueName;
+            session.TryTransition(CallSessionState.Queued);
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.QueueJoined, entry.Channel, null, queueName));
         }
+
+        _events.OnNext(new CallQueuedEvent(session.SessionId, session.ServerId,
+            DateTimeOffset.UtcNow, queueName, entry.Position));
+        _ = PersistAsync(session);
     }
 
     private void OnSessionCompleted(CallSession session)
@@ -329,6 +380,7 @@ public sealed class CallSessionManager : ICallSessionManager
         _events.OnNext(new CallEndedEvent(session.SessionId, session.ServerId,
             DateTimeOffset.UtcNow, session.HangupCause, session.Duration, session.TalkTime));
 
+        _ = PersistAsync(session);
         EvictStaleCompleted();
     }
 
@@ -363,8 +415,11 @@ public sealed class CallSessionManager : ICallSessionManager
         lock (session.SyncRoot)
         {
             if (session.TryTransition(CallSessionState.Dialing))
+            {
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Dialing, channel.Name, channel.DialedChannel, null));
+                _ = PersistAsync(session);
+            }
         }
     }
 
@@ -380,6 +435,7 @@ public sealed class CallSessionManager : ICallSessionManager
             if (channel.DialStatus == "ANSWER")
                 session.TryTransition(CallSessionState.Connected);
         }
+        _ = PersistAsync(session);
     }
 
     // --- Bridge destroyed handler ---

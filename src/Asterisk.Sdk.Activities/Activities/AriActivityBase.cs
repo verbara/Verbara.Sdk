@@ -4,9 +4,10 @@ using Asterisk.Sdk;
 namespace Asterisk.Sdk.Activities.Activities;
 
 /// <summary>
-/// Base implementation for PBX activities with status tracking and real cancellation support.
+/// Base implementation for ARI-based activities with status tracking and cancellation support.
+/// Mirrors <see cref="ActivityBase"/> but accepts <see cref="IAriClient"/> instead of <see cref="IAgiChannel"/>.
 /// </summary>
-public abstract class ActivityBase : IActivity
+public abstract class AriActivityBase : IActivity
 {
     private readonly BehaviorSubject<ActivityStatus> _statusSubject = new(ActivityStatus.Pending);
     private readonly Lock _lock = new();
@@ -15,11 +16,11 @@ public abstract class ActivityBase : IActivity
     public ActivityStatus Status => _statusSubject.Value;
     public IObservable<ActivityStatus> StatusChanges => _statusSubject;
 
-    protected IAgiChannel Channel { get; }
+    protected IAriClient AriClient { get; }
 
-    protected ActivityBase(IAgiChannel channel)
+    protected AriActivityBase(IAriClient ariClient)
     {
-        Channel = channel;
+        AriClient = ariClient;
     }
 
     public async ValueTask StartAsync(CancellationToken cancellationToken = default)
@@ -59,7 +60,7 @@ public abstract class ActivityBase : IActivity
         }
     }
 
-    public ValueTask CancelAsync(CancellationToken cancellationToken = default)
+    public async ValueTask CancelAsync(CancellationToken cancellationToken = default)
     {
         lock (_lock)
         {
@@ -69,20 +70,27 @@ public abstract class ActivityBase : IActivity
                 SetStatus(ActivityStatus.Cancelled);
             }
         }
-        return ValueTask.CompletedTask;
+
+        await OnCancellingAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// Override to perform ARI-specific cleanup during cancellation (e.g., hanging up channels).
+    /// Called after the CTS is cancelled and status is set to Cancelled.
+    /// </summary>
+    protected virtual ValueTask OnCancellingAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
 
     protected abstract ValueTask ExecuteAsync(CancellationToken cancellationToken);
 
     protected void SetStatus(ActivityStatus status) => _statusSubject.OnNext(status);
 
-    public ValueTask DisposeAsync()
+    public virtual async ValueTask DisposeAsync()
     {
         _executionCts?.Cancel();
         _executionCts?.Dispose();
         _statusSubject.OnCompleted();
         _statusSubject.Dispose();
+        await ValueTask.CompletedTask;
         GC.SuppressFinalize(this);
-        return ValueTask.CompletedTask;
     }
 }
