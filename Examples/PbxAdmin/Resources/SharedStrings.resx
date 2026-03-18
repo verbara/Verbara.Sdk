@@ -972,4 +972,17 @@
   <data name="HelpPanel_ConfEdit_BridgeSettings" xml:space="preserve"><value>Set up the conference bridge: give it a name, assign an extension number that people dial to join, and set how many participants can be in the room at once.</value></data>
   <data name="HelpPanel_ConfEdit_Security" xml:space="preserve"><value>Security PINs to control who can join the conference. The user PIN is for regular participants, and the admin PIN gives extra controls like muting and kicking. Leave empty for open access.</value></data>
   <data name="HelpPanel_ConfEdit_Options" xml:space="preserve"><value>Additional options: enable auto-recording to capture the conference audio, and choose what music plays while waiting for others to join.</value></data>
+  <!-- MohEdit Help -->
+  <data name="Help_MohName_Title" xml:space="preserve"><value>Class Name</value></data>
+  <data name="Help_MohName" xml:space="preserve"><value>Name for this music class. Use descriptive names like 'jazz' or 'classical'.</value></data>
+  <data name="Help_MohMode_Title" xml:space="preserve"><value>Audio Mode</value></data>
+  <data name="Help_MohMode" xml:space="preserve"><value>How audio is played: 'files' reads from a folder, 'custom' runs an external command. Avoid 'mp3' — it's deprecated.</value></data>
+  <data name="Help_MohDirectory_Title" xml:space="preserve"><value>Audio Directory</value></data>
+  <data name="Help_MohDirectory" xml:space="preserve"><value>Server folder containing the audio files. Asterisk reads all supported files from this directory.</value></data>
+  <data name="Help_MohSort_Title" xml:space="preserve"><value>Play Order</value></data>
+  <data name="Help_MohSort" xml:space="preserve"><value>Play files in random order (shuffle) or alphabetically. Random is more natural for callers on hold.</value></data>
+  <data name="Help_MohCustomApp_Title" xml:space="preserve"><value>Custom Application</value></data>
+  <data name="Help_MohCustomApp" xml:space="preserve"><value>External command to generate audio. For example, an mp3 streaming command. Must output 8kHz mono audio.</value></data>
+  <data name="HelpPanel_MohEdit_ClassSettings" xml:space="preserve"><value>Set up the music class: give it a name and choose how audio is played — from local files on the server or via an external streaming command.</value></data>
+  <data name="HelpPanel_MohEdit_AudioFiles" xml:space="preserve"><value>Upload and manage audio files for this class. Supported formats include WAV, GSM, ulaw, alaw, and more. Files play to callers waiting on hold or in queue.</value></data>
 </root>

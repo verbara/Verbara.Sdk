@@ -972,5 +972,18 @@
   <data name="HelpPanel_ConfEdit_BridgeSettings" xml:space="preserve"><value>Configure el puente de conferencia: asígnele un nombre, un número de extensión que la gente marca para unirse, y defina cuántos participantes pueden estar en la sala al mismo tiempo.</value></data>
   <data name="HelpPanel_ConfEdit_Security" xml:space="preserve"><value>PINs de seguridad para controlar quién puede entrar. El PIN de usuario es para participantes regulares, y el PIN de admin da controles extra como silenciar y expulsar. Dejar vacío para acceso libre.</value></data>
   <data name="HelpPanel_ConfEdit_Options" xml:space="preserve"><value>Opciones adicionales: habilite la grabación automática para capturar el audio de la conferencia, y elija qué música suena mientras se espera a que se unan los demás.</value></data>
+  <!-- MohEdit Help -->
+  <data name="Help_MohName_Title" xml:space="preserve"><value>Nombre de Clase</value></data>
+  <data name="Help_MohName" xml:space="preserve"><value>Nombre para esta clase de música. Use nombres descriptivos como 'jazz' o 'clasica'.</value></data>
+  <data name="Help_MohMode_Title" xml:space="preserve"><value>Modo de Audio</value></data>
+  <data name="Help_MohMode" xml:space="preserve"><value>Cómo se reproduce el audio: 'files' lee de una carpeta, 'custom' ejecuta un comando externo. Evite 'mp3' — está obsoleto.</value></data>
+  <data name="Help_MohDirectory_Title" xml:space="preserve"><value>Directorio de Audio</value></data>
+  <data name="Help_MohDirectory" xml:space="preserve"><value>Carpeta del servidor que contiene los archivos de audio. Asterisk lee todos los archivos soportados de este directorio.</value></data>
+  <data name="Help_MohSort_Title" xml:space="preserve"><value>Orden de Reproducción</value></data>
+  <data name="Help_MohSort" xml:space="preserve"><value>Reproducir archivos en orden aleatorio o alfabético. El aleatorio es más natural para quienes esperan en línea.</value></data>
+  <data name="Help_MohCustomApp_Title" xml:space="preserve"><value>Aplicación Personalizada</value></data>
+  <data name="Help_MohCustomApp" xml:space="preserve"><value>Comando externo para generar audio. Por ejemplo, un comando de streaming mp3. Debe producir audio mono a 8kHz.</value></data>
+  <data name="HelpPanel_MohEdit_ClassSettings" xml:space="preserve"><value>Configure la clase de música: asígnele un nombre y elija cómo se reproduce el audio — desde archivos locales en el servidor o mediante un comando de streaming externo.</value></data>
+  <data name="HelpPanel_MohEdit_AudioFiles" xml:space="preserve"><value>Suba y administre archivos de audio para esta clase. Los formatos soportados incluyen WAV, GSM, ulaw, alaw y más. Los archivos se reproducen para quienes esperan en espera o en cola.</value></data>
 
 </root>
