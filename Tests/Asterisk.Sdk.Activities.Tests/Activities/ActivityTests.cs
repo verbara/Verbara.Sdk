@@ -240,6 +240,46 @@ public class ActivityTests
     }
 
     [Fact]
+    public async Task CancelAsync_ShouldCancelCtsBeforeSettingStatus_WhenActivityIsRunning()
+    {
+        // Arrange — activity that blocks until cancelled, recording whether
+        // the CTS was already cancelled at the moment status becomes Cancelled.
+        var channel = Substitute.For<IAgiChannel>();
+        var ctsWasCancelledWhenStatusChanged = false;
+        CancellationToken capturedToken = default;
+
+#pragma warning disable CA2012
+        channel.ExecAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                capturedToken = callInfo.ArgAt<CancellationToken>(2);
+                return new ValueTask(Task.Delay(Timeout.Infinite, capturedToken));
+            });
+#pragma warning restore CA2012
+
+        var activity = new DialActivity(channel) { Target = new EndPoint(TechType.PJSIP, "1000") };
+
+        // Subscribe to observe the exact moment Cancelled status is emitted
+        activity.StatusChanges.Subscribe(s =>
+        {
+            if (s == ActivityStatus.Cancelled)
+                ctsWasCancelledWhenStatusChanged = capturedToken.IsCancellationRequested;
+        });
+
+        var startTask = activity.StartAsync().AsTask();
+
+        // Act — wait for InProgress, then cancel
+        await Task.Delay(50);
+        await activity.CancelAsync();
+        await startTask;
+
+        // Assert — the CTS must have been cancelled BEFORE the status was set
+        activity.Status.Should().Be(ActivityStatus.Cancelled);
+        ctsWasCancelledWhenStatusChanged.Should().BeTrue(
+            "the CancellationToken should be cancelled before status transitions to Cancelled");
+    }
+
+    [Fact]
     public async Task StartAsync_ShouldThrow_WhenCalledTwice()
     {
         var activity = new HangupActivity(_channel);

@@ -65,8 +65,8 @@ public abstract class ActivityBase : IActivity
         {
             if (Status is ActivityStatus.InProgress or ActivityStatus.Starting)
             {
-                SetStatus(ActivityStatus.Cancelled);
                 _executionCts?.Cancel();
+                SetStatus(ActivityStatus.Cancelled);
             }
         }
         return ValueTask.CompletedTask;
