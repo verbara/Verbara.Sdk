@@ -3,6 +3,8 @@ using Asterisk.Sdk.Agi.Mapping;
 using Asterisk.Sdk.Ami.Transport;
 using Asterisk.Sdk.Hosting;
 using Asterisk.Sdk.Live.Server;
+using Asterisk.Sdk.Sessions.Extensions;
+using Asterisk.Sdk.Sessions.Manager;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -110,5 +112,52 @@ public class ServiceRegistrationTests
 
         hostedServices.Should().Contain(s => s is AmiConnectionHostedService);
         hostedServices.Should().Contain(s => s is AsteriskServerHostedService);
+    }
+
+    [Fact]
+    public async Task AddAsteriskSessions_ShouldRegisterHostedService()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddAsterisk(options =>
+        {
+            options.Ami.Hostname = "localhost";
+            options.Ami.Username = "admin";
+            options.Ami.Password = "secret";
+        });
+        services.AddAsteriskSessions();
+
+        await using var provider = services.BuildServiceProvider();
+        var hostedServices = provider.GetServices<IHostedService>().ToList();
+
+        hostedServices.Should().Contain(s => s.GetType().Name == "SessionManagerHostedService");
+    }
+
+    [Fact]
+    public async Task AddAsteriskSessionsMultiServer_ShouldNotRegisterHostedService()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddAsteriskMultiServer();
+        services.AddAsteriskSessionsMultiServer();
+
+        await using var provider = services.BuildServiceProvider();
+        var hostedServices = provider.GetServices<IHostedService>().ToList();
+
+        hostedServices.Should().NotContain(s => s.GetType().Name == "SessionManagerHostedService");
+    }
+
+    [Fact]
+    public async Task AddAsteriskSessionsMultiServer_ShouldRegisterCoreServices()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddAsteriskMultiServer();
+        services.AddAsteriskSessionsMultiServer();
+
+        await using var provider = services.BuildServiceProvider();
+
+        provider.GetService<ICallSessionManager>().Should().NotBeNull();
+        provider.GetService<SessionStoreBase>().Should().NotBeNull();
     }
 }

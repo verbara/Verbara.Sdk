@@ -160,11 +160,34 @@ public static class ServiceCollectionExtensions
 
     /// <summary>
     /// Add session engine services (CallSessionManager, extension points, hosted service).
-    /// Call after <see cref="AddAsterisk(IServiceCollection, Action{AsteriskOptions})"/> to enable call session correlation and domain events.
+    /// Auto-attaches to the single <see cref="AsteriskServer"/> on startup.
+    /// Call after <see cref="AddAsterisk(IServiceCollection, Action{AsteriskOptions})"/> for single-server deployments.
     /// </summary>
     public static IServiceCollection AddAsteriskSessions(
         this IServiceCollection services,
         Action<SessionOptions>? configure = null)
+    {
+        AddSessionsCore(services, configure);
+        services.AddSingleton<IHostedService, SessionManagerHostedService>();
+        return services;
+    }
+
+    /// <summary>
+    /// Add session engine services for multi-server deployments using <see cref="AsteriskServerPool"/>.
+    /// Does NOT register a hosted service — manual server attachment via
+    /// <see cref="CallSessionManager.AttachToServer"/> / <see cref="CallSessionManager.DetachFromServer"/> is required.
+    /// Call after <see cref="AddAsteriskMultiServer"/> for clustered deployments.
+    /// </summary>
+    public static IServiceCollection AddAsteriskSessionsMultiServer(
+        this IServiceCollection services,
+        Action<SessionOptions>? configure = null)
+    {
+        return AddSessionsCore(services, configure);
+    }
+
+    private static IServiceCollection AddSessionsCore(
+        IServiceCollection services,
+        Action<SessionOptions>? configure)
     {
         services.TryAddSingleton<ICallSessionManager, CallSessionManager>();
         services.TryAddSingleton<SessionStoreBase, InMemorySessionStore>();
@@ -174,8 +197,6 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IValidateOptions<SessionOptions>, SessionOptionsValidator>();
         services.AddOptions<SessionOptions>().ValidateOnStart();
-        services.AddSingleton<IHostedService, SessionManagerHostedService>();
-
         return services;
     }
 
