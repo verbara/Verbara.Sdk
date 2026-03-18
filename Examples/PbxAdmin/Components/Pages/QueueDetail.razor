@@ -40,6 +40,7 @@
 }
 else
 {
+    <HelpPanel SectionKey="QueueDetail_Stats">@L["QueueDetail_Stats"]</HelpPanel>
     <div class="stats-bar">
         <div class="stat-item"><strong>@_queue.Max</strong> @L["QDetail_Max"]</div>
         <div class="stat-item"><strong>@_queue.Strategy</strong> @L["QDetail_Strategy"]</div>
@@ -81,6 +82,7 @@ else
         }
     </div>
 
+    <HelpPanel SectionKey="QueueDetail_Agents">@L["QueueDetail_Agents"]</HelpPanel>
     <h3>@L["QDetail_AgentsSection"] (@_queue.MemberCount)</h3>
     <div class="card-grid">
         @foreach (var member in _queue.Members.Values)
@@ -123,6 +125,7 @@ else
         }
     </div>
 
+    <HelpPanel SectionKey="QueueDetail_Callers">@L["QueueDetail_Callers"]</HelpPanel>
     <h3>@L["QDetail_CallersWaiting"] (@_queue.EntryCount)</h3>
     @if (_queue.EntryCount > 0)
     {
