@@ -19,6 +19,8 @@
 
 @if (_activeTab == "inbound")
 {
+    <HelpPanel SectionKey="Routes_Inbound">@L["Routes_Inbound"]</HelpPanel>
+
     <div class="kpi-grid kpi-grid-sm">
         <div class="kpi-card kpi-blue">
             <div class="kpi-value">@_inbound.Count</div>
@@ -74,6 +76,8 @@
 }
 else
 {
+    <HelpPanel SectionKey="Routes_Outbound">@L["Routes_Outbound"]</HelpPanel>
+
     <div style="margin-bottom: 1rem;">
         <button class="btn btn-blue" @onclick="NavigateNewOutbound">@L["Routes_NewOutbound"]</button>
     </div>
