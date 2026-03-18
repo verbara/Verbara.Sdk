@@ -3,7 +3,7 @@
 @using Asterisk.Sdk.Live.Agents
 @inject IStringLocalizer<SharedStrings> L
 @inject SelectedServerService ServerSvc
-@inject CallFlowTracker CallTracker
+@inject ICallSessionManager Sessions
 @implements IDisposable
 
 <PageTitle>@L["Home_Title"]</PageTitle>
@@ -124,40 +124,33 @@
             .Count();
 
         var serverId = ServerSvc.SelectedServerId;
-        var recentCalls = CallTracker.GetRecentCompleted(200)
-            .Where(c => c.ServerId == serverId)
-            .ToList();
-        _callsTracked = CallTracker.ActiveCalls.Count(c => c.ServerId == serverId) + recentCalls.Count;
+        var recent = Sessions.GetRecentCompleted(200).ToList();
+        var allCalls = Sessions.ActiveSessions.Concat(recent);
+        var calls = serverId is not null
+            ? allCalls.Where(s => s.ServerId == serverId).ToList()
+            : allCalls.ToList();
 
-        var queueCalls = recentCalls.Where(c => c.QueueName is not null).ToList();
+        _callsTracked = calls.Count;
+
+        var queueCalls = calls.Where(s => s.QueueName is not null).ToList();
         if (queueCalls.Count > 0)
         {
-            var waitTimes = queueCalls
-                .Select(c =>
-                {
-                    var join = c.Events.FirstOrDefault(e => e.Type == CallFlowEventType.QueueJoin);
-                    var connect = c.Events.FirstOrDefault(e => e.Type == CallFlowEventType.AgentConnect);
-                    return join is not null && connect is not null ? (TimeSpan?)(connect.Timestamp - join.Timestamp) : null;
-                })
-                .Where(t => t.HasValue)
-                .Select(t => t!.Value)
-                .ToList();
+            var avgWait = queueCalls
+                .Where(s => s.WaitTime.HasValue)
+                .Select(s => s.WaitTime!.Value.TotalSeconds)
+                .DefaultIfEmpty(0).Average();
+            _avgWaitTime = FormatSeconds((int)avgWait);
 
-            _avgWaitTime = waitTimes.Count > 0
-                ? FormatSeconds((int)waitTimes.Average(t => t.TotalSeconds))
-                : "—";
+            var avgTalk = queueCalls
+                .Where(s => s.ConnectedAt is not null && s.TalkTime.HasValue)
+                .Select(s => s.TalkTime!.Value.TotalSeconds)
+                .DefaultIfEmpty(0).Average();
+            _avgTalkTime = FormatSeconds((int)avgTalk);
 
-            var talkTimes = queueCalls
-                .Where(c => c.AgentName is not null)
-                .Select(c => c.Duration.TotalSeconds)
-                .ToList();
-            _avgTalkTime = talkTimes.Count > 0
-                ? FormatSeconds((int)talkTimes.Average())
-                : "—";
-
-            var abandoned = queueCalls.Count(c => c.AgentName is null);
-            var rate = (double)abandoned / queueCalls.Count * 100;
-            _abandonRate = $"{rate:F0}%";
+            var totalQueue = queueCalls.Count;
+            var abandoned = queueCalls.Count(s => s.AgentId is null
+                && s.State is CallSessionState.Completed or CallSessionState.Failed);
+            _abandonRate = $"{(double)abandoned / totalQueue * 100:F0}%";
         }
         else
         {

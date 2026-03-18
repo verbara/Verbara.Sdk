@@ -334,7 +334,8 @@ public sealed class AsteriskServer : IAsteriskServer
                     break;
 
                 case AgentConnectEvent ace:
-                    server.Agents.OnAgentConnect(ace.Agent ?? "", ace.Channel);
+                    server.Agents.OnAgentConnect(ace.Agent ?? "", ace.Channel,
+                        ace.LinkedId, ace.Interface);
                     break;
 
                 case AgentCompleteEvent acoe:

@@ -2,7 +2,7 @@
 @using PbxAdmin.Services
 @using Asterisk.Sdk.Live.Agents
 @inject SelectedServerService ServerSvc
-@inject CallFlowTracker CallTracker
+@inject ICallSessionManager Sessions
 @inject NavigationManager Nav
 @inject IStringLocalizer<SharedStrings> L
 @implements IDisposable
@@ -91,11 +91,11 @@
                     }
                     @if (agent.State == AgentState.OnCall && agent.TalkingTo is not null)
                     {
-                        var activeCall = CallTracker.FindActiveCallByChannel(agent.Channel ?? agent.TalkingTo);
+                        var activeCall = Sessions.FindByChannel(agent.Channel ?? agent.TalkingTo);
                         <div>@L["Agents_TalkingTo"]: @agent.TalkingTo
                             @if (activeCall is not null)
                             {
-                                <a href="/calls/@Uri.EscapeDataString(activeCall.CallId)" class="badge badge-blue" @onclick:stopPropagation="true">@L["Agents_ViewCall"]</a>
+                                <a href="/calls/@Uri.EscapeDataString(activeCall.SessionId)" class="badge badge-blue" @onclick:stopPropagation="true">@L["Agents_ViewCall"]</a>
                             }
                         </div>
                     }
