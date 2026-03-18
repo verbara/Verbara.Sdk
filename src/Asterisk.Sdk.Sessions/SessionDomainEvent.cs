@@ -25,5 +25,8 @@ public sealed record CallEndedEvent(string SessionId, string ServerId, DateTimeO
 public sealed record CallFailedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     string Reason) : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
+public sealed record CallQueuedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
+    string QueueName, int? Position) : SessionDomainEvent(SessionId, ServerId, Timestamp);
+
 public sealed record SessionMergedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     string MergedSessionId) : SessionDomainEvent(SessionId, ServerId, Timestamp);

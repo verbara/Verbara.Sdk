@@ -149,6 +149,9 @@ public sealed partial class CallSessionManager : ICallSessionManager
         var direction = _correlator.InferDirection(channel.Context, channel.Extension);
         var session = new CallSession(Guid.NewGuid().ToString("N"), linkedId, serverId, direction);
 
+        session.Context = channel.Context;
+        session.Extension = channel.Extension;
+
         var callerRole = SessionCorrelator.InferRole(channel.Name, 0);
         session.AddParticipant(new SessionParticipant
         {
@@ -340,9 +343,13 @@ public sealed partial class CallSessionManager : ICallSessionManager
         lock (session.SyncRoot)
         {
             session.QueueName = queueName;
+            session.TryTransition(CallSessionState.Queued);
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.QueueJoined, entry.Channel, null, queueName));
         }
+
+        _events.OnNext(new CallQueuedEvent(session.SessionId, session.ServerId,
+            DateTimeOffset.UtcNow, queueName, entry.Position));
         _ = PersistAsync(session);
     }
 

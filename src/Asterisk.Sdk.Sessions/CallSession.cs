@@ -33,7 +33,21 @@ public sealed class CallSession
     // Participants
     public IReadOnlyList<SessionParticipant> Participants => _participants;
 
-    // Context
+    // Convenience — originating party info
+    /// <summary>Caller ID number of the originating party.</summary>
+    public string? CallerIdNum => Participants.Count > 0 ? Participants[0].CallerIdNum : null;
+
+    /// <summary>Caller ID name of the originating party.</summary>
+    public string? CallerIdName => Participants.Count > 0 ? Participants[0].CallerIdName : null;
+
+    // Dialplan context
+    /// <summary>Dialplan context where the call arrived.</summary>
+    public string? Context { get; internal set; }
+
+    /// <summary>Dialplan extension dialed.</summary>
+    public string? Extension { get; internal set; }
+
+    // Call context
     public string? QueueName { get; set; }
     public string? AgentId { get; set; }
     public string? AgentInterface { get; set; }
@@ -44,6 +58,7 @@ public sealed class CallSession
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? DialingAt { get; set; }
     public DateTimeOffset? RingingAt { get; set; }
+    public DateTimeOffset? QueuedAt { get; set; }
     public DateTimeOffset? ConnectedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
 
@@ -97,7 +112,7 @@ public sealed class CallSession
     // Mutators
     internal void AddParticipant(SessionParticipant participant) => _participants.Add(participant);
     internal void AddEvent(CallSessionEvent evt) => _events.Add(evt);
-    internal void SetMetadata(string key, string value) => _metadata[key] = value;
+    public void SetMetadata(string key, string value) => _metadata[key] = value;
 
     private void UpdateTimestamp(CallSessionState state)
     {
@@ -106,6 +121,7 @@ public sealed class CallSession
         {
             case CallSessionState.Dialing: DialingAt ??= now; break;
             case CallSessionState.Ringing: RingingAt ??= now; break;
+            case CallSessionState.Queued: QueuedAt ??= now; break;
             case CallSessionState.Connected: ConnectedAt ??= now; break;
             case CallSessionState.Completed:
             case CallSessionState.Failed:
