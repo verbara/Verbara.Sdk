@@ -56,6 +56,23 @@ public sealed class ConfigProviderResolver : IConfigProviderResolver, IDisposabl
     public ConfigMode GetConfigMode(string serverId) =>
         _providers.TryGetValue(serverId, out var entry) ? entry.Mode : ConfigMode.File;
 
+    public async Task<Dictionary<string, List<string>>> ValidateRealtimeSchemasAsync(CancellationToken ct = default)
+    {
+        var results = new Dictionary<string, List<string>>();
+
+        foreach (var kvp in _providers)
+        {
+            if (kvp.Value.Mode == ConfigMode.Realtime && kvp.Value.Provider is DbConfigProvider dbProvider)
+            {
+                var missing = await dbProvider.ValidateSchemaAsync(ct);
+                if (missing.Count > 0)
+                    results[kvp.Key] = missing;
+            }
+        }
+
+        return results;
+    }
+
     public void Dispose()
     {
         foreach (var kvp in _providers)
