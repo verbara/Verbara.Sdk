@@ -953,4 +953,23 @@
   <data name="Met_SessionAvgTalk" xml:space="preserve"><value>AVG TALK (MS)</value></data>
   <data name="Met_SessionAvgHold" xml:space="preserve"><value>AVG HOLD (MS)</value></data>
   <data name="Met_SessionAvgDuration" xml:space="preserve"><value>AVG DURATION (MS)</value></data>
+
+  <!-- ConferenceConfigEdit Help -->
+  <data name="Help_ConfName_Title" xml:space="preserve"><value>Conference Name</value></data>
+  <data name="Help_ConfName" xml:space="preserve"><value>The name that identifies this conference room in the system.</value></data>
+  <data name="Help_ConfNumber_Title" xml:space="preserve"><value>Extension Number</value></data>
+  <data name="Help_ConfNumber" xml:space="preserve"><value>The extension number users dial to join this conference (e.g., 6000).</value></data>
+  <data name="Help_ConfMaxMembers_Title" xml:space="preserve"><value>Max Members</value></data>
+  <data name="Help_ConfMaxMembers" xml:space="preserve"><value>Maximum number of participants allowed at the same time. 0 means unlimited.</value></data>
+  <data name="Help_ConfUserPin_Title" xml:space="preserve"><value>User PIN</value></data>
+  <data name="Help_ConfUserPin" xml:space="preserve"><value>Optional PIN that regular participants must enter to join. Leave empty for open access.</value></data>
+  <data name="Help_ConfAdminPin_Title" xml:space="preserve"><value>Admin PIN</value></data>
+  <data name="Help_ConfAdminPin" xml:space="preserve"><value>Optional PIN for the conference administrator. The admin can mute/unmute and kick participants.</value></data>
+  <data name="Help_ConfAutoRecord_Title" xml:space="preserve"><value>Auto Record</value></data>
+  <data name="Help_ConfAutoRecord" xml:space="preserve"><value>When enabled, the conference is automatically recorded from the moment the first participant joins.</value></data>
+  <data name="Help_ConfMohClass_Title" xml:space="preserve"><value>Music on Hold</value></data>
+  <data name="Help_ConfMohClass" xml:space="preserve"><value>The music that plays when only one person is in the conference waiting for others to join.</value></data>
+  <data name="HelpPanel_ConfEdit_BridgeSettings" xml:space="preserve"><value>Set up the conference bridge: give it a name, assign an extension number that people dial to join, and set how many participants can be in the room at once.</value></data>
+  <data name="HelpPanel_ConfEdit_Security" xml:space="preserve"><value>Security PINs to control who can join the conference. The user PIN is for regular participants, and the admin PIN gives extra controls like muting and kicking. Leave empty for open access.</value></data>
+  <data name="HelpPanel_ConfEdit_Options" xml:space="preserve"><value>Additional options: enable auto-recording to capture the conference audio, and choose what music plays while waiting for others to join.</value></data>
 </root>

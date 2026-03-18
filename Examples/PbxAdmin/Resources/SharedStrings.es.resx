@@ -954,4 +954,23 @@
   <data name="Met_SessionAvgHold" xml:space="preserve"><value>ESPERA EN L&#205;NEA PROM. (MS)</value></data>
   <data name="Met_SessionAvgDuration" xml:space="preserve"><value>DURACI&#211;N PROM. (MS)</value></data>
 
+  <!-- ConferenceConfigEdit Help -->
+  <data name="Help_ConfName_Title" xml:space="preserve"><value>Nombre de Conferencia</value></data>
+  <data name="Help_ConfName" xml:space="preserve"><value>El nombre que identifica esta sala de conferencia en el sistema.</value></data>
+  <data name="Help_ConfNumber_Title" xml:space="preserve"><value>Número de Extensión</value></data>
+  <data name="Help_ConfNumber" xml:space="preserve"><value>El número de extensión que los usuarios marcan para unirse a esta conferencia (ej. 6000).</value></data>
+  <data name="Help_ConfMaxMembers_Title" xml:space="preserve"><value>Máx. Participantes</value></data>
+  <data name="Help_ConfMaxMembers" xml:space="preserve"><value>Número máximo de participantes permitidos al mismo tiempo. 0 significa ilimitado.</value></data>
+  <data name="Help_ConfUserPin_Title" xml:space="preserve"><value>PIN de Usuario</value></data>
+  <data name="Help_ConfUserPin" xml:space="preserve"><value>PIN opcional que los participantes regulares deben ingresar para unirse. Dejar vacío para acceso libre.</value></data>
+  <data name="Help_ConfAdminPin_Title" xml:space="preserve"><value>PIN de Admin</value></data>
+  <data name="Help_ConfAdminPin" xml:space="preserve"><value>PIN opcional para el administrador de la conferencia. El admin puede silenciar/activar y expulsar participantes.</value></data>
+  <data name="Help_ConfAutoRecord_Title" xml:space="preserve"><value>Grabación Automática</value></data>
+  <data name="Help_ConfAutoRecord" xml:space="preserve"><value>Cuando está habilitado, la conferencia se graba automáticamente desde que se une el primer participante.</value></data>
+  <data name="Help_ConfMohClass_Title" xml:space="preserve"><value>Música en Espera</value></data>
+  <data name="Help_ConfMohClass" xml:space="preserve"><value>La música que suena cuando solo hay una persona en la conferencia esperando a que se unan los demás.</value></data>
+  <data name="HelpPanel_ConfEdit_BridgeSettings" xml:space="preserve"><value>Configure el puente de conferencia: asígnele un nombre, un número de extensión que la gente marca para unirse, y defina cuántos participantes pueden estar en la sala al mismo tiempo.</value></data>
+  <data name="HelpPanel_ConfEdit_Security" xml:space="preserve"><value>PINs de seguridad para controlar quién puede entrar. El PIN de usuario es para participantes regulares, y el PIN de admin da controles extra como silenciar y expulsar. Dejar vacío para acceso libre.</value></data>
+  <data name="HelpPanel_ConfEdit_Options" xml:space="preserve"><value>Opciones adicionales: habilite la grabación automática para capturar el audio de la conferencia, y elija qué música suena mientras se espera a que se unan los demás.</value></data>
+
 </root>
