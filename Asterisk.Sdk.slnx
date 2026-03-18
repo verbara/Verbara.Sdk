@@ -10,6 +10,7 @@
     <Project Path="Examples/MultiServerExample/MultiServerExample.csproj" />
     <Project Path="Examples/PbxActivitiesExample/PbxActivitiesExample.csproj" />
     <Project Path="Examples/PbxAdmin/PbxAdmin.csproj" />
+    <Project Path="Examples/SessionExample/SessionExample.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Asterisk.Sdk.Agi/Asterisk.Sdk.Agi.csproj" />
