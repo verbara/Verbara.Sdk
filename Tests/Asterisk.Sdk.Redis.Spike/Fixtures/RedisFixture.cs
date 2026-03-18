@@ -31,7 +31,7 @@ public sealed class RedisFixture : IAsyncLifetime
     }
 }
 
-[CollectionDefinition("Redis")]
 #pragma warning disable CA1711 // Identifiers should not have incorrect suffix — xunit convention
+[CollectionDefinition("Redis")]
 public class RedisCollection : ICollectionFixture<RedisFixture>;
 #pragma warning restore CA1711
