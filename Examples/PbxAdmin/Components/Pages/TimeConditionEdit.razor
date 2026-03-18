@@ -288,6 +288,12 @@ else
             return;
         }
 
+        if (_dayEnabled.All(d => !d))
+        {
+            _result = "At least one day must be enabled";
+            return;
+        }
+
         _saving = true;
         _result = null;
 

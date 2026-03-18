@@ -275,6 +275,13 @@ else
     private async Task SaveAsync()
     {
         if (_serverId is null) return;
+
+        if (_config.Enabled && string.IsNullOrWhiteSpace(_config.Greeting))
+        {
+            _error = "Greeting is required when menu is enabled";
+            return;
+        }
+
         _error = null;
 
         var (success, error) = _isNew

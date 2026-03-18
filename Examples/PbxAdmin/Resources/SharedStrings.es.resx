@@ -619,6 +619,7 @@
   <data name="FC_NoCodes" xml:space="preserve"><value>Sin códigos de funciones configurados.</value></data>
   <data name="FC_NewFeatureCode" xml:space="preserve"><value>Nuevo Código de Función</value></data>
   <data name="FC_EditCode" xml:space="preserve"><value>Editar:</value></data>
+  <data name="FC_DeleteCode" xml:space="preserve"><value>Eliminar código de función</value></data>
   <data name="Col_Code" xml:space="preserve"><value>Código</value></data>
 
   <!-- Voicemail Page -->

@@ -116,22 +116,36 @@
 
     private async Task Save()
     {
+        if (string.IsNullOrWhiteSpace(_config.Name))
+        {
+            _error = "Name is required";
+            return;
+        }
+
         _saving = true;
         _error = null;
+        try
+        {
+            var serverId = ServerSvc.SelectedServerId;
+            if (serverId is null) { _error = "No server selected"; return; }
 
-        var serverId = ServerSvc.SelectedServerId;
-        if (serverId is null) { _error = "No server selected"; _saving = false; return; }
+            var (success, error) = _isNew
+                ? await ConfConfigSvc.CreateConfigAsync(serverId, _config)
+                : await ConfConfigSvc.UpdateConfigAsync(serverId, _config);
 
-        var (success, error) = _isNew
-            ? await ConfConfigSvc.CreateConfigAsync(serverId, _config)
-            : await ConfConfigSvc.UpdateConfigAsync(serverId, _config);
-
-        _saving = false;
-
-        if (success)
-            Nav.NavigateTo("/conferences");
-        else
-            _error = error;
+            if (success)
+                Nav.NavigateTo("/conferences");
+            else
+                _error = error;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unexpected error: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
     }
 
     private void GoBack() => Nav.NavigateTo("/conferences");
