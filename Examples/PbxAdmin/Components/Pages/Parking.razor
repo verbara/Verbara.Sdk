@@ -12,9 +12,9 @@
 
 <h2>@L["Parking_Heading"]</h2>
 
-<div class="tab-bar">
-    <button class="tab @(_activeTab == "live" ? "tab-active" : "")" @onclick='() => _activeTab = "live"'>@L["Parking_ParkedCalls"]</button>
-    <button class="tab @(_activeTab == "config" ? "tab-active" : "")" @onclick="SwitchToConfig">@L["Parking_LotConfig"]</button>
+<div class="chip-bar">
+    <button class="chip @(_activeTab == "live" ? "chip-active" : "")" @onclick='() => _activeTab = "live"'>@L["Parking_ParkedCalls"]</button>
+    <button class="chip @(_activeTab == "config" ? "chip-active" : "")" @onclick="SwitchToConfig">@L["Parking_LotConfig"]</button>
 </div>
 
 @if (_activeTab == "live")

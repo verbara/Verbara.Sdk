@@ -42,7 +42,7 @@ builder.Services.AddAuthorization(options =>
         .Build());
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
+builder.Services.AddLocalization();
 
 builder.Services.AddAsteriskMultiServer();
 builder.Services.AddSingleton<EventLogService>();
@@ -198,7 +198,8 @@ app.MapGet("/set-language/{culture}", (string culture, HttpContext context) =>
         CookieRequestCultureProvider.DefaultCookieName,
         CookieRequestCultureProvider.MakeCookieValue(new RequestCulture(culture)),
         new CookieOptions { Expires = DateTimeOffset.UtcNow.AddYears(1) });
-    return Results.Redirect(context.Request.Headers.Referer.ToString() ?? "/");
+    var referer = context.Request.Headers.Referer.ToString();
+    return Results.Redirect(string.IsNullOrEmpty(referer) ? "/" : referer);
 }).AllowAnonymous();
 
 app.MapRazorComponents<PbxAdmin.Components.App>()
