@@ -10,7 +10,6 @@ public sealed class BlindTransferActivity(IAgiChannel channel) : ActivityBase(ch
 
     protected override async ValueTask ExecuteAsync(CancellationToken cancellationToken)
     {
-        await Channel.SetVariableAsync("TRANSFER_CONTEXT", Destination.Context, cancellationToken);
-        await Channel.ExecAsync("Goto", $"{Destination.Context},{Destination.Extension},{Destination.Priority}", cancellationToken);
+        await Channel.ExecAsync("BlindTransfer", $"{Destination.Extension}@{Destination.Context}", cancellationToken);
     }
 }
