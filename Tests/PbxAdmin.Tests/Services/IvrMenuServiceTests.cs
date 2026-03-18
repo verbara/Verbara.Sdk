@@ -3,7 +3,9 @@ using PbxAdmin.Services;
 using PbxAdmin.Services.Dialplan;
 using PbxAdmin.Services.Repositories;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace PbxAdmin.Tests.Services;
@@ -338,7 +340,8 @@ public class IvrMenuServiceTests
         var dialplanResolver = Substitute.For<IDialplanProviderResolver>();
         var regen = new DialplanRegenerator(routeRepoResolver, dialplanResolver, repo);
         var logger = Substitute.For<ILogger<IvrMenuService>>();
-        var sut = new IvrMenuService(repo, regen, logger);
+        var soundSvc = new SystemSoundService(Substitute.For<IConfiguration>(), new AudioFileService(NullLogger<AudioFileService>.Instance));
+        var sut = new IvrMenuService(repo, regen, soundSvc, logger);
         return (sut, repo, regen);
     }
 

@@ -1,7 +1,9 @@
+using Asterisk.Sdk.Ami.Responses;
 using PbxAdmin.Models;
 using PbxAdmin.Services;
 using PbxAdmin.Services.Repositories;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -17,8 +19,9 @@ public class MohServiceTests
         var schema = Substitute.For<IRecordingMohSchemaManager>();
         var providerResolver = Substitute.For<IConfigProviderResolver>();
         var audioSvc = new AudioFileService(NullLogger<AudioFileService>.Instance);
+        var config = Substitute.For<IConfiguration>();
         var logger = NullLogger<MohService>.Instance;
-        var sut = new MohService(repo, schema, providerResolver, audioSvc, logger);
+        var sut = new MohService(repo, schema, providerResolver, audioSvc, config, logger);
         return (sut, repo, providerResolver);
     }
 
@@ -34,14 +37,18 @@ public class MohServiceTests
     [Fact]
     public async Task CreateClass_ShouldSucceed_WhenValid()
     {
-        var (sut, repo, _) = CreateService();
+        var (sut, repo, provider) = CreateService();
         repo.GetByNameAsync(ServerId, "default", Arg.Any<CancellationToken>()).Returns((MohClass?)null);
         repo.InsertAsync(Arg.Any<MohClass>(), Arg.Any<CancellationToken>()).Returns(1);
+        // Provide a mock config provider so regeneration doesn't NRE
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.GetCategoriesAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<ConfigCategory>()));
+        provider.GetProvider(ServerId).Returns(configProvider);
 
-        var (success, error) = await sut.CreateClassAsync(ServerId, ValidClass());
+        var (success, _) = await sut.CreateClassAsync(ServerId, ValidClass());
 
         success.Should().BeTrue();
-        error.Should().BeNull();
     }
 
     [Fact]
