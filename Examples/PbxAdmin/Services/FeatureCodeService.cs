@@ -52,7 +52,8 @@ public sealed partial class FeatureCodeService
 
         code.ServerId = serverId;
         var id = await _repo.InsertFeatureCodeAsync(code, ct);
-        await RegenerateFeaturesConfAsync(serverId, ct);
+        var (regenOk1, regenError1) = await RegenerateFeaturesConfAsync(serverId, ct);
+        if (!regenOk1) return (true, $"Saved but: {regenError1}");
         FeatureCodeCreated(_logger, id, code.Code);
         return (true, null);
     }
@@ -71,7 +72,8 @@ public sealed partial class FeatureCodeService
 
         code.ServerId = serverId;
         await _repo.UpdateFeatureCodeAsync(code, ct);
-        await RegenerateFeaturesConfAsync(serverId, ct);
+        var (regenOk2, regenError2) = await RegenerateFeaturesConfAsync(serverId, ct);
+        if (!regenOk2) return (true, $"Saved but: {regenError2}");
         FeatureCodeUpdated(_logger, code.Id);
         return (true, null);
     }
@@ -81,7 +83,8 @@ public sealed partial class FeatureCodeService
     {
         await _schema.EnsureSchemaAsync(ct);
         await _repo.DeleteFeatureCodeAsync(id, ct);
-        await RegenerateFeaturesConfAsync(serverId, ct);
+        var (regenOk3, regenError3) = await RegenerateFeaturesConfAsync(serverId, ct);
+        if (!regenOk3) return (true, $"Saved but: {regenError3}");
         FeatureCodeDeleted(_logger, id);
         return (true, null);
     }
@@ -113,7 +116,8 @@ public sealed partial class FeatureCodeService
 
         lot.ServerId = serverId;
         var id = await _repo.InsertParkingLotAsync(lot, ct);
-        await RegenerateFeaturesConfAsync(serverId, ct);
+        var (regenOk4, regenError4) = await RegenerateFeaturesConfAsync(serverId, ct);
+        if (!regenOk4) return (true, $"Saved but: {regenError4}");
         ParkingLotCreated(_logger, id, lot.Name);
         return (true, null);
     }
@@ -132,7 +136,8 @@ public sealed partial class FeatureCodeService
 
         lot.ServerId = serverId;
         await _repo.UpdateParkingLotAsync(lot, ct);
-        await RegenerateFeaturesConfAsync(serverId, ct);
+        var (regenOk5, regenError5) = await RegenerateFeaturesConfAsync(serverId, ct);
+        if (!regenOk5) return (true, $"Saved but: {regenError5}");
         ParkingLotUpdated(_logger, lot.Id);
         return (true, null);
     }
@@ -142,14 +147,15 @@ public sealed partial class FeatureCodeService
     {
         await _schema.EnsureSchemaAsync(ct);
         await _repo.DeleteParkingLotAsync(id, ct);
-        await RegenerateFeaturesConfAsync(serverId, ct);
+        var (regenOk6, regenError6) = await RegenerateFeaturesConfAsync(serverId, ct);
+        if (!regenOk6) return (true, $"Saved but: {regenError6}");
         ParkingLotDeleted(_logger, id);
         return (true, null);
     }
 
     // --- Config regeneration ---
 
-    public async Task RegenerateFeaturesConfAsync(string serverId, CancellationToken ct = default)
+    public async Task<(bool Success, string? Error)> RegenerateFeaturesConfAsync(string serverId, CancellationToken ct = default)
     {
         try
         {
@@ -184,10 +190,12 @@ public sealed partial class FeatureCodeService
             await provider.ExecuteCommandAsync(serverId, "dialplan reload", ct);
 
             FeaturesRegenerated(_logger, serverId, lots.Count);
+            return (true, null);
         }
         catch (Exception ex)
         {
             FeaturesRegenFailed(_logger, ex, serverId);
+            return (false, $"Features regeneration failed: {ex.Message}");
         }
     }
 

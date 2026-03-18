@@ -79,7 +79,8 @@ public sealed partial class MohService
             catch (Exception ex) { DirCreateFailed(_logger, ex, mohClass.Directory); }
         }
 
-        await RegenerateMohConfAsync(serverId, ct);
+        var (regenOk1, regenError1) = await RegenerateMohConfAsync(serverId, ct);
+        if (!regenOk1) return (true, $"Saved but: {regenError1}");
         ClassCreated(_logger, id, mohClass.Name);
         return (true, null);
     }
@@ -106,7 +107,8 @@ public sealed partial class MohService
 
         mohClass.ServerId = serverId;
         await _repo.UpdateAsync(mohClass, ct);
-        await RegenerateMohConfAsync(serverId, ct);
+        var (regenOk2, regenError2) = await RegenerateMohConfAsync(serverId, ct);
+        if (!regenOk2) return (true, $"Saved but: {regenError2}");
         ClassUpdated(_logger, mohClass.Id);
         return (true, null);
     }
@@ -116,7 +118,8 @@ public sealed partial class MohService
     {
         await _schema.EnsureSchemaAsync(ct);
         await _repo.DeleteAsync(id, ct);
-        await RegenerateMohConfAsync(serverId, ct);
+        var (regenOk3, regenError3) = await RegenerateMohConfAsync(serverId, ct);
+        if (!regenOk3) return (true, $"Saved but: {regenError3}");
         ClassDeleted(_logger, id);
         return (true, null);
     }
@@ -241,7 +244,7 @@ public sealed partial class MohService
 
     // --- Config regeneration ---
 
-    public async Task RegenerateMohConfAsync(string serverId, CancellationToken ct = default)
+    public async Task<(bool Success, string? Error)> RegenerateMohConfAsync(string serverId, CancellationToken ct = default)
     {
         try
         {
@@ -277,10 +280,12 @@ public sealed partial class MohService
             // Reload module
             await provider.ExecuteCommandAsync(serverId, "module reload res_musiconhold", ct);
             ConfRegenerated(_logger, serverId, classes.Count);
+            return (true, null);
         }
         catch (Exception ex)
         {
             ConfRegenFailed(_logger, ex, serverId);
+            return (false, $"MOH regeneration failed: {ex.Message}");
         }
     }
 

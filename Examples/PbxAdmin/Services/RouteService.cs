@@ -122,7 +122,8 @@ public sealed partial class RouteService
             return (false, $"DID pattern '{config.DidPattern}' already exists");
 
         await repo.CreateInboundRouteAsync(config, ct);
-        await RegenerateDialplanAsync(config.ServerId, ct);
+        var (regenOk1, regenError1) = await RegenerateDialplanAsync(config.ServerId, ct);
+        if (!regenOk1) return (true, $"Saved but: {regenError1}");
 
         RouteServiceLog.InboundCreated(_logger, config.ServerId, config.DidPattern);
         return (true, null);
@@ -141,7 +142,8 @@ public sealed partial class RouteService
         var success = await repo.UpdateInboundRouteAsync(config, ct);
         if (!success) return (false, "Route not found");
 
-        await RegenerateDialplanAsync(config.ServerId, ct);
+        var (regenOk2, regenError2) = await RegenerateDialplanAsync(config.ServerId, ct);
+        if (!regenOk2) return (true, $"Saved but: {regenError2}");
 
         RouteServiceLog.InboundUpdated(_logger, config.ServerId, config.Id);
         return (true, null);
@@ -211,7 +213,8 @@ public sealed partial class RouteService
 
         var repo = _repoResolver.GetRepository(config.ServerId);
         await repo.CreateOutboundRouteAsync(config, ct);
-        await RegenerateDialplanAsync(config.ServerId, ct);
+        var (regenOk3, regenError3) = await RegenerateDialplanAsync(config.ServerId, ct);
+        if (!regenOk3) return (true, $"Saved but: {regenError3}");
 
         RouteServiceLog.OutboundCreated(_logger, config.ServerId, config.DialPattern);
         return (true, null);
@@ -230,7 +233,8 @@ public sealed partial class RouteService
         var success = await repo.UpdateOutboundRouteAsync(config, ct);
         if (!success) return (false, "Route not found");
 
-        await RegenerateDialplanAsync(config.ServerId, ct);
+        var (regenOk4, regenError4) = await RegenerateDialplanAsync(config.ServerId, ct);
+        if (!regenOk4) return (true, $"Saved but: {regenError4}");
 
         RouteServiceLog.OutboundUpdated(_logger, config.ServerId, config.Id);
         return (true, null);
@@ -272,15 +276,8 @@ public sealed partial class RouteService
     // -----------------------------------------------------------------------
 
     /// <summary>Regenerates the dialplan for a server from all routes and time conditions.</summary>
-    public async Task RegenerateDialplanAsync(string serverId, CancellationToken ct = default)
+    private async Task<(bool, string?)> RegenerateDialplanAsync(string serverId, CancellationToken ct)
     {
-        try
-        {
-            await _regenerator.RegenerateAsync(serverId, ct);
-        }
-        catch (Exception ex)
-        {
-            RouteServiceLog.RegenerateFailed(_logger, ex, serverId);
-        }
+        return await _regenerator.RegenerateAsync(serverId, ct);
     }
 }

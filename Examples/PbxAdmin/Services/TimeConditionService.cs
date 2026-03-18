@@ -155,7 +155,8 @@ public sealed class TimeConditionService
             return (false, "A time condition with this name already exists on the server");
 
         await repo.CreateTimeConditionAsync(config, ct);
-        await RegenerateDialplanAsync(config.ServerId, ct);
+        var (regenOk1, regenError1) = await RegenerateDialplanAsync(config.ServerId, ct);
+        if (!regenOk1) return (true, $"Saved but: {regenError1}");
 
         TimeConditionServiceLog.Created(_logger, config.ServerId, config.Name);
         return (true, null);
@@ -180,7 +181,8 @@ public sealed class TimeConditionService
         var success = await repo.UpdateTimeConditionAsync(config, ct);
         if (!success) return (false, "Time condition not found");
 
-        await RegenerateDialplanAsync(config.ServerId, ct);
+        var (regenOk2, regenError2) = await RegenerateDialplanAsync(config.ServerId, ct);
+        if (!regenOk2) return (true, $"Saved but: {regenError2}");
 
         TimeConditionServiceLog.Updated(_logger, config.ServerId, config.Id);
         return (true, null);
@@ -197,7 +199,8 @@ public sealed class TimeConditionService
         var success = await repo.DeleteTimeConditionAsync(id, ct);
         if (!success) return (false, "Time condition not found");
 
-        await RegenerateDialplanAsync(serverId, ct);
+        var (regenOk3, regenError3) = await RegenerateDialplanAsync(serverId, ct);
+        if (!regenOk3) return (true, $"Saved but: {regenError3}");
 
         TimeConditionServiceLog.Deleted(_logger, serverId, id);
         return (true, null);
@@ -276,8 +279,10 @@ public sealed class TimeConditionService
 
         try
         {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(15));
             var response = await entry.Connection.SendActionAsync<CommandResponse>(
-                new CommandAction { Command = "database show TC_OVERRIDE" }, ct);
+                new CommandAction { Command = "database show TC_OVERRIDE" }, cts.Token);
 
             return ParseDatabaseShowOutput(response.Output);
         }
@@ -332,8 +337,8 @@ public sealed class TimeConditionService
         _ => target
     };
 
-    private async Task RegenerateDialplanAsync(string serverId, CancellationToken ct)
+    private async Task<(bool, string?)> RegenerateDialplanAsync(string serverId, CancellationToken ct)
     {
-        await _regenerator.RegenerateAsync(serverId, ct);
+        return await _regenerator.RegenerateAsync(serverId, ct);
     }
 }
