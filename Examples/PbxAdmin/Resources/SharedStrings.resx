@@ -1114,4 +1114,53 @@
   <data name="HelpPanel_Events_Overview" xml:space="preserve"><value>Real-time AMI event stream: the last 50 events from the server. Filter by type (Channel, Queue, Agent) to focus on what interests you. Useful for live monitoring and diagnosis.</value></data>
   <data name="HelpPanel_Console_Overview" xml:space="preserve"><value>Asterisk command console: run CLI commands remotely via AMI, as if you were at the server terminal. Quick buttons run the most common commands. History keeps the last 20 commands with results.</value></data>
   <data name="HelpPanel_Traffic_Overview" xml:space="preserve"><value>Phone traffic statistics: call volume, answer rate, average duration, and wait times. Enable advanced mode to see breakdown by state, top active queues, and agents with most calls handled.</value></data>
+  <!-- New Glossary Terms -->
+  <data name="Glossary_ConferenceBridge" xml:space="preserve"><value>Conference Bridge</value></data>
+  <data name="Glossary_ConferenceBridge_Category" xml:space="preserve"><value>Conferencing</value></data>
+  <data name="Glossary_ConferenceBridge_Def" xml:space="preserve"><value>Virtual room where multiple people can talk at the same time. Asterisk supports ConfBridge (modern) and MeetMe (legacy).</value></data>
+  <data name="Glossary_ConferenceBridge_Tip" xml:space="preserve"><value>Use ConfBridge for new setups — it's more flexible and actively maintained.</value></data>
+  <data name="Glossary_PIN" xml:space="preserve"><value>PIN</value></data>
+  <data name="Glossary_PIN_Category" xml:space="preserve"><value>Security</value></data>
+  <data name="Glossary_PIN_Def" xml:space="preserve"><value>Numeric code to control access to conferences or voicemail boxes. Like a meeting access code.</value></data>
+  <data name="Glossary_PIN_Tip" xml:space="preserve"><value>Always set an admin PIN on public conferences to prevent abuse.</value></data>
+  <data name="Glossary_Recording" xml:space="preserve"><value>Recording</value></data>
+  <data name="Glossary_Recording_Category" xml:space="preserve"><value>Recording</value></data>
+  <data name="Glossary_Recording_Def" xml:space="preserve"><value>Audio capture of a call to a file. MixMonitor records both sides of the conversation into a single file.</value></data>
+  <data name="Glossary_Recording_Tip" xml:space="preserve"><value>Check local laws — many jurisdictions require consent before recording calls.</value></data>
+  <data name="Glossary_CDR" xml:space="preserve"><value>CDR</value></data>
+  <data name="Glossary_CDR_Category" xml:space="preserve"><value>Logging</value></data>
+  <data name="Glossary_CDR_Def" xml:space="preserve"><value>Call Detail Record: automatic log of each call with origin, destination, duration, and result. Like a call receipt.</value></data>
+  <data name="Glossary_CDR_Tip" xml:space="preserve"><value>CDRs are stored in the database and used for billing and reporting.</value></data>
+  <data name="Glossary_FeatureCode" xml:space="preserve"><value>Feature Code</value></data>
+  <data name="Glossary_FeatureCode_Category" xml:space="preserve"><value>Functionality</value></data>
+  <data name="Glossary_FeatureCode_Def" xml:space="preserve"><value>Short code (e.g., *72) that users dial to activate features like forwarding, DND, or call pickup.</value></data>
+  <data name="Glossary_FeatureCode_Tip" xml:space="preserve"><value>Print a quick-reference card of active feature codes for your users.</value></data>
+  <data name="Glossary_TimeCondition" xml:space="preserve"><value>Time Condition</value></data>
+  <data name="Glossary_TimeCondition_Category" xml:space="preserve"><value>Routing</value></data>
+  <data name="Glossary_TimeCondition_Def" xml:space="preserve"><value>Rule that directs calls to different destinations based on day and time. Typical: business hours vs after hours.</value></data>
+  <data name="Glossary_TimeCondition_Tip" xml:space="preserve"><value>Create separate conditions for holidays and override them manually when needed.</value></data>
+  <data name="Glossary_CallParking" xml:space="preserve"><value>Call Parking</value></data>
+  <data name="Glossary_CallParking_Category" xml:space="preserve"><value>Functionality</value></data>
+  <data name="Glossary_CallParking_Def" xml:space="preserve"><value>'Park' a call in a numbered slot so another person can pick it up by dialing that number.</value></data>
+  <data name="Glossary_CallParking_Tip" xml:space="preserve"><value>Useful in offices where someone needs to transfer a call to a person whose extension they don't know.</value></data>
+  <data name="Glossary_Originate" xml:space="preserve"><value>Originate</value></data>
+  <data name="Glossary_Originate_Category" xml:space="preserve"><value>Command</value></data>
+  <data name="Glossary_Originate_Def" xml:space="preserve"><value>Create a call from the system: Asterisk calls the specified channel and connects it to the destination extension.</value></data>
+  <data name="Glossary_Originate_Tip" xml:space="preserve"><value>Used by click-to-call features and admin console testing.</value></data>
+  <data name="Glossary_Channel" xml:space="preserve"><value>Channel</value></data>
+  <data name="Glossary_Channel_Category" xml:space="preserve"><value>Core</value></data>
+  <data name="Glossary_Channel_Def" xml:space="preserve"><value>The 'pipe' that carries a call. Each participant has their own channel (e.g., PJSIP/2000-00000001).</value></data>
+  <data name="Glossary_Channel_Tip" xml:space="preserve"><value>A bridged call has two channels connected together — one for each side.</value></data>
+  <data name="Glossary_MixMonitor" xml:space="preserve"><value>MixMonitor</value></data>
+  <data name="Glossary_MixMonitor_Category" xml:space="preserve"><value>Recording</value></data>
+  <data name="Glossary_MixMonitor_Def" xml:space="preserve"><value>Asterisk command that records both sides of an active call without interrupting it.</value></data>
+  <data name="Glossary_MixMonitor_Tip" xml:space="preserve"><value>Replaces the older Monitor command. Records both directions (rx+tx) into one file.</value></data>
+  <data name="Glossary_Dialplan" xml:space="preserve"><value>Dialplan</value></data>
+  <data name="Glossary_Dialplan_Category" xml:space="preserve"><value>Core</value></data>
+  <data name="Glossary_Dialplan_Def" xml:space="preserve"><value>Set of rules Asterisk follows to process each call: what to do when someone dials a number.</value></data>
+  <data name="Glossary_Dialplan_Tip" xml:space="preserve"><value>The dialplan lives in extensions.conf (or the database in Realtime mode).</value></data>
+  <data name="Glossary_AOR" xml:space="preserve"><value>AOR</value></data>
+  <data name="Glossary_AOR_Category" xml:space="preserve"><value>SIP</value></data>
+  <data name="Glossary_AOR_Def" xml:space="preserve"><value>Address of Record: PJSIP registration that associates an extension with the IP address of the connected phone.</value></data>
+  <data name="Glossary_AOR_Tip" xml:space="preserve"><value>Each PJSIP endpoint has an AOR that tracks where the phone is registered from.</value></data>
 </root>
