@@ -940,4 +940,17 @@
   <data name="Template_LobbyPhone" xml:space="preserve"><value>Lobby Phone — Shared phone, no voicemail</value></data>
   <data name="Template_Manager" xml:space="preserve"><value>Manager — Full features with HD audio</value></data>
   <data name="Template_Delete" xml:space="preserve"><value>Delete</value></data>
+
+  <!-- Session Engine Metrics -->
+  <data name="Met_SessionEngine" xml:space="preserve"><value>SESSION ENGINE</value></data>
+  <data name="Met_SessionsCreated" xml:space="preserve"><value>SESSIONS CREATED</value></data>
+  <data name="Met_SessionsCompleted" xml:space="preserve"><value>SESSIONS COMPLETED</value></data>
+  <data name="Met_SessionsFailed" xml:space="preserve"><value>SESSIONS FAILED</value></data>
+  <data name="Met_SessionsTimedOut" xml:space="preserve"><value>SESSIONS TIMED OUT</value></data>
+  <data name="Met_SessionsOrphaned" xml:space="preserve"><value>SESSIONS ORPHANED</value></data>
+  <data name="Met_SessionHistograms" xml:space="preserve"><value>SESSION HISTOGRAMS</value></data>
+  <data name="Met_SessionAvgWait" xml:space="preserve"><value>AVG WAIT (MS)</value></data>
+  <data name="Met_SessionAvgTalk" xml:space="preserve"><value>AVG TALK (MS)</value></data>
+  <data name="Met_SessionAvgHold" xml:space="preserve"><value>AVG HOLD (MS)</value></data>
+  <data name="Met_SessionAvgDuration" xml:space="preserve"><value>AVG DURATION (MS)</value></data>
 </root>
