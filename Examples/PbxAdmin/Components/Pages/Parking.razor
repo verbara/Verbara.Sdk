@@ -19,6 +19,7 @@
 
 @if (_activeTab == "live")
 {
+    <HelpPanel SectionKey="Parking_Live">@L["Parking_ParkedCalls"]</HelpPanel>
     <div class="kpi-grid">
         <div class="kpi-card kpi-blue">
             <span class="kpi-value">@_parkedCalls.Count</span>
@@ -76,6 +77,7 @@
 else
 {
     @* ---------- Parking Lot Configuration ---------- *@
+    <HelpPanel SectionKey="Parking_LotConfig">@L["Parking_LotConfig"]</HelpPanel>
 
     @if (_configError is not null)
     {
@@ -129,32 +131,32 @@ else
             <h4>@(_editingLot.Id == 0 ? "New Parking Lot" : $"Edit: {_editingLot.Name}")</h4>
 
             <div class="form-group">
-                <label>@L["Lbl_Name"]</label>
+                <label>@L["Lbl_Name"] <HelpIcon HelpKey="ParkLotName" /></label>
                 <input type="text" @bind="_editingLot.Name" class="form-control" placeholder="default" />
             </div>
 
             <div class="form-group">
-                <label>@L["Lbl_StartSlot"]</label>
+                <label>@L["Lbl_StartSlot"] <HelpIcon HelpKey="ParkStartSlot" /></label>
                 <input type="number" @bind="_editingLot.ParkingStartSlot" class="form-control" min="1" />
             </div>
 
             <div class="form-group">
-                <label>@L["Lbl_EndSlot"]</label>
+                <label>@L["Lbl_EndSlot"] <HelpIcon HelpKey="ParkEndSlot" /></label>
                 <input type="number" @bind="_editingLot.ParkingEndSlot" class="form-control" min="1" />
             </div>
 
             <div class="form-group">
-                <label>@L["Lbl_Timeout"]</label>
+                <label>@L["Lbl_Timeout"] <HelpIcon HelpKey="ParkTimeout" /></label>
                 <input type="number" @bind="_editingLot.ParkingTimeout" class="form-control" min="0" />
             </div>
 
             <div class="form-group">
-                <label>@L["Lbl_Context"]</label>
+                <label>@L["Lbl_Context"] <HelpIcon HelpKey="ParkContext" /></label>
                 <input type="text" @bind="_editingLot.Context" class="form-control" placeholder="parkedcalls" />
             </div>
 
             <div class="form-group">
-                <label>@L["Lbl_MusicOnHold"]</label>
+                <label>@L["Lbl_MusicOnHold"] <HelpIcon HelpKey="ParkMoh" /></label>
                 <input type="text" @bind="_editingLot.MusicOnHold" class="form-control" placeholder="default" />
             </div>
 

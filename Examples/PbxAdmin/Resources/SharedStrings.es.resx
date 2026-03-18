@@ -1057,4 +1057,61 @@
   <data name="HelpPanel_IvrMenus_Overview" xml:space="preserve"><value>Menús IVR (operadora automática): reproducen un saludo y esperan que el llamante presione una tecla. Cada opción (1, 2, 3...) apunta a un destino diferente. Los submenús crean árboles de navegación.</value></data>
   <data name="HelpPanel_Conferences_Live" xml:space="preserve"><value>Salas de conferencia activas en tiempo real. Muestra participantes, quién habla, quién está silenciado o es admin. Puede bloquear la sala, silenciar, expulsar o iniciar/detener grabación.</value></data>
   <data name="HelpPanel_Conferences_Config" xml:space="preserve"><value>Perfiles de conferencia: plantillas reutilizables que definen capacidad máxima, PINs de seguridad, grabación automática y música de espera. Cada sala de conferencia usa uno de estos perfiles.</value></data>
+
+  <!-- List Pages Part 2 Help -->
+  <data name="HelpPanel_FeatureCodes_Overview" xml:space="preserve"><value>Códigos de función (star codes): atajos que los usuarios marcan para activar funciones. Por ejemplo, *72 para desvío de llamadas o *60 para no molestar. Puede crear, editar y activar/desactivar cada código.</value></data>
+  <data name="Help_FcCode_Title" xml:space="preserve"><value>Código</value></data>
+  <data name="Help_FcCode" xml:space="preserve"><value>El código que el usuario marca en el teléfono (ej. *72, #21). Normalmente empieza con * o #.</value></data>
+  <data name="Help_FcName_Title" xml:space="preserve"><value>Nombre del Código</value></data>
+  <data name="Help_FcName" xml:space="preserve"><value>Nombre descriptivo del código, como 'Desvío de Llamadas' o 'No Molestar'.</value></data>
+  <data name="Help_FcDescription_Title" xml:space="preserve"><value>Descripción</value></data>
+  <data name="Help_FcDescription" xml:space="preserve"><value>Explicación de qué hace este código cuando se marca.</value></data>
+  <data name="Help_FcEnabled_Title" xml:space="preserve"><value>Habilitado</value></data>
+  <data name="Help_FcEnabled" xml:space="preserve"><value>Cuando está activo, los usuarios pueden marcar este código. Desactivarlo lo inhabilita sin borrarlo.</value></data>
+  <data name="HelpPanel_MusicOnHold_Overview" xml:space="preserve"><value>Clases de música en espera: grupos de archivos de audio que suenan cuando un llamante está en espera o en cola. Cada clase puede usar archivos locales o streaming externo. La clase 'default' se usa cuando no se especifica otra.</value></data>
+  <data name="HelpPanel_Parking_Live" xml:space="preserve"><value>Llamadas estacionadas: llamadas 'aparcadas' en un slot numérico para que otro usuario las recoja marcando ese número. Muestra canal, caller ID y tiempo restante antes de regresar al origen.</value></data>
+  <data name="HelpPanel_Parking_LotConfig" xml:space="preserve"><value>Lotes de estacionamiento: definen rangos de slots (ej. 701-720), tiempo máximo de espera y contexto. Puede crear múltiples lotes para distintos departamentos.</value></data>
+  <data name="Help_ParkLotName_Title" xml:space="preserve"><value>Nombre del Lote</value></data>
+  <data name="Help_ParkLotName" xml:space="preserve"><value>Nombre identificador del lote de estacionamiento (ej. 'default', 'ventas').</value></data>
+  <data name="Help_ParkStartSlot_Title" xml:space="preserve"><value>Slot Inicial</value></data>
+  <data name="Help_ParkStartSlot" xml:space="preserve"><value>Primer número del rango de slots (ej. 701). Los usuarios marcan este número para recoger una llamada aparcada.</value></data>
+  <data name="Help_ParkEndSlot_Title" xml:space="preserve"><value>Slot Final</value></data>
+  <data name="Help_ParkEndSlot" xml:space="preserve"><value>Último número del rango (ej. 720). Más slots = más llamadas se pueden aparcar a la vez.</value></data>
+  <data name="Help_ParkTimeout_Title" xml:space="preserve"><value>Tiempo Límite</value></data>
+  <data name="Help_ParkTimeout" xml:space="preserve"><value>Segundos que una llamada puede estar aparcada antes de regresar automáticamente a quien la estacionó.</value></data>
+  <data name="Help_ParkContext_Title" xml:space="preserve"><value>Contexto</value></data>
+  <data name="Help_ParkContext" xml:space="preserve"><value>Contexto de Asterisk donde se ejecuta el estacionamiento. Normalmente 'parkedcalls'.</value></data>
+  <data name="Help_ParkMoh_Title" xml:space="preserve"><value>Música en Espera</value></data>
+  <data name="Help_ParkMoh" xml:space="preserve"><value>Clase de música en espera que se reproduce al llamante aparcado mientras espera a ser recogido.</value></data>
+  <data name="HelpPanel_Voicemail_Overview" xml:space="preserve"><value>Buzones de correo de voz: muestra todos los buzones configurados con mensajes nuevos y antiguos. Expanda un buzón para ver mensajes individuales con fecha, duración y remitente. Puede eliminar mensajes desde aquí.</value></data>
+  <data name="HelpPanel_Recordings_Policies" xml:space="preserve"><value>Políticas de grabación: reglas que definen qué llamadas se graban, en qué formato y por cuánto tiempo se conservan. Cada política puede apuntar a extensiones, colas o troncales específicas.</value></data>
+  <data name="HelpPanel_Recordings_Files" xml:space="preserve"><value>Archivos de grabación en el servidor. Puede reproducirlos directamente o descargarlos. Los archivos que exceden la retención de la política se marcan con advertencia.</value></data>
+  <data name="HelpPanel_Recordings_Active" xml:space="preserve"><value>Grabaciones en curso: llamadas que se están grabando ahora mismo. Puede detener una grabación activa si es necesario.</value></data>
+  <!-- Detail Pages Help Panels -->
+  <data name="HelpPanel_ExtDetail_Status" xml:space="preserve"><value>Estado de registro de la extensión: muestra si el teléfono está conectado, desde qué IP, qué software usa (User Agent) y la latencia de conexión. Verde = registrado, rojo = inalcanzable.</value></data>
+  <data name="HelpPanel_ExtDetail_Features" xml:space="preserve"><value>Funciones que puede activar en vivo: No Molestar (DND) rechaza todas las llamadas, y los desvíos redirigen llamadas a otro número (incondicional, ocupado o sin respuesta).</value></data>
+  <data name="HelpPanel_ExtDetail_RawConfig" xml:space="preserve"><value>Configuración técnica completa tal como aparece en los archivos de Asterisk (pjsip.conf, sip.conf). Útil para verificar parámetros avanzados o diagnosticar problemas.</value></data>
+  <data name="HelpPanel_TrunkDetail_Status" xml:space="preserve"><value>Estado del troncal: muestra si está registrado con el proveedor, host y puerto, transporte, codecs negociados y llamadas activas. La latencia indica la salud de la conexión.</value></data>
+  <data name="TrunkDetail_RawConfig" xml:space="preserve"><value>Configuración Cruda</value></data>
+  <data name="HelpPanel_TrunkDetail_RawConfig" xml:space="preserve"><value>Configuración técnica completa del troncal en los archivos de Asterisk. Para PJSIP muestra secciones separadas: endpoint, autenticación, AOR y registro.</value></data>
+  <data name="CallDetail_Summary" xml:space="preserve"><value>Resumen</value></data>
+  <data name="HelpPanel_CallDetail_Summary" xml:space="preserve"><value>Resumen de la llamada: quién llama, a dónde, por cuál cola pasó, qué agente la atendió. Muestra identificadores técnicos (canales) y tiempos exactos de inicio y fin.</value></data>
+  <data name="CallDetail_Timeline" xml:space="preserve"><value>Línea de Tiempo</value></data>
+  <data name="HelpPanel_CallDetail_Timeline" xml:space="preserve"><value>Línea de tiempo visual estilo Gantt: cada participante tiene una barra con los estados por los que pasó (marcando, sonando, conectado, en espera). Vea la secuencia completa de un vistazo.</value></data>
+  <data name="CallDetail_Events" xml:space="preserve"><value>Eventos</value></data>
+  <data name="HelpPanel_CallDetail_Events" xml:space="preserve"><value>Registro cronológico de todos los eventos AMI de la llamada. Cada evento muestra el tiempo relativo, tipo, canales involucrados y detalles. Como un log técnico para diagnóstico.</value></data>
+  <data name="QueueDetail_Stats" xml:space="preserve"><value>Estadísticas</value></data>
+  <data name="HelpPanel_QueueDetail_Stats" xml:space="preserve"><value>Estadísticas de cola en tiempo real: llamadas actuales, tiempo en espera, tiempo de conversación, completadas y abandonadas. La estrategia determina cómo se distribuyen las llamadas entre agentes.</value></data>
+  <data name="QueueDetail_Agents" xml:space="preserve"><value>Agentes</value></data>
+  <data name="HelpPanel_QueueDetail_Agents" xml:space="preserve"><value>Agentes de la cola (miembros): muestra estado, llamadas atendidas, penalidad y estado de pausa. Puede pausar/reactivar agentes o removerlos de la cola.</value></data>
+  <data name="QueueDetail_Callers" xml:space="preserve"><value>Llamantes en Espera</value></data>
+  <data name="HelpPanel_QueueDetail_Callers" xml:space="preserve"><value>Llamantes esperando en cola: posición, caller ID, canal y tiempo de espera. Las posiciones más altas son atendidas primero.</value></data>
+  <!-- Analytics &amp; Admin Help Panels -->
+  <data name="HelpPanel_Metrics_SystemInfo" xml:space="preserve"><value>Información del servidor Asterisk: versión instalada, tiempo de actividad, llamadas activas y máximas. Estos datos se cargan una sola vez al abrir la página.</value></data>
+  <data name="HelpPanel_Metrics_AmiHealth" xml:space="preserve"><value>Salud de la conexión AMI (protocolo de administración): eventos recibidos, descartados y despachados, acciones enviadas y respuestas recibidas. Eventos descartados o reconexiones pueden indicar sobrecarga.</value></data>
+  <data name="HelpPanel_Metrics_LiveGauges" xml:space="preserve"><value>Medidores en vivo del SDK: canales activos, colas, y estado de agentes (disponibles, en llamada, en pausa). Se actualizan cada 2 segundos.</value></data>
+  <data name="HelpPanel_Metrics_Sessions" xml:space="preserve"><value>Métricas del motor de sesiones: llamadas creadas, completadas, fallidas, expiradas y huérfanas. Los histogramas muestran promedios de espera, conversación, hold y duración total.</value></data>
+  <data name="HelpPanel_Events_Overview" xml:space="preserve"><value>Flujo de eventos AMI en tiempo real: los últimos 50 eventos del servidor. Filtre por tipo (Canal, Cola, Agente) para enfocarse en lo que le interesa. Útil para monitoreo y diagnóstico en vivo.</value></data>
+  <data name="HelpPanel_Console_Overview" xml:space="preserve"><value>Consola de comandos Asterisk: ejecute comandos CLI remotamente vía AMI, como si estuviera en la terminal del servidor. Los botones rápidos ejecutan los comandos más comunes. El historial guarda los últimos 20 comandos.</value></data>
+  <data name="HelpPanel_Traffic_Overview" xml:space="preserve"><value>Estadísticas de tráfico telefónico: volumen de llamadas, tasa de respuesta, duración promedio y tiempos de espera. Active el modo avanzado para ver desglose por estado, ranking de colas y agentes.</value></data>
 </root>
