@@ -36,15 +36,18 @@ public sealed partial class IvrMenuService
 
     private readonly IIvrMenuRepository _repo;
     private readonly DialplanRegenerator _regenerator;
+    private readonly SystemSoundService _soundSvc;
     private readonly ILogger<IvrMenuService> _logger;
 
     public IvrMenuService(
         IIvrMenuRepository repo,
         DialplanRegenerator regenerator,
+        SystemSoundService soundSvc,
         ILogger<IvrMenuService> logger)
     {
         _repo = repo;
         _regenerator = regenerator;
+        _soundSvc = soundSvc;
         _logger = logger;
     }
 
@@ -224,12 +227,15 @@ public sealed partial class IvrMenuService
 
     // ─── Audio validation ───
 
-    public Task<(bool Exists, string? Warning)> ValidateGreetingAsync(string serverId, string greeting, CancellationToken ct = default)
+    public Task<(bool Valid, string? Warning)> ValidateGreetingAsync(string serverId, string greeting)
     {
         if (string.IsNullOrWhiteSpace(greeting))
             return Task.FromResult<(bool, string?)>((true, null));
 
-        return Task.FromResult<(bool, string?)>((true, "Audio validation requires AMI connection (not yet wired)"));
+        var exists = _soundSvc.SoundExists(serverId, greeting);
+        return Task.FromResult(exists
+            ? ((bool, string?))(true, null)
+            : (true, $"Sound '{greeting}' not found on server. IVR may play silence."));
     }
 
     // ─── Validation ───

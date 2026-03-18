@@ -60,10 +60,10 @@ else
             <div class="form-grid">
                 <div class="form-field">
                     <label class="form-label">@L["IvrEdit_Greeting"] <HelpIcon HelpKey="IvrGreeting" /></label>
-                    <div class="input-with-indicator">
-                        <input class="input" @bind="_config.Greeting" placeholder="e.g. welcome, press-1-for-sales" />
-                        <span class="indicator @_greetingIndicator" title="@_greetingWarning"></span>
-                    </div>
+                    <SoundFilePicker @bind-Value="_config.Greeting"
+                                     Mode="SoundPickerMode.SystemSound"
+                                     ServerId="@_serverId"
+                                     Placeholder="e.g. welcome, press-1-for-sales" />
                     <span class="text-muted">@L["IvrEdit_GreetingHint"]</span>
                 </div>
             </div>
@@ -232,8 +232,6 @@ else
     private bool _loading = true;
     private string? _error;
     private string? _serverId;
-    private string _greetingIndicator = "indicator-gray";
-    private string? _greetingWarning = null;
 
     private List<string> _extensions = [];
     private List<string> _queues = [];
