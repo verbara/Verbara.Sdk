@@ -1,0 +1,59 @@
+# Git
+.git/
+.gitignore
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*~
+*.user
+*.suo
+*.DotSettings
+
+# Build artifacts
+**/bin/
+**/obj/
+**/[Dd]ebug/
+**/[Rr]elease/
+publish/
+
+# Tests (not needed in PbxAdmin image)
+Tests/
+TestResults/
+coverage/
+BenchmarkDotNet.Artifacts/
+
+# Docs
+docs/
+*.md
+
+# Other examples (only PbxAdmin needed)
+Examples/*/
+!Examples/PbxAdmin/
+
+# Tools
+tools/
+
+# NuGet
+*.nupkg
+*.snupkg
+
+# Claude Code
+.claude/
+.worktrees/
+.superpowers/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker (avoid recursive context)
+docker/Dockerfile.*
+docker/docker-compose*.yml
+docker/test-config/
+docker/sql/
+docker/dashboard-config/
+docker/dashboard-config-file/
+docker/moh/
