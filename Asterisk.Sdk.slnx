@@ -37,5 +37,6 @@
     <Project Path="Tests/PbxAdmin.Tests/PbxAdmin.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Sessions.FunctionalTests/Asterisk.Sdk.Sessions.FunctionalTests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Sessions.Tests/Asterisk.Sdk.Sessions.Tests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.Redis.Spike/Asterisk.Sdk.Redis.Spike.csproj" />
   </Folder>
 </Solution>

@@ -9,8 +9,8 @@ public sealed class CallSession
     private readonly List<SessionParticipant> _participants = [];
     private readonly List<CallSessionEvent> _events = [];
     private readonly ConcurrentDictionary<string, string> _metadata = new();
-    private DateTimeOffset? _holdStartedAt;
-    private TimeSpan _accumulatedHoldTime;
+    internal DateTimeOffset? _holdStartedAt;
+    internal TimeSpan _accumulatedHoldTime;
 
     public CallSession(string sessionId, string linkedId, string serverId, CallDirection direction)
     {
@@ -27,7 +27,7 @@ public sealed class CallSession
     public string ServerId { get; }
 
     // State
-    public CallSessionState State { get; private set; } = CallSessionState.Created;
+    public CallSessionState State { get; internal set; } = CallSessionState.Created;
     public CallDirection Direction { get; }
 
     // Participants
