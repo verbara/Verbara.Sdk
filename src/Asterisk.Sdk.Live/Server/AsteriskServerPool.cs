@@ -67,6 +67,26 @@ public sealed class AsteriskServerPool : IAsyncDisposable
     }
 
     /// <summary>
+    /// Adds an already-connected AsteriskServer to the pool (for cluster failover).
+    /// Subscribes to agent events for routing and indexes existing agents.
+    /// </summary>
+    public void AddExistingServer(string serverId, AsteriskServer server)
+    {
+        if (!_servers.TryAdd(serverId, server))
+            throw new InvalidOperationException($"Server '{serverId}' already exists in the pool.");
+
+        // Subscribe to agent events to maintain routing table
+        server.Agents.AgentLoggedIn += a => _agentRouting[a.AgentId] = serverId;
+        server.Agents.AgentLoggedOff += a => _agentRouting.TryRemove(a.AgentId, out _);
+
+        // Index existing agents
+        foreach (var agent in server.Agents.Agents)
+        {
+            _agentRouting[agent.AgentId] = serverId;
+        }
+    }
+
+    /// <summary>
     /// Remove and disconnect a server from the pool.
     /// </summary>
     public async ValueTask RemoveServerAsync(string serverId)

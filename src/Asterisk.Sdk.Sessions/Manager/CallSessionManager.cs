@@ -400,6 +400,24 @@ public sealed partial class CallSessionManager : ICallSessionManager
         }
     }
 
+    public bool RegisterReconstructedSession(CallSession session)
+    {
+        if (!_byLinkedId.TryAdd(session.LinkedId, session))
+            return false;
+
+        _sessions.TryAdd(session.SessionId, session);
+
+        foreach (var participant in session.Participants)
+            _byChannelId.TryAdd(participant.UniqueId, session);
+
+        if (session.BridgeId is not null)
+            _bridgeToSession.TryAdd(session.BridgeId, session.SessionId);
+
+        _ = PersistAsync(session);
+
+        return true;
+    }
+
     public ValueTask DisposeAsync()
     {
         foreach (var serverId in _serverSubs.Keys.ToArray())

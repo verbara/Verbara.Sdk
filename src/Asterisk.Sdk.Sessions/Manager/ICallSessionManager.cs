@@ -15,4 +15,11 @@ public interface ICallSessionManager : IAsyncDisposable
 
     void AttachToServer(AsteriskServer server, string serverId);
     void DetachFromServer(string serverId);
+
+    /// <summary>
+    /// Registers a session reconstructed during cluster failover.
+    /// Adds to all indices without firing creation events.
+    /// Skips if a session with the same LinkedId already exists.
+    /// </summary>
+    bool RegisterReconstructedSession(CallSession session);
 }
