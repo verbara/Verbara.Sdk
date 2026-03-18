@@ -5,7 +5,7 @@
 @using PbxAdmin.Models
 @using Asterisk.Sdk.Ami.Actions
 @inject AsteriskMonitorService Monitor
-@inject CallFlowTracker Tracker
+@inject ICallSessionManager Sessions
 @inject QueueService QueueSvc
 @inject ConfigOperationState ConfigOp
 @inject NavigationManager Nav
@@ -101,11 +101,11 @@ else
                         <div class="badge badge-yellow">Paused @(member.PausedReason is not null ? $"— {member.PausedReason}" : "")</div>
                     }
                     @{
-                        var memberCall = Tracker.FindActiveCallByChannel(member.Interface);
+                        var memberCall = Sessions.FindByChannel(member.Interface);
                     }
                     @if (memberCall is not null)
                     {
-                        <a href="/calls/@Uri.EscapeDataString(memberCall.CallId)" class="badge badge-blue">Active Call</a>
+                        <a href="/calls/@Uri.EscapeDataString(memberCall.SessionId)" class="badge badge-blue">Active Call</a>
                     }
                 </div>
                 <div class="agent-card-actions">
@@ -139,7 +139,7 @@ else
             <tbody>
                 @foreach (var entry in _queue.Entries.Values.OrderBy(e => e.Position))
                 {
-                    var callerCall = Tracker.FindActiveCallByChannel(entry.Channel);
+                    var callerCall = Sessions.FindByChannel(entry.Channel);
                     <tr>
                         <td>@entry.Position</td>
                         <td>@entry.CallerId</td>
@@ -148,7 +148,7 @@ else
                         <td>
                             @if (callerCall is not null)
                             {
-                                <a href="/calls/@Uri.EscapeDataString(callerCall.CallId)" class="badge badge-blue">@L["QDetail_ViewCall"]</a>
+                                <a href="/calls/@Uri.EscapeDataString(callerCall.SessionId)" class="badge badge-blue">@L["QDetail_ViewCall"]</a>
                             }
                         </td>
                     </tr>
