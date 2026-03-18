@@ -27,4 +27,7 @@ internal sealed class InMemorySessionStore : SessionStoreBase
         _store.TryRemove(sessionId, out _);
         return ValueTask.CompletedTask;
     }
+
+    public override ValueTask<CallSession?> GetByLinkedIdAsync(string linkedId, CancellationToken ct)
+        => ValueTask.FromResult(_store.Values.FirstOrDefault(s => s.LinkedId == linkedId));
 }
