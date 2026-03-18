@@ -221,4 +221,48 @@ public sealed class AsteriskServerPoolTests : IAsyncDisposable
         _sut.GetServerForAgent("Agent/1001").Should().BeSameAs(east);
         _sut.GetServerForAgent("Agent/2001").Should().BeSameAs(west);
     }
+
+    [Fact]
+    public void AddExistingServer_ShouldAddServerAndBeRetrievable()
+    {
+        var conn = Substitute.For<IAmiConnection>();
+        conn.AsteriskVersion.Returns("20.0.0");
+        conn.Subscribe(Arg.Any<IObserver<ManagerEvent>>()).Returns(Substitute.For<IDisposable>());
+        var server = new AsteriskServer(conn, NullLoggerFactory.Instance.CreateLogger<AsteriskServer>());
+
+        _sut.AddExistingServer("failover-1", server);
+
+        _sut.ServerCount.Should().Be(1);
+        _sut.GetServer("failover-1").Should().BeSameAs(server);
+    }
+
+    [Fact]
+    public void AddExistingServer_ShouldThrow_WhenDuplicateServerId()
+    {
+        var conn = Substitute.For<IAmiConnection>();
+        conn.AsteriskVersion.Returns("20.0.0");
+        conn.Subscribe(Arg.Any<IObserver<ManagerEvent>>()).Returns(Substitute.For<IDisposable>());
+        var server1 = new AsteriskServer(conn, NullLoggerFactory.Instance.CreateLogger<AsteriskServer>());
+        var server2 = new AsteriskServer(conn, NullLoggerFactory.Instance.CreateLogger<AsteriskServer>());
+
+        _sut.AddExistingServer("dup", server1);
+
+        var act = () => _sut.AddExistingServer("dup", server2);
+        act.Should().Throw<InvalidOperationException>().WithMessage("*already exists*");
+    }
+
+    [Fact]
+    public void AddExistingServer_ShouldSubscribeToAgentEvents()
+    {
+        var conn = Substitute.For<IAmiConnection>();
+        conn.AsteriskVersion.Returns("20.0.0");
+        conn.Subscribe(Arg.Any<IObserver<ManagerEvent>>()).Returns(Substitute.For<IDisposable>());
+        var server = new AsteriskServer(conn, NullLoggerFactory.Instance.CreateLogger<AsteriskServer>());
+
+        _sut.AddExistingServer("failover-2", server);
+
+        // Agent login after adding should be tracked
+        server.Agents.OnAgentLogin("Agent/5001");
+        _sut.GetServerForAgent("Agent/5001").Should().BeSameAs(server);
+    }
 }
