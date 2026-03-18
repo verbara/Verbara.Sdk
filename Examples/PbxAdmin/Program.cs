@@ -105,6 +105,7 @@ builder.Services.AddSingleton<IvrMenuService>();
 // Recording + MOH services
 builder.Services.AddSingleton<IRecordingMohSchemaManager, RecordingMohSchemaManager>();
 builder.Services.AddSingleton<AudioFileService>();
+builder.Services.AddSingleton<SystemSoundService>();
 
 builder.Services.AddSingleton<IRecordingPolicyRepository>(sp =>
 {
@@ -298,6 +299,22 @@ mohApi.MapDelete("/{classId:int}/files/{filename}", async (
 {
     var (success, error) = await svc.DeleteAudioAsync(classId, filename);
     return success ? Results.Ok() : Results.BadRequest(error);
+});
+
+// System sounds: read-only enumeration and streaming
+api.MapGet("/sounds", async (string? serverId, string? dir, SystemSoundService svc, SelectedServerService serverSvc) =>
+{
+    var sid = serverId ?? serverSvc.SelectedServerId ?? "default";
+    return Results.Ok(await svc.GetSystemSoundsAsync(sid, dir));
+});
+
+api.MapGet("/sounds/{**path}", (string path, string? serverId, SystemSoundService svc, SelectedServerService serverSvc) =>
+{
+    var sid = serverId ?? serverSvc.SelectedServerId ?? "default";
+    var stream = svc.GetSoundStream(sid, path);
+    if (stream is null) return Results.NotFound();
+    var contentType = AudioFileService.GetContentType(Path.GetExtension(path));
+    return Results.Stream(stream, contentType);
 });
 
 app.Run();
