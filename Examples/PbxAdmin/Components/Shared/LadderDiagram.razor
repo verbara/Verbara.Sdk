@@ -48,7 +48,7 @@ else
 
                     @if (row.SourceIdx == row.TargetIdx)
                     {
-                        <!-- Self-arrow (DTMF, Hold on same channel, etc.) -->
+                        <!-- Self-arrow (Hold on same channel, etc.) -->
                         <div class="ladder-self-arrow @row.ArrowClass"
                              style="left:@ColCenter(row.SourceIdx, colCount); color:@row.Color">
                             <span class="ladder-self-arrow-icon">@row.Icon</span>
@@ -84,7 +84,7 @@ else
 }
 
 @code {
-    [Parameter] public CallFlow? Call { get; set; }
+    [Parameter] public CallSession? Call { get; set; }
 
     private sealed record ParticipantColumn(string Key, string Label, string Channel, string Technology, int Index);
 
@@ -92,7 +92,7 @@ else
         int SourceIdx, int TargetIdx,
         string Label, string Icon,
         string ArrowClass, string TimeLabel,
-        string Color, CallFlowEventType EventType,
+        string Color, CallSessionEventType EventType,
         int RowIndex);
 
     private sealed record BridgeBlock(
@@ -110,10 +110,11 @@ else
         var index = 0;
 
         // Add caller first
-        if (Call.Caller is not null)
+        var caller = Call.GetCaller();
+        if (caller is not null)
         {
-            var key = ShortChannel(Call.Caller.Channel);
-            seen[key] = new ParticipantColumn(key, key, Call.Caller.Channel, Call.Caller.Technology, index++);
+            var key = ShortChannel(caller.Channel);
+            seen[key] = new ParticipantColumn(key, key, caller.Channel, caller.Technology, index++);
         }
 
         // Add "Asterisk" as the central PBX column
@@ -128,11 +129,12 @@ else
         }
 
         // Add destination / agent
-        if (Call.Destination is not null)
+        var destination = Call.GetDestination();
+        if (destination is not null)
         {
-            var key = ShortChannel(Call.Destination.Channel);
+            var key = ShortChannel(destination.Channel);
             if (!seen.ContainsKey(key))
-                seen[key] = new ParticipantColumn(key, key, Call.Destination.Channel, Call.Destination.Technology, index++);
+                seen[key] = new ParticipantColumn(key, key, destination.Channel, destination.Technology, index++);
         }
 
         // Add any other participants
@@ -151,7 +153,7 @@ else
         if (Call is null) return [];
 
         var rows = new List<LadderRow>();
-        var callStart = Call.StartTime;
+        var callStart = Call.CreatedAt;
         var rowIndex = 0;
 
         foreach (var evt in Call.Events)
@@ -159,8 +161,8 @@ else
             var relTime = evt.Timestamp - callStart;
             var timeLabel = FormatTime(relTime);
 
-            var sourceIdx = ResolveColumn(participants, evt.Source, evt.Type, isSource: true);
-            var targetIdx = ResolveColumn(participants, evt.Target, evt.Type, isSource: false);
+            var sourceIdx = ResolveColumn(participants, evt.SourceChannel, evt.Type, isSource: true);
+            var targetIdx = ResolveColumn(participants, evt.TargetChannel, evt.Type, isSource: false);
 
             // For events without clear source/target, show as self-arrow on PBX
             if (sourceIdx == -1) sourceIdx = FindColumn(participants, "Asterisk");
@@ -175,7 +177,7 @@ else
         return rows;
     }
 
-    private static int ResolveColumn(List<ParticipantColumn> participants, string? channel, CallFlowEventType eventType, bool isSource)
+    private static int ResolveColumn(List<ParticipantColumn> participants, string? channel, CallSessionEventType eventType, bool isSource)
     {
         if (channel is null) return -1;
 
@@ -214,7 +216,7 @@ else
         {
             var row = rows[i];
 
-            if (row.ArrowClass.Contains("bridge") || row.ArrowClass.Contains("answer"))
+            if (row.ArrowClass.Contains("bridge") || row.ArrowClass.Contains("answer") || row.ArrowClass.Contains("connected"))
             {
                 if (bridgeStart is null)
                 {
@@ -224,7 +226,7 @@ else
                     isHold = false;
                 }
             }
-            else if (row.ArrowClass.Contains("hold") && bridgeStart is not null)
+            else if (row.ArrowClass.Contains("hold") && !row.ArrowClass.Contains("unhold") && bridgeStart is not null)
             {
                 // End connected block, start hold block
                 blocks.Add(new BridgeBlock(bridgeLeft, bridgeRight,
@@ -241,7 +243,7 @@ else
                 bridgeStart = i;
                 isHold = false;
             }
-            else if (row.ArrowClass.Contains("hangup") && bridgeStart is not null)
+            else if ((row.ArrowClass.Contains("hangup") || row.ArrowClass.Contains("completed") || row.ArrowClass.Contains("failed") || row.ArrowClass.Contains("left")) && bridgeStart is not null)
             {
                 blocks.Add(new BridgeBlock(bridgeLeft, bridgeRight,
                     bridgeStart.Value * RowHeight, (i - bridgeStart.Value) * RowHeight,
@@ -262,42 +264,48 @@ else
         return blocks;
     }
 
-    private static (string label, string icon, string arrowClass) GetEventStyle(CallFlowEvent evt) =>
+    private static (string label, string icon, string arrowClass) GetEventStyle(CallSessionEvent evt) =>
         evt.Type switch
         {
-            CallFlowEventType.NewChannel => ($"NewChannel", "+", "ladder-arrow-newchannel"),
-            CallFlowEventType.Dial => ($"DIAL {evt.Detail ?? ""}", ">>", "ladder-arrow-dial"),
-            CallFlowEventType.Ring => ($"RINGING", ">>", "ladder-arrow-ring"),
-            CallFlowEventType.Answer => ($"ANSWER {evt.Detail ?? ""}", "OK", "ladder-arrow-answer"),
-            CallFlowEventType.Bridge => ($"BRIDGE {evt.Detail ?? ""}", "=", "ladder-arrow-bridge"),
-            CallFlowEventType.Hold => ("HOLD", "||", "ladder-arrow-hold"),
-            CallFlowEventType.Unhold => ("UNHOLD", ">>", "ladder-arrow-unhold"),
-            CallFlowEventType.Dtmf => ($"DTMF '{evt.Detail}'", "#", "ladder-arrow-dtmf"),
-            CallFlowEventType.QueueJoin => ($"JOIN {evt.Target ?? ""}", "Q", "ladder-arrow-queue"),
-            CallFlowEventType.AgentConnect => ($"AGENT {evt.Detail ?? ""}", "A", "ladder-arrow-agent"),
-            CallFlowEventType.Transfer => ($"TRANSFER", ">>|", "ladder-arrow-transfer"),
-            CallFlowEventType.Hangup => ($"HANGUP {evt.Detail ?? ""}", "X", "ladder-arrow-hangup"),
+            CallSessionEventType.ParticipantJoined => ($"JOINED", "+", "ladder-arrow-newchannel"),
+            CallSessionEventType.Created => ($"CREATED", "+", "ladder-arrow-newchannel"),
+            CallSessionEventType.Dialing => ($"DIAL {evt.Detail ?? ""}", ">>", "ladder-arrow-dial"),
+            CallSessionEventType.Ringing => ($"RINGING", ">>", "ladder-arrow-ring"),
+            CallSessionEventType.Connected => ($"CONNECTED {evt.Detail ?? ""}", "=", "ladder-arrow-connected"),
+            CallSessionEventType.Hold => ("HOLD", "||", "ladder-arrow-hold"),
+            CallSessionEventType.Unhold => ("UNHOLD", ">>", "ladder-arrow-unhold"),
+            CallSessionEventType.QueueJoined => ($"JOIN {evt.TargetChannel ?? ""}", "Q", "ladder-arrow-queue"),
+            CallSessionEventType.AgentConnected => ($"AGENT {evt.Detail ?? ""}", "A", "ladder-arrow-agent"),
+            CallSessionEventType.Transfer => ($"TRANSFER", ">>|", "ladder-arrow-transfer"),
+            CallSessionEventType.Conference => ($"CONFERENCE", "<<>>", "ladder-arrow-connected"),
+            CallSessionEventType.ParticipantLeft => ($"LEFT {evt.Detail ?? ""}", "X", "ladder-arrow-hangup"),
+            CallSessionEventType.Completed => ($"COMPLETED {evt.Detail ?? ""}", "X", "ladder-arrow-completed"),
+            CallSessionEventType.Failed => ($"FAILED {evt.Detail ?? ""}", "X", "ladder-arrow-hangup"),
+            CallSessionEventType.TimedOut => ($"TIMED OUT", "X", "ladder-arrow-hangup"),
             _ => (evt.Type.ToString(), "?", "ladder-arrow-newchannel")
         };
 
-    private static string GetEventColor(CallFlowEventType type) =>
+    private static string GetEventColor(CallSessionEventType type) =>
         type switch
         {
             // Green: setup events
-            CallFlowEventType.Dial => "#4caf50",
-            CallFlowEventType.Ring => "#4caf50",
-            CallFlowEventType.Answer => "#4caf50",
-            // Blue: bridge events
-            CallFlowEventType.Bridge => "#2196f3",
-            CallFlowEventType.QueueJoin => "#2196f3",
-            CallFlowEventType.AgentConnect => "#2196f3",
+            CallSessionEventType.Dialing => "#4caf50",
+            CallSessionEventType.Ringing => "#4caf50",
+            // Blue: connected/bridge events
+            CallSessionEventType.Connected => "#2196f3",
+            CallSessionEventType.QueueJoined => "#2196f3",
+            CallSessionEventType.AgentConnected => "#2196f3",
+            CallSessionEventType.Conference => "#2196f3",
             // Orange: hold events
-            CallFlowEventType.Hold => "#ff9800",
-            CallFlowEventType.Unhold => "#ff9800",
-            // Red: hangup
-            CallFlowEventType.Hangup => "#f44336",
+            CallSessionEventType.Hold => "#ff9800",
+            CallSessionEventType.Unhold => "#ff9800",
+            // Red: hangup/end events
+            CallSessionEventType.ParticipantLeft => "#f44336",
+            CallSessionEventType.Completed => "#f44336",
+            CallSessionEventType.Failed => "#f44336",
+            CallSessionEventType.TimedOut => "#f44336",
             // Purple: transfer
-            CallFlowEventType.Transfer => "#9c27b0",
+            CallSessionEventType.Transfer => "#9c27b0",
             // Gray: everything else
             _ => "#9e9e9e"
         };

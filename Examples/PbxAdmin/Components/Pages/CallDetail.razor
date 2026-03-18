@@ -1,6 +1,6 @@
 @page "/calls/{CallId}"
 @using PbxAdmin.Services
-@inject CallFlowTracker Tracker
+@inject ICallSessionManager Sessions
 @inject NavigationManager Nav
 @inject IStringLocalizer<SharedStrings> L
 @implements IDisposable
@@ -16,6 +16,8 @@
 else
 {
     var (borderClass, stateLabel, _) = GetCallStyle(_call);
+    var caller = _call.GetCaller();
+    var destination = _call.GetDestination();
 
     <div style="display:flex; align-items:center; gap:0.75rem; margin:1rem 0">
         <h2 style="margin:0">@L["CD_Heading"]</h2>
@@ -27,7 +29,7 @@ else
     <div class="call-detail-summary">
         <div class="call-detail-field">
             <span class="call-detail-label">@L["CD_CallId"]</span>
-            <span class="call-detail-value mono">@_call.CallId</span>
+            <span class="call-detail-value mono">@_call.SessionId</span>
         </div>
         <div class="call-detail-field">
             <span class="call-detail-label">@L["CD_Server"]</span>
@@ -36,31 +38,31 @@ else
         <div class="call-detail-field">
             <span class="call-detail-label">@L["Col_Tech"]</span>
             <span class="call-detail-value">
-                @if (_call.Caller?.Technology is not null)
+                @if (caller?.Technology is not null)
                 {
-                    <span class="badge @TechBadgeClass(_call.Caller.Technology)">@_call.Caller.Technology</span>
+                    <span class="badge @TechBadgeClass(caller.Technology)">@caller.Technology</span>
                 }
-                @if (_call.Destination?.Technology is not null && _call.Destination.Technology != _call.Caller?.Technology)
+                @if (destination?.Technology is not null && destination.Technology != caller?.Technology)
                 {
-                    <span class="badge @TechBadgeClass(_call.Destination.Technology)">@_call.Destination.Technology</span>
+                    <span class="badge @TechBadgeClass(destination.Technology)">@destination.Technology</span>
                 }
             </span>
         </div>
         <div class="call-detail-field">
             <span class="call-detail-label">@L["Calls_Caller"]</span>
-            <span class="call-detail-value">@(_call.Caller?.CallerIdNum ?? "unknown")</span>
-            @if (_call.Caller?.CallerIdName is not null)
+            <span class="call-detail-value">@(caller?.CallerIdNum ?? "unknown")</span>
+            @if (caller?.CallerIdName is not null)
             {
-                <span class="text-muted" style="font-size:0.75rem">@_call.Caller.CallerIdName</span>
+                <span class="text-muted" style="font-size:0.75rem">@caller.CallerIdName</span>
             }
         </div>
         <div class="call-detail-field">
             <span class="call-detail-label">@L["CD_CallerChannel"]</span>
-            <span class="call-detail-value mono">@(_call.Caller?.Channel ?? "—")</span>
+            <span class="call-detail-value mono">@(caller?.Channel ?? "---")</span>
         </div>
         <div class="call-detail-field">
             <span class="call-detail-label">@L["Calls_Destination"]</span>
-            <span class="call-detail-value">@(_call.Destination?.CallerIdNum ?? _call.Destination?.Channel ?? "—")</span>
+            <span class="call-detail-value">@(destination?.CallerIdNum ?? destination?.Channel ?? "---")</span>
         </div>
         @if (_call.QueueName is not null)
         {
@@ -69,11 +71,11 @@ else
                 <span class="call-detail-value">@_call.QueueName</span>
             </div>
         }
-        @if (_call.AgentName is not null)
+        @if (_call.AgentId is not null)
         {
             <div class="call-detail-field">
                 <span class="call-detail-label">@L["Calls_Agent"]</span>
-                <span class="call-detail-value">@_call.AgentName</span>
+                <span class="call-detail-value">@_call.AgentId</span>
                 @if (_call.AgentInterface is not null)
                 {
                     <span class="text-muted" style="font-size:0.75rem">@_call.AgentInterface</span>
@@ -82,13 +84,13 @@ else
         }
         <div class="call-detail-field">
             <span class="call-detail-label">@L["CD_StartTime"]</span>
-            <span class="call-detail-value mono">@_call.StartTime.ToLocalTime().ToString("HH:mm:ss.fff")</span>
+            <span class="call-detail-value mono">@_call.CreatedAt.ToLocalTime().ToString("HH:mm:ss.fff")</span>
         </div>
-        @if (_call.EndTime.HasValue)
+        @if (_call.CompletedAt.HasValue)
         {
             <div class="call-detail-field">
                 <span class="call-detail-label">@L["CD_EndTime"]</span>
-                <span class="call-detail-value mono">@_call.EndTime.Value.ToLocalTime().ToString("HH:mm:ss.fff")</span>
+                <span class="call-detail-value mono">@_call.CompletedAt.Value.ToLocalTime().ToString("HH:mm:ss.fff")</span>
             </div>
         }
         @if (_call.HangupCause.HasValue)
@@ -98,7 +100,7 @@ else
                 <span class="call-detail-value">@_call.HangupCause</span>
             </div>
         }
-        @if (_call.AgentName is not null || _call.QueueName is not null)
+        @if (_call.AgentId is not null || _call.QueueName is not null)
         {
             <div class="call-detail-field">
                 <span class="call-detail-label">@L["CD_QueueAgent"]</span>
@@ -107,9 +109,9 @@ else
                     {
                         <a href="/queue/@_call.ServerId/@_call.QueueName" class="badge badge-blue">@_call.QueueName</a>
                     }
-                    @if (_call.AgentName is not null)
+                    @if (_call.AgentId is not null)
                     {
-                        <span class="badge badge-muted">@_call.AgentName</span>
+                        <span class="badge badge-muted">@_call.AgentId</span>
                     }
                     @if (_call.AgentInterface is not null)
                     {
@@ -230,19 +232,19 @@ else
             @foreach (var evt in _call.Events)
             {
                 var (icon, typeClass) = GetEventStyle(evt.Type);
-                var relativeTime = evt.Timestamp - _call.StartTime;
+                var relativeTime = evt.Timestamp - _call.CreatedAt;
                 <div class="event-entry @typeClass">
                     <span class="event-time">+@FormatDuration(relativeTime)</span>
                     <span class="event-icon">@icon</span>
                     <span class="event-desc">
                         <strong>@evt.Type</strong>
-                        @if (evt.Source is not null)
+                        @if (evt.SourceChannel is not null)
                         {
-                            <text> @ShortChannel(evt.Source)</text>
+                            <text> @ShortChannel(evt.SourceChannel)</text>
                         }
-                        @if (evt.Target is not null)
+                        @if (evt.TargetChannel is not null)
                         {
-                            <text> &rarr; @ShortChannel(evt.Target)</text>
+                            <text> &rarr; @ShortChannel(evt.TargetChannel)</text>
                         }
                         @if (evt.Detail is not null)
                         {
@@ -260,29 +262,29 @@ else
     [Parameter] public string CallId { get; set; } = "";
 
     private Timer? _timer;
-    private CallFlow? _call;
+    private CallSession? _call;
     private string _view = "timeline";
 
     protected override void OnInitialized()
     {
-        _call = Tracker.GetById(Uri.UnescapeDataString(CallId));
+        _call = Sessions.GetById(Uri.UnescapeDataString(CallId));
 
         // Auto-refresh for active calls
         _timer = new Timer(_ =>
         {
-            _call = Tracker.GetById(Uri.UnescapeDataString(CallId));
+            _call = Sessions.GetById(Uri.UnescapeDataString(CallId));
             InvokeAsync(StateHasChanged);
         }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
     protected override void OnParametersSet()
     {
-        _call = Tracker.GetById(Uri.UnescapeDataString(CallId));
+        _call = Sessions.GetById(Uri.UnescapeDataString(CallId));
     }
 
     // -- Timeline segment builder --
 
-    private List<TimelineSegment> BuildSegments(CallParticipant participant)
+    private List<TimelineSegment> BuildSegments(SessionParticipant participant)
     {
         var segments = new List<TimelineSegment>();
         if (_call is null) return segments;
@@ -290,9 +292,9 @@ else
         var callDuration = _call.Duration.TotalSeconds;
         if (callDuration <= 0) callDuration = 1;
 
-        var callStart = _call.StartTime;
-        var participantJoin = participant.JoinedAt ?? callStart;
-        var participantEnd = participant.LeftAt ?? (_call.EndTime ?? DateTimeOffset.UtcNow);
+        var callStart = _call.CreatedAt;
+        var participantJoin = participant.JoinedAt;
+        var participantEnd = participant.LeftAt ?? (_call.CompletedAt ?? DateTimeOffset.UtcNow);
 
         // Collect state transitions relevant to this participant's channel
         var transitions = new List<(DateTimeOffset Time, string State)>
@@ -304,15 +306,16 @@ else
         {
             var state = evt.Type switch
             {
-                CallFlowEventType.Dial => "Ringing",
-                CallFlowEventType.Ring => "Ringing",
-                CallFlowEventType.Answer => "Connected",
-                CallFlowEventType.Bridge => "Connected",
-                CallFlowEventType.QueueJoin => "Queued",
-                CallFlowEventType.AgentConnect => "Connected",
-                CallFlowEventType.Hold => "Hold",
-                CallFlowEventType.Unhold => "Connected",
-                CallFlowEventType.Hangup => "Hangup",
+                CallSessionEventType.Dialing => "Ringing",
+                CallSessionEventType.Ringing => "Ringing",
+                CallSessionEventType.Connected => "Connected",
+                CallSessionEventType.QueueJoined => "Queued",
+                CallSessionEventType.AgentConnected => "Connected",
+                CallSessionEventType.Hold => "Hold",
+                CallSessionEventType.Unhold => "Connected",
+                CallSessionEventType.ParticipantLeft => "Hangup",
+                CallSessionEventType.Completed => "Hangup",
+                CallSessionEventType.Failed => "Hangup",
                 _ => (string?)null
             };
 
@@ -354,12 +357,12 @@ else
         return segments;
     }
 
-    private static bool IsForParticipant(CallFlowEvent evt, string channel)
+    private static bool IsForParticipant(CallSessionEvent evt, string channel)
     {
         var shortCh = ShortChannel(channel);
-        return (evt.Source is not null && ShortChannel(evt.Source) == shortCh)
-            || (evt.Target is not null && ShortChannel(evt.Target) == shortCh)
-            || evt.Type is CallFlowEventType.QueueJoin or CallFlowEventType.AgentConnect;
+        return (evt.SourceChannel is not null && ShortChannel(evt.SourceChannel) == shortCh)
+            || (evt.TargetChannel is not null && ShortChannel(evt.TargetChannel) == shortCh)
+            || evt.Type is CallSessionEventType.QueueJoined or CallSessionEventType.AgentConnected;
     }
 
     private List<AxisTick> BuildAxisTicks()
@@ -399,13 +402,13 @@ else
     {
         if (_call is null || _call.QueueName is null) return null;
 
-        var joinEvt = _call.Events.FirstOrDefault(e => e.Type == CallFlowEventType.QueueJoin);
-        var connectEvt = _call.Events.FirstOrDefault(e => e.Type == CallFlowEventType.AgentConnect);
+        var joinEvt = _call.Events.FirstOrDefault(e => e.Type == CallSessionEventType.QueueJoined);
+        var connectEvt = _call.Events.FirstOrDefault(e => e.Type == CallSessionEventType.AgentConnected);
         if (joinEvt is null || connectEvt is null) return null;
 
         var callDuration = _call.Duration.TotalSeconds;
         if (callDuration <= 0) callDuration = 1;
-        var callStart = _call.StartTime;
+        var callStart = _call.CreatedAt;
 
         var leftPct = ((joinEvt.Timestamp - callStart).TotalSeconds / callDuration) * 100;
         var widthPct = ((connectEvt.Timestamp - joinEvt.Timestamp).TotalSeconds / callDuration) * 100;
@@ -421,8 +424,8 @@ else
     private TimeSpan? GetQueueWaitTime()
     {
         if (_call is null) return null;
-        var joinEvt = _call.Events.FirstOrDefault(e => e.Type == CallFlowEventType.QueueJoin);
-        var connectEvt = _call.Events.FirstOrDefault(e => e.Type == CallFlowEventType.AgentConnect);
+        var joinEvt = _call.Events.FirstOrDefault(e => e.Type == CallSessionEventType.QueueJoined);
+        var connectEvt = _call.Events.FirstOrDefault(e => e.Type == CallSessionEventType.AgentConnected);
         if (joinEvt is null || connectEvt is null) return null;
         return connectEvt.Timestamp - joinEvt.Timestamp;
     }
@@ -434,33 +437,41 @@ else
         _ => "badge-muted"
     };
 
-    private static (string borderClass, string stateLabel, string stateIcon) GetCallStyle(CallFlow call) =>
+    private static (string borderClass, string stateLabel, string stateIcon) GetCallStyle(CallSession call) =>
         call.State switch
         {
-            CallFlowState.Dialing => ("call-dialing", "Dialing", "~"),
-            CallFlowState.Ringing => ("call-ringing", "Ringing", ">>"),
-            CallFlowState.Queued => ("call-queued", "Queued", "#"),
-            CallFlowState.Connected => ("call-connected", "Connected", "<<>>"),
-            CallFlowState.Hold => ("call-hold", "On Hold", "||"),
-            CallFlowState.Completed => ("call-completed", "Completed", "--"),
+            CallSessionState.Created => ("call-dialing", "Created", "~"),
+            CallSessionState.Dialing => ("call-dialing", "Dialing", "~"),
+            CallSessionState.Ringing => ("call-ringing", "Ringing", ">>"),
+            CallSessionState.Queued => ("call-queued", "Queued", "#"),
+            CallSessionState.Connected => ("call-connected", "Connected", "<<>>"),
+            CallSessionState.OnHold => ("call-hold", "On Hold", "||"),
+            CallSessionState.Transferring => ("call-ringing", "Transferring", ">>|"),
+            CallSessionState.Conference => ("call-connected", "Conference", "<<>>"),
+            CallSessionState.Completed => ("call-completed", "Completed", "--"),
+            CallSessionState.Failed => ("call-completed", "Failed", "X"),
+            CallSessionState.TimedOut => ("call-completed", "Timed Out", "X"),
             _ => ("call-unknown", "Unknown", "?")
         };
 
-    private static (string icon, string typeClass) GetEventStyle(CallFlowEventType type) =>
+    private static (string icon, string typeClass) GetEventStyle(CallSessionEventType type) =>
         type switch
         {
-            CallFlowEventType.NewChannel => ("+", ""),
-            CallFlowEventType.Dial => (">>", "event-type-dial"),
-            CallFlowEventType.Ring => (">>", "event-type-dial"),
-            CallFlowEventType.Answer => ("<<>>", "event-type-bridge"),
-            CallFlowEventType.Bridge => ("<<>>", "event-type-bridge"),
-            CallFlowEventType.Hold => ("||", "event-type-hold"),
-            CallFlowEventType.Unhold => (">>", "event-type-bridge"),
-            CallFlowEventType.Dtmf => ("#", "event-type-dtmf"),
-            CallFlowEventType.QueueJoin => ("Q", "event-type-queue"),
-            CallFlowEventType.AgentConnect => ("A", "event-type-agent"),
-            CallFlowEventType.Transfer => (">>|", "event-type-dial"),
-            CallFlowEventType.Hangup => ("X", "event-type-hangup"),
+            CallSessionEventType.ParticipantJoined => ("+", ""),
+            CallSessionEventType.Dialing => (">>", "event-type-dial"),
+            CallSessionEventType.Ringing => (">>", "event-type-dial"),
+            CallSessionEventType.Connected => ("<<>>", "event-type-bridge"),
+            CallSessionEventType.Hold => ("||", "event-type-hold"),
+            CallSessionEventType.Unhold => (">>", "event-type-bridge"),
+            CallSessionEventType.QueueJoined => ("Q", "event-type-queue"),
+            CallSessionEventType.AgentConnected => ("A", "event-type-agent"),
+            CallSessionEventType.Transfer => (">>|", "event-type-dial"),
+            CallSessionEventType.Conference => ("<<>>", "event-type-bridge"),
+            CallSessionEventType.ParticipantLeft => ("X", "event-type-hangup"),
+            CallSessionEventType.Completed => ("X", "event-type-hangup"),
+            CallSessionEventType.Failed => ("X", "event-type-hangup"),
+            CallSessionEventType.TimedOut => ("X", "event-type-hangup"),
+            CallSessionEventType.Created => ("+", ""),
             _ => ("?", "")
         };
 
