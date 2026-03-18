@@ -150,7 +150,8 @@ public sealed partial class IvrMenuService
         try
         {
             await _repo.CreateMenuAsync(config, ct);
-            await _regenerator.RegenerateAsync(serverId, ct);
+            var (regenOk1, regenError1) = await _regenerator.RegenerateAsync(serverId, ct);
+            if (!regenOk1) return (true, $"Saved but: {regenError1}");
             IvrMenuServiceLog.Created(_logger, serverId, config.Name);
             return (true, null);
         }
@@ -188,7 +189,8 @@ public sealed partial class IvrMenuService
         try
         {
             await _repo.UpdateMenuAsync(config, ct);
-            await _regenerator.RegenerateAsync(config.ServerId, ct);
+            var (regenOk2, regenError2) = await _regenerator.RegenerateAsync(config.ServerId, ct);
+            if (!regenOk2) return (true, $"Saved but: {regenError2}");
             IvrMenuServiceLog.Updated(_logger, config.ServerId, config.Name);
             return (true, null);
         }
@@ -208,7 +210,8 @@ public sealed partial class IvrMenuService
         try
         {
             await _repo.DeleteMenuAsync(id, ct);
-            await _regenerator.RegenerateAsync(serverId, ct);
+            var (regenOk3, regenError3) = await _regenerator.RegenerateAsync(serverId, ct);
+            if (!regenOk3) return (true, $"Saved but: {regenError3}");
             IvrMenuServiceLog.Deleted(_logger, serverId, id);
             return (true, null);
         }

@@ -50,7 +50,8 @@ public sealed partial class ConferenceConfigService
 
         config.ServerId = serverId;
         var id = await _repo.InsertAsync(config, ct);
-        await RegenerateConfBridgeConfAsync(serverId, ct);
+        var (regenOk1, regenError1) = await RegenerateConfBridgeConfAsync(serverId, ct);
+        if (!regenOk1) return (true, $"Saved but: {regenError1}");
         ConfigCreated(_logger, id, config.Name);
         return (true, null);
     }
@@ -69,7 +70,8 @@ public sealed partial class ConferenceConfigService
 
         config.ServerId = serverId;
         await _repo.UpdateAsync(config, ct);
-        await RegenerateConfBridgeConfAsync(serverId, ct);
+        var (regenOk2, regenError2) = await RegenerateConfBridgeConfAsync(serverId, ct);
+        if (!regenOk2) return (true, $"Saved but: {regenError2}");
         ConfigUpdated(_logger, config.Id);
         return (true, null);
     }
@@ -79,14 +81,15 @@ public sealed partial class ConferenceConfigService
     {
         await _schema.EnsureSchemaAsync(ct);
         await _repo.DeleteAsync(id, ct);
-        await RegenerateConfBridgeConfAsync(serverId, ct);
+        var (regenOk3, regenError3) = await RegenerateConfBridgeConfAsync(serverId, ct);
+        if (!regenOk3) return (true, $"Saved but: {regenError3}");
         ConfigDeleted(_logger, id);
         return (true, null);
     }
 
     // --- Config regeneration ---
 
-    public async Task RegenerateConfBridgeConfAsync(string serverId, CancellationToken ct = default)
+    public async Task<(bool Success, string? Error)> RegenerateConfBridgeConfAsync(string serverId, CancellationToken ct = default)
     {
         try
         {
@@ -119,10 +122,12 @@ public sealed partial class ConferenceConfigService
 
             await provider.ExecuteCommandAsync(serverId, "module reload app_confbridge", ct);
             ConfRegenerated(_logger, serverId, configs.Count);
+            return (true, null);
         }
         catch (Exception ex)
         {
             ConfRegenFailed(_logger, ex, serverId);
+            return (false, $"ConfBridge regeneration failed: {ex.Message}");
         }
     }
 
