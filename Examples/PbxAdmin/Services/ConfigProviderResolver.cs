@@ -9,7 +9,7 @@ public interface IConfigProviderResolver
     ConfigMode GetConfigMode(string serverId);
 }
 
-public sealed class ConfigProviderResolver : IConfigProviderResolver
+public sealed class ConfigProviderResolver : IConfigProviderResolver, IDisposable
 {
     private readonly FrozenDictionary<string, (ConfigMode Mode, IConfigProvider Provider)> _providers;
     private readonly IConfigProvider _fallback;
@@ -55,4 +55,13 @@ public sealed class ConfigProviderResolver : IConfigProviderResolver
 
     public ConfigMode GetConfigMode(string serverId) =>
         _providers.TryGetValue(serverId, out var entry) ? entry.Mode : ConfigMode.File;
+
+    public void Dispose()
+    {
+        foreach (var kvp in _providers)
+        {
+            if (kvp.Value.Provider is IDisposable disposable)
+                disposable.Dispose();
+        }
+    }
 }

@@ -31,9 +31,9 @@ internal static partial class DbConfigLog
 /// AMI-only operations (<see cref="ExecuteCommandAsync"/>, <see cref="ReloadModuleAsync"/>) are
 /// delegated to <see cref="PbxConfigManager"/>.
 /// </summary>
-public sealed class DbConfigProvider : IConfigProvider
+public sealed class DbConfigProvider : IConfigProvider, IDisposable, IAsyncDisposable
 {
-    private readonly string _connectionString;
+    private readonly NpgsqlDataSource _dataSource;
     private readonly PbxConfigManager _amiProvider;
     private readonly ILogger<DbConfigProvider> _logger;
 
@@ -45,10 +45,13 @@ public sealed class DbConfigProvider : IConfigProvider
 
     public DbConfigProvider(string connectionString, PbxConfigManager amiProvider, ILogger<DbConfigProvider> logger)
     {
-        _connectionString = connectionString;
+        _dataSource = NpgsqlDataSource.Create(connectionString);
         _amiProvider = amiProvider;
         _logger = logger;
     }
+
+    public void Dispose() => _dataSource.Dispose();
+    public ValueTask DisposeAsync() => _dataSource.DisposeAsync();
 
     public async Task<List<ConfigCategory>> GetCategoriesAsync(string serverId, string filename, CancellationToken ct = default)
     {
@@ -63,13 +66,12 @@ public sealed class DbConfigProvider : IConfigProvider
 
         try
         {
-            await using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync(ct);
+            await using var conn = await _dataSource.OpenConnectionAsync(ct);
 
             foreach (var table in tables)
             {
                 var sql = $"SELECT * FROM {table.TableName}";
-                var rows = (await conn.QueryAsync(new CommandDefinition(sql, cancellationToken: ct))).AsList();
+                var rows = (await conn.QueryAsync(new CommandDefinition(sql, commandTimeout: 15, cancellationToken: ct))).AsList();
 
                 foreach (IDictionary<string, object?> row in rows)
                 {
@@ -115,13 +117,12 @@ public sealed class DbConfigProvider : IConfigProvider
 
         try
         {
-            await using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync(ct);
+            await using var conn = await _dataSource.OpenConnectionAsync(ct);
 
             foreach (var table in tables)
             {
                 var sql = $"SELECT * FROM {table.TableName} WHERE {table.IdColumn} = @Id";
-                if (await conn.QueryFirstOrDefaultAsync(new CommandDefinition(sql, new { Id = section }, cancellationToken: ct))
+                if (await conn.QueryFirstOrDefaultAsync(new CommandDefinition(sql, new { Id = section }, commandTimeout: 15, cancellationToken: ct))
                     is not IDictionary<string, object?> row) continue;
 
                 var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -165,8 +166,7 @@ public sealed class DbConfigProvider : IConfigProvider
 
         try
         {
-            await using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync(ct);
+            await using var conn = await _dataSource.OpenConnectionAsync(ct);
 
             var columns = new List<string> { table.IdColumn };
             var paramNames = new List<string> { "@p0" };
@@ -191,7 +191,7 @@ public sealed class DbConfigProvider : IConfigProvider
             }
 
             var sql = $"INSERT INTO {table.TableName} ({string.Join(", ", columns)}) VALUES ({string.Join(", ", paramNames)})";
-            await conn.ExecuteAsync(new CommandDefinition(sql, parameters, cancellationToken: ct));
+            await conn.ExecuteAsync(new CommandDefinition(sql, parameters, commandTimeout: 15, cancellationToken: ct));
 
             DbConfigLog.CreateSection(_logger, table.TableName, section);
             return true;
@@ -219,8 +219,7 @@ public sealed class DbConfigProvider : IConfigProvider
 
         try
         {
-            await using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync(ct);
+            await using var conn = await _dataSource.OpenConnectionAsync(ct);
 
             // Try to update in each table; if the row exists in one, update it there
             foreach (var table in tables)
@@ -247,7 +246,7 @@ public sealed class DbConfigProvider : IConfigProvider
                 if (setClauses.Count == 0) continue;
 
                 var sql = $"UPDATE {table.TableName} SET {string.Join(", ", setClauses)} WHERE {table.IdColumn} = @Id";
-                var rowsAffected = await conn.ExecuteAsync(new CommandDefinition(sql, parameters, cancellationToken: ct));
+                var rowsAffected = await conn.ExecuteAsync(new CommandDefinition(sql, parameters, commandTimeout: 15, cancellationToken: ct));
 
                 if (rowsAffected > 0)
                 {
@@ -273,14 +272,13 @@ public sealed class DbConfigProvider : IConfigProvider
 
         try
         {
-            await using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync(ct);
+            await using var conn = await _dataSource.OpenConnectionAsync(ct);
 
             var deleted = false;
             foreach (var table in tables)
             {
                 var sql = $"DELETE FROM {table.TableName} WHERE {table.IdColumn} = @Id";
-                var rowsAffected = await conn.ExecuteAsync(new CommandDefinition(sql, new { Id = section }, cancellationToken: ct));
+                var rowsAffected = await conn.ExecuteAsync(new CommandDefinition(sql, new { Id = section }, commandTimeout: 15, cancellationToken: ct));
                 if (rowsAffected > 0) deleted = true;
             }
 
