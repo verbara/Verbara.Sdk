@@ -24,6 +24,8 @@
 
 @if (_activeTab == "live")
 {
+    <HelpPanel SectionKey="Conferences_Live">@L["Conf_LiveRooms"]</HelpPanel>
+
     @* ---------- MeetMe Section (Live Layer) ---------- *@
 
     <h3>@L["Conf_MeetMe"]</h3>
@@ -217,6 +219,8 @@
 else
 {
     @* ---------- Configuration Tab ---------- *@
+
+    <HelpPanel SectionKey="Conferences_Config">@L["Conf_Configuration"]</HelpPanel>
 
     <div class="page-header-row">
         <h3>@L["Conf_Profiles"]</h3>
