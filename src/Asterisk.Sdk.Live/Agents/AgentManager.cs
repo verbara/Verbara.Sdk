@@ -37,6 +37,7 @@ public sealed class AgentManager
     public event Action<AsteriskAgent>? AgentLoggedIn;
     public event Action<AsteriskAgent>? AgentLoggedOff;
     public event Action<AsteriskAgent>? AgentStateChanged;
+    public event Action<string, string?, string?>? AgentConnected; // agentId, linkedId, interface
 
     public AgentManager(ILogger logger) => _logger = logger;
 
@@ -86,7 +87,8 @@ public sealed class AgentManager
     }
 
     /// <summary>Handle AgentConnect event (agent answered a queue call).</summary>
-    public void OnAgentConnect(string agentId, string? talkingTo = null)
+    public void OnAgentConnect(string agentId, string? talkingTo = null,
+        string? linkedId = null, string? memberInterface = null)
     {
         if (_agents.TryGetValue(agentId, out var agent))
         {
@@ -99,6 +101,7 @@ public sealed class AgentManager
             AgentManagerLog.Connect(_logger, agentId, talkingTo);
             LiveMetrics.AgentStateChanges.Add(1);
             AgentStateChanged?.Invoke(agent);
+            AgentConnected?.Invoke(agentId, linkedId, memberInterface);
         }
     }
 

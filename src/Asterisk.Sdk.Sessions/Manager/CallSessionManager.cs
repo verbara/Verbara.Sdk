@@ -90,6 +90,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
         Action<AsteriskBridge> onBridgeDestroyed = OnBridgeDestroyed;
         Action<BridgeTransferInfo> onTransfer = OnTransfer;
         Action<string, AsteriskQueueEntry> onCallerJoined = OnQueueCallerJoined;
+        Action<string, string?, string?> onAgentConnected = OnAgentConnected;
 
         server.Channels.ChannelAdded += onAdded;
         server.Channels.ChannelRemoved += onRemoved;
@@ -102,10 +103,12 @@ public sealed partial class CallSessionManager : ICallSessionManager
         server.Bridges.BridgeDestroyed += onBridgeDestroyed;
         server.Bridges.TransferOccurred += onTransfer;
         server.Queues.CallerJoined += onCallerJoined;
+        server.Agents.AgentConnected += onAgentConnected;
 
         _serverSubs[serverId] = new ServerSubscriptions(server,
             onAdded, onRemoved, onStateChanged, onDialBegin, onDialEnd,
-            onHeld, onUnheld, onBridgeEntered, onBridgeDestroyed, onTransfer, onCallerJoined);
+            onHeld, onUnheld, onBridgeEntered, onBridgeDestroyed, onTransfer, onCallerJoined,
+            onAgentConnected);
     }
 
     public void DetachFromServer(string serverId)
@@ -406,6 +409,37 @@ public sealed partial class CallSessionManager : ICallSessionManager
         return ValueTask.CompletedTask;
     }
 
+    // --- Agent event handlers ---
+
+    private void OnAgentConnected(string agentId, string? linkedId, string? interface_)
+    {
+        if (linkedId is null || !_byLinkedId.TryGetValue(linkedId, out var session))
+            return;
+
+        lock (session.SyncRoot)
+        {
+            session.AgentId = agentId;
+            session.AgentInterface = interface_;
+            session.AddEvent(new CallSessionEvent(
+                DateTimeOffset.UtcNow,
+                CallSessionEventType.AgentConnected,
+                interface_,
+                null,
+                $"Agent {agentId}"));
+
+            if (session.TryTransition(CallSessionState.Connected))
+            {
+                session.ConnectedAt ??= DateTimeOffset.UtcNow;
+            }
+        }
+
+        _events.OnNext(new CallConnectedEvent(
+            session.SessionId, session.ServerId, DateTimeOffset.UtcNow,
+            agentId, session.QueueName, session.WaitTime ?? TimeSpan.Zero));
+
+        _ = PersistAsync(session);
+    }
+
     // --- Dial event handlers ---
 
     private void OnChannelDialBegin(AsteriskChannel channel)
@@ -466,7 +500,8 @@ public sealed partial class CallSessionManager : ICallSessionManager
         Action<AsteriskBridge, string> onBridgeEntered,
         Action<AsteriskBridge> onBridgeDestroyed,
         Action<BridgeTransferInfo> onTransfer,
-        Action<string, AsteriskQueueEntry> onCallerJoined)
+        Action<string, AsteriskQueueEntry> onCallerJoined,
+        Action<string, string?, string?> onAgentConnected)
     {
         public void Detach()
         {
@@ -481,6 +516,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
             server.Bridges.BridgeDestroyed -= onBridgeDestroyed;
             server.Bridges.TransferOccurred -= onTransfer;
             server.Queues.CallerJoined -= onCallerJoined;
+            server.Agents.AgentConnected -= onAgentConnected;
         }
     }
 }
