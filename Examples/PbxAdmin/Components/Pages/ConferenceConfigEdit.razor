@@ -21,56 +21,56 @@
 }
 
 <div class="form-section">
-    <h3>@L["ConfEdit_BridgeSettings"]</h3>
+    <HelpPanel SectionKey="ConfEdit_BridgeSettings">@L["ConfEdit_BridgeSettings"]</HelpPanel>
 
     <div class="form-group">
-        <label>@L["Lbl_Name"]</label>
+        <label>@L["Lbl_Name"] <HelpIcon HelpKey="ConfName" /></label>
         <input type="text" @bind="_config.Name" class="form-control"
                placeholder="alphanumeric, hyphens, underscores" />
     </div>
 
     <div class="form-group">
-        <label>@L["ConfEdit_NumberExt"]</label>
+        <label>@L["ConfEdit_NumberExt"] <HelpIcon HelpKey="ConfNumber" /></label>
         <input type="text" @bind="_config.Number" class="form-control"
                placeholder="e.g. 6000" />
         <small class="text-muted">@L["ConfEdit_NumberHint"]</small>
     </div>
 
     <div class="form-group">
-        <label>@L["ConfEdit_MaxMembers"]</label>
+        <label>@L["ConfEdit_MaxMembers"] <HelpIcon HelpKey="ConfMaxMembers" /></label>
         <input type="number" @bind="_config.MaxMembers" class="form-control" min="0" />
         <small class="text-muted">@L["ConfEdit_MaxHint"]</small>
     </div>
 </div>
 
 <div class="form-section">
-    <h3>@L["ConfEdit_Security"]</h3>
+    <HelpPanel SectionKey="ConfEdit_Security">@L["ConfEdit_Security"]</HelpPanel>
 
     <div class="form-group">
-        <label>@L["ConfEdit_UserPin"]</label>
+        <label>@L["ConfEdit_UserPin"] <HelpIcon HelpKey="ConfUserPin" /></label>
         <input type="text" @bind="_config.Pin" class="form-control"
                placeholder="Digits only (leave empty for no PIN)" />
     </div>
 
     <div class="form-group">
-        <label>@L["ConfEdit_AdminPin"]</label>
+        <label>@L["ConfEdit_AdminPin"] <HelpIcon HelpKey="ConfAdminPin" /></label>
         <input type="text" @bind="_config.AdminPin" class="form-control"
                placeholder="Digits only (leave empty for no admin PIN)" />
     </div>
 </div>
 
 <div class="form-section">
-    <h3>@L["ConfEdit_Options"]</h3>
+    <HelpPanel SectionKey="ConfEdit_Options">@L["ConfEdit_Options"]</HelpPanel>
 
     <div class="form-group">
         <label>
             <input type="checkbox" @bind="_config.Record" />
-            @L["ConfEdit_AutoRecord"]
+            @L["ConfEdit_AutoRecord"] <HelpIcon HelpKey="ConfAutoRecord" />
         </label>
     </div>
 
     <div class="form-group">
-        <label>@L["ConfEdit_MohClass"]</label>
+        <label>@L["ConfEdit_MohClass"] <HelpIcon HelpKey="ConfMohClass" /></label>
         <select @bind="_config.MusicOnHold" class="form-control">
             <option value="default">default</option>
             @foreach (var cls in _mohClasses)
