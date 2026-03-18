@@ -14,6 +14,12 @@ internal static partial class TrunkServiceLog
 
     [LoggerMessage(Level = LogLevel.Information, Message = "[TRUNK] Deleted: server={ServerId} name={Name} technology={Technology}")]
     public static partial void Deleted(ILogger logger, string serverId, string name, TrunkTechnology technology);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[TRUNK] Module reload failed after creating trunk {Name}")]
+    public static partial void ReloadFailedCreate(ILogger logger, string name);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[TRUNK] Module reload failed after deleting trunk {Name}")]
+    public static partial void ReloadFailedDelete(ILogger logger, string name);
 }
 
 /// <summary>
@@ -172,7 +178,8 @@ public sealed class TrunkService
         }
 
         // Reload the appropriate module
-        await configProvider.ReloadModuleAsync(serverId, GetReloadModule(config.Technology), ct);
+        if (!await configProvider.ReloadModuleAsync(serverId, GetReloadModule(config.Technology), ct))
+            TrunkServiceLog.ReloadFailedCreate(_logger, config.Name);
 
         TrunkServiceLog.Created(_logger, serverId, config.Name, config.Technology);
         return true;
@@ -195,7 +202,8 @@ public sealed class TrunkService
         if (!await DeleteSectionsAsync(serverId, name, technology, ct))
             return false;
 
-        await _resolver.GetProvider(serverId).ReloadModuleAsync(serverId, GetReloadModule(technology), ct);
+        if (!await _resolver.GetProvider(serverId).ReloadModuleAsync(serverId, GetReloadModule(technology), ct))
+            TrunkServiceLog.ReloadFailedDelete(_logger, name);
         TrunkServiceLog.Deleted(_logger, serverId, name, technology);
         return true;
     }
@@ -251,9 +259,11 @@ public sealed class TrunkService
         try
         {
             var configProvider = _resolver.GetProvider(serverId);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(15));
 
             // Get PJSIP endpoint statuses
-            var pjsipOutput = await configProvider.ExecuteCommandAsync(serverId, "pjsip show endpoints", ct);
+            var pjsipOutput = await configProvider.ExecuteCommandAsync(serverId, "pjsip show endpoints", cts.Token);
             if (pjsipOutput is not null)
             {
                 foreach (var trunk in trunks.Where(t => t.Technology == TrunkTechnology.PjSip))
@@ -263,7 +273,7 @@ public sealed class TrunkService
             }
 
             // Get SIP peer statuses
-            var sipOutput = await configProvider.ExecuteCommandAsync(serverId, "sip show peers", ct);
+            var sipOutput = await configProvider.ExecuteCommandAsync(serverId, "sip show peers", cts.Token);
             if (sipOutput is not null)
             {
                 foreach (var trunk in trunks.Where(t => t.Technology == TrunkTechnology.Sip))
@@ -273,7 +283,7 @@ public sealed class TrunkService
             }
 
             // Get IAX2 peer statuses
-            var iaxOutput = await configProvider.ExecuteCommandAsync(serverId, "iax2 show peers", ct);
+            var iaxOutput = await configProvider.ExecuteCommandAsync(serverId, "iax2 show peers", cts.Token);
             if (iaxOutput is not null)
             {
                 foreach (var trunk in trunks.Where(t => t.Technology == TrunkTechnology.Iax2))

@@ -7,6 +7,9 @@ internal static partial class QueueServiceLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[QUEUE] Delete failed: server={ServerId} queue={QueueName}")]
     public static partial void DeleteFailed(ILogger logger, Exception exception, string serverId, string queueName);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[QUEUE] Module reload failed after deleting queue {QueueName} on server {ServerId}")]
+    public static partial void ReloadFailed(ILogger logger, string queueName, string serverId);
 }
 
 /// <summary>
@@ -36,7 +39,8 @@ public sealed class QueueService
             if (!deleted)
                 return false;
 
-            await provider.ReloadModuleAsync(serverId, "app_queue.so", ct);
+            if (!await provider.ReloadModuleAsync(serverId, "app_queue.so", ct))
+                QueueServiceLog.ReloadFailed(_logger, queueName, serverId);
 
             QueueServiceLog.Deleted(_logger, serverId, queueName);
             return true;

@@ -23,6 +23,9 @@ internal static partial class QueueConfigServiceLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[QUEUE-CFG] Operation failed: server={ServerId}")]
     public static partial void OperationFailed(ILogger logger, Exception exception, string serverId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[QUEUE-CFG] Module reload failed for app_queue.so on server {ServerId}")]
+    public static partial void ReloadFailed(ILogger logger, string serverId);
 }
 
 public sealed partial class QueueConfigService
@@ -282,6 +285,7 @@ public sealed partial class QueueConfigService
     private async Task ReloadAsync(string serverId, CancellationToken ct)
     {
         var provider = _providerResolver.GetProvider(serverId);
-        await provider.ReloadModuleAsync(serverId, "app_queue.so", ct);
+        if (!await provider.ReloadModuleAsync(serverId, "app_queue.so", ct))
+            QueueConfigServiceLog.ReloadFailed(_logger, serverId);
     }
 }

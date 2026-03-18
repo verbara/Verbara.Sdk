@@ -18,6 +18,15 @@ internal static partial class ExtensionServiceLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "[EXT] Cleanup failed for {Extension} on {ServerId}: {Detail}")]
     public static partial void CleanupFailed(ILogger logger, string extension, string serverId, string detail);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[EXT] Module reload failed after creating extension {Extension}")]
+    public static partial void ReloadFailedCreate(ILogger logger, string extension);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[EXT] Module reload failed after updating extension {Extension}")]
+    public static partial void ReloadFailedUpdate(ILogger logger, string extension);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[EXT] Module reload failed after deleting extension {Extension}")]
+    public static partial void ReloadFailedDelete(ILogger logger, string extension);
 }
 
 /// <summary>
@@ -340,7 +349,8 @@ public sealed class ExtensionService
         }
 
         // Reload module
-        await configProvider.ReloadModuleAsync(serverId, GetReloadModule(config.Technology), ct);
+        if (!await configProvider.ReloadModuleAsync(serverId, GetReloadModule(config.Technology), ct))
+            ExtensionServiceLog.ReloadFailedCreate(_logger, config.Extension);
 
         ExtensionServiceLog.Created(_logger, serverId, config.Extension, config.Technology);
         return true;
@@ -399,7 +409,8 @@ public sealed class ExtensionService
         await _features.SetAsync(serverId, config.Extension, features, ct);
 
         // Reload module
-        await configProvider.ReloadModuleAsync(serverId, GetReloadModule(config.Technology), ct);
+        if (!await configProvider.ReloadModuleAsync(serverId, GetReloadModule(config.Technology), ct))
+            ExtensionServiceLog.ReloadFailedUpdate(_logger, config.Extension);
 
         ExtensionServiceLog.Created(_logger, serverId, config.Extension, config.Technology);
         return true;
@@ -433,7 +444,8 @@ public sealed class ExtensionService
         }
 
         // Reload module
-        await _resolver.GetProvider(serverId).ReloadModuleAsync(serverId, GetReloadModule(technology), ct);
+        if (!await _resolver.GetProvider(serverId).ReloadModuleAsync(serverId, GetReloadModule(technology), ct))
+            ExtensionServiceLog.ReloadFailedDelete(_logger, extension);
 
         ExtensionServiceLog.Deleted(_logger, serverId, extension, technology);
         return true;
@@ -541,9 +553,11 @@ public sealed class ExtensionService
         try
         {
             var configProvider = _resolver.GetProvider(serverId);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(15));
 
             // Get PJSIP endpoint statuses
-            var pjsipOutput = await configProvider.ExecuteCommandAsync(serverId, "pjsip show endpoints", ct);
+            var pjsipOutput = await configProvider.ExecuteCommandAsync(serverId, "pjsip show endpoints", cts.Token);
             if (pjsipOutput is not null)
             {
                 foreach (var ext in extensions.Where(e => e.Technology == ExtensionTechnology.PjSip))
@@ -553,7 +567,7 @@ public sealed class ExtensionService
             }
 
             // Get SIP peer statuses
-            var sipOutput = await configProvider.ExecuteCommandAsync(serverId, "sip show peers", ct);
+            var sipOutput = await configProvider.ExecuteCommandAsync(serverId, "sip show peers", cts.Token);
             if (sipOutput is not null)
             {
                 foreach (var ext in extensions.Where(e => e.Technology == ExtensionTechnology.Sip))
@@ -563,7 +577,7 @@ public sealed class ExtensionService
             }
 
             // Get IAX2 peer statuses
-            var iaxOutput = await configProvider.ExecuteCommandAsync(serverId, "iax2 show peers", ct);
+            var iaxOutput = await configProvider.ExecuteCommandAsync(serverId, "iax2 show peers", cts.Token);
             if (iaxOutput is not null)
             {
                 foreach (var ext in extensions.Where(e => e.Technology == ExtensionTechnology.Iax2))
