@@ -17,9 +17,9 @@
 
 <h2>@L["Conf_Heading"]</h2>
 
-<div class="tab-bar">
-    <button class="tab @(_activeTab == "live" ? "tab-active" : "")" @onclick='() => _activeTab = "live"'>@L["Conf_LiveRooms"]</button>
-    <button class="tab @(_activeTab == "config" ? "tab-active" : "")" @onclick="SwitchToConfig">@L["Conf_Configuration"]</button>
+<div class="chip-bar">
+    <button class="chip @(_activeTab == "live" ? "chip-active" : "")" @onclick='() => _activeTab = "live"'>@L["Conf_LiveRooms"]</button>
+    <button class="chip @(_activeTab == "config" ? "chip-active" : "")" @onclick="SwitchToConfig">@L["Conf_Configuration"]</button>
 </div>
 
 @if (_activeTab == "live")

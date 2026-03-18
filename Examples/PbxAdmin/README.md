@@ -46,6 +46,17 @@ A full-featured **Blazor Server** PBX administration panel that demonstrates the
   - [Conferences — MeetMe / ConfBridge Rooms](#conferences--meetme--confbridge-rooms)
   - [Metrics — SDK Instrumentation](#metrics--sdk-instrumentation)
   - [Events — Live AMI Event Log](#events--live-ami-event-log)
+  - [Extensions — SIP Extension Management](#extensions--sip-extension-management)
+  - [Routes — Inbound & Outbound Routing](#routes--inbound--outbound-routing)
+  - [IVR Menus — Interactive Voice Response](#ivr-menus--interactive-voice-response)
+  - [Time Conditions — Schedule-Based Routing](#time-conditions--schedule-based-routing)
+  - [Recordings — Call Recording Policies](#recordings--call-recording-policies)
+  - [Music on Hold — MoH Class Management](#music-on-hold--moh-class-management)
+  - [Feature Codes — Star Code Management](#feature-codes--star-code-management)
+  - [Parking — Call Parking](#parking--call-parking)
+  - [Voicemail — Mailbox Management](#voicemail--mailbox-management)
+  - [Console — AMI CLI Console](#console--ami-cli-console)
+  - [Traffic — Call Traffic Analytics](#traffic--call-traffic-analytics)
 - [Services Reference](#services-reference)
 - [SDK Features Demonstrated](#sdk-features-demonstrated)
 - [Project Structure](#project-structure)
@@ -67,15 +78,15 @@ A full-featured **Blazor Server** PBX administration panel that demonstrates the
 Run the full demo (Asterisk PBX + Dashboard) with zero local dependencies:
 
 ```bash
-docker compose -f docker/docker-compose.dashboard.yml up --build
+docker compose -f docker/docker-compose.pbxadmin.yml up --build
 ```
 
-Open [http://localhost:8080](http://localhost:8080). Default credentials: `admin` / `**AdmIn**`.
+Open [http://localhost:8080](http://localhost:8080). Default credentials: `admin` / `admin`.
 
 You should see:
 
 - **Server selector** with available PBX servers and connection status
-- **demo-pbx** with a green connection dot in the header
+- **pbx-realtime** and **pbx-file** with green connection dots in the header
 - **2 queues** — `sales` (3 members, ringall) and `support` (3 members, leastrecent)
 - **6 PJSIP endpoints** — 2001-2003 (sales) and 3001-3003 (support)
 - **4 agents** — 1001-1004 (available after login via `*11`)
@@ -85,7 +96,7 @@ The Docker setup includes a pre-configured Asterisk instance with AMI, queues, a
 To stop:
 
 ```bash
-docker compose -f docker/docker-compose.dashboard.yml down
+docker compose -f docker/docker-compose.pbxadmin.yml down
 ```
 
 ---
@@ -112,7 +123,19 @@ docker compose -f docker/docker-compose.dashboard.yml down
 | **Connection health** | Header dots showing per-server `AmiConnectionState` (green/yellow/red) |
 | **Server filtering** | Dropdown to filter any page by a specific server or "All Servers" |
 | **Responsive layout** | Sidebar collapses to top-bar on mobile (< 768px) |
-| **Zero JavaScript** | Pure Blazor Server + CSS — no JS dependencies |
+| **Extension management** | CRUD for PJSIP/SIP/IAX2 extensions with registration status monitoring |
+| **Route management** | Inbound and outbound route CRUD with priority, DID patterns, and destinations |
+| **IVR menus** | Create and manage Interactive Voice Response menus with key mappings |
+| **Time conditions** | Schedule-based call routing with day/time rules |
+| **Recording policies** | Configure call recording policies: mode, format, retention, targets |
+| **Music on Hold** | Manage MoH classes: directory, sort order, file upload |
+| **Feature codes** | Star-code management (*67, *69, etc.) with enable/disable toggles |
+| **Call parking** | Live parked calls view + parking lot configuration |
+| **Voicemail** | Voicemail box overview with message counts and mailbox details |
+| **AMI console** | Interactive Asterisk CLI — run commands via AMI `CommandAction` |
+| **Traffic analytics** | Originated/answered/unanswered call stats with breakdown and rates |
+| **i18n (EN/ES)** | Full localization with 800+ keys in English and Spanish, runtime language switching |
+| **Minimal JavaScript** | ~25 lines for help tooltips (`help.js`) |
 
 ---
 
@@ -122,8 +145,8 @@ docker compose -f docker/docker-compose.dashboard.yml down
 ┌─────────────────┐     ┌─────────────────┐
 │ Asterisk PBX 1  │     │ Asterisk PBX 2  │     ... N servers
 │   (AMI :5038)   │     │   (AMI :5038)   │
-│   File config   │     │   Realtime (PG)  │
-└────────┬────────┘     └────────┬────────┘
+│   File config   │     │   Realtime (PG) │
+└────────┬────────┘     └─────────┬───────┘
          │ TCP                    │ TCP
          └──────────┬─────────────┘
                     │
@@ -145,14 +168,14 @@ docker compose -f docker/docker-compose.dashboard.yml down
          │  └────────────────┘ │
          │  ┌────────────────┐ │
          │  │ TrunkService   │ │  PJSIP/SIP/IAX2 CRUD
-         │  │  ├ FileProvider │ │  ↔ .conf files
+         │  │  ├ FileProvider│ │  ↔ .conf files
          │  │  └ DbProvider  │ │  ↔ PostgreSQL (Realtime)
          │  └────────────────┘ │
          └──────────┬──────────┘
                     │ In-memory (singleton)
          ┌──────────▼──────────┐
          │  Blazor Server      │  SignalR (built-in)
-         │  15 pages + layout  │  Timer-based refresh (1–2s)
+         │  42 pages + layout  │  Timer-based refresh (1–2s)
          │  Cookie auth (8h)   │
          └──────────┬──────────┘
                     │ WebSocket
@@ -193,6 +216,17 @@ docker compose -f docker/docker-compose.dashboard.yml down
 | Conferences | ![Conferences](docs/screenshots/conferences.png) |
 | Metrics | ![Metrics](docs/screenshots/metrics.png) |
 | Events | ![Events](docs/screenshots/events.png) |
+| Extensions | ![Extensions](docs/screenshots/extensions.png) |
+| Routes | ![Routes](docs/screenshots/routes.png) |
+| IVR Menus | ![IVR Menus](docs/screenshots/ivr-menus.png) |
+| Time Conditions | ![Time Conditions](docs/screenshots/time-conditions.png) |
+| Recordings | ![Recordings](docs/screenshots/recordings.png) |
+| Music on Hold | ![Music on Hold](docs/screenshots/moh.png) |
+| Feature Codes | ![Feature Codes](docs/screenshots/feature-codes.png) |
+| Parking | ![Parking](docs/screenshots/parking.png) |
+| Voicemail | ![Voicemail](docs/screenshots/voicemail.png) |
+| Console | ![Console](docs/screenshots/console.png) |
+| Traffic | ![Traffic](docs/screenshots/traffic.png) |
 
 ---
 
@@ -1042,6 +1076,120 @@ The `EventLogService` maintains a **thread-safe circular buffer** (`ConcurrentQu
 
 ---
 
+### Extensions — SIP Extension Management
+
+**Route:** `/extensions`
+
+Manage PJSIP, SIP, and IAX2 extensions. Shows config backend (File or Realtime) and summary KPIs: total, registered, unregistered, with voicemail.
+
+**Filters:** Technology (All/PJSIP/SIP/IAX2) and Status (All/Registered/Unregistered/Unreachable). Search by name or number.
+
+**CRUD:** Create, edit, and delete extensions. Each extension includes endpoint config, auth, AOR, and optional voicemail setup.
+
+---
+
+### Routes — Inbound & Outbound Routing
+
+**Route:** `/routes`
+
+Tab-based view for inbound and outbound call routes. KPIs show total, enabled, and disabled routes.
+
+**Inbound routes:** DID pattern matching with priority, name, and destination (extension, queue, IVR, voicemail). **Outbound routes:** Pattern-based dialing rules with trunk selection and caller ID manipulation.
+
+CRUD with priority ordering and enable/disable toggles.
+
+---
+
+### IVR Menus — Interactive Voice Response
+
+**Route:** `/ivr-menus`
+
+Create and manage IVR auto-attendant menus. Each menu defines key-press actions (1-9, *, #, timeout, invalid) that route to extensions, queues, other IVRs, or voicemail.
+
+CRUD with drag-and-drop-style key mapping and destination pickers.
+
+---
+
+### Time Conditions — Schedule-Based Routing
+
+**Route:** `/time-conditions`
+
+Define time-based call routing rules. Each condition specifies active hours, days of week, and date ranges with matched/unmatched destinations.
+
+Used in route and IVR configurations to enable business-hours routing.
+
+---
+
+### Recordings — Call Recording Policies
+
+**Route:** `/recordings`
+
+Three-tab interface: **Policies** (recording configuration), **Files** (recorded files browser), **Active** (live recordings in progress).
+
+Policies define recording mode (Always/OnDemand), format (wav/mp3), retention period, and target queues/extensions. File browser with playback, download, and deletion.
+
+---
+
+### Music on Hold — MoH Class Management
+
+**Route:** `/moh`
+
+Manage Music on Hold classes. Each class shows mode, directory path, sort order, and file count with total size.
+
+Create new classes, upload audio files, and delete classes. Supports `files` and `custom` modes.
+
+---
+
+### Feature Codes — Star Code Management
+
+**Route:** `/feature-codes`
+
+Table of Asterisk star codes (*67 Caller ID Block, *69 Last Call Return, *70 Call Waiting, etc.) with name, description, enabled status, and edit/delete actions.
+
+Create custom feature codes with dial pattern and application mapping.
+
+---
+
+### Parking — Call Parking
+
+**Route:** `/parking`
+
+Two-tab interface: **Parked Calls** (live view) and **Lot Configuration**.
+
+Live tab shows total parked count and a list of currently parked calls with caller ID, slot number, and timeout. Configuration tab manages parking lot settings: slots, timeout, music class, and return context.
+
+---
+
+### Voicemail — Mailbox Management
+
+**Route:** `/voicemail`
+
+Overview of all voicemail boxes. KPIs: total mailboxes, new messages, old messages. Table showing mailbox number, context, full name, email, new/old message counts.
+
+Expandable rows show per-folder message details.
+
+---
+
+### Console — AMI CLI Console
+
+**Route:** `/console`
+
+Interactive Asterisk CLI interface. Quick-access buttons for common commands (`core show channels`, `sip show peers`, `pjsip show endpoints`, `queue show`, `confbridge list`).
+
+Free-text input for any AMI `CommandAction`. Output displayed in monospace pre-formatted text.
+
+---
+
+### Traffic — Call Traffic Analytics
+
+**Route:** `/traffic`
+
+Outbound call traffic KPIs: originated, answered (with %), unanswered (with %), bridged to agent (with %). Secondary KPIs: active now, completed, avg duration, avg wait.
+
+**Advanced Breakdown** (expandable): state breakdown table and top queues table with per-queue metrics.
+
+---
+
 ## Services Reference
 
 | Service | Scope | Purpose |
@@ -1054,6 +1202,13 @@ The `EventLogService` maintains a **thread-safe circular buffer** (`ConcurrentQu
 | **PbxConfigManager** | Singleton | High-level config file management (load, save, reload) |
 | **ConfigProviderResolver** | Singleton | Factory that returns the correct `IConfigProvider` (File or Database) per server |
 | **DbConfigProvider** | Singleton | Realtime config backend via PostgreSQL + Dapper for ODBC-style tables |
+| **ExtensionService** | Singleton | CRUD for PJSIP/SIP/IAX2 extensions via config providers |
+| **RouteService** | Singleton | Inbound/outbound route management with dialplan regeneration |
+| **TimeConditionService** | Singleton | Time-based routing condition CRUD |
+| **IvrMenuService** | Singleton | IVR auto-attendant menu CRUD |
+| **MohService** | Singleton | Music on Hold class management and file uploads |
+| **QueueConfigService** | Singleton | Queue configuration CRUD (separate from live queue state) |
+| **DialplanRegenerator** | Singleton | Regenerates Asterisk dialplan after route/IVR changes |
 
 ---
 
@@ -1122,9 +1277,32 @@ Examples/PbxAdmin/
 │   │   ├── CampaignMetrics.razor    # Outbound campaign analytics
 │   │   ├── Conferences.razor        # MeetMe/ConfBridge rooms
 │   │   ├── Metrics.razor            # MeterListener for SDK metrics
-│   │   └── Events.razor             # Live AMI event log with filtering
+│   │   ├── Events.razor             # Live AMI event log with filtering
+│   │   ├── Extensions.razor         # Extension list with status filters
+│   │   ├── ExtensionDetail.razor    # Extension detail view
+│   │   ├── ExtensionEdit.razor      # Extension create/edit form
+│   │   ├── Routes.razor             # Inbound/outbound route management
+│   │   ├── RouteInboundEdit.razor   # Inbound route editor
+│   │   ├── RouteOutboundEdit.razor  # Outbound route editor
+│   │   ├── IvrMenus.razor           # IVR menu list
+│   │   ├── IvrMenuEdit.razor        # IVR menu editor
+│   │   ├── TimeConditions.razor     # Time condition list
+│   │   ├── TimeConditionEdit.razor  # Time condition editor
+│   │   ├── Recordings.razor         # Recording policies and files
+│   │   ├── RecordingEdit.razor      # Recording policy editor
+│   │   ├── Moh.razor               # Music on Hold classes
+│   │   ├── MohEdit.razor           # MoH class editor
+│   │   ├── FeatureCodes.razor       # Star code management
+│   │   ├── Conferences.razor        # MeetMe/ConfBridge rooms
+│   │   ├── ConferenceConfigEdit.razor # Conference bridge config
+│   │   ├── Parking.razor            # Parked calls and lot config
+│   │   ├── Voicemail.razor          # Voicemail box overview
+│   │   ├── Console.razor            # AMI CLI console
+│   │   └── Traffic.razor            # Call traffic analytics
 │   └── Shared/
 │       ├── LadderDiagram.razor      # UML sequence diagram for call flows
+│       ├── HelpPanel.razor          # Context-sensitive help panel
+│       ├── GlossaryPanel.razor      # PBX terminology glossary
 │       └── RedirectToLogin.razor    # Redirect unauthorized users
 │
 ├── Services/
@@ -1138,7 +1316,15 @@ Examples/PbxAdmin/
 │   ├── DbConfigProvider.cs          # PostgreSQL realtime config backend
 │   ├── ConfigProviderResolver.cs    # File vs. Realtime provider factory
 │   ├── ConfigProviderOptions.cs     # Config options model
-│   └── RealtimeTableMap.cs          # Database table mappings
+│   ├── RealtimeTableMap.cs          # Database table mappings
+│   ├── ExtensionService.cs          # Extension CRUD operations
+│   ├── RouteService.cs              # Route management + dialplan regen
+│   ├── TimeConditionService.cs      # Time condition CRUD
+│   ├── IvrMenuService.cs            # IVR menu CRUD
+│   ├── MohService.cs                # Music on Hold management
+│   ├── QueueConfigService.cs        # Queue configuration CRUD
+│   ├── QueueViewManager.cs          # Queue view state management
+│   └── DialplanRegenerator.cs       # Dialplan regeneration after changes
 │
 ├── Models/
 │   ├── ConfigMode.cs                # Enum: File, Realtime
@@ -1149,8 +1335,15 @@ Examples/PbxAdmin/
 │   └── TrunkConfig.cs               # Editable trunk configuration
 │
 ├── wwwroot/
-│   └── css/
-│       └── dashboard.css            # Complete design system (~1500 lines)
+│   ├── css/
+│   │   └── dashboard.css            # Complete design system (~2000 lines)
+│   └── js/
+│       └── help.js                  # Help tooltip and panel toggle (~25 lines)
+│
+├── Resources/
+│   ├── SharedStrings.cs             # Marker class for IStringLocalizer
+│   ├── SharedStrings.resx           # English translations (800+ keys)
+│   └── SharedStrings.es.resx        # Spanish translations (800+ keys)
 │
 ├── docs/
 │   └── screenshots/                 # Place screenshots here

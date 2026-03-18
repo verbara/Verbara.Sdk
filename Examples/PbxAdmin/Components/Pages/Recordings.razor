@@ -14,10 +14,10 @@
     <button class="btn btn-primary" @onclick="NewPolicy">@L["Rec_NewPolicy"]</button>
 </div>
 
-<div class="tab-bar">
-    <button class="tab @(_activeTab == "policies" ? "active" : "")" @onclick='() => _activeTab = "policies"'>@L["Rec_Policies"]</button>
-    <button class="tab @(_activeTab == "files" ? "active" : "")" @onclick='() => _activeTab = "files"'>@L["Rec_Files"]</button>
-    <button class="tab @(_activeTab == "active" ? "active" : "")" @onclick='() => _activeTab = "active"'>@L["Rec_Active"]</button>
+<div class="chip-bar">
+    <button class="chip @(_activeTab == "policies" ? "chip-active" : "")" @onclick='() => _activeTab = "policies"'>@L["Rec_Policies"]</button>
+    <button class="chip @(_activeTab == "files" ? "chip-active" : "")" @onclick='() => _activeTab = "files"'>@L["Rec_Files"]</button>
+    <button class="chip @(_activeTab == "active" ? "chip-active" : "")" @onclick='() => _activeTab = "active"'>@L["Rec_Active"]</button>
 </div>
 
 @if (_loading)
