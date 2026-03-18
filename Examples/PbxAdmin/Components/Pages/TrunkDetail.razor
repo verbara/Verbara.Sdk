@@ -42,7 +42,7 @@ else
     @if (_detail.ContactUri is not null || _detail.UserAgent is not null || _detail.RoundtripMs.HasValue)
     {
         <div class="form-section">
-            <h3>@L["ExtDetail_RegDetails"]</h3>
+            <HelpPanel SectionKey="TrunkDetail_Status">@L["Lbl_Status"]</HelpPanel>
             <div class="form-grid">
                 @if (_detail.ContactUri is not null)
                 {
@@ -73,6 +73,7 @@ else
     @if (_detail.Config.Technology == TrunkTechnology.PjSip)
     {
         <h3>@L["ExtDetail_RawConfig"] (pjsip.conf)</h3>
+        <HelpPanel SectionKey="TrunkDetail_RawConfig">@L["TrunkDetail_RawConfig"]</HelpPanel>
 
         @foreach (var (sectionName, vars) in _configSections)
         {
@@ -93,6 +94,7 @@ else
     else
     {
         <h3>@L["ExtDetail_RawConfig"] (@TrunkService.GetConfigFilename(_detail.Config.Technology))</h3>
+        <HelpPanel SectionKey="TrunkDetail_RawConfig">@L["TrunkDetail_RawConfig"]</HelpPanel>
         @if (_singleSection is not null)
         {
             <div class="config-section">

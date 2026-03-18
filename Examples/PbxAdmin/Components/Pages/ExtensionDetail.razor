@@ -73,7 +73,7 @@ else
     @if (_detail.IpAddress is not null || _detail.ContactUri is not null || _detail.UserAgent is not null || _detail.RoundtripMs.HasValue)
     {
         <div class="form-section">
-            <h3>@L["ExtDetail_RegDetails"]</h3>
+            <HelpPanel SectionKey="ExtDetail_Status">@L["ExtDetail_RegDetails"]</HelpPanel>
             <div class="form-grid">
                 @if (_detail.IpAddress is not null)
                 {
@@ -109,7 +109,7 @@ else
 
     <!-- Features (inline editable) -->
     <div class="form-section">
-        <h3>@L["ExtDetail_Features"]</h3>
+        <HelpPanel SectionKey="ExtDetail_Features">@L["ExtDetail_Features"]</HelpPanel>
 
         @if (_actionResult is { } result)
         {
@@ -184,6 +184,7 @@ else
     @if (_detail.Technology == ExtensionTechnology.PjSip)
     {
         <h3>@L["ExtDetail_RawConfig"] (pjsip.conf)</h3>
+        <HelpPanel SectionKey="ExtDetail_RawConfig">@L["ExtDetail_RawConfig"]</HelpPanel>
 
         @foreach (var (sectionName, vars) in _detail.RawConfig)
         {
@@ -204,6 +205,7 @@ else
     else
     {
         <h3>@L["ExtDetail_RawConfig"] (@ExtensionService.GetConfigFilename(_detail.Technology))</h3>
+        <HelpPanel SectionKey="ExtDetail_RawConfig">@L["ExtDetail_RawConfig"]</HelpPanel>
         @if (_detail.RawConfig.TryGetValue(Extension, out var singleSection))
         {
             <div class="config-section">

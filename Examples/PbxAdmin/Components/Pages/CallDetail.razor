@@ -26,6 +26,7 @@ else
     </div>
 
     <!-- Summary panel -->
+    <HelpPanel SectionKey="CallDetail_Summary">@L["CallDetail_Summary"]</HelpPanel>
     <div class="call-detail-summary">
         <div class="call-detail-field">
             <span class="call-detail-label">@L["CD_CallId"]</span>
@@ -139,6 +140,7 @@ else
 
     @if (_view == "timeline")
     {
+        <HelpPanel SectionKey="CallDetail_Timeline">@L["CallDetail_Timeline"]</HelpPanel>
         <!-- Gantt Timeline -->
         @if (_call.Participants.Count > 0)
         {
@@ -220,6 +222,7 @@ else
 
     @if (_view == "events")
     {
+    <HelpPanel SectionKey="CallDetail_Events">@L["CallDetail_Events"]</HelpPanel>
     <!-- Event Log -->
     <div class="event-timeline">
         <h3 style="font-size:1rem; margin:0 0 0.75rem">@L["CD_Events"] (@_call.Events.Count)</h3>
