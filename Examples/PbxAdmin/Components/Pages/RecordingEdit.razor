@@ -147,20 +147,28 @@
     {
         _saving = true;
         _error = null;
+        try
+        {
+            var serverId = ServerSvc.SelectedServerId;
+            if (serverId is null) { _error = "No server selected"; return; }
 
-        var serverId = ServerSvc.SelectedServerId;
-        if (serverId is null) { _error = "No server selected"; _saving = false; return; }
+            var (success, error) = _isNew
+                ? await RecSvc.CreatePolicyAsync(serverId, _policy)
+                : await RecSvc.UpdatePolicyAsync(serverId, _policy);
 
-        var (success, error) = _isNew
-            ? await RecSvc.CreatePolicyAsync(serverId, _policy)
-            : await RecSvc.UpdatePolicyAsync(serverId, _policy);
-
-        _saving = false;
-
-        if (success)
-            Nav.NavigateTo("/recordings");
-        else
-            _error = error;
+            if (success)
+                Nav.NavigateTo("/recordings");
+            else
+                _error = error;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unexpected error: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
     }
 
     private void GoBack() => Nav.NavigateTo("/recordings");

@@ -51,12 +51,21 @@ else
                     </td>
                     <td>
                         <button class="btn btn-sm btn-blue" @onclick="() => EditCode(fc)">@L["Btn_Edit"]</button>
-                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteCode(fc.Id)">@L["Btn_Delete"]</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => _deleteConfirmId = fc.Id">@L["Btn_Delete"]</button>
                     </td>
                 </tr>
             }
         </tbody>
     </table>
+}
+
+@if (_deleteConfirmId is not null)
+{
+    <div class="confirm-bar confirm-bar-danger">
+        <span>@L["FC_DeleteCode"] <strong>@_codes.FirstOrDefault(c => c.Id == _deleteConfirmId)?.Code</strong>?</span>
+        <button class="btn btn-sm btn-danger" @onclick="() => ConfirmDelete(_deleteConfirmId!.Value)">@L["Btn_Confirm"]</button>
+        <button class="btn btn-sm btn-muted" @onclick="() => _deleteConfirmId = null">@L["Btn_Cancel"]</button>
+    </div>
 }
 
 @* ---------- Inline Edit Form ---------- *@
@@ -105,6 +114,7 @@ else
     private FeatureCode? _editingCode;
     private bool _saving;
     private string? _error;
+    private int? _deleteConfirmId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -143,6 +153,12 @@ else
     {
         if (_editingCode is null) return;
 
+        if (string.IsNullOrWhiteSpace(_editingCode.Code))
+        {
+            _error = "Code is required";
+            return;
+        }
+
         _saving = true;
         _error = null;
 
@@ -179,8 +195,9 @@ else
             _error = error;
     }
 
-    private async Task DeleteCode(int id)
+    private async Task ConfirmDelete(int id)
     {
+        _deleteConfirmId = null;
         var serverId = ServerSvc.SelectedServerId;
         if (serverId is null) return;
 

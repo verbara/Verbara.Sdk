@@ -228,6 +228,17 @@ else
     {
         if (_editingLot is null) return;
 
+        if (string.IsNullOrWhiteSpace(_editingLot.Name))
+        {
+            _configError = "Name is required";
+            return;
+        }
+        if (_editingLot.ParkingStartSlot >= _editingLot.ParkingEndSlot)
+        {
+            _configError = "Start slot must be less than end slot";
+            return;
+        }
+
         _lotSaving = true;
         _configError = null;
 
