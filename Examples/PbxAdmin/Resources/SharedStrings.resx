@@ -1022,4 +1022,21 @@
   <data name="HelpPanel_IvrEdit_Behavior" xml:space="preserve"><value>How long to wait for the caller to press a key, and how many chances they get before being redirected. These prevent callers from getting stuck in silence.</value></data>
   <data name="HelpPanel_IvrEdit_Options" xml:space="preserve"><value>DTMF options: each key (0-9, *, #) can point to a different destination — an extension, queue, submenu, voicemail, or hangup. This is the menu tree the caller navigates.</value></data>
   <data name="HelpPanel_IvrEdit_Fallbacks" xml:space="preserve"><value>What happens when the caller doesn't press anything (timeout) or presses an invalid key. Always set these so callers don't get stuck.</value></data>
+  <!-- TimeConditionEdit Help -->
+  <data name="Help_TcName_Title" xml:space="preserve"><value>Condition Name</value></data>
+  <data name="Help_TcName" xml:space="preserve"><value>Internal name for this time condition (e.g., 'business-hours', 'holiday-schedule').</value></data>
+  <data name="Help_TcEnabled_Title" xml:space="preserve"><value>Enabled</value></data>
+  <data name="Help_TcEnabled" xml:space="preserve"><value>When enabled, this condition actively routes calls. Disable to bypass it.</value></data>
+  <data name="Help_TcMatchType_Title" xml:space="preserve"><value>Match Destination Type</value></data>
+  <data name="Help_TcMatchType" xml:space="preserve"><value>Destination type when the current time matches the schedule (extension, queue, or another time condition).</value></data>
+  <data name="Help_TcMatchTarget_Title" xml:space="preserve"><value>Match Target</value></data>
+  <data name="Help_TcMatchTarget" xml:space="preserve"><value>The specific destination (extension number, queue name) for calls during business hours.</value></data>
+  <data name="Help_TcNoMatchType_Title" xml:space="preserve"><value>No-Match Destination Type</value></data>
+  <data name="Help_TcNoMatchType" xml:space="preserve"><value>Destination type when the current time does NOT match (after hours, holidays).</value></data>
+  <data name="Help_TcNoMatchTarget_Title" xml:space="preserve"><value>No-Match Target</value></data>
+  <data name="Help_TcNoMatchTarget" xml:space="preserve"><value>The specific destination for non-matching calls (e.g., voicemail, after-hours queue).</value></data>
+  <data name="HelpPanel_TcEdit_Identity" xml:space="preserve"><value>Basic identification: give the time condition a name and choose whether it's active. Think of it as a traffic light for calls — it decides which way they go based on the clock.</value></data>
+  <data name="HelpPanel_TcEdit_Schedule" xml:space="preserve"><value>Weekly schedule: enable/disable each day and set business hours. Calls during these hours go to the match destination, and calls outside go to the no-match destination.</value></data>
+  <data name="HelpPanel_TcEdit_Holidays" xml:space="preserve"><value>Special dates when the normal schedule is overridden — calls go to the no-match destination regardless of the time. Great for holidays, company events, or maintenance windows.</value></data>
+  <data name="HelpPanel_TcEdit_Destinations" xml:space="preserve"><value>Where to send calls: the match destination handles calls during business hours (e.g., ring the front desk), and the no-match destination handles after hours (e.g., go to voicemail).</value></data>
 </root>

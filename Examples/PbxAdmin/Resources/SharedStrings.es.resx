@@ -1022,4 +1022,21 @@
   <data name="HelpPanel_IvrEdit_Behavior" xml:space="preserve"><value>Cuánto tiempo esperar a que el llamante presione una tecla y cuántas oportunidades tiene antes de ser redirigido. Esto evita que los llamantes se queden en silencio.</value></data>
   <data name="HelpPanel_IvrEdit_Options" xml:space="preserve"><value>Opciones DTMF: cada tecla (0-9, *, #) puede apuntar a un destino diferente — extensión, cola, submenú, buzón de voz o colgar. Este es el árbol de navegación del llamante.</value></data>
   <data name="HelpPanel_IvrEdit_Fallbacks" xml:space="preserve"><value>Qué sucede cuando el llamante no presiona nada (tiempo agotado) o presiona una tecla inválida. Configure siempre estos destinos para que los llamantes no se queden atascados.</value></data>
+  <!-- TimeConditionEdit Help -->
+  <data name="Help_TcName_Title" xml:space="preserve"><value>Nombre de Condición</value></data>
+  <data name="Help_TcName" xml:space="preserve"><value>Nombre interno de esta condición de tiempo (ej. 'horario-laboral', 'feriados').</value></data>
+  <data name="Help_TcEnabled_Title" xml:space="preserve"><value>Habilitado</value></data>
+  <data name="Help_TcEnabled" xml:space="preserve"><value>Cuando está habilitado, esta condición enruta llamadas activamente. Deshabilite para omitirla.</value></data>
+  <data name="Help_TcMatchType_Title" xml:space="preserve"><value>Tipo Destino Coincide</value></data>
+  <data name="Help_TcMatchType" xml:space="preserve"><value>Tipo de destino cuando la hora actual coincide con el horario (extensión, cola u otra condición de tiempo).</value></data>
+  <data name="Help_TcMatchTarget_Title" xml:space="preserve"><value>Destino Coincide</value></data>
+  <data name="Help_TcMatchTarget" xml:space="preserve"><value>El destino específico (número de extensión, nombre de cola) para llamadas en horario laboral.</value></data>
+  <data name="Help_TcNoMatchType_Title" xml:space="preserve"><value>Tipo Destino No Coincide</value></data>
+  <data name="Help_TcNoMatchType" xml:space="preserve"><value>Tipo de destino cuando la hora actual NO coincide (fuera de horario, feriados).</value></data>
+  <data name="Help_TcNoMatchTarget_Title" xml:space="preserve"><value>Destino No Coincide</value></data>
+  <data name="Help_TcNoMatchTarget" xml:space="preserve"><value>El destino específico para llamadas fuera de horario (ej. buzón de voz, cola nocturna).</value></data>
+  <data name="HelpPanel_TcEdit_Identity" xml:space="preserve"><value>Identificación básica: nombre y si está activa. Piense en ella como un semáforo para llamadas — decide hacia dónde van según la hora del reloj.</value></data>
+  <data name="HelpPanel_TcEdit_Schedule" xml:space="preserve"><value>Horario semanal: habilite/deshabilite cada día y defina las horas laborales. Las llamadas durante estas horas van al destino 'coincide', y las de fuera van al destino 'no coincide'.</value></data>
+  <data name="HelpPanel_TcEdit_Holidays" xml:space="preserve"><value>Fechas especiales donde el horario normal se anula — las llamadas van al destino 'no coincide' sin importar la hora. Ideal para feriados, eventos de la empresa o ventanas de mantenimiento.</value></data>
+  <data name="HelpPanel_TcEdit_Destinations" xml:space="preserve"><value>A dónde enviar las llamadas: el destino 'coincide' maneja llamadas en horario laboral (ej. recepción), y el destino 'no coincide' maneja fuera de horario (ej. buzón de voz).</value></data>
 </root>

@@ -21,17 +21,17 @@ else
 {
     <!-- Name -->
     <div class="form-section">
-        <h3>@L["ExtEdit_Identity"]</h3>
+        <HelpPanel SectionKey="TcEdit_Identity">@L["ExtEdit_Identity"]</HelpPanel>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">@L["Lbl_Name"]</label>
+                <label class="form-label">@L["Lbl_Name"] <HelpIcon HelpKey="TcName" /></label>
                 <input class="input" @bind="_config.Name" placeholder="business-hours" />
                 <span class="text-muted" style="font-size:0.85rem;">@L["TCEdit_NameHint"]</span>
             </div>
             <div class="form-field">
                 <label class="codec-check">
                     <input type="checkbox" @bind="_config.Enabled" />
-                    @L["Lbl_Enabled"]
+                    @L["Lbl_Enabled"] <HelpIcon HelpKey="TcEnabled" />
                 </label>
             </div>
         </div>
@@ -39,7 +39,7 @@ else
 
     <!-- Schedule Builder -->
     <div class="form-section">
-        <h3>@L["TCEdit_Schedule"]</h3>
+        <HelpPanel SectionKey="TcEdit_Schedule">@L["TCEdit_Schedule"]</HelpPanel>
         <table class="data-table">
             <thead>
                 <tr>
@@ -78,7 +78,7 @@ else
 
     <!-- Holidays -->
     <div class="form-section">
-        <h3>@L["TCEdit_HolidaysSection"]</h3>
+        <HelpPanel SectionKey="TcEdit_Holidays">@L["TCEdit_HolidaysSection"]</HelpPanel>
         @if (_holidays.Count > 0)
         {
             <table class="data-table" style="margin-bottom: 0.75rem;">
@@ -121,12 +121,12 @@ else
         <button class="btn" @onclick="AddHoliday">@L["TCEdit_AddHoliday"]</button>
     </div>
 
-    <!-- Match Destination -->
+    <!-- Match / No-Match Destinations -->
     <div class="form-section">
-        <h3>@L["TCEdit_MatchDest"]</h3>
+        <HelpPanel SectionKey="TcEdit_Destinations">@L["TCEdit_MatchDest"]</HelpPanel>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">@L["Lbl_Type"]</label>
+                <label class="form-label">@L["Lbl_Type"] <HelpIcon HelpKey="TcMatchType" /></label>
                 <select class="input" @bind="_config.MatchDestType">
                     <option value="">@L["Lbl_SelectType"]</option>
                     <option value="extension">@L["Lbl_Extension"]</option>
@@ -135,18 +135,14 @@ else
                 </select>
             </div>
             <div class="form-field">
-                <label class="form-label">@L["Lbl_Target"]</label>
+                <label class="form-label">@L["Lbl_Target"] <HelpIcon HelpKey="TcMatchTarget" /></label>
                 <input class="input" @bind="_config.MatchDest" placeholder="Destination" />
             </div>
         </div>
-    </div>
-
-    <!-- No-Match Destination -->
-    <div class="form-section">
-        <h3>@L["TCEdit_NoMatchDest"]</h3>
+        <h4 style="margin-top: 1rem;">@L["TCEdit_NoMatchDest"]</h4>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">@L["Lbl_Type"]</label>
+                <label class="form-label">@L["Lbl_Type"] <HelpIcon HelpKey="TcNoMatchType" /></label>
                 <select class="input" @bind="_config.NoMatchDestType">
                     <option value="">@L["Lbl_SelectType"]</option>
                     <option value="extension">@L["Lbl_Extension"]</option>
@@ -155,7 +151,7 @@ else
                 </select>
             </div>
             <div class="form-field">
-                <label class="form-label">@L["Lbl_Target"]</label>
+                <label class="form-label">@L["Lbl_Target"] <HelpIcon HelpKey="TcNoMatchTarget" /></label>
                 <input class="input" @bind="_config.NoMatchDest" placeholder="Destination" />
             </div>
         </div>
