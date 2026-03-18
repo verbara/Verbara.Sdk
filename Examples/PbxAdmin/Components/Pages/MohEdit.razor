@@ -86,7 +86,10 @@
 
         @if (!_fileAccessAvailable)
         {
-            <div class="alert alert-warning">@L["MohEdit_FileAccessUnavail"]</div>
+            <div class="alert alert-warning">
+                &#9888; @L["MohEdit_FileAccessUnavail"]
+                <br/><small class="text-muted">@L["MohEdit_Directory"]: @_mohClass.Directory</small>
+            </div>
         }
         else
         {
