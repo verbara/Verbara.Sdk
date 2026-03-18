@@ -941,4 +941,17 @@
   <data name="Template_Manager" xml:space="preserve"><value>Gerente — Todas las funciones con audio HD</value></data>
   <data name="Template_Delete" xml:space="preserve"><value>Eliminar</value></data>
 
+  <!-- Session Engine Metrics -->
+  <data name="Met_SessionEngine" xml:space="preserve"><value>MOTOR DE SESIONES</value></data>
+  <data name="Met_SessionsCreated" xml:space="preserve"><value>SESIONES CREADAS</value></data>
+  <data name="Met_SessionsCompleted" xml:space="preserve"><value>SESIONES COMPLETADAS</value></data>
+  <data name="Met_SessionsFailed" xml:space="preserve"><value>SESIONES FALLIDAS</value></data>
+  <data name="Met_SessionsTimedOut" xml:space="preserve"><value>SESIONES EXPIRADAS</value></data>
+  <data name="Met_SessionsOrphaned" xml:space="preserve"><value>SESIONES HU&#201;RFANAS</value></data>
+  <data name="Met_SessionHistograms" xml:space="preserve"><value>HISTOGRAMAS DE SESIONES</value></data>
+  <data name="Met_SessionAvgWait" xml:space="preserve"><value>ESPERA PROM. (MS)</value></data>
+  <data name="Met_SessionAvgTalk" xml:space="preserve"><value>CONVERSACI&#211;N PROM. (MS)</value></data>
+  <data name="Met_SessionAvgHold" xml:space="preserve"><value>ESPERA EN L&#205;NEA PROM. (MS)</value></data>
+  <data name="Met_SessionAvgDuration" xml:space="preserve"><value>DURACI&#211;N PROM. (MS)</value></data>
+
 </root>

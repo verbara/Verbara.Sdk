@@ -1,6 +1,5 @@
 @page "/traffic"
-@using PbxAdmin.Services
-@inject CallFlowTracker CallTracker
+@inject ICallSessionManager Sessions
 @inject SelectedServerService ServerSvc
 @inject IStringLocalizer<SharedStrings> L
 @implements IDisposable
@@ -126,7 +125,7 @@
 
     private int _originated, _answered, _unanswered, _bridged, _activeNow, _completed;
     private string _answeredPct = "0", _unansweredPct = "0", _bridgedPct = "0";
-    private string _avgDuration = "—", _avgWait = "—";
+    private string _avgDuration = "\u2014", _avgWait = "\u2014";
 
     private List<StateRow> _stateBreakdown = [];
     private List<QueueRow> _topQueues = [];
@@ -140,51 +139,46 @@
 
     private void Refresh()
     {
-        var calls = CallTracker.AllCalls
-            .Where(c => c.ServerId == ServerSvc.SelectedServerId)
+        var sessions = Sessions.ActiveSessions.Concat(Sessions.GetRecentCompleted(500))
+            .Where(s => s.ServerId == ServerSvc.SelectedServerId)
             .ToList();
 
-        _originated = calls.Count;
-        _answered = calls.Count(WasAnswered);
+        _originated = sessions.Count;
+        _answered = sessions.Count(s => s.ConnectedAt is not null);
         _unanswered = _originated - _answered;
-        _bridged = calls.Count(c => c.AgentName is not null);
+        _bridged = sessions.Count(s => s.AgentId is not null);
 
         _answeredPct = _originated > 0 ? ((double)_answered / _originated * 100).ToString("F0") : "0";
         _unansweredPct = _originated > 0 ? ((double)_unanswered / _originated * 100).ToString("F0") : "0";
         _bridgedPct = _answered > 0 ? ((double)_bridged / _answered * 100).ToString("F0") : "0";
 
-        _activeNow = calls.Count(c => c.State != CallFlowState.Completed);
-        _completed = calls.Count(c => c.State == CallFlowState.Completed);
+        _activeNow = sessions.Count(s => s.State is not (CallSessionState.Completed or CallSessionState.Failed or CallSessionState.TimedOut));
+        _completed = sessions.Count(s => s.State is CallSessionState.Completed or CallSessionState.Failed or CallSessionState.TimedOut);
 
-        var completedCalls = calls.Where(c => c.State == CallFlowState.Completed).ToList();
-        _avgDuration = completedCalls.Count > 0
-            ? FormatSeconds((int)completedCalls.Average(c => c.Duration.TotalSeconds))
-            : "—";
+        var completedSessions = sessions.Where(s => s.State is CallSessionState.Completed or CallSessionState.Failed or CallSessionState.TimedOut).ToList();
+        _avgDuration = completedSessions.Count > 0
+            ? FormatSeconds((int)completedSessions.Average(s => s.Duration.TotalSeconds))
+            : "\u2014";
 
-        var waitTimes = calls
-            .Select(c =>
-            {
-                var join = c.Events.FirstOrDefault(e => e.Type == CallFlowEventType.QueueJoin);
-                var connect = c.Events.FirstOrDefault(e => e.Type == CallFlowEventType.AgentConnect);
-                return join is not null && connect is not null ? (TimeSpan?)(connect.Timestamp - join.Timestamp) : null;
-            })
+        var waitTimes = sessions
+            .Select(s => s.WaitTime)
             .Where(t => t.HasValue)
             .Select(t => t!.Value)
             .ToList();
         _avgWait = waitTimes.Count > 0
             ? FormatSeconds((int)waitTimes.Average(t => t.TotalSeconds))
-            : "—";
+            : "\u2014";
 
         if (_showAdvanced)
-            RefreshAdvanced(calls);
+            RefreshAdvanced(sessions);
     }
 
-    private void RefreshAdvanced(List<CallFlow> calls)
+    private void RefreshAdvanced(List<CallSession> sessions)
     {
-        _stateBreakdown = Enum.GetValues<CallFlowState>()
+        _stateBreakdown = Enum.GetValues<CallSessionState>()
             .Select(s =>
             {
-                var count = calls.Count(c => c.State == s);
+                var count = sessions.Count(c => c.State == s);
                 return new StateRow
                 {
                     State = s,
@@ -195,13 +189,13 @@
             .Where(r => r.Count > 0)
             .ToList();
 
-        _topQueues = calls
-            .Where(c => c.QueueName is not null)
-            .GroupBy(c => c.QueueName!)
+        _topQueues = sessions
+            .Where(s => s.QueueName is not null)
+            .GroupBy(s => s.QueueName!)
             .Select(g =>
             {
                 var total = g.Count();
-                var ans = g.Count(WasAnswered);
+                var ans = g.Count(s => s.ConnectedAt is not null);
                 return new QueueRow
                 {
                     Queue = g.Key,
@@ -214,26 +208,19 @@
             .Take(10)
             .ToList();
 
-        _topAgents = calls
-            .Where(c => c.AgentName is not null)
-            .GroupBy(c => c.AgentName!)
+        _topAgents = sessions
+            .Where(s => s.AgentId is not null)
+            .GroupBy(s => s.AgentId!)
             .Select(g => new AgentRow
             {
                 Agent = g.Key,
                 Calls = g.Count(),
-                AvgDuration = FormatSeconds((int)g.Average(c => c.Duration.TotalSeconds))
+                AvgDuration = FormatSeconds((int)g.Average(s => s.Duration.TotalSeconds))
             })
             .OrderByDescending(r => r.Calls)
             .Take(10)
             .ToList();
     }
-
-    private static bool WasAnswered(CallFlow c) =>
-        c.Events.Any(e =>
-            e.Type == CallFlowEventType.AgentConnect
-            || e.Type == CallFlowEventType.Bridge
-            || (e.Type == CallFlowEventType.Answer
-                && string.Equals(e.Detail, "ANSWER", StringComparison.OrdinalIgnoreCase)));
 
     private static string FormatSeconds(int seconds)
     {
@@ -245,7 +232,7 @@
 
     private sealed class StateRow
     {
-        public CallFlowState State { get; init; }
+        public CallSessionState State { get; init; }
         public int Count { get; init; }
         public string Pct { get; init; } = "0";
     }
@@ -262,6 +249,6 @@
     {
         public string Agent { get; init; } = "";
         public int Calls { get; init; }
-        public string AvgDuration { get; init; } = "—";
+        public string AvgDuration { get; init; } = "\u2014";
     }
 }
