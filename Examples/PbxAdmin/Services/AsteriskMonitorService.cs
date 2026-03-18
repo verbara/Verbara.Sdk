@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Asterisk.Sdk;
 using Asterisk.Sdk.Ami.Connection;
 using Asterisk.Sdk.Live.Server;
+using Asterisk.Sdk.Sessions.Manager;
 using PbxAdmin.Models;
 
 namespace PbxAdmin.Services;
@@ -32,7 +33,7 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
     private readonly IAmiConnectionFactory _factory;
     private readonly ILoggerFactory _loggerFactory;
     private readonly EventLogService _eventLog;
-    private readonly CallFlowTracker _callFlowTracker;
+    private readonly ICallSessionManager _sessionManager;
     private readonly IConfiguration _config;
     private readonly ILogger<AsteriskMonitorService> _logger;
     private readonly ConcurrentDictionary<string, ServerEntry> _servers = new();
@@ -43,14 +44,14 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
         IAmiConnectionFactory factory,
         ILoggerFactory loggerFactory,
         EventLogService eventLog,
-        CallFlowTracker callFlowTracker,
+        ICallSessionManager sessionManager,
         IConfiguration config,
         ILogger<AsteriskMonitorService> logger)
     {
         _factory = factory;
         _loggerFactory = loggerFactory;
         _eventLog = eventLog;
-        _callFlowTracker = callFlowTracker;
+        _sessionManager = sessionManager;
         _config = config;
         _logger = logger;
     }
@@ -91,9 +92,10 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
                     MonitorServiceLog.ConnectionLost(_logger, ex, id);
 
                 var eventLogSub = connection.Subscribe(new EventLogObserver(id, _eventLog));
-                var callFlowSub = connection.Subscribe(_callFlowTracker.CreateObserver(id));
 
                 await server.StartAsync(cancellationToken);
+
+                _sessionManager.AttachToServer(server, id);
 
                 // Create a dedicated config connection with a longer timeout.
                 // No subscriptions — this connection is silent (no event pump overhead).
@@ -101,7 +103,7 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
                 var configConnection = await CreateConfigConnectionAsync(id, options, cancellationToken);
 
                 var effectiveConfigConn = configConnection ?? connection;
-                _servers[id] = new ServerEntry(connection, effectiveConfigConn, server, eventLogSub, callFlowSub, configMode);
+                _servers[id] = new ServerEntry(connection, effectiveConfigConn, server, eventLogSub, configMode);
                 MonitorServiceLog.Connected(_logger, id, options.Hostname, options.Port, server.AsteriskVersion);
                 MonitorServiceLog.ConnectionSummary(_logger, id,
                     configConnection is not null ? "dedicated (30s timeout)" : "shared (fallback to event connection)");
@@ -149,7 +151,6 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
         foreach (var (_, entry) in _servers)
         {
             entry.Subscription.Dispose();
-            entry.CallFlowSubscription.Dispose();
             await entry.Server.DisposeAsync();
             if (!ReferenceEquals(entry.ConfigConnection, entry.Connection))
                 await entry.ConfigConnection.DisposeAsync();
@@ -165,14 +166,12 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
     /// <param name="ConfigConnection">Dedicated connection for config operations (30s timeout). Falls back to Connection if creation failed.</param>
     /// <param name="Server">Live domain model for real-time state.</param>
     /// <param name="Subscription">Event log observer subscription.</param>
-    /// <param name="CallFlowSubscription">Call flow tracker subscription.</param>
     /// <param name="ConfigMode">File or Realtime config mode.</param>
     public sealed record ServerEntry(
         IAmiConnection Connection,
         IAmiConnection ConfigConnection,
         AsteriskServer Server,
         IDisposable Subscription,
-        IDisposable CallFlowSubscription,
         ConfigMode ConfigMode);
 
     private sealed class EventLogObserver(string serverId, EventLogService eventLog)
