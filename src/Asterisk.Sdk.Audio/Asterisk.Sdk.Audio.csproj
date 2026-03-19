@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <Description>Audio processing library for Asterisk.Sdk — resampling, format conversion, gain, silence detection.</Description>
+    <PackageTags>$(PackageTags);audio;resampling;voiceai</PackageTags>
+  </PropertyGroup>
+</Project>
