@@ -22,8 +22,7 @@ public class GoogleSpeechRecognizerTests
         await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
 
         mock.LastRequest!.Content!.Headers.ContentType!.MediaType.Should().Be("application/json");
-        var body = await mock.LastRequest.Content.ReadAsStringAsync();
-        body.Should().Contain("content");
+        mock.LastRequestBody.Should().Contain("content");
     }
 
     [Fact]
@@ -36,9 +35,8 @@ public class GoogleSpeechRecognizerTests
 
         await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
 
-        var body = await mock.LastRequest!.Content!.ReadAsStringAsync();
-        body.Should().Contain("en-US");
-        body.Should().Contain("LINEAR16");
+        mock.LastRequestBody.Should().Contain("en-US");
+        mock.LastRequestBody.Should().Contain("LINEAR16");
     }
 
     [Fact]

@@ -54,7 +54,7 @@ public sealed class WhisperSpeechRecognizer : SpeechRecognizer
     private static async Task<byte[]> DrainFramesAsync(
         IAsyncEnumerable<ReadOnlyMemory<byte>> frames, CancellationToken ct)
     {
-        var ms = new MemoryStream();
+        using var ms = new MemoryStream();
         await foreach (var frame in frames.WithCancellation(ct).ConfigureAwait(false))
             ms.Write(frame.Span);
         return ms.ToArray();

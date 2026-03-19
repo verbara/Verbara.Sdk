@@ -45,7 +45,7 @@ public sealed class GoogleSpeechRecognizer : SpeechRecognizer
         var json = JsonSerializer.Serialize(request, VoiceAiSttJsonContext.Default.GoogleSpeechRequest);
         var uri = new Uri($"https://speech.googleapis.com/v1/speech:recognize?key={_options.ApiKey}");
 
-        var req = new HttpRequestMessage(HttpMethod.Post, uri);
+        using var req = new HttpRequestMessage(HttpMethod.Post, uri);
         req.Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
         using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
@@ -63,7 +63,7 @@ public sealed class GoogleSpeechRecognizer : SpeechRecognizer
     private static async Task<byte[]> DrainFramesAsync(
         IAsyncEnumerable<ReadOnlyMemory<byte>> frames, CancellationToken ct)
     {
-        var ms = new MemoryStream();
+        using var ms = new MemoryStream();
         await foreach (var frame in frames.WithCancellation(ct).ConfigureAwait(false))
             ms.Write(frame.Span);
         return ms.ToArray();
