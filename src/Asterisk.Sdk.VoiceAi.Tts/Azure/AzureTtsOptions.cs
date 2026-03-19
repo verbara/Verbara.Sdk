@@ -12,6 +12,9 @@ public sealed class AzureTtsOptions
     /// <summary>Voice name (e.g., "es-CO-SalomeNeural").</summary>
     public string VoiceName { get; set; } = string.Empty;
 
+    /// <summary>SSML language tag (e.g., "es-CO", "en-US"). Defaults to "es-CO".</summary>
+    public string Language { get; set; } = "es-CO";
+
     /// <summary>Output audio format. Defaults to raw 8 kHz 16-bit mono PCM.</summary>
     public string OutputFormat { get; set; } = AzureTtsOutputFormat.Raw8Khz16BitMonoPcm;
 }
