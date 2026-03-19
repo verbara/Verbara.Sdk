@@ -62,9 +62,8 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
         await foreach (var result in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
             yield return result;
 
-        // Ensure both tasks complete (propagate exceptions).
-        await sendTask.ConfigureAwait(false);
-        await receiveTask.ConfigureAwait(false);
+        // Ensure both tasks complete (propagate exceptions via AggregateException).
+        await Task.WhenAll(sendTask, receiveTask).ConfigureAwait(false);
     }
 
     private static async Task SendLoopAsync(

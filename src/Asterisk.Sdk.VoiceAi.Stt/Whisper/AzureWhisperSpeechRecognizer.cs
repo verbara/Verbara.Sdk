@@ -14,12 +14,8 @@ public sealed class AzureWhisperSpeechRecognizer : SpeechRecognizer
     private readonly AzureWhisperOptions _options;
     private readonly HttpClient _http;
 
-    /// <summary>Initializes a new instance for production use.</summary>
-    public AzureWhisperSpeechRecognizer(IOptions<AzureWhisperOptions> options)
-        : this(options, new HttpClient()) { }
-
-    /// <summary>Initializes a new instance for testing with a custom HttpClient.</summary>
-    internal AzureWhisperSpeechRecognizer(IOptions<AzureWhisperOptions> options, HttpClient http)
+    /// <summary>Initializes a new instance for production use with DI-managed HttpClient.</summary>
+    public AzureWhisperSpeechRecognizer(IOptions<AzureWhisperOptions> options, HttpClient http)
     {
         _options = options.Value;
         _http = http;
@@ -34,7 +30,7 @@ public sealed class AzureWhisperSpeechRecognizer : SpeechRecognizer
         var pcmData = await DrainFramesAsync(audioFrames, ct).ConfigureAwait(false);
         var wavBytes = WhisperSpeechRecognizer.AddWavHeaderStatic(pcmData, format);
 
-        var uri = new Uri($"{_options.Endpoint.ToString().TrimEnd('/')}/{_options.DeploymentName}" +
+        var uri = new Uri($"{_options.Endpoint.ToString().TrimEnd('/')}/{_options.Deployment}" +
             $"/audio/transcriptions?api-version={_options.ApiVersion}");
 
         using var form = new MultipartFormDataContent();
