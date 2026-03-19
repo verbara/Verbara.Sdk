@@ -7,7 +7,7 @@ namespace Asterisk.Sdk.VoiceAi.Stt.Tests.Deepgram;
 /// <summary>In-process WebSocket server that speaks the Deepgram wire protocol.</summary>
 internal sealed class DeepgramFakeServer : IAsyncDisposable
 {
-    private readonly HttpListener _listener;
+    private readonly HttpListener _listener = null!;
     private readonly CancellationTokenSource _cts = new();
     private Task? _acceptLoop;
     private int _receivedFrameCount;
@@ -18,14 +18,31 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
 
     public DeepgramFakeServer()
     {
-        var tcp = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-        tcp.Start();
-        Port = ((IPEndPoint)tcp.LocalEndpoint).Port;
-        tcp.Stop();
+        // Retry port allocation to avoid conflicts with parallel tests.
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            var tcp = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+            tcp.Start();
+            var port = ((IPEndPoint)tcp.LocalEndpoint).Port;
+            tcp.Stop();
 
-        _listener = new HttpListener();
-        _listener.Prefixes.Add($"http://localhost:{Port}/");
-        _listener.Start();
+            var listener = new HttpListener();
+            listener.Prefixes.Add($"http://localhost:{port}/");
+            try
+            {
+                listener.Start();
+                _listener = listener;
+                Port = port;
+                break;
+            }
+            catch (HttpListenerException) when (attempt < 9)
+            {
+                listener.Close();
+            }
+        }
+
+        if (_listener is null)
+            throw new InvalidOperationException("Failed to allocate a port for the fake Deepgram server.");
 
         ResultMessages.Add(BuildResultJson("hola mundo", 0.99f, isFinal: false));
         ResultMessages.Add(BuildResultJson("hola mundo", 0.99f, isFinal: true));
