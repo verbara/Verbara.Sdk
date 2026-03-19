@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Test fakes for Asterisk.Sdk.VoiceAi -- FakeSpeechRecognizer, FakeSpeechSynthesizer, FakeConversationHandler for testing Voice AI apps without API keys.</Description>
+    <PackageTags>$(PackageTags);voiceai;testing;fakes</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Asterisk.Sdk.VoiceAi.Testing.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Asterisk.Sdk.VoiceAi\Asterisk.Sdk.VoiceAi.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Voice AI pipeline for Asterisk.Sdk — orchestration layer for STT, TTS and conversation with turn-taking and barge-in detection.</Description>
+    <PackageTags>$(PackageTags);voiceai;stt;tts;ai;pipeline</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Asterisk.Sdk.VoiceAi.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Asterisk.Sdk.Audio\Asterisk.Sdk.Audio.csproj" />
+    <ProjectReference Include="..\Asterisk.Sdk.VoiceAi.AudioSocket\Asterisk.Sdk.VoiceAi.AudioSocket.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="System.Reactive" />
+  </ItemGroup>
+</Project>
