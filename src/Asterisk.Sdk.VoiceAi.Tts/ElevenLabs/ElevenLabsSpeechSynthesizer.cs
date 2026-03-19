@@ -99,6 +99,10 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
         await ws.SendAsync(
             Encoding.UTF8.GetBytes(closeJson).AsMemory(),
             WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+
+        // Initiate the WebSocket closing handshake so the server knows we are done.
+        if (ws.State == WebSocketState.Open)
+            await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct).ConfigureAwait(false);
     }
 
     private static async Task ReceiveFramesAsync(
