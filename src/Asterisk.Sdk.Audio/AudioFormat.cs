@@ -28,10 +28,16 @@ public readonly record struct AudioFormat(
     public int BytesPerSample => Channels * (BitsPerSample / 8);
 
     /// <summary>Byte count for an audio frame of the given duration.</summary>
-    public int BytesPerFrame(TimeSpan frameDuration) =>
-        (int)(SampleRate * BytesPerSample * frameDuration.TotalSeconds);
+    public int BytesPerFrame(TimeSpan frameDuration)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(frameDuration, TimeSpan.Zero, nameof(frameDuration));
+        return (int)(SampleRate * BytesPerSample * frameDuration.TotalSeconds);
+    }
 
     /// <summary>Number of samples per frame of the given duration.</summary>
-    public int SamplesPerFrame(TimeSpan frameDuration) =>
-        (int)(SampleRate * frameDuration.TotalSeconds);
+    public int SamplesPerFrame(TimeSpan frameDuration)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(frameDuration, TimeSpan.Zero, nameof(frameDuration));
+        return (int)(SampleRate * frameDuration.TotalSeconds);
+    }
 }

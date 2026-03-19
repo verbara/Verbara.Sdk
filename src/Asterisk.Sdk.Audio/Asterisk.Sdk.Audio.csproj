@@ -2,6 +2,6 @@
   <PropertyGroup>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <Description>Audio processing library for Asterisk.Sdk — resampling, format conversion, gain, silence detection.</Description>
-    <PackageTags>asterisk;audio;resampling;telephony;voiceai</PackageTags>
+    <PackageTags>$(PackageTags);audio;resampling;voiceai</PackageTags>
   </PropertyGroup>
 </Project>
