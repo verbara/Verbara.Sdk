@@ -98,7 +98,7 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
         var frames = AudioFramesToSend.ToList();
         for (int i = 0; i < frames.Count; i++)
         {
-            if (ws.State != WebSocketState.Open) break;
+            if (ws.State is not (WebSocketState.Open or WebSocketState.CloseReceived)) break;
             await ws.SendAsync(frames[i].AsMemory(), WebSocketMessageType.Binary, true, _cts.Token)
                 .ConfigureAwait(false);
 
@@ -110,16 +110,21 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
             }
         }
 
-        // Initiate close from server side after sending all audio.
-        if (ws.State == WebSocketState.Open)
+        // Complete close handshake after sending all audio.
+        try
         {
-            try
+            if (ws.State == WebSocketState.Open)
             {
                 await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
                     .ConfigureAwait(false);
             }
-            catch { }
+            else if (ws.State == WebSocketState.CloseReceived)
+            {
+                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
         }
+        catch { }
 
         try { await receiveTask.ConfigureAwait(false); } catch { }
     }
