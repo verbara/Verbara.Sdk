@@ -39,7 +39,7 @@ public class SttDiTests
         {
             o.ApiKey = "test";
             o.Endpoint = new Uri("https://example.openai.azure.com/openai/deployments");
-            o.DeploymentName = "whisper";
+            o.Deployment = "whisper";
         });
         await using var provider = services.BuildServiceProvider();
         provider.GetRequiredService<SpeechRecognizer>().Should().BeOfType<AzureWhisperSpeechRecognizer>();

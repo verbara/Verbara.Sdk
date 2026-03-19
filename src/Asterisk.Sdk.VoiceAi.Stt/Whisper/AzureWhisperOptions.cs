@@ -10,8 +10,8 @@ public sealed class AzureWhisperOptions
     public Uri Endpoint { get; set; } = default!;
 
     /// <summary>Azure deployment name for the Whisper model.</summary>
-    public string DeploymentName { get; set; } = string.Empty;
+    public string Deployment { get; set; } = string.Empty;
 
     /// <summary>Azure API version.</summary>
-    public string ApiVersion { get; set; } = "2024-06-01";
+    public string ApiVersion { get; set; } = "2024-02-01";
 }

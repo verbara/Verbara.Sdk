@@ -15,9 +15,11 @@ public static class SttServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddDeepgramSpeechRecognizer(
         this IServiceCollection services,
-        Action<DeepgramOptions> configure)
+        Action<DeepgramOptions>? configure = null)
     {
-        services.Configure(configure);
+        if (configure is not null)
+            services.Configure(configure);
+
         services.TryAddSingleton<SpeechRecognizer, DeepgramSpeechRecognizer>();
         return services;
     }
@@ -28,10 +30,13 @@ public static class SttServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddWhisperSpeechRecognizer(
         this IServiceCollection services,
-        Action<WhisperOptions> configure)
+        Action<WhisperOptions>? configure = null)
     {
-        services.Configure(configure);
-        services.TryAddSingleton<SpeechRecognizer, WhisperSpeechRecognizer>();
+        if (configure is not null)
+            services.Configure(configure);
+
+        services.AddHttpClient<WhisperSpeechRecognizer>();
+        services.TryAddSingleton<SpeechRecognizer>(sp => sp.GetRequiredService<WhisperSpeechRecognizer>());
         return services;
     }
 
@@ -41,10 +46,13 @@ public static class SttServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddAzureWhisperSpeechRecognizer(
         this IServiceCollection services,
-        Action<AzureWhisperOptions> configure)
+        Action<AzureWhisperOptions>? configure = null)
     {
-        services.Configure(configure);
-        services.TryAddSingleton<SpeechRecognizer, AzureWhisperSpeechRecognizer>();
+        if (configure is not null)
+            services.Configure(configure);
+
+        services.AddHttpClient<AzureWhisperSpeechRecognizer>();
+        services.TryAddSingleton<SpeechRecognizer>(sp => sp.GetRequiredService<AzureWhisperSpeechRecognizer>());
         return services;
     }
 
@@ -54,10 +62,13 @@ public static class SttServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddGoogleSpeechRecognizer(
         this IServiceCollection services,
-        Action<GoogleSpeechOptions> configure)
+        Action<GoogleSpeechOptions>? configure = null)
     {
-        services.Configure(configure);
-        services.TryAddSingleton<SpeechRecognizer, GoogleSpeechRecognizer>();
+        if (configure is not null)
+            services.Configure(configure);
+
+        services.AddHttpClient<GoogleSpeechRecognizer>();
+        services.TryAddSingleton<SpeechRecognizer>(sp => sp.GetRequiredService<GoogleSpeechRecognizer>());
         return services;
     }
 }
