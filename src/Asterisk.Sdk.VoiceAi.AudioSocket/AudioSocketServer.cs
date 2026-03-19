@@ -85,7 +85,7 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
 
             var stream = client.GetStream();
-            var reader = PipeReader.Create(stream);
+            var reader = PipeReader.Create(stream, new StreamPipeReaderOptions(bufferSize: _options.ReceiveBufferSize));
             Guid channelId = default;
             var gotUuid = false;
 
@@ -116,16 +116,16 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
                 return;
             }
 
-            if (_sessions.Count >= _options.MaxConcurrentSessions)
+            var session = new AudioSocketSession(channelId, client, reader, _options.DefaultFormat, _logger);
+            session.OnHangup += () => _sessions.TryRemove(channelId, out _);
+
+            if (_sessions.Count >= _options.MaxConcurrentSessions || !_sessions.TryAdd(channelId, session))
             {
                 AudioSocketLog.SessionLimitReached(_logger, _options.MaxConcurrentSessions);
-                client.Dispose();
+                await session.DisposeAsync().ConfigureAwait(false);
                 return;
             }
 
-            var session = new AudioSocketSession(channelId, client, reader, _options.DefaultFormat, _logger);
-            session.OnHangup += () => _sessions.TryRemove(channelId, out _);
-            _sessions[channelId] = session;
             session.StartReadLoop();
 
             AudioSocketLog.SessionStarted(_logger, channelId);
