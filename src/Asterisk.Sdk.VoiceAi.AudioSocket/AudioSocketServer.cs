@@ -23,6 +23,9 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// <summary>Raised when a new AudioSocket session has been established and the UUID frame received.</summary>
     public event Func<AudioSocketSession, ValueTask>? OnSessionStarted;
 
+    /// <summary>The actual port the server is listening on. Available after <see cref="StartAsync"/>.</summary>
+    public int BoundPort => (_listener?.LocalEndpoint as IPEndPoint)?.Port ?? 0;
+
     /// <summary>Number of currently active sessions.</summary>
     public int ActiveSessionCount => _sessions.Count;
 
