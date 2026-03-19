@@ -19,7 +19,8 @@ public static class AudioSocketServiceCollectionExtensions
         var options = new AudioSocketOptions();
         configure?.Invoke(options);
         services.TryAddSingleton(options);
-        services.AddHostedService<AudioSocketServer>();
+        services.TryAddSingleton<AudioSocketServer>();
+        services.AddHostedService<AudioSocketServer>(sp => sp.GetRequiredService<AudioSocketServer>());
         return services;
     }
 }
