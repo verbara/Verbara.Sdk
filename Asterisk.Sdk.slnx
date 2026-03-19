@@ -24,6 +24,7 @@
     <Project Path="src/Asterisk.Sdk.Activities/Asterisk.Sdk.Activities.csproj" />
     <Project Path="src/Asterisk.Sdk.VoiceAi.AudioSocket/Asterisk.Sdk.VoiceAi.AudioSocket.csproj" />
     <Project Path="src/Asterisk.Sdk.VoiceAi/Asterisk.Sdk.VoiceAi.csproj" />
+    <Project Path="src/Asterisk.Sdk.VoiceAi.Stt/Asterisk.Sdk.VoiceAi.Stt.csproj" />
     <Project Path="src/Asterisk.Sdk.VoiceAi.Testing/Asterisk.Sdk.VoiceAi.Testing.csproj" />
     <Project Path="src/Asterisk.Sdk/Asterisk.Sdk.csproj" />
     <Project Path="src/Asterisk.Sdk.Hosting/Asterisk.Sdk.Hosting.csproj" />
@@ -41,6 +42,7 @@
     <Project Path="Tests/Asterisk.Sdk.Activities.Tests/Asterisk.Sdk.Activities.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.VoiceAi.AudioSocket.Tests/Asterisk.Sdk.VoiceAi.AudioSocket.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.VoiceAi.Tests/Asterisk.Sdk.VoiceAi.Tests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.VoiceAi.Stt.Tests/Asterisk.Sdk.VoiceAi.Stt.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.VoiceAi.Testing.Tests/Asterisk.Sdk.VoiceAi.Testing.Tests.csproj" />
     <Project Path="Tests/PbxAdmin.Tests/PbxAdmin.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Sessions.FunctionalTests/Asterisk.Sdk.Sessions.FunctionalTests.csproj" />
