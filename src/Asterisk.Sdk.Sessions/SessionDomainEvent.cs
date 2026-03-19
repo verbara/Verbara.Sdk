@@ -30,3 +30,13 @@ public sealed record CallQueuedEvent(string SessionId, string ServerId, DateTime
 
 public sealed record SessionMergedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     string MergedSessionId) : SessionDomainEvent(SessionId, ServerId, Timestamp);
+
+public sealed record CallWrapUpEvent(
+    string SessionId, string ServerId, DateTimeOffset Timestamp,
+    string? AgentId, string? QueueName, TimeSpan WrapUpDuration)
+    : SessionDomainEvent(SessionId, ServerId, Timestamp);
+
+public sealed record CallRingNoAnswerEvent(
+    string SessionId, string ServerId, DateTimeOffset Timestamp,
+    string AgentId, string? QueueName)
+    : SessionDomainEvent(SessionId, ServerId, Timestamp);
