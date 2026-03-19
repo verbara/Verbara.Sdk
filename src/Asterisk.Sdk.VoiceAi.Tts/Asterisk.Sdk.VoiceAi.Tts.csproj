@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>TTS providers for Asterisk.Sdk.VoiceAi — ElevenLabs (WebSocket streaming) and Azure TTS (REST). Zero third-party dependencies.</Description>
+    <PackageTags>$(PackageTags);voiceai;tts;elevenlabs;azure;text-to-speech</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Asterisk.Sdk.VoiceAi.Tts.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Asterisk.Sdk.VoiceAi\Asterisk.Sdk.VoiceAi.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+</Project>
