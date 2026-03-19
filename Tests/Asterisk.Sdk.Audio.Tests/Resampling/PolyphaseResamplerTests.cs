@@ -106,7 +106,7 @@ public sealed class PolyphaseResamplerTests
 
         // Last sample of frame1 and first sample of frame2 should not be wildly different
         // (continuity check -- no abrupt jumps from delay line corruption)
-        Math.Abs((int)out1[n1 - 1] - out2[0]).Should().BeLessThan(15000);
+        Math.Abs((int)out1[n1 - 1] - out2[0]).Should().BeLessThan(2000);
     }
 
     [Fact]

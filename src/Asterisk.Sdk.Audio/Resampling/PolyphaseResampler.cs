@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace Asterisk.Sdk.Audio.Resampling;
@@ -21,8 +22,6 @@ namespace Asterisk.Sdk.Audio.Resampling;
 /// </remarks>
 public sealed class PolyphaseResampler : IAudioTransform, IDisposable
 {
-    private readonly int _inputRate;
-    private readonly int _outputRate;
     private readonly int _l;         // upsample factor
     private readonly int _m;         // downsample factor
     private readonly float[] _coefficients; // L * tapsPerPhase values in polyphase order
@@ -40,8 +39,6 @@ public sealed class PolyphaseResampler : IAudioTransform, IDisposable
 
     internal PolyphaseResampler(int inputRate, int outputRate, int l, int m, float[] coefficients)
     {
-        _inputRate = inputRate;
-        _outputRate = outputRate;
         _l = l;
         _m = m;
         _coefficients = coefficients;
@@ -87,7 +84,8 @@ public sealed class PolyphaseResampler : IAudioTransform, IDisposable
     public int MaxOutputBytes(int inputBytes)
     {
         int inputSamples = inputBytes / 2;
-        return (ResamplerFactory.CalculateOutputSize(inputSamples, _inputRate, _outputRate) + 1) * 2;
+        // Exact rational: inputSamples * L / M + 1 sample of headroom, times 2 bytes/sample
+        return (inputSamples * _l / _m + 2) * 2;
     }
 
     /// <summary>
@@ -144,8 +142,8 @@ public sealed class PolyphaseResampler : IAudioTransform, IDisposable
                 if (sample > short.MaxValue) sample = short.MaxValue;
                 else if (sample < short.MinValue) sample = short.MinValue;
 
-                if (outputPos < output.Length)
-                    output[outputPos++] = (short)sample;
+                Debug.Assert(outputPos < output.Length, "Output buffer too small — caller must use MaxOutputBytes().");
+                output[outputPos++] = (short)sample;
 
                 phase += m;
             }

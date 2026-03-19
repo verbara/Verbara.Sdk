@@ -53,6 +53,9 @@ public static class ResamplerFactory
     /// Calculates the expected number of output samples for a given number of input samples.
     /// Adds 1 to account for filter boundary rounding.
     /// </summary>
+    /// <param name="inputSamples">Number of input samples.</param>
+    /// <param name="inputRate">Input sample rate in Hz.</param>
+    /// <param name="outputRate">Output sample rate in Hz.</param>
     public static int CalculateOutputSize(int inputSamples, int inputRate, int outputRate)
     {
         return (int)Math.Ceiling((double)inputSamples * outputRate / inputRate) + 1;
