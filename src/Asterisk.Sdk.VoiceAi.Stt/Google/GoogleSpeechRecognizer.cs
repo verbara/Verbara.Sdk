@@ -14,12 +14,8 @@ public sealed class GoogleSpeechRecognizer : SpeechRecognizer
     private readonly GoogleSpeechOptions _options;
     private readonly HttpClient _http;
 
-    /// <summary>Initializes a new instance for production use.</summary>
-    public GoogleSpeechRecognizer(IOptions<GoogleSpeechOptions> options)
-        : this(options, new HttpClient()) { }
-
-    /// <summary>Initializes a new instance for testing with a custom HttpClient.</summary>
-    internal GoogleSpeechRecognizer(IOptions<GoogleSpeechOptions> options, HttpClient http)
+    /// <summary>Initializes a new instance for production use with DI-managed HttpClient.</summary>
+    public GoogleSpeechRecognizer(IOptions<GoogleSpeechOptions> options, HttpClient http)
     {
         _options = options.Value;
         _http = http;
