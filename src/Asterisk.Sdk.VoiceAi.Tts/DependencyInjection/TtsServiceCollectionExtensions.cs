@@ -1,0 +1,41 @@
+using Asterisk.Sdk.VoiceAi.Tts.Azure;
+using Asterisk.Sdk.VoiceAi.Tts.ElevenLabs;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+
+namespace Asterisk.Sdk.VoiceAi.Tts.DependencyInjection;
+
+/// <summary>Extension methods for registering TTS providers in the DI container.</summary>
+public static class TtsServiceCollectionExtensions
+{
+    /// <summary>
+    /// Registers the ElevenLabs WebSocket streaming TTS provider as the
+    /// <see cref="SpeechSynthesizer"/> singleton.
+    /// </summary>
+    public static IServiceCollection AddElevenLabsSpeechSynthesizer(
+        this IServiceCollection services,
+        Action<ElevenLabsOptions>? configure = null)
+    {
+        if (configure is not null)
+            services.Configure(configure);
+
+        services.TryAddSingleton<SpeechSynthesizer, ElevenLabsSpeechSynthesizer>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the Azure Cognitive Services REST TTS provider as the
+    /// <see cref="SpeechSynthesizer"/> singleton.
+    /// </summary>
+    public static IServiceCollection AddAzureTtsSpeechSynthesizer(
+        this IServiceCollection services,
+        Action<AzureTtsOptions>? configure = null)
+    {
+        if (configure is not null)
+            services.Configure(configure);
+
+        services.AddHttpClient<AzureTtsSpeechSynthesizer>();
+        services.TryAddSingleton<SpeechSynthesizer>(sp => sp.GetRequiredService<AzureTtsSpeechSynthesizer>());
+        return services;
+    }
+}
