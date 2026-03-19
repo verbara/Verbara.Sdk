@@ -18,6 +18,7 @@
     <Project Path="src/Asterisk.Sdk.Ami.SourceGenerators/Asterisk.Sdk.Ami.SourceGenerators.csproj" />
     <Project Path="src/Asterisk.Sdk.Ami/Asterisk.Sdk.Ami.csproj" />
     <Project Path="src/Asterisk.Sdk.Ari/Asterisk.Sdk.Ari.csproj" />
+    <Project Path="src/Asterisk.Sdk.Audio/Asterisk.Sdk.Audio.csproj" />
     <Project Path="src/Asterisk.Sdk.Config/Asterisk.Sdk.Config.csproj" />
     <Project Path="src/Asterisk.Sdk.Live/Asterisk.Sdk.Live.csproj" />
     <Project Path="src/Asterisk.Sdk.Activities/Asterisk.Sdk.Activities.csproj" />
@@ -29,6 +30,7 @@
     <Project Path="Tests/Asterisk.Sdk.Agi.Tests/Asterisk.Sdk.Agi.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Ami.Tests/Asterisk.Sdk.Ami.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Ari.Tests/Asterisk.Sdk.Ari.Tests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.Audio.Tests/Asterisk.Sdk.Audio.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Benchmarks/Asterisk.Sdk.Benchmarks.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Config.Tests/Asterisk.Sdk.Config.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.IntegrationTests/Asterisk.Sdk.IntegrationTests.csproj" />
