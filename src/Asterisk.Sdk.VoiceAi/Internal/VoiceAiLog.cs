@@ -16,4 +16,7 @@ internal static partial class VoiceAiLog
 
     [LoggerMessage(LogLevel.Debug, "Barge-in detected for channel {ChannelId}")]
     internal static partial void BargInDetected(ILogger logger, Guid channelId);
+
+    [LoggerMessage(LogLevel.Error, "VoiceAi session error [{ChannelId}]")]
+    internal static partial void SessionError(ILogger logger, Guid channelId, Exception exception);
 }
