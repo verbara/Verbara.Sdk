@@ -52,6 +52,9 @@ public sealed class CallSession
     public string? AgentId { get; set; }
     public string? AgentInterface { get; set; }
     public string? BridgeId { get; set; }
+
+    /// <summary>Tenant identifier. Set by ITenantResolver on call arrival.</summary>
+    public string? TenantId { get; set; }
     public HangupCause? HangupCause { get; set; }
 
     // Timestamps
