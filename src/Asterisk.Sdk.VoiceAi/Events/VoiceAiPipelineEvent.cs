@@ -38,7 +38,8 @@ public record BargInDetectedEvent(DateTimeOffset Timestamp)
 /// <summary>An error occurred in one of the pipeline stages.</summary>
 public record PipelineErrorEvent(
     DateTimeOffset Timestamp,
-    Exception Error,
+    string Message,
+    Exception? Exception,
     PipelineErrorSource Source)
     : VoiceAiPipelineEvent(Timestamp);
 
