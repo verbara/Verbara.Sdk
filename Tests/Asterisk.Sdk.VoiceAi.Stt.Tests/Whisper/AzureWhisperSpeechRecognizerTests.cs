@@ -15,8 +15,8 @@ public class AzureWhisperSpeechRecognizerTests
     {
         ApiKey = "azure-key",
         Endpoint = new Uri("https://myresource.openai.azure.com/openai/deployments"),
-        DeploymentName = "whisper-deployment",
-        ApiVersion = "2024-06-01"
+        Deployment = "whisper-deployment",
+        ApiVersion = "2024-02-01"
     };
 
     [Fact]

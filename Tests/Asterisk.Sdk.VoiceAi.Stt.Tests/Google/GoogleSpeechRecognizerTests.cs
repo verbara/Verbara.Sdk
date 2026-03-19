@@ -67,6 +67,20 @@ public class GoogleSpeechRecognizerTests
         mock.LastRequest!.RequestUri!.Query.Should().Contain("my-gcp-key");
     }
 
+    [Fact]
+    public async Task StreamAsync_ShouldReturnEmpty_WhenNoResults()
+    {
+        var emptyResponse = """{"results":[]}""";
+        var mock = new MockHttpMessageHandler(emptyResponse);
+        var recognizer = new GoogleSpeechRecognizer(
+            Options.Create(new GoogleSpeechOptions { ApiKey = "gcp-key" }),
+            new HttpClient(mock));
+
+        var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().BeEmpty();
+    }
+
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()
     {
         yield return new byte[320];
