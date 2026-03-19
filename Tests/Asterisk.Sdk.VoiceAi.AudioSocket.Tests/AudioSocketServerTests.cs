@@ -6,13 +6,11 @@ namespace Asterisk.Sdk.VoiceAi.AudioSocket.Tests;
 public sealed class AudioSocketServerTests : IAsyncDisposable
 {
     private readonly AudioSocketServer _server;
-    private readonly int _port;
 
     public AudioSocketServerTests()
     {
-        // Use a random high port to avoid conflicts
-        _port = Random.Shared.Next(19000, 20000);
-        var options = new AudioSocketOptions { Port = _port, ConnectionTimeout = TimeSpan.FromSeconds(5) };
+        // Port = 0: OS assigns an available ephemeral port, eliminating collision risk
+        var options = new AudioSocketOptions { Port = 0, ConnectionTimeout = TimeSpan.FromSeconds(5) };
         _server = new AudioSocketServer(options, NullLogger<AudioSocketServer>.Instance);
     }
 
@@ -29,7 +27,7 @@ public sealed class AudioSocketServerTests : IAsyncDisposable
         await _server.StartAsync(CancellationToken.None);
 
         var channelId = Guid.NewGuid();
-        await using var client = new AudioSocketClient("127.0.0.1", _port, channelId);
+        await using var client = new AudioSocketClient("127.0.0.1", _server.BoundPort, channelId);
         await client.ConnectAsync();
 
         // Give server time to process the UUID frame
@@ -52,7 +50,7 @@ public sealed class AudioSocketServerTests : IAsyncDisposable
         await _server.StartAsync(CancellationToken.None);
 
         var channelId = Guid.NewGuid();
-        await using var client = new AudioSocketClient("127.0.0.1", _port, channelId);
+        await using var client = new AudioSocketClient("127.0.0.1", _server.BoundPort, channelId);
         await client.ConnectAsync();
         await Task.Delay(200);
 
@@ -73,6 +71,7 @@ public sealed class AudioSocketServerTests : IAsyncDisposable
 
         received.Should().NotBeNull();
         received!.Value.Length.Should().Be(320);
+        received!.Value.ToArray().Should().BeEquivalentTo(audioData);
     }
 
     [Fact]
@@ -88,7 +87,7 @@ public sealed class AudioSocketServerTests : IAsyncDisposable
         await _server.StartAsync(CancellationToken.None);
 
         var channelId = Guid.NewGuid();
-        await using var client = new AudioSocketClient("127.0.0.1", _port, channelId);
+        await using var client = new AudioSocketClient("127.0.0.1", _server.BoundPort, channelId);
         await client.ConnectAsync();
         await Task.Delay(200);
 
@@ -106,8 +105,8 @@ public sealed class AudioSocketServerTests : IAsyncDisposable
     {
         await _server.StartAsync(CancellationToken.None);
 
-        await using var client1 = new AudioSocketClient("127.0.0.1", _port, Guid.NewGuid());
-        await using var client2 = new AudioSocketClient("127.0.0.1", _port, Guid.NewGuid());
+        await using var client1 = new AudioSocketClient("127.0.0.1", _server.BoundPort, Guid.NewGuid());
+        await using var client2 = new AudioSocketClient("127.0.0.1", _server.BoundPort, Guid.NewGuid());
 
         await client1.ConnectAsync();
         await client2.ConnectAsync();
@@ -129,7 +128,7 @@ public sealed class AudioSocketServerTests : IAsyncDisposable
         await _server.StartAsync(CancellationToken.None);
 
         var channelId = Guid.NewGuid();
-        await using var client = new AudioSocketClient("127.0.0.1", _port, channelId);
+        await using var client = new AudioSocketClient("127.0.0.1", _server.BoundPort, channelId);
         await client.ConnectAsync();
         await Task.Delay(200);
 
