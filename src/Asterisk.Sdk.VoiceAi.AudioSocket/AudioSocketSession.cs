@@ -19,7 +19,8 @@ public sealed class AudioSocketSession : IAsyncDisposable
     private readonly Channel<ReadOnlyMemory<byte>> _audioChannel;
     private readonly CancellationTokenSource _cts;
     private readonly ILogger _logger;
-    private volatile bool _disposed;
+    private int _disposed; // 0 = not disposed, 1 = disposed
+    private int _hangupFired; // 0 = not fired, 1 = fired
 
     /// <summary>UUID received from Asterisk (from the first UUID frame).</summary>
     public Guid ChannelId { get; }
@@ -31,7 +32,7 @@ public sealed class AudioSocketSession : IAsyncDisposable
     public AudioFormat InputFormat { get; }
 
     /// <summary>Whether the session is still connected.</summary>
-    public bool IsConnected => !_disposed && !_cts.IsCancellationRequested;
+    public bool IsConnected => _disposed == 0 && !_cts.IsCancellationRequested;
 
     /// <summary>Raised when the channel hangs up (from either side).</summary>
     public event Action? OnHangup;
@@ -54,7 +55,7 @@ public sealed class AudioSocketSession : IAsyncDisposable
             {
                 FullMode = BoundedChannelFullMode.DropOldest,
                 SingleWriter = true,
-                SingleReader = false
+                SingleReader = true
             });
 
         _reader = reader;
@@ -77,7 +78,7 @@ public sealed class AudioSocketSession : IAsyncDisposable
     /// <summary>Write PCM audio back to Asterisk (e.g., TTS output).</summary>
     public async ValueTask WriteAudioAsync(ReadOnlyMemory<byte> pcmData, CancellationToken ct = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(_disposed == 1, this);
         AudioSocketFrameCodec.WriteFrame(_writer, AudioSocketFrameType.Audio, pcmData.Span);
         await _writer.FlushAsync(ct).ConfigureAwait(false);
     }
@@ -85,7 +86,7 @@ public sealed class AudioSocketSession : IAsyncDisposable
     /// <summary>Send a silence indication frame.</summary>
     public async ValueTask WriteSilenceAsync(CancellationToken ct = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(_disposed == 1, this);
         Span<byte> payload = stackalloc byte[2];
         payload[0] = 0;
         payload[1] = 0;
@@ -96,7 +97,7 @@ public sealed class AudioSocketSession : IAsyncDisposable
     /// <summary>Signal hangup to Asterisk.</summary>
     public async ValueTask HangupAsync(CancellationToken ct = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(_disposed == 1, this);
         AudioSocketFrameCodec.WriteFrame(_writer, AudioSocketFrameType.Hangup, []);
         await _writer.FlushAsync(ct).ConfigureAwait(false);
         await DisposeAsync().ConfigureAwait(false);
@@ -122,8 +123,7 @@ public sealed class AudioSocketSession : IAsyncDisposable
 
                         case AudioSocketFrameType.Hangup:
                         case AudioSocketFrameType.Error:
-                            _audioChannel.Writer.TryComplete();
-                            OnHangup?.Invoke();
+                            FireHangup();
                             await DisposeAsync().ConfigureAwait(false);
                             return;
 
@@ -147,6 +147,14 @@ public sealed class AudioSocketSession : IAsyncDisposable
         }
         finally
         {
+            FireHangup();
+        }
+    }
+
+    private void FireHangup()
+    {
+        if (Interlocked.CompareExchange(ref _hangupFired, 1, 0) == 0)
+        {
             _audioChannel.Writer.TryComplete();
             OnHangup?.Invoke();
         }
@@ -155,8 +163,7 @@ public sealed class AudioSocketSession : IAsyncDisposable
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;
         await _cts.CancelAsync().ConfigureAwait(false);
         _cts.Dispose();
         _client.Dispose();
