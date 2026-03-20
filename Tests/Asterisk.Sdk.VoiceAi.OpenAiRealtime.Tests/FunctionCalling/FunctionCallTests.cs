@@ -37,6 +37,14 @@ public sealed class FunctionCallTests
     }
 
     [Fact]
+    public void Registry_DuplicateName_Throws()
+    {
+        var act = () => new RealtimeFunctionRegistry([new AddFunction(), new AddFunction()]);
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*'add'*");
+    }
+
+    [Fact]
     public void Registry_AllHandlers_ContainsRegisteredHandlers()
     {
         var handler = new AddFunction();

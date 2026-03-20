@@ -14,7 +14,13 @@ internal sealed class RealtimeFunctionRegistry
     /// <summary>Initializes the registry from a collection of handlers.</summary>
     public RealtimeFunctionRegistry(IEnumerable<IRealtimeFunctionHandler> handlers)
     {
-        _handlers = handlers.ToDictionary(h => h.Name, StringComparer.Ordinal);
+        _handlers = new Dictionary<string, IRealtimeFunctionHandler>(StringComparer.Ordinal);
+        foreach (var h in handlers)
+        {
+            if (!_handlers.TryAdd(h.Name, h))
+                throw new InvalidOperationException(
+                    $"Duplicate function handler registered for name '{h.Name}'. Each handler must have a unique Name.");
+        }
     }
 
     /// <summary>All registered handlers — used by <c>BuildSessionUpdate</c> to enumerate tools.</summary>
