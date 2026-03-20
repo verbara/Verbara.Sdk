@@ -1,12 +1,12 @@
 # Asterisk.Sdk
 
-**.NET 10 Native AOT SDK for Asterisk PBX (AMI, AGI, ARI, Live API)**
+**.NET 10 Native AOT SDK for Asterisk PBX — AMI, AGI, ARI, Live, Sessions, Voice AI**
 
 [![NuGet](https://img.shields.io/nuget/v/Asterisk.Sdk?label=NuGet&color=blue)](https://www.nuget.org/packages/Asterisk.Sdk)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-Asterisk.Sdk is a high-performance, Native AOT-compatible .NET library for integrating with [Asterisk PBX](https://www.asterisk.org/). It provides full support for AMI (Manager Interface), AGI (Gateway Interface), ARI (REST Interface), and a real-time Live API for tracking channels, queues, and agents -- all with zero runtime reflection.
+Asterisk.Sdk is a high-performance, Native AOT-compatible .NET library for integrating with [Asterisk PBX](https://www.asterisk.org/). It provides full support for AMI (Manager Interface), AGI (Gateway Interface), ARI (REST Interface), a real-time Live API, a Session Engine, and a complete Voice AI stack — all with zero runtime reflection.
 
 Ported from [asterisk-java](https://github.com/asterisk-java/asterisk-java) 3.42.0, redesigned from the ground up for .NET 10 and Native AOT.
 
@@ -14,41 +14,57 @@ Ported from [asterisk-java](https://github.com/asterisk-java/asterisk-java) 3.42
 
 ## Features
 
-- **AMI Client** -- Connect to the Asterisk Manager Interface over TCP with MD5 challenge-response authentication, 111 actions, 215 events, and 17 typed responses. Auto-reconnect with configurable exponential backoff. Configurable heartbeat/keepalive with auto-disconnect on timeout.
-- **FastAGI Server** -- Async TCP server for the Asterisk Gateway Interface with 54 AGI commands, pluggable script mapping strategies, and zero-copy I/O via `System.IO.Pipelines`. Per-connection timeout, status 511 hangup detection, and `AgiMetrics` instrumentation.
-- **ARI Client** -- REST + WebSocket client for the Asterisk REST Interface. Manage channels, bridges, playbacks, recordings, endpoints, applications, and sounds. Domain exceptions (`AriNotFoundException`, `AriConflictException`) for HTTP error mapping. WebSocket reconnect with exponential backoff.
-- **Live API** -- Real-time in-memory tracking of channels, queues, agents, and conference rooms from AMI events. Secondary indices for O(1) lookups by name. Observable gauges and event counters via `System.Diagnostics.Metrics`.
-- **Activities** -- High-level telephony operations (Dial, Hold, Transfer, Park, Bridge, Conference) modeled as async state machines with `IObservable<ActivityStatus>` tracking. Real cancellation support, re-entrance guards, and channel variable capture (`DIALSTATUS`, `QUEUESTATUS`). Now stable (no longer experimental).
-- **Session Engine** -- Correlate AMI events into unified call sessions using LinkedId grouping. State-machine lifecycle (Ringing, Answered, OnHold, Transferred, Completed), domain events (`SessionStarted`, `SessionEnded`, `SessionStateChanged`), automatic orphan detection via `SessionReconciler`, and pluggable extension points (`ISessionEnricher`, `ISessionPolicy`, `ISessionEventHandler`).
-- **Config Parser** -- Read and parse Asterisk `.conf` files and `extensions.conf` dialplans. Quote-aware comment stripping.
-- **Hosting** -- `IHostedService` for AMI and Live API lifecycle. `IHealthCheck` for AMI connection state. AOT-safe `IConfiguration` binding.
-- **Native AOT** -- Zero reflection at runtime. Four source generators replace runtime code generation. 0 trim warnings.
-- **Multi-Server** -- Federate multiple Asterisk servers with `AsteriskServerPool` and agent routing.
+- **AMI Client** — Connect to the Asterisk Manager Interface over TCP with MD5 challenge-response authentication, 111 actions, 215 events, and 17 typed responses. Auto-reconnect with configurable exponential backoff. Configurable heartbeat/keepalive with auto-disconnect on timeout.
+- **FastAGI Server** — Async TCP server for the Asterisk Gateway Interface with 54 AGI commands, pluggable script mapping strategies, and zero-copy I/O via `System.IO.Pipelines`. Per-connection timeout, status 511 hangup detection, and `AgiMetrics` instrumentation.
+- **ARI Client** — REST + WebSocket client for the Asterisk REST Interface. Manage channels, bridges, playbacks, recordings, endpoints, applications, and sounds. Domain exceptions (`AriNotFoundException`, `AriConflictException`) for HTTP error mapping. WebSocket reconnect with exponential backoff.
+- **Live API** — Real-time in-memory tracking of channels, queues, agents, and conference rooms from AMI events. Secondary indices for O(1) lookups by name. Observable gauges and event counters via `System.Diagnostics.Metrics`.
+- **Activities** — High-level telephony operations (Dial, Hold, Transfer, Park, Bridge, Conference) modeled as async state machines with `IObservable<ActivityStatus>` tracking. Real cancellation support, re-entrance guards, and channel variable capture (`DIALSTATUS`, `QUEUESTATUS`).
+- **Session Engine** — Correlate AMI events into unified call sessions using LinkedId grouping. State-machine lifecycle (Ringing, Answered, OnHold, Transferred, Completed), domain events (`SessionStarted`, `SessionEnded`, `SessionStateChanged`), automatic orphan detection via `SessionReconciler`, and pluggable extension points (`ISessionEnricher`, `ISessionPolicy`, `ISessionEventHandler`).
+- **Voice AI** — Full stack for AI-powered telephony: PCM audio processing (resampler, VAD, gain), AudioSocket transport, STT/TTS abstraction layer with pluggable providers (Deepgram, ElevenLabs, Azure, Google, Whisper), barge-in pipeline with turn-taking, and a direct OpenAI Realtime API bridge.
+- **Config Parser** — Read and parse Asterisk `.conf` files and `extensions.conf` dialplans. Quote-aware comment stripping.
+- **Hosting** — `IHostedService` for AMI and Live API lifecycle. `IHealthCheck` for AMI connection state. AOT-safe `IConfiguration` binding.
+- **Native AOT** — Zero reflection at runtime. Four source generators replace runtime code generation. 0 trim warnings.
+- **Multi-Server** — Federate multiple Asterisk servers with `AsteriskServerPool` and agent routing.
 
 ---
 
-## What's New in v0.5.0-beta
+## What's New in v0.6.0-beta
 
-- **Session Engine** -- New `Asterisk.Sdk.Sessions` package: correlate AMI events into call sessions via LinkedId, with state-machine lifecycle, domain events, orphan reconciliation, and pluggable extension points
-- **Activities Stable** -- `Asterisk.Sdk.Activities` is no longer marked `[Experimental]`; the API is stable
-- **Distributed Tracing** -- `AmiActivitySource`, `AgiActivitySource`, `AriActivitySource` for OpenTelemetry-compatible distributed tracing across all protocol layers
-- **AMI Heartbeat** -- Configurable periodic ping with auto-disconnect on timeout
-- **AMI Health Check** -- `IHealthCheck` implementation for K8s readiness/liveness probes
-- **Hosted Services** -- `IHostedService` for AMI connection and AsteriskServer lifecycle
-- **IConfiguration Binding** -- AOT-safe `AddAsterisk(IConfiguration)` overload for `appsettings.json`
-- **ARI Domain Exceptions** -- `AriNotFoundException` (404) and `AriConflictException` (409) from all resources
-- **AGI Hardening** -- Status 511 hangup detection, per-connection timeout, `AgiMetrics` instrumentation
-- **LiveMetrics Expansion** -- Event counters for channels, queues, agents + queue wait time histogram
+### Voice AI Stack (Sprints 21–24)
+
+**`Asterisk.Sdk.Audio`** — Pure C# polyphase FIR resampler with 12 pre-computed rate pairs (8kHz↔16kHz↔24kHz↔48kHz), zero-alloc output buffers, PCM16 processing, RMS energy measurement, and voice activity detection. No external dependencies.
+
+**`Asterisk.Sdk.VoiceAi.AudioSocket`** — AudioSocket server and client using `System.IO.Pipelines` for zero-copy PCM streaming. `AudioSocketSession` handles bidirectional audio with backpressure. `AudioSocketClient` enables local testing without a real Asterisk instance.
+
+**`Asterisk.Sdk.VoiceAi`** — Core pipeline abstractions. `VoiceAiPipeline` orchestrates VAD → STT → conversation handler → TTS in a dual-loop design (audio monitor + pipeline), with barge-in detection via a volatile `CancellationTokenSource`. `ISessionHandler` is the interchange point: both `VoiceAiPipeline` and `OpenAiRealtimeBridge` implement it, making them drop-in replacements.
+
+**`Asterisk.Sdk.VoiceAi.Stt`** — Speech-to-text providers: Deepgram (WebSocket streaming, real-time), OpenAI Whisper (batch REST), Azure Whisper, and Google Speech (REST). All registered via `AddDeepgramSpeechRecognizer()` / `AddWhisperSpeechRecognizer()` / `AddAzureWhisperSpeechRecognizer()` / `AddGoogleSpeechRecognizer()`.
+
+**`Asterisk.Sdk.VoiceAi.Tts`** — Text-to-speech providers: ElevenLabs (WebSocket streaming, ultra-low-latency) and Azure TTS (REST). Registered via `AddElevenLabsSpeechSynthesizer()` / `AddAzureTtsSpeechSynthesizer()`.
+
+**`Asterisk.Sdk.VoiceAi.OpenAiRealtime`** — Bridges Asterisk AudioSocket directly to the [OpenAI Realtime API](https://platform.openai.com/docs/guides/realtime), bypassing the STT+LLM+TTS chain entirely. A single persistent WebSocket carries bidirectional PCM (resampled 8kHz↔24kHz). Supports server-side VAD, function calling (`IRealtimeFunctionHandler`), and emits typed events (`RealtimeSpeechStartedEvent`, `RealtimeTranscriptEvent`, `RealtimeFunctionCalledEvent`, etc.) via `IObservable<RealtimeEvent>`.
+
+**`Asterisk.Sdk.VoiceAi.Testing`** — Fake implementations (`FakeSpeechRecognizer`, `FakeSpeechSynthesizer`, `FakeConversationHandler`) for unit testing Voice AI pipelines without real API calls.
 
 ---
 
 ## Installation
 
 ```bash
+# Core SDK + protocol clients + hosting
 dotnet add package Asterisk.Sdk.Hosting
+
+# Voice AI — turn-based pipeline (STT + TTS)
+dotnet add package Asterisk.Sdk.VoiceAi.AudioSocket
+dotnet add package Asterisk.Sdk.VoiceAi
+dotnet add package Asterisk.Sdk.VoiceAi.Stt      # STT providers
+dotnet add package Asterisk.Sdk.VoiceAi.Tts      # TTS providers
+
+# Voice AI — OpenAI Realtime (GPT-4o direct bridge)
+dotnet add package Asterisk.Sdk.VoiceAi.OpenAiRealtime
 ```
 
-The `Asterisk.Sdk.Hosting` meta-package includes all sub-packages and DI extensions. To install individual packages, see the [Packages](#packages) table below.
+The `Asterisk.Sdk.Hosting` meta-package includes all core sub-packages and DI extensions. Install VoiceAi packages individually as needed.
 
 ---
 
@@ -88,7 +104,7 @@ builder.Services.AddAsterisk(builder.Configuration);
 }
 ```
 
-### AMI: Manual Connect, Ping, and Events
+### AMI: Events and Actions
 
 ```csharp
 using Asterisk.Sdk;
@@ -111,25 +127,21 @@ var ami = provider.GetRequiredService<IAmiConnection>();
 await ami.ConnectAsync();
 Console.WriteLine($"Connected to Asterisk {ami.AsteriskVersion}");
 
-// Send a Ping action
 var response = await ami.SendActionAsync(new PingAction());
 Console.WriteLine($"Ping response: {response.Response}");
 
-// Subscribe to all events
 ami.OnEvent += async evt =>
 {
     Console.WriteLine($"Event: {evt.EventType}");
     await ValueTask.CompletedTask;
 };
 
-// Keep running until Ctrl+C...
 await ami.DisconnectAsync();
 ```
 
 ### AGI: FastAGI Server with Script Handler
 
 ```csharp
-using Asterisk.Sdk;
 using Asterisk.Sdk.Agi.Mapping;
 using Asterisk.Sdk.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -149,12 +161,9 @@ services.AddAsterisk(options =>
 
 await using var provider = services.BuildServiceProvider();
 var agi = provider.GetRequiredService<IAgiServer>();
-
 await agi.StartAsync();
 Console.WriteLine($"FastAGI server listening on port {agi.Port}");
-
-// Wait for Ctrl+C
-await Task.Delay(Timeout.Infinite, default(CancellationToken));
+await Task.Delay(Timeout.Infinite);
 
 // In your Asterisk dialplan:
 //   same => n,AGI(agi://your-server:4573/hello-world)
@@ -171,60 +180,6 @@ class HelloWorldScript : IAgiScript
 }
 ```
 
-### ARI: Connect WebSocket and Originate a Call
-
-```csharp
-using Asterisk.Sdk;
-using Asterisk.Sdk.Ari.Client;
-using Asterisk.Sdk.Hosting;
-using Microsoft.Extensions.DependencyInjection;
-
-var services = new ServiceCollection();
-services.AddLogging();
-services.AddAsterisk(options =>
-{
-    options.Ami.Username = "admin";
-    options.Ami.Password = "secret";
-    options.Ari = new AriClientOptions
-    {
-        BaseUrl = "http://192.168.1.100:8088",
-        Username = "ariuser",
-        Password = "aripass",
-        Application = "my-stasis-app"
-    };
-});
-
-await using var provider = services.BuildServiceProvider();
-var ari = provider.GetRequiredService<IAriClient>();
-
-// Subscribe to ARI events before connecting
-var subscription = ari.Subscribe(new AriEventObserver());
-
-await ari.ConnectAsync();
-Console.WriteLine("ARI WebSocket connected");
-
-// Originate a call into the Stasis application
-var channel = await ari.Channels.OriginateAsync(
-    endpoint: "PJSIP/6001",
-    extension: "s",
-    context: "my-stasis-app");
-Console.WriteLine($"Originated channel: {channel.Id}");
-
-// Keep running until Ctrl+C...
-subscription.Dispose();
-await ari.DisconnectAsync();
-
-class AriEventObserver : IObserver<AriEvent>
-{
-    public void OnNext(AriEvent evt) =>
-        Console.WriteLine($"ARI Event: {evt.Type}");
-    public void OnError(Exception error) =>
-        Console.WriteLine($"ARI Error: {error.Message}");
-    public void OnCompleted() =>
-        Console.WriteLine("ARI connection closed");
-}
-```
-
 ### Live API: Track Channels and Queues in Real-Time
 
 ```csharp
@@ -238,7 +193,6 @@ services.AddLogging();
 services.AddAsterisk(options =>
 {
     options.Ami.Hostname = "192.168.1.100";
-    options.Ami.Port = 5038;
     options.Ami.Username = "admin";
     options.Ami.Password = "secret";
 });
@@ -247,34 +201,118 @@ await using var provider = services.BuildServiceProvider();
 var ami = provider.GetRequiredService<IAmiConnection>();
 var server = provider.GetRequiredService<AsteriskServer>();
 
-// Connect AMI first, then start live tracking
 await ami.ConnectAsync();
 await server.StartAsync();
 
-Console.WriteLine($"Asterisk {server.AsteriskVersion}");
 Console.WriteLine($"Active channels: {server.Channels.ChannelCount}");
 Console.WriteLine($"Configured queues: {server.Queues.QueueCount}");
 
-// Print each active channel
-foreach (var ch in server.Channels.ActiveChannels)
-    Console.WriteLine($"  Channel: {ch.Name} [{ch.State}]");
-
-// Print each queue and its members
-foreach (var q in server.Queues.Queues)
-    Console.WriteLine($"  Queue: {q.Name} ({q.MemberCount} members, {q.EntryCount} callers)");
-
-// Subscribe to channel lifecycle events
 server.Channels.ChannelAdded += ch =>
-    Console.WriteLine($"  + Channel added: {ch.Name}");
-server.Channels.ChannelRemoved += ch =>
-    Console.WriteLine($"  - Channel removed: {ch.Name}");
+    Console.WriteLine($"+ Channel: {ch.Name}");
 
 await ami.DisconnectAsync();
+```
+
+### Voice AI: Turn-Based Pipeline (STT + TTS)
+
+Connect Asterisk AudioSocket to a conversation handler powered by Deepgram STT + ElevenLabs TTS:
+
+```csharp
+using Asterisk.Sdk.VoiceAi;
+using Asterisk.Sdk.VoiceAi.AudioSocket.DependencyInjection;
+using Asterisk.Sdk.VoiceAi.DependencyInjection;
+using Asterisk.Sdk.VoiceAi.Stt.DependencyInjection;
+using Asterisk.Sdk.VoiceAi.Tts.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
+var host = Host.CreateDefaultBuilder(args)
+    .ConfigureServices((ctx, services) =>
+    {
+        services.AddAudioSocketServer(o => o.Port = 9091);
+
+        services.AddDeepgramSpeechRecognizer(o =>
+            o.ApiKey = ctx.Configuration["Deepgram:ApiKey"]!);
+
+        services.AddElevenLabsSpeechSynthesizer(o =>
+            o.ApiKey = ctx.Configuration["ElevenLabs:ApiKey"]!);
+
+        services.AddVoiceAiPipeline<MyConversationHandler>();
+    })
+    .Build();
+
+await host.RunAsync();
+
+// Asterisk dialplan:
+//   same => n,AudioSocket(your-server:9091)
+
+class MyConversationHandler : IConversationHandler
+{
+    public ValueTask<string> HandleAsync(
+        string userInput, ConversationContext ctx, CancellationToken ct)
+        => ValueTask.FromResult($"You said: {userInput}");
+}
+```
+
+### Voice AI: OpenAI Realtime Bridge (GPT-4o direct)
+
+Replace the entire STT+LLM+TTS chain with a single WebSocket to OpenAI Realtime API:
+
+```csharp
+using Asterisk.Sdk.VoiceAi.OpenAiRealtime;
+using Asterisk.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection;
+using Asterisk.Sdk.VoiceAi.AudioSocket.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using System.Reactive.Linq;
+
+var host = Host.CreateDefaultBuilder(args)
+    .ConfigureServices((ctx, services) =>
+    {
+        services.AddAudioSocketServer(o => o.Port = 9092);
+
+        services.AddOpenAiRealtimeBridge(o =>
+        {
+            o.ApiKey       = ctx.Configuration["OpenAI:ApiKey"]!;
+            o.Model        = "gpt-4o-realtime-preview";
+            o.Voice        = "alloy";
+            o.Instructions = "You are a helpful contact center assistant.";
+        })
+        .AddFunction<GetWeatherFunction>();
+    })
+    .Build();
+
+// Subscribe to events
+var bridge = host.Services.GetRequiredService<OpenAiRealtimeBridge>();
+
+bridge.Events
+    .OfType<RealtimeTranscriptEvent>()
+    .Where(e => e.IsFinal)
+    .Subscribe(e => Console.WriteLine($"[{e.ChannelId:D}] User: {e.Transcript}"));
+
+bridge.Events
+    .OfType<RealtimeFunctionCalledEvent>()
+    .Subscribe(e => Console.WriteLine($"[{e.ChannelId:D}] Tool '{e.FunctionName}' → {e.ResultJson}"));
+
+Console.WriteLine("Bridge ready on AudioSocket port 9092. Dial your Asterisk extension.");
+await host.RunAsync();
+
+// Implement a function tool
+class GetWeatherFunction : IRealtimeFunctionHandler
+{
+    public string Name => "get_weather";
+    public string Description => "Returns current weather for a city.";
+    public string ParametersSchema =>
+        """{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}""";
+
+    public ValueTask<string> ExecuteAsync(string argumentsJson, CancellationToken ct = default)
+        => ValueTask.FromResult("""{"temperature":"22°C","condition":"sunny"}""");
+}
 ```
 
 ---
 
 ## Packages
+
+### Core
 
 | Package | Description |
 |---------|-------------|
@@ -286,7 +324,19 @@ await ami.DisconnectAsync();
 | **Asterisk.Sdk.Activities** | High-level telephony activities: Dial, Hold, Transfer, Park, Bridge, Conference |
 | **Asterisk.Sdk.Sessions** | Session Engine: call session correlation, state machines, and domain events |
 | **Asterisk.Sdk.Config** | Asterisk `.conf` and `extensions.conf` file parsers |
-| **Asterisk.Sdk.Hosting** | DI extensions (`AddAsterisk`) and meta-package referencing all above |
+| **Asterisk.Sdk.Hosting** | DI extensions (`AddAsterisk`) and meta-package referencing all core packages |
+
+### Voice AI
+
+| Package | Description |
+|---------|-------------|
+| **Asterisk.Sdk.Audio** | Polyphase FIR resampler, VAD, PCM16 processing — zero dependencies |
+| **Asterisk.Sdk.VoiceAi** | Pipeline orchestration (`VoiceAiPipeline`), `ISessionHandler`, `IConversationHandler` |
+| **Asterisk.Sdk.VoiceAi.AudioSocket** | AudioSocket server/client with `System.IO.Pipelines` bidirectional streaming |
+| **Asterisk.Sdk.VoiceAi.Stt** | STT providers: Deepgram (WebSocket), Whisper, Azure Whisper, Google Speech |
+| **Asterisk.Sdk.VoiceAi.Tts** | TTS providers: ElevenLabs (WebSocket), Azure TTS |
+| **Asterisk.Sdk.VoiceAi.OpenAiRealtime** | OpenAI Realtime API bridge (GPT-4o): dual-loop WebSocket, function calling, observability events |
+| **Asterisk.Sdk.VoiceAi.Testing** | Fake STT/TTS/handler implementations for unit testing pipelines |
 
 ---
 
@@ -294,11 +344,11 @@ await ami.DisconnectAsync();
 
 The `Examples/PbxAdmin` project is a Blazor Server application showcasing the full SDK in a real-world PBX administration panel. It includes:
 
-**Monitoring** -- Live call matrix, queue status, agent tracking, channel list, parked calls, traffic analytics, Prometheus-style metrics, event log, and CLI console.
+**Monitoring** — Live call matrix, queue status, agent tracking, channel list, parked calls, traffic analytics, Prometheus-style metrics, event log, and CLI console.
 
-**PBX Management** -- CRUD pages for Extensions, Trunks, Routes, IVR Menus, Queue Config, and Time Conditions. Both file-based (AMI `GetConfig`/`UpdateConfig`) and Realtime (PostgreSQL + Dapper) backends.
+**PBX Management** — CRUD pages for Extensions, Trunks, Routes, IVR Menus, Queue Config, and Time Conditions. Both file-based (AMI `GetConfig`/`UpdateConfig`) and Realtime (PostgreSQL + Dapper) backends.
 
-**Media & Features** -- Recording policies with on-demand MixMonitor, Music on Hold class management with audio upload/conversion, ConfBridge profile configuration, Feature Codes with star-code CRUD, and Parking Lot slot/timeout configuration.
+**Media & Features** — Recording policies with on-demand MixMonitor, Music on Hold class management with audio upload/conversion, ConfBridge profile configuration, Feature Codes with star-code CRUD, and Parking Lot slot/timeout configuration.
 
 ---
 
@@ -319,6 +369,8 @@ The `Examples/` directory contains standalone console applications demonstrating
 | `PbxActivitiesExample` | High-level telephony activities (Dial, Hold, Transfer) |
 | `SessionExample` | Session Engine: call session correlation and domain events |
 | `SessionExtensionsExample` | Session Engine extension points: enrichers, policies, event handlers |
+| `VoiceAiExample` | Turn-based Voice AI pipeline: Deepgram STT + ElevenLabs TTS + echo handler |
+| `OpenAiRealtimeExample` | GPT-4o direct bridge via OpenAI Realtime API with function calling |
 | `PbxAdmin` | Full Blazor Server PBX administration panel (see above) |
 
 ---
