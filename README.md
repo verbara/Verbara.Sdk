@@ -1,14 +1,36 @@
 # Asterisk.Sdk
 
-**.NET 10 Native AOT SDK for Asterisk PBX — AMI, AGI, ARI, Live, Sessions, Voice AI**
+> The modern .NET SDK for Asterisk PBX. AMI, AGI, ARI, Live API, Sessions, Voice AI — all in one package. Native AOT. Zero reflection. MIT licensed.
 
 [![NuGet](https://img.shields.io/nuget/v/Asterisk.Sdk?label=NuGet&color=blue)](https://www.nuget.org/packages/Asterisk.Sdk)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-Asterisk.Sdk is a high-performance, Native AOT-compatible .NET library for integrating with [Asterisk PBX](https://www.asterisk.org/). It provides full support for AMI (Manager Interface), AGI (Gateway Interface), ARI (REST Interface), a real-time Live API, a Session Engine, and a complete Voice AI stack — all with zero runtime reflection.
+---
 
-Ported from [asterisk-java](https://github.com/asterisk-java/asterisk-java) 3.42.0, redesigned from the ground up for .NET 10 and Native AOT.
+## Why Asterisk.Sdk?
+
+The .NET Asterisk ecosystem is stalled. AsterNET targets .NET Framework 4.0 and has been abandoned since 2018. AsterNET.NetStandard is a minimal fork stuck at .NET Standard 2.0. Sufficit covers AMI and AGI on .NET 9 but offers no ARI, no Live objects, no Session Engine, and no Voice AI. None of them support Native AOT.
+
+Asterisk.Sdk is the complete, modern alternative. One NuGet meta-package gives you AMI + AGI + ARI + Live API + Sessions with full DI integration. Add Voice AI packages to build AI-powered telephony — turn-based STT/TTS pipelines or a direct OpenAI Realtime bridge. Everything is AOT-safe, zero-reflection, and backed by four source generators that replace runtime code generation entirely.
+
+The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk-java) 3.42.0 — the most mature Asterisk library in any language, with 790+ classes covering every protocol detail. Asterisk.Sdk takes that foundation and redesigns it from the ground up for .NET 10 performance patterns: `System.IO.Pipelines` for zero-copy TCP parsing, `System.Threading.Channels` for async event dispatch, `System.Reactive` for observable state machines, and `System.Text.Json` source generation for ARI serialization.
+
+---
+
+## How It Compares
+
+| Capability | Asterisk.Sdk | AsterNET | Sufficit | asterisk-java |
+|---|:---:|:---:|:---:|:---:|
+| AMI | Yes | Yes | Yes | Yes |
+| AGI | Yes | Yes | Yes | Yes |
+| ARI | Yes | Separate pkg | No | No |
+| Live Objects | Yes | No | No | Basic |
+| Session Engine | Yes | No | No | No |
+| Voice AI | Yes | No | No | No |
+| Native AOT | Yes | No | No | N/A |
+| .NET 10 | Yes | .NET Fx 4.0 | .NET 9 | Java 8+ |
+| Active | Yes | No (2018) | Yes | Yes |
 
 ---
 
@@ -372,6 +394,24 @@ The `Examples/` directory contains standalone console applications demonstrating
 | `VoiceAiExample` | Turn-based Voice AI pipeline: Deepgram STT + ElevenLabs TTS + echo handler |
 | `OpenAiRealtimeExample` | GPT-4o direct bridge via OpenAI Realtime API with function calling |
 | `PbxAdmin` | Full Blazor Server PBX administration panel (see above) |
+
+---
+
+## Enterprise
+
+Need skill-based routing, predictive dialer, real-time analytics, or AI agent assist?
+
+[Asterisk.Sdk.Pro](https://github.com/Harol-Reina/Asterisk.Sdk.Pro) extends this SDK
+with enterprise contact center capabilities — same architecture, same AOT guarantees,
+composable NuGet packages for clustering, outbound campaigns, event sourcing, and more.
+
+---
+
+## Learn More
+
+- **For decision-makers** — [docs/README-commercial.md](docs/README-commercial.md)
+- **For developers** — [docs/README-technical.md](docs/README-technical.md)
+- **Pro (enterprise)** — [Asterisk.Sdk.Pro](https://github.com/Harol-Reina/Asterisk.Sdk.Pro)
 
 ---
 
