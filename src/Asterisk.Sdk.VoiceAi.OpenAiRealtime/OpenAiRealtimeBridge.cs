@@ -165,18 +165,30 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 
         while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
         {
+            // Accumulate all fragments of one WebSocket message
+            var messageBuffer = new ArrayBufferWriter<byte>();
             ValueWebSocketReceiveResult result;
-            try
+            do
             {
-                result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
-            catch { return; }
+                try
+                {
+                    result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+                catch { return; }
 
-            if (result.MessageType == WebSocketMessageType.Close) return;
-            if (result.MessageType != WebSocketMessageType.Text) continue;
+                if (result.MessageType == WebSocketMessageType.Close) return;
+                if (result.MessageType != WebSocketMessageType.Text)
+                {
+                    // Non-text frame, skip entire message
+                    break;
+                }
 
-            var json = Encoding.UTF8.GetString(buf, 0, result.Count);
+                messageBuffer.Write(buf.AsSpan(0, result.Count));
+            } while (!result.EndOfMessage);
+
+            if (messageBuffer.WrittenCount == 0) continue;
+            var json = Encoding.UTF8.GetString(messageBuffer.WrittenSpan);
 
             // Two-pass decode: first read type, then deserialize to specific DTO
             var baseEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ServerEventBase);
