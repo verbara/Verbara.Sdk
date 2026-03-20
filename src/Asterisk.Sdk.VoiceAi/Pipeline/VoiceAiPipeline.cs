@@ -17,7 +17,7 @@ namespace Asterisk.Sdk.VoiceAi.Pipeline;
 /// Orchestrates the Voice AI conversation loop: VAD → STT → handler → TTS,
 /// with barge-in detection and error recovery.
 /// </summary>
-public sealed class VoiceAiPipeline : IAsyncDisposable
+public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
 {
     private readonly SpeechRecognizer _stt;
     private readonly SpeechSynthesizer _tts;
@@ -28,6 +28,7 @@ public sealed class VoiceAiPipeline : IAsyncDisposable
 
     private volatile PipelineState _state = PipelineState.Idle;
     private volatile CancellationTokenSource? _ttsCts;
+    private int _disposed;
 
     /// <summary>Observable stream of pipeline lifecycle events.</summary>
     public IObservable<VoiceAiPipelineEvent> Events => _events;
@@ -324,6 +325,9 @@ public sealed class VoiceAiPipeline : IAsyncDisposable
     /// <inheritdoc/>
     public ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return ValueTask.CompletedTask;
+
         GC.SuppressFinalize(this);
         _events.OnCompleted();
         _events.Dispose();
