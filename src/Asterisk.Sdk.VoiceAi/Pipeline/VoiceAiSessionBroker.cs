@@ -7,24 +7,24 @@ namespace Asterisk.Sdk.VoiceAi.Pipeline;
 
 /// <summary>
 /// Hosted service that wires <see cref="AudioSocketServer.OnSessionStarted"/>
-/// to <see cref="VoiceAiPipeline.HandleSessionAsync"/>, spawning a pipeline
+/// to <see cref="ISessionHandler.HandleSessionAsync"/>, spawning a handler
 /// loop for each incoming AudioSocket session.
 /// </summary>
 public sealed class VoiceAiSessionBroker : IHostedService
 {
     private readonly AudioSocketServer _server;
-    private readonly VoiceAiPipeline _pipeline;
+    private readonly ISessionHandler _handler;
     private readonly ILogger<VoiceAiSessionBroker> _logger;
     private CancellationToken _stoppingToken;
 
     /// <summary>Creates a new session broker.</summary>
     public VoiceAiSessionBroker(
         AudioSocketServer server,
-        VoiceAiPipeline pipeline,
+        ISessionHandler handler,
         ILogger<VoiceAiSessionBroker> logger)
     {
         _server = server;
-        _pipeline = pipeline;
+        _handler = handler;
         _logger = logger;
     }
 
@@ -35,7 +35,7 @@ public sealed class VoiceAiSessionBroker : IHostedService
 
         _server.OnSessionStarted += session =>
         {
-            _ = _pipeline.HandleSessionAsync(session, _stoppingToken)
+            _ = _handler.HandleSessionAsync(session, _stoppingToken)
                 .AsTask()
                 .ContinueWith(
                     t => VoiceAiLog.SessionError(_logger, session.ChannelId, t.Exception!),
