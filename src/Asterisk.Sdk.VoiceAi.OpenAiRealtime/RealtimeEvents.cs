@@ -6,10 +6,14 @@ namespace Asterisk.Sdk.VoiceAi.OpenAiRealtime;
 public abstract record RealtimeEvent(Guid ChannelId, DateTimeOffset Timestamp);
 
 /// <summary>OpenAI detected that the caller started speaking.</summary>
+/// <param name="ChannelId">Identifies which AudioSocket session produced this event.</param>
+/// <param name="Timestamp">UTC wall-clock time when the event was created.</param>
 public sealed record RealtimeSpeechStartedEvent(Guid ChannelId, DateTimeOffset Timestamp)
     : RealtimeEvent(ChannelId, Timestamp);
 
 /// <summary>OpenAI detected that the caller stopped speaking.</summary>
+/// <param name="ChannelId">Identifies which AudioSocket session produced this event.</param>
+/// <param name="Timestamp">UTC wall-clock time when the event was created.</param>
 public sealed record RealtimeSpeechStoppedEvent(Guid ChannelId, DateTimeOffset Timestamp)
     : RealtimeEvent(ChannelId, Timestamp);
 
@@ -23,6 +27,8 @@ public sealed record RealtimeTranscriptEvent(
     : RealtimeEvent(ChannelId, Timestamp);
 
 /// <summary>OpenAI started generating a response.</summary>
+/// <param name="ChannelId">Identifies which AudioSocket session produced this event.</param>
+/// <param name="Timestamp">UTC wall-clock time when the event was created.</param>
 public sealed record RealtimeResponseStartedEvent(Guid ChannelId, DateTimeOffset Timestamp)
     : RealtimeEvent(ChannelId, Timestamp);
 
@@ -35,6 +41,11 @@ public sealed record RealtimeResponseEndedEvent(
     : RealtimeEvent(ChannelId, Timestamp);
 
 /// <summary>A function tool was invoked by OpenAI and its result was sent back.</summary>
+/// <param name="ChannelId">Identifies which AudioSocket session produced this event.</param>
+/// <param name="Timestamp">UTC wall-clock time when the event was created.</param>
+/// <param name="FunctionName">The name of the function tool that was invoked.</param>
+/// <param name="ArgumentsJson">The JSON-encoded arguments passed by OpenAI to the function.</param>
+/// <param name="ResultJson">The JSON-encoded result returned to OpenAI after execution.</param>
 public sealed record RealtimeFunctionCalledEvent(
     Guid ChannelId, DateTimeOffset Timestamp,
     string FunctionName, string ArgumentsJson, string ResultJson)

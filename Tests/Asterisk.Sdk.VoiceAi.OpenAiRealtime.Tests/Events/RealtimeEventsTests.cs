@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Asterisk.Sdk.VoiceAi.OpenAiRealtime.Tests.Events;
 
-public class RealtimeEventsTests
+public sealed class RealtimeEventsTests
 {
     [Fact]
     public void RealtimeTranscriptEvent_IsARealtimeEvent()
@@ -27,5 +27,50 @@ public class RealtimeEventsTests
 
         evt.ChannelId.Should().Be(id);
         evt.Duration.Should().Be(duration);
+    }
+
+    [Fact]
+    public void RealtimeSpeechStartedEvent_ExposesChannelId()
+    {
+        var id = Guid.NewGuid();
+        var evt = new RealtimeSpeechStartedEvent(id, DateTimeOffset.UtcNow);
+        evt.ChannelId.Should().Be(id);
+    }
+
+    [Fact]
+    public void RealtimeSpeechStoppedEvent_ExposesChannelId()
+    {
+        var id = Guid.NewGuid();
+        var evt = new RealtimeSpeechStoppedEvent(id, DateTimeOffset.UtcNow);
+        evt.ChannelId.Should().Be(id);
+    }
+
+    [Fact]
+    public void RealtimeResponseStartedEvent_ExposesChannelId()
+    {
+        var id = Guid.NewGuid();
+        var evt = new RealtimeResponseStartedEvent(id, DateTimeOffset.UtcNow);
+        evt.ChannelId.Should().Be(id);
+    }
+
+    [Fact]
+    public void RealtimeFunctionCalledEvent_ExposesAllProperties()
+    {
+        var id = Guid.NewGuid();
+        var evt = new RealtimeFunctionCalledEvent(
+            id, DateTimeOffset.UtcNow,
+            "get_time", """{"zone":"UTC"}""", """{"time":"12:00"}""");
+
+        evt.FunctionName.Should().Be("get_time");
+        evt.ArgumentsJson.Should().Be("""{"zone":"UTC"}""");
+        evt.ResultJson.Should().Be("""{"time":"12:00"}""");
+    }
+
+    [Fact]
+    public void RealtimeErrorEvent_ExposesMessage()
+    {
+        var id = Guid.NewGuid();
+        var evt = new RealtimeErrorEvent(id, DateTimeOffset.UtcNow, "rate limited");
+        evt.Message.Should().Be("rate limited");
     }
 }
