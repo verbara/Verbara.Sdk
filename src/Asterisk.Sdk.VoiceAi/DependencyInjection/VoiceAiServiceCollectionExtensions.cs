@@ -25,6 +25,7 @@ public static class VoiceAiServiceCollectionExtensions
     {
         services.TryAddScoped<IConversationHandler, THandler>();
         services.TryAddSingleton<VoiceAiPipeline>();
+        services.TryAddSingleton<ISessionHandler>(sp => sp.GetRequiredService<VoiceAiPipeline>());
         services.TryAddSingleton<VoiceAiSessionBroker>();
         services.AddHostedService<VoiceAiSessionBroker>(sp => sp.GetRequiredService<VoiceAiSessionBroker>());
 
