@@ -438,6 +438,7 @@ services.AddOpenAiRealtimeBridge(o => { o.ApiKey = "..."; o.Model = "gpt-4o-real
 
 - [Repository overview](../README.md)
 - [For decision-makers](README-commercial.md)
+- [Pro (enterprise extension)](https://github.com/Harol-Reina/Asterisk.Sdk.Pro)
 - [Architecture review (high-load)](architecture/architecture-review-high-load.md)
 
 ---
