@@ -1,4 +1,4 @@
--- Seed data: equivalent to dashboard-config/pjsip.conf demo endpoints
+-- Seed data: equivalent to asterisk-config-realtime/pjsip.conf demo endpoints
 
 -- Sales team endpoints (2001-2003)
 INSERT INTO ps_endpoints (id, transport, aors, auth, context, disallow, allow, direct_media, callerid) VALUES

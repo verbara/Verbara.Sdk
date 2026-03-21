@@ -25,31 +25,31 @@ services:
       - "8088:8088"       # ARI HTTP
       - "5060:5060/udp"   # SIP
     volumes:
-      - ./dashboard-config/ari.conf:/etc/asterisk/ari.conf:ro
-      - ./dashboard-config/asterisk.conf:/etc/asterisk/asterisk.conf:ro
-      - ./dashboard-config/cdr.conf:/etc/asterisk/cdr.conf:ro
-      - ./dashboard-config/cdr_odbc.conf:/etc/asterisk/cdr_odbc.conf:ro
-      - ./dashboard-config/cel.conf:/etc/asterisk/cel.conf:ro
-      - ./dashboard-config/cel_odbc.conf:/etc/asterisk/cel_odbc.conf:ro
-      - ./dashboard-config/confbridge.conf:/etc/asterisk/confbridge.conf:ro
-      - ./dashboard-config/extconfig.conf:/etc/asterisk/extconfig.conf:ro
-      - ./dashboard-config/extensions.conf:/etc/asterisk/extensions.conf:ro
-      - ./dashboard-config/features.conf:/etc/asterisk/features.conf:ro
-      - ./dashboard-config/geolocation.conf:/etc/asterisk/geolocation.conf:ro
-      - ./dashboard-config/http.conf:/etc/asterisk/http.conf:ro
-      - ./dashboard-config/logger.conf:/etc/asterisk/logger.conf:ro
-      - ./dashboard-config/manager.conf:/etc/asterisk/manager.conf:ro
-      - ./dashboard-config/modules.conf:/etc/asterisk/modules.conf:ro
-      - ./dashboard-config/musiconhold.conf:/etc/asterisk/musiconhold.conf:ro
-      - ./dashboard-config/pjproject.conf:/etc/asterisk/pjproject.conf:ro
-      - ./dashboard-config/pjsip.conf:/etc/asterisk/pjsip.conf:ro
-      - ./dashboard-config/queues.conf:/etc/asterisk/queues.conf:ro
-      - ./dashboard-config/res_odbc.conf:/etc/asterisk/res_odbc.conf:ro
-      - ./dashboard-config/res_parking.conf:/etc/asterisk/res_parking.conf:ro
-      - ./dashboard-config/sorcery.conf:/etc/asterisk/sorcery.conf:ro
-      - ./dashboard-config/users.conf:/etc/asterisk/users.conf:ro
-      - ./dashboard-config/odbcinst.ini:/etc/odbcinst.ini:ro
-      - ./dashboard-config/odbc.ini:/etc/odbc.ini:ro
+      - ./asterisk-config-realtime/ari.conf:/etc/asterisk/ari.conf:ro
+      - ./asterisk-config-realtime/asterisk.conf:/etc/asterisk/asterisk.conf:ro
+      - ./asterisk-config-realtime/cdr.conf:/etc/asterisk/cdr.conf:ro
+      - ./asterisk-config-realtime/cdr_odbc.conf:/etc/asterisk/cdr_odbc.conf:ro
+      - ./asterisk-config-realtime/cel.conf:/etc/asterisk/cel.conf:ro
+      - ./asterisk-config-realtime/cel_odbc.conf:/etc/asterisk/cel_odbc.conf:ro
+      - ./asterisk-config-realtime/confbridge.conf:/etc/asterisk/confbridge.conf:ro
+      - ./asterisk-config-realtime/extconfig.conf:/etc/asterisk/extconfig.conf:ro
+      - ./asterisk-config-realtime/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./asterisk-config-realtime/features.conf:/etc/asterisk/features.conf:ro
+      - ./asterisk-config-realtime/geolocation.conf:/etc/asterisk/geolocation.conf:ro
+      - ./asterisk-config-realtime/http.conf:/etc/asterisk/http.conf:ro
+      - ./asterisk-config-realtime/logger.conf:/etc/asterisk/logger.conf:ro
+      - ./asterisk-config-realtime/manager.conf:/etc/asterisk/manager.conf:ro
+      - ./asterisk-config-realtime/modules.conf:/etc/asterisk/modules.conf:ro
+      - ./asterisk-config-realtime/musiconhold.conf:/etc/asterisk/musiconhold.conf:ro
+      - ./asterisk-config-realtime/pjproject.conf:/etc/asterisk/pjproject.conf:ro
+      - ./asterisk-config-realtime/pjsip.conf:/etc/asterisk/pjsip.conf:ro
+      - ./asterisk-config-realtime/queues.conf:/etc/asterisk/queues.conf:ro
+      - ./asterisk-config-realtime/res_odbc.conf:/etc/asterisk/res_odbc.conf:ro
+      - ./asterisk-config-realtime/res_parking.conf:/etc/asterisk/res_parking.conf:ro
+      - ./asterisk-config-realtime/sorcery.conf:/etc/asterisk/sorcery.conf:ro
+      - ./asterisk-config-realtime/users.conf:/etc/asterisk/users.conf:ro
+      - ./asterisk-config-realtime/odbcinst.ini:/etc/odbcinst.ini:ro
+      - ./asterisk-config-realtime/odbc.ini:/etc/odbc.ini:ro
       - moh-realtime:/var/lib/asterisk/moh
       - recordings-realtime:/var/spool/asterisk/monitor
     depends_on:
@@ -71,20 +71,20 @@ services:
       - "8089:8088"       # ARI HTTP
       - "5061:5060/udp"   # SIP
     volumes:
-      - ./dashboard-config-file/agents.conf:/etc/asterisk/agents.conf:ro
-      - ./dashboard-config-file/ari.conf:/etc/asterisk/ari.conf:ro
-      - ./dashboard-config-file/asterisk.conf:/etc/asterisk/asterisk.conf:ro
-      - ./dashboard-config-file/confbridge.conf:/etc/asterisk/confbridge.conf:ro
-      - ./dashboard-config-file/extensions.conf:/etc/asterisk/extensions.conf:ro
-      - ./dashboard-config-file/features.conf:/etc/asterisk/features.conf:ro
-      - ./dashboard-config-file/http.conf:/etc/asterisk/http.conf:ro
-      - ./dashboard-config-file/manager.conf:/etc/asterisk/manager.conf:ro
-      - ./dashboard-config-file/modules.conf:/etc/asterisk/modules.conf:ro
-      - ./dashboard-config-file/musiconhold.conf:/etc/asterisk/musiconhold.conf:ro
-      - ./dashboard-config-file/pjsip.conf:/etc/asterisk/pjsip.conf:ro
-      - ./dashboard-config-file/queues.conf:/etc/asterisk/queues.conf:ro
-      - ./dashboard-config-file/res_parking.conf:/etc/asterisk/res_parking.conf:ro
-      - ./dashboard-config-file/users.conf:/etc/asterisk/users.conf:ro
+      - ./asterisk-config-file/agents.conf:/etc/asterisk/agents.conf:ro
+      - ./asterisk-config-file/ari.conf:/etc/asterisk/ari.conf:ro
+      - ./asterisk-config-file/asterisk.conf:/etc/asterisk/asterisk.conf:ro
+      - ./asterisk-config-file/confbridge.conf:/etc/asterisk/confbridge.conf:ro
+      - ./asterisk-config-file/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./asterisk-config-file/features.conf:/etc/asterisk/features.conf:ro
+      - ./asterisk-config-file/http.conf:/etc/asterisk/http.conf:ro
+      - ./asterisk-config-file/manager.conf:/etc/asterisk/manager.conf:ro
+      - ./asterisk-config-file/modules.conf:/etc/asterisk/modules.conf:ro
+      - ./asterisk-config-file/musiconhold.conf:/etc/asterisk/musiconhold.conf:ro
+      - ./asterisk-config-file/pjsip.conf:/etc/asterisk/pjsip.conf:ro
+      - ./asterisk-config-file/queues.conf:/etc/asterisk/queues.conf:ro
+      - ./asterisk-config-file/res_parking.conf:/etc/asterisk/res_parking.conf:ro
+      - ./asterisk-config-file/users.conf:/etc/asterisk/users.conf:ro
       - moh-file:/var/lib/asterisk/moh
       - recordings-file:/var/spool/asterisk/monitor
     healthcheck:
