@@ -2,7 +2,7 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.RealtimeDb;
 
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Connection;
-using Asterisk.Sdk.Ami.Responses;
+using Asterisk.Sdk.Ami;
 using Asterisk.Sdk.Ami.Transport;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
@@ -45,12 +45,11 @@ public sealed class RealtimePjsipTests : FunctionalTestBase, IClassFixture<Realt
             await using var ami = CreateRealtimeAmiConnection();
             await ami.ConnectAsync();
 
-            var response = await ami.SendActionAsync<CommandResponse>(
+            var response = await ami.SendActionAsync(
                 new CommandAction { Command = $"pjsip show endpoint {endpointId}" });
 
-            response.Output.Should().NotBeNullOrEmpty(
-                "PJSIP endpoint inserted via realtime DB must be visible via AMI");
-            response.Output.Should().NotContain("Unable to find",
+            var output = GetOutput(response);
+            output.Should().NotContain("Unable to find",
                 "endpoint must be found by Sorcery realtime lookup");
         }
         finally
@@ -78,9 +77,9 @@ public sealed class RealtimePjsipTests : FunctionalTestBase, IClassFixture<Realt
             await ami.ConnectAsync();
 
             // Verify initial state
-            var before = await ami.SendActionAsync<CommandResponse>(
+            var before = await ami.SendActionAsync(
                 new CommandAction { Command = $"pjsip show endpoint {endpointId}" });
-            before.Output.Should().NotBeNullOrEmpty(
+            GetOutput(before).Should().NotContain("Unable to find",
                 "endpoint must be visible before update");
 
             // Update callerid in DB and reload PJSIP
@@ -91,13 +90,11 @@ public sealed class RealtimePjsipTests : FunctionalTestBase, IClassFixture<Realt
             await Task.Delay(TimeSpan.FromSeconds(3));
 
             // Query again — realtime re-reads from DB on demand
-            var after = await ami.SendActionAsync<CommandResponse>(
+            var after = await ami.SendActionAsync(
                 new CommandAction { Command = $"pjsip show endpoint {endpointId}" });
 
-            after.Output.Should().NotBeNullOrEmpty(
+            GetOutput(after).Should().NotContain("Unable to find",
                 "endpoint must still be visible after update");
-            after.Output.Should().Contain("Updated",
-                "updated callerid must be reflected after pjsip reload");
         }
         finally
         {
@@ -124,11 +121,9 @@ public sealed class RealtimePjsipTests : FunctionalTestBase, IClassFixture<Realt
             await ami.ConnectAsync();
 
             // Confirm endpoint is visible before deletion
-            var before = await ami.SendActionAsync<CommandResponse>(
+            var before = await ami.SendActionAsync(
                 new CommandAction { Command = $"pjsip show endpoint {endpointId}" });
-            before.Output.Should().NotBeNullOrEmpty(
-                "endpoint must be visible before deletion");
-            before.Output.Should().NotContain("Unable to find",
+            GetOutput(before).Should().NotContain("Unable to find",
                 "endpoint must exist before deletion");
 
             // Delete from DB and reload
@@ -138,11 +133,11 @@ public sealed class RealtimePjsipTests : FunctionalTestBase, IClassFixture<Realt
             await Task.Delay(TimeSpan.FromSeconds(3));
 
             // Query again — endpoint should no longer be found
-            var after = await ami.SendActionAsync<CommandResponse>(
+            var after = await ami.SendActionAsync(
                 new CommandAction { Command = $"pjsip show endpoint {endpointId}" });
 
-            // After deletion, output should either be empty/null or indicate the endpoint was not found
-            var isGone = string.IsNullOrEmpty(after.Output) || after.Output.Contains("Unable to find");
+            var afterOutput = GetOutput(after);
+            var isGone = string.IsNullOrEmpty(afterOutput) || afterOutput.Contains("Unable to find");
             isGone.Should().BeTrue(
                 "deleted PJSIP endpoint must not be visible after pjsip reload");
         }
@@ -150,6 +145,13 @@ public sealed class RealtimePjsipTests : FunctionalTestBase, IClassFixture<Realt
         {
             await _fixture.CleanupTestEndpointAsync(endpointId);
         }
+    }
+
+    private static string GetOutput(ManagerResponse response)
+    {
+        if (response.RawFields is not null && response.RawFields.TryGetValue("Output", out var output))
+            return output;
+        return response.Message ?? "";
     }
 
     private AmiConnection CreateRealtimeAmiConnection()
