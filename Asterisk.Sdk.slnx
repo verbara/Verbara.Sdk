@@ -41,6 +41,7 @@
     <Project Path="Tests/Asterisk.Sdk.Audio.Tests/Asterisk.Sdk.Audio.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Benchmarks/Asterisk.Sdk.Benchmarks.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Config.Tests/Asterisk.Sdk.Config.Tests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.FunctionalTests/Asterisk.Sdk.FunctionalTests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.IntegrationTests/Asterisk.Sdk.IntegrationTests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Live.Tests/Asterisk.Sdk.Live.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Activities.Tests/Asterisk.Sdk.Activities.Tests.csproj" />
