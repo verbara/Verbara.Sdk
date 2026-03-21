@@ -3,8 +3,8 @@
 @using Asterisk.Sdk.Enums
 @inject IStringLocalizer<SharedStrings> L
 @inject AsteriskMonitorService Monitor
-@inject SelectedServerService ServerSvc
-@inject ConfigOperationState ConfigOp
+@inject ISelectedServerService ServerSvc
+@inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @implements IDisposable
 

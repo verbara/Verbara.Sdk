@@ -3,7 +3,7 @@ using PbxAdmin.Services.Repositories;
 
 namespace PbxAdmin.Services;
 
-public sealed class ExtensionTemplateService(IExtensionTemplateRepository repo)
+public sealed class ExtensionTemplateService(IExtensionTemplateRepository repo) : IExtensionTemplateService
 {
     public Task<IReadOnlyList<ExtensionTemplate>> GetAllAsync() => repo.GetAllAsync();
 

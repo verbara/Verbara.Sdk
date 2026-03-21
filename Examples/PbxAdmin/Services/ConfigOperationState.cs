@@ -5,7 +5,7 @@ namespace PbxAdmin.Services;
 /// Pages set the operation before calling PbxConfigManager methods;
 /// the MainLayout overlay observes changes and shows a progress indicator.
 /// </summary>
-public sealed class ConfigOperationState
+public sealed class ConfigOperationState : IConfigOperationState
 {
     private volatile ConfigOperation? _current;
 

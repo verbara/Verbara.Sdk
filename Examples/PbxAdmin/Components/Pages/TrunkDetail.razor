@@ -2,10 +2,10 @@
 @using PbxAdmin.Services
 @using PbxAdmin.Models
 @inject AsteriskMonitorService Monitor
-@inject TrunkService TrunkSvc
+@inject ITrunkService TrunkSvc
 @inject IConfigProviderResolver ConfigResolver
 @inject IStringLocalizer<SharedStrings> L
-@inject ConfigOperationState ConfigOp
+@inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
 
 <PageTitle>@TrunkName — Asterisk PBX Admin</PageTitle>

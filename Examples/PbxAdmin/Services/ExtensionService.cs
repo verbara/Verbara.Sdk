@@ -32,7 +32,7 @@ internal static partial class ExtensionServiceLog
 /// <summary>
 /// CRUD service for Asterisk extensions (PJSIP, SIP, IAX2).
 /// </summary>
-public sealed class ExtensionService
+public sealed class ExtensionService : IExtensionService
 {
     private readonly IConfigProviderResolver _resolver;
     private readonly AsteriskMonitorService _monitor;

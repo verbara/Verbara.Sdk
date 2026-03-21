@@ -28,7 +28,7 @@ internal static partial class QueueConfigServiceLog
     public static partial void ReloadFailed(ILogger logger, string serverId);
 }
 
-public sealed partial class QueueConfigService
+public sealed partial class QueueConfigService : IQueueConfigService
 {
     private static readonly string[] ValidStrategies =
         ["ringall", "roundrobin", "leastrecent", "fewestcalls", "random", "rrmemory", "linear", "wrandom"];

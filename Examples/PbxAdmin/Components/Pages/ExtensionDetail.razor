@@ -2,11 +2,11 @@
 @using PbxAdmin.Services
 @using PbxAdmin.Services.Helpers
 @using PbxAdmin.Models
-@inject ExtensionService ExtSvc
-@inject SelectedServerService ServerSvc
+@inject IExtensionService ExtSvc
+@inject ISelectedServerService ServerSvc
 @inject IConfigProviderResolver ConfigResolver
 @inject IStringLocalizer<SharedStrings> L
-@inject ConfigOperationState ConfigOp
+@inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
 
 <PageTitle>@Extension — Asterisk PBX Admin</PageTitle>

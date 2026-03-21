@@ -1,10 +1,10 @@
 @page "/trunks"
 @using PbxAdmin.Services
 @using PbxAdmin.Models
-@inject SelectedServerService ServerSvc
-@inject TrunkService TrunkSvc
+@inject ISelectedServerService ServerSvc
+@inject ITrunkService TrunkSvc
 @inject IConfigProviderResolver ConfigResolver
-@inject ConfigOperationState ConfigOp
+@inject IConfigOperationState ConfigOp
 @inject IStringLocalizer<SharedStrings> L
 @inject NavigationManager Nav
 @implements IDisposable

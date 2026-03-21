@@ -25,7 +25,7 @@ internal static partial class TrunkServiceLog
 /// <summary>
 /// CRUD service for Asterisk trunks (PJSIP, SIP, IAX2).
 /// </summary>
-public sealed class TrunkService
+public sealed class TrunkService : ITrunkService
 {
     private readonly IConfigProviderResolver _resolver;
     private readonly AsteriskMonitorService _monitor;

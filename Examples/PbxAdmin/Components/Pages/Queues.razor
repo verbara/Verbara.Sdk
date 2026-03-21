@@ -2,8 +2,8 @@
 @using PbxAdmin.Models
 @using PbxAdmin.Services
 @inject IStringLocalizer<SharedStrings> L
-@inject SelectedServerService ServerSvc
-@inject QueueConfigService QueueCfgSvc
+@inject ISelectedServerService ServerSvc
+@inject IQueueConfigService QueueCfgSvc
 @implements IDisposable
 
 <PageTitle>@L["Queues_Title"]</PageTitle>
