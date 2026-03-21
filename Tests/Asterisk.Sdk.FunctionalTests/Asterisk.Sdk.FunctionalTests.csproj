@@ -17,6 +17,8 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="System.Reactive" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Dapper" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Asterisk.Sdk.Ami\Asterisk.Sdk.Ami.csproj" />
