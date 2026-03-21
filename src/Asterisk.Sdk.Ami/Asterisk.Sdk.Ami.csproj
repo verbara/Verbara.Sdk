@@ -7,6 +7,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Asterisk.Sdk.Ami.Tests" />
     <InternalsVisibleTo Include="Asterisk.Sdk.Benchmarks" />
+    <InternalsVisibleTo Include="Asterisk.Sdk.FunctionalTests" />
   </ItemGroup>
 
   <ItemGroup>
