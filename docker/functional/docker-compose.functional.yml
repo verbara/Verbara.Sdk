@@ -1,13 +1,23 @@
 services:
   asterisk:
-    image: andrius/asterisk:21-alpine
+    image: docker-asterisk-file:latest
     container_name: functional-asterisk
     ports:
       - "5038:5038"
       - "4573:4573"
       - "8088:8088"
     volumes:
-      - ./asterisk-config:/etc/asterisk
+      - ./asterisk-config/manager.conf:/etc/asterisk/manager.conf:ro
+      - ./asterisk-config/ari.conf:/etc/asterisk/ari.conf:ro
+      - ./asterisk-config/http.conf:/etc/asterisk/http.conf:ro
+      - ./asterisk-config/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./asterisk-config/pjsip.conf:/etc/asterisk/pjsip.conf:ro
+      - ./asterisk-config/queues.conf:/etc/asterisk/queues.conf:ro
+      - ./asterisk-config/confbridge.conf:/etc/asterisk/confbridge.conf:ro
+      - ./asterisk-config/modules.conf:/etc/asterisk/modules.conf:ro
+      - ./asterisk-config/cdr_manager.conf:/etc/asterisk/cdr_manager.conf:ro
+      - ./asterisk-config/cel_manager.conf:/etc/asterisk/cel_manager.conf:ro
+      - ./asterisk-config/res_parking.conf:/etc/asterisk/res_parking.conf:ro
     healthcheck:
       test: ["CMD", "asterisk", "-rx", "core show version"]
       interval: 5s
