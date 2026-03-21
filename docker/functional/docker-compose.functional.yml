@@ -13,3 +13,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  sipp:
+    image: ctaloi/sipp
+    container_name: functional-sipp
+    depends_on:
+      asterisk:
+        condition: service_healthy
+    network_mode: "service:asterisk"
+    volumes:
+      - ./sipp-scenarios:/sipp-scenarios
+    entrypoint: ["sleep", "infinity"]
