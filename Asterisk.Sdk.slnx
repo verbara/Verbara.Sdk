@@ -51,6 +51,7 @@
     <Project Path="Tests/Asterisk.Sdk.VoiceAi.Testing.Tests/Asterisk.Sdk.VoiceAi.Testing.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.VoiceAi.Tts.Tests/Asterisk.Sdk.VoiceAi.Tts.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.VoiceAi.OpenAiRealtime.Tests/Asterisk.Sdk.VoiceAi.OpenAiRealtime.Tests.csproj" />
+    <Project Path="Tests/PbxAdmin.E2E.Tests/PbxAdmin.E2E.Tests.csproj" />
     <Project Path="Tests/PbxAdmin.Tests/PbxAdmin.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Sessions.FunctionalTests/Asterisk.Sdk.Sessions.FunctionalTests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Sessions.Tests/Asterisk.Sdk.Sessions.Tests.csproj" />
