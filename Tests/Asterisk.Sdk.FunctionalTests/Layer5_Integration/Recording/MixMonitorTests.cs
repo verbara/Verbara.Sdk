@@ -223,18 +223,19 @@ public sealed class MixMonitorTests : FunctionalTestBase, IClassFixture<Asterisk
         using var subscription = connection.Subscribe(
             new RecordingObserver(onStart: startEvents.Add, onStop: stopEvents.Add));
 
-        // Originate to ext 900 which runs MixMonitor -> Wait -> StopMixMonitor -> Hangup
+        // Originate to ext 900 which runs MixMonitor -> Wait(5) -> StopMixMonitor -> Hangup
+        // The originate leg must wait long enough for the dialplan leg to complete
         await connection.SendActionAsync(new OriginateAction
         {
             Channel = "Local/900@test-functional",
             Application = "Wait",
-            Data = "1",
+            Data = "15",
             IsAsync = true,
             ActionId = "mixmon-dialplan-01"
         });
 
-        // Wait for the full dialplan sequence to complete (~10s)
-        await Task.Delay(TimeSpan.FromSeconds(10));
+        // Wait for the full dialplan sequence: Answer + MixMonitor + Wait(5) + StopMixMonitor + Hangup
+        await Task.Delay(TimeSpan.FromSeconds(12));
 
         startEvents.Should().NotBeEmpty(
             "dialplan MixMonitor on ext 900 must fire MixMonitorStartEvent");
@@ -262,18 +263,18 @@ public sealed class MixMonitorTests : FunctionalTestBase, IClassFixture<Asterisk
         using var subscription = connection.Subscribe(
             new RecordingObserver(onStart: startEvents.Add, onStop: stopEvents.Add));
 
-        // Originate to ext 900 which runs MixMonitor -> Wait -> StopMixMonitor -> Hangup
+        // Originate to ext 900 which runs MixMonitor -> Wait(5) -> StopMixMonitor -> Hangup
         await connection.SendActionAsync(new OriginateAction
         {
             Channel = "Local/900@test-functional",
             Application = "Wait",
-            Data = "1",
+            Data = "15",
             IsAsync = true,
             ActionId = "mixmon-matching-01"
         });
 
-        // Wait for the full dialplan sequence to complete
-        await Task.Delay(TimeSpan.FromSeconds(10));
+        // Wait for the full dialplan sequence
+        await Task.Delay(TimeSpan.FromSeconds(12));
 
         startEvents.Should().NotBeEmpty("MixMonitorStartEvent must fire");
         stopEvents.Should().NotBeEmpty("MixMonitorStopEvent must fire");

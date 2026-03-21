@@ -42,7 +42,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/700@test-functional",
             Application = "ConfBridge",
             Data = confName,
             IsAsync = true,
@@ -51,9 +51,10 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
 
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        if (joinEvents.IsEmpty) return;
+        var confJoin = joinEvents.FirstOrDefault(e => e.Conference == confName);
+        if (confJoin is null) return;
 
-        var joinedChannel = joinEvents.First().Channel;
+        var joinedChannel = confJoin.Channel;
         joinedChannel.Should().NotBeNullOrEmpty();
 
         await connection.SendActionAsync(new ConfbridgeMuteAction
@@ -90,7 +91,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/700@test-functional",
             Application = "ConfBridge",
             Data = confName,
             IsAsync = true,
@@ -99,9 +100,10 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
 
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        if (joinEvents.IsEmpty) return;
+        var confJoin = joinEvents.FirstOrDefault(e => e.Conference == confName);
+        if (confJoin is null) return;
 
-        var joinedChannel = joinEvents.First().Channel;
+        var joinedChannel = confJoin.Channel;
         joinedChannel.Should().NotBeNullOrEmpty();
 
         // Mute first, then unmute
@@ -147,7 +149,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/700@test-functional",
             Application = "ConfBridge",
             Data = confName,
             IsAsync = true,
@@ -156,9 +158,10 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
 
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        if (joinEvents.IsEmpty) return;
+        var confJoin = joinEvents.FirstOrDefault(e => e.Conference == confName);
+        if (confJoin is null) return;
 
-        var joinedChannel = joinEvents.First().Channel;
+        var joinedChannel = confJoin.Channel;
         joinedChannel.Should().NotBeNullOrEmpty();
 
         await connection.SendActionAsync(new ConfbridgeKickAction
@@ -196,7 +199,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
         // First channel enters the conference
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/700@test-functional",
             Application = "ConfBridge",
             Data = confName,
             IsAsync = true,
@@ -205,9 +208,9 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
 
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        if (joinEvents.IsEmpty) return;
+        if (!joinEvents.Any(e => e.Conference == confName)) return;
 
-        var initialJoinCount = joinEvents.Count;
+        var initialJoinCount = joinEvents.Count(e => e.Conference == confName);
 
         // Lock the conference
         await connection.SendActionAsync(new ConfbridgeLockAction
@@ -220,7 +223,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
         // Attempt to originate a second channel into the locked conference
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/700@test-functional",
             Application = "ConfBridge",
             Data = confName,
             IsAsync = true,
@@ -258,7 +261,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
         // First channel enters the conference
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/700@test-functional",
             Application = "ConfBridge",
             Data = confName,
             IsAsync = true,
@@ -267,7 +270,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
 
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        if (joinEvents.IsEmpty) return;
+        if (!joinEvents.Any(e => e.Conference == confName)) return;
 
         // Lock then unlock
         await connection.SendActionAsync(new ConfbridgeLockAction
@@ -287,7 +290,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
         // Originate a second channel — should succeed after unlock
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/700@test-functional",
             Application = "ConfBridge",
             Data = confName,
             IsAsync = true,
@@ -324,7 +327,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/700@test-functional",
             Application = "ConfBridge",
             Data = confName,
             IsAsync = true,
@@ -370,7 +373,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/700@test-functional",
             Application = "ConfBridge",
             Data = confName,
             IsAsync = true,
@@ -430,7 +433,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/700@test-functional",
             Application = "ConfBridge",
             Data = confName,
             IsAsync = true,
