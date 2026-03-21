@@ -50,9 +50,9 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ---
 
-## What's New in v0.6.0-beta
+## What's New in v1.0.0
 
-### Voice AI Stack (Sprints 21–24)
+### Voice AI Stack
 
 **`Asterisk.Sdk.Audio`** — Pure C# polyphase FIR resampler with 12 pre-computed rate pairs (8kHz↔16kHz↔24kHz↔48kHz), zero-alloc output buffers, PCM16 processing, RMS energy measurement, and voice activity detection. No external dependencies.
 
