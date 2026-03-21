@@ -24,3 +24,13 @@ services:
     volumes:
       - ./sipp-scenarios:/sipp-scenarios
     entrypoint: ["sleep", "infinity"]
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    container_name: functional-toxiproxy
+    ports:
+      - "8474:8474"
+      - "15038:15038"
+    depends_on:
+      asterisk:
+        condition: service_healthy
