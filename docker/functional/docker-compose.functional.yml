@@ -18,6 +18,7 @@ services:
       - ./asterisk-config/cdr_manager.conf:/etc/asterisk/cdr_manager.conf:ro
       - ./asterisk-config/cel_manager.conf:/etc/asterisk/cel_manager.conf:ro
       - ./asterisk-config/res_parking.conf:/etc/asterisk/res_parking.conf:ro
+      - ./asterisk-config/voicemail.conf:/etc/asterisk/voicemail.conf:ro
     healthcheck:
       test: ["CMD", "asterisk", "-rx", "core show version"]
       interval: 5s
