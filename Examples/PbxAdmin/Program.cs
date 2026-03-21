@@ -58,10 +58,10 @@ builder.Services.AddSingleton<AsteriskMonitorService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AsteriskMonitorService>());
 builder.Services.AddSingleton<PbxConfigManager>();
 
-builder.Services.AddSingleton<ConfigOperationState>();
+builder.Services.AddSingleton<IConfigOperationState, ConfigOperationState>();
 builder.Services.AddSingleton<IConfigProviderResolver, ConfigProviderResolver>();
-builder.Services.AddSingleton<TrunkService>();
-builder.Services.AddSingleton<ExtensionService>();
+builder.Services.AddSingleton<ITrunkService, TrunkService>();
+builder.Services.AddSingleton<IExtensionService, ExtensionService>();
 builder.Services.AddSingleton<QueueService>();
 builder.Services.AddSingleton<IRouteRepositoryResolver, RouteRepositoryResolver>();
 builder.Services.AddSingleton<IDialplanProviderResolver, DialplanProviderResolver>();
@@ -82,7 +82,7 @@ builder.Services.AddSingleton<IQueueConfigRepository>(sp =>
     return new DbQueueConfigRepository(connStr, logger);
 });
 builder.Services.AddSingleton<IQueueViewManager, QueueViewManager>();
-builder.Services.AddSingleton<QueueConfigService>();
+builder.Services.AddSingleton<IQueueConfigService, QueueConfigService>();
 
 builder.Services.AddSingleton<IIvrMenuRepository>(sp =>
 {
@@ -171,9 +171,9 @@ builder.Services.AddSingleton<IExtensionTemplateRepository>(sp =>
     var logger = sp.GetRequiredService<ILogger<DbExtensionTemplateRepository>>();
     return new DbExtensionTemplateRepository(connStr, logger);
 });
-builder.Services.AddSingleton<ExtensionTemplateService>();
+builder.Services.AddSingleton<IExtensionTemplateService, ExtensionTemplateService>();
 
-builder.Services.AddScoped<SelectedServerService>();
+builder.Services.AddScoped<ISelectedServerService, SelectedServerService>();
 
 var app = builder.Build();
 
@@ -298,13 +298,13 @@ mohApi.MapDelete("/{classId:int}/files/{filename}", async (
 });
 
 // System sounds: read-only enumeration and streaming
-api.MapGet("/sounds", async (string? serverId, string? dir, SystemSoundService svc, SelectedServerService serverSvc) =>
+api.MapGet("/sounds", async (string? serverId, string? dir, SystemSoundService svc, ISelectedServerService serverSvc) =>
 {
     var sid = serverId ?? serverSvc.SelectedServerId ?? "default";
     return Results.Ok(await svc.GetSystemSoundsAsync(sid, dir));
 });
 
-api.MapGet("/sounds/{**path}", (string path, string? serverId, SystemSoundService svc, SelectedServerService serverSvc) =>
+api.MapGet("/sounds/{**path}", (string path, string? serverId, SystemSoundService svc, ISelectedServerService serverSvc) =>
 {
     var sid = serverId ?? serverSvc.SelectedServerId ?? "default";
     var stream = svc.GetSoundStream(sid, path);

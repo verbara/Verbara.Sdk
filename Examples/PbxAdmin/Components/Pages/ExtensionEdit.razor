@@ -2,13 +2,13 @@
 @page "/extensions/edit/{ServerId}/{Extension}"
 @using PbxAdmin.Services
 @using PbxAdmin.Models
-@inject ExtensionService ExtSvc
-@inject SelectedServerService ServerSvc
+@inject IExtensionService ExtSvc
+@inject ISelectedServerService ServerSvc
 @inject IStringLocalizer<SharedStrings> L
-@inject ConfigOperationState ConfigOp
+@inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @inject IJSRuntime JS
-@inject ExtensionTemplateService TemplateSvc
+@inject IExtensionTemplateService TemplateSvc
 
 <PageTitle>@(_isNew ? L["ExtEdit_NewTitle"] : L["ExtEdit_EditTitle", Extension ?? ""]) — Asterisk PBX Admin</PageTitle>
 

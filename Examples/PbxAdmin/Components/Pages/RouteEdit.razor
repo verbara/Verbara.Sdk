@@ -5,10 +5,10 @@
 @using PbxAdmin.Services
 @using PbxAdmin.Models
 @inject RouteService RouteSvc
-@inject TrunkService TrunkSvc
+@inject ITrunkService TrunkSvc
 @inject TimeConditionService TcSvc
-@inject SelectedServerService ServerSvc
-@inject ConfigOperationState ConfigOp
+@inject ISelectedServerService ServerSvc
+@inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @inject IStringLocalizer<SharedStrings> L
 @inject IJSRuntime JS

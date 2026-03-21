@@ -3,7 +3,7 @@
 @using Asterisk.Sdk.Live.Queues
 
 @inject IStringLocalizer<SharedStrings> L
-@inject SelectedServerService SelectedServer
+@inject ISelectedServerService SelectedServer
 
 <div class="semaphore-bar">
     @foreach (var item in _items)

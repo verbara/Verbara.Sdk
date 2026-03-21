@@ -4,7 +4,7 @@ namespace PbxAdmin.Services;
 /// Circuit-scoped service that holds the currently selected Asterisk server ID.
 /// One instance per Blazor circuit (browser tab).
 /// </summary>
-public sealed class SelectedServerService
+public sealed class SelectedServerService : ISelectedServerService
 {
     private readonly AsteriskMonitorService _monitor;
 

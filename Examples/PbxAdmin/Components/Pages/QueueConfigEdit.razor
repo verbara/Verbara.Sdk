@@ -2,9 +2,9 @@
 @using PbxAdmin.Models
 @using PbxAdmin.Services
 @using Microsoft.AspNetCore.WebUtilities
-@inject QueueConfigService QueueCfgSvc
+@inject IQueueConfigService QueueCfgSvc
 @inject NavigationManager Nav
-@inject ConfigOperationState ConfigOp
+@inject IConfigOperationState ConfigOp
 @inject IStringLocalizer<SharedStrings> L
 @inject IJSRuntime JS
 
