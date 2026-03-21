@@ -275,6 +275,114 @@ VoiceAi.Testing          (-> VoiceAi)
 
 ---
 
+## Performance
+
+Benchmarks run with BenchmarkDotNet v0.14.0 on .NET 10.0.5, AMD Ryzen 9 9900X (12 cores, X64 RyuJIT AVX-512). `ShortRun` profile: 3 warmup iterations + 3 measurement iterations per benchmark.
+
+### AMI Protocol Reader (`System.IO.Pipelines`)
+
+| Benchmark | Mean | Allocated |
+|-----------|-----:|----------:|
+| Parse single event (10 fields) | 635 ns | 1.83 KB |
+| Parse response message | 430 ns | 1.24 KB |
+| Parse 100-event batch | 35.8 µs | 68.1 KB |
+
+### AMI Protocol Writer
+
+| Benchmark | Mean | Allocated |
+|-----------|-----:|----------:|
+| Write simple action (Ping) | 114 ns | 0 B |
+| Write action with 7 fields (Originate) | 261 ns | 32 B |
+| Write 1 000 actions | 77.7 µs | 0 B |
+
+### Event Deserializer
+
+| Benchmark | Mean | Allocated |
+|-----------|-----:|----------:|
+| Parse `Newchannel` (15 fields) | 828 ns | 1.90 KB |
+| Parse `VarSet` (5 fields) | 407 ns | 1.30 KB |
+| Parse `QueueParams` (11 fields) | 712 ns | 1.97 KB |
+
+### Observer Dispatch (lock-free copy-on-write volatile array)
+
+Zero allocation on the hot path regardless of subscriber count.
+
+| Benchmark | Mean | Allocated |
+|-----------|-----:|----------:|
+| Dispatch to 1 observer | 0.27 ns | 0 B |
+| Dispatch to 10 observers | 1.88 ns | 0 B |
+| Dispatch to 100 observers | 22.8 ns | 0 B |
+
+### Async Event Pump (`System.Threading.Channels`)
+
+| Benchmark | Mean | Allocated |
+|-----------|-----:|----------:|
+| Enqueue + consume 1 000 events (end-to-end) | 67.0 µs | 15.4 KB |
+| Enqueue-only 10 000 events | 130.7 µs | 257 KB |
+
+### Action Correlation (`ConcurrentDictionary`)
+
+| Benchmark | Mean | Allocated |
+|-----------|-----:|----------:|
+| Register + correlate 1 000 actions | 60.6 µs | 140.6 KB |
+| Remove + complete 1 000 TCS | 65.4 µs | 140.6 KB |
+
+### Channel Manager (Live API, dual index)
+
+10 000 channels pre-loaded; lookups use secondary indices (`_channelsByName`, `_channelsByUniqueId`).
+
+| Benchmark | Mean | Allocated |
+|-----------|-----:|----------:|
+| Create 1 000 channels | 172.0 µs | 812 KB |
+| Update 1 000 channel states | 31.9 µs | 31.3 KB |
+| Lookup by UniqueId (O(1)) | 6.1 ns | 0 B |
+| Lookup by Name (O(1)) | 7.1 ns | 0 B |
+| Enumerate by state (10 K channels) | 60.9 µs | 78.3 KB |
+
+### Concurrent Throughput (mixed AMI traffic)
+
+| Benchmark | Mean | Allocated |
+|-----------|-----:|----------:|
+| Parse 100 mixed messages (events + responses) | 25.8 µs | 48.1 KB |
+| Write + read roundtrip 100 actions | 23.6 µs | 37.4 KB |
+
+### ARI JSON (source-generated, zero reflection)
+
+| Benchmark | Mean | Allocated |
+|-----------|-----:|----------:|
+| Serialize `AriChannel` | 159 ns | 424 B |
+| Deserialize `AriChannel` | 299 ns | 232 B |
+| Serialize `AriBridge` | 117 ns | 280 B |
+| Deserialize `AriBridge` | 249 ns | 832 B |
+| Deserialize 100 channels | 27.6 µs | 24.5 KB |
+
+### AudioSocket Protocol
+
+| Benchmark | Mean | Allocated |
+|-----------|-----:|----------:|
+| Parse single 640-byte audio frame | 11.1 ns | 0 B |
+| Parse 100 audio frames | 569 ns | 0 B |
+| Write 640-byte audio frame | 26.0 ns | 704 B |
+| Incomplete frame — rewind | 10.8 ns | 0 B |
+
+### Key takeaways
+
+- **Sub-microsecond lookups.** Channel lookup by UniqueId or Name is ~6–7 ns via `ConcurrentDictionary` secondary indices — no linear scan.
+- **Zero-alloc observer dispatch.** The AMI event hot path dispatches to N subscribers with zero heap allocations (volatile read + `foreach` over array snapshot).
+- **Zero-alloc audio parsing.** AudioSocket frame parsing allocates nothing, critical for real-time PCM streams at 50 frames/sec per call.
+- **Source-generated JSON.** ARI serialization uses `System.Text.Json` source generation: `SerializeChannel` in 159 ns, `DeserializeChannel` in 299 ns, no reflection.
+- **Throughput.** 100 mixed AMI messages parsed in 25.8 µs → ~3.9 million messages/sec theoretical throughput on this hardware.
+
+### Reproduce
+
+```bash
+dotnet run --project Tests/Asterisk.Sdk.Benchmarks/ -c Release
+```
+
+Results are exported to `BenchmarkDotNet.Artifacts/results/` as CSV, HTML, and Markdown.
+
+---
+
 ## Build and Test
 
 ```bash
