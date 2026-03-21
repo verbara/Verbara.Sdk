@@ -86,6 +86,25 @@ public sealed class ActionSerializerPipelineTests
     }
 
     [Fact]
+    public void Serialize_OriginateAction_ShouldIncludeVariablesViaExtraFields()
+    {
+        var action = new OriginateAction
+        {
+            Channel = "SIP/test",
+            Application = "Wait",
+            Data = "5"
+        };
+        action.SetVariable("MY_VAR", "hello");
+        action.SetVariable("OTHER", "world");
+
+        var fields = GeneratedActionSerializer.Serialize(action).ToList();
+
+        fields.Should().Contain(kvp => kvp.Key == "Channel" && kvp.Value == "SIP/test");
+        fields.Should().Contain(kvp => kvp.Key == "Variable" && kvp.Value == "MY_VAR=hello");
+        fields.Should().Contain(kvp => kvp.Key == "Variable" && kvp.Value == "OTHER=world");
+    }
+
+    [Fact]
     public void GetActionName_ShouldReturnRegisteredName()
     {
         GeneratedActionSerializer.GetActionName(new PingAction()).Should().Be("Ping");
