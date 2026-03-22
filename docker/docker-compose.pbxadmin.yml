@@ -70,9 +70,9 @@ services:
     container_name: demo-pbx-file
     ports:
       - "5039:5038"       # AMI
-      - "8089:8088"       # ARI HTTP
+      - "8188:8088"       # ARI HTTP
       - "5061:5060/udp"   # SIP
-      - "8090:8089"       # WSS (WebRTC)
+      - "8190:8089"       # WSS (WebRTC)
     volumes:
       - ./asterisk-config-file/agents.conf:/etc/asterisk/agents.conf:ro
       - ./asterisk-config-file/ari.conf:/etc/asterisk/ari.conf:ro
