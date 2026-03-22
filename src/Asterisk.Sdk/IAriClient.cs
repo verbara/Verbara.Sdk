@@ -145,6 +145,12 @@ public interface IAriBridgesResource
     ValueTask DestroyAsync(string bridgeId, CancellationToken cancellationToken = default);
     ValueTask AddChannelAsync(string bridgeId, string channelId, CancellationToken cancellationToken = default);
     ValueTask RemoveChannelAsync(string bridgeId, string channelId, CancellationToken cancellationToken = default);
+
+    /// <summary>Play media to a bridge. POST /bridges/{bridgeId}/play. The format parameter (Asterisk 23+) sets the Announcer channel audio format.</summary>
+    ValueTask<AriPlayback> PlayAsync(string bridgeId, string media, string? lang = null, int? offsetms = null, int? skipms = null, string? playbackId = null, string? format = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Record audio from a bridge. POST /bridges/{bridgeId}/record. The format parameter (Asterisk 23+) sets the Recorder channel audio format.</summary>
+    ValueTask<AriLiveRecording> RecordAsync(string bridgeId, string name, string recordingFormat, int? maxDurationSeconds = null, int? maxSilenceSeconds = null, string? ifExists = null, bool? beep = null, string? terminateOn = null, string? format = null, CancellationToken cancellationToken = default);
 }
 
 // ---------------------------------------------------------------------------

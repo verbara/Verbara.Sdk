@@ -301,7 +301,7 @@ public sealed class AsteriskServer : IAsteriskServer
                 case QueueMemberStatusEvent qms:
                     server.Queues.OnMemberStatusChanged(
                         qms.Queue ?? "",
-                        qms.RawFields?.GetValueOrDefault("Location") ?? qms.Interface ?? "",
+                        qms.Location ?? qms.Interface ?? "",
                         qms.Status ?? 0);
                     break;
 
