@@ -156,10 +156,60 @@ window.Softphone = {
 
     _setupSessionListeners(session) {
         var self = this;
+
+        // Attach ontrack handler early — before session establishes
+        // This ensures we capture remote audio tracks as they arrive via ICE
+        session.sessionDescriptionHandlerOptionsReply = {};
+        var trackHandler = function() {
+            var sdh = session.sessionDescriptionHandler;
+            if (!sdh) return;
+            var pc = sdh.peerConnection;
+            if (!pc) return;
+
+            // Remove previous handler if re-attaching
+            pc.ontrack = function(event) {
+                if (!self._audioElement) return;
+                var remoteStream = self._audioElement.srcObject;
+                if (!remoteStream) {
+                    remoteStream = new MediaStream();
+                    self._audioElement.srcObject = remoteStream;
+                }
+                event.streams.forEach(function(s) {
+                    s.getTracks().forEach(function(t) {
+                        remoteStream.addTrack(t);
+                    });
+                });
+                if (!event.streams.length && event.track) {
+                    remoteStream.addTrack(event.track);
+                }
+                self._audioElement.play().catch(function() {});
+            };
+
+            // Also grab any tracks already present
+            pc.getReceivers().forEach(function(r) {
+                if (r.track && self._audioElement) {
+                    var stream = self._audioElement.srcObject;
+                    if (!stream) {
+                        stream = new MediaStream();
+                        self._audioElement.srcObject = stream;
+                    }
+                    stream.addTrack(r.track);
+                }
+            });
+            if (self._audioElement && self._audioElement.srcObject) {
+                self._audioElement.play().catch(function() {});
+            }
+        };
+
         session.stateChange.addListener(function(state) {
             switch (state) {
+                case SIP.SessionState.Establishing:
+                    // SDH is created — attach ontrack
+                    trackHandler();
+                    break;
                 case SIP.SessionState.Established:
-                    self._setupMedia(session);
+                    // Also try again in case Establishing was missed
+                    trackHandler();
                     self._dotNetRef.invokeMethodAsync("OnCallAnswered");
                     break;
                 case SIP.SessionState.Terminated:
@@ -169,18 +219,16 @@ window.Softphone = {
                     break;
             }
         });
-    },
 
-    _setupMedia(session) {
-        var pc = session.sessionDescriptionHandler?.peerConnection;
-        if (!pc || !this._audioElement) return;
-        var remoteStream = new MediaStream();
-        pc.getReceivers().forEach(function(r) { if (r.track) remoteStream.addTrack(r.track); });
-        this._audioElement.srcObject = remoteStream;
-        this._audioElement.play().catch(function() {});
+        // For incoming calls, SDH may already exist
+        if (session.sessionDescriptionHandler) {
+            trackHandler();
+        }
     },
 
     _cleanupMedia() {
-        if (this._audioElement) this._audioElement.srcObject = null;
+        if (this._audioElement) {
+            this._audioElement.srcObject = null;
+        }
     }
 };

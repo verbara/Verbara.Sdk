@@ -67,6 +67,7 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
                     'yes', 'yes', 'yes', 'dtls', 'yes',
                     'yes', 'yes', 'yes', 1, 1)
                 ON CONFLICT (id) DO UPDATE SET
+                    transport = EXCLUDED.transport,
                     aors = EXCLUDED.aors,
                     auth = EXCLUDED.auth,
                     context = EXCLUDED.context,
