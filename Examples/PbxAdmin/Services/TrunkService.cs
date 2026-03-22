@@ -357,35 +357,63 @@ public sealed class TrunkService : ITrunkService
         _ => "res_pjsip.so"
     };
 
+    /// <summary>
+    /// Detects trunk status from CLI output. For PJSIP trunks, checks both the Endpoint line
+    /// and Contact lines. A trunk with a Contact "Avail" is registered even if the Endpoint
+    /// line says "Not in use".
+    /// </summary>
     private static TrunkStatus DetectTrunkStatusFromOutput(string output, string trunkName)
     {
-        // Find the line containing the trunk name and look for status keywords
+        var hasAvailContact = false;
+        var endpointStatus = TrunkStatus.Unknown;
+
         foreach (var line in output.Split('\n'))
         {
             if (!line.Contains(trunkName, StringComparison.OrdinalIgnoreCase))
                 continue;
 
             var upper = line.ToUpperInvariant();
-            if (upper.Contains("AVAIL") || upper.Contains("REACHABLE") || upper.Contains("REGISTERED"))
-                return TrunkStatus.Registered;
-            if (upper.Contains("UNAVAIL") || upper.Contains("UNREACHABLE"))
-                return TrunkStatus.Unreachable;
-            if (upper.Contains("UNREGISTERED"))
-                return TrunkStatus.Unregistered;
-            if (upper.Contains("REJECTED"))
-                return TrunkStatus.Rejected;
+
+            if (upper.Contains("CONTACT:"))
+                hasAvailContact |= upper.Contains("AVAIL");
+            else
+                endpointStatus = ParseTrunkEndpointLine(upper, endpointStatus);
         }
 
-        return TrunkStatus.Unknown;
+        // A trunk with an available contact is registered even if endpoint says "Unavailable"
+        if (hasAvailContact)
+            return TrunkStatus.Registered;
+
+        return endpointStatus;
+    }
+
+    private static TrunkStatus ParseTrunkEndpointLine(string upper, TrunkStatus current)
+    {
+        if (current != TrunkStatus.Unknown)
+            return current;
+
+        if (upper.Contains("UNAVAIL") || upper.Contains("UNREACHABLE"))
+            return TrunkStatus.Unreachable;
+        if (upper.Contains("UNREGISTERED"))
+            return TrunkStatus.Unregistered;
+        if (upper.Contains("REJECTED"))
+            return TrunkStatus.Rejected;
+        if (upper.Contains("NOT IN USE") || upper.Contains("IN USE")
+            || upper.Contains("AVAIL") || upper.Contains("REACHABLE") || upper.Contains("REGISTERED"))
+            return TrunkStatus.Registered;
+
+        return current;
     }
 
     private static TrunkStatus DetectPjsipStatus(string output)
     {
         var upper = output.ToUpperInvariant();
-        if (upper.Contains("AVAIL") || upper.Contains("REACHABLE"))
-            return TrunkStatus.Registered;
+        // Check negative first to avoid AVAIL matching inside UNAVAIL
         if (upper.Contains("UNAVAIL") || upper.Contains("UNREACHABLE"))
             return TrunkStatus.Unreachable;
+        if (upper.Contains("NOT IN USE") || upper.Contains("IN USE")
+            || upper.Contains("AVAIL") || upper.Contains("REACHABLE"))
+            return TrunkStatus.Registered;
         return TrunkStatus.Unknown;
     }
 
