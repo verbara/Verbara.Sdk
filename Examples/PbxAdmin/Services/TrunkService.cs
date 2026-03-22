@@ -375,7 +375,7 @@ public sealed class TrunkService : ITrunkService
             var upper = line.ToUpperInvariant();
 
             if (upper.Contains("CONTACT:"))
-                hasAvailContact |= upper.Contains("AVAIL");
+                hasAvailContact |= upper.Contains("AVAIL") && !upper.Contains("UNAVAIL");
             else
                 endpointStatus = ParseTrunkEndpointLine(upper, endpointStatus);
         }
