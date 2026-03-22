@@ -95,6 +95,21 @@ services:
       timeout: 3s
       retries: 10
 
+  pstn-emulator:
+    image: docker-asterisk-file:latest
+    container_name: demo-pstn
+    volumes:
+      - ../docker/functional/pstn-emulator-config/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ../docker/functional/pstn-emulator-config/pjsip.conf:/etc/asterisk/pjsip.conf:ro
+      - ../docker/functional/pstn-emulator-config/voicemail.conf:/etc/asterisk/voicemail.conf:ro
+      - ../docker/functional/pstn-emulator-config/modules.conf:/etc/asterisk/modules.conf:ro
+      - ../docker/functional/pstn-emulator-config/manager.conf:/etc/asterisk/manager.conf:ro
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show version"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   pbx-admin:
     build:
       context: ..
