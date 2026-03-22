@@ -112,10 +112,14 @@ services:
     volumes:
       # Shared MOH files (read-only, same for both servers)
       - ./moh:/data/moh:ro
-      # Recordings — shared folder with sample files pre-loaded
-      # Both Asterisk containers write here too (via named volumes mapped to same host dir)
+      # Recordings — mounted at the fallback path that the Recordings page uses
+      # The code falls back to /var/spool/asterisk/monitor when config lookup by serverId fails
+      - ./sample-recordings:/var/spool/asterisk/monitor
+      # Also mount at /data/ paths for the env var config
       - ./sample-recordings:/data/recordings-realtime
       - ./sample-recordings:/data/recordings-file
+      # MOH at the fallback path too
+      - ./moh:/var/lib/asterisk/moh:ro
     environment:
       - DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE=false
       - Logging__LogLevel__Default=Debug
