@@ -149,33 +149,19 @@ public sealed class TrunkService : ITrunkService
     {
         var configProvider = _resolver.GetProvider(serverId);
         var filename = GetConfigFilename(config.Technology);
-        bool success;
 
+        bool success;
         if (config.Technology == TrunkTechnology.PjSip)
         {
-            // Create 4 PJSIP sections: endpoint, auth, aor, registration
-            success = await configProvider.CreateSectionAsync(serverId, filename, config.Name, config.ToPjsipEndpoint(), ct: ct);
-            if (!success) return false;
-
-            success = await configProvider.CreateSectionAsync(serverId, filename, $"{config.Name}-auth", config.ToPjsipAuth(), ct: ct);
-            if (!success) return false;
-
-            success = await configProvider.CreateSectionAsync(serverId, filename, $"{config.Name}-aor", config.ToPjsipAor(), ct: ct);
-            if (!success) return false;
-
-            var regVars = config.ToPjsipRegistration();
-            if (regVars is not null)
-            {
-                success = await configProvider.CreateSectionAsync(serverId, filename, $"{config.Name}-reg", regVars, ct: ct);
-                if (!success) return false;
-            }
+            success = await CreatePjsipSectionsAsync(configProvider, serverId, filename, config, ct);
         }
         else
         {
             var vars = config.Technology == TrunkTechnology.Sip ? config.ToSipPeer() : config.ToIaxPeer();
             success = await configProvider.CreateSectionAsync(serverId, filename, config.Name, vars, ct: ct);
-            if (!success) return false;
         }
+
+        if (!success) return false;
 
         // Reload the appropriate module
         if (!await configProvider.ReloadModuleAsync(serverId, GetReloadModule(config.Technology), ct))
@@ -185,15 +171,71 @@ public sealed class TrunkService : ITrunkService
         return true;
     }
 
-    /// <summary>Updates a trunk by deleting and recreating all sections.</summary>
+    /// <summary>Updates a trunk by upserting each config section in place.</summary>
     public async Task<bool> UpdateTrunkAsync(string serverId, TrunkConfig config, CancellationToken ct = default)
     {
-        // Delete existing sections first
-        if (!await DeleteSectionsAsync(serverId, config.Name, config.Technology, ct))
+        var configProvider = _resolver.GetProvider(serverId);
+        var filename = GetConfigFilename(config.Technology);
+
+        bool success;
+        if (config.Technology == TrunkTechnology.PjSip)
+        {
+            success = await UpdatePjsipSectionsAsync(configProvider, serverId, filename, config, ct);
+        }
+        else
+        {
+            var vars = config.Technology == TrunkTechnology.Sip ? config.ToSipPeer() : config.ToIaxPeer();
+            success = await configProvider.UpdateSectionAsync(serverId, filename, config.Name, vars, ct);
+        }
+
+        if (!success) return false;
+
+        if (!await configProvider.ReloadModuleAsync(serverId, GetReloadModule(config.Technology), ct))
+            TrunkServiceLog.ReloadFailedCreate(_logger, config.Name);
+
+        return true;
+    }
+
+    private static async Task<bool> CreatePjsipSectionsAsync(
+        IConfigProvider provider, string serverId, string filename, TrunkConfig config, CancellationToken ct)
+    {
+        if (!await provider.CreateSectionAsync(serverId, filename, config.Name, config.ToPjsipEndpoint(), ct: ct))
+            return false;
+        if (!await provider.CreateSectionAsync(serverId, filename, $"{config.Name}-auth", config.ToPjsipAuth(), ct: ct))
+            return false;
+        if (!await provider.CreateSectionAsync(serverId, filename, $"{config.Name}-aor", config.ToPjsipAor(), ct: ct))
             return false;
 
-        // Recreate with new config
-        return await CreateTrunkAsync(serverId, config, ct);
+        if (config.ToPjsipRegistration() is { } regVars
+            && !await provider.CreateSectionAsync(serverId, filename, $"{config.Name}-reg", regVars, ct: ct))
+            return false;
+
+        if (!string.IsNullOrEmpty(config.Host)
+            && !await provider.CreateSectionAsync(serverId, filename, $"{config.Name}-identify", config.ToPjsipIdentify(), ct: ct))
+            return false;
+
+        return true;
+    }
+
+    private static async Task<bool> UpdatePjsipSectionsAsync(
+        IConfigProvider provider, string serverId, string filename, TrunkConfig config, CancellationToken ct)
+    {
+        if (!await provider.UpdateSectionAsync(serverId, filename, config.Name, config.ToPjsipEndpoint(), ct))
+            return false;
+        if (!await provider.UpdateSectionAsync(serverId, filename, $"{config.Name}-auth", config.ToPjsipAuth(), ct))
+            return false;
+        if (!await provider.UpdateSectionAsync(serverId, filename, $"{config.Name}-aor", config.ToPjsipAor(), ct))
+            return false;
+
+        if (config.RegistrationEnabled && config.ToPjsipRegistration() is { } regVars
+            && !await provider.UpdateSectionAsync(serverId, filename, $"{config.Name}-reg", regVars, ct))
+            return false;
+
+        if (!string.IsNullOrEmpty(config.Host)
+            && !await provider.UpdateSectionAsync(serverId, filename, $"{config.Name}-identify", config.ToPjsipIdentify(), ct))
+            return false;
+
+        return true;
     }
 
     /// <summary>Deletes a trunk and all its config sections.</summary>
@@ -215,11 +257,12 @@ public sealed class TrunkService : ITrunkService
 
         if (technology == TrunkTechnology.PjSip)
         {
-            // Delete all 4 possible PJSIP sections
+            // Delete all 5 possible PJSIP sections
             await configProvider.DeleteSectionAsync(serverId, filename, name, ct);
             await configProvider.DeleteSectionAsync(serverId, filename, $"{name}-auth", ct);
             await configProvider.DeleteSectionAsync(serverId, filename, $"{name}-aor", ct);
             await configProvider.DeleteSectionAsync(serverId, filename, $"{name}-reg", ct);
+            await configProvider.DeleteSectionAsync(serverId, filename, $"{name}-identify", ct);
             return true;
         }
 

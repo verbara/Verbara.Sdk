@@ -6,7 +6,7 @@ namespace PbxAdmin.Tests.Services;
 public class RealtimeTableMapTests
 {
     [Theory]
-    [InlineData("pjsip.conf", 4)]
+    [InlineData("pjsip.conf", 5)]
     [InlineData("sip.conf", 1)]
     [InlineData("iax.conf", 1)]
     [InlineData("queues.conf", 2)]
@@ -18,8 +18,8 @@ public class RealtimeTableMapTests
     }
 
     [Theory]
-    [InlineData("PJSIP.CONF", 4)]
-    [InlineData("Pjsip.Conf", 4)]
+    [InlineData("PJSIP.CONF", 5)]
+    [InlineData("Pjsip.Conf", 5)]
     [InlineData("SIP.CONF", 1)]
     public void GetTables_ShouldBeCaseInsensitive(string filename, int expected)
     {
@@ -42,6 +42,9 @@ public class RealtimeTableMapTests
 
         tables[3].TableName.Should().Be("ps_registrations");
         tables[3].TypeValue.Should().Be("registration");
+
+        tables[4].TableName.Should().Be("ps_endpoint_id_ips");
+        tables[4].TypeValue.Should().Be("identify");
     }
 
     [Fact]

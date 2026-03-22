@@ -13,6 +13,7 @@ internal static class RealtimeTableMap
             new("ps_auths", "id", "type", "auth"),
             new("ps_aors", "id", "type", "aor"),
             new("ps_registrations", "id", "type", "registration"),
+            new("ps_endpoint_id_ips", "id", "type", "identify"),
         ],
         "sip.conf" => [new("sippeers", "name", "type", null)],
         "iax.conf" => [new("iaxpeers", "name", "type", null)],
