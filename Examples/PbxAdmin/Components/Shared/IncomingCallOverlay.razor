@@ -1,0 +1,22 @@
+@namespace PbxAdmin.Components.Shared
+@inject SoftphoneService Phone
+@inject IStringLocalizer<SharedStrings> L
+
+@if (Phone.State == SoftphoneState.RingingIn)
+{
+    <div class="incoming-call-overlay">
+        <div class="incoming-call-label">@L["Softphone_Incoming"]</div>
+        <div class="incoming-call-number">@(Phone.RemoteNumber ?? "Unknown")</div>
+        @if (Phone.RemoteName is not null)
+        {
+            <div class="incoming-call-name">@Phone.RemoteName</div>
+        }
+        <div class="incoming-call-actions">
+            <button class="softphone-call-btn call-green" @onclick="Phone.AnswerAsync" title="@L["Softphone_Accept"]">&#128222;</button>
+            <button class="softphone-call-btn call-red" @onclick="Phone.RejectAsync" title="@L["Softphone_Reject"]">&#128245;</button>
+        </div>
+    </div>
+}
+
+@code {
+}

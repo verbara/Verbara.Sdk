@@ -1,0 +1,136 @@
+@namespace PbxAdmin.Components.Shared
+@implements IDisposable
+@inject SoftphoneService Phone
+@inject ISelectedServerService ServerSvc
+@inject IStringLocalizer<SharedStrings> L
+
+<!-- Hidden audio element for remote media -->
+<audio id="softphone-remote-audio" autoplay style="display:none;"></audio>
+
+<!-- Incoming call overlay (visible regardless of popup) -->
+<IncomingCallOverlay />
+
+<!-- FAB -->
+<div class="softphone-fab @FabClass" @onclick="TogglePopup">
+    <div class="softphone-fab-ring"></div>
+    &#128222;
+</div>
+
+<!-- Popup -->
+@if (_expanded)
+{
+    <div class="softphone-popup">
+        <div class="softphone-header">
+            <div class="softphone-status">
+                <div class="softphone-status-dot" style="background:@StatusColor;"></div>
+                <span class="softphone-status-text" style="color:@StatusColor;">@StatusText</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.5rem;">
+                @if (Phone.Extension is not null)
+                {
+                    <span class="softphone-ext">@Phone.Extension</span>
+                }
+                <span class="softphone-minimize" @onclick="TogglePopup">&mdash;</span>
+            </div>
+        </div>
+
+        @switch (Phone.State)
+        {
+            case SoftphoneState.Unregistered:
+                <div class="softphone-connect">
+                    <div class="softphone-connect-text">@L["Softphone_Connect"]</div>
+                    <button class="btn btn-sm btn-blue" @onclick="Connect">@L["Softphone_Connect"]</button>
+                </div>
+                break;
+
+            case SoftphoneState.Registering:
+                <div class="softphone-connect">
+                    <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;padding:1rem;">
+                        <span class="btn-spinner"></span>
+                        <span style="color:var(--text-secondary);font-size:0.85rem;">@L["Softphone_Registering"]</span>
+                    </div>
+                </div>
+                break;
+
+            case SoftphoneState.Idle:
+                <SoftphoneDialer OnCall="HandleCall" />
+                break;
+
+            case SoftphoneState.RingingOut:
+                <div class="softphone-call-info">
+                    <div class="softphone-call-number">@Phone.RemoteNumber</div>
+                    <div style="color:var(--text-secondary);font-size:0.8rem;margin-top:0.25rem;">@L["Softphone_Calling"]</div>
+                </div>
+                <div class="softphone-call-btn">
+                    <button class="call-red" @onclick="Phone.HangupAsync">&#128245;</button>
+                </div>
+                break;
+
+            case SoftphoneState.InCall:
+            case SoftphoneState.OnHold:
+                <SoftphoneCallView />
+                break;
+
+            case SoftphoneState.RingingIn:
+                <div class="softphone-call-info">
+                    <div style="color:#34d399;font-size:0.75rem;font-weight:600;">@L["Softphone_Incoming"]</div>
+                    <div class="softphone-call-number">@Phone.RemoteNumber</div>
+                </div>
+                break;
+        }
+    </div>
+}
+
+@code {
+    private bool _expanded;
+
+    protected override void OnInitialized() => Phone.OnStateChanged += Refresh;
+
+    private void TogglePopup() => _expanded = !_expanded;
+
+    private async Task Connect()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+        await Phone.ConnectAsync(serverId, "admin");
+    }
+
+    private async Task HandleCall(string number) => await Phone.CallAsync(number);
+
+    private string FabClass => Phone.State switch
+    {
+        SoftphoneState.Unregistered => "unregistered",
+        SoftphoneState.Registering => "registering",
+        SoftphoneState.Idle => "idle",
+        SoftphoneState.RingingOut => "ringing-out",
+        SoftphoneState.RingingIn => "ringing-in",
+        SoftphoneState.InCall => "in-call",
+        SoftphoneState.OnHold => "on-hold",
+        _ => "unregistered"
+    };
+
+    private string StatusColor => Phone.State switch
+    {
+        SoftphoneState.Idle => "#34d399",
+        SoftphoneState.InCall => "#f87171",
+        SoftphoneState.OnHold => "#fbbf24",
+        SoftphoneState.RingingIn or SoftphoneState.RingingOut => "#60a5fa",
+        SoftphoneState.Registering => "#22d3ee",
+        _ => "#6b7280"
+    };
+
+    private string StatusText => Phone.State switch
+    {
+        SoftphoneState.Idle => "Ready",
+        SoftphoneState.InCall => "In Call",
+        SoftphoneState.OnHold => "On Hold",
+        SoftphoneState.RingingOut => "Calling",
+        SoftphoneState.RingingIn => "Incoming",
+        SoftphoneState.Registering => "Registering",
+        _ => "Offline"
+    };
+
+    private async void Refresh() => await InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Phone.OnStateChanged -= Refresh;
+}
