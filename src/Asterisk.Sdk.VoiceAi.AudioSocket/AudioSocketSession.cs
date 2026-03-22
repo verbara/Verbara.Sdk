@@ -76,10 +76,18 @@ public sealed class AudioSocketSession : IAsyncDisposable
     }
 
     /// <summary>Write PCM audio back to Asterisk (e.g., TTS output).</summary>
-    public async ValueTask WriteAudioAsync(ReadOnlyMemory<byte> pcmData, CancellationToken ct = default)
+    public ValueTask WriteAudioAsync(ReadOnlyMemory<byte> pcmData, CancellationToken ct = default) =>
+        WriteAudioAsync(pcmData, AudioSocketFrameType.Audio, ct);
+
+    /// <summary>
+    /// Write PCM audio back to Asterisk using the specified audio frame type.
+    /// Use <see cref="AudioSocketFrameType.Audio"/> (8 kHz) for standard Asterisk configurations,
+    /// or a high-rate type (e.g., <see cref="AudioSocketFrameType.AudioSlin16"/>) for Asterisk 23+.
+    /// </summary>
+    public async ValueTask WriteAudioAsync(ReadOnlyMemory<byte> pcmData, AudioSocketFrameType frameType, CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(_disposed == 1, this);
-        AudioSocketFrameCodec.WriteFrame(_writer, AudioSocketFrameType.Audio, pcmData.Span);
+        AudioSocketFrameCodec.WriteFrame(_writer, frameType, pcmData.Span);
         await _writer.FlushAsync(ct).ConfigureAwait(false);
     }
 
@@ -117,6 +125,14 @@ public sealed class AudioSocketSession : IAsyncDisposable
                     switch (frame.Type)
                     {
                         case AudioSocketFrameType.Audio:
+                        case AudioSocketFrameType.AudioSlin12:
+                        case AudioSocketFrameType.AudioSlin16:
+                        case AudioSocketFrameType.AudioSlin24:
+                        case AudioSocketFrameType.AudioSlin32:
+                        case AudioSocketFrameType.AudioSlin44:
+                        case AudioSocketFrameType.AudioSlin48:
+                        case AudioSocketFrameType.AudioSlin96:
+                        case AudioSocketFrameType.AudioSlin192:
                             var copy = frame.Payload.ToArray();
                             await _audioChannel.Writer.WriteAsync(copy, ct).ConfigureAwait(false);
                             break;
