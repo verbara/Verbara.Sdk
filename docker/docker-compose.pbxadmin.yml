@@ -112,12 +112,10 @@ services:
     volumes:
       # Shared MOH files (read-only, same for both servers)
       - ./moh:/data/moh:ro
-      # Recordings per server (read-write for upload support)
-      - recordings-realtime:/data/recordings-realtime
-      - recordings-file:/data/recordings-file
-      # Sample recordings visible in both
-      - ./sample-recordings:/data/recordings-realtime/samples:ro
-      - ./sample-recordings:/data/recordings-file/samples:ro
+      # Recordings — shared folder with sample files pre-loaded
+      # Both Asterisk containers write here too (via named volumes mapped to same host dir)
+      - ./sample-recordings:/data/recordings-realtime
+      - ./sample-recordings:/data/recordings-file
     environment:
       - DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE=false
       - Logging__LogLevel__Default=Debug
