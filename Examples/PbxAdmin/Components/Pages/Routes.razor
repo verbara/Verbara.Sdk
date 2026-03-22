@@ -7,6 +7,7 @@
 @inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
 
 <PageTitle>@L["Routes_Title"]</PageTitle>
 
@@ -129,24 +130,13 @@ else
     </table>
 }
 
-@if (_showDeleteConfirm)
-{
-    <div class="confirm-overlay" @onclick="CancelDelete">
-        <div class="confirm-dialog" @onclick:stopPropagation="true">
-            <h4>@L["Routes_DeleteTitle"]</h4>
-            <p>@L["Routes_DeleteConfirm", _deletingName ?? ""] @L["Ext_CannotUndo"]</p>
-            <div class="confirm-dialog-actions">
-                <button class="btn btn-sm" @onclick="CancelDelete">@L["Btn_Cancel"]</button>
-                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">@L["Btn_Delete"]</button>
-            </div>
-        </div>
-    </div>
-}
-
-@if (_actionResult is not null)
-{
-    <p class="action-result">@_actionResult</p>
-}
+<ConfirmDialog @ref="_deleteDialog"
+    Title="@L["Routes_DeleteTitle"]"
+    Message="@L["Routes_DeleteConfirm", _deletingName ?? ""]"
+    ConfirmText="@L["Btn_Delete"]"
+    CancelText="@L["Btn_Cancel"]"
+    ConfirmStyle="danger"
+    OnConfirm="ExecuteDelete" />
 
 <style>
     .data-table {
@@ -182,11 +172,10 @@ else
     private List<InboundRouteViewModel> _inbound = [];
     private List<OutboundRouteViewModel> _outbound = [];
     private Dictionary<int, OutboundRouteConfig> _outboundConfigs = new();
-    private bool _showDeleteConfirm;
     private string? _deletingName;
     private int _deletingId;
     private bool _deletingIsInbound;
-    private string? _actionResult;
+    private ConfirmDialog? _deleteDialog;
 
     private void NavigateNewInbound() => Nav.NavigateTo("/routes/inbound/new");
     private void NavigateNewOutbound() => Nav.NavigateTo("/routes/outbound/new");
@@ -220,7 +209,7 @@ else
         _deletingId = route.Id;
         _deletingName = route.Name;
         _deletingIsInbound = true;
-        _showDeleteConfirm = true;
+        _deleteDialog?.Show();
     }
 
     private void ConfirmDeleteOutbound(OutboundRouteViewModel route)
@@ -228,13 +217,7 @@ else
         _deletingId = route.Id;
         _deletingName = route.Name;
         _deletingIsInbound = false;
-        _showDeleteConfirm = true;
-    }
-
-    private void CancelDelete()
-    {
-        _showDeleteConfirm = false;
-        _deletingName = null;
+        _deleteDialog?.Show();
     }
 
     private async Task ExecuteDelete()
@@ -242,21 +225,30 @@ else
         var serverId = ServerSvc.SelectedServerId;
         if (serverId is null) return;
 
-        using var _ = ConfigOp.Begin("Deleting Route", serverId, _deletingName);
-        bool success;
-        if (_deletingIsInbound)
-            success = await RouteSvc.DeleteInboundRouteAsync(_deletingId, serverId);
-        else
-            success = await RouteSvc.DeleteOutboundRouteAsync(_deletingId, serverId);
+        var deletingName = _deletingName;
+        try
+        {
+            using var _ = ConfigOp.Begin("Deleting Route", serverId, deletingName);
+            bool success;
+            if (_deletingIsInbound)
+                success = await RouteSvc.DeleteInboundRouteAsync(_deletingId, serverId);
+            else
+                success = await RouteSvc.DeleteOutboundRouteAsync(_deletingId, serverId);
 
-        _actionResult = success
-            ? $"Route '{_deletingName}' deleted successfully."
-            : $"Failed to delete route '{_deletingName}'.";
+            _deletingName = null;
 
-        _showDeleteConfirm = false;
-        _deletingName = null;
+            if (success)
+                Toast.Show(L["Toast_Deleted"], ToastLevel.Success, deletingName);
+            else
+                Toast.Show(L["Toast_Error"], ToastLevel.Error);
 
-        await LoadRoutes();
+            await LoadRoutes();
+        }
+        catch (Exception ex)
+        {
+            _deletingName = null;
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, ex.Message);
+        }
     }
 
     private static string GetDestBadge(string type) => type switch

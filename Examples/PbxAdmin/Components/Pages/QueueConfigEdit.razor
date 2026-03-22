@@ -6,6 +6,7 @@
 @inject NavigationManager Nav
 @inject IConfigOperationState ConfigOp
 @inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
 @inject IJSRuntime JS
 
 <PageTitle>@(_isNew ? L["QCfg_NewTitle"] : $"{L["QCfg_EditTitle"]} {_config.Name}") — Asterisk PBX Admin</PageTitle>
@@ -17,10 +18,6 @@
     </h2>
 </div>
 
-@if (_result is not null)
-{
-    <div class="alert alert-danger">@_result</div>
-}
 
 <div class="form-section">
     <HelpPanel SectionKey="QCfg_Identity">@L["QCfg_Identity"]</HelpPanel>
@@ -229,18 +226,17 @@
     <button class="btn btn-muted" @onclick="Cancel">@L["Btn_Cancel"]</button>
     @if (!_isNew)
     {
-        <button class="btn btn-red" @onclick="() => _showDeleteConfirm = true">@L["Btn_Delete"]</button>
+        <button class="btn btn-red" @onclick="() => _deleteDialog?.Show()">@L["Btn_Delete"]</button>
     }
 </div>
 
-@if (_showDeleteConfirm)
-{
-    <div class="confirm-bar confirm-bar-danger">
-        <span>@L["QCfg_DeleteQueue"] <strong>@_config.Name</strong>? @L["QCfg_DeleteWarn"]</span>
-        <button class="btn btn-sm btn-red" @onclick="Delete" disabled="@_saving">@L["Btn_Confirm"]</button>
-        <button class="btn btn-sm btn-muted" @onclick="() => _showDeleteConfirm = false">@L["Btn_Cancel"]</button>
-    </div>
-}
+<ConfirmDialog @ref="_deleteDialog"
+    Title="@L["Confirm_DeleteTitle"]"
+    Message="@($"{L["QCfg_DeleteQueue"]} {_config.Name}? {L["QCfg_DeleteWarn"]}")"
+    ConfirmText="@L["Btn_Delete"]"
+    CancelText="@L["Btn_Cancel"]"
+    ConfirmStyle="danger"
+    OnConfirm="Delete" />
 
 @code {
     [Parameter] public string ServerId { get; set; } = "";
@@ -249,8 +245,7 @@
     private QueueConfigDto _config = new();
     private bool _isNew;
     private bool _saving;
-    private bool _showDeleteConfirm;
-    private string? _result;
+    private ConfirmDialog? _deleteDialog;
 
     private string _newMemberInterface = "";
     private string? _newMemberName;
@@ -322,7 +317,6 @@
         if (!IsFormValid) return;
 
         _saving = true;
-        _result = null;
 
         try
         {
@@ -337,11 +331,11 @@
             if (success)
                 Nav.NavigateTo("/queues");
             else
-                _result = error ?? "Failed to save queue configuration.";
+                Toast.Show(L["Toast_Error"], ToastLevel.Error, error);
         }
         catch (Exception ex)
         {
-            _result = $"Error: {ex.Message}";
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, ex.Message);
         }
         finally
         {
@@ -360,16 +354,15 @@
             if (success)
                 Nav.NavigateTo("/queues");
             else
-                _result = error ?? "Failed to delete queue.";
+                Toast.Show(L["Toast_Error"], ToastLevel.Error, error);
         }
         catch (Exception ex)
         {
-            _result = $"Error: {ex.Message}";
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, ex.Message);
         }
         finally
         {
             _saving = false;
-            _showDeleteConfirm = false;
         }
     }
 

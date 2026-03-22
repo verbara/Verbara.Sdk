@@ -11,6 +11,7 @@
 @inject NavigationManager Nav
 @inject IQueueConfigService QueueCfgSvc
 @inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
 @implements IDisposable
 
 <PageTitle>@QueueName — Asterisk PBX Admin</PageTitle>
@@ -23,16 +24,13 @@
     <button class="btn btn-sm btn-red" @onclick="ConfirmDelete" disabled="@_deleteInProgress">@L["QDetail_DeleteQueue"]</button>
 </div>
 
-@if (_showDeleteConfirm)
-{
-    <div class="confirm-bar confirm-bar-danger">
-        <span>@L["QDetail_DeleteConfirm"] <strong>@QueueName</strong></span>
-        <button class="btn btn-sm btn-red" @onclick="DeleteQueue" disabled="@_deleteInProgress">
-            @(_deleteInProgress ? L["QDetail_Deleting"] : L["QDetail_ConfirmDelete"])
-        </button>
-        <button class="btn btn-sm btn-muted" @onclick="() => _showDeleteConfirm = false" disabled="@_deleteInProgress">@L["Btn_Cancel"]</button>
-    </div>
-}
+<ConfirmDialog @ref="_deleteDialog"
+    Title="@L["Confirm_DeleteTitle"]"
+    Message="@(L["QDetail_DeleteConfirm"] + " " + QueueName)"
+    ConfirmText="@L["Btn_Delete"]"
+    CancelText="@L["Btn_Cancel"]"
+    ConfirmStyle="danger"
+    OnConfirm="DeleteQueue" />
 
 @if (_queue is null)
 {
@@ -171,10 +169,6 @@ else
         <input @bind="_addPenalty" type="number" placeholder="Penalty" class="input input-sm" />
         <button class="btn btn-blue" @onclick="AddMember">@L["Btn_Add"]</button>
     </div>
-    @if (_actionMessage is not null)
-    {
-        <p class="action-result">@_actionMessage</p>
-    }
 }
 
 @code {
@@ -187,9 +181,8 @@ else
     private string _addInterface = "";
     private string _addMemberName = "";
     private int _addPenalty;
-    private string? _actionMessage;
-    private bool _showDeleteConfirm;
     private bool _deleteInProgress;
+    private ConfirmDialog? _deleteDialog;
 
     protected override async Task OnInitializedAsync()
     {
@@ -215,7 +208,7 @@ else
         var iface = member.Interface;
         if (string.IsNullOrEmpty(QueueName) || string.IsNullOrEmpty(iface))
         {
-            _actionMessage = $"Pause failed: missing Queue=\"{QueueName}\" or Interface=\"{iface}\"";
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, $"Pause failed: missing Queue=\"{QueueName}\" or Interface=\"{iface}\"");
             return;
         }
 
@@ -226,7 +219,10 @@ else
             Interface = iface,
             Paused = pause
         });
-        _actionMessage = $"Pause {(pause ? "on" : "off")}: {response.Response} — {response.Message}";
+        if (string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase))
+            Toast.Show(pause ? L["Toast_Success"] : L["Toast_Success"], ToastLevel.Success, $"{iface} {(pause ? "paused" : "unpaused")}");
+        else
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, response.Message);
     }
 
     private async Task RemoveMember(AsteriskQueueMember member)
@@ -237,7 +233,7 @@ else
         var iface = member.Interface;
         if (string.IsNullOrEmpty(QueueName) || string.IsNullOrEmpty(iface))
         {
-            _actionMessage = $"Remove failed: missing Queue=\"{QueueName}\" or Interface=\"{iface}\"";
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, $"Remove failed: missing Queue=\"{QueueName}\" or Interface=\"{iface}\"");
             return;
         }
 
@@ -247,16 +243,18 @@ else
             Queue = QueueName,
             Interface = iface
         });
-        _actionMessage = $"Remove: {response.Response} — {response.Message}";
+        if (string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase))
+            Toast.Show(L["Toast_Success"], ToastLevel.Success, $"{iface} removed");
+        else
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, response.Message);
     }
 
-    private void ConfirmDelete() => _showDeleteConfirm = true;
+    private void ConfirmDelete() => _deleteDialog?.Show();
 
     private async Task DeleteQueue()
     {
         if (_deleteInProgress) return;
         _deleteInProgress = true;
-        _actionMessage = "Deleting queue...";
 
         try
         {
@@ -268,8 +266,7 @@ else
             }
             else
             {
-                _actionMessage = "Failed to delete queue.";
-                _showDeleteConfirm = false;
+                Toast.Show(L["Toast_Error"], ToastLevel.Error, "Failed to delete queue.");
             }
         }
         finally
@@ -293,7 +290,10 @@ else
             MemberName = string.IsNullOrWhiteSpace(_addMemberName) ? null : _addMemberName,
             Penalty = _addPenalty
         });
-        _actionMessage = $"Add: {response.Response} — {response.Message}";
+        if (string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase))
+            Toast.Show(L["Toast_Success"], ToastLevel.Success, $"{_addInterface} added");
+        else
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, response.Message);
         _addInterface = "";
         _addMemberName = "";
         _addPenalty = 0;

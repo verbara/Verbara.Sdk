@@ -33,11 +33,14 @@ public sealed class ExtensionEditTests : IDisposable
         var templateSvc = Substitute.For<IExtensionTemplateService>();
         templateSvc.GetAllAsync().Returns(Task.FromResult<IReadOnlyList<ExtensionTemplate>>([]));
 
+        var toastSvc = Substitute.For<IToastService>();
+
         _ctx.Services.AddSingleton(serverSvc);
         _ctx.Services.AddSingleton(extSvc);
         _ctx.Services.AddSingleton(configOp);
         _ctx.Services.AddSingleton(localizer);
         _ctx.Services.AddSingleton(templateSvc);
+        _ctx.Services.AddSingleton(toastSvc);
     }
 
     [Fact]

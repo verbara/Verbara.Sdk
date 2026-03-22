@@ -6,6 +6,7 @@
 @inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
 
 <PageTitle>@L["TC_Title"]</PageTitle>
 
@@ -53,28 +54,13 @@
     <p class="text-muted">@L["TC_NoConditions"]</p>
 }
 
-@if (_showDeleteConfirm)
-{
-    <div class="confirm-overlay" @onclick="CancelDelete">
-        <div class="confirm-dialog" @onclick:stopPropagation="true">
-            <h4>@L["TC_DeleteTitle"]</h4>
-            <p>@L["TC_DeleteConfirm", _deletingTc?.Name ?? ""] @L["Ext_CannotUndo"]</p>
-            @if (_deleteError is not null)
-            {
-                <p class="action-result" style="color: #f87171;">@_deleteError</p>
-            }
-            <div class="confirm-dialog-actions">
-                <button class="btn btn-sm" @onclick="CancelDelete">@L["Btn_Cancel"]</button>
-                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">@L["Btn_Delete"]</button>
-            </div>
-        </div>
-    </div>
-}
-
-@if (_actionResult is not null)
-{
-    <p class="action-result">@_actionResult</p>
-}
+<ConfirmDialog @ref="_deleteDialog"
+    Title="@L["TC_DeleteTitle"]"
+    Message="@L["TC_DeleteConfirm", _deletingTc?.Name ?? ""]"
+    ConfirmText="@L["Btn_Delete"]"
+    CancelText="@L["Btn_Cancel"]"
+    ConfirmStyle="danger"
+    OnConfirm="ExecuteDelete" />
 
 <style>
     .tc-grid {
@@ -111,10 +97,8 @@
 
 @code {
     private List<TimeConditionViewModel> _conditions = [];
-    private bool _showDeleteConfirm;
     private TimeConditionViewModel? _deletingTc;
-    private string? _deleteError;
-    private string? _actionResult;
+    private ConfirmDialog? _deleteDialog;
 
     private void NavigateNew() => Nav.NavigateTo("/time-conditions/new");
     private void NavigateEdit(int id) => Nav.NavigateTo($"/time-conditions/edit/{id}");
@@ -156,15 +140,7 @@
     private void ConfirmDelete(TimeConditionViewModel tc)
     {
         _deletingTc = tc;
-        _deleteError = null;
-        _showDeleteConfirm = true;
-    }
-
-    private void CancelDelete()
-    {
-        _showDeleteConfirm = false;
-        _deletingTc = null;
-        _deleteError = null;
+        _deleteDialog?.Show();
     }
 
     private async Task ExecuteDelete()
@@ -174,20 +150,27 @@
         var serverId = ServerSvc.SelectedServerId;
         if (serverId is null) return;
 
-        using var _ = ConfigOp.Begin("Deleting Time Condition", serverId, _deletingTc.Name);
-        var (success, error) = await TcSvc.DeleteTimeConditionAsync(_deletingTc.Id, serverId);
-
-        if (success)
+        var tcName = _deletingTc.Name;
+        try
         {
-            _actionResult = $"Time condition '{_deletingTc.Name}' deleted successfully.";
-            _showDeleteConfirm = false;
+            using var _ = ConfigOp.Begin("Deleting Time Condition", serverId, tcName);
+            var (success, error) = await TcSvc.DeleteTimeConditionAsync(_deletingTc.Id, serverId);
             _deletingTc = null;
-            _deleteError = null;
-            await LoadConditions();
+
+            if (success)
+            {
+                Toast.Show(L["Toast_Deleted"], ToastLevel.Success, tcName);
+                await LoadConditions();
+            }
+            else
+            {
+                Toast.Show(L["Toast_Error"], ToastLevel.Error, error);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            _deleteError = error ?? "Failed to delete time condition.";
+            _deletingTc = null;
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, ex.Message);
         }
     }
 

@@ -8,6 +8,7 @@
 @inject IConfigProviderResolver ConfigResolver
 @inject IConfigOperationState ConfigOp
 @inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
 @inject NavigationManager Nav
 @implements IDisposable
 
@@ -90,32 +91,20 @@
     }
 </div>
 
-@if (_showDeleteConfirm)
-{
-    <div class="confirm-overlay" @onclick="CancelDelete">
-        <div class="confirm-dialog" @onclick:stopPropagation="true">
-            <h4>@L["Trunk_DeleteTitle"]</h4>
-            <p>@L["Trunk_DeleteConfirm", _deletingTrunk?.Name ?? ""] @L["Ext_CannotUndo"]</p>
-            <div class="confirm-dialog-actions">
-                <button class="btn btn-sm" @onclick="CancelDelete">@L["Btn_Cancel"]</button>
-                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">@L["Btn_Delete"]</button>
-            </div>
-        </div>
-    </div>
-}
-
-@if (_actionResult is not null)
-{
-    <p class="action-result">@_actionResult</p>
-}
+<ConfirmDialog @ref="_deleteDialog"
+    Title="@L["Trunk_DeleteTitle"]"
+    Message="@L["Trunk_DeleteConfirm", _deletingTrunk?.Name ?? ""]"
+    ConfirmText="@L["Btn_Delete"]"
+    CancelText="@L["Btn_Cancel"]"
+    ConfirmStyle="danger"
+    OnConfirm="ExecuteDelete" />
 
 @code {
     private Timer? _timer;
     private TrunkStatus? _statusFilter;
     private List<TrunkViewModel> _trunks = [];
-    private bool _showDeleteConfirm;
     private TrunkViewModel? _deletingTrunk;
-    private string? _actionResult;
+    private ConfirmDialog? _deleteDialog;
 
     private IEnumerable<TrunkViewModel> FilteredTrunks =>
         _statusFilter.HasValue ? _trunks.Where(t => t.Status == _statusFilter.Value) : _trunks;
@@ -155,13 +144,7 @@
     private void ConfirmDelete(TrunkViewModel trunk)
     {
         _deletingTrunk = trunk;
-        _showDeleteConfirm = true;
-    }
-
-    private void CancelDelete()
-    {
-        _showDeleteConfirm = false;
-        _deletingTrunk = null;
+        _deleteDialog?.Show();
     }
 
     private async Task ExecuteDelete()
@@ -171,16 +154,25 @@
         var serverId = ServerSvc.SelectedServerId;
         if (serverId is null) return;
 
-        using var _ = ConfigOp.Begin("Deleting Trunk", serverId, _deletingTrunk.Name);
-        var success = await TrunkSvc.DeleteTrunkAsync(serverId, _deletingTrunk.Name, _deletingTrunk.Technology);
-        _actionResult = success
-            ? $"Trunk '{_deletingTrunk.Name}' deleted successfully."
-            : $"Failed to delete trunk '{_deletingTrunk.Name}'.";
+        var trunkName = _deletingTrunk.Name;
+        try
+        {
+            using var _ = ConfigOp.Begin("Deleting Trunk", serverId, trunkName);
+            var success = await TrunkSvc.DeleteTrunkAsync(serverId, trunkName, _deletingTrunk.Technology);
+            _deletingTrunk = null;
 
-        _showDeleteConfirm = false;
-        _deletingTrunk = null;
+            if (success)
+                Toast.Show(L["Toast_Deleted"], ToastLevel.Success, trunkName);
+            else
+                Toast.Show(L["Toast_Error"], ToastLevel.Error);
 
-        await LoadTrunks();
+            await LoadTrunks();
+        }
+        catch (Exception ex)
+        {
+            _deletingTrunk = null;
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, ex.Message);
+        }
     }
 
     private async Task TestCall(TrunkViewModel trunk)
@@ -188,14 +180,14 @@
         var serverId = ServerSvc.SelectedServerId;
         if (serverId is null)
         {
-            _actionResult = L["Trunk_TestCallNoServer"];
+            Toast.Show(L["Toast_Error"], ToastLevel.Warning, L["Trunk_TestCallNoServer"]);
             return;
         }
 
         var entry = Monitor.GetServer(serverId);
         if (entry is null)
         {
-            _actionResult = L["Trunk_TestCallNoServer"];
+            Toast.Show(L["Toast_Error"], ToastLevel.Warning, L["Trunk_TestCallNoServer"]);
             return;
         }
 
@@ -218,13 +210,14 @@
             };
 
             var response = await entry.Connection.SendActionAsync(action);
-            _actionResult = string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase)
-                ? string.Format(L["Trunk_TestCallSuccess"], trunk.Name)
-                : string.Format(L["Trunk_TestCallFailed"], trunk.Name, response.Message ?? "Unknown error");
+            if (string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase))
+                Toast.Show(string.Format(L["Trunk_TestCallSuccess"], trunk.Name), ToastLevel.Success);
+            else
+                Toast.Show(L["Toast_Error"], ToastLevel.Error, string.Format(L["Trunk_TestCallFailed"], trunk.Name, response.Message ?? "Unknown error"));
         }
         catch (Exception ex)
         {
-            _actionResult = string.Format(L["Trunk_TestCallFailed"], trunk.Name, ex.Message);
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, string.Format(L["Trunk_TestCallFailed"], trunk.Name, ex.Message));
         }
     }
 
