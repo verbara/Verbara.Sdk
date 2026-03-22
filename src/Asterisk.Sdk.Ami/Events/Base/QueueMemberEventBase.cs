@@ -7,7 +7,10 @@ public class QueueMemberEventBase : ManagerEvent
 {
     public string? Queue { get; set; }
     public string? MemberName { get; set; }
+    /// <summary>Member interface. Asterisk &lt;21 uses "Interface", Asterisk 22+ uses "Location".</summary>
     public string? Interface { get; set; }
+    /// <summary>Asterisk 22+ sends "Location" instead of "Interface" for the member interface.</summary>
+    public string? Location { get; set; }
     public string? StateInterface { get; set; }
     public string? Membership { get; set; }
     public int? Penalty { get; set; }
