@@ -3,6 +3,12 @@ using Asterisk.Sdk.Attributes;
 
 namespace Asterisk.Sdk.Ami.Events;
 
+/// <summary>
+/// Response event from SIPpeers/IAXpeers actions.
+/// chan_sip was removed in Asterisk 21 — this event is only relevant for IAX2 peers.
+/// For PJSIP, use PJSIPShowEndpoints action instead.
+/// </summary>
+[Obsolete("chan_sip removed in Asterisk 21. Use PjSipShowEndpointsAction for PJSIP endpoints.")]
 [AsteriskMapping("PeerEntry")]
 public sealed class PeerEntryEvent : ResponseEvent
 {

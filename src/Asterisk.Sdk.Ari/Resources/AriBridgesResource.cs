@@ -65,4 +65,37 @@ public sealed class AriBridgesResource : IAriBridgesResource
             null, cancellationToken);
         await response.EnsureAriSuccessAsync();
     }
+
+    public async ValueTask<AriPlayback> PlayAsync(string bridgeId, string media, string? lang = null, int? offsetms = null, int? skipms = null, string? playbackId = null, string? format = null, CancellationToken cancellationToken = default)
+    {
+        var query = $"media={Uri.EscapeDataString(media)}";
+        if (lang is not null) query += $"&lang={Uri.EscapeDataString(lang)}";
+        if (offsetms.HasValue) query += $"&offsetms={offsetms.Value}";
+        if (skipms.HasValue) query += $"&skipms={skipms.Value}";
+        if (playbackId is not null) query += $"&playbackId={Uri.EscapeDataString(playbackId)}";
+        if (format is not null) query += $"&format={Uri.EscapeDataString(format)}";
+
+        var response = await _http.PostAsync(
+            $"bridges/{Uri.EscapeDataString(bridgeId)}/play?{query}", null, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriPlayback)!;
+    }
+
+    public async ValueTask<AriLiveRecording> RecordAsync(string bridgeId, string name, string recordingFormat, int? maxDurationSeconds = null, int? maxSilenceSeconds = null, string? ifExists = null, bool? beep = null, string? terminateOn = null, string? format = null, CancellationToken cancellationToken = default)
+    {
+        var query = $"name={Uri.EscapeDataString(name)}&format={Uri.EscapeDataString(recordingFormat)}";
+        if (maxDurationSeconds.HasValue) query += $"&maxDurationSeconds={maxDurationSeconds.Value}";
+        if (maxSilenceSeconds.HasValue) query += $"&maxSilenceSeconds={maxSilenceSeconds.Value}";
+        if (ifExists is not null) query += $"&ifExists={Uri.EscapeDataString(ifExists)}";
+        if (beep.HasValue) query += $"&beep={beep.Value.ToString().ToLowerInvariant()}";
+        if (terminateOn is not null) query += $"&terminateOn={Uri.EscapeDataString(terminateOn)}";
+        if (format is not null) query += $"&announcerFormat={Uri.EscapeDataString(format)}";
+
+        var response = await _http.PostAsync(
+            $"bridges/{Uri.EscapeDataString(bridgeId)}/record?{query}", null, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriLiveRecording)!;
+    }
 }
