@@ -78,6 +78,14 @@ public sealed class AriClient : IAriClient
     public IAriMailboxesResource Mailboxes { get; }
     public IAudioServer? AudioServer { get; }
 
+    public async ValueTask GenerateUserEventAsync(string eventName, string application, string? source = null, CancellationToken cancellationToken = default)
+    {
+        var url = $"events/user/{Uri.EscapeDataString(eventName)}?application={Uri.EscapeDataString(application)}";
+        if (source is not null) url += $"&source={Uri.EscapeDataString(source)}";
+        var response = await _httpClient.PostAsync(url, null, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+    }
+
     public AriClient(IOptions<AriClientOptions> options, ILogger<AriClient> logger, IAudioServer? audioServer = null)
     {
         _options = options.Value;

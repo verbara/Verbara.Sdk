@@ -95,4 +95,13 @@ public sealed class AriRecordingsResource : IAriRecordingsResource
             $"recordings/live/{Uri.EscapeDataString(recordingName)}/mute", cancellationToken);
         await response.EnsureAriSuccessAsync();
     }
+
+    public async ValueTask<Stream> GetStoredFileAsync(string recordingName, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetAsync(
+            $"recordings/stored/{Uri.EscapeDataString(recordingName)}/file",
+            HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+        return await response.Content.ReadAsStreamAsync(cancellationToken);
+    }
 }
