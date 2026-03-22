@@ -175,6 +175,7 @@ builder.Services.AddSingleton<IExtensionTemplateRepository>(sp =>
 builder.Services.AddSingleton<IExtensionTemplateService, ExtensionTemplateService>();
 
 builder.Services.AddScoped<ISelectedServerService, SelectedServerService>();
+builder.Services.Configure<SoftphoneOptions>(builder.Configuration.GetSection("Softphone"));
 
 var app = builder.Build();
 
