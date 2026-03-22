@@ -85,6 +85,53 @@ public sealed class PbxConfigManager : IConfigProvider
         return category?.Variables;
     }
 
+    /// <summary>
+    /// Gets all lines of a config section as key-value pairs, preserving duplicates.
+    /// Unlike <see cref="GetSectionAsync"/> (which uses Dictionary), this supports
+    /// repeated keys like multiple "member" lines in queues.conf.
+    /// </summary>
+    public async Task<List<KeyValuePair<string, string>>?> GetSectionLinesAsync(
+        string serverId, string filename, string section, CancellationToken ct = default)
+    {
+        var response = await GetConfigAsync(serverId, filename, ct);
+        if (response?.RawFields is null)
+            return null;
+
+        // Find the category number for our section name
+        string? targetCatNum = null;
+        foreach (var (key, value) in response.RawFields)
+        {
+            if (key.StartsWith("Category-", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(value, section, StringComparison.OrdinalIgnoreCase))
+            {
+                targetCatNum = key[9..];
+                break;
+            }
+        }
+
+        if (targetCatNum is null)
+            return null;
+
+        // Parse Line-NNNNNN-MMMMMM fields for this category
+        var prefix = $"Line-{targetCatNum}-";
+        var lines = new List<KeyValuePair<string, string>>();
+
+        foreach (var (key, value) in response.RawFields)
+        {
+            if (!key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var eqIdx = value.IndexOf('=');
+            if (eqIdx <= 0) continue;
+
+            var varName = value[..eqIdx].Trim();
+            var varValue = value[(eqIdx + 1)..].Trim();
+            lines.Add(new(varName, varValue));
+        }
+
+        return lines;
+    }
+
     public async Task<bool> CreateSectionAsync(string serverId, string filename, string section,
         Dictionary<string, string> variables, string? templateName = null, CancellationToken ct = default)
     {
@@ -233,6 +280,43 @@ public sealed class PbxConfigManager : IConfigProvider
         {
             var ms = ElapsedMs(sw);
             PbxConfigLog.OperationFailed(_logger, ex, "DeleteSection", serverId, filename, section, ms);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Removes a specific variable line (matching by value) from a config section.
+    /// Used for deleting static queue members from queues.conf in file mode.
+    /// </summary>
+    public async Task<bool> RemoveLineAsync(string serverId, string filename, string section,
+        string variable, string matchValue, CancellationToken ct = default)
+    {
+        var entry = _monitor.GetServer(serverId);
+        if (entry is null) return false;
+
+        var action = new UpdateConfigAction
+        {
+            SrcFilename = filename,
+            DstFilename = filename,
+        };
+        action.AddDelete(section, variable, matchValue);
+
+        var mode = GetConnectionMode(entry);
+        PbxConfigLog.OperationStart(_logger, "RemoveLine", serverId, filename, section, mode);
+        var sw = Stopwatch.GetTimestamp();
+
+        try
+        {
+            var response = await entry.ConfigConnection.SendActionAsync(action, ct);
+            var ms = ElapsedMs(sw);
+            var result = response.Response ?? "null";
+            PbxConfigLog.OperationEnd(_logger, "RemoveLine", serverId, filename, section, result, ms);
+            return response.Response == "Success";
+        }
+        catch (Exception ex)
+        {
+            var ms = ElapsedMs(sw);
+            PbxConfigLog.OperationFailed(_logger, ex, "RemoveLine", serverId, filename, section, ms);
             return false;
         }
     }

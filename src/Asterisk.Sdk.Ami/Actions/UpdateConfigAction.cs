@@ -46,6 +46,13 @@ public sealed class UpdateConfigAction : ManagerAction, IHasExtraFields
         return this;
     }
 
+    /// <summary>Add a Delete operation to delete a variable with a matching value from a category.</summary>
+    public UpdateConfigAction AddDelete(string category, string variable, string matchValue)
+    {
+        _operations.Add(new ConfigOperation("Delete", category, variable, matchValue));
+        return this;
+    }
+
     /// <summary>Add a DelCat operation to delete an entire category.</summary>
     public UpdateConfigAction AddDeleteCategory(string category)
     {

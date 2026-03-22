@@ -227,9 +227,6 @@ else
 
     private async Task RemoveMember(AsteriskQueueMember member)
     {
-        var entry = Monitor.GetServer(ServerId);
-        if (entry is null) return;
-
         var iface = member.Interface;
         if (string.IsNullOrEmpty(QueueName) || string.IsNullOrEmpty(iface))
         {
@@ -238,15 +235,11 @@ else
         }
 
         using var _ = ConfigOp.Begin("Removing Member", ServerId, $"{QueueName}/{iface}");
-        var response = await entry.ConfigConnection.SendActionAsync(new QueueRemoveAction
-        {
-            Queue = QueueName,
-            Interface = iface
-        });
-        if (string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase))
+        var (success, error) = await QueueSvc.RemoveMemberAsync(ServerId, QueueName, iface);
+        if (success)
             Toast.Show(L["Toast_Success"], ToastLevel.Success, $"{iface} removed");
         else
-            Toast.Show(L["Toast_Error"], ToastLevel.Error, response.Message);
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, error ?? "Unknown error");
     }
 
     private void ConfirmDelete() => _deleteDialog?.Show();

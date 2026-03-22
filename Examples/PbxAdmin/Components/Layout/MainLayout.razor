@@ -24,7 +24,6 @@ else
             <NavLink href="/" Match="NavLinkMatch.All" class="nav-item">@L["Nav_Home"]</NavLink>
             <NavLink href="/calls" class="nav-item">@L["Nav_Calls"]</NavLink>
             <NavLink href="/queues" class="nav-item">@L["Nav_Queues"]</NavLink>
-            <NavLink href="/agents" class="nav-item">@L["Nav_Agents"]</NavLink>
             <NavLink href="/channels" class="nav-item">@L["Nav_Channels"]</NavLink>
 
             <div class="nav-section">@L["Nav_PbxManagement"]</div>
@@ -88,7 +87,6 @@ else
                 <div class="header-right">
                     <span class="header-stat">@_totalChannels @L["Stat_Calls"]</span>
                     <span class="header-stat">@_totalQueues @L["Stat_Queues"]</span>
-                    <span class="header-stat">@_totalAgents @L["Stat_Agents"]</span>
                     <NotificationCenter />
                     <button class="btn btn-sm btn-muted" @onclick="() => _glossaryOpen = !_glossaryOpen" title="@L["Glossary_Title"]">📖</button>
                     <button class="btn btn-sm btn-muted lang-switch" @onclick="SwitchLanguage">
@@ -138,7 +136,6 @@ else
     private Timer? _timer;
     private int _totalChannels;
     private int _totalQueues;
-    private int _totalAgents;
     private bool _isSpanish;
     private bool _glossaryOpen;
 
@@ -176,7 +173,6 @@ else
         {
             _totalChannels = entry.Server.Channels.ChannelCount;
             _totalQueues = entry.Server.Queues.QueueCount;
-            _totalAgents = entry.Server.Agents.AgentCount;
         }
     }
 
