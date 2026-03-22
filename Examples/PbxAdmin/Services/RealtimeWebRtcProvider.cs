@@ -44,8 +44,9 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
         var extensionId = $"{_options.ExtensionPrefix}-{username}";
         var password = Guid.NewGuid().ToString("N")[..16];
         var serverEntry = _monitor.GetServer(serverId);
-        var serverHost = GetServerHost(serverId);
-        var wssUrl = $"wss://{serverHost}:{_options.WssPort}/ws";
+        var wssHost = _options.WssHost ?? "localhost";
+        var wssPort = GetWssPort(serverId);
+        var wssUrl = $"wss://{wssHost}:{wssPort}/ws";
 
         var connStr = GetConnectionString(serverId);
         if (connStr is null)
@@ -59,11 +60,11 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
             // Upsert ps_endpoints
             const string endpointSql = """
                 INSERT INTO ps_endpoints (id, transport, aors, auth, context, disallow, allow, direct_media,
-                    webrtc, dtls_auto_generate_cert, use_avpf, media_encryption, ice_support, use_received_transport,
-                    rtcp_mux, bundle, max_audio_streams, max_video_streams)
+                    webrtc, dtls_auto_generate_cert, use_avpf, media_encryption, ice_support,
+                    media_use_received_transport, rtcp_mux, bundle, max_audio_streams, max_video_streams)
                 VALUES (@id, 'transport-wss', @aors, @auth, @context, 'all', @codecs, 'no',
-                    'yes', 'yes', 'yes', 'dtls', 'yes', 'yes',
-                    'yes', 'yes', 1, 1)
+                    'yes', 'yes', 'yes', 'dtls', 'yes',
+                    'yes', 'yes', 'yes', 1, 1)
                 ON CONFLICT (id) DO UPDATE SET
                     aors = EXCLUDED.aors,
                     auth = EXCLUDED.auth,
@@ -166,7 +167,7 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
         return null;
     }
 
-    private string GetServerHost(string serverId)
+    private int GetWssPort(string serverId)
     {
         var servers = _configuration.GetSection("Asterisk:Servers").GetChildren();
         foreach (var section in servers)
@@ -175,9 +176,11 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
             if (!string.Equals(id, serverId, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            return section["Hostname"] ?? "localhost";
+            var port = section["WssPort"];
+            if (port is not null && int.TryParse(port, out var p))
+                return p;
         }
 
-        return "localhost";
+        return _options.WssPort;
     }
 }

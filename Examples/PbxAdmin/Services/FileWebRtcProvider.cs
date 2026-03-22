@@ -50,8 +50,9 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
     {
         var extensionId = $"{_options.ExtensionPrefix}-{username}";
         var password = Guid.NewGuid().ToString("N")[..16];
-        var serverHost = GetServerHost(serverId);
-        var wssUrl = string.Create(CultureInfo.InvariantCulture, $"wss://{serverHost}:{_options.WssPort}/ws");
+        var wssHost = _options.WssHost ?? "localhost";
+        var wssPort = GetWssPort(serverId);
+        var wssUrl = string.Create(CultureInfo.InvariantCulture, $"wss://{wssHost}:{wssPort}/ws");
         var filePath = GetPjsipFilePath(serverId);
 
         try
@@ -111,7 +112,7 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
             ["use_avpf"] = "yes",
             ["media_encryption"] = "dtls",
             ["ice_support"] = "yes",
-            ["use_received_transport"] = "yes",
+            ["media_use_received_transport"] = "yes",
             ["rtcp_mux"] = "yes",
         };
 
@@ -173,16 +174,20 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
     // Config helpers
     // -----------------------------------------------------------------------
 
-    private string GetServerHost(string serverId)
+    private int GetWssPort(string serverId)
     {
         foreach (var section in _configuration.GetSection("Asterisk:Servers").GetChildren())
         {
             var id = section["Id"] ?? "default";
             if (string.Equals(id, serverId, StringComparison.OrdinalIgnoreCase))
-                return section["Hostname"] ?? "localhost";
+            {
+                var port = section["WssPort"];
+                if (port is not null && int.TryParse(port, out var p))
+                    return p;
+            }
         }
 
-        return "localhost";
+        return _options.WssPort;
     }
 
     private string GetPjsipFilePath(string serverId)
