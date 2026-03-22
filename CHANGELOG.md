@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-03-22
+
+### Added
+
+- **AMI:** 11 new actions — `VoicemailRefresh`, `VoicemailUserStatus`, `PresenceState`, `PresenceStateList`, `QueueReload`, `QueueRule`, `DBGetTree`, `CoreShowChannelMap`, `Flash`, `DialplanExtensionAdd`, `DialplanExtensionRemove`
+- **AMI:** 3 new response events — `QueueRuleEvent`, `QueueRuleListCompleteEvent`, `DbGetTreeResponseEvent`
+- **AudioSocket:** 8 new high sample rate frame types for Asterisk 23 — `AudioSlin12` (12 kHz) through `AudioSlin192` (192 kHz)
+- **AudioSocket:** `GetSampleRate()` and `IsAudio()` extension methods on `AudioSocketFrameType`
+- **AudioSocket:** `WriteAudioAsync` overload accepting explicit `AudioSocketFrameType` for high-rate audio
+
+### Compatibility
+
+- AMI Action coverage: 150/152 (99%) of Asterisk 22-23 actions (remaining 2: DAHDI-specific)
+- ARI endpoint coverage: 92/98 (94%)
+- AudioSocket: full Asterisk 18-23 protocol support including high sample rate types
+
+---
+
 ## [1.3.1] - 2026-03-22
 
 ### Added
