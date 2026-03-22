@@ -7,8 +7,4 @@ namespace Asterisk.Sdk.Ami.Events;
 [AsteriskMapping("QueueMemberAdded")]
 public sealed class QueueMemberAddedEvent : QueueMemberEventBase
 {
-    public string? Stateinterface { get; set; }
-    public int? LoginTime { get; set; }
-    public int? WrapupTime { get; set; }
 }
-

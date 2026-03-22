@@ -1,17 +1,14 @@
 using Asterisk.Sdk;
 using Asterisk.Sdk.Attributes;
+using Asterisk.Sdk.Ami.Events.Base;
 
 namespace Asterisk.Sdk.Ami.Events;
 
+/// <summary>
+/// Fired when a queue member's device state changes.
+/// Now inherits QueueMemberEventBase for full field coverage (16 fields).
+/// </summary>
 [AsteriskMapping("QueueMemberStatus")]
-public sealed class QueueMemberStatusEvent : ManagerEvent
+public sealed class QueueMemberStatusEvent : QueueMemberEventBase
 {
-    public string? Queue { get; set; }
-    public string? Interface { get; set; }
-    public int? Status { get; set; }
-    public string? Ringinuse { get; set; }
-    public int? Wrapuptime { get; set; }
-    /// <summary>Time when the member entered the queue (seconds). Asterisk 20+.</summary>
-    public int? LoginTime { get; set; }
 }
-
