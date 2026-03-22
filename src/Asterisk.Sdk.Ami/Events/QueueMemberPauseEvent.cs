@@ -1,22 +1,17 @@
 using Asterisk.Sdk;
 using Asterisk.Sdk.Attributes;
+using Asterisk.Sdk.Ami.Events.Base;
 
 namespace Asterisk.Sdk.Ami.Events;
 
+/// <summary>
+/// Fired when a queue member is paused or unpaused (legacy event name).
+/// Now inherits QueueMemberEventBase for full field coverage.
+/// Adds Pausedreason for the specific pause reason field.
+/// </summary>
 [AsteriskMapping("QueueMemberPause")]
-public sealed class QueueMemberPauseEvent : ManagerEvent
+public sealed class QueueMemberPauseEvent : QueueMemberEventBase
 {
-    public string? Membership { get; set; }
-    public long? Lastcall { get; set; }
-    public long? Lastpause { get; set; }
-    public int? CallsTaken { get; set; }
-    public int? Penalty { get; set; }
-    public int? Status { get; set; }
-    public bool? Ringinuse { get; set; }
-    public string? StateInterface { get; set; }
-    public int? Incall { get; set; }
+    /// <summary>Reason for pause (alternate casing from Asterisk).</summary>
     public string? Pausedreason { get; set; }
-    public int? LoginTime { get; set; }
-    public int? WrapupTime { get; set; }
 }
-
