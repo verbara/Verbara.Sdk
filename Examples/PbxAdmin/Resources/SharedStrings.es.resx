@@ -499,6 +499,12 @@
   <data name="QDetail_AgentStatus" xml:space="preserve"><value>Estado:</value></data>
   <data name="QDetail_AgentCalls" xml:space="preserve"><value>Llamadas:</value></data>
   <data name="QDetail_AgentPenalty" xml:space="preserve"><value>Penalización:</value></data>
+  <data name="QDetail_MembersSection" xml:space="preserve"><value>Miembros</value></data>
+  <data name="QDetail_MemberStatus" xml:space="preserve"><value>Estado</value></data>
+  <data name="QDetail_MemberCalls" xml:space="preserve"><value>Llamadas</value></data>
+  <data name="QDetail_MemberPenalty" xml:space="preserve"><value>Penalización</value></data>
+  <data name="QueueDetail_Members" xml:space="preserve"><value>Miembros</value></data>
+  <data name="HelpPanel_QueueDetail_Members" xml:space="preserve"><value>Miembros de la cola: muestra el estado del dispositivo, llamadas atendidas, penalidad y estado de pausa. Puede pausar/reactivar miembros o removerlos de la cola.</value></data>
   <data name="QDetail_Pause" xml:space="preserve"><value>Pausar</value></data>
   <data name="QDetail_Unpause" xml:space="preserve"><value>Despausar</value></data>
   <data name="QDetail_CallersWaiting" xml:space="preserve"><value>Llamantes en Espera</value></data>

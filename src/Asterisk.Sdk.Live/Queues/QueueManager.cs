@@ -26,6 +26,9 @@ internal static partial class QueueManagerLog
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "[QUEUE] Caller left: queue={QueueName} channel={Channel}")]
     public static partial void CallerLeft(ILogger logger, string queueName, string channel);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "[QUEUE] Queue removed: queue={QueueName}")]
+    public static partial void QueueRemoved(ILogger logger, string queueName);
 }
 
 /// <summary>
@@ -216,6 +219,23 @@ public sealed class QueueManager
         if (_queues.TryGetValue(queueName, out var queue))
             return queue.Members.Values.Where(predicate);
         return [];
+    }
+
+    /// <summary>Remove a queue entirely from the in-memory state.</summary>
+    public bool RemoveQueue(string queueName)
+    {
+        if (!_queues.TryRemove(queueName, out var queue))
+            return false;
+
+        // Clean up reverse member index
+        foreach (var iface in queue.Members.Keys)
+        {
+            if (_queuesByMember.TryGetValue(iface, out var queues))
+                queues.TryRemove(queueName, out _);
+        }
+
+        QueueManagerLog.QueueRemoved(_logger, queueName);
+        return true;
     }
 
     public void Clear()

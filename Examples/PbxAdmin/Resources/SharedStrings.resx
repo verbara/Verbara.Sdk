@@ -499,6 +499,12 @@
   <data name="QDetail_AgentStatus" xml:space="preserve"><value>Status:</value></data>
   <data name="QDetail_AgentCalls" xml:space="preserve"><value>Calls:</value></data>
   <data name="QDetail_AgentPenalty" xml:space="preserve"><value>Penalty:</value></data>
+  <data name="QDetail_MembersSection" xml:space="preserve"><value>Members</value></data>
+  <data name="QDetail_MemberStatus" xml:space="preserve"><value>Status</value></data>
+  <data name="QDetail_MemberCalls" xml:space="preserve"><value>Calls</value></data>
+  <data name="QDetail_MemberPenalty" xml:space="preserve"><value>Penalty</value></data>
+  <data name="QueueDetail_Members" xml:space="preserve"><value>Members</value></data>
+  <data name="HelpPanel_QueueDetail_Members" xml:space="preserve"><value>Queue members: shows each member's device status, calls taken, penalty, and pause state. You can pause/unpause members or remove them from the queue.</value></data>
   <data name="QDetail_Pause" xml:space="preserve"><value>Pause</value></data>
   <data name="QDetail_Unpause" xml:space="preserve"><value>Unpause</value></data>
   <data name="QDetail_CallersWaiting" xml:space="preserve"><value>Callers Waiting</value></data>

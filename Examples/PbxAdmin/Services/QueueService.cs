@@ -27,12 +27,15 @@ public sealed class QueueService
 {
     private readonly IConfigProviderResolver _resolver;
     private readonly PbxConfigManager _pbxConfig;
+    private readonly AsteriskMonitorService _monitor;
     private readonly ILogger<QueueService> _logger;
 
-    public QueueService(IConfigProviderResolver resolver, PbxConfigManager pbxConfig, ILogger<QueueService> logger)
+    public QueueService(IConfigProviderResolver resolver, PbxConfigManager pbxConfig,
+        AsteriskMonitorService monitor, ILogger<QueueService> logger)
     {
         _resolver = resolver;
         _pbxConfig = pbxConfig;
+        _monitor = monitor;
         _logger = logger;
     }
 
@@ -51,6 +54,9 @@ public sealed class QueueService
 
             if (!await provider.ReloadModuleAsync(serverId, "app_queue.so", ct))
                 QueueServiceLog.ReloadFailed(_logger, queueName, serverId);
+
+            // Remove from Live layer so UI updates immediately
+            _monitor.GetServer(serverId)?.Server.Queues.RemoveQueue(queueName);
 
             QueueServiceLog.Deleted(_logger, serverId, queueName);
             return true;
@@ -89,6 +95,9 @@ public sealed class QueueService
 
             if (!await _resolver.GetProvider(serverId).ReloadModuleAsync(serverId, "app_queue.so", ct))
                 QueueServiceLog.ReloadFailed(_logger, queueName, serverId);
+
+            // Notify the in-memory QueueManager so the UI updates immediately
+            _monitor.GetServer(serverId)?.Server.Queues.OnMemberRemoved(queueName, iface);
 
             QueueServiceLog.MemberRemoved(_logger, serverId, queueName, iface);
             return (true, null);
