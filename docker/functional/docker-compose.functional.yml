@@ -19,6 +19,26 @@ services:
       - ./asterisk-config/cel_manager.conf:/etc/asterisk/cel_manager.conf:ro
       - ./asterisk-config/res_parking.conf:/etc/asterisk/res_parking.conf:ro
       - ./asterisk-config/voicemail.conf:/etc/asterisk/voicemail.conf:ro
+      - ../../docker/moh:/var/lib/asterisk/moh:ro
+      - recordings:/var/spool/asterisk/monitor
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show version"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  pstn-emulator:
+    image: docker-asterisk-file:latest
+    container_name: functional-pstn
+    volumes:
+      - ./pstn-emulator-config/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./pstn-emulator-config/pjsip.conf:/etc/asterisk/pjsip.conf:ro
+      - ./pstn-emulator-config/voicemail.conf:/etc/asterisk/voicemail.conf:ro
+      - ./pstn-emulator-config/modules.conf:/etc/asterisk/modules.conf:ro
+      - ./pstn-emulator-config/manager.conf:/etc/asterisk/manager.conf:ro
+    depends_on:
+      asterisk:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "asterisk", "-rx", "core show version"]
       interval: 5s
@@ -45,3 +65,6 @@ services:
     depends_on:
       asterisk:
         condition: service_healthy
+
+volumes:
+  recordings:
