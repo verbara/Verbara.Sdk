@@ -53,7 +53,7 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
         var wssHost = _options.WssHost ?? "localhost";
         var wssPort = GetWssPort(serverId);
         var scheme = _options.UseTls ? "wss" : "ws";
-        var wssUrl = string.Create(CultureInfo.InvariantCulture, $"{scheme}://{wssHost}:{wssPort}");
+        var wssUrl = string.Create(CultureInfo.InvariantCulture, $"{scheme}://{wssHost}:{wssPort}/ws");
         var filePath = GetPjsipFilePath(serverId);
 
         try
