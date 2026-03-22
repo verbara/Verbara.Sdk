@@ -85,7 +85,16 @@ public sealed class AmiProtocolReader
                 // Fast path: parse field directly from bytes (no intermediate string allocation)
                 if (TryParseFieldBytes(line, out var key, out var value))
                 {
-                    fields[key] = value;
+                    // Accumulate "Output:" lines into __CommandOutput (Asterisk 22+ format)
+                    if (key.Equals("Output", StringComparison.OrdinalIgnoreCase))
+                    {
+                        commandOutput ??= new StringBuilder();
+                        commandOutput.AppendLine(value);
+                    }
+                    else
+                    {
+                        fields[key] = value;
+                    }
 
                     if (commandOutput is null
                         && key.Equals("Response", StringComparison.OrdinalIgnoreCase)
