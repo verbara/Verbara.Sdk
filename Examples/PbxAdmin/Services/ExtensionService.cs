@@ -592,32 +592,57 @@ public sealed class ExtensionService : IExtensionService
         }
     }
 
+    /// <summary>
+    /// Detects PJSIP endpoint status from "pjsip show endpoints" output.
+    /// Searches for the Endpoint line matching the name and parses its state.
+    /// States: "Not in use"=registered, "In use"=registered+call, "Unavailable"=offline.
+    /// </summary>
     private static ExtensionStatus DetectStatusFromOutput(string output, string name)
     {
         foreach (var line in output.Split('\n'))
         {
+            // Only match "Endpoint:" lines containing our name to avoid auth/aor false matches
+            if (!line.Contains("Endpoint:", StringComparison.OrdinalIgnoreCase))
+                continue;
             if (!line.Contains(name, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var upper = line.ToUpperInvariant();
-            if (upper.Contains("AVAIL") || upper.Contains("REACHABLE") || upper.Contains("REGISTERED"))
-                return ExtensionStatus.Registered;
-            if (upper.Contains("UNAVAIL") || upper.Contains("UNREACHABLE"))
-                return ExtensionStatus.Unreachable;
-            if (upper.Contains("UNREGISTERED"))
-                return ExtensionStatus.Unregistered;
+            return ParseEndpointLine(line.ToUpperInvariant());
         }
 
         return ExtensionStatus.Unknown;
     }
 
+    private static ExtensionStatus ParseEndpointLine(string upper)
+    {
+        // Check negative states first (UNAVAIL before AVAIL, UNREGISTERED before REGISTERED)
+        if (upper.Contains("UNAVAIL") || upper.Contains("UNREACHABLE") || upper.Contains("UNREGISTERED"))
+            return ExtensionStatus.Unregistered;
+
+        // Positive states: "Not in use", "In use", "Ringing", "Busy" all mean registered
+        if (upper.Contains("NOT IN USE") || upper.Contains("IN USE")
+            || upper.Contains("RINGING") || upper.Contains("BUSY"))
+            return ExtensionStatus.Registered;
+
+        // Fallback positive checks
+        if (upper.Contains("AVAIL") || upper.Contains("REACHABLE") || upper.Contains("REGISTERED"))
+            return ExtensionStatus.Registered;
+
+        return ExtensionStatus.Unknown;
+    }
+
+    /// <summary>
+    /// Detects PJSIP status from contact/endpoint detail output.
+    /// </summary>
     private static ExtensionStatus DetectPjsipStatus(string output)
     {
         var upper = output.ToUpperInvariant();
-        if (upper.Contains("AVAIL") || upper.Contains("REACHABLE"))
-            return ExtensionStatus.Registered;
+        // Check negative first to avoid AVAIL matching inside UNAVAIL
         if (upper.Contains("UNAVAIL") || upper.Contains("UNREACHABLE"))
             return ExtensionStatus.Unreachable;
+        if (upper.Contains("NOT IN USE") || upper.Contains("IN USE")
+            || upper.Contains("AVAIL") || upper.Contains("REACHABLE"))
+            return ExtensionStatus.Registered;
         return ExtensionStatus.Unknown;
     }
 
