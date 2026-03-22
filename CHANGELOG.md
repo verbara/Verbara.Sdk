@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-03-22
+
+### Added
+
+- **AMI:** 3 new actions for Asterisk 20+ compatibility (`PJSIPShowContacts`, `PJSIPShowEndpoint`, `PJSIPShowRegistrationInboundContactStatuses`)
+- **ARI:** `AriBridgesResource` — bridge management operations (create, addChannel, removeChannel, startMoh, stopMoh, record)
+- **ARI:** Extended `IAriClient` with `Bridges` property for ARI bridge operations
+
+### Fixed
+
+- **AMI:** Complete queue event fields (`QueueEntryEvent`, `QueueMemberStatusEvent`, `QueueMemberPauseEvent`, `PeerEntryEvent`) for Asterisk 18-23 compatibility
+- **Live:** Use `Location` field for queue member interface on Asterisk 22+ (falls back to `StateInterface`)
+
+### Compatibility
+
+- Tested with Asterisk 18, 20, 22, and 23
+
+---
+
 ## [1.0.0] - 2026-03-21
 
 First stable release of Asterisk.Sdk — a .NET 10 Native AOT SDK for Asterisk PBX.
