@@ -78,6 +78,18 @@ public sealed class TrunkConfig
         return vars;
     }
 
+    /// <summary>Generates PJSIP identify section variables for IP-based trunk matching.</summary>
+    public Dictionary<string, string> ToPjsipIdentify()
+    {
+        var vars = new Dictionary<string, string>
+        {
+            ["type"] = "identify",
+            ["endpoint"] = Name ?? "",
+            ["match"] = Host ?? ""
+        };
+        return vars;
+    }
+
     /// <summary>Generates PJSIP registration section variables, or null if disabled.</summary>
     public Dictionary<string, string>? ToPjsipRegistration()
     {
