@@ -92,7 +92,7 @@
     {
         var serverId = ServerSvc.SelectedServerId;
         if (serverId is null) return;
-        await Phone.ConnectAsync(serverId, "admin");
+        await Phone.ConnectAsync(serverId);
     }
 
     private async Task HandleCall(string number) => await Phone.CallAsync(number);
