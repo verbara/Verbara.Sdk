@@ -47,4 +47,14 @@ public sealed class AriApplicationsResource : IAriApplicationsResource
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriApplication)!;
     }
+
+    public async ValueTask<AriApplication> SetEventFilterAsync(string applicationName, CancellationToken cancellationToken = default)
+    {
+        var url = $"applications/{Uri.EscapeDataString(applicationName)}/eventFilter";
+        using var request = new HttpRequestMessage(HttpMethod.Put, url);
+        var response = await _http.SendAsync(request, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriApplication)!;
+    }
 }

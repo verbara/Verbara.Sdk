@@ -52,6 +52,9 @@ public interface IAriClient : IAsyncDisposable
     /// <summary>Access mailbox operations.</summary>
     IAriMailboxesResource Mailboxes { get; }
 
+    /// <summary>Generate a user event. POST /events/user/{eventName}</summary>
+    ValueTask GenerateUserEventAsync(string eventName, string application, string? source = null, CancellationToken cancellationToken = default);
+
     /// <summary>Access the audio server (null if not configured).</summary>
     IAudioServer? AudioServer { get; }
 }
@@ -254,6 +257,9 @@ public interface IAriRecordingsResource
 
     /// <summary>Unmute live recording. DELETE /recordings/live/{recordingName}/mute</summary>
     ValueTask UnmuteAsync(string recordingName, CancellationToken cancellationToken = default);
+
+    /// <summary>Get stored recording file (binary). GET /recordings/stored/{recordingName}/file</summary>
+    ValueTask<Stream> GetStoredFileAsync(string recordingName, CancellationToken cancellationToken = default);
 }
 
 // ---------------------------------------------------------------------------
@@ -297,6 +303,9 @@ public interface IAriApplicationsResource
 
     /// <summary>Unsubscribe from event source. DELETE /applications/{applicationName}/subscription</summary>
     ValueTask<AriApplication> UnsubscribeAsync(string applicationName, string eventSource, CancellationToken cancellationToken = default);
+
+    /// <summary>Filter application events. PUT /applications/{applicationName}/eventFilter</summary>
+    ValueTask<AriApplication> SetEventFilterAsync(string applicationName, CancellationToken cancellationToken = default);
 }
 
 // ---------------------------------------------------------------------------
