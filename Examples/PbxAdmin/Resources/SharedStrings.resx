@@ -1171,4 +1171,14 @@
   <data name="Notif_Title" xml:space="preserve"><value>Notifications</value></data>
   <data name="Notif_ClearAll" xml:space="preserve"><value>Clear all</value></data>
   <data name="Notif_Empty" xml:space="preserve"><value>No notifications</value></data>
+  <data name="Toast_Success" xml:space="preserve"><value>Operation completed</value></data>
+  <data name="Toast_Error" xml:space="preserve"><value>Operation failed</value></data>
+  <data name="Toast_Saved" xml:space="preserve"><value>Changes saved</value></data>
+  <data name="Toast_Deleted" xml:space="preserve"><value>Item deleted</value></data>
+  <data name="Toast_Created" xml:space="preserve"><value>Item created</value></data>
+  <data name="Toast_Reloaded" xml:space="preserve"><value>Configuration reloaded</value></data>
+  <data name="Confirm_DeleteTitle" xml:space="preserve"><value>Confirm deletion</value></data>
+  <data name="Confirm_CannotUndo" xml:space="preserve"><value>This action cannot be undone.</value></data>
+  <data name="Btn_Deleting" xml:space="preserve"><value>Deleting...</value></data>
+  <data name="Btn_Loading" xml:space="preserve"><value>Loading...</value></data>
 </root>
