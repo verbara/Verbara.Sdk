@@ -159,6 +159,8 @@ services:
       - Asterisk__Servers__0__MohBasePath=/data/moh
       - Asterisk__Servers__0__MaxUploadSizeMb=20
       - Asterisk__Servers__0__MaxMohClassSizeMb=200
+      - Asterisk__Servers__0__ExtensionRange__Start=2000
+      - Asterisk__Servers__0__ExtensionRange__End=3999
       - Asterisk__Servers__0__WssPort=8089
       - Softphone__UseTls=true
       # File-mode PBX (extensions 4XXX/5XXX, queues sales2/support2)
@@ -172,6 +174,8 @@ services:
       - Asterisk__Servers__1__MohBasePath=/data/moh
       - Asterisk__Servers__1__MaxUploadSizeMb=20
       - Asterisk__Servers__1__MaxMohClassSizeMb=200
+      - Asterisk__Servers__1__ExtensionRange__Start=4000
+      - Asterisk__Servers__1__ExtensionRange__End=5999
       - Asterisk__Servers__1__WssPort=8190
 
 volumes:

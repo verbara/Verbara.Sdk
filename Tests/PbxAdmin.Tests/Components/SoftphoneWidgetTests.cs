@@ -22,10 +22,9 @@ public sealed class SoftphoneWidgetTests : IAsyncDisposable
         // These tests do not call ConnectAsync, so null! is safe for the resolver parameter.
         var jsRuntime = Substitute.For<IJSRuntime>();
         var toast = Substitute.For<IToastService>();
-        var options = Options.Create(new SoftphoneOptions());
 
         _ctx.Services.AddScoped<SoftphoneService>(_ =>
-            new SoftphoneService(jsRuntime, toast, null!, options));
+            new SoftphoneService(jsRuntime, toast, null!));
 
         var serverSvc = Substitute.For<ISelectedServerService>();
         serverSvc.SelectedServerId.Returns("pbx-test");

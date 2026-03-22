@@ -46,9 +46,8 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
         _logger = logger;
     }
 
-    public async Task<WebRtcCredentials> ProvisionAsync(string serverId, string username, CancellationToken ct = default)
+    public async Task<WebRtcCredentials> ProvisionAsync(string serverId, CancellationToken ct = default)
     {
-        var extensionId = $"{_options.ExtensionPrefix}-{username}";
         var password = Guid.NewGuid().ToString("N")[..16];
         var wssHost = _options.WssHost ?? "localhost";
         var wssPort = GetWssPort(serverId);
@@ -59,6 +58,8 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
         try
         {
             var configProvider = _resolver.GetProvider(serverId);
+            var range = ExtensionService.GetExtensionRange(_configuration, serverId);
+            var extensionId = await FindNextAvailableExtensionAsync(serverId, configProvider, range, ct);
             var endpointVars = BuildEndpointVariables(extensionId);
             var authVars = BuildAuthVariables(extensionId, password);
             var aorVars = BuildAorVariables();
@@ -81,7 +82,7 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
         }
         catch (Exception ex)
         {
-            FileWebRtcLog.ProvisionFailed(_logger, ex, serverId, username);
+            FileWebRtcLog.ProvisionFailed(_logger, ex, serverId, serverId);
             throw;
         }
     }
@@ -201,5 +202,29 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
         }
 
         return DefaultPjsipPath;
+    }
+
+    /// <summary>
+    /// Finds the next available numeric extension by reading pjsip.conf categories
+    /// and searching from the top of the range downward.
+    /// </summary>
+    private static async Task<string> FindNextAvailableExtensionAsync(
+        string serverId, IConfigProvider provider, (int Start, int End) range, CancellationToken ct)
+    {
+        var categories = await provider.GetCategoriesAsync(serverId, PjsipConf, ct);
+        var existing = categories
+            .Where(c => c.Variables.GetValueOrDefault("type") == "endpoint")
+            .Select(c => c.Name)
+            .ToHashSet();
+
+        for (var i = range.End; i >= range.Start; i--)
+        {
+            var candidate = i.ToString(CultureInfo.InvariantCulture);
+            if (!existing.Contains(candidate))
+                return candidate;
+        }
+
+        throw new InvalidOperationException(
+            $"No available extension in range {range.Start}-{range.End}");
     }
 }

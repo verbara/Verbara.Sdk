@@ -28,8 +28,7 @@ public class SoftphoneServiceTests
 
         var resolver = new WebRtcProviderResolver(null!, null!, configResolver);
 
-        var options = Options.Create(new SoftphoneOptions());
-        return new SoftphoneService(js, toast, resolver, options);
+        return new SoftphoneService(js, toast, resolver);
     }
 
     // -----------------------------------------------------------------------

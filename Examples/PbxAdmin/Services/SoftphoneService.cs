@@ -13,7 +13,6 @@ public sealed class SoftphoneService : IAsyncDisposable
     private readonly IJSRuntime _js;
     private readonly IToastService _toast;
     private readonly WebRtcProviderResolver _providerResolver;
-    private readonly SoftphoneOptions _options;
     private DotNetObjectReference<SoftphoneService>? _dotNetRef;
 
     public SoftphoneState State { get; private set; } = SoftphoneState.Unregistered;
@@ -30,13 +29,11 @@ public sealed class SoftphoneService : IAsyncDisposable
     public SoftphoneService(
         IJSRuntime js,
         IToastService toast,
-        WebRtcProviderResolver providerResolver,
-        IOptions<SoftphoneOptions> options)
+        WebRtcProviderResolver providerResolver)
     {
         _js = js;
         _toast = toast;
         _providerResolver = providerResolver;
-        _options = options.Value;
     }
 
     // -----------------------------------------------------------------------
@@ -44,17 +41,17 @@ public sealed class SoftphoneService : IAsyncDisposable
     // -----------------------------------------------------------------------
 
     /// <summary>Provisions a WebRTC extension and registers the SIP UA in the browser.</summary>
-    public async Task ConnectAsync(string serverId, string username)
+    public async Task ConnectAsync(string serverId)
     {
         SetState(SoftphoneState.Registering);
         try
         {
             var provider = _providerResolver.GetProvider(serverId);
-            var creds = await provider.ProvisionAsync(serverId, username);
+            var creds = await provider.ProvisionAsync(serverId);
             Extension = creds.Extension;
             _dotNetRef = DotNetObjectReference.Create(this);
             await _js.InvokeVoidAsync("Softphone.register",
-                creds.WssUrl, creds.Extension, creds.Password, username, _dotNetRef);
+                creds.WssUrl, creds.Extension, creds.Password, creds.Extension, _dotNetRef);
         }
         catch (Exception ex)
         {

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Dapper;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -20,30 +21,25 @@ internal static partial class RealtimeWebRtcLog
 public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
 {
     private readonly IConfigProviderResolver _resolver;
-    private readonly AsteriskMonitorService _monitor;
     private readonly SoftphoneOptions _options;
     private readonly IConfiguration _configuration;
     private readonly ILogger<RealtimeWebRtcProvider> _logger;
 
     public RealtimeWebRtcProvider(
         IConfigProviderResolver resolver,
-        AsteriskMonitorService monitor,
         IOptions<SoftphoneOptions> options,
         IConfiguration configuration,
         ILogger<RealtimeWebRtcProvider> logger)
     {
         _resolver = resolver;
-        _monitor = monitor;
         _options = options.Value;
         _configuration = configuration;
         _logger = logger;
     }
 
-    public async Task<WebRtcCredentials> ProvisionAsync(string serverId, string username, CancellationToken ct = default)
+    public async Task<WebRtcCredentials> ProvisionAsync(string serverId, CancellationToken ct = default)
     {
-        var extensionId = $"{_options.ExtensionPrefix}-{username}";
         var password = Guid.NewGuid().ToString("N")[..16];
-        var serverEntry = _monitor.GetServer(serverId);
         var wssHost = _options.WssHost ?? "localhost";
         var wssPort = GetWssPort(serverId);
         var scheme = _options.UseTls ? "wss" : "ws";
@@ -52,6 +48,9 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
         var connStr = GetConnectionString(serverId);
         if (connStr is null)
             throw new InvalidOperationException($"No Realtime connection string found for server '{serverId}'.");
+
+        var range = ExtensionService.GetExtensionRange(_configuration, serverId);
+        var extensionId = await FindNextAvailableExtensionAsync(connStr, range, ct);
 
         try
         {
@@ -116,17 +115,14 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
             }, commandTimeout: 15, cancellationToken: ct));
 
             // Reload res_pjsip so the new extension takes effect
-            if (serverEntry is not null)
-            {
-                await _resolver.GetProvider(serverId).ReloadModuleAsync(serverId, "res_pjsip.so", ct);
-            }
+            await _resolver.GetProvider(serverId).ReloadModuleAsync(serverId, "res_pjsip.so", ct);
 
             RealtimeWebRtcLog.Provisioned(_logger, serverId, extensionId);
             return new WebRtcCredentials(extensionId, password, wssUrl);
         }
         catch (Exception ex)
         {
-            RealtimeWebRtcLog.ProvisionFailed(_logger, ex, serverId, username);
+            RealtimeWebRtcLog.ProvisionFailed(_logger, ex, serverId, extensionId);
             throw;
         }
     }
@@ -185,5 +181,32 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
         }
 
         return _options.WssPort;
+    }
+
+    /// <summary>
+    /// Finds the next available numeric extension within the configured range
+    /// by querying existing endpoints in the database. Searches from the end
+    /// of the range downward to avoid collisions with manually created extensions.
+    /// </summary>
+    private static async Task<string> FindNextAvailableExtensionAsync(
+        string connStr, (int Start, int End) range, CancellationToken ct)
+    {
+        await using var ds = NpgsqlDataSource.Create(connStr);
+        await using var conn = await ds.OpenConnectionAsync(ct);
+
+        var existing = (await conn.QueryAsync<string>(new CommandDefinition(
+            "SELECT id FROM ps_endpoints WHERE id ~ '^[0-9]+$'",
+            commandTimeout: 10, cancellationToken: ct))).ToHashSet();
+
+        // Search from the top of the range downward (softphone extensions at the high end)
+        for (var i = range.End; i >= range.Start; i--)
+        {
+            var candidate = i.ToString(CultureInfo.InvariantCulture);
+            if (!existing.Contains(candidate))
+                return candidate;
+        }
+
+        throw new InvalidOperationException(
+            $"No available extension in range {range.Start}-{range.End}");
     }
 }
