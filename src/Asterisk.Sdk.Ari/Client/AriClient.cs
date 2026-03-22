@@ -74,6 +74,8 @@ public sealed class AriClient : IAriClient
     public IAriApplicationsResource Applications { get; }
     public IAriSoundsResource Sounds { get; }
     public IAriDeviceStatesResource DeviceStates { get; }
+    public IAriAsteriskResource Asterisk { get; }
+    public IAriMailboxesResource Mailboxes { get; }
     public IAudioServer? AudioServer { get; }
 
     public AriClient(IOptions<AriClientOptions> options, ILogger<AriClient> logger, IAudioServer? audioServer = null)
@@ -95,6 +97,8 @@ public sealed class AriClient : IAriClient
         Applications = new AriApplicationsResource(_httpClient);
         Sounds = new AriSoundsResource(_httpClient);
         DeviceStates = new AriDeviceStatesResource(_httpClient);
+        Asterisk = new AriAsteriskResource(_httpClient);
+        Mailboxes = new AriMailboxesResource(_httpClient);
     }
 
     public async ValueTask ConnectAsync(CancellationToken cancellationToken = default)
