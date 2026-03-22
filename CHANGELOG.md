@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-03-22
+
+### Added
+
+- **ARI:** New `AriAsteriskResource` — 16 endpoints for system info, modules, logging, config, and global variables
+- **ARI:** New `AriMailboxesResource` — 4 endpoints for mailbox state management (list, get, update, delete)
+- **ARI:** 8 new `AriChannelsResource` endpoints — `Move`, `Dial`, `GetRtpStatistics`, `Silence/StopSilence`, `StartMoh/StopMoh`, `StopRing`
+- **ARI:** 5 new `AriBridgesResource` endpoints — `CreateWithId`, `SetVideoSource`, `ClearVideoSource`, `StartMoh`, `StopMoh`
+- **ARI:** 8 new `AriRecordingsResource` endpoints — `ListStored`, `GetStored`, `CopyStored`, `Cancel`, `Pause/Unpause`, `Mute/Unmute`
+- **ARI:** 2 new `AriApplicationsResource` endpoints — `Subscribe`, `Unsubscribe` event sources
+- **ARI:** 3 new `AriEndpointsResource` endpoints — `ListByTech`, `SendMessage`, `SendMessageToEndpoint`
+- **ARI:** 11 new models — `AriAsteriskInfo`, `AriBuildInfo`, `AriSystemInfo`, `AriConfigInfo`, `AriStatusInfo`, `AriAsteriskPing`, `AriLogChannel`, `AriModule`, `AriMailbox`, `AriConfigTuple`, `AriRtpStats`
+- **ARI:** `IAriClient` extended with `Asterisk` and `Mailboxes` resource properties
+
+### Compatibility
+
+- ARI endpoint coverage: ~94/98 (96%) of Asterisk 22-23 endpoints
+- AMI Action coverage: 139/152 (91%)
+
+---
+
 ## [1.2.0] - 2026-03-22
 
 ### Added
