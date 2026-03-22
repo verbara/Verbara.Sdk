@@ -1168,4 +1168,7 @@
   <data name="Glossary_AOR_Category" xml:space="preserve"><value>SIP</value></data>
   <data name="Glossary_AOR_Def" xml:space="preserve"><value>Address of Record: registro PJSIP que asocia una extensión con la dirección IP del teléfono conectado.</value></data>
   <data name="Glossary_AOR_Tip" xml:space="preserve"><value>Cada endpoint PJSIP tiene un AOR que rastrea desde dónde está registrado el teléfono.</value></data>
+  <data name="Notif_Title" xml:space="preserve"><value>Notificaciones</value></data>
+  <data name="Notif_ClearAll" xml:space="preserve"><value>Limpiar todo</value></data>
+  <data name="Notif_Empty" xml:space="preserve"><value>Sin notificaciones</value></data>
 </root>

@@ -1,0 +1,18 @@
+@namespace PbxAdmin.Components.Shared
+@implements IDisposable
+@inject IConfigOperationState ConfigOp
+
+@if (ConfigOp.IsBusy)
+{
+    <div class="header-progress">
+        <div class="header-progress-bar"></div>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized() => ConfigOp.OnChanged += Refresh;
+
+    private async void Refresh() => await InvokeAsync(StateHasChanged);
+
+    public void Dispose() => ConfigOp.OnChanged -= Refresh;
+}

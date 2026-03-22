@@ -1,0 +1,50 @@
+@namespace PbxAdmin.Components.Shared
+
+@if (_visible)
+{
+    <div class="confirm-overlay" @onclick="Cancel">
+        <div class="confirm-dialog" @onclick:stopPropagation="true">
+            <h4>@Title</h4>
+            <p>@Message</p>
+            <div class="confirm-dialog-actions">
+                <button class="btn btn-sm" @onclick="Cancel">@CancelText</button>
+                <button class="btn btn-sm @ButtonClass" @onclick="HandleConfirm">@ConfirmText</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _visible;
+
+    [Parameter] public string Title { get; set; } = "Confirm";
+    [Parameter] public string Message { get; set; } = "Are you sure?";
+    [Parameter] public string ConfirmText { get; set; } = "Confirm";
+    [Parameter] public string CancelText { get; set; } = "Cancel";
+    [Parameter] public string ConfirmStyle { get; set; } = "danger";
+    [Parameter] public EventCallback OnConfirm { get; set; }
+
+    private string ButtonClass => ConfirmStyle switch
+    {
+        "danger" => "btn-red",
+        "warning" => "btn-yellow",
+        _ => "btn-blue"
+    };
+
+    public void Show()
+    {
+        _visible = true;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleConfirm()
+    {
+        _visible = false;
+        await OnConfirm.InvokeAsync();
+    }
+
+    private void Cancel()
+    {
+        _visible = false;
+    }
+}
