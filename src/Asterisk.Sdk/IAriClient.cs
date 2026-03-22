@@ -46,6 +46,12 @@ public interface IAriClient : IAsyncDisposable
     /// <summary>Access device state operations.</summary>
     IAriDeviceStatesResource DeviceStates { get; }
 
+    /// <summary>Access Asterisk system operations.</summary>
+    IAriAsteriskResource Asterisk { get; }
+
+    /// <summary>Access mailbox operations.</summary>
+    IAriMailboxesResource Mailboxes { get; }
+
     /// <summary>Access the audio server (null if not configured).</summary>
     IAudioServer? AudioServer { get; }
 }
@@ -130,6 +136,30 @@ public interface IAriChannelsResource
 
     /// <summary>Create a channel without dialing. POST /channels/create</summary>
     ValueTask<AriChannel> CreateWithoutDialAsync(string endpoint, string app, string? channelId = null, string? otherChannelId = null, string? originator = null, IReadOnlyDictionary<string, string>? variables = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Move channel to another Stasis app. POST /channels/{channelId}/move</summary>
+    ValueTask MoveAsync(string channelId, string app, string? appArgs = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Dial a created channel. POST /channels/{channelId}/dial</summary>
+    ValueTask DialAsync(string channelId, string? caller = null, int? timeout = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Get RTP statistics. GET /channels/{channelId}/rtp_statistics</summary>
+    ValueTask<AriRtpStats> GetRtpStatisticsAsync(string channelId, CancellationToken cancellationToken = default);
+
+    /// <summary>Start silence on channel. POST /channels/{channelId}/silence</summary>
+    ValueTask SilenceAsync(string channelId, CancellationToken cancellationToken = default);
+
+    /// <summary>Stop silence on channel. DELETE /channels/{channelId}/silence</summary>
+    ValueTask StopSilenceAsync(string channelId, CancellationToken cancellationToken = default);
+
+    /// <summary>Start MOH on channel. POST /channels/{channelId}/moh</summary>
+    ValueTask StartMohAsync(string channelId, string? mohClass = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Stop MOH on channel. DELETE /channels/{channelId}/moh</summary>
+    ValueTask StopMohAsync(string channelId, CancellationToken cancellationToken = default);
+
+    /// <summary>Stop ringing on channel. DELETE /channels/{channelId}/ring</summary>
+    ValueTask StopRingAsync(string channelId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -151,6 +181,21 @@ public interface IAriBridgesResource
 
     /// <summary>Record audio from a bridge. POST /bridges/{bridgeId}/record. The format parameter (Asterisk 23+) sets the Recorder channel audio format.</summary>
     ValueTask<AriLiveRecording> RecordAsync(string bridgeId, string name, string recordingFormat, int? maxDurationSeconds = null, int? maxSilenceSeconds = null, string? ifExists = null, bool? beep = null, string? terminateOn = null, string? format = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Create bridge with specific ID. POST /bridges/{bridgeId}</summary>
+    ValueTask<AriBridge> CreateWithIdAsync(string bridgeId, string? type = null, string? name = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Set video source for bridge. POST /bridges/{bridgeId}/videoSource/{channelId}</summary>
+    ValueTask SetVideoSourceAsync(string bridgeId, string channelId, CancellationToken cancellationToken = default);
+
+    /// <summary>Clear video source for bridge. DELETE /bridges/{bridgeId}/videoSource</summary>
+    ValueTask ClearVideoSourceAsync(string bridgeId, CancellationToken cancellationToken = default);
+
+    /// <summary>Start MOH on bridge. POST /bridges/{bridgeId}/moh</summary>
+    ValueTask StartMohAsync(string bridgeId, string? mohClass = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Stop MOH on bridge. DELETE /bridges/{bridgeId}/moh</summary>
+    ValueTask StopMohAsync(string bridgeId, CancellationToken cancellationToken = default);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +230,30 @@ public interface IAriRecordingsResource
 
     /// <summary>Delete a stored recording. DELETE /recordings/stored/{recordingName}</summary>
     ValueTask DeleteStoredAsync(string recordingName, CancellationToken cancellationToken = default);
+
+    /// <summary>List stored recordings. GET /recordings/stored</summary>
+    ValueTask<AriStoredRecording[]> ListStoredAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Get stored recording. GET /recordings/stored/{recordingName}</summary>
+    ValueTask<AriStoredRecording> GetStoredAsync(string recordingName, CancellationToken cancellationToken = default);
+
+    /// <summary>Copy stored recording. POST /recordings/stored/{recordingName}/copy</summary>
+    ValueTask<AriStoredRecording> CopyStoredAsync(string recordingName, string destinationRecordingName, CancellationToken cancellationToken = default);
+
+    /// <summary>Cancel live recording (discard). DELETE /recordings/live/{recordingName}</summary>
+    ValueTask CancelAsync(string recordingName, CancellationToken cancellationToken = default);
+
+    /// <summary>Pause live recording. POST /recordings/live/{recordingName}/pause</summary>
+    ValueTask PauseAsync(string recordingName, CancellationToken cancellationToken = default);
+
+    /// <summary>Unpause live recording. DELETE /recordings/live/{recordingName}/pause</summary>
+    ValueTask UnpauseAsync(string recordingName, CancellationToken cancellationToken = default);
+
+    /// <summary>Mute live recording. POST /recordings/live/{recordingName}/mute</summary>
+    ValueTask MuteAsync(string recordingName, CancellationToken cancellationToken = default);
+
+    /// <summary>Unmute live recording. DELETE /recordings/live/{recordingName}/mute</summary>
+    ValueTask UnmuteAsync(string recordingName, CancellationToken cancellationToken = default);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,6 +268,15 @@ public interface IAriEndpointsResource
 
     /// <summary>Get an endpoint by technology and resource. GET /endpoints/{tech}/{resource}</summary>
     ValueTask<AriEndpoint> GetAsync(string tech, string resource, CancellationToken cancellationToken = default);
+
+    /// <summary>List endpoints by technology. GET /endpoints/{tech}</summary>
+    ValueTask<AriEndpoint[]> ListByTechAsync(string tech, CancellationToken cancellationToken = default);
+
+    /// <summary>Send message to endpoint. PUT /endpoints/sendMessage</summary>
+    ValueTask SendMessageAsync(string destination, string from, string? body = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Send message to specific endpoint. PUT /endpoints/{tech}/{resource}/sendMessage</summary>
+    ValueTask SendMessageToEndpointAsync(string tech, string resource, string from, string? body = null, CancellationToken cancellationToken = default);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +291,12 @@ public interface IAriApplicationsResource
 
     /// <summary>Get a Stasis application by name. GET /applications/{applicationName}</summary>
     ValueTask<AriApplication> GetAsync(string applicationName, CancellationToken cancellationToken = default);
+
+    /// <summary>Subscribe to event source. POST /applications/{applicationName}/subscription</summary>
+    ValueTask<AriApplication> SubscribeAsync(string applicationName, string eventSource, CancellationToken cancellationToken = default);
+
+    /// <summary>Unsubscribe from event source. DELETE /applications/{applicationName}/subscription</summary>
+    ValueTask<AriApplication> UnsubscribeAsync(string applicationName, string eventSource, CancellationToken cancellationToken = default);
 }
 
 // ---------------------------------------------------------------------------
@@ -247,6 +331,36 @@ public interface IAriDeviceStatesResource
 
     /// <summary>Delete a custom device state. DELETE /deviceStates/{deviceName}</summary>
     ValueTask DeleteAsync(string deviceName, CancellationToken cancellationToken = default);
+}
+
+/// <summary>ARI Asterisk resource — system info, modules, logging, config, variables.</summary>
+public interface IAriAsteriskResource
+{
+    ValueTask<AriAsteriskInfo> GetInfoAsync(CancellationToken cancellationToken = default);
+    ValueTask<AriAsteriskPing> PingAsync(CancellationToken cancellationToken = default);
+    ValueTask<string> GetVariableAsync(string variable, CancellationToken cancellationToken = default);
+    ValueTask SetVariableAsync(string variable, string value, CancellationToken cancellationToken = default);
+    ValueTask<AriModule[]> ListModulesAsync(CancellationToken cancellationToken = default);
+    ValueTask<AriModule> GetModuleAsync(string moduleName, CancellationToken cancellationToken = default);
+    ValueTask LoadModuleAsync(string moduleName, CancellationToken cancellationToken = default);
+    ValueTask UnloadModuleAsync(string moduleName, CancellationToken cancellationToken = default);
+    ValueTask ReloadModuleAsync(string moduleName, CancellationToken cancellationToken = default);
+    ValueTask<AriLogChannel[]> ListLoggingAsync(CancellationToken cancellationToken = default);
+    ValueTask AddLogChannelAsync(string logChannelName, string configuration, CancellationToken cancellationToken = default);
+    ValueTask DeleteLogChannelAsync(string logChannelName, CancellationToken cancellationToken = default);
+    ValueTask RotateLogChannelAsync(string logChannelName, CancellationToken cancellationToken = default);
+    ValueTask<AriConfigTuple[]> GetConfigAsync(string configClass, string objectType, string id, CancellationToken cancellationToken = default);
+    ValueTask UpdateConfigAsync(string configClass, string objectType, string id, CancellationToken cancellationToken = default);
+    ValueTask DeleteConfigAsync(string configClass, string objectType, string id, CancellationToken cancellationToken = default);
+}
+
+/// <summary>ARI Mailboxes resource — mailbox state management.</summary>
+public interface IAriMailboxesResource
+{
+    ValueTask<AriMailbox[]> ListAsync(CancellationToken cancellationToken = default);
+    ValueTask<AriMailbox> GetAsync(string mailboxName, CancellationToken cancellationToken = default);
+    ValueTask UpdateAsync(string mailboxName, int oldMessages, int newMessages, CancellationToken cancellationToken = default);
+    ValueTask DeleteAsync(string mailboxName, CancellationToken cancellationToken = default);
 }
 
 // ---------------------------------------------------------------------------
@@ -413,6 +527,121 @@ public sealed class AriTextMessage
     public string? To { get; set; }
     public string? Body { get; set; }
     public Dictionary<string, string>? Variables { get; set; }
+}
+
+/// <summary>ARI Asterisk system information.</summary>
+public sealed class AriAsteriskInfo
+{
+    public AriBuildInfo? Build { get; set; }
+    public AriSystemInfo? System { get; set; }
+    public AriConfigInfo? Config { get; set; }
+    public AriStatusInfo? Status { get; set; }
+}
+
+/// <summary>ARI build information.</summary>
+public sealed class AriBuildInfo
+{
+    public string Os { get; set; } = string.Empty;
+    public string Kernel { get; set; } = string.Empty;
+    public string Machine { get; set; } = string.Empty;
+    public string Options { get; set; } = string.Empty;
+    public string Date { get; set; } = string.Empty;
+    public string User { get; set; } = string.Empty;
+}
+
+/// <summary>ARI system information.</summary>
+public sealed class AriSystemInfo
+{
+    public string Version { get; set; } = string.Empty;
+    public string EntityId { get; set; } = string.Empty;
+}
+
+/// <summary>ARI configuration information.</summary>
+public sealed class AriConfigInfo
+{
+    public string Name { get; set; } = string.Empty;
+    public string DefaultLanguage { get; set; } = string.Empty;
+    public double? MaxChannels { get; set; }
+    public double? MaxOpenFiles { get; set; }
+    public double? MaxLoad { get; set; }
+    public AriSetId? SetId { get; set; }
+}
+
+/// <summary>ARI set ID (user/group).</summary>
+public sealed class AriSetId
+{
+    public string User { get; set; } = string.Empty;
+    public string Group { get; set; } = string.Empty;
+}
+
+/// <summary>ARI status information.</summary>
+public sealed class AriStatusInfo
+{
+    public string? StartupTime { get; set; }
+    public string? LastReloadTime { get; set; }
+}
+
+/// <summary>ARI ping response.</summary>
+public sealed class AriAsteriskPing
+{
+    public string? AsteriskId { get; set; }
+    public string? Ping { get; set; }
+    public string? Timestamp { get; set; }
+}
+
+/// <summary>ARI log channel.</summary>
+public sealed class AriLogChannel
+{
+    public string Channel { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string Configuration { get; set; } = string.Empty;
+}
+
+/// <summary>ARI module information.</summary>
+public sealed class AriModule
+{
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public int UseCount { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string SupportLevel { get; set; } = string.Empty;
+}
+
+/// <summary>ARI mailbox model.</summary>
+public sealed class AriMailbox
+{
+    public string Name { get; set; } = string.Empty;
+    public int OldMessages { get; set; }
+    public int NewMessages { get; set; }
+}
+
+/// <summary>ARI configuration key-value tuple.</summary>
+public sealed class AriConfigTuple
+{
+    public string Attribute { get; set; } = string.Empty;
+    public string Value { get; set; } = string.Empty;
+}
+
+/// <summary>ARI RTP statistics.</summary>
+public sealed class AriRtpStats
+{
+    public int? Txcount { get; set; }
+    public int? Rxcount { get; set; }
+    public double? Txjitter { get; set; }
+    public double? Rxjitter { get; set; }
+    public int? Txploss { get; set; }
+    public int? Rxploss { get; set; }
+    public int? Rtt { get; set; }
+    public string? ChannelUniqueid { get; set; }
+    public int? LocalSsrc { get; set; }
+    public int? RemoteSsrc { get; set; }
+    public double? LocalMaxjitter { get; set; }
+    public double? LocalMinjitter { get; set; }
+    public double? LocalNormdevjitter { get; set; }
+    public double? LocalStdevjitter { get; set; }
+    public int? LocalMaxrxploss { get; set; }
+    public int? LocalMinrxploss { get; set; }
 }
 
 // ---------------------------------------------------------------------------
