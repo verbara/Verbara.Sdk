@@ -109,6 +109,15 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    volumes:
+      # Shared MOH files (read-only, same for both servers)
+      - ./moh:/data/moh:ro
+      # Recordings per server (read-write for upload support)
+      - recordings-realtime:/data/recordings-realtime
+      - recordings-file:/data/recordings-file
+      # Sample recordings visible in both
+      - ./sample-recordings:/data/recordings-realtime/samples:ro
+      - ./sample-recordings:/data/recordings-file/samples:ro
     environment:
       - DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE=false
       - Logging__LogLevel__Default=Debug
@@ -122,8 +131,8 @@ services:
       - Asterisk__Servers__0__Password=dashboard
       - Asterisk__Servers__0__ConfigMode=Realtime
       - Asterisk__Servers__0__RealtimeConnectionString=Host=postgres;Database=asterisk;Username=asterisk;Password=asterisk
-      - Asterisk__Servers__0__RecordingsPath=/var/spool/asterisk/monitor
-      - Asterisk__Servers__0__MohBasePath=/var/lib/asterisk/moh
+      - Asterisk__Servers__0__RecordingsPath=/data/recordings-realtime
+      - Asterisk__Servers__0__MohBasePath=/data/moh
       - Asterisk__Servers__0__MaxUploadSizeMb=20
       - Asterisk__Servers__0__MaxMohClassSizeMb=200
       # File-mode PBX (extensions 4XXX/5XXX, queues sales2/support2)
@@ -133,8 +142,8 @@ services:
       - Asterisk__Servers__1__Username=dashboard
       - Asterisk__Servers__1__Password=dashboard
       - Asterisk__Servers__1__ConfigMode=File
-      - Asterisk__Servers__1__RecordingsPath=/var/spool/asterisk/monitor
-      - Asterisk__Servers__1__MohBasePath=/var/lib/asterisk/moh
+      - Asterisk__Servers__1__RecordingsPath=/data/recordings-file
+      - Asterisk__Servers__1__MohBasePath=/data/moh
       - Asterisk__Servers__1__MaxUploadSizeMb=20
       - Asterisk__Servers__1__MaxMohClassSizeMb=200
 
