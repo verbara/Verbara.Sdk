@@ -209,18 +209,79 @@ public sealed class AriChannelsResource : IAriChannelsResource
 
     public async ValueTask<AriChannel> CreateWithoutDialAsync(string endpoint, string app, string? channelId = null, string? otherChannelId = null, string? originator = null, IReadOnlyDictionary<string, string>? variables = null, CancellationToken cancellationToken = default)
     {
-        var url = $"channels/create?endpoint={Uri.EscapeDataString(endpoint)}&app={Uri.EscapeDataString(app)}";
-        if (channelId is not null) url += $"&channelId={Uri.EscapeDataString(channelId)}";
-        if (otherChannelId is not null) url += $"&otherChannelId={Uri.EscapeDataString(otherChannelId)}";
-        if (originator is not null) url += $"&originator={Uri.EscapeDataString(originator)}";
+        var sb = new System.Text.StringBuilder("channels/create?endpoint=")
+            .Append(Uri.EscapeDataString(endpoint))
+            .Append("&app=")
+            .Append(Uri.EscapeDataString(app));
+        if (channelId is not null) sb.Append("&channelId=").Append(Uri.EscapeDataString(channelId));
+        if (otherChannelId is not null) sb.Append("&otherChannelId=").Append(Uri.EscapeDataString(otherChannelId));
+        if (originator is not null) sb.Append("&originator=").Append(Uri.EscapeDataString(originator));
         if (variables is not null)
         {
             foreach (var kv in variables)
-                url += $"&variables[{Uri.EscapeDataString(kv.Key)}]={Uri.EscapeDataString(kv.Value)}";
+                sb.Append("&variables[").Append(Uri.EscapeDataString(kv.Key)).Append("]=").Append(Uri.EscapeDataString(kv.Value));
         }
-        var response = await _http.PostAsync(url, null, cancellationToken);
+        var response = await _http.PostAsync(sb.ToString(), null, cancellationToken);
         await response.EnsureAriSuccessAsync();
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriChannel)!;
+    }
+
+    public async ValueTask MoveAsync(string channelId, string app, string? appArgs = null, CancellationToken cancellationToken = default)
+    {
+        var url = $"channels/{Uri.EscapeDataString(channelId)}/move?app={Uri.EscapeDataString(app)}";
+        if (appArgs is not null) url += $"&appArgs={Uri.EscapeDataString(appArgs)}";
+        var response = await _http.PostAsync(url, null, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+    }
+
+    public async ValueTask DialAsync(string channelId, string? caller = null, int? timeout = null, CancellationToken cancellationToken = default)
+    {
+        var url = $"channels/{Uri.EscapeDataString(channelId)}/dial";
+        var sep = '?';
+        if (caller is not null) { url += $"{sep}caller={Uri.EscapeDataString(caller)}"; sep = '&'; }
+        if (timeout is not null) { url += $"{sep}timeout={timeout}"; }
+        var response = await _http.PostAsync(url, null, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+    }
+
+    public async ValueTask<AriRtpStats> GetRtpStatisticsAsync(string channelId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetAsync($"channels/{Uri.EscapeDataString(channelId)}/rtp_statistics", cancellationToken);
+        await response.EnsureAriSuccessAsync();
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriRtpStats)!;
+    }
+
+    public async ValueTask SilenceAsync(string channelId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PostAsync($"channels/{Uri.EscapeDataString(channelId)}/silence", null, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+    }
+
+    public async ValueTask StopSilenceAsync(string channelId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.DeleteAsync($"channels/{Uri.EscapeDataString(channelId)}/silence", cancellationToken);
+        await response.EnsureAriSuccessAsync();
+    }
+
+    public async ValueTask StartMohAsync(string channelId, string? mohClass = null, CancellationToken cancellationToken = default)
+    {
+        var url = $"channels/{Uri.EscapeDataString(channelId)}/moh";
+        if (mohClass is not null) url += $"?mohClass={Uri.EscapeDataString(mohClass)}";
+        var response = await _http.PostAsync(url, null, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+    }
+
+    public async ValueTask StopMohAsync(string channelId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.DeleteAsync($"channels/{Uri.EscapeDataString(channelId)}/moh", cancellationToken);
+        await response.EnsureAriSuccessAsync();
+    }
+
+    public async ValueTask StopRingAsync(string channelId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.DeleteAsync($"channels/{Uri.EscapeDataString(channelId)}/ring", cancellationToken);
+        await response.EnsureAriSuccessAsync();
     }
 }

@@ -98,4 +98,46 @@ public sealed class AriBridgesResource : IAriBridgesResource
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriLiveRecording)!;
     }
+
+    public async ValueTask<AriBridge> CreateWithIdAsync(string bridgeId, string? type = null, string? name = null, CancellationToken cancellationToken = default)
+    {
+        var query = "";
+        if (type is not null) query += $"type={Uri.EscapeDataString(type)}&";
+        if (name is not null) query += $"name={Uri.EscapeDataString(name)}&";
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"bridges/{Uri.EscapeDataString(bridgeId)}?{query.TrimEnd('&')}");
+        var response = await _http.SendAsync(request, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriBridge)!;
+    }
+
+    public async ValueTask SetVideoSourceAsync(string bridgeId, string channelId, CancellationToken cancellationToken = default)
+    {
+        var url = $"bridges/{Uri.EscapeDataString(bridgeId)}/videoSource/{Uri.EscapeDataString(channelId)}";
+        using var request = new HttpRequestMessage(HttpMethod.Post, url);
+        var response = await _http.SendAsync(request, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+    }
+
+    public async ValueTask ClearVideoSourceAsync(string bridgeId, CancellationToken cancellationToken = default)
+    {
+        var url = $"bridges/{Uri.EscapeDataString(bridgeId)}/videoSource";
+        var response = await _http.DeleteAsync(url, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+    }
+
+    public async ValueTask StartMohAsync(string bridgeId, string? mohClass = null, CancellationToken cancellationToken = default)
+    {
+        var url = $"bridges/{Uri.EscapeDataString(bridgeId)}/moh";
+        if (mohClass is not null) url += $"?mohClass={Uri.EscapeDataString(mohClass)}";
+        var response = await _http.PostAsync(url, null, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+    }
+
+    public async ValueTask StopMohAsync(string bridgeId, CancellationToken cancellationToken = default)
+    {
+        var url = $"bridges/{Uri.EscapeDataString(bridgeId)}/moh";
+        var response = await _http.DeleteAsync(url, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+    }
 }

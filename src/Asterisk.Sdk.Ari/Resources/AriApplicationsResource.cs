@@ -29,4 +29,22 @@ public sealed class AriApplicationsResource : IAriApplicationsResource
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriApplication)!;
     }
+
+    public async ValueTask<AriApplication> SubscribeAsync(string applicationName, string eventSource, CancellationToken cancellationToken = default)
+    {
+        var url = $"applications/{Uri.EscapeDataString(applicationName)}/subscription?eventSource={Uri.EscapeDataString(eventSource)}";
+        var response = await _http.PostAsync(url, null, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriApplication)!;
+    }
+
+    public async ValueTask<AriApplication> UnsubscribeAsync(string applicationName, string eventSource, CancellationToken cancellationToken = default)
+    {
+        var url = $"applications/{Uri.EscapeDataString(applicationName)}/subscription?eventSource={Uri.EscapeDataString(eventSource)}";
+        var response = await _http.DeleteAsync(url, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriApplication)!;
+    }
 }
