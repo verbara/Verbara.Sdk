@@ -1,22 +1,24 @@
 using Asterisk.Sdk;
 using Asterisk.Sdk.Enums;
 using Asterisk.Sdk.Ami.Actions;
+using Asterisk.Sdk.Ami.Connection;
 using Asterisk.Sdk.IntegrationTests.Infrastructure;
 using FluentAssertions;
 
 namespace Asterisk.Sdk.IntegrationTests.Ami;
 
+[Collection("Integration")]
 [Trait("Category", "Integration")]
-public class AmiConnectionIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncLifetime
+public class AmiConnectionIntegrationTests : IAsyncLifetime
 {
-    private readonly AsteriskFixture _fixture;
-    private Asterisk.Sdk.Ami.Connection.AmiConnection? _connection;
+    private readonly IntegrationFixture _fixture;
+    private AmiConnection? _connection;
 
-    public AmiConnectionIntegrationTests(AsteriskFixture fixture) => _fixture = fixture;
+    public AmiConnectionIntegrationTests(IntegrationFixture fixture) => _fixture = fixture;
 
     public async Task InitializeAsync()
     {
-        _connection = _fixture.CreateAmiConnection();
+        _connection = AsteriskFixture.CreateAmiConnection(_fixture);
         await _connection.ConnectAsync();
     }
 

@@ -7,8 +7,9 @@ using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
 
-[Trait("Category", "Integration")]
-public sealed class PipelineBackpressureTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class PipelineBackpressureTests : FunctionalTestBase
 {
     /// <summary>
     /// Verifies that a slow consumer does not cause unbounded memory growth.

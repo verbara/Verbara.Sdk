@@ -10,8 +10,9 @@ using Asterisk.Sdk.Live.Server;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 
-[Trait("Category", "Integration")]
-public sealed class ChannelEventOrderTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class ChannelEventOrderTests : FunctionalTestBase
 {
     /// <summary>
     /// Originate + immediate hangup in rapid succession.

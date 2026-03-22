@@ -12,21 +12,22 @@ using Microsoft.Extensions.Options;
 
 namespace Asterisk.Sdk.IntegrationTests.Sessions;
 
+[Collection("Integration")]
 [Trait("Category", "Integration")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable",
     Justification = "Disposal is handled via IAsyncLifetime.DisposeAsync")]
-public sealed class SessionIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncLifetime
+public sealed class SessionIntegrationTests : IAsyncLifetime
 {
-    private readonly AsteriskFixture _fixture;
+    private readonly IntegrationFixture _fixture;
     private Asterisk.Sdk.Ami.Connection.AmiConnection? _connection;
     private AsteriskServer? _server;
     private CallSessionManager? _sessionManager;
 
-    public SessionIntegrationTests(AsteriskFixture fixture) => _fixture = fixture;
+    public SessionIntegrationTests(IntegrationFixture fixture) => _fixture = fixture;
 
     public async Task InitializeAsync()
     {
-        _connection = _fixture.CreateAmiConnection();
+        _connection = AsteriskFixture.CreateAmiConnection(_fixture);
         await _connection.ConnectAsync();
 
         _server = new AsteriskServer(_connection, NullLogger<AsteriskServer>.Instance);

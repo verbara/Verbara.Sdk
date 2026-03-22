@@ -13,8 +13,9 @@ using FluentAssertions;
 /// Tests for CdrEvent (Call Detail Record). CDR events fire after call hangup
 /// and require cdr_manager.conf enabled in Asterisk.
 /// </summary>
-[Trait("Category", "Integration")]
-public sealed class CdrEventTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class CdrEventTests : FunctionalTestBase
 {
     public CdrEventTests() : base("Asterisk.Sdk.Ami")
     {

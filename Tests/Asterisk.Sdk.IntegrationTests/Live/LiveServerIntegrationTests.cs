@@ -7,20 +7,21 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Asterisk.Sdk.IntegrationTests.Live;
 
+[Collection("Integration")]
 [Trait("Category", "Integration")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable",
     Justification = "Disposal is handled via IAsyncLifetime.DisposeAsync")]
-public class LiveServerIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncLifetime
+public class LiveServerIntegrationTests : IAsyncLifetime
 {
-    private readonly AsteriskFixture _fixture;
+    private readonly IntegrationFixture _fixture;
     private Asterisk.Sdk.Ami.Connection.AmiConnection? _connection;
     private AsteriskServer? _server;
 
-    public LiveServerIntegrationTests(AsteriskFixture fixture) => _fixture = fixture;
+    public LiveServerIntegrationTests(IntegrationFixture fixture) => _fixture = fixture;
 
     public async Task InitializeAsync()
     {
-        _connection = _fixture.CreateAmiConnection();
+        _connection = AsteriskFixture.CreateAmiConnection(_fixture);
         await _connection.ConnectAsync();
 
         _server = new AsteriskServer(_connection, NullLogger<AsteriskServer>.Instance);

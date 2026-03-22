@@ -18,8 +18,9 @@ using Microsoft.Extensions.Logging;
 /// the transfer. AtxferAction requires an active bridged channel with transfer features
 /// enabled, which limits what can be tested in an automated environment.
 /// </summary>
-[Trait("Category", "Integration")]
-public sealed class TransferTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class TransferTests : FunctionalTestBase
 {
     public TransferTests() : base("Asterisk.Sdk.Ami")
     {

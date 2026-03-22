@@ -14,8 +14,9 @@ using Microsoft.Extensions.Logging;
 /// Queue call flow tests that verify the full event sequence when callers enter queues.
 /// Uses OriginateAction with Local channels to drive call flow (no SIPp dependency).
 /// </summary>
-[Trait("Category", "Integration")]
-public sealed class QueueCallFlowTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class QueueCallFlowTests : FunctionalTestBase
 {
     private const string TestQueue = "test-queue";
     private const string TestInterface = "Local/100@test-functional";

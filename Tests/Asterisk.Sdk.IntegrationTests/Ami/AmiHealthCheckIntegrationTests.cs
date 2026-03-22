@@ -1,5 +1,6 @@
 using Asterisk.Sdk;
 using Asterisk.Sdk.Enums;
+using Asterisk.Sdk.Ami.Connection;
 using Asterisk.Sdk.Ami.Diagnostics;
 using Asterisk.Sdk.IntegrationTests.Infrastructure;
 using FluentAssertions;
@@ -7,17 +8,18 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Asterisk.Sdk.IntegrationTests.Ami;
 
+[Collection("Integration")]
 [Trait("Category", "Integration")]
-public class AmiHealthCheckIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncLifetime
+public class AmiHealthCheckIntegrationTests : IAsyncLifetime
 {
-    private readonly AsteriskFixture _fixture;
-    private Asterisk.Sdk.Ami.Connection.AmiConnection? _connection;
+    private readonly IntegrationFixture _fixture;
+    private AmiConnection? _connection;
 
-    public AmiHealthCheckIntegrationTests(AsteriskFixture fixture) => _fixture = fixture;
+    public AmiHealthCheckIntegrationTests(IntegrationFixture fixture) => _fixture = fixture;
 
     public async Task InitializeAsync()
     {
-        _connection = _fixture.CreateAmiConnection();
+        _connection = AsteriskFixture.CreateAmiConnection(_fixture);
         await _connection.ConnectAsync();
     }
 

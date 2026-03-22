@@ -12,8 +12,9 @@ using FluentAssertions;
 /// Tests for DTMF detection via AMI PlayDTMF action and event observation.
 /// Requires Asterisk container with the test-functional dialplan context.
 /// </summary>
-[Trait("Category", "Integration")]
-public sealed class DtmfDetectionTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class DtmfDetectionTests : FunctionalTestBase
 {
     public DtmfDetectionTests() : base("Asterisk.Sdk.Ami")
     {

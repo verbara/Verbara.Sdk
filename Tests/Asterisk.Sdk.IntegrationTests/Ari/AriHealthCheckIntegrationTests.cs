@@ -10,17 +10,18 @@ using Microsoft.Extensions.Options;
 
 namespace Asterisk.Sdk.IntegrationTests.Ari;
 
+[Collection("Integration")]
 [Trait("Category", "Integration")]
-public class AriHealthCheckIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncLifetime
+public class AriHealthCheckIntegrationTests : IAsyncLifetime
 {
-    private readonly AsteriskFixture _fixture;
+    private readonly IntegrationFixture _fixture;
     private AriClient? _client;
 
-    public AriHealthCheckIntegrationTests(AsteriskFixture fixture) => _fixture = fixture;
+    public AriHealthCheckIntegrationTests(IntegrationFixture fixture) => _fixture = fixture;
 
     public async Task InitializeAsync()
     {
-        _client = _fixture.CreateAriClient();
+        _client = AsteriskFixture.CreateAriClient(_fixture);
         await _client.ConnectAsync();
     }
 

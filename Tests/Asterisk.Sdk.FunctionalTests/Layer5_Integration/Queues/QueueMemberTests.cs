@@ -9,8 +9,9 @@ using Asterisk.Sdk.Live.Server;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 
-[Trait("Category", "Integration")]
-public sealed class QueueMemberTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class QueueMemberTests : FunctionalTestBase
 {
     private const string TestQueue = "test-queue";
     private const string TestQueue2 = "test-queue-2";

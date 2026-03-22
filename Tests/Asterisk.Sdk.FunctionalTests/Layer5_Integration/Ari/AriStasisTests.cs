@@ -11,8 +11,9 @@ using FluentAssertions;
 /// Integration tests for ARI Stasis application lifecycle, channel control,
 /// and bridge management via the ARI REST + WebSocket interface.
 /// </summary>
-[Trait("Category", "Integration")]
-public sealed class AriStasisTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class AriStasisTests : FunctionalTestBase
 {
     public AriStasisTests() : base("Asterisk.Sdk.Ari")
     {

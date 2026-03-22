@@ -12,8 +12,9 @@ using FluentAssertions;
 /// Tests for call parking events (ParkedCall, UnParkedCall, ParkedCallTimeOut, ParkedCallGiveUp).
 /// Parking is configured in res_parking.conf: parkext=750, parkpos=751-770, parkingtime=10s.
 /// </summary>
-[Trait("Category", "Integration")]
-public sealed class ParkingTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class ParkingTests : FunctionalTestBase
 {
     public ParkingTests() : base("Asterisk.Sdk.Ami")
     {

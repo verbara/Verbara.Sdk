@@ -15,13 +15,13 @@ using Microsoft.Extensions.Options;
 /// Tests that PJSIP endpoints configured via PostgreSQL realtime (Sorcery/res_config_pgsql)
 /// are visible through AMI after insertion, update, and deletion.
 /// </summary>
-[Trait("Category", "Integration")]
+[Collection("Realtime")]
 [Trait("Category", "Realtime")]
-public sealed class RealtimePjsipTests : FunctionalTestBase, IClassFixture<RealtimeFixture>
+public sealed class RealtimePjsipTests : FunctionalTestBase
 {
-    private readonly RealtimeFixture _fixture;
+    private readonly RealtimeDbFixture _fixture;
 
-    public RealtimePjsipTests(RealtimeFixture fixture) : base("Asterisk.Sdk.Ami")
+    public RealtimePjsipTests(RealtimeDbFixture fixture) : base("Asterisk.Sdk.Ami")
     {
         _fixture = fixture;
     }
@@ -158,10 +158,10 @@ public sealed class RealtimePjsipTests : FunctionalTestBase, IClassFixture<Realt
     {
         var options = Options.Create(new AmiConnectionOptions
         {
-            Hostname = RealtimeFixture.AmiHost,
-            Port = RealtimeFixture.AmiPort,
-            Username = RealtimeFixture.AmiUsername,
-            Password = RealtimeFixture.AmiPassword,
+            Hostname = _fixture.AmiHost,
+            Port = _fixture.AmiPort,
+            Username = RealtimeDbFixture.AmiUsername,
+            Password = RealtimeDbFixture.AmiPassword,
             DefaultResponseTimeout = TimeSpan.FromSeconds(15),
             AutoReconnect = false
         });

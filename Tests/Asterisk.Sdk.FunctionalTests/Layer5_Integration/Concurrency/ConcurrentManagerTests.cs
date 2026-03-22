@@ -12,8 +12,9 @@ using Asterisk.Sdk.Live.Server;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 
-[Trait("Category", "Integration")]
-public sealed class ConcurrentManagerTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class ConcurrentManagerTests : FunctionalTestBase
 {
     [AsteriskContainerFact]
     public async Task ConcurrentChannelCreation_ShouldMaintainConsistentState()

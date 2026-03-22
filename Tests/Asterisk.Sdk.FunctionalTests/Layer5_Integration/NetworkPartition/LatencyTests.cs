@@ -7,8 +7,9 @@ using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
 
-[Trait("Category", "Integration")]
-public sealed class LatencyTests : FunctionalTestBase, IClassFixture<ToxiproxyFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class LatencyTests : FunctionalTestBase
 {
     private const string ProxyName = ToxiproxyFixture.AmiProxyName;
 

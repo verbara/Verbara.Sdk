@@ -15,13 +15,13 @@ using Microsoft.Extensions.Options;
 /// Tests that Asterisk realtime queues and members configured via PostgreSQL
 /// are visible through AMI after a queue reload.
 /// </summary>
-[Trait("Category", "Integration")]
+[Collection("Realtime")]
 [Trait("Category", "Realtime")]
-public sealed class RealtimeQueueTests : FunctionalTestBase, IClassFixture<RealtimeFixture>
+public sealed class RealtimeQueueTests : FunctionalTestBase
 {
-    private readonly RealtimeFixture _fixture;
+    private readonly RealtimeDbFixture _fixture;
 
-    public RealtimeQueueTests(RealtimeFixture fixture) : base("Asterisk.Sdk.Ami")
+    public RealtimeQueueTests(RealtimeDbFixture fixture) : base("Asterisk.Sdk.Ami")
     {
         _fixture = fixture;
     }
@@ -145,10 +145,10 @@ public sealed class RealtimeQueueTests : FunctionalTestBase, IClassFixture<Realt
     {
         var options = Options.Create(new AmiConnectionOptions
         {
-            Hostname = RealtimeFixture.AmiHost,
-            Port = RealtimeFixture.AmiPort,
-            Username = RealtimeFixture.AmiUsername,
-            Password = RealtimeFixture.AmiPassword,
+            Hostname = _fixture.AmiHost,
+            Port = _fixture.AmiPort,
+            Username = RealtimeDbFixture.AmiUsername,
+            Password = RealtimeDbFixture.AmiPassword,
             DefaultResponseTimeout = TimeSpan.FromSeconds(15),
             AutoReconnect = false
         });
