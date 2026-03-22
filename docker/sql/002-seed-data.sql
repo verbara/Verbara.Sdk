@@ -2,9 +2,9 @@
 
 -- Sales team endpoints (2001-2003)
 INSERT INTO ps_endpoints (id, transport, aors, auth, context, disallow, allow, direct_media, callerid) VALUES
-    ('2001', 'transport-udp', '2001', '2001', 'from-internal', 'all', 'ulaw,alaw,opus', 'no', '"Sales Agent 1" <2001>'),
-    ('2002', 'transport-udp', '2002', '2002', 'from-internal', 'all', 'ulaw,alaw,opus', 'no', '"Sales Agent 2" <2002>'),
-    ('2003', 'transport-udp', '2003', '2003', 'from-internal', 'all', 'ulaw,alaw,opus', 'no', '"Sales Agent 3" <2003>');
+    ('2001', 'transport-udp', '2001', '2001', 'default', 'all', 'ulaw,alaw,opus', 'no', '"Sales Agent 1" <2001>'),
+    ('2002', 'transport-udp', '2002', '2002', 'default', 'all', 'ulaw,alaw,opus', 'no', '"Sales Agent 2" <2002>'),
+    ('2003', 'transport-udp', '2003', '2003', 'default', 'all', 'ulaw,alaw,opus', 'no', '"Sales Agent 3" <2003>');
 
 INSERT INTO ps_auths (id, auth_type, password, username) VALUES
     ('2001', 'userpass', 'secret2001', '2001'),
@@ -18,9 +18,9 @@ INSERT INTO ps_aors (id, max_contacts, remove_existing, qualify_frequency) VALUE
 
 -- Support team endpoints (3001-3003)
 INSERT INTO ps_endpoints (id, transport, aors, auth, context, disallow, allow, direct_media, callerid) VALUES
-    ('3001', 'transport-udp', '3001', '3001', 'from-internal', 'all', 'ulaw,alaw,opus', 'no', '"Support Agent 1" <3001>'),
-    ('3002', 'transport-udp', '3002', '3002', 'from-internal', 'all', 'ulaw,alaw,opus', 'no', '"Support Agent 2" <3002>'),
-    ('3003', 'transport-udp', '3003', '3003', 'from-internal', 'all', 'ulaw,alaw,opus', 'no', '"Support Agent 3" <3003>');
+    ('3001', 'transport-udp', '3001', '3001', 'default', 'all', 'ulaw,alaw,opus', 'no', '"Support Agent 1" <3001>'),
+    ('3002', 'transport-udp', '3002', '3002', 'default', 'all', 'ulaw,alaw,opus', 'no', '"Support Agent 2" <3002>'),
+    ('3003', 'transport-udp', '3003', '3003', 'default', 'all', 'ulaw,alaw,opus', 'no', '"Support Agent 3" <3003>');
 
 INSERT INTO ps_auths (id, auth_type, password, username) VALUES
     ('3001', 'userpass', 'secret3001', '3001'),
