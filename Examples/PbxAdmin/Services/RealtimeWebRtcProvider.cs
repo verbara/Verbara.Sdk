@@ -47,7 +47,7 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
         var wssHost = _options.WssHost ?? "localhost";
         var wssPort = GetWssPort(serverId);
         var scheme = _options.UseTls ? "wss" : "ws";
-        var wssUrl = $"{scheme}://{wssHost}:{wssPort}";
+        var wssUrl = $"{scheme}://{wssHost}:{wssPort}/ws";
 
         var connStr = GetConnectionString(serverId);
         if (connStr is null)
