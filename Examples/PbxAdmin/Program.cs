@@ -176,6 +176,10 @@ builder.Services.AddSingleton<IExtensionTemplateService, ExtensionTemplateServic
 
 builder.Services.AddScoped<ISelectedServerService, SelectedServerService>();
 builder.Services.Configure<SoftphoneOptions>(builder.Configuration.GetSection("Softphone"));
+builder.Services.AddSingleton<RealtimeWebRtcProvider>();
+builder.Services.AddSingleton<FileWebRtcProvider>();
+builder.Services.AddSingleton<WebRtcProviderResolver>();
+builder.Services.AddScoped<SoftphoneService>();
 
 var app = builder.Build();
 
