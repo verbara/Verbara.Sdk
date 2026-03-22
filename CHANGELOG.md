@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-03-22
+
+### Added
+
+- **AMI:** 11 PJSIP management actions — `PJSIPShowAors`, `PJSIPShowAuths`, `PJSIPShowRegistrationsInbound`, `PJSIPShowRegistrationsOutbound`, `PJSIPShowResourceLists`, `PJSIPShowSubscriptionsInbound`, `PJSIPShowSubscriptionsOutbound`, `PJSIPRegister`, `PJSIPUnregister`, `PJSIPQualify`, `PJSIPHangup`
+- **AMI:** 7 bridge management actions — `BridgeDestroy`, `BridgeInfo`, `BridgeKick`, `BridgeList`, `BridgeTechnologyList`, `BridgeTechnologySuspend`, `BridgeTechnologyUnsuspend`
+- **AMI:** 2 transfer actions — `BlindTransfer`, `CancelAtxfer`
+- **AMI:** 6 new response events for event-generating actions (`BridgeListItem`, `BridgeListComplete`, `BridgeTechnologyListItem`, `BridgeTechnologyListComplete`, `ResourceListDetailComplete`, `SubscriptionsComplete`)
+
+### Compatibility
+
+- AMI Actions coverage: 139/152 (91%) of Asterisk 22-23 actions
+
+---
+
 ## [1.1.0] - 2026-03-22
 
 ### Added
