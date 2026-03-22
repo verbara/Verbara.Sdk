@@ -7,6 +7,7 @@
 @inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
 
 <PageTitle>@(_isNew ? L["TCEdit_NewTitle"] : L["TCEdit_EditTitle", _config.Name]) — Asterisk PBX Admin</PageTitle>
 
@@ -162,10 +163,6 @@ else
         <button class="btn" @onclick="NavigateBack">@L["Btn_Cancel"]</button>
     </div>
 
-    @if (_result is not null)
-    {
-        <p class="action-result">@_result</p>
-    }
 }
 
 <style>
@@ -200,7 +197,6 @@ else
     private bool _isNew => Id == 0;
     private bool _loading = true;
     private bool _saving;
-    private string? _result;
 
     private TimeConditionConfig _config = new();
     private List<HolidayEntry> _holidays = [];
@@ -271,31 +267,30 @@ else
         var serverId = ServerSvc.SelectedServerId;
         if (string.IsNullOrEmpty(serverId))
         {
-            _result = "No server selected.";
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, "No server selected.");
             return;
         }
 
         // Validate name
         if (string.IsNullOrWhiteSpace(_config.Name))
         {
-            _result = "Name is required.";
+            Toast.Show(L["Toast_Error"], ToastLevel.Warning, "Name is required.");
             return;
         }
 
         if (!System.Text.RegularExpressions.Regex.IsMatch(_config.Name, @"^[a-zA-Z0-9\-]+$"))
         {
-            _result = "Name must contain only alphanumeric characters and hyphens.";
+            Toast.Show(L["Toast_Error"], ToastLevel.Warning, "Name must contain only alphanumeric characters and hyphens.");
             return;
         }
 
         if (_dayEnabled.All(d => !d))
         {
-            _result = "At least one day must be enabled";
+            Toast.Show(L["Toast_Error"], ToastLevel.Warning, "At least one day must be enabled.");
             return;
         }
 
         _saving = true;
-        _result = null;
 
         try
         {
@@ -313,11 +308,11 @@ else
             if (success)
                 Nav.NavigateTo("/time-conditions");
             else
-                _result = error ?? "Failed to save time condition.";
+                Toast.Show(L["Toast_Error"], ToastLevel.Error, error);
         }
         catch (Exception ex)
         {
-            _result = $"Error: {ex.Message}";
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, ex.Message);
         }
         finally
         {

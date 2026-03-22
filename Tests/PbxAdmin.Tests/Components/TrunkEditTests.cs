@@ -36,10 +36,13 @@ public sealed class TrunkEditTests : IDisposable
         localizer[Arg.Any<string>()].Returns(ci => new LocalizedString(ci.Arg<string>(), ci.Arg<string>()));
         localizer[Arg.Any<string>(), Arg.Any<object[]>()].Returns(ci => new LocalizedString(ci.Arg<string>(), ci.Arg<string>()));
 
+        var toastSvc = Substitute.For<IToastService>();
+
         _ctx.Services.AddSingleton(monitor);
         _ctx.Services.AddSingleton(trunkSvc);
         _ctx.Services.AddSingleton(configOp);
         _ctx.Services.AddSingleton(localizer);
+        _ctx.Services.AddSingleton(toastSvc);
     }
 
     [Fact]

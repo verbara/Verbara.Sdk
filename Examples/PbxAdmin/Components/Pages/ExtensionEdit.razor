@@ -5,6 +5,7 @@
 @inject IExtensionService ExtSvc
 @inject ISelectedServerService ServerSvc
 @inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
 @inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -260,10 +261,6 @@ else
         }
     </div>
 
-    @if (_result is not null)
-    {
-        <p class="action-result">@_result</p>
-    }
 }
 
 @code {
@@ -277,7 +274,6 @@ else
     private ExtensionConfig _config = new();
     private bool _loading = true;
     private bool _saving;
-    private string? _result;
     private bool _changePassword;
     private int _rangeStart = 100;
     private int _rangeEnd = 999;
@@ -405,14 +401,14 @@ else
         var serverId = ServerId ?? Server ?? ServerSvc.SelectedServerId;
         if (serverId is null)
         {
-            _result = "No server selected.";
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, "No server selected.");
             return;
         }
 
         // Validation: extension number within range
         if (!ExtensionService.IsInExtensionRange(_config.Extension, _rangeStart, _rangeEnd))
         {
-            _result = $"Extension must be a number between {_rangeStart} and {_rangeEnd}.";
+            Toast.Show(L["Toast_Error"], ToastLevel.Warning, $"Extension must be a number between {_rangeStart} and {_rangeEnd}.");
             return;
         }
 
@@ -421,7 +417,7 @@ else
         {
             if (string.IsNullOrEmpty(_config.Password) || _config.Password.Length < 8)
             {
-                _result = "Password is required and must be at least 8 characters.";
+                Toast.Show(L["Toast_Error"], ToastLevel.Warning, "Password is required and must be at least 8 characters.");
                 return;
             }
         }
@@ -434,14 +430,14 @@ else
         // Validation: at least 1 codec
         if (string.IsNullOrWhiteSpace(_config.Codecs))
         {
-            _result = "At least one codec must be selected.";
+            Toast.Show(L["Toast_Error"], ToastLevel.Warning, "At least one codec must be selected.");
             return;
         }
 
         // Validation: voicemail PIN
         if (_config.VoicemailEnabled && !string.IsNullOrEmpty(_config.VoicemailPin) && _config.VoicemailPin.Length < 4)
         {
-            _result = "Voicemail PIN must be at least 4 digits.";
+            Toast.Show(L["Toast_Error"], ToastLevel.Warning, "Voicemail PIN must be at least 4 digits.");
             return;
         }
 
@@ -450,12 +446,11 @@ else
             || !IsValidCfDestination(_config.CallForwardBusy)
             || !IsValidCfDestination(_config.CallForwardNoAnswer))
         {
-            _result = "Call forward destinations must be numeric.";
+            Toast.Show(L["Toast_Error"], ToastLevel.Warning, "Call forward destinations must be numeric.");
             return;
         }
 
         _saving = true;
-        _result = null;
 
         try
         {
@@ -477,12 +472,12 @@ else
             }
             else
             {
-                _result = "Failed to save extension. Check server logs for details.";
+                Toast.Show(L["Toast_Error"], ToastLevel.Error, "Failed to save extension. Check server logs for details.");
             }
         }
         catch (Exception ex)
         {
-            _result = $"Error: {ex.Message}";
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, ex.Message);
         }
         finally
         {

@@ -5,6 +5,7 @@
 @inject AsteriskMonitorService Monitor
 @inject ITrunkService TrunkSvc
 @inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
 @inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -208,10 +209,6 @@ else
         <button class="btn" @onclick="NavigateBack">@L["Btn_Cancel"]</button>
     </div>
 
-    @if (_result is not null)
-    {
-        <p class="action-result">@_result</p>
-    }
 }
 
 @code {
@@ -225,7 +222,6 @@ else
     private TrunkConfig _config = new();
     private bool _loading = true;
     private bool _saving;
-    private string? _result;
 
     private static readonly string[] _availableCodecs = ["ulaw", "alaw", "g729", "opus", "gsm", "g722"];
 
@@ -298,12 +294,11 @@ else
         var serverId = ServerId ?? Server ?? Monitor.Servers.Select(s => s.Key).FirstOrDefault();
         if (serverId is null)
         {
-            _result = "No server selected.";
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, "No server selected.");
             return;
         }
 
         _saving = true;
-        _result = null;
 
         try
         {
@@ -325,12 +320,12 @@ else
             }
             else
             {
-                _result = "Failed to save trunk. Check server logs for details.";
+                Toast.Show(L["Toast_Error"], ToastLevel.Error, "Failed to save trunk. Check server logs for details.");
             }
         }
         catch (Exception ex)
         {
-            _result = $"Error: {ex.Message}";
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, ex.Message);
         }
         finally
         {

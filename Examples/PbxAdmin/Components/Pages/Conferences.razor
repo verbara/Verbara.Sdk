@@ -12,6 +12,7 @@
 @inject NavigationManager Nav
 @implements IDisposable
 @inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
 
 <PageTitle>@L["Conf_Title"]</PageTitle>
 
@@ -211,10 +212,6 @@
         }
     }
 
-    @if (_actionResult is not null)
-    {
-        <p class="action-result">@_actionResult</p>
-    }
 }
 else
 {
@@ -286,7 +283,6 @@ else
     private bool _loading;
     private bool _actionInProgress;
     private string? _confbridgeError;
-    private string? _actionResult;
     private List<ConfBridgeRoom> _confbridgeRooms = [];
     private readonly HashSet<string> _recordingRooms = new(StringComparer.Ordinal);
 
@@ -465,20 +461,20 @@ else
         if (entry is null) return;
 
         _actionInProgress = true;
-        _actionResult = null;
 
         try
         {
             var serverId = ServerSvc.SelectedServerId ?? "unknown";
             using var _ = ConfigOp.Begin("Conference Action", serverId, successMessage);
             var response = await entry.ConfigConnection.SendActionAsync(action);
-            _actionResult = string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase)
-                ? successMessage
-                : $"Failed: {response.Response} — {response.Message}";
+            if (string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase))
+                Toast.Show(L["Toast_Success"], ToastLevel.Success, successMessage);
+            else
+                Toast.Show(L["Toast_Error"], ToastLevel.Error, $"{response.Response} — {response.Message}");
         }
         catch (Exception ex)
         {
-            _actionResult = $"Error: {ex.Message}";
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, ex.Message);
         }
         finally
         {

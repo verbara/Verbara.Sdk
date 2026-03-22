@@ -11,6 +11,7 @@
 @inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
 @inject IJSRuntime JS
 
 <PageTitle>@(_isNew ? (_isInbound ? L["RouteEdit_NewInbound"] : L["RouteEdit_NewOutbound"]) : (_isInbound ? L["RouteEdit_EditInbound"] : L["RouteEdit_EditOutbound"])) — Asterisk PBX Admin</PageTitle>
@@ -208,10 +209,6 @@ else
     <button class="btn" @onclick="NavigateBack">@L["Btn_Cancel"]</button>
 </div>
 
-@if (_result is not null)
-{
-    <p class="action-result">@_result</p>
-}
 
 <style>
     .data-table {
@@ -243,7 +240,6 @@ else
     private bool _isNew;
     private bool _loading = true;
     private bool _saving;
-    private string? _result;
     private string _selectedTrunk = "";
 
     private InboundRouteConfig _inConfig = new();
@@ -379,12 +375,11 @@ else
         var serverId = ServerSvc.SelectedServerId;
         if (string.IsNullOrEmpty(serverId))
         {
-            _result = "No server selected.";
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, "No server selected.");
             return;
         }
 
         _saving = true;
-        _result = null;
 
         try
         {
@@ -401,7 +396,7 @@ else
                 if (success)
                     Nav.NavigateTo("/routes");
                 else
-                    _result = error ?? "Failed to save route.";
+                    Toast.Show(L["Toast_Error"], ToastLevel.Error, error);
             }
             else
             {
@@ -416,12 +411,12 @@ else
                 if (success)
                     Nav.NavigateTo("/routes");
                 else
-                    _result = error ?? "Failed to save route.";
+                    Toast.Show(L["Toast_Error"], ToastLevel.Error, error);
             }
         }
         catch (Exception ex)
         {
-            _result = $"Error: {ex.Message}";
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, ex.Message);
         }
         finally
         {
