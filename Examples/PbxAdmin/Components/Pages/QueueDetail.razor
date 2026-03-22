@@ -80,35 +80,47 @@ else
         }
     </div>
 
-    <HelpPanel SectionKey="QueueDetail_Agents">@L["QueueDetail_Agents"]</HelpPanel>
-    <h3>@L["QDetail_AgentsSection"] (@_queue.MemberCount)</h3>
+    <HelpPanel SectionKey="QueueDetail_Members">@L["QueueDetail_Members"]</HelpPanel>
+    <h3>@L["QDetail_MembersSection"] (@_queue.MemberCount)</h3>
     <div class="card-grid">
         @foreach (var member in _queue.Members.Values)
         {
-            var (dotClass, icon) = GetMemberStyle(member);
-            <div class="agent-card @dotClass">
-                <div class="agent-card-header">
-                    <span class="status-dot @dotClass"></span>
-                    <strong>@(member.MemberName ?? member.Interface)</strong>
-                    <span class="agent-icon">@icon</span>
+            var (statusClass, statusLabel, icon) = GetMemberStyle(member);
+            <div class="member-card @statusClass">
+                <div class="member-card-header">
+                    <span class="member-avatar @statusClass">@icon</span>
+                    <div class="member-card-title">
+                        <strong>@(member.MemberName ?? member.Interface)</strong>
+                        <span class="member-interface">@member.Interface</span>
+                    </div>
+                    <span class="member-status-badge @statusClass">@statusLabel</span>
                 </div>
-                <div class="agent-card-body">
-                    <div>@member.Interface</div>
-                    <div>@L["QDetail_AgentStatus"]: @member.Status</div>
-                    <div>@L["QDetail_AgentCalls"]: @member.CallsTaken | @L["QDetail_AgentPenalty"]: @member.Penalty</div>
-                    @if (member.Paused)
-                    {
-                        <div class="badge badge-yellow">Paused @(member.PausedReason is not null ? $"— {member.PausedReason}" : "")</div>
-                    }
-                    @{
-                        var memberCall = Sessions.FindByChannel(member.Interface);
-                    }
-                    @if (memberCall is not null)
-                    {
+                <div class="member-card-stats">
+                    <div class="member-stat">
+                        <span class="member-stat-value">@member.CallsTaken</span>
+                        <span class="member-stat-label">@L["QDetail_MemberCalls"]</span>
+                    </div>
+                    <div class="member-stat">
+                        <span class="member-stat-value">@member.Penalty</span>
+                        <span class="member-stat-label">@L["QDetail_MemberPenalty"]</span>
+                    </div>
+                </div>
+                @if (member.Paused)
+                {
+                    <div class="member-card-alert">
+                        <span class="badge badge-yellow">Paused @(member.PausedReason is not null ? $"— {member.PausedReason}" : "")</span>
+                    </div>
+                }
+                @{
+                    var memberCall = Sessions.FindByChannel(member.Interface);
+                }
+                @if (memberCall is not null)
+                {
+                    <div class="member-card-alert">
                         <a href="/calls/@Uri.EscapeDataString(memberCall.SessionId)" class="badge badge-blue">Active Call</a>
-                    }
-                </div>
-                <div class="agent-card-actions">
+                    </div>
+                }
+                <div class="member-card-actions">
                     @if (member.Paused)
                     {
                         <button class="btn btn-sm btn-green" @onclick="() => TogglePause(member, false)">@L["QDetail_Unpause"]</button>
@@ -292,18 +304,31 @@ else
         _addPenalty = 0;
     }
 
-    private static (string dotClass, string icon) GetMemberStyle(AsteriskQueueMember member)
+    private static string FormatMemberStatus(QueueMemberState status) => status switch
     {
-        if (member.Paused) return ("status-paused", "\u23F8");
+        QueueMemberState.DeviceNotInUse => "Available",
+        QueueMemberState.DeviceInUse => "In Use",
+        QueueMemberState.DeviceBusy => "Busy",
+        QueueMemberState.DeviceRinging => "Ringing",
+        QueueMemberState.DeviceRingInUse => "Ringing (In Use)",
+        QueueMemberState.DeviceOnHold => "On Hold",
+        QueueMemberState.DeviceUnavailable => "Offline",
+        QueueMemberState.DeviceInvalid => "Invalid",
+        _ => "Unknown"
+    };
+
+    private static (string statusClass, string statusLabel, string icon) GetMemberStyle(AsteriskQueueMember member)
+    {
+        if (member.Paused) return ("status-paused", "Paused", "\u23F8");
         return member.Status switch
         {
-            QueueMemberState.DeviceNotInUse => ("status-available", "\u2713"),
-            QueueMemberState.DeviceInUse => ("status-incall", "\uD83D\uDCDE"),
-            QueueMemberState.DeviceBusy => ("status-busy", "\u26D4"),
-            QueueMemberState.DeviceRinging or QueueMemberState.DeviceRingInUse => ("status-ringing", "\uD83D\uDD14"),
-            QueueMemberState.DeviceOnHold => ("status-hold", "\u23F3"),
-            QueueMemberState.DeviceUnavailable => ("status-offline", "\u2715"),
-            _ => ("status-unknown", "?")
+            QueueMemberState.DeviceNotInUse => ("status-available", "Available", "\u2713"),
+            QueueMemberState.DeviceInUse => ("status-incall", "In Use", "\uD83D\uDCDE"),
+            QueueMemberState.DeviceBusy => ("status-busy", "Busy", "\u26D4"),
+            QueueMemberState.DeviceRinging or QueueMemberState.DeviceRingInUse => ("status-ringing", "Ringing", "\uD83D\uDD14"),
+            QueueMemberState.DeviceOnHold => ("status-hold", "On Hold", "\u23F3"),
+            QueueMemberState.DeviceUnavailable => ("status-offline", "Offline", "\u2715"),
+            _ => ("status-unknown", "Unknown", "?")
         };
     }
 

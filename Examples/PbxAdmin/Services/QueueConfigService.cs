@@ -46,17 +46,20 @@ public sealed partial class QueueConfigService : IQueueConfigService
     private readonly IQueueConfigRepository _repo;
     private readonly IQueueViewManager _viewManager;
     private readonly IConfigProviderResolver _providerResolver;
+    private readonly AsteriskMonitorService? _monitor;
     private readonly ILogger<QueueConfigService> _logger;
 
     public QueueConfigService(
         IQueueConfigRepository repo,
         IQueueViewManager viewManager,
         IConfigProviderResolver providerResolver,
+        AsteriskMonitorService? monitor,
         ILogger<QueueConfigService> logger)
     {
         _repo = repo;
         _viewManager = viewManager;
         _providerResolver = providerResolver;
+        _monitor = monitor;
         _logger = logger;
     }
 
@@ -144,11 +147,19 @@ public sealed partial class QueueConfigService : IQueueConfigService
         try
         {
             await _viewManager.EnsureViewsExistAsync(serverId, ct);
+
+            // Get queue name before deleting for Live layer notification
+            var queue = await _repo.GetQueueAsync(id, ct);
             var deleted = await _repo.DeleteQueueAsync(id, ct);
             if (!deleted)
                 return (false, "Queue not found");
 
             await ReloadAsync(serverId, ct);
+
+            // Remove from Live layer so UI updates immediately
+            if (queue is not null)
+                _monitor?.GetServer(serverId)?.Server.Queues.RemoveQueue(queue.Name);
+
             QueueConfigServiceLog.Deleted(_logger, serverId, id);
             return (true, null);
         }
@@ -173,6 +184,11 @@ public sealed partial class QueueConfigService : IQueueConfigService
         {
             member.Id = await _repo.AddMemberAsync(member, ct);
             await ReloadAsync(serverId, ct);
+
+            // Notify Live layer so UI updates immediately
+            _monitor?.GetServer(serverId)?.Server.Queues
+                .OnMemberAdded(queueName, member.Interface, member.MemberName, member.Penalty, false, 0);
+
             QueueConfigServiceLog.MemberAdded(_logger, queueName, member.Interface);
             return (true, null);
         }

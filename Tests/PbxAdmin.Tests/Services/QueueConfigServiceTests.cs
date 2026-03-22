@@ -210,7 +210,7 @@ public class QueueConfigServiceTests
         var viewManager = Substitute.For<IQueueViewManager>();
 
         var sut = new QueueConfigService(repo, viewManager, providerResolver,
-            Substitute.For<ILogger<QueueConfigService>>());
+            null, Substitute.For<ILogger<QueueConfigService>>());
 
         var config = ValidQueue();
         var (success, _) = await sut.CreateQueueAsync(config);
@@ -233,7 +233,7 @@ public class QueueConfigServiceTests
         var viewManager = Substitute.For<IQueueViewManager>();
 
         var sut = new QueueConfigService(repo, viewManager, providerResolver,
-            Substitute.For<ILogger<QueueConfigService>>());
+            null, Substitute.For<ILogger<QueueConfigService>>());
 
         var member = new QueueMemberConfigDto { QueueConfigId = 1, Interface = "PJSIP/2001" };
         var (success, _) = await sut.AddMemberAsync("s1", "sales", member);
@@ -266,6 +266,6 @@ public class QueueConfigServiceTests
         var viewManager = Substitute.For<IQueueViewManager>();
         var providerResolver = Substitute.For<IConfigProviderResolver>();
         var logger = Substitute.For<ILogger<QueueConfigService>>();
-        return new QueueConfigService(repo, viewManager, providerResolver, logger);
+        return new QueueConfigService(repo, viewManager, providerResolver, null, logger);
     }
 }
