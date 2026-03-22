@@ -142,6 +142,8 @@ services:
       - ./sample-recordings:/data/recordings-file
       # MOH at the fallback path too
       - ./moh:/var/lib/asterisk/moh:ro
+      # Seed route data for file-mode server (JSON-based route repository)
+      - ./seed-routes:/app/data/routes
     environment:
       - DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE=false
       - Logging__LogLevel__Default=Debug
