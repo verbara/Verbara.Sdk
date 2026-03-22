@@ -12,5 +12,10 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.Playwright" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Asterisk.Sdk.Ami\Asterisk.Sdk.Ami.csproj" />
   </ItemGroup>
 </Project>

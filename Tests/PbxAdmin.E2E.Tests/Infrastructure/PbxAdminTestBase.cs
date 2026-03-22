@@ -58,7 +58,7 @@ public abstract class PbxAdminTestBase : IAsyncLifetime
 
             // Avoid overwriting if duplicate name
             if (File.Exists(newPath))
-                newPath = Path.Combine(dir, $"{_testName}_{Guid.NewGuid():N[..8]}.webm");
+                newPath = Path.Combine(dir, $"{_testName}_{Guid.NewGuid().ToString("N")[..8]}.webm");
 
             try { File.Move(_videoPath, newPath); } catch { /* best effort */ }
         }
