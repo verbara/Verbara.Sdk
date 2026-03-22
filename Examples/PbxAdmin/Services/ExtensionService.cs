@@ -502,11 +502,21 @@ public sealed class ExtensionService : IExtensionService
         if (technology == ExtensionTechnology.PjSip)
         {
             var categories = await configProvider.GetCategoriesAsync(serverId, filename, ct);
-            var catDict = categories.ToDictionary(c => c.Name, c => c.Variables, StringComparer.OrdinalIgnoreCase);
 
-            catDict.TryGetValue(extension, out var endpoint);
-            catDict.TryGetValue($"{extension}-auth", out var auth);
-            catDict.TryGetValue($"{extension}-aor", out var aor);
+            // Use FirstOrDefault instead of ToDictionary to handle duplicate names
+            // (Realtime DB returns ps_endpoints, ps_auths, ps_aors with the same id)
+            var endpoint = categories
+                .FirstOrDefault(c => string.Equals(c.Name, extension, StringComparison.OrdinalIgnoreCase)
+                    && c.Variables.GetValueOrDefault("type") == "endpoint")?.Variables
+                ?? categories.FirstOrDefault(c => string.Equals(c.Name, extension, StringComparison.OrdinalIgnoreCase))?.Variables;
+            var auth = categories
+                .FirstOrDefault(c => string.Equals(c.Name, $"{extension}-auth", StringComparison.OrdinalIgnoreCase))?.Variables
+                ?? categories.FirstOrDefault(c => string.Equals(c.Name, extension, StringComparison.OrdinalIgnoreCase)
+                    && c.Variables.GetValueOrDefault("type") == "auth")?.Variables;
+            var aor = categories
+                .FirstOrDefault(c => string.Equals(c.Name, $"{extension}-aor", StringComparison.OrdinalIgnoreCase))?.Variables
+                ?? categories.FirstOrDefault(c => string.Equals(c.Name, extension, StringComparison.OrdinalIgnoreCase)
+                    && c.Variables.GetValueOrDefault("type") == "aor")?.Variables;
 
             if (endpoint is null) return null;
 

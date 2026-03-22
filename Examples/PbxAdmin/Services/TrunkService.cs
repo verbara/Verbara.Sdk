@@ -277,12 +277,20 @@ public sealed class TrunkService : ITrunkService
         if (technology == TrunkTechnology.PjSip)
         {
             var categories = await configProvider.GetCategoriesAsync(serverId, filename, ct);
-            var catDict = categories.ToDictionary(c => c.Name, c => c.Variables, StringComparer.OrdinalIgnoreCase);
 
-            catDict.TryGetValue(name, out var endpoint);
-            catDict.TryGetValue($"{name}-auth", out var auth);
-            catDict.TryGetValue($"{name}-aor", out var aor);
-            catDict.TryGetValue($"{name}-reg", out var reg);
+            // Use FirstOrDefault instead of ToDictionary to handle duplicate names
+            // (Realtime DB returns ps_endpoints, ps_auths, ps_aors with the same id)
+            Dictionary<string, string>? FindCat(string catName, string? type = null) =>
+                (type is not null
+                    ? categories.FirstOrDefault(c => string.Equals(c.Name, catName, StringComparison.OrdinalIgnoreCase)
+                        && c.Variables.GetValueOrDefault("type") == type)
+                    : categories.FirstOrDefault(c => string.Equals(c.Name, catName, StringComparison.OrdinalIgnoreCase)))
+                ?.Variables;
+
+            var endpoint = FindCat(name, "endpoint") ?? FindCat(name);
+            var auth = FindCat($"{name}-auth") ?? FindCat(name, "auth");
+            var aor = FindCat($"{name}-aor") ?? FindCat(name, "aor");
+            var reg = FindCat($"{name}-reg") ?? FindCat(name, "registration");
 
             if (endpoint is null) return null;
 
