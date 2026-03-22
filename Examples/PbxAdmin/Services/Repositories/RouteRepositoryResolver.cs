@@ -32,28 +32,32 @@ public sealed class RouteRepositoryResolver : IRouteRepositoryResolver
         var dict = new Dictionary<string, IRouteRepository>(StringComparer.OrdinalIgnoreCase);
         var servers = config.GetSection("Asterisk:Servers").GetChildren();
 
-        foreach (var section in servers)
+        // Find a shared DB connection string (any Realtime server)
+        var sharedConnStr = servers
+            .Select(s => s["RealtimeConnectionString"])
+            .FirstOrDefault(c => c is not null);
+
+        foreach (var section in config.GetSection("Asterisk:Servers").GetChildren())
         {
             var id = section["Id"] ?? "default";
-            var modeStr = section["ConfigMode"] ?? "File";
-            var isRealtime = string.Equals(modeStr, "Realtime", StringComparison.OrdinalIgnoreCase);
+            var connStr = section["RealtimeConnectionString"] ?? sharedConnStr;
 
             IRouteRepository repo;
-            if (isRealtime)
+            string mode;
+            if (connStr is not null)
             {
-                var connStr = section["RealtimeConnectionString"]
-                    ?? throw new InvalidOperationException(
-                        $"Asterisk:Servers entry '{id}' has ConfigMode=Realtime but no RealtimeConnectionString.");
                 repo = new DbRouteRepository(connStr, loggerFactory.CreateLogger<DbRouteRepository>());
+                mode = "Realtime";
             }
             else
             {
                 var serverDataDir = Path.Combine(AppContext.BaseDirectory, "data", "routes");
                 repo = new FileRouteRepository(serverDataDir, loggerFactory.CreateLogger<FileRouteRepository>());
+                mode = "File";
             }
 
             dict[id] = repo;
-            RouteRepositoryResolverLog.Registered(_logger, id, isRealtime ? "Realtime" : "File");
+            RouteRepositoryResolverLog.Registered(_logger, id, mode);
         }
 
         _repositories = dict.ToFrozenDictionary();
