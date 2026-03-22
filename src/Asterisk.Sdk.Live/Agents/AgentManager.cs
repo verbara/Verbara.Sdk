@@ -142,6 +142,19 @@ public sealed class AgentManager
         }
     }
 
+    /// <summary>Register an agent definition without logging it in (appears as LoggedOff).</summary>
+    public void RegisterAgent(string agentId, string? name = null)
+    {
+        var agent = _agents.GetOrAdd(agentId, id => new AsteriskAgent { AgentId = id });
+        lock (agent.SyncRoot)
+        {
+            agent.Name = name ?? agent.Name;
+            // Don't change state if already logged in
+            if (agent.State == AgentState.Unknown)
+                agent.State = AgentState.LoggedOff;
+        }
+    }
+
     /// <summary>Get agents filtered by state (lazy, zero-alloc).</summary>
     public IEnumerable<AsteriskAgent> GetAgentsByState(AgentState state) =>
         _agents.Values.Where(a => a.State == state);
@@ -180,6 +193,15 @@ public sealed class AsteriskAgent : LiveObjectBase
 
     /// <summary>Talk time of the last completed call in seconds.</summary>
     public long LastCallTalkTimeSecs { get; set; }
+
+    /// <summary>Set the agent name (thread-safe).</summary>
+    public void SetName(string name)
+    {
+        lock (SyncRoot)
+        {
+            Name = name;
+        }
+    }
 
     /// <summary>Duration the agent has been in the current state.</summary>
     public TimeSpan StateElapsed => LastStateChangeAt.HasValue

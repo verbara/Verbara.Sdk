@@ -174,19 +174,29 @@ public sealed class AsteriskServer : IAsteriskServer
             }
         }
 
-        // Populate agents from AgentsAction
-        await foreach (var evt in _connection.SendEventGeneratingActionAsync(new AgentsAction(), cancellationToken))
-        {
-            if (evt is AgentsEvent ae && ae.Agent is not null)
-            {
-                if (!string.Equals(ae.Status, "AGENT_LOGGEDOFF", StringComparison.OrdinalIgnoreCase))
-                {
-                    Agents.OnAgentLogin(ae.Agent, ae.LoggedInChan);
-                }
-            }
-        }
+        await PopulateAgentsAsync(cancellationToken);
 
         AsteriskServerLog.InitialStateLoaded(_logger, Channels.ChannelCount, Queues.QueueCount, Agents.AgentCount);
+    }
+
+    private async ValueTask PopulateAgentsAsync(CancellationToken cancellationToken)
+    {
+        await foreach (var evt in _connection.SendEventGeneratingActionAsync(new AgentsAction(), cancellationToken))
+        {
+            if (evt is not AgentsEvent ae || ae.Agent is null)
+                continue;
+
+            var isLoggedOff = string.Equals(ae.Status, "AGENT_LOGGEDOFF", StringComparison.OrdinalIgnoreCase);
+            if (isLoggedOff)
+            {
+                Agents.RegisterAgent(ae.Agent, ae.Name);
+                continue;
+            }
+
+            Agents.OnAgentLogin(ae.Agent, ae.LoggedInChan);
+            if (ae.Name is not null)
+                Agents.GetById(ae.Agent)?.SetName(ae.Name);
+        }
     }
 
     /// <summary>
