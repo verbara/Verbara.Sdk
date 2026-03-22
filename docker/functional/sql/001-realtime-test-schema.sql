@@ -28,8 +28,18 @@ CREATE TABLE IF NOT EXISTS ps_auths (
 
 CREATE TABLE IF NOT EXISTS ps_aors (
     id VARCHAR(40) NOT NULL PRIMARY KEY,
+    contact VARCHAR(255),
     max_contacts INTEGER DEFAULT 1,
-    remove_existing VARCHAR(3) DEFAULT 'yes'
+    remove_existing VARCHAR(3) DEFAULT 'yes',
+    qualify_frequency INTEGER DEFAULT 60
+);
+
+CREATE TABLE IF NOT EXISTS ps_endpoint_id_ips (
+    id VARCHAR(40) NOT NULL PRIMARY KEY,
+    endpoint VARCHAR(40),
+    match VARCHAR(80),
+    srv_lookups VARCHAR(3),
+    match_header VARCHAR(255)
 );
 
 CREATE TABLE IF NOT EXISTS queue_table (
