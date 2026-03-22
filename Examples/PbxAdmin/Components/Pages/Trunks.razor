@@ -1,7 +1,9 @@
 @page "/trunks"
 @using PbxAdmin.Services
 @using PbxAdmin.Models
+@using Asterisk.Sdk.Ami.Actions
 @inject ISelectedServerService ServerSvc
+@inject AsteriskMonitorService Monitor
 @inject ITrunkService TrunkSvc
 @inject IConfigProviderResolver ConfigResolver
 @inject IConfigOperationState ConfigOp
@@ -79,6 +81,7 @@
                 }
             </div>
             <div class="trunk-card-actions">
+                <button class="btn btn-sm btn-green" @onclick="() => TestCall(trunk)">@L["Trunk_TestCall"]</button>
                 <button class="btn btn-sm btn-blue" @onclick="() => NavigateDetail(trunk)">@L["Ext_Detail"]</button>
                 <button class="btn btn-sm btn-yellow" @onclick="() => NavigateEdit(trunk)">@L["Btn_Edit"]</button>
                 <button class="btn btn-sm btn-red" @onclick="() => ConfirmDelete(trunk)">@L["Btn_Delete"]</button>
@@ -178,6 +181,51 @@
         _deletingTrunk = null;
 
         await LoadTrunks();
+    }
+
+    private async Task TestCall(TrunkViewModel trunk)
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null)
+        {
+            _actionResult = L["Trunk_TestCallNoServer"];
+            return;
+        }
+
+        var entry = Monitor.GetServer(serverId);
+        if (entry is null)
+        {
+            _actionResult = L["Trunk_TestCallNoServer"];
+            return;
+        }
+
+        try
+        {
+            var channelPrefix = trunk.Technology switch
+            {
+                TrunkTechnology.Sip => "SIP",
+                TrunkTechnology.Iax2 => "IAX2",
+                _ => "PJSIP"
+            };
+
+            var action = new OriginateAction
+            {
+                Channel = $"{channelPrefix}/1001@{trunk.Name}",
+                Application = "Playback",
+                Data = "tt-monkeys",
+                IsAsync = true,
+                Timeout = 30000
+            };
+
+            var response = await entry.Connection.SendActionAsync(action);
+            _actionResult = string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase)
+                ? string.Format(L["Trunk_TestCallSuccess"], trunk.Name)
+                : string.Format(L["Trunk_TestCallFailed"], trunk.Name, response.Message ?? "Unknown error");
+        }
+        catch (Exception ex)
+        {
+            _actionResult = string.Format(L["Trunk_TestCallFailed"], trunk.Name, ex.Message);
+        }
     }
 
     private static string GetStatusClass(TrunkStatus status) => status switch
