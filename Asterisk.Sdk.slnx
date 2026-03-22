@@ -45,6 +45,7 @@
     <Project Path="Tests/Asterisk.Sdk.IntegrationTests/Asterisk.Sdk.IntegrationTests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Live.Tests/Asterisk.Sdk.Live.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Activities.Tests/Asterisk.Sdk.Activities.Tests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.TestInfrastructure/Asterisk.Sdk.TestInfrastructure.csproj" />
     <Project Path="Tests/Asterisk.Sdk.VoiceAi.AudioSocket.Tests/Asterisk.Sdk.VoiceAi.AudioSocket.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.VoiceAi.Tests/Asterisk.Sdk.VoiceAi.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.VoiceAi.Stt.Tests/Asterisk.Sdk.VoiceAi.Stt.Tests.csproj" />
