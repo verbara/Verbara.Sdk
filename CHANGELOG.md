@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-03-22
+
+### Added
+
+- **ARI:** `SetEventFilterAsync` on Applications resource — filter WebSocket events per app (reduces traffic at scale)
+- **ARI:** `GetStoredFileAsync` on Recordings resource — binary download of stored recordings (enables CallAnalytics transcription)
+- **ARI:** `GenerateUserEventAsync` on AriClient — emit custom user events between Stasis apps
+
+---
+
 ## [1.3.0] - 2026-03-22
 
 ### Added
