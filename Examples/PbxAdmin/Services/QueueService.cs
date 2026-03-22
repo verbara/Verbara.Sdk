@@ -1,3 +1,5 @@
+using PbxAdmin.Models;
+
 namespace PbxAdmin.Services;
 
 internal static partial class QueueServiceLog
@@ -10,6 +12,12 @@ internal static partial class QueueServiceLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "[QUEUE] Module reload failed after deleting queue {QueueName} on server {ServerId}")]
     public static partial void ReloadFailed(ILogger logger, string queueName, string serverId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "[QUEUE] Member removed: server={ServerId} queue={QueueName} interface={Interface}")]
+    public static partial void MemberRemoved(ILogger logger, string serverId, string queueName, string @interface);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[QUEUE] Remove member failed: server={ServerId} queue={QueueName} interface={Interface}")]
+    public static partial void RemoveMemberFailed(ILogger logger, Exception exception, string serverId, string queueName, string @interface);
 }
 
 /// <summary>
@@ -18,11 +26,13 @@ internal static partial class QueueServiceLog
 public sealed class QueueService
 {
     private readonly IConfigProviderResolver _resolver;
+    private readonly PbxConfigManager _pbxConfig;
     private readonly ILogger<QueueService> _logger;
 
-    public QueueService(IConfigProviderResolver resolver, ILogger<QueueService> logger)
+    public QueueService(IConfigProviderResolver resolver, PbxConfigManager pbxConfig, ILogger<QueueService> logger)
     {
         _resolver = resolver;
+        _pbxConfig = pbxConfig;
         _logger = logger;
     }
 
@@ -50,5 +60,59 @@ public sealed class QueueService
             QueueServiceLog.DeleteFailed(_logger, ex, serverId, queueName);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Removes a queue member by interface. Handles both File mode (rewrite queues.conf)
+    /// and Realtime mode (DELETE from queue_members table).
+    /// </summary>
+    public async Task<(bool Success, string? Error)> RemoveMemberAsync(
+        string serverId, string queueName, string iface, CancellationToken ct = default)
+    {
+        try
+        {
+            var mode = _resolver.GetConfigMode(serverId);
+            bool success;
+
+            if (mode == ConfigMode.File)
+            {
+                success = await RemoveFileMemberAsync(serverId, queueName, iface, ct);
+            }
+            else
+            {
+                var provider = _resolver.GetProvider(serverId);
+                success = await ((DbConfigProvider)provider).RemoveQueueMemberAsync(queueName, iface, ct);
+            }
+
+            if (!success)
+                return (false, $"Member '{iface}' not found in queue '{queueName}'");
+
+            if (!await _resolver.GetProvider(serverId).ReloadModuleAsync(serverId, "app_queue.so", ct))
+                QueueServiceLog.ReloadFailed(_logger, queueName, serverId);
+
+            QueueServiceLog.MemberRemoved(_logger, serverId, queueName, iface);
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            QueueServiceLog.RemoveMemberFailed(_logger, ex, serverId, queueName, iface);
+            return (false, $"Failed to remove member: {ex.Message}");
+        }
+    }
+
+    private async Task<bool> RemoveFileMemberAsync(
+        string serverId, string queueName, string iface, CancellationToken ct)
+    {
+        var lines = await _pbxConfig.GetSectionLinesAsync(serverId, "queues.conf", queueName, ct);
+        if (lines is null) return false;
+
+        var filtered = lines.Where(kv =>
+            !(string.Equals(kv.Key, "member", StringComparison.OrdinalIgnoreCase)
+              && kv.Value.StartsWith(iface, StringComparison.OrdinalIgnoreCase))).ToList();
+
+        if (filtered.Count == lines.Count)
+            return false; // member not found
+
+        return await _pbxConfig.CreateSectionWithLinesAsync(serverId, "queues.conf", queueName, filtered, ct);
     }
 }

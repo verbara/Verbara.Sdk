@@ -78,7 +78,6 @@ services:
       - "8280:8180"       # WS (WebRTC plain, dev)
       - "8190:8089"       # WSS (WebRTC TLS, prod)
     volumes:
-      - ./asterisk-config-file/agents.conf:/etc/asterisk/agents.conf
       - ./asterisk-config-file/ari.conf:/etc/asterisk/ari.conf:ro
       - ./asterisk-config-file/asterisk.conf:/etc/asterisk/asterisk.conf:ro
       - ./asterisk-config-file/confbridge.conf:/etc/asterisk/confbridge.conf

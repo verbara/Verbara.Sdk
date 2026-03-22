@@ -310,6 +310,18 @@ public sealed class DbConfigProvider : IConfigProvider, IDisposable, IAsyncDispo
         => _amiProvider.ReloadModuleAsync(serverId, moduleName, ct);
 
     /// <summary>
+    /// Removes a queue member from the Realtime queue_members table by queue name and interface.
+    /// </summary>
+    public async Task<bool> RemoveQueueMemberAsync(string queueName, string iface, CancellationToken ct = default)
+    {
+        await using var conn = await _dataSource.OpenConnectionAsync(ct);
+        var rows = await conn.ExecuteAsync(
+            "DELETE FROM queue_members WHERE queue_name = @Queue AND interface = @Interface",
+            new { Queue = queueName, Interface = iface });
+        return rows > 0;
+    }
+
+    /// <summary>
     /// Checks that all Realtime tables referenced by <see cref="RealtimeTableMap"/> exist in the
     /// database. Returns a list of table names that could not be queried (missing or inaccessible).
     /// </summary>

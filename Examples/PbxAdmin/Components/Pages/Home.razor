@@ -1,6 +1,5 @@
 @page "/"
 @using PbxAdmin.Services
-@using Asterisk.Sdk.Live.Agents
 @inject IStringLocalizer<SharedStrings> L
 @inject ISelectedServerService ServerSvc
 @inject ICallSessionManager Sessions
@@ -26,18 +25,6 @@
     <div class="kpi-card @(_waitingCallers > 0 ? "kpi-red" : "kpi-gray")">
         <div class="kpi-value">@_waitingCallers</div>
         <div class="kpi-label">@L["Home_WaitingCallers"]</div>
-    </div>
-    <div class="kpi-card kpi-green">
-        <div class="kpi-value">@_availableAgents</div>
-        <div class="kpi-label">@L["Home_Available"]</div>
-    </div>
-    <div class="kpi-card kpi-red">
-        <div class="kpi-value">@_onCallAgents</div>
-        <div class="kpi-label">@L["Home_OnCall"]</div>
-    </div>
-    <div class="kpi-card kpi-yellow">
-        <div class="kpi-value">@_pausedAgents</div>
-        <div class="kpi-label">@L["Home_Paused"]</div>
     </div>
 </div>
 
@@ -97,7 +84,6 @@
 @code {
     private Timer? _timer;
     private int _activeCalls, _queueCount, _waitingCallers;
-    private int _availableAgents, _onCallAgents, _pausedAgents;
     private int _callsTracked;
     private string _avgWaitTime = "—", _avgTalkTime = "—", _abandonRate = "—";
 
@@ -115,15 +101,6 @@
         _waitingCallers = servers
             .SelectMany(s => s.Value.Server.Queues.Queues)
             .Sum(q => q.EntryCount);
-        _availableAgents = servers
-            .SelectMany(s => s.Value.Server.Agents.GetAgentsByState(AgentState.Available))
-            .Count();
-        _onCallAgents = servers
-            .SelectMany(s => s.Value.Server.Agents.GetAgentsByState(AgentState.OnCall))
-            .Count();
-        _pausedAgents = servers
-            .SelectMany(s => s.Value.Server.Agents.GetAgentsByState(AgentState.Paused))
-            .Count();
 
         var serverId = ServerSvc.SelectedServerId;
         var recent = Sessions.GetRecentCompleted(200).ToList();
