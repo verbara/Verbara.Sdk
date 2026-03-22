@@ -295,6 +295,10 @@
   <data name="Trunk_CallCount" xml:space="preserve"><value>Llamadas:</value></data>
   <data name="Trunk_DeleteTitle" xml:space="preserve"><value>Eliminar Troncal</value></data>
   <data name="Trunk_DeleteConfirm" xml:space="preserve"><value>¿Está seguro de que desea eliminar la troncal</value></data>
+  <data name="Trunk_TestCall" xml:space="preserve"><value>Llamada de Prueba</value></data>
+  <data name="Trunk_TestCallSuccess" xml:space="preserve"><value>Llamada de prueba originada exitosamente a través de la troncal '{0}'.</value></data>
+  <data name="Trunk_TestCallFailed" xml:space="preserve"><value>Llamada de prueba falló para la troncal '{0}': {1}</value></data>
+  <data name="Trunk_TestCallNoServer" xml:space="preserve"><value>Servidor no disponible para llamada de prueba.</value></data>
 
   <!-- Trunk Edit Page -->
   <data name="TrunkEdit_NewTitle" xml:space="preserve"><value>Nueva Troncal — Asterisk PBX Admin</value></data>

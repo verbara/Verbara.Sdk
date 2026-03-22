@@ -295,6 +295,10 @@
   <data name="Trunk_CallCount" xml:space="preserve"><value>Calls:</value></data>
   <data name="Trunk_DeleteTitle" xml:space="preserve"><value>Delete Trunk</value></data>
   <data name="Trunk_DeleteConfirm" xml:space="preserve"><value>Are you sure you want to delete trunk</value></data>
+  <data name="Trunk_TestCall" xml:space="preserve"><value>Test Call</value></data>
+  <data name="Trunk_TestCallSuccess" xml:space="preserve"><value>Test call originated successfully through trunk '{0}'.</value></data>
+  <data name="Trunk_TestCallFailed" xml:space="preserve"><value>Test call failed for trunk '{0}': {1}</value></data>
+  <data name="Trunk_TestCallNoServer" xml:space="preserve"><value>Server not available for test call.</value></data>
 
   <!-- Trunk Edit Page -->
   <data name="TrunkEdit_NewTitle" xml:space="preserve"><value>New Trunk — Asterisk PBX Admin</value></data>

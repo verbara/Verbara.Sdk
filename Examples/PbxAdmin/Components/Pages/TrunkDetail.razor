@@ -1,6 +1,7 @@
 @page "/trunks/{ServerId}/{TrunkName}"
 @using PbxAdmin.Services
 @using PbxAdmin.Models
+@using Asterisk.Sdk.Ami.Actions
 @inject AsteriskMonitorService Monitor
 @inject ITrunkService TrunkSvc
 @inject IConfigProviderResolver ConfigResolver
@@ -108,9 +109,15 @@ else
 
     <!-- Actions -->
     <div class="form-actions">
+        <button class="btn btn-blue" @onclick="TestCall" disabled="@_testCallInProgress">@L["Trunk_TestCall"]</button>
         <button class="btn btn-yellow" @onclick="GoEdit">@L["Btn_Edit"]</button>
         <button class="btn btn-red" @onclick="ConfirmDelete">@L["Btn_Delete"]</button>
     </div>
+
+    @if (_actionResult is not null)
+    {
+        <p class="action-result">@_actionResult</p>
+    }
 
     @if (_showDeleteConfirm)
     {
@@ -135,6 +142,8 @@ else
     private TrunkDetailViewModel? _detail;
     private bool _loading = true;
     private bool _showDeleteConfirm;
+    private bool _testCallInProgress;
+    private string? _actionResult;
     private List<(string Name, Dictionary<string, string> Vars)> _configSections = [];
     private Dictionary<string, string>? _singleSection;
     private readonly HashSet<string> _expandedSections = [];
@@ -199,6 +208,51 @@ else
         using var _ = ConfigOp.Begin("Deleting Trunk", ServerId, TrunkName);
         await TrunkSvc.DeleteTrunkAsync(ServerId, TrunkName, _detail.Config.Technology);
         Nav.NavigateTo("/trunks");
+    }
+
+    private async Task TestCall()
+    {
+        var entry = Monitor.GetServer(ServerId);
+        if (entry is null)
+        {
+            _actionResult = L["Trunk_TestCallNoServer"];
+            return;
+        }
+
+        _testCallInProgress = true;
+        _actionResult = null;
+
+        try
+        {
+            var channelPrefix = _detail?.Config.Technology switch
+            {
+                TrunkTechnology.Sip => "SIP",
+                TrunkTechnology.Iax2 => "IAX2",
+                _ => "PJSIP"
+            };
+
+            var action = new OriginateAction
+            {
+                Channel = $"{channelPrefix}/1001@{TrunkName}",
+                Application = "Playback",
+                Data = "tt-monkeys",
+                IsAsync = true,
+                Timeout = 30000
+            };
+
+            var response = await entry.Connection.SendActionAsync(action);
+            _actionResult = string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase)
+                ? string.Format(L["Trunk_TestCallSuccess"], TrunkName)
+                : string.Format(L["Trunk_TestCallFailed"], TrunkName, response.Message ?? "Unknown error");
+        }
+        catch (Exception ex)
+        {
+            _actionResult = string.Format(L["Trunk_TestCallFailed"], TrunkName, ex.Message);
+        }
+        finally
+        {
+            _testCallInProgress = false;
+        }
     }
 
     private static string GetDotClass(TrunkStatus status) => status switch
