@@ -164,7 +164,7 @@ public sealed class AsteriskServer : IAsteriskServer
                     break;
                 case QueueMemberEvent qm:
                     Queues.OnMemberAdded(
-                        qm.Queue ?? "", qm.Interface ?? "", qm.MemberName,
+                        qm.Queue ?? "", qm.Location ?? qm.Interface ?? "", qm.MemberName,
                         qm.Penalty ?? 0, qm.Paused ?? false, qm.Status ?? 0);
                     break;
                 case QueueEntryEvent qe:
@@ -277,7 +277,7 @@ public sealed class AsteriskServer : IAsteriskServer
                 case QueueMemberAddedEvent qma:
                     server.Queues.OnMemberAdded(
                         qma.Queue ?? "",
-                        qma.Interface ?? "",
+                        qma.Location ?? qma.Interface ?? "",
                         qma.MemberName,
                         qma.Penalty ?? 0,
                         qma.Paused ?? false,
@@ -287,13 +287,13 @@ public sealed class AsteriskServer : IAsteriskServer
                 case QueueMemberRemovedEvent qmr:
                     server.Queues.OnMemberRemoved(
                         qmr.Queue ?? "",
-                        qmr.Interface ?? "");
+                        qmr.Location ?? qmr.Interface ?? "");
                     break;
 
                 case QueueMemberPausedEvent qmp:
                     server.Queues.OnMemberPaused(
                         qmp.Queue ?? "",
-                        qmp.Interface ?? "",
+                        qmp.Location ?? qmp.Interface ?? "",
                         qmp.Paused ?? false,
                         qmp.Reason);
                     break;
@@ -301,14 +301,14 @@ public sealed class AsteriskServer : IAsteriskServer
                 case QueueMemberStatusEvent qms:
                     server.Queues.OnMemberStatusChanged(
                         qms.Queue ?? "",
-                        qms.Interface ?? "",
+                        qms.RawFields?.GetValueOrDefault("Location") ?? qms.Interface ?? "",
                         qms.Status ?? 0);
                     break;
 
                 case QueueMemberPauseEvent qmpe:
                     server.Queues.OnMemberPaused(
                         qmpe.RawFields?.GetValueOrDefault("Queue") ?? "",
-                        qmpe.RawFields?.GetValueOrDefault("Interface") ?? "",
+                        qmpe.RawFields?.GetValueOrDefault("Location") ?? qmpe.RawFields?.GetValueOrDefault("Interface") ?? "",
                         qmpe.RawFields?.GetValueOrDefault("Paused") == "1",
                         qmpe.Pausedreason);
                     break;
