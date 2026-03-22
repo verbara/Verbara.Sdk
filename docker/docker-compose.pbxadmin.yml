@@ -52,6 +52,8 @@ services:
       - ./asterisk-config-realtime/users.conf:/etc/asterisk/users.conf:ro
       - ./asterisk-config-realtime/odbcinst.ini:/etc/odbcinst.ini:ro
       - ./asterisk-config-realtime/odbc.ini:/etc/odbc.ini:ro
+      - ./certs/asterisk.pem:/etc/asterisk/keys/asterisk.pem:ro
+      - ./certs/asterisk.key:/etc/asterisk/keys/asterisk.key:ro
       - ./moh:/var/lib/asterisk/moh:ro
       - recordings-realtime:/var/spool/asterisk/monitor
       - ./sample-recordings:/var/spool/asterisk/monitor/samples:ro
@@ -90,6 +92,8 @@ services:
       - ./asterisk-config-file/queues.conf:/etc/asterisk/queues.conf:ro
       - ./asterisk-config-file/res_parking.conf:/etc/asterisk/res_parking.conf:ro
       - ./asterisk-config-file/users.conf:/etc/asterisk/users.conf:ro
+      - ./certs/asterisk.pem:/etc/asterisk/keys/asterisk.pem:ro
+      - ./certs/asterisk.key:/etc/asterisk/keys/asterisk.key:ro
       - ./moh:/var/lib/asterisk/moh:ro
       - recordings-file:/var/spool/asterisk/monitor
       - ./sample-recordings:/var/spool/asterisk/monitor/samples:ro
@@ -156,7 +160,8 @@ services:
       - Asterisk__Servers__0__MohBasePath=/data/moh
       - Asterisk__Servers__0__MaxUploadSizeMb=20
       - Asterisk__Servers__0__MaxMohClassSizeMb=200
-      - Asterisk__Servers__0__WssPort=8088
+      - Asterisk__Servers__0__WssPort=8089
+      - Softphone__UseTls=true
       # File-mode PBX (extensions 4XXX/5XXX, queues sales2/support2)
       - Asterisk__Servers__1__Id=pbx-file
       - Asterisk__Servers__1__Hostname=asterisk-file
@@ -168,7 +173,7 @@ services:
       - Asterisk__Servers__1__MohBasePath=/data/moh
       - Asterisk__Servers__1__MaxUploadSizeMb=20
       - Asterisk__Servers__1__MaxMohClassSizeMb=200
-      - Asterisk__Servers__1__WssPort=8188
+      - Asterisk__Servers__1__WssPort=8190
 
 volumes:
   pgdata:
