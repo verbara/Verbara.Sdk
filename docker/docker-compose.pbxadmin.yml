@@ -84,7 +84,7 @@ services:
       - ./asterisk-config-file/manager.conf:/etc/asterisk/manager.conf:ro
       - ./asterisk-config-file/modules.conf:/etc/asterisk/modules.conf:ro
       - ./asterisk-config-file/musiconhold.conf:/etc/asterisk/musiconhold.conf:ro
-      - ./asterisk-config-file/pjsip.conf:/etc/asterisk/pjsip.conf:ro
+      - ./asterisk-config-file/pjsip.conf:/etc/asterisk/pjsip.conf
       - ./asterisk-config-file/queues.conf:/etc/asterisk/queues.conf:ro
       - ./asterisk-config-file/res_parking.conf:/etc/asterisk/res_parking.conf:ro
       - ./asterisk-config-file/users.conf:/etc/asterisk/users.conf:ro
