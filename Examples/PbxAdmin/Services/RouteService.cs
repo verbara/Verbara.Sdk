@@ -37,20 +37,17 @@ public sealed partial class RouteService
     private readonly IRouteRepositoryResolver _repoResolver;
     private readonly DialplanRegenerator _regenerator;
     private readonly AsteriskMonitorService _monitor;
-    private readonly TrunkService _trunkService;
     private readonly ILogger<RouteService> _logger;
 
     public RouteService(
         IRouteRepositoryResolver repoResolver,
         DialplanRegenerator regenerator,
         AsteriskMonitorService monitor,
-        TrunkService trunkService,
         ILogger<RouteService> logger)
     {
         _repoResolver = repoResolver;
         _regenerator = regenerator;
         _monitor = monitor;
-        _trunkService = trunkService;
         _logger = logger;
     }
 
