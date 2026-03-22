@@ -13,8 +13,9 @@ using FluentAssertions;
 /// Ext 160 runs Background(silence/1) + WaitExten(5).
 /// WaitExten targets: 1 -> 165, 2 -> 166, i -> 160 (retry), t -> Hangup.
 /// </summary>
-[Trait("Category", "Integration")]
-public sealed class IvrNavigationTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class IvrNavigationTests : FunctionalTestBase
 {
     public IvrNavigationTests() : base("Asterisk.Sdk.Ami")
     {

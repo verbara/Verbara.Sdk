@@ -1,20 +1,22 @@
 using Asterisk.Sdk;
+using Asterisk.Sdk.Ari.Client;
 using Asterisk.Sdk.IntegrationTests.Infrastructure;
 using FluentAssertions;
 
 namespace Asterisk.Sdk.IntegrationTests.Ari;
 
+[Collection("Integration")]
 [Trait("Category", "Integration")]
-public class AriClientIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncLifetime
+public class AriClientIntegrationTests : IAsyncLifetime
 {
-    private readonly AsteriskFixture _fixture;
-    private Asterisk.Sdk.Ari.Client.AriClient? _client;
+    private readonly IntegrationFixture _fixture;
+    private AriClient? _client;
 
-    public AriClientIntegrationTests(AsteriskFixture fixture) => _fixture = fixture;
+    public AriClientIntegrationTests(IntegrationFixture fixture) => _fixture = fixture;
 
     public async Task InitializeAsync()
     {
-        _client = _fixture.CreateAriClient();
+        _client = AsteriskFixture.CreateAriClient(_fixture);
         await _client.ConnectAsync();
     }
 
@@ -32,7 +34,7 @@ public class AriClientIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncL
     [AsteriskAvailableFact]
     public async Task CreateChannel_ShouldReturnChannel()
     {
-        var channel = await _client!.Channels.CreateAsync("Local/100@default", _fixture.AriApp);
+        var channel = await _client!.Channels.CreateAsync("Local/100@default", AsteriskFixture.AriApp);
         channel.Should().NotBeNull();
         channel.Id.Should().NotBeNullOrEmpty();
 
@@ -58,7 +60,7 @@ public class AriClientIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncL
         using var sub = _client!.Subscribe(new TestObserver(eventReceived));
 
         // Create a channel to trigger StasisStart
-        var channel = await _client.Channels.CreateAsync("Local/300@default", _fixture.AriApp);
+        var channel = await _client.Channels.CreateAsync("Local/300@default", AsteriskFixture.AriApp);
 
         try
         {
@@ -84,7 +86,7 @@ public class AriClientIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncL
     public async Task CreateBridgeAndAddChannel_ShouldWork()
     {
         var bridge = await _client!.Bridges.CreateAsync("mixing", "test-bridge-add");
-        var channel = await _client.Channels.CreateAsync("Local/100@default", _fixture.AriApp);
+        var channel = await _client.Channels.CreateAsync("Local/100@default", AsteriskFixture.AriApp);
 
         try
         {

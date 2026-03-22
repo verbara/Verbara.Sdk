@@ -37,4 +37,27 @@ public static class AriClientFactory
 
         return new AriClient(wrappedOptions, logger);
     }
+
+    public static AriClient Create(
+        string host,
+        int port,
+        ILoggerFactory? loggerFactory = null,
+        string application = "test-app",
+        Action<AriClientOptions>? configure = null)
+    {
+        var options = new AriClientOptions
+        {
+            BaseUrl = $"http://{host}:{port}",
+            Username = Username,
+            Password = Password,
+            Application = application,
+            AutoReconnect = false
+        };
+        configure?.Invoke(options);
+
+        var wrappedOptions = Options.Create(options);
+        var logger = loggerFactory?.CreateLogger<AriClient>() ?? NullLogger<AriClient>.Instance;
+
+        return new AriClient(wrappedOptions, logger);
+    }
 }

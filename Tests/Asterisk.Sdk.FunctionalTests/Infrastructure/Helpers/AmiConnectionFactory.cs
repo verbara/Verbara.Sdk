@@ -37,4 +37,26 @@ public static class AmiConnectionFactory
 
         return new AmiConnection(wrappedOptions, socketFactory, logger);
     }
+
+    public static AmiConnection Create(
+        string host,
+        int port,
+        ILoggerFactory? loggerFactory = null,
+        Action<AmiConnectionOptions>? configure = null)
+    {
+        var options = new AmiConnectionOptions
+        {
+            Hostname = host,
+            Port = port,
+            Username = Username,
+            Password = Password
+        };
+        configure?.Invoke(options);
+
+        var wrappedOptions = Options.Create(options);
+        var socketFactory = new PipelineSocketConnectionFactory();
+        var logger = loggerFactory?.CreateLogger<AmiConnection>() ?? NullLogger<AmiConnection>.Instance;
+
+        return new AmiConnection(wrappedOptions, socketFactory, logger);
+    }
 }

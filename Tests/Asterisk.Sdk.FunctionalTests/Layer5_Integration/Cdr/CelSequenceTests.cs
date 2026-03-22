@@ -13,8 +13,9 @@ using FluentAssertions;
 /// Tests for CelEvent (Channel Event Logging). CEL events fire multiple times during a
 /// call (one per milestone) and require cel_manager.conf enabled in Asterisk.
 /// </summary>
-[Trait("Category", "Integration")]
-public sealed class CelSequenceTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class CelSequenceTests : FunctionalTestBase
 {
     public CelSequenceTests() : base("Asterisk.Sdk.Ami")
     {

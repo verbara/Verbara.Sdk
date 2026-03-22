@@ -7,8 +7,9 @@ using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
 
-[Trait("Category", "Integration")]
-public sealed class ConcurrentEventTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class ConcurrentEventTests : FunctionalTestBase
 {
     [AsteriskContainerFact]
     public async Task ConcurrentSubscribeUnsubscribe_ShouldNotThrow()

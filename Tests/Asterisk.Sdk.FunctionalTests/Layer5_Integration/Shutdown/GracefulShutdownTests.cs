@@ -14,8 +14,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-[Trait("Category", "Integration")]
-public sealed class GracefulShutdownTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class GracefulShutdownTests : FunctionalTestBase
 {
     // -----------------------------------------------------------------------
     // Test 1: IHost stops and AMI connection becomes Disconnected

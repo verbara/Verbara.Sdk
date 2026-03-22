@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Asterisk.Sdk.Hosting\Asterisk.Sdk.Hosting.csproj" />
     <ProjectReference Include="..\..\src\Asterisk.Sdk.Sessions\Asterisk.Sdk.Sessions.csproj" />
+    <ProjectReference Include="..\Asterisk.Sdk.TestInfrastructure\Asterisk.Sdk.TestInfrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -13,8 +13,9 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 
-[Trait("Category", "Integration")]
-public sealed class HealthCheckEdgeCaseTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class HealthCheckEdgeCaseTests : FunctionalTestBase
 {
     [AsteriskContainerFact]
     public async Task AmiHealthCheck_ShouldTransitionStates_DuringReconnect()

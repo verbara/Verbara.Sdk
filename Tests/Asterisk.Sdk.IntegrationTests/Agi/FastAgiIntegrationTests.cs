@@ -8,23 +8,24 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Asterisk.Sdk.IntegrationTests.Agi;
 
+[Collection("Integration")]
 [Trait("Category", "Integration")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
-public class FastAgiIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncLifetime
+public class FastAgiIntegrationTests : IAsyncLifetime
 {
-    private readonly AsteriskFixture _fixture;
+    private readonly IntegrationFixture _fixture;
     private Asterisk.Sdk.Ami.Connection.AmiConnection? _amiConnection;
     private FastAgiServer? _agiServer;
     private readonly SimpleMappingStrategy _strategy = new();
 
-    public FastAgiIntegrationTests(AsteriskFixture fixture) => _fixture = fixture;
+    public FastAgiIntegrationTests(IntegrationFixture fixture) => _fixture = fixture;
 
     public async Task InitializeAsync()
     {
-        _amiConnection = _fixture.CreateAmiConnection();
+        _amiConnection = AsteriskFixture.CreateAmiConnection(_fixture);
         await _amiConnection.ConnectAsync();
 
-        _agiServer = new FastAgiServer(_fixture.AgiPort, _strategy, NullLogger<FastAgiServer>.Instance);
+        _agiServer = new FastAgiServer(_fixture.Asterisk.AgiPort, _strategy, NullLogger<FastAgiServer>.Instance);
         await _agiServer.StartAsync();
     }
 

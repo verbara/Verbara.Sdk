@@ -12,8 +12,9 @@ using FluentAssertions;
 /// Tests for MixMonitor recording lifecycle events (Start, Stop, Mute)
 /// using AMI-controlled recording on ext 100 and dialplan-driven recording on ext 900.
 /// </summary>
-[Trait("Category", "Integration")]
-public sealed class MixMonitorTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class MixMonitorTests : FunctionalTestBase
 {
     public MixMonitorTests() : base("Asterisk.Sdk.Ami")
     {

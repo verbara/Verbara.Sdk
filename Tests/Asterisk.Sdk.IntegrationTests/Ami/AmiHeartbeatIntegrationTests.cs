@@ -10,23 +10,24 @@ using Microsoft.Extensions.Options;
 
 namespace Asterisk.Sdk.IntegrationTests.Ami;
 
+[Collection("Integration")]
 [Trait("Category", "Integration")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
-public class AmiHeartbeatIntegrationTests : IClassFixture<AsteriskFixture>, IAsyncLifetime
+public class AmiHeartbeatIntegrationTests : IAsyncLifetime
 {
-    private readonly AsteriskFixture _fixture;
+    private readonly IntegrationFixture _fixture;
     private AmiConnection? _connection;
 
-    public AmiHeartbeatIntegrationTests(AsteriskFixture fixture) => _fixture = fixture;
+    public AmiHeartbeatIntegrationTests(IntegrationFixture fixture) => _fixture = fixture;
 
     public async Task InitializeAsync()
     {
         var options = Options.Create(new AmiConnectionOptions
         {
-            Hostname = _fixture.Host,
-            Port = _fixture.AmiPort,
-            Username = _fixture.AmiUsername,
-            Password = _fixture.AmiPassword,
+            Hostname = _fixture.Asterisk.Host,
+            Port = _fixture.Asterisk.AmiPort,
+            Username = AsteriskFixture.AmiUsername,
+            Password = AsteriskFixture.AmiPassword,
             EnableHeartbeat = true,
             HeartbeatInterval = TimeSpan.FromSeconds(3),
             HeartbeatTimeout = TimeSpan.FromSeconds(5)

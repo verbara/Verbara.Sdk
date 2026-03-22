@@ -6,8 +6,9 @@ using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
 
-[Trait("Category", "Integration")]
-public sealed class AuthenticationTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class AuthenticationTests : FunctionalTestBase
 {
     // -----------------------------------------------------------------------
     // Test 1: Wrong password throws AmiAuthenticationException, no hang

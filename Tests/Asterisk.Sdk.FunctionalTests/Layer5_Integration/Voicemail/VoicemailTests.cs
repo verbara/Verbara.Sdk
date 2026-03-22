@@ -15,8 +15,9 @@ using FluentAssertions;
 /// Extensions 950 (direct VM), 951 (ring then VM), 952 (VM check) are used.
 /// Mailbox 9001@default is configured with PIN 1234.
 /// </summary>
-[Trait("Category", "Integration")]
-public sealed class VoicemailTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class VoicemailTests : FunctionalTestBase
 {
     public VoicemailTests() : base("Asterisk.Sdk.Ami")
     {

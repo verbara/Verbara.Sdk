@@ -14,8 +14,9 @@ using Microsoft.Extensions.Logging;
 /// Tests for bridge lifecycle events (BridgeCreate, BridgeEnter, BridgeLeave, BridgeDestroy)
 /// using ConfBridge (ext 600) to create bridges between channels.
 /// </summary>
-[Trait("Category", "Integration")]
-public sealed class BridgeLifecycleTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class BridgeLifecycleTests : FunctionalTestBase
 {
     public BridgeLifecycleTests() : base("Asterisk.Sdk.Ami")
     {

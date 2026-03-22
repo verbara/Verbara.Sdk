@@ -13,8 +13,9 @@ using Microsoft.Extensions.Logging;
 /// during queue call flows. Observable gauges (live.queues.count) are tested
 /// via direct QueueManager assertions since MeterListener does not capture them.
 /// </summary>
-[Trait("Category", "Integration")]
-public sealed class QueueMetricsTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class QueueMetricsTests : FunctionalTestBase
 {
     private const string TestQueue = "test-queue";
     private const string TestInterface = "Local/100@test-functional";

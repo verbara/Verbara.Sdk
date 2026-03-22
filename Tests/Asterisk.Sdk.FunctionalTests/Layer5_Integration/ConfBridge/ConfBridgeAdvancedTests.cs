@@ -12,8 +12,9 @@ using FluentAssertions;
 /// Advanced ConfBridge tests covering mute/unmute, kick, lock/unlock,
 /// recording, and conference lifecycle (start/end) events.
 /// </summary>
-[Trait("Category", "Integration")]
-public sealed class ConfBridgeAdvancedTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
 {
     public ConfBridgeAdvancedTests() : base("Asterisk.Sdk.Ami")
     {

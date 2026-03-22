@@ -13,8 +13,9 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-[Trait("Category", "Integration")]
-public sealed class SessionEventOrderTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class SessionEventOrderTests : FunctionalTestBase
 {
     // ────────────────────────────────────────────────────────────────────────
     //  Factory helpers

@@ -11,8 +11,9 @@ using FluentAssertions;
 /// Integration tests that verify AMI metrics (counters and histogram) are recorded
 /// correctly when actions are sent and events are received via a live Asterisk connection.
 /// </summary>
-[Trait("Category", "Integration")]
-public sealed class AmiMetricsTests : FunctionalTestBase, IClassFixture<AsteriskContainerFixture>
+[Collection("Functional")]
+[Trait("Category", "Functional")]
+public sealed class AmiMetricsTests : FunctionalTestBase
 {
     public AmiMetricsTests() : base("Asterisk.Sdk.Ami")
     {
