@@ -1171,4 +1171,14 @@
   <data name="Notif_Title" xml:space="preserve"><value>Notificaciones</value></data>
   <data name="Notif_ClearAll" xml:space="preserve"><value>Limpiar todo</value></data>
   <data name="Notif_Empty" xml:space="preserve"><value>Sin notificaciones</value></data>
+  <data name="Toast_Success" xml:space="preserve"><value>Operación completada</value></data>
+  <data name="Toast_Error" xml:space="preserve"><value>Operación fallida</value></data>
+  <data name="Toast_Saved" xml:space="preserve"><value>Cambios guardados</value></data>
+  <data name="Toast_Deleted" xml:space="preserve"><value>Elemento eliminado</value></data>
+  <data name="Toast_Created" xml:space="preserve"><value>Elemento creado</value></data>
+  <data name="Toast_Reloaded" xml:space="preserve"><value>Configuración recargada</value></data>
+  <data name="Confirm_DeleteTitle" xml:space="preserve"><value>Confirmar eliminación</value></data>
+  <data name="Confirm_CannotUndo" xml:space="preserve"><value>Esta acción no se puede deshacer.</value></data>
+  <data name="Btn_Deleting" xml:space="preserve"><value>Eliminando...</value></data>
+  <data name="Btn_Loading" xml:space="preserve"><value>Cargando...</value></data>
 </root>

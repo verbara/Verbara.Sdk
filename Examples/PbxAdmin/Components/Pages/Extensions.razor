@@ -6,6 +6,7 @@
 @inject IConfigProviderResolver ConfigResolver
 @inject IConfigOperationState ConfigOp
 @inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
 @inject NavigationManager Nav
 @implements IDisposable
 
@@ -112,24 +113,13 @@
     }
 </div>
 
-@if (_showDeleteConfirm)
-{
-    <div class="confirm-overlay" @onclick="CancelDelete">
-        <div class="confirm-dialog" @onclick:stopPropagation="true">
-            <h4>@L["Ext_DeleteTitle"]</h4>
-            <p>@L["Ext_DeleteConfirm", _deletingExtension?.Extension ?? ""] @L["Ext_CannotUndo"]</p>
-            <div class="confirm-dialog-actions">
-                <button class="btn btn-sm" @onclick="CancelDelete">@L["Btn_Cancel"]</button>
-                <button class="btn btn-sm btn-red" @onclick="ExecuteDelete">@L["Btn_Delete"]</button>
-            </div>
-        </div>
-    </div>
-}
-
-@if (_actionResult is not null)
-{
-    <p class="action-result">@_actionResult</p>
-}
+<ConfirmDialog @ref="_deleteDialog"
+    Title="@L["Confirm_DeleteTitle"]"
+    Message="@L["Ext_DeleteConfirm", _deletingExtension?.Extension ?? ""]"
+    ConfirmText="@L["Btn_Delete"]"
+    CancelText="@L["Btn_Cancel"]"
+    ConfirmStyle="danger"
+    OnConfirm="ExecuteDelete" />
 
 @code {
     private Timer? _timer;
@@ -137,9 +127,8 @@
     private string _statusFilter = "All";
     private string _searchFilter = "";
     private List<ExtensionViewModel> _extensions = [];
-    private bool _showDeleteConfirm;
     private ExtensionViewModel? _deletingExtension;
-    private string? _actionResult;
+    private ConfirmDialog? _deleteDialog;
 
     private IEnumerable<ExtensionViewModel> FilteredExtensions
     {
@@ -223,13 +212,7 @@
     private void ConfirmDelete(ExtensionViewModel ext)
     {
         _deletingExtension = ext;
-        _showDeleteConfirm = true;
-    }
-
-    private void CancelDelete()
-    {
-        _showDeleteConfirm = false;
-        _deletingExtension = null;
+        _deleteDialog?.Show();
     }
 
     private async Task ExecuteDelete()
@@ -239,16 +222,25 @@
         var serverId = ServerSvc.SelectedServerId;
         if (serverId is null) return;
 
-        using var _ = ConfigOp.Begin("Deleting Extension", serverId, _deletingExtension.Extension);
-        var success = await ExtSvc.DeleteExtensionAsync(serverId, _deletingExtension.Extension, _deletingExtension.Technology);
-        _actionResult = success
-            ? $"Extension '{_deletingExtension.Extension}' deleted successfully."
-            : $"Failed to delete extension '{_deletingExtension.Extension}'.";
+        var extNumber = _deletingExtension.Extension;
+        try
+        {
+            using var _ = ConfigOp.Begin("Deleting Extension", serverId, extNumber);
+            var success = await ExtSvc.DeleteExtensionAsync(serverId, extNumber, _deletingExtension.Technology);
+            _deletingExtension = null;
 
-        _showDeleteConfirm = false;
-        _deletingExtension = null;
+            if (success)
+                Toast.Show(L["Toast_Deleted"], ToastLevel.Success, extNumber);
+            else
+                Toast.Show(L["Toast_Error"], ToastLevel.Error);
 
-        await LoadExtensions();
+            await LoadExtensions();
+        }
+        catch (Exception ex)
+        {
+            _deletingExtension = null;
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, ex.Message);
+        }
     }
 
     private static string GetStatusClass(ExtensionStatus status) => status switch

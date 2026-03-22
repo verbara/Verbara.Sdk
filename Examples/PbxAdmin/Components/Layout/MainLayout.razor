@@ -6,6 +6,7 @@
 @inject ISelectedServerService ServerSvc
 @inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
+@inject IToastService Toast
 @implements IDisposable
 
 @if (!ServerSvc.HasSelection)
@@ -88,6 +89,7 @@ else
                     <span class="header-stat">@_totalChannels @L["Stat_Calls"]</span>
                     <span class="header-stat">@_totalQueues @L["Stat_Queues"]</span>
                     <span class="header-stat">@_totalAgents @L["Stat_Agents"]</span>
+                    <NotificationCenter />
                     <button class="btn btn-sm btn-muted" @onclick="() => _glossaryOpen = !_glossaryOpen" title="@L["Glossary_Title"]">📖</button>
                     <button class="btn btn-sm btn-muted lang-switch" @onclick="SwitchLanguage">
                         @(_isSpanish ? "EN" : "ES")
@@ -99,6 +101,7 @@ else
                 </div>
             </header>
 
+            <HeaderProgressBar />
             <main class="content">
                 @Body
             </main>
@@ -106,6 +109,7 @@ else
     </div>
 
     <GlossarySidebar IsOpen="_glossaryOpen" OnClose="() => _glossaryOpen = false" />
+    <ToastContainer />
 
     @if (ConfigOp.IsBusy)
     {
