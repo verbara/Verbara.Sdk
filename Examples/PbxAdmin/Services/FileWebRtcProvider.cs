@@ -52,7 +52,8 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
         var password = Guid.NewGuid().ToString("N")[..16];
         var wssHost = _options.WssHost ?? "localhost";
         var wssPort = GetWssPort(serverId);
-        var wssUrl = string.Create(CultureInfo.InvariantCulture, $"wss://{wssHost}:{wssPort}/ws");
+        var scheme = _options.UseTls ? "wss" : "ws";
+        var wssUrl = string.Create(CultureInfo.InvariantCulture, $"{scheme}://{wssHost}:{wssPort}");
         var filePath = GetPjsipFilePath(serverId);
 
         try
@@ -100,7 +101,7 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
         new(StringComparer.OrdinalIgnoreCase)
         {
             ["type"] = "endpoint",
-            ["transport"] = "transport-wss",
+            ["transport"] = _options.UseTls ? "transport-wss" : "transport-ws",
             ["aors"] = extensionId,
             ["auth"] = $"{extensionId}-auth",
             ["context"] = _options.Context,

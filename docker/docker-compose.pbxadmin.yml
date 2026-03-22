@@ -24,7 +24,8 @@ services:
       - "5038:5038"       # AMI
       - "8088:8088"       # ARI HTTP
       - "5060:5060/udp"   # SIP
-      - "8089:8089"       # WSS (WebRTC)
+      - "8180:8180"       # WS (WebRTC plain, dev)
+      - "8089:8089"       # WSS (WebRTC TLS, prod)
     volumes:
       - ./asterisk-config-realtime/ari.conf:/etc/asterisk/ari.conf:ro
       - ./asterisk-config-realtime/asterisk.conf:/etc/asterisk/asterisk.conf:ro
@@ -72,7 +73,8 @@ services:
       - "5039:5038"       # AMI
       - "8188:8088"       # ARI HTTP
       - "5061:5060/udp"   # SIP
-      - "8190:8089"       # WSS (WebRTC)
+      - "8280:8180"       # WS (WebRTC plain, dev)
+      - "8190:8089"       # WSS (WebRTC TLS, prod)
     volumes:
       - ./asterisk-config-file/agents.conf:/etc/asterisk/agents.conf:ro
       - ./asterisk-config-file/ari.conf:/etc/asterisk/ari.conf:ro
@@ -154,7 +156,7 @@ services:
       - Asterisk__Servers__0__MohBasePath=/data/moh
       - Asterisk__Servers__0__MaxUploadSizeMb=20
       - Asterisk__Servers__0__MaxMohClassSizeMb=200
-      - Asterisk__Servers__0__WssPort=8089
+      - Asterisk__Servers__0__WssPort=8180
       # File-mode PBX (extensions 4XXX/5XXX, queues sales2/support2)
       - Asterisk__Servers__1__Id=pbx-file
       - Asterisk__Servers__1__Hostname=asterisk-file
@@ -166,7 +168,7 @@ services:
       - Asterisk__Servers__1__MohBasePath=/data/moh
       - Asterisk__Servers__1__MaxUploadSizeMb=20
       - Asterisk__Servers__1__MaxMohClassSizeMb=200
-      - Asterisk__Servers__1__WssPort=8190
+      - Asterisk__Servers__1__WssPort=8280
 
 volumes:
   pgdata:

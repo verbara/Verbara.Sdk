@@ -46,7 +46,8 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
         var serverEntry = _monitor.GetServer(serverId);
         var wssHost = _options.WssHost ?? "localhost";
         var wssPort = GetWssPort(serverId);
-        var wssUrl = $"wss://{wssHost}:{wssPort}/ws";
+        var scheme = _options.UseTls ? "wss" : "ws";
+        var wssUrl = $"{scheme}://{wssHost}:{wssPort}";
 
         var connStr = GetConnectionString(serverId);
         if (connStr is null)
@@ -62,7 +63,7 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
                 INSERT INTO ps_endpoints (id, transport, aors, auth, context, disallow, allow, direct_media,
                     webrtc, dtls_auto_generate_cert, use_avpf, media_encryption, ice_support,
                     media_use_received_transport, rtcp_mux, bundle, max_audio_streams, max_video_streams)
-                VALUES (@id, 'transport-wss', @aors, @auth, @context, 'all', @codecs, 'no',
+                VALUES (@id, @transport, @aors, @auth, @context, 'all', @codecs, 'no',
                     'yes', 'yes', 'yes', 'dtls', 'yes',
                     'yes', 'yes', 'yes', 1, 1)
                 ON CONFLICT (id) DO UPDATE SET
@@ -76,6 +77,7 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
             await conn.ExecuteAsync(new CommandDefinition(endpointSql, new
             {
                 id = extensionId,
+                transport = _options.UseTls ? "transport-wss" : "transport-ws",
                 aors = extensionId,
                 auth = $"{extensionId}-auth",
                 context = _options.Context,
