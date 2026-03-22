@@ -50,8 +50,9 @@ services:
       - ./asterisk-config-realtime/users.conf:/etc/asterisk/users.conf:ro
       - ./asterisk-config-realtime/odbcinst.ini:/etc/odbcinst.ini:ro
       - ./asterisk-config-realtime/odbc.ini:/etc/odbc.ini:ro
-      - moh-realtime:/var/lib/asterisk/moh
+      - ./moh:/var/lib/asterisk/moh:ro
       - recordings-realtime:/var/spool/asterisk/monitor
+      - ./sample-recordings:/var/spool/asterisk/monitor/samples:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -85,8 +86,9 @@ services:
       - ./asterisk-config-file/queues.conf:/etc/asterisk/queues.conf:ro
       - ./asterisk-config-file/res_parking.conf:/etc/asterisk/res_parking.conf:ro
       - ./asterisk-config-file/users.conf:/etc/asterisk/users.conf:ro
-      - moh-file:/var/lib/asterisk/moh
+      - ./moh:/var/lib/asterisk/moh:ro
       - recordings-file:/var/spool/asterisk/monitor
+      - ./sample-recordings:/var/spool/asterisk/monitor/samples:ro
     healthcheck:
       test: ["CMD", "asterisk", "-rx", "core show version"]
       interval: 5s
@@ -138,7 +140,5 @@ services:
 
 volumes:
   pgdata:
-  moh-realtime:
-  moh-file:
   recordings-realtime:
   recordings-file:
