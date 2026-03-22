@@ -1181,4 +1181,15 @@
   <data name="Confirm_CannotUndo" xml:space="preserve"><value>Esta acción no se puede deshacer.</value></data>
   <data name="Btn_Deleting" xml:space="preserve"><value>Eliminando...</value></data>
   <data name="Btn_Loading" xml:space="preserve"><value>Cargando...</value></data>
+  <data name="Softphone_Connect" xml:space="preserve"><value>Conectar Softphone</value></data>
+  <data name="Softphone_Disconnect" xml:space="preserve"><value>Desconectar</value></data>
+  <data name="Softphone_Registering" xml:space="preserve"><value>Registrando...</value></data>
+  <data name="Softphone_Calling" xml:space="preserve"><value>Llamando...</value></data>
+  <data name="Softphone_InCall" xml:space="preserve"><value>En llamada</value></data>
+  <data name="Softphone_OnHold" xml:space="preserve"><value>En espera</value></data>
+  <data name="Softphone_Incoming" xml:space="preserve"><value>Llamada entrante</value></data>
+  <data name="Softphone_Accept" xml:space="preserve"><value>Aceptar</value></data>
+  <data name="Softphone_Reject" xml:space="preserve"><value>Rechazar</value></data>
+  <data name="Softphone_Hangup" xml:space="preserve"><value>Colgar</value></data>
+  <data name="Softphone_Idle" xml:space="preserve"><value>Listo</value></data>
 </root>

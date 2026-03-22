@@ -1,0 +1,42 @@
+@namespace PbxAdmin.Components.Shared
+
+<div class="softphone-input-wrap">
+    <input class="softphone-input" value="@_number" @oninput="OnInput" placeholder="Enter number..." />
+    @if (_number.Length > 0)
+    {
+        <span class="softphone-backspace" @onclick="Backspace">&#9003;</span>
+    }
+</div>
+
+<div class="softphone-dialpad">
+    @foreach (var key in _keys)
+    {
+        <div class="softphone-key" @onclick="() => AppendDigit(key.Digit)">
+            @key.Digit
+            <div class="softphone-key-sub">@key.Letters</div>
+        </div>
+    }
+</div>
+
+<div class="softphone-call-btn">
+    <button class="call-green" disabled="@(_number.Length == 0)" @onclick="HandleCall">&#128222;</button>
+</div>
+
+@code {
+    [Parameter] public EventCallback<string> OnCall { get; set; }
+
+    private string _number = "";
+
+    private static readonly (string Digit, string Letters)[] _keys =
+    [
+        ("1", " "), ("2", "ABC"), ("3", "DEF"),
+        ("4", "GHI"), ("5", "JKL"), ("6", "MNO"),
+        ("7", "PQRS"), ("8", "TUV"), ("9", "WXYZ"),
+        ("*", ""), ("0", "+"), ("#", "")
+    ];
+
+    private void AppendDigit(string digit) => _number += digit;
+    private void Backspace() { if (_number.Length > 0) _number = _number[..^1]; }
+    private void OnInput(ChangeEventArgs e) => _number = e.Value?.ToString() ?? "";
+    private async Task HandleCall() { if (_number.Length > 0) await OnCall.InvokeAsync(_number); }
+}
