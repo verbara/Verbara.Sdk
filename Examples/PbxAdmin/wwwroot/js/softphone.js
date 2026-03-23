@@ -6,10 +6,16 @@ window.Softphone = {
     _session: null,
     _dotNetRef: null,
     _audioElement: null,
+    _ringbackElement: null,
+    _ringbackReady: false,
 
     async register(wssUrl, extension, password, displayName, dotNetRef) {
         this._dotNetRef = dotNetRef;
         this._audioElement = document.getElementById("softphone-remote-audio");
+        this._ringbackElement = document.getElementById("softphone-ringback");
+
+        // Pre-build ringback WAV and prime the audio element
+        this._prepareRingback();
 
         try {
             const uri = SIP.UserAgent.makeURI("sip:" + extension + "@" + new URL(wssUrl).hostname);
@@ -53,8 +59,10 @@ window.Softphone = {
                     constraints: { audio: true, video: false }
                 }
             });
+            this._startRingback();
             this._dotNetRef.invokeMethodAsync("OnRingingOut");
         } catch (err) {
+            this._stopRingback();
             this._dotNetRef.invokeMethodAsync("OnCallFailed", err.message || "Call failed");
             this._session = null;
         }
@@ -75,6 +83,7 @@ window.Softphone = {
 
     async hangup() {
         if (!this._session) return;
+        this._stopRingback();
         try {
             switch (this._session.state) {
                 case SIP.SessionState.Established:
@@ -145,6 +154,106 @@ window.Softphone = {
         this._session = null;
     },
 
+    // --- Ringback tone ---
+
+    _prepareRingback() {
+        // Build WAV and assign to the DOM <audio> element.
+        // Then do a silent play()+pause() to unlock autoplay on this element,
+        // since we're in the call stack of a user gesture (register click).
+        var el = this._ringbackElement;
+        if (!el || this._ringbackReady) return;
+
+        var url = this._buildRingbackWav();
+        el.src = url;
+        el.volume = 0.5;
+        el.load();
+
+        // Unlock autoplay: play a tiny bit then immediately pause
+        var unlock = el.play();
+        if (unlock) {
+            unlock.then(function() {
+                el.pause();
+                el.currentTime = 0;
+            }).catch(function() {
+                // Autoplay blocked even here — will retry on call()
+            });
+        }
+        this._ringbackReady = true;
+    },
+
+    _startRingback() {
+        var el = this._ringbackElement;
+        if (!el) return;
+
+        // If not prepared yet, try now
+        if (!this._ringbackReady) {
+            this._prepareRingback();
+        }
+
+        el.currentTime = 0;
+        el.play().catch(function(err) {
+            console.warn("[Softphone] Ringback play failed:", err.message);
+        });
+    },
+
+    _stopRingback() {
+        var el = this._ringbackElement;
+        if (!el) return;
+        el.pause();
+        el.currentTime = 0;
+    },
+
+    _buildRingbackWav() {
+        // US ringback: 440Hz + 480Hz, 2s on / 4s off, ~30s total (5 cycles)
+        // PCM 16-bit mono 8000Hz
+        var sampleRate = 8000;
+        var cycleOn = 2 * sampleRate;
+        var cycleOff = 4 * sampleRate;
+        var cycles = 5;
+        var totalSamples = cycles * (cycleOn + cycleOff);
+        var buffer = new ArrayBuffer(44 + totalSamples * 2);
+        var view = new DataView(buffer);
+
+        // WAV header
+        var writeStr = function(off, str) {
+            for (var i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i));
+        };
+        writeStr(0, "RIFF");
+        view.setUint32(4, 36 + totalSamples * 2, true);
+        writeStr(8, "WAVE");
+        writeStr(12, "fmt ");
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        writeStr(36, "data");
+        view.setUint32(40, totalSamples * 2, true);
+
+        // Generate tone samples
+        var off = 44;
+        var amp = 0.15 * 32767;
+        for (var c = 0; c < cycles; c++) {
+            for (var i = 0; i < cycleOn; i++) {
+                var t = i / sampleRate;
+                var sample = amp * (Math.sin(2 * Math.PI * 440 * t) + Math.sin(2 * Math.PI * 480 * t)) / 2;
+                view.setInt16(off, sample, true);
+                off += 2;
+            }
+            for (var j = 0; j < cycleOff; j++) {
+                view.setInt16(off, 0, true);
+                off += 2;
+            }
+        }
+
+        var blob = new Blob([buffer], { type: "audio/wav" });
+        return URL.createObjectURL(blob);
+    },
+
+    // --- Session handling ---
+
     _handleIncoming(invitation) {
         this._session = invitation;
         this._setupSessionListeners(invitation);
@@ -210,9 +319,11 @@ window.Softphone = {
                 case SIP.SessionState.Established:
                     // Also try again in case Establishing was missed
                     trackHandler();
+                    self._stopRingback();
                     self._dotNetRef.invokeMethodAsync("OnCallAnswered");
                     break;
                 case SIP.SessionState.Terminated:
+                    self._stopRingback();
                     self._cleanupMedia();
                     self._session = null;
                     self._dotNetRef.invokeMethodAsync("OnCallEnded");
