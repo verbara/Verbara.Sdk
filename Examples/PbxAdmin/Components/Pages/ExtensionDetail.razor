@@ -8,6 +8,7 @@
 @inject IStringLocalizer<SharedStrings> L
 @inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
+@inject CosService CosSvc
 
 <PageTitle>@Extension — Asterisk PBX Admin</PageTitle>
 
@@ -41,7 +42,17 @@ else
         {
             <span class="badge badge-yellow">CF → @_detail.CallForwardTo</span>
         }
+        @if (_cosLevel is not null)
+        {
+            <span class="badge badge-blue">COS: @_cosLevel.Name</span>
+        }
     </div>
+
+    @if (_cosLevel is not null && _detail.Context is not null
+        && !string.Equals(_detail.Context, _cosLevel.AsteriskContext, StringComparison.OrdinalIgnoreCase))
+    {
+        <div class="alert alert-warning">@L["COS_ContextMismatch"]</div>
+    }
 
     <!-- Stats bar -->
     <div class="stats-bar">
@@ -244,6 +255,7 @@ else
     [SupplyParameterFromQuery] public string? Tech { get; set; }
 
     private ExtensionDetailViewModel? _detail;
+    private CosLevel? _cosLevel;
     private bool _loading = true;
     private bool _showDeleteConfirm;
     private (bool, string)? _actionResult;
@@ -263,6 +275,9 @@ else
 
         if (_detail is not null)
         {
+            // Resolve COS level for this extension
+            _cosLevel = await CosSvc.GetExtensionCosAsync(ServerId, Extension);
+
             // Populate feature edit fields from loaded data
             _editDnd = _detail.DndEnabled;
             _editCf = _detail.CallForwardTo;

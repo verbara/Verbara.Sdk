@@ -1255,4 +1255,7 @@
   <data name="Sim_Trace" xml:space="preserve"><value>Traza</value></data>
   <data name="Sim_FlagChecks" xml:space="preserve"><value>Verificación de Indicadores</value></data>
   <data name="Lbl_BuiltIn" xml:space="preserve"><value>Integrado</value></data>
+  <data name="COS_CosLevel" xml:space="preserve"><value>Nivel COS</value></data>
+  <data name="COS_ContextMismatch" xml:space="preserve"><value>Advertencia: el contexto del endpoint no coincide con el contexto COS.</value></data>
+  <data name="COS_SelectLevel" xml:space="preserve"><value>Seleccionar Nivel COS</value></data>
 </root>

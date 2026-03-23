@@ -3,6 +3,8 @@
 @inject IStringLocalizer<SharedStrings> L
 @inject ISelectedServerService ServerSvc
 @inject ICallSessionManager Sessions
+@inject CosService CosSvc
+@inject IExtensionService ExtSvc
 @implements IDisposable
 
 <PageTitle>@L["Home_Title"]</PageTitle>
@@ -25,6 +27,10 @@
     <div class="kpi-card @(_waitingCallers > 0 ? "kpi-red" : "kpi-gray")">
         <div class="kpi-value">@_waitingCallers</div>
         <div class="kpi-label">@L["Home_WaitingCallers"]</div>
+    </div>
+    <div class="kpi-card @(_unassignedCosCount > 0 ? "kpi-red" : "kpi-gray")">
+        <div class="kpi-value">@_unassignedCosCount</div>
+        <div class="kpi-label">@L["COS_Unassigned"]</div>
     </div>
 </div>
 
@@ -84,13 +90,26 @@
 @code {
     private Timer? _timer;
     private int _activeCalls, _queueCount, _waitingCallers;
+    private int _unassignedCosCount;
     private int _callsTracked;
     private string _avgWaitTime = "—", _avgTalkTime = "—", _abandonRate = "—";
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        await LoadCosStatsAsync();
         _timer = new Timer(_ => { Refresh(); InvokeAsync(StateHasChanged); },
             null, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+    }
+
+    private async Task LoadCosStatsAsync()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        var extensions = await ExtSvc.GetExtensionsAsync(serverId);
+        var overrides = await CosSvc.GetExtensionOverridesAsync(serverId);
+        var assignedExtensions = new HashSet<string>(overrides.Select(o => o.Extension), StringComparer.OrdinalIgnoreCase);
+        _unassignedCosCount = extensions.Count(e => !assignedExtensions.Contains(e.Extension));
     }
 
     private void Refresh()

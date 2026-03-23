@@ -10,6 +10,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject IExtensionTemplateService TemplateSvc
+@inject CosService CosSvc
 
 <PageTitle>@(_isNew ? L["ExtEdit_NewTitle"] : L["ExtEdit_EditTitle", Extension ?? ""]) — Asterisk PBX Admin</PageTitle>
 
@@ -147,8 +148,14 @@ else
         <HelpPanel SectionKey="ExtEdit_Dialplan">@L["ExtEdit_Dialplan"]</HelpPanel>
         <div class="form-grid">
             <div class="form-field">
-                <label class="form-label">@L["Lbl_Context"] <HelpIcon HelpKey="Context" /></label>
-                <input class="input" @bind="_config.Context" placeholder="from-internal" />
+                <label class="form-label">@L["COS_CosLevel"] <HelpIcon HelpKey="Context" /></label>
+                <select class="input" @bind="_selectedCosId">
+                    <option value="">— @L["COS_SelectLevel"] —</option>
+                    @foreach (var cos in _cosLevels.Where(c => c.Enabled))
+                    {
+                        <option value="@cos.Id">@cos.Name (@cos.AsteriskContext)</option>
+                    }
+                </select>
             </div>
             <div class="form-field">
                 <label class="form-label">@L["ExtEdit_CallGroup"] <HelpIcon HelpKey="CallGroup" /></label>
@@ -280,6 +287,8 @@ else
 
     private bool _isAdvanced;
     private List<ExtensionTemplate> _templates = [];
+    private List<CosLevel> _cosLevels = [];
+    private int? _selectedCosId;
     private bool _extTouched, _nameTouched, _pwdTouched, _codecTouched, _vmPinTouched, _cfnaTouched;
     private bool _showSaveTemplate;
     private string _templateName = "";
@@ -307,6 +316,7 @@ else
             var range = ExtSvc.GetExtensionRange(serverId);
             _rangeStart = range.Start;
             _rangeEnd = range.End;
+            _cosLevels = await CosSvc.GetLevelsAsync(serverId);
         }
 
         if (!_isNew && serverId is not null)
@@ -329,6 +339,11 @@ else
                 _config.CallForwardNoAnswerTimeout = detail.CfNoAnswerTimeout > 0 ? detail.CfNoAnswerTimeout : 20;
                 _config.VoicemailEnabled = detail.VoicemailEnabled;
                 _config.VoicemailEmail = detail.VoicemailEmail;
+
+                // Resolve COS assignment for this extension
+                var cos = await CosSvc.GetExtensionCosAsync(serverId, Extension!);
+                _selectedCosId = cos?.Id;
+                _config.CosLevelId = _selectedCosId;
             }
         }
 
@@ -450,6 +465,12 @@ else
             return;
         }
 
+        // Apply COS selection to config
+        _config.CosLevelId = _selectedCosId;
+        var selectedCos = _cosLevels.FirstOrDefault(c => c.Id == _selectedCosId);
+        if (selectedCos is not null)
+            _config.Context = selectedCos.AsteriskContext;
+
         _saving = true;
 
         try
@@ -468,6 +489,12 @@ else
 
             if (success)
             {
+                // Persist COS assignment
+                if (_selectedCosId.HasValue)
+                    await CosSvc.AssignToExtensionAsync(serverId, _config.Extension, _selectedCosId.Value);
+                else
+                    await CosSvc.DeleteExtensionOverrideAsync(serverId, _config.Extension);
+
                 Nav.NavigateTo("/extensions");
             }
             else

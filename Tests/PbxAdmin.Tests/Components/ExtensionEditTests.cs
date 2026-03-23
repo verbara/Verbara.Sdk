@@ -1,12 +1,15 @@
 using Bunit;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using PbxAdmin.Components.Pages;
 using PbxAdmin.Models;
 using PbxAdmin.Resources;
 using PbxAdmin.Services;
+using PbxAdmin.Services.Repositories;
 
 namespace PbxAdmin.Tests.Components;
 
@@ -35,12 +38,25 @@ public sealed class ExtensionEditTests : IDisposable
 
         var toastSvc = Substitute.For<IToastService>();
 
+        var cosRepo = Substitute.For<ICosRepository>();
+        cosRepo.GetLevelsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<CosLevel>()));
+        cosRepo.GetExtensionOverridesAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<CosExtensionOverride>()));
+
+        var cosRepoResolver = Substitute.For<ICosRepositoryResolver>();
+        cosRepoResolver.GetCosRepository(Arg.Any<string>()).Returns(cosRepo);
+
+        var config = new ConfigurationBuilder().Build();
+        var cosSvc = new CosService(cosRepoResolver, config, NullLogger<CosService>.Instance);
+
         _ctx.Services.AddSingleton(serverSvc);
         _ctx.Services.AddSingleton(extSvc);
         _ctx.Services.AddSingleton(configOp);
         _ctx.Services.AddSingleton(localizer);
         _ctx.Services.AddSingleton(templateSvc);
         _ctx.Services.AddSingleton(toastSvc);
+        _ctx.Services.AddSingleton(cosSvc);
     }
 
     [Fact]
