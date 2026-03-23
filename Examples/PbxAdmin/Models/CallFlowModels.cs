@@ -4,7 +4,6 @@ namespace PbxAdmin.Models;
 // - EntityId is string for uniformity: routes/TCs/IVRs use int Id (.ToString()),
 //   queues and extensions use name as ID.
 // - These types are never serialized over SignalR — used only in-memory for Blazor rendering.
-// - CallFlowTrace and CallFlowTraceStep are deferred to Phase 2.
 
 public abstract class CallFlowNode
 {
@@ -74,6 +73,28 @@ public sealed class CallFlowGraph
     public DateTime BuiltAt { get; init; }
     public List<DidNode> InboundFlows { get; init; } = [];
     public List<HealthWarning> Warnings { get; init; } = [];
+}
+
+public sealed class CallFlowTrace
+{
+    public string InputNumber { get; init; } = "";
+    public DateTime InputTime { get; init; }
+    public string Direction { get; init; } = "";
+    public string OverrideMode { get; init; } = "";
+    public List<CallFlowTraceStep> Steps { get; init; } = [];
+    public bool RouteFound { get; init; }
+}
+
+public sealed class CallFlowTraceStep
+{
+    public int StepNumber { get; init; }
+    public string Description { get; init; } = "";
+    public string? Evaluation { get; init; }
+    public string Result { get; init; } = "";
+    public string EntityType { get; init; } = "";
+    public string EntityId { get; init; } = "";
+    public string? EditUrl { get; init; }
+    public List<string> DialplanLines { get; init; } = [];
 }
 
 public sealed class HealthWarning
