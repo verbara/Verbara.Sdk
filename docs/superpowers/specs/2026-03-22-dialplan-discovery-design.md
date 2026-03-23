@@ -68,6 +68,8 @@ DialplanEditorService (new, singleton)
     └── Uses IConfigProviderResolver to detect File vs Realtime mode
 ```
 
+**Logging:** Both services use source-generated `[LoggerMessage]` via static partial log classes (`DialplanDiscoveryLog`, `DialplanEditorLog`), consistent with existing `FileDialplanLog`, `RealtimeDialplanLog`, etc.
+
 ### 3.2 Refresh Strategy
 
 - **Initial load:** When `AsteriskMonitorService` connects to a server, `DialplanDiscoveryService.RefreshAsync(serverId)` is called
@@ -118,7 +120,10 @@ CREATE TABLE IF NOT EXISTS extensions (
 | SQL INSERT fails | Rollback transaction, notify user |
 | AMI `dialplan reload` fails | Data is in DB but not loaded — show warning: "Saved but reload failed, try manual reload" |
 | AMI disconnected | Discovery returns stale cache with warning badge "Last refreshed X min ago" |
-| `dialplan show` returns empty | Show "No dialplan loaded" message |
+| `ShowDialplan` returns empty | Show "No dialplan loaded" message |
+| Circular include detected | Validate at write time: `AddIncludeAsync` checks if adding would create a cycle, rejects with error |
+| Empty context creation | `CreateContextAsync` adds a `NoOp` placeholder extension (Asterisk does not persist empty contexts in `extensions.conf`) |
+| Delete extension | `RemoveExtensionAsync` removes ALL priorities for a pattern (not individual priorities) |
 
 ## 4. Data Model
 
@@ -161,26 +166,86 @@ public sealed class DialplanPriority
 }
 ```
 
-### 4.1 Parsing Strategy
+### 4.1 Discovery Strategy — SDK `ShowDialplanAction`
 
-AMI `dialplan show` output format:
+**The SDK already has typed AMI support for dialplan discovery.** We use `ShowDialplanAction` (not CLI `dialplan show`) which returns structured `ListDialplanEvent` events.
+
+**SDK types (in `Asterisk.Sdk.Ami`):**
+- `ShowDialplanAction` — sends AMI `ShowDialplan` action
+- `ListDialplanEvent` — one event per priority line, with typed fields
+- `ShowDialplanCompleteEvent` — completion event with counts
+
+**`ListDialplanEvent` fields from AMI (verified against Asterisk 22):**
 ```
-[ Context 'default' created by 'pbx_config' ]
-  '100' =>          1. Answer()                    [extensions.conf:7]
-                    2. Queue(sales,,,,300)          [extensions.conf:8]
-                    3. Hangup()                     [extensions.conf:9]
-  '_2XXX' =>        1. Dial(PJSIP/${EXTEN},30)     [extensions.conf:25]
-     [nodata]       6. Playback(vm-norecord)        [extensions.conf:75]
-  Include =>       'parkedcalls'                    [extensions.conf:87]
+Event: ListDialplan
+Context: default              ← context name
+Extension: _2XXX              ← extension pattern
+Priority: 1                   ← priority number
+Application: Dial             ← application name
+AppData: PJSIP/${EXTEN},30   ← application data
+Registrar: pbx_config         ← who created it (module name)
+IncludeContext: parkedcalls    ← present only for include entries
+ExtensionLabel: nodata         ← priority label (optional)
 ```
 
-**Regex patterns:**
-- Context header: `\[ Context '([^']+)' created by '([^']+)' \]`
-- Extension start: `^\s+'([^']+)'\s+=>\s+(\d+)\.\s+(\w+)\(([^)]*)\)\s+\[([^\]]+)\]`
-- Priority continuation: `^\s+(?:\[(\w+)\])?\s*(\d+)\.\s+(\w+)\(([^)]*)\)\s+\[([^\]]+)\]`
-- Include: `^\s+Include\s+=>\s+'([^']+)'`
+**Required SDK changes:** Add `Context` and `Priority` properties to `ListDialplanEvent` (currently missing — the AMI sends them but the SDK doesn't map them). These are simple property additions to the existing event class.
 
-### 4.2 System Context Filtering
+**Processing flow:**
+```
+1. SendActionAsync<ShowDialplanCompleteEvent>(new ShowDialplanAction())
+   → collects List<ListDialplanEvent> via ResponseEventCollector
+2. Group events by Context
+3. For each context:
+   - Set CreatedBy from Registrar (first event in context)
+   - Events with IncludeContext → add to Includes list
+   - Events with Extension → group by Extension, build priorities
+4. Build DialplanSnapshot
+
+No regex parsing needed.
+```
+
+**Realtime mode supplement:** In Realtime mode, `ShowDialplan` only returns contexts loaded in Asterisk's memory. To get the complete picture, also query the `extensions` table directly:
+```sql
+SELECT DISTINCT context FROM extensions ORDER BY context
+```
+Merge with AMI results — SQL provides contexts that exist in DB but may not be loaded yet.
+
+### 4.2 Thread Safety & Cache Design
+
+The `DialplanDiscoveryService` is a singleton shared across Blazor circuits. The cache uses a **snapshot-swap pattern**:
+
+```csharp
+private volatile IReadOnlyDictionary<string, DialplanSnapshot> _snapshots =
+    new Dictionary<string, DialplanSnapshot>();
+
+public async Task RefreshAsync(string serverId, CancellationToken ct = default)
+{
+    var snapshot = await BuildSnapshotAsync(serverId, ct);
+    var dict = new Dictionary<string, DialplanSnapshot>(_snapshots) { [serverId] = snapshot };
+    _snapshots = dict; // atomic reference swap, no lock needed for readers
+}
+```
+
+All public methods take `CancellationToken ct = default` following the project convention. The service implements `IDisposable` to clean up background refresh timers.
+
+### 4.3 SDK Changes Required
+
+Add missing properties to `ListDialplanEvent`:
+```csharp
+// src/Asterisk.Sdk.Ami/Events/ListDialplanEvent.cs
+public string? Context { get; set; }     // AMI sends this but SDK doesn't map it yet
+public int? Priority { get; set; }        // AMI sends this but SDK doesn't map it yet
+```
+
+Add optional `Context` filter to `ShowDialplanAction`:
+```csharp
+// src/Asterisk.Sdk.Ami/Actions/ShowDialplanAction.cs
+public string? Context { get; set; }     // Filter by context name (optional)
+```
+
+These are backward-compatible additions. No existing code breaks.
+
+### 4.4 System Context Filtering
 
 A context is considered **system/internal** when `CreatedBy` is NOT one of:
 - `pbx_config` (loaded from extensions.conf)
@@ -388,8 +453,10 @@ App starts
 | File | Responsibility |
 |------|---------------|
 | `Examples/PbxAdmin/Models/DialplanSnapshot.cs` | `DialplanSnapshot`, `DiscoveredContext`, `DialplanExtension`, `DialplanPriority` |
-| `Examples/PbxAdmin/Services/DialplanDiscoveryService.cs` | AMI-based discovery + in-memory cache |
-| `Examples/PbxAdmin/Services/DialplanEditorService.cs` | Mutations via AMI (File) or SQL (Realtime) |
+| `Examples/PbxAdmin/Services/Dialplan/DialplanDiscoveryService.cs` | AMI-based discovery + in-memory cache |
+| `Examples/PbxAdmin/Services/Dialplan/DialplanEditorService.cs` | Mutations via AMI (File) or SQL (Realtime) |
+| `src/Asterisk.Sdk.Ami/Events/ListDialplanEvent.cs` | Add `Context` and `Priority` properties |
+| `src/Asterisk.Sdk.Ami/Actions/ShowDialplanAction.cs` | Add optional `Context` filter property |
 | `Examples/PbxAdmin/Components/Pages/Dialplan.razor` | Main dialplan page (two-panel) |
 | `Examples/PbxAdmin/Components/Pages/DialplanContextDetail.razor` | Context detail component (right panel) |
 | `Tests/PbxAdmin.Tests/Services/DialplanParserTests.cs` | Parser unit tests |
