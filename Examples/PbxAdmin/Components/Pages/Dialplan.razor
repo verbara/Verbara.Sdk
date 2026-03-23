@@ -1,0 +1,795 @@
+@page "/dialplan"
+@using PbxAdmin.Services
+@using PbxAdmin.Services.Dialplan
+@using PbxAdmin.Models
+@inject DialplanDiscoveryService DiscoverySvc
+@inject DialplanEditorService EditorSvc
+@inject ISelectedServerService ServerSvc
+@inject IConfigOperationState ConfigOp
+@inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
+
+<PageTitle>@L["DP_Title"]</PageTitle>
+
+<h2>@L["DP_Heading"]</h2>
+
+@if (_loading)
+{
+    <p class="text-muted">Loading...</p>
+}
+else
+{
+    @* KPI Row *@
+    <div class="kpi-row">
+        <div class="kpi-card">
+            <div class="kpi-value">@(_snapshot?.Contexts.Count ?? 0)</div>
+            <div class="kpi-label">@L["DP_TotalContexts"]</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value">@(_snapshot?.Contexts.Count(c => !c.IsSystem) ?? 0)</div>
+            <div class="kpi-label">@L["DP_UserContexts"]</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-value">@(_snapshot?.Contexts.Sum(c => c.Extensions.Count) ?? 0)</div>
+            <div class="kpi-label">@L["DP_TotalExtensions"]</div>
+        </div>
+    </div>
+
+    @* Action Bar *@
+    <div class="dp-action-bar">
+        <input type="text" class="form-control dp-search" placeholder="@L["DP_SearchContexts"]"
+               @bind="_search" @bind:event="oninput" @bind:after="ApplyFilter" />
+        <button class="btn btn-blue" @onclick="ShowNewContextModal">@L["DP_NewContext"]</button>
+        <button class="btn" @onclick="RefreshData">@L["DP_Refresh"]</button>
+        @if (_snapshot is not null)
+        {
+            <span class="text-muted dp-refresh-time">@L["DP_LastRefresh"]: @_snapshot.RefreshedAt.ToLocalTime().ToString("HH:mm:ss")</span>
+        }
+    </div>
+
+    @* Two-panel layout *@
+    <div class="dp-layout">
+        @* Left panel: Context list *@
+        <div class="dp-list">
+            @if (_filteredContexts.Count == 0)
+            {
+                <p class="text-muted" style="padding: 1rem;">@L["DP_NoContexts"]</p>
+            }
+            else
+            {
+                @foreach (var ctx in _filteredContexts)
+                {
+                    var isSelected = _selectedContext is not null
+                        && string.Equals(_selectedContext.Name, ctx.Name, StringComparison.Ordinal);
+                    <div class="dp-card @(isSelected ? "selected" : "") @(ctx.IsSystem ? "system" : "")"
+                         @onclick="() => SelectContext(ctx)">
+                        <div class="dp-card-header">
+                            <strong>@ctx.Name</strong>
+                            <span class="badge @(ctx.IsSystem ? "badge-muted" : "badge-green")">
+                                @(ctx.IsSystem ? L["DP_System"] : L["DP_User"])
+                            </span>
+                        </div>
+                        <div class="dp-card-meta">
+                            <span>@ctx.Extensions.Count @L["DP_Extensions"]</span>
+                            @if (ctx.Includes.Count > 0)
+                            {
+                                <span> · @ctx.Includes.Count @L["DP_Includes"]</span>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        @* Right panel: Context detail *@
+        <div class="dp-detail">
+            @if (_selectedContext is null)
+            {
+                <p class="text-muted">@L["DP_SelectContext"]</p>
+            }
+            else
+            {
+                <h3>@_selectedContext.Name</h3>
+                <div class="dp-detail-badges">
+                    <span class="badge badge-muted">@L["DP_CreatedBy"]: @_selectedContext.CreatedBy</span>
+                    <span class="badge @(_selectedContext.IsSystem ? "badge-muted" : "badge-green")">
+                        @(_selectedContext.IsSystem ? L["DP_System"] : L["DP_User"])
+                    </span>
+                </div>
+
+                @* Includes section *@
+                <h4>@L["DP_IncludesSection"]</h4>
+                @if (_selectedContext.Includes.Count == 0)
+                {
+                    <p class="text-muted" style="font-size: 0.85rem;">None</p>
+                }
+                else
+                {
+                    <ul class="dp-include-list">
+                        @foreach (var inc in _selectedContext.Includes)
+                        {
+                            <li>
+                                <span>@inc</span>
+                                @if (!_selectedContext.IsSystem)
+                                {
+                                    <button class="btn btn-sm btn-red" @onclick="() => RemoveInclude(inc)">@L["DP_RemoveInclude"]</button>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+
+                @if (!_selectedContext.IsSystem)
+                {
+                    <div class="dp-add-include-row">
+                        <select class="form-control dp-include-select" @bind="_newIncludeContext">
+                            <option value="">-- @L["DP_AddInclude"] --</option>
+                            @if (_snapshot is not null)
+                            {
+                                @foreach (var ctx in _snapshot.Contexts.Where(c =>
+                                    !string.Equals(c.Name, _selectedContext.Name, StringComparison.Ordinal)
+                                    && !_selectedContext.Includes.Contains(c.Name)))
+                                {
+                                    <option value="@ctx.Name">@ctx.Name</option>
+                                }
+                            }
+                        </select>
+                        <button class="btn btn-sm btn-blue" disabled="@string.IsNullOrEmpty(_newIncludeContext)" @onclick="AddInclude">@L["DP_AddInclude"]</button>
+                    </div>
+                }
+
+                <button class="btn btn-sm" style="margin-top: 0.5rem;" @onclick="ToggleIncludeTree">@L["DP_ViewTree"]</button>
+
+                @if (_showIncludeTree)
+                {
+                    <div class="dp-tree">
+                        @RenderIncludeTree(_selectedContext.Name, [], 0)
+                    </div>
+                }
+
+                @* Included By section *@
+                <h4>@L["DP_IncludedBy"]</h4>
+                @if (GetIncludedBy(_selectedContext.Name) is { Count: > 0 } includedBy)
+                {
+                    <ul class="dp-include-list">
+                        @foreach (var parent in includedBy)
+                        {
+                            <li><span>@parent</span></li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <p class="text-muted" style="font-size: 0.85rem;">None</p>
+                }
+
+                @* Extensions section *@
+                <h4>@L["DP_ExtensionsSection"] (@_selectedContext.Extensions.Count)</h4>
+                @if (_selectedContext.Extensions.Count > 0)
+                {
+                    <table class="dp-table">
+                        <thead>
+                            <tr>
+                                <th>@L["DP_Pattern"]</th>
+                                <th>@L["DP_Priorities"]</th>
+                                <th>@L["DP_Application"]</th>
+                                <th>@L["DP_Actions"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ext in _selectedContext.Extensions)
+                            {
+                                var isExpanded = string.Equals(_expandedExten, ext.Pattern, StringComparison.Ordinal);
+                                <tr class="dp-ext-row" @onclick="() => ToggleExten(ext.Pattern)">
+                                    <td>@ext.Pattern</td>
+                                    <td>@ext.Priorities.Count</td>
+                                    <td>@(ext.Priorities.Count > 0 ? ext.Priorities[0].Application : "")</td>
+                                    <td @onclick:stopPropagation="true">
+                                        @if (!_selectedContext.IsSystem)
+                                        {
+                                            <button class="btn btn-sm btn-red" @onclick="() => RemoveExtension(ext.Pattern)">@L["DP_RemoveExtension"]</button>
+                                        }
+                                    </td>
+                                </tr>
+                                @if (isExpanded)
+                                {
+                                    <tr class="dp-ext-detail">
+                                        <td colspan="4">
+                                            <table class="dp-priority-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th>Label</th>
+                                                        <th>@L["DP_Application"]</th>
+                                                        <th>@L["DP_AppData"]</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var p in ext.Priorities.OrderBy(p => p.Number))
+                                                    {
+                                                        <tr>
+                                                            <td>@p.Number</td>
+                                                            <td>@(p.Label ?? "")</td>
+                                                            <td>@p.Application</td>
+                                                            <td>@p.ApplicationData</td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                }
+
+                @* Add Extension form *@
+                @if (!_selectedContext.IsSystem)
+                {
+                    <button class="btn btn-sm btn-blue" style="margin-top: 0.75rem;" @onclick="() => _showAddExtenForm = !_showAddExtenForm">
+                        @L["DP_AddExtension"]
+                    </button>
+
+                    @if (_showAddExtenForm)
+                    {
+                        <div class="dp-add-exten-form">
+                            <div class="dp-form-row">
+                                <label>@L["DP_Pattern"]</label>
+                                <input type="text" class="form-control" @bind="_newExtenPattern" />
+                            </div>
+                            <div class="dp-form-row">
+                                <label>@L["DP_Priority"]</label>
+                                <input type="number" class="form-control" @bind="_newExtenPriority" min="1" />
+                            </div>
+                            <div class="dp-form-row">
+                                <label>@L["DP_Application"]</label>
+                                <select class="form-control" @bind="_newExtenApp">
+                                    @foreach (var app in DialplanApps)
+                                    {
+                                        <option value="@app">@app</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="dp-form-row">
+                                <label>@L["DP_AppData"]</label>
+                                <input type="text" class="form-control" @bind="_newExtenAppData" />
+                            </div>
+                            <button class="btn btn-blue" @onclick="AddExtension"
+                                    disabled="@string.IsNullOrWhiteSpace(_newExtenPattern)">
+                                @L["DP_AddExtension"]
+                            </button>
+                        </div>
+                    }
+
+                    @* Delete Context *@
+                    <div style="margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+                        <button class="btn btn-red" @onclick="ConfirmDeleteContext">@L["DP_DeleteContext"]</button>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    @* New Context Modal *@
+    @if (_showNewContextModal)
+    {
+        <div class="modal-backdrop" @onclick="() => _showNewContextModal = false">
+            <div class="modal-card" @onclick:stopPropagation="true">
+                <h3>@L["DP_NewContext"]</h3>
+                <div class="dp-form-row">
+                    <label>@L["DP_ContextName"]</label>
+                    <input type="text" class="form-control" @bind="_newContextName" />
+                </div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                    <button class="btn btn-blue" @onclick="CreateContext"
+                            disabled="@string.IsNullOrWhiteSpace(_newContextName)">
+                        @L["DP_NewContext"]
+                    </button>
+                    <button class="btn" @onclick="() => _showNewContextModal = false">@L["Btn_Cancel"]</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <ConfirmDialog @ref="_deleteDialog"
+        Title="@L["DP_DeleteContext"]"
+        Message="@L["DP_DeleteContextConfirm", _selectedContext?.Name ?? ""]"
+        ConfirmText="@L["Btn_Delete"]"
+        CancelText="@L["Btn_Cancel"]"
+        ConfirmStyle="danger"
+        OnConfirm="ExecuteDeleteContext" />
+}
+
+<style>
+    .kpi-row {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    .kpi-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1rem 1.5rem;
+        min-width: 140px;
+        text-align: center;
+    }
+    .kpi-value {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: var(--accent);
+    }
+    .kpi-label {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+    .dp-action-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+    }
+    .dp-search {
+        max-width: 260px;
+    }
+    .dp-refresh-time {
+        font-size: 0.8rem;
+    }
+    .dp-layout {
+        display: grid;
+        grid-template-columns: 300px 1fr;
+        gap: 1rem;
+        align-items: start;
+    }
+    .dp-list {
+        max-height: 70vh;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--card-bg);
+    }
+    .dp-card {
+        padding: 0.6rem 0.85rem;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border);
+        transition: background 0.15s;
+    }
+    .dp-card:hover {
+        background: rgba(255,255,255,0.03);
+    }
+    .dp-card.selected {
+        background: rgba(99,102,241,0.12);
+        border-left: 3px solid var(--accent);
+    }
+    .dp-card.system {
+        opacity: 0.55;
+    }
+    .dp-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+    .dp-card-meta {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-top: 0.15rem;
+    }
+    .dp-detail {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1.25rem;
+        min-height: 200px;
+    }
+    .dp-detail h3 {
+        margin: 0 0 0.5rem 0;
+    }
+    .dp-detail h4 {
+        margin: 1.25rem 0 0.5rem 0;
+        font-size: 1rem;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.25rem;
+    }
+    .dp-detail-badges {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .dp-include-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    .dp-include-list li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.3rem 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.9rem;
+    }
+    .dp-add-include-row {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    .dp-include-select {
+        max-width: 220px;
+    }
+    .dp-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+    .dp-table th, .dp-table td {
+        padding: 0.4rem 0.6rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+    }
+    .dp-table th {
+        color: var(--text-muted);
+        font-weight: 600;
+        font-size: 0.8rem;
+    }
+    .dp-ext-row {
+        cursor: pointer;
+    }
+    .dp-ext-row:hover {
+        background: rgba(255,255,255,0.03);
+    }
+    .dp-ext-detail td {
+        padding: 0;
+    }
+    .dp-priority-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+        background: rgba(0,0,0,0.1);
+    }
+    .dp-priority-table th, .dp-priority-table td {
+        padding: 0.3rem 0.5rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+    }
+    .dp-priority-table th {
+        color: var(--text-muted);
+        font-size: 0.75rem;
+    }
+    .dp-add-exten-form {
+        margin-top: 0.75rem;
+        padding: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: rgba(0,0,0,0.05);
+    }
+    .dp-form-row {
+        margin-bottom: 0.5rem;
+    }
+    .dp-form-row label {
+        display: block;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-bottom: 0.2rem;
+    }
+    .dp-tree {
+        margin-top: 0.5rem;
+        padding: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 0.85rem;
+        font-family: monospace;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    .dp-tree-cycle {
+        color: #f87171;
+        font-style: italic;
+    }
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+    .modal-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.5rem;
+        min-width: 340px;
+        max-width: 90vw;
+    }
+</style>
+
+@code {
+    private static readonly string[] DialplanApps =
+    [
+        "Answer", "AGI", "Background", "Dial", "ExecIf", "Goto", "GotoIfTime",
+        "Hangup", "NoOp", "Playback", "Queue", "Read", "Set", "VoiceMail",
+        "VoiceMailMain"
+    ];
+
+    private DialplanSnapshot? _snapshot;
+    private List<DiscoveredContext> _filteredContexts = [];
+    private DiscoveredContext? _selectedContext;
+    private string _search = "";
+    private bool _loading = true;
+    private string _newContextName = "";
+    private bool _showNewContextModal;
+    private string _newExtenPattern = "";
+    private int _newExtenPriority = 1;
+    private string _newExtenApp = "NoOp";
+    private string _newExtenAppData = "";
+    private bool _showAddExtenForm;
+    private string? _expandedExten;
+    private bool _showIncludeTree;
+    private string _newIncludeContext = "";
+    private ConfirmDialog? _deleteDialog;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null)
+        {
+            _loading = false;
+            return;
+        }
+
+        _snapshot = await DiscoverySvc.GetSnapshotAsync(serverId);
+        ApplyFilter();
+        _loading = false;
+    }
+
+    private async Task RefreshData()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        _loading = true;
+        StateHasChanged();
+
+        await DiscoverySvc.RefreshAsync(serverId);
+        _snapshot = await DiscoverySvc.GetSnapshotAsync(serverId);
+        ReSelectContext();
+        ApplyFilter();
+        _loading = false;
+    }
+
+    private void ApplyFilter()
+    {
+        if (_snapshot is null)
+        {
+            _filteredContexts = [];
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_search))
+        {
+            _filteredContexts = _snapshot.Contexts.OrderBy(c => c.IsSystem).ThenBy(c => c.Name).ToList();
+        }
+        else
+        {
+            _filteredContexts = _snapshot.Contexts
+                .Where(c => c.Name.Contains(_search, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(c => c.IsSystem).ThenBy(c => c.Name)
+                .ToList();
+        }
+    }
+
+    private void SelectContext(DiscoveredContext ctx)
+    {
+        _selectedContext = ctx;
+        _showAddExtenForm = false;
+        _expandedExten = null;
+        _showIncludeTree = false;
+        _newIncludeContext = "";
+    }
+
+    private void ReSelectContext()
+    {
+        if (_selectedContext is null || _snapshot is null) return;
+
+        _selectedContext = _snapshot.Contexts
+            .FirstOrDefault(c => string.Equals(c.Name, _selectedContext.Name, StringComparison.Ordinal));
+    }
+
+    private void ToggleExten(string pattern)
+    {
+        _expandedExten = string.Equals(_expandedExten, pattern, StringComparison.Ordinal) ? null : pattern;
+    }
+
+    private void ToggleIncludeTree()
+    {
+        _showIncludeTree = !_showIncludeTree;
+    }
+
+    private List<string> GetIncludedBy(string contextName)
+    {
+        if (_snapshot is null) return [];
+        return _snapshot.Contexts
+            .Where(c => c.Includes.Contains(contextName))
+            .Select(c => c.Name)
+            .ToList();
+    }
+
+    private RenderFragment RenderIncludeTree(string contextName, HashSet<string> visited, int depth) => builder =>
+    {
+        var indent = new string(' ', depth * 2);
+        var prefix = depth == 0 ? "" : "|- ";
+
+        if (!visited.Add(contextName))
+        {
+            builder.OpenElement(0, "div");
+            builder.AddAttribute(1, "class", "dp-tree-cycle");
+            builder.AddContent(2, $"{indent}{prefix}{contextName} ({L["DP_Cycle"]})");
+            builder.CloseElement();
+            return;
+        }
+
+        builder.OpenElement(0, "div");
+        builder.AddContent(1, $"{indent}{prefix}{contextName}");
+        builder.CloseElement();
+
+        var ctx = _snapshot?.Contexts.FirstOrDefault(c =>
+            string.Equals(c.Name, contextName, StringComparison.Ordinal));
+
+        if (ctx is not null)
+        {
+            foreach (var inc in ctx.Includes)
+            {
+                var childVisited = new HashSet<string>(visited, StringComparer.Ordinal);
+                builder.AddContent(2, RenderIncludeTree(inc, childVisited, depth + 1));
+            }
+        }
+    };
+
+    // ── Editor actions ──
+
+    private void ShowNewContextModal()
+    {
+        _newContextName = "";
+        _showNewContextModal = true;
+    }
+
+    private async Task CreateContext()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null || string.IsNullOrWhiteSpace(_newContextName)) return;
+
+        using var _ = ConfigOp.Begin("Creating context", serverId, _newContextName);
+        var (success, error) = await EditorSvc.CreateContextAsync(serverId, _newContextName.Trim());
+        _showNewContextModal = false;
+
+        if (success)
+        {
+            Toast.Show(L["Toast_Saved"], ToastLevel.Success, _newContextName);
+            await RefreshData();
+        }
+        else
+        {
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, error);
+        }
+    }
+
+    private async Task AddExtension()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null || _selectedContext is null || string.IsNullOrWhiteSpace(_newExtenPattern)) return;
+
+        using var _ = ConfigOp.Begin("Adding extension", serverId, _newExtenPattern);
+        var (success, error) = await EditorSvc.AddExtensionAsync(
+            serverId, _selectedContext.Name, _newExtenPattern.Trim(),
+            _newExtenPriority, _newExtenApp, _newExtenAppData);
+
+        if (success)
+        {
+            Toast.Show(L["Toast_Saved"], ToastLevel.Success, _newExtenPattern);
+            _newExtenPattern = "";
+            _newExtenPriority = 1;
+            _newExtenApp = "NoOp";
+            _newExtenAppData = "";
+            _showAddExtenForm = false;
+            await RefreshData();
+        }
+        else
+        {
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, error);
+        }
+    }
+
+    private async Task RemoveExtension(string pattern)
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null || _selectedContext is null) return;
+
+        using var _ = ConfigOp.Begin("Removing extension", serverId, pattern);
+        var (success, error) = await EditorSvc.RemoveExtensionAsync(serverId, _selectedContext.Name, pattern);
+
+        if (success)
+        {
+            Toast.Show(L["Toast_Deleted"], ToastLevel.Success, pattern);
+            await RefreshData();
+        }
+        else
+        {
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, error);
+        }
+    }
+
+    private async Task AddInclude()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null || _selectedContext is null || string.IsNullOrEmpty(_newIncludeContext)) return;
+
+        using var _ = ConfigOp.Begin("Adding include", serverId, _newIncludeContext);
+        var (success, error) = await EditorSvc.AddIncludeAsync(serverId, _selectedContext.Name, _newIncludeContext);
+
+        if (success)
+        {
+            Toast.Show(L["Toast_Saved"], ToastLevel.Success, _newIncludeContext);
+            _newIncludeContext = "";
+            await RefreshData();
+        }
+        else
+        {
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, error);
+        }
+    }
+
+    private async Task RemoveInclude(string includeContext)
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null || _selectedContext is null) return;
+
+        using var _ = ConfigOp.Begin("Removing include", serverId, includeContext);
+        var (success, error) = await EditorSvc.RemoveIncludeAsync(serverId, _selectedContext.Name, includeContext);
+
+        if (success)
+        {
+            Toast.Show(L["Toast_Deleted"], ToastLevel.Success, includeContext);
+            await RefreshData();
+        }
+        else
+        {
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, error);
+        }
+    }
+
+    private void ConfirmDeleteContext()
+    {
+        _deleteDialog?.Show();
+    }
+
+    private async Task ExecuteDeleteContext()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null || _selectedContext is null) return;
+
+        var contextName = _selectedContext.Name;
+        using var _ = ConfigOp.Begin("Deleting context", serverId, contextName);
+        var (success, error) = await EditorSvc.RemoveContextAsync(serverId, contextName);
+
+        if (success)
+        {
+            Toast.Show(L["Toast_Deleted"], ToastLevel.Success, contextName);
+            _selectedContext = null;
+            await RefreshData();
+        }
+        else
+        {
+            Toast.Show(L["Toast_Error"], ToastLevel.Error, error);
+        }
+    }
+}

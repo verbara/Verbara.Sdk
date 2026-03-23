@@ -1198,4 +1198,43 @@
   <data name="Softphone_Reject" xml:space="preserve"><value>Rechazar</value></data>
   <data name="Softphone_Hangup" xml:space="preserve"><value>Colgar</value></data>
   <data name="Softphone_Idle" xml:space="preserve"><value>Listo</value></data>
+
+  <!-- Dialplan -->
+  <data name="Nav_Dialplan" xml:space="preserve"><value>Dialplan</value></data>
+  <data name="DP_Title" xml:space="preserve"><value>Explorador de Dialplan</value></data>
+  <data name="DP_Heading" xml:space="preserve"><value>Contextos del Dialplan</value></data>
+  <data name="DP_TotalContexts" xml:space="preserve"><value>Total Contextos</value></data>
+  <data name="DP_UserContexts" xml:space="preserve"><value>Contextos de Usuario</value></data>
+  <data name="DP_TotalExtensions" xml:space="preserve"><value>Total Extensiones</value></data>
+  <data name="DP_SearchContexts" xml:space="preserve"><value>Buscar contextos...</value></data>
+  <data name="DP_NewContext" xml:space="preserve"><value>Nuevo Contexto</value></data>
+  <data name="DP_Refresh" xml:space="preserve"><value>Actualizar</value></data>
+  <data name="DP_NoContexts" xml:space="preserve"><value>No se encontraron contextos. Actualice para cargar desde Asterisk.</value></data>
+  <data name="DP_Extensions" xml:space="preserve"><value>extensiones</value></data>
+  <data name="DP_Includes" xml:space="preserve"><value>incluye</value></data>
+  <data name="DP_ContextDetail" xml:space="preserve"><value>Detalle del Contexto</value></data>
+  <data name="DP_CreatedBy" xml:space="preserve"><value>Creado por</value></data>
+  <data name="DP_IncludesSection" xml:space="preserve"><value>Incluye</value></data>
+  <data name="DP_IncludedBy" xml:space="preserve"><value>Incluido Por</value></data>
+  <data name="DP_ExtensionsSection" xml:space="preserve"><value>Extensiones</value></data>
+  <data name="DP_Pattern" xml:space="preserve"><value>Patr&#243;n</value></data>
+  <data name="DP_Priorities" xml:space="preserve"><value>Prioridades</value></data>
+  <data name="DP_Application" xml:space="preserve"><value>Aplicaci&#243;n</value></data>
+  <data name="DP_Actions" xml:space="preserve"><value>Acciones</value></data>
+  <data name="DP_AddExtension" xml:space="preserve"><value>Agregar Extensi&#243;n</value></data>
+  <data name="DP_RemoveExtension" xml:space="preserve"><value>Eliminar Extensi&#243;n</value></data>
+  <data name="DP_AddInclude" xml:space="preserve"><value>Agregar Include</value></data>
+  <data name="DP_RemoveInclude" xml:space="preserve"><value>Eliminar Include</value></data>
+  <data name="DP_ViewTree" xml:space="preserve"><value>Ver &#193;rbol de Includes</value></data>
+  <data name="DP_DeleteContext" xml:space="preserve"><value>Eliminar Contexto</value></data>
+  <data name="DP_DeleteContextConfirm" xml:space="preserve"><value>&#191;Eliminar contexto '{0}'? Todas las extensiones ser&#225;n eliminadas.</value></data>
+  <data name="DP_ContextName" xml:space="preserve"><value>Nombre del Contexto</value></data>
+  <data name="DP_Priority" xml:space="preserve"><value>Prioridad</value></data>
+  <data name="DP_AppData" xml:space="preserve"><value>Datos de Aplicaci&#243;n</value></data>
+  <data name="DP_Cycle" xml:space="preserve"><value>ciclo detectado</value></data>
+  <data name="DP_System" xml:space="preserve"><value>Sistema</value></data>
+  <data name="DP_User" xml:space="preserve"><value>Usuario</value></data>
+  <data name="DP_LastRefresh" xml:space="preserve"><value>&#218;ltima actualizaci&#243;n</value></data>
+  <data name="DP_SelectContext" xml:space="preserve"><value>Seleccione un contexto de la lista para ver detalles.</value></data>
+  <data name="DP_IncludeNotSupported" xml:space="preserve"><value>La gesti&#243;n de includes no est&#225; soportada en modo Realtime.</value></data>
 </root>
