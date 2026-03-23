@@ -1198,4 +1198,61 @@
   <data name="Softphone_Reject" xml:space="preserve"><value>Reject</value></data>
   <data name="Softphone_Hangup" xml:space="preserve"><value>Hang Up</value></data>
   <data name="Softphone_Idle" xml:space="preserve"><value>Ready</value></data>
+
+  <!-- Calling Permissions -->
+  <data name="Nav_CallingPermissions" xml:space="preserve"><value>Calling Perms.</value></data>
+  <data name="Nav_PatternGroups" xml:space="preserve"><value>Pattern Groups</value></data>
+  <data name="PG_Title" xml:space="preserve"><value>Pattern Groups</value></data>
+  <data name="PG_Heading" xml:space="preserve"><value>Pattern Groups</value></data>
+  <data name="PG_NewGroup" xml:space="preserve"><value>New Group</value></data>
+  <data name="PG_NoGroups" xml:space="preserve"><value>No pattern groups found.</value></data>
+  <data name="PG_Total" xml:space="preserve"><value>Total</value></data>
+  <data name="PG_BuiltIn" xml:space="preserve"><value>Built-in</value></data>
+  <data name="PG_Custom" xml:space="preserve"><value>Custom</value></data>
+  <data name="PG_Name" xml:space="preserve"><value>Name</value></data>
+  <data name="PG_Country" xml:space="preserve"><value>Country</value></data>
+  <data name="PG_PatternCount" xml:space="preserve"><value>Patterns</value></data>
+  <data name="PG_Description" xml:space="preserve"><value>Description</value></data>
+  <data name="PG_Patterns" xml:space="preserve"><value>Patterns (one per line)</value></data>
+  <data name="PG_CountryCode" xml:space="preserve"><value>Country Code</value></data>
+  <data name="PG_SaveSuccess" xml:space="preserve"><value>Pattern group saved.</value></data>
+  <data name="COS_Title" xml:space="preserve"><value>Calling Permissions</value></data>
+  <data name="COS_Heading" xml:space="preserve"><value>COS Levels</value></data>
+  <data name="COS_NewLevel" xml:space="preserve"><value>New COS Level</value></data>
+  <data name="COS_NoLevels" xml:space="preserve"><value>No COS levels found.</value></data>
+  <data name="COS_Name" xml:space="preserve"><value>Name</value></data>
+  <data name="COS_Priority" xml:space="preserve"><value>Priority</value></data>
+  <data name="COS_Context" xml:space="preserve"><value>Context</value></data>
+  <data name="COS_Flags" xml:space="preserve"><value>Flags</value></data>
+  <data name="COS_Premium" xml:space="preserve"><value>Premium</value></data>
+  <data name="COS_Mobile" xml:space="preserve"><value>Mobile</value></data>
+  <data name="COS_FwdExt" xml:space="preserve"><value>Fwd External</value></data>
+  <data name="COS_ConfExt" xml:space="preserve"><value>Conf External</value></data>
+  <data name="COS_RecCtrl" xml:space="preserve"><value>Recording Ctrl</value></data>
+  <data name="COS_Rules" xml:space="preserve"><value>Rules</value></data>
+  <data name="COS_Sequence" xml:space="preserve"><value>Seq</value></data>
+  <data name="COS_PatternGroup" xml:space="preserve"><value>Pattern Group</value></data>
+  <data name="COS_Action" xml:space="preserve"><value>Action</value></data>
+  <data name="COS_AddRule" xml:space="preserve"><value>Add Rule</value></data>
+  <data name="COS_Description" xml:space="preserve"><value>Description</value></data>
+  <data name="COS_Enabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="COS_SaveSuccess" xml:space="preserve"><value>COS level saved.</value></data>
+  <data name="COS_Extensions" xml:space="preserve"><value>Extensions</value></data>
+  <data name="COS_AssignedExts" xml:space="preserve"><value>Assigned Extensions</value></data>
+  <data name="COS_Unassigned" xml:space="preserve"><value>Unassigned</value></data>
+  <data name="COS_BulkTitle" xml:space="preserve"><value>Bulk COS Assignment</value></data>
+  <data name="COS_BulkHeading" xml:space="preserve"><value>Bulk Assignment</value></data>
+  <data name="COS_TargetCos" xml:space="preserve"><value>Target COS</value></data>
+  <data name="COS_ApplyBtn" xml:space="preserve"><value>Apply</value></data>
+  <data name="COS_BulkConfirm" xml:space="preserve"><value>Change {0} extensions to {1}?</value></data>
+  <data name="COS_BulkResult" xml:space="preserve"><value>{0} changed, {1} failed</value></data>
+  <data name="Sim_Title" xml:space="preserve"><value>Dial Simulator</value></data>
+  <data name="Sim_Heading" xml:space="preserve"><value>Dial Simulator</value></data>
+  <data name="Sim_Extension" xml:space="preserve"><value>Extension</value></data>
+  <data name="Sim_DialNumber" xml:space="preserve"><value>Number to Dial</value></data>
+  <data name="Sim_TestBtn" xml:space="preserve"><value>Test</value></data>
+  <data name="Sim_Result" xml:space="preserve"><value>Result</value></data>
+  <data name="Sim_Trace" xml:space="preserve"><value>Trace</value></data>
+  <data name="Sim_FlagChecks" xml:space="preserve"><value>Flag Checks</value></data>
+  <data name="Lbl_BuiltIn" xml:space="preserve"><value>Built-in</value></data>
 </root>

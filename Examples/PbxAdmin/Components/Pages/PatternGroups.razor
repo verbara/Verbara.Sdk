@@ -1,0 +1,93 @@
+@page "/pattern-groups"
+@using PbxAdmin.Models
+@using PbxAdmin.Services
+@inject CosPatternGroupService PgSvc
+@inject ISelectedServerService ServerSvc
+@inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
+
+<PageTitle>@L["PG_Title"]</PageTitle>
+
+<div class="page-header-row">
+    <h2>@L["PG_Heading"]</h2>
+    <button class="btn btn-primary" @onclick="NewGroup">@L["PG_NewGroup"]</button>
+</div>
+
+@if (_loading)
+{
+    <p>@L["Lbl_Loading"]</p>
+}
+else if (_groups.Count == 0)
+{
+    <p class="text-muted">@L["PG_NoGroups"]</p>
+}
+else
+{
+    <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-value">@_groups.Count</div><div class="kpi-label">@L["PG_Total"]</div></div>
+        <div class="kpi-card"><div class="kpi-value">@_groups.Count(g => g.IsBuiltIn)</div><div class="kpi-label">@L["PG_BuiltIn"]</div></div>
+        <div class="kpi-card"><div class="kpi-value">@_groups.Count(g => !g.IsBuiltIn)</div><div class="kpi-label">@L["PG_Custom"]</div></div>
+    </div>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>@L["PG_Name"]</th>
+                <th>@L["PG_Country"]</th>
+                <th>@L["PG_PatternCount"]</th>
+                <th>@L["Lbl_Actions"]</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var g in _groups)
+            {
+                <tr>
+                    <td>
+                        <a href="javascript:void(0)" @onclick="() => EditGroup(g.Id)">@g.Name</a>
+                        @if (g.IsBuiltIn) { <span class="badge badge-muted">@L["Lbl_BuiltIn"]</span> }
+                    </td>
+                    <td>@(g.CountryCode ?? "\u2014")</td>
+                    <td>@g.Patterns.Length</td>
+                    <td>
+                        <button class="btn btn-sm" @onclick="() => EditGroup(g.Id)">@L["Btn_Edit"]</button>
+                        @if (!g.IsBuiltIn)
+                        {
+                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteGroup(g)">@L["Btn_Delete"]</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+@code {
+    private List<CosPatternGroup> _groups = [];
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+        _groups = await PgSvc.GetGroupsAsync(serverId);
+        _loading = false;
+    }
+
+    private void NewGroup() => Nav.NavigateTo("/pattern-groups/new");
+    private void EditGroup(int id) => Nav.NavigateTo($"/pattern-groups/{id}");
+
+    private async Task DeleteGroup(CosPatternGroup group)
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+        var (ok, err) = await PgSvc.DeleteGroupAsync(group.Id, serverId);
+        if (!ok) { _error = err; return; }
+        _groups.RemoveAll(g => g.Id == group.Id);
+    }
+}

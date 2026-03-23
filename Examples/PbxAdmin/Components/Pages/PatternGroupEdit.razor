@@ -1,0 +1,124 @@
+@page "/pattern-groups/new"
+@page "/pattern-groups/{Id:int}"
+@using PbxAdmin.Models
+@using PbxAdmin.Services
+@inject CosPatternGroupService PgSvc
+@inject ISelectedServerService ServerSvc
+@inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
+
+<PageTitle>@(_isNew ? L["PG_Title"] : _group.Name) — @L["PG_Title"]</PageTitle>
+
+<a href="/pattern-groups" class="back-link">@L["PG_Heading"]</a>
+<h2>@(_isNew ? L["PG_NewGroup"] : _group.Name)</h2>
+
+@if (_loading)
+{
+    <p class="text-muted">@L["Lbl_Loading"]</p>
+}
+else
+{
+    <div class="form-section">
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="form-label">@L["PG_Name"]</label>
+                <input class="input" @bind="_group.Name" placeholder="local-numbers" />
+            </div>
+            <div class="form-field">
+                <label class="form-label">@L["PG_CountryCode"]</label>
+                <input class="input" @bind="_group.CountryCode" placeholder="US" />
+            </div>
+        </div>
+        <div class="form-field" style="margin-top: 0.75rem;">
+            <label class="form-label">@L["PG_Description"]</label>
+            <input class="input" @bind="_group.Description" placeholder="Optional description" />
+        </div>
+    </div>
+
+    <div class="form-section">
+        <label class="form-label">@L["PG_Patterns"]</label>
+        <textarea class="input" rows="10" @bind="_patternsText" placeholder="_NXXNXXXXXX&#10;_1NXXNXXXXXX&#10;911"></textarea>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+
+    <div class="form-actions">
+        <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? L["Btn_Saving"] : L["Btn_Save"])</button>
+        <button class="btn" @onclick="NavigateBack">@L["Btn_Cancel"]</button>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private bool _isNew => Id == 0;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+
+    private CosPatternGroup _group = new();
+    private string _patternsText = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!_isNew)
+        {
+            var serverId = ServerSvc.SelectedServerId;
+            if (serverId is null) return;
+            var groups = await PgSvc.GetGroupsAsync(serverId);
+            var existing = groups.Find(g => g.Id == Id);
+            if (existing is not null)
+            {
+                _group = existing;
+                _patternsText = string.Join("\n", existing.Patterns);
+            }
+        }
+        else
+        {
+            _group.ServerId = ServerSvc.SelectedServerId ?? "";
+        }
+
+        _loading = false;
+    }
+
+    private async Task Save()
+    {
+        _error = null;
+        _saving = true;
+
+        try
+        {
+            _group.ServerId = ServerSvc.SelectedServerId ?? "";
+            _group.Patterns = _patternsText
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            var (ok, err) = _isNew
+                ? await PgSvc.CreateGroupAsync(_group)
+                : await PgSvc.UpdateGroupAsync(_group);
+
+            if (ok)
+            {
+                Toast.Show(L["PG_SaveSuccess"], ToastLevel.Success);
+                Nav.NavigateTo("/pattern-groups");
+            }
+            else
+            {
+                _error = err;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void NavigateBack() => Nav.NavigateTo("/pattern-groups");
+}
