@@ -159,6 +159,6 @@ public class TimeConditionServiceTests
         var logger = Substitute.For<ILogger<TimeConditionService>>();
 
         // AsteriskMonitorService is not accessed during validation
-        return new TimeConditionService(repoResolver, regenerator, null!, logger);
+        return new TimeConditionService(repoResolver, regenerator, null!, logger, Substitute.For<IServiceProvider>());
     }
 }
