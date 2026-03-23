@@ -69,11 +69,13 @@ public sealed class CallFlowPageTests : IDisposable
 
         var routeService = new RouteService(
             repoResolver, regenerator, monitor,
-            NullLogger<RouteService>.Instance);
+            NullLogger<RouteService>.Instance,
+            Substitute.For<IServiceProvider>());
 
         var tcService = new TimeConditionService(
             repoResolver, regenerator, monitor,
-            NullLogger<TimeConditionService>.Instance);
+            NullLogger<TimeConditionService>.Instance,
+            Substitute.For<IServiceProvider>());
 
         // Interface-based service mocks
         _ivrRepo = Substitute.For<IIvrMenuRepository>();

@@ -118,6 +118,6 @@ public class RouteServiceTests
         var logger = Substitute.For<ILogger<RouteService>>();
 
         // AsteriskMonitorService is not accessed during validation
-        return new RouteService(repoResolver, regenerator, null!, logger);
+        return new RouteService(repoResolver, regenerator, null!, logger, Substitute.For<IServiceProvider>());
     }
 }
