@@ -1,0 +1,195 @@
+@page "/calling-permissions/{Id:int}/edit"
+@page "/calling-permissions/new"
+@using PbxAdmin.Models
+@using PbxAdmin.Services
+@inject CosService CosSvc
+@inject CosPatternGroupService PgSvc
+@inject ISelectedServerService ServerSvc
+@inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
+
+<PageTitle>@(_isNew ? L["COS_NewLevel"] : _level.Name) — @L["COS_Title"]</PageTitle>
+
+<a href="/calling-permissions" class="back-link">@L["COS_Heading"]</a>
+<h2>@(_isNew ? L["COS_NewLevel"] : _level.Name)</h2>
+
+@if (_loading)
+{
+    <p class="text-muted">@L["Lbl_Loading"]</p>
+}
+else
+{
+    <!-- Identity -->
+    <div class="form-section">
+        <div class="form-grid">
+            <div class="form-field">
+                <label class="form-label">@L["COS_Name"]</label>
+                <input class="input" @bind="_level.Name" placeholder="standard" />
+            </div>
+            <div class="form-field">
+                <label class="form-label">@L["COS_Description"]</label>
+                <input class="input" @bind="_level.Description" placeholder="Optional description" />
+            </div>
+            <div class="form-field">
+                <label class="form-label">@L["COS_Priority"]</label>
+                <input class="input" type="number" @bind="_level.Priority" min="0" max="999" />
+            </div>
+            <div class="form-field">
+                <label class="form-label">@L["COS_Context"]</label>
+                <input class="input" @bind="_level.AsteriskContext" placeholder="from-internal" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Flags -->
+    <div class="form-section">
+        <h3>@L["COS_Flags"]</h3>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            <label class="codec-check"><input type="checkbox" @bind="_level.AllowPremium" /> @L["COS_Premium"]</label>
+            <label class="codec-check"><input type="checkbox" @bind="_level.AllowMobile" /> @L["COS_Mobile"]</label>
+            <label class="codec-check"><input type="checkbox" @bind="_level.AllowForwardExternal" /> @L["COS_FwdExt"]</label>
+            <label class="codec-check"><input type="checkbox" @bind="_level.AllowConferenceExternal" /> @L["COS_ConfExt"]</label>
+            <label class="codec-check"><input type="checkbox" @bind="_level.AllowRecordingControl" /> @L["COS_RecCtrl"]</label>
+        </div>
+        <div style="margin-top: 0.75rem;">
+            <label class="codec-check"><input type="checkbox" @bind="_level.Enabled" /> @L["COS_Enabled"]</label>
+        </div>
+    </div>
+
+    <!-- Rules -->
+    <div class="form-section">
+        <h3>@L["COS_Rules"]</h3>
+        @if (_level.Rules.Count > 0)
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>@L["COS_Sequence"]</th>
+                        <th>@L["COS_PatternGroup"]</th>
+                        <th>@L["COS_Action"]</th>
+                        <th>@L["Lbl_Actions"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var rule in _level.Rules.OrderBy(r => r.Sequence))
+                    {
+                        <tr>
+                            <td>
+                                <input class="input" type="number" @bind="rule.Sequence" min="1" style="width: 5rem;" />
+                            </td>
+                            <td>
+                                <select class="input" @bind="rule.PatternGroupId">
+                                    <option value="0">-- Select --</option>
+                                    @foreach (var pg in _patternGroups)
+                                    {
+                                        <option value="@pg.Id">@pg.Name</option>
+                                    }
+                                </select>
+                            </td>
+                            <td>
+                                <select class="input" @bind="rule.Action" style="width: 7rem;">
+                                    <option value="ALLOW">ALLOW</option>
+                                    <option value="DENY">DENY</option>
+                                </select>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-danger" @onclick="() => _level.Rules.Remove(rule)">@L["Btn_Remove"]</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        <button class="btn" @onclick="AddRule">@L["COS_AddRule"]</button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+
+    <div class="form-actions">
+        <button class="btn btn-green" @onclick="Save" disabled="@_saving">@(_saving ? L["Btn_Saving"] : L["Btn_Save"])</button>
+        <button class="btn" @onclick="NavigateBack">@L["Btn_Cancel"]</button>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private bool _isNew => Id == 0;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+
+    private CosLevel _level = new();
+    private List<CosPatternGroup> _patternGroups = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        _patternGroups = await PgSvc.GetGroupsAsync(serverId);
+
+        if (!_isNew)
+        {
+            var existing = await CosSvc.GetLevelAsync(Id, serverId);
+            if (existing is not null)
+                _level = existing;
+        }
+        else
+        {
+            _level.ServerId = serverId;
+        }
+
+        _loading = false;
+    }
+
+    private void AddRule()
+    {
+        var nextSeq = _level.Rules.Count > 0 ? _level.Rules.Max(r => r.Sequence) + 10 : 10;
+        _level.Rules.Add(new CosLevelRule
+        {
+            CosLevelId = _level.Id,
+            Sequence = nextSeq,
+            Action = "ALLOW",
+        });
+    }
+
+    private async Task Save()
+    {
+        _error = null;
+        _saving = true;
+
+        try
+        {
+            _level.ServerId = ServerSvc.SelectedServerId ?? "";
+
+            var (ok, err) = _isNew
+                ? await CosSvc.CreateLevelAsync(_level)
+                : await CosSvc.UpdateLevelAsync(_level);
+
+            if (ok)
+            {
+                Toast.Show(L["COS_SaveSuccess"], ToastLevel.Success);
+                Nav.NavigateTo("/calling-permissions");
+            }
+            else
+            {
+                _error = err;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void NavigateBack() => Nav.NavigateTo("/calling-permissions");
+}

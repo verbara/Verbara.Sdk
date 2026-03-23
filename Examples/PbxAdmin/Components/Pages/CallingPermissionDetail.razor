@@ -1,0 +1,145 @@
+@page "/calling-permissions/{Id:int}"
+@using PbxAdmin.Models
+@using PbxAdmin.Services
+@inject CosService CosSvc
+@inject CosPatternGroupService PgSvc
+@inject ISelectedServerService ServerSvc
+@inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
+
+<PageTitle>@(_level?.Name ?? L["COS_Title"])</PageTitle>
+
+<a href="/calling-permissions" class="back-link">@L["COS_Heading"]</a>
+
+@if (_loading)
+{
+    <p class="text-muted">@L["Lbl_Loading"]</p>
+}
+else if (_level is null)
+{
+    <p class="text-muted">COS level not found.</p>
+}
+else
+{
+    <div class="page-header-row">
+        <h2>@_level.Name</h2>
+        <button class="btn btn-primary" @onclick="EditLevel">@L["Btn_Edit"]</button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_level.Description))
+    {
+        <p class="text-muted">@_level.Description</p>
+    }
+
+    <div class="form-section">
+        <h3>@L["COS_Flags"]</h3>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <span class="badge @(_level.AllowPremium ? "badge-green" : "badge-red")">@L["COS_Premium"]: @(_level.AllowPremium ? "Yes" : "No")</span>
+            <span class="badge @(_level.AllowMobile ? "badge-green" : "badge-red")">@L["COS_Mobile"]: @(_level.AllowMobile ? "Yes" : "No")</span>
+            <span class="badge @(_level.AllowForwardExternal ? "badge-green" : "badge-red")">@L["COS_FwdExt"]: @(_level.AllowForwardExternal ? "Yes" : "No")</span>
+            <span class="badge @(_level.AllowConferenceExternal ? "badge-green" : "badge-red")">@L["COS_ConfExt"]: @(_level.AllowConferenceExternal ? "Yes" : "No")</span>
+            <span class="badge @(_level.AllowRecordingControl ? "badge-green" : "badge-red")">@L["COS_RecCtrl"]: @(_level.AllowRecordingControl ? "Yes" : "No")</span>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <div class="form-grid">
+            <div>
+                <span class="text-muted">@L["COS_Priority"]:</span> <strong>@_level.Priority</strong>
+            </div>
+            <div>
+                <span class="text-muted">@L["COS_Context"]:</span> <strong>@_level.AsteriskContext</strong>
+            </div>
+            <div>
+                <span class="text-muted">@L["COS_Enabled"]:</span>
+                <span class="badge @(_level.Enabled ? "badge-green" : "badge-red")">@(_level.Enabled ? "Yes" : "No")</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>@L["COS_Rules"]</h3>
+        @if (_level.Rules.Count == 0)
+        {
+            <p class="text-muted">No rules defined.</p>
+        }
+        else
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>@L["COS_Sequence"]</th>
+                        <th>@L["COS_PatternGroup"]</th>
+                        <th>@L["COS_Action"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var rule in _level.Rules.OrderBy(r => r.Sequence))
+                    {
+                        var groupName = _groupNames.GetValueOrDefault(rule.PatternGroupId, $"#{rule.PatternGroupId}");
+                        <tr>
+                            <td>@rule.Sequence</td>
+                            <td>@groupName</td>
+                            <td>
+                                <span class="badge @(rule.Action == "ALLOW" ? "badge-green" : "badge-red")">@rule.Action</span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    <div class="form-section">
+        <h3>@L["COS_AssignedExts"]</h3>
+        @if (_assignedExtensions.Count == 0)
+        {
+            <p class="text-muted">No extensions assigned.</p>
+        }
+        else
+        {
+            <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+                @foreach (var ext in _assignedExtensions)
+                {
+                    <span class="badge badge-muted">@ext</span>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private CosLevel? _level;
+    private bool _loading = true;
+    private Dictionary<int, string> _groupNames = [];
+    private List<string> _assignedExtensions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        _level = await CosSvc.GetLevelAsync(Id, serverId);
+
+        if (_level is not null)
+        {
+            // Load pattern group names for display
+            var groups = await PgSvc.GetGroupsAsync(serverId);
+            _groupNames = groups.ToDictionary(g => g.Id, g => g.Name);
+
+            // Load assigned extensions
+            var overrides = await CosSvc.GetExtensionOverridesAsync(serverId);
+            _assignedExtensions = overrides
+                .Where(o => o.CosLevelId == Id)
+                .Select(o => o.Extension)
+                .OrderBy(e => e)
+                .ToList();
+        }
+
+        _loading = false;
+    }
+
+    private void EditLevel() => Nav.NavigateTo($"/calling-permissions/{Id}/edit");
+}

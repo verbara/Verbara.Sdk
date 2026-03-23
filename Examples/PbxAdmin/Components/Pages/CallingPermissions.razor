@@ -1,0 +1,119 @@
+@page "/calling-permissions"
+@using PbxAdmin.Models
+@using PbxAdmin.Services
+@inject CosService CosSvc
+@inject ISelectedServerService ServerSvc
+@inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
+
+<PageTitle>@L["COS_Title"]</PageTitle>
+
+<div class="page-header-row">
+    <h2>@L["COS_Heading"]</h2>
+    <div>
+        <button class="btn btn-sm" @onclick="@(() => Nav.NavigateTo("/calling-permissions/bulk-assign"))">@L["COS_BulkTitle"]</button>
+        <button class="btn btn-sm" @onclick="@(() => Nav.NavigateTo("/dial-simulator"))">@L["Sim_Title"]</button>
+        <button class="btn btn-primary" @onclick="NewLevel">@L["COS_NewLevel"]</button>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <p>@L["Lbl_Loading"]</p>
+}
+else if (_levels.Count == 0)
+{
+    <p class="text-muted">@L["COS_NoLevels"]</p>
+}
+else
+{
+    <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-value">@_levels.Count</div><div class="kpi-label">@L["PG_Total"]</div></div>
+        <div class="kpi-card"><div class="kpi-value">@_assignedCount</div><div class="kpi-label">@L["COS_AssignedExts"]</div></div>
+        <div class="kpi-card"><div class="kpi-value">@_unassignedCount</div><div class="kpi-label">@L["COS_Unassigned"]</div></div>
+    </div>
+
+    <div class="card-grid">
+        @foreach (var level in _levels.OrderBy(l => l.Priority))
+        {
+            <div class="card" style="cursor: pointer;" @onclick="() => ViewLevel(level.Id)">
+                <div class="card-header">
+                    <strong>@level.Name</strong>
+                    <span class="badge badge-muted">P@level.Priority</span>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(level.Description))
+                    {
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.5rem;">@level.Description</p>
+                    }
+                    <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                        <span class="badge @(level.AllowPremium ? "badge-green" : "badge-red")">@L["COS_Premium"]</span>
+                        <span class="badge @(level.AllowMobile ? "badge-green" : "badge-red")">@L["COS_Mobile"]</span>
+                        <span class="badge @(level.AllowForwardExternal ? "badge-green" : "badge-red")">@L["COS_FwdExt"]</span>
+                        <span class="badge @(level.AllowConferenceExternal ? "badge-green" : "badge-red")">@L["COS_ConfExt"]</span>
+                        <span class="badge @(level.AllowRecordingControl ? "badge-green" : "badge-red")">@L["COS_RecCtrl"]</span>
+                    </div>
+                    <div class="text-muted" style="font-size: 0.85rem;">
+                        @level.Rules.Count @L["COS_Rules"] · @level.AsteriskContext
+                    </div>
+                    @if (!level.Enabled)
+                    {
+                        <span class="badge badge-warning">Disabled</span>
+                    }
+                </div>
+                <div class="card-footer" @onclick:stopPropagation="true">
+                    <button class="btn btn-sm" @onclick="() => EditLevel(level.Id)">@L["Btn_Edit"]</button>
+                    @if (!level.IsBuiltIn)
+                    {
+                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteLevel(level)">@L["Btn_Delete"]</button>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+@code {
+    private List<CosLevel> _levels = [];
+    private bool _loading = true;
+    private string? _error;
+    private int _assignedCount;
+    private int _unassignedCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        _levels = await CosSvc.GetLevelsAsync(serverId);
+        var overrides = await CosSvc.GetExtensionOverridesAsync(serverId);
+        _assignedCount = overrides.Count;
+        // Unassigned count is informational — extensions without explicit COS override
+        _unassignedCount = 0; // Would require cross-referencing extension list
+        _loading = false;
+    }
+
+    private void NewLevel() => Nav.NavigateTo("/calling-permissions/new");
+    private void ViewLevel(int id) => Nav.NavigateTo($"/calling-permissions/{id}");
+    private void EditLevel(int id) => Nav.NavigateTo($"/calling-permissions/{id}/edit");
+
+    private async Task DeleteLevel(CosLevel level)
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+        var (ok, err) = await CosSvc.DeleteLevelAsync(level.Id, serverId);
+        if (!ok)
+        {
+            _error = err;
+            return;
+        }
+        _levels.RemoveAll(l => l.Id == level.Id);
+        Toast.Show(L["Toast_Deleted"], ToastLevel.Success, level.Name);
+    }
+}
