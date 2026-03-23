@@ -1,5 +1,6 @@
 @page "/dialplan"
 @using PbxAdmin.Services
+@using PbxAdmin.Services.CallFlow
 @using PbxAdmin.Services.Dialplan
 @using PbxAdmin.Models
 @inject DialplanDiscoveryService DiscoverySvc
@@ -8,6 +9,7 @@
 @inject IConfigOperationState ConfigOp
 @inject IStringLocalizer<SharedStrings> L
 @inject IToastService Toast
+@inject NavigationManager Nav
 
 <PageTitle>@L["DP_Title"]</PageTitle>
 
@@ -65,8 +67,15 @@ else
                          @onclick="() => SelectContext(ctx)">
                         <div class="dp-card-header">
                             <strong>@ctx.Name</strong>
-                            <span class="badge @(ctx.IsSystem ? "badge-muted" : "badge-green")">
-                                @(ctx.IsSystem ? L["DP_System"] : L["DP_User"])
+                            <span style="display:flex; gap:0.35rem;">
+                                <span class="badge @(ctx.IsSystem ? "badge-muted" : "badge-green")">
+                                    @(ctx.IsSystem ? L["DP_System"] : L["DP_User"])
+                                </span>
+                                @{ var ctxType = GetContextType(ctx.Name); }
+                                @if (!string.IsNullOrEmpty(ctxType.Label))
+                                {
+                                    <span class="badge @ctxType.CssClass">@ctxType.Label</span>
+                                }
                             </span>
                         </div>
                         <div class="dp-card-meta">
@@ -89,7 +98,13 @@ else
             }
             else
             {
-                <h3>@_selectedContext.Name</h3>
+                <div style="display: flex; align-items: center;">
+                    <h3 style="margin: 0;">@_selectedContext.Name</h3>
+                    @if (IsManagedContext(_selectedContext.Name))
+                    {
+                        <a href="/call-flow" class="btn btn-sm" style="margin-left: 0.5rem;">View in Call Flow</a>
+                    }
+                </div>
                 <div class="dp-detail-badges">
                     <span class="badge badge-muted">@L["DP_CreatedBy"]: @_selectedContext.CreatedBy</span>
                     <span class="badge @(_selectedContext.IsSystem ? "badge-muted" : "badge-green")">
@@ -194,7 +209,7 @@ else
                                 @if (isExpanded)
                                 {
                                     <tr class="dp-ext-detail">
-                                        <td colspan="4">
+                                        <td colspan="5">
                                             <table class="dp-priority-table">
                                                 <thead>
                                                     <tr>
@@ -202,6 +217,7 @@ else
                                                         <th>Label</th>
                                                         <th>@L["DP_Application"]</th>
                                                         <th>@L["DP_AppData"]</th>
+                                                        <th>Description</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -212,6 +228,7 @@ else
                                                             <td>@(p.Label ?? "")</td>
                                                             <td>@p.Application</td>
                                                             <td>@p.ApplicationData</td>
+                                                            <td>@DialplanHumanizer.Humanize(p.Application, p.ApplicationData)</td>
                                                         </tr>
                                                     }
                                                 </tbody>
@@ -505,9 +522,15 @@ else
         min-width: 340px;
         max-width: 90vw;
     }
+    .badge-yellow { background: #f59e0b22; color: #fbbf24; }
+    .badge-orange { background: #f9731622; color: #fb923c; }
+    .badge-purple { background: #a855f722; color: #c084fc; }
 </style>
 
 @code {
+    [SupplyParameterFromQuery]
+    public string? Context { get; set; }
+
     private static readonly string[] DialplanApps =
     [
         "Answer", "AGI", "Background", "Dial", "ExecIf", "Goto", "GotoIfTime",
@@ -535,6 +558,12 @@ else
     protected override async Task OnInitializedAsync()
     {
         await LoadData();
+
+        if (Context is not null)
+        {
+            _selectedContext = _snapshot?.Contexts.FirstOrDefault(c =>
+                string.Equals(c.Name, Context, StringComparison.OrdinalIgnoreCase));
+        }
     }
 
     private async Task LoadData()
@@ -792,4 +821,20 @@ else
             Toast.Show(L["Toast_Error"], ToastLevel.Error, error);
         }
     }
+
+    private static (string Label, string CssClass) GetContextType(string name) => name switch
+    {
+        "from-trunk" => ("Inbound", "badge-green"),
+        "outbound-routes" => ("Outbound", "badge-blue"),
+        _ when name.StartsWith("tc-", StringComparison.Ordinal) => ("TC", "badge-yellow"),
+        _ when name.StartsWith("ivr-", StringComparison.Ordinal) => ("IVR", "badge-purple"),
+        "queues" => ("Queues", "badge-orange"),
+        "default" => ("Main", "badge-muted"),
+        _ => ("", "")
+    };
+
+    private static bool IsManagedContext(string name) =>
+        name is "from-trunk" or "outbound-routes" ||
+        name.StartsWith("tc-", StringComparison.Ordinal) ||
+        name.StartsWith("ivr-", StringComparison.Ordinal);
 }
