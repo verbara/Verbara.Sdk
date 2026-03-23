@@ -152,7 +152,7 @@ internal static class DialplanGenerator
 
     private static string ResolveIvrItemAppData(IvrMenuItemConfig item) => item.DestType switch
     {
-        "extension" => $"from-internal,{item.DestTarget},1",
+        "extension" => $"default,{item.DestTarget},1",
         "queue" => $"queues,{item.DestTarget},1",
         "ivr" => $"ivr-{item.DestTarget},s,1",
         "voicemail" => $"{item.DestTarget}@default,u",
@@ -165,7 +165,7 @@ internal static class DialplanGenerator
 
     internal static string ResolveDestination(string type, string target) => type switch
     {
-        "extension" => $"from-internal,{target},1",
+        "extension" => $"default,{target},1",
         "queue" => $"queues,{target},1",
         "time_condition" => $"tc-{target},s,1",
         "ivr" => $"ivr-{target},s,1",

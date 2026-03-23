@@ -10,6 +10,7 @@ using NSubstitute;
 using PbxAdmin.Components.Pages;
 using PbxAdmin.Resources;
 using PbxAdmin.Services;
+using PbxAdmin.Services.Dialplan;
 
 namespace PbxAdmin.Tests.Components;
 
@@ -27,7 +28,8 @@ public sealed class TrunkEditTests : IDisposable
             new EventLogService(),
             Substitute.For<ICallSessionManager>(),
             new ConfigurationBuilder().Build(),
-            NullLogger<AsteriskMonitorService>.Instance);
+            NullLogger<AsteriskMonitorService>.Instance,
+            Substitute.For<IServiceProvider>());
 
         var trunkSvc = Substitute.For<ITrunkService>();
         var configOp = Substitute.For<IConfigOperationState>();
@@ -37,12 +39,14 @@ public sealed class TrunkEditTests : IDisposable
         localizer[Arg.Any<string>(), Arg.Any<object[]>()].Returns(ci => new LocalizedString(ci.Arg<string>(), ci.Arg<string>()));
 
         var toastSvc = Substitute.For<IToastService>();
+        var discoverySvc = new DialplanDiscoveryService(monitor, NullLogger<DialplanDiscoveryService>.Instance);
 
         _ctx.Services.AddSingleton(monitor);
         _ctx.Services.AddSingleton(trunkSvc);
         _ctx.Services.AddSingleton(configOp);
         _ctx.Services.AddSingleton(localizer);
         _ctx.Services.AddSingleton(toastSvc);
+        _ctx.Services.AddSingleton(discoverySvc);
     }
 
     [Fact]

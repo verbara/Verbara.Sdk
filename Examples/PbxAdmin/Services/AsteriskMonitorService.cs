@@ -3,7 +3,9 @@ using Asterisk.Sdk;
 using Asterisk.Sdk.Ami.Connection;
 using Asterisk.Sdk.Live.Server;
 using Asterisk.Sdk.Sessions.Manager;
+using Microsoft.Extensions.DependencyInjection;
 using PbxAdmin.Models;
+using PbxAdmin.Services.Dialplan;
 
 namespace PbxAdmin.Services;
 
@@ -36,6 +38,7 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
     private readonly ICallSessionManager _sessionManager;
     private readonly IConfiguration _config;
     private readonly ILogger<AsteriskMonitorService> _logger;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ConcurrentDictionary<string, ServerEntry> _servers = new();
 
     public IEnumerable<KeyValuePair<string, ServerEntry>> Servers => _servers;
@@ -46,7 +49,8 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
         EventLogService eventLog,
         ICallSessionManager sessionManager,
         IConfiguration config,
-        ILogger<AsteriskMonitorService> logger)
+        ILogger<AsteriskMonitorService> logger,
+        IServiceProvider serviceProvider)
     {
         _factory = factory;
         _loggerFactory = loggerFactory;
@@ -54,6 +58,7 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
         _sessionManager = sessionManager;
         _config = config;
         _logger = logger;
+        _serviceProvider = serviceProvider;
     }
 
     /// <summary>
@@ -107,6 +112,10 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
                 MonitorServiceLog.Connected(_logger, id, options.Hostname, options.Port, server.AsteriskVersion);
                 MonitorServiceLog.ConnectionSummary(_logger, id,
                     configConnection is not null ? "dedicated (30s timeout)" : "shared (fallback to event connection)");
+
+                var discoveryService = _serviceProvider.GetService<DialplanDiscoveryService>();
+                if (discoveryService is not null)
+                    _ = discoveryService.RefreshAsync(id, CancellationToken.None);
             }
             catch (Exception ex)
             {

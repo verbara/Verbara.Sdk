@@ -39,7 +39,7 @@ public class IvrDialplanGeneratorTests
         var menu = ValidMenu() with { Items = [Item("1", "extension", "1001")] };
         var data = DataWith(menu);
         var lines = DialplanGenerator.Generate(data);
-        lines.Should().Contain(l => l.Context == "ivr-main" && l.Exten == "1" && l.App == "Goto" && l.AppData == "from-internal,1001,1");
+        lines.Should().Contain(l => l.Context == "ivr-main" && l.Exten == "1" && l.App == "Goto" && l.AppData == "default,1001,1");
     }
 
     [Fact]

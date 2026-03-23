@@ -16,7 +16,7 @@ public class DialplanGeneratorTests
             [], []);
         var lines = DialplanGenerator.Generate(data);
         lines.Should().ContainSingle(l => l.Context == "from-trunk" && l.Exten == "5551000")
-            .Which.Should().Match<DialplanLine>(l => l.App == "Goto" && l.AppData == "from-internal,1001,1");
+            .Which.Should().Match<DialplanLine>(l => l.App == "Goto" && l.AppData == "default,1001,1");
     }
 
     [Fact]
@@ -192,6 +192,6 @@ public class DialplanGeneratorTests
         lines.Should().ContainSingle(l => l.Context == "tc-horario-open")
             .Which.AppData.Should().Be("queues,sales,1");
         lines.Should().ContainSingle(l => l.Context == "tc-horario-closed")
-            .Which.AppData.Should().Be("from-internal,1099,1");
+            .Which.AppData.Should().Be("default,1099,1");
     }
 }

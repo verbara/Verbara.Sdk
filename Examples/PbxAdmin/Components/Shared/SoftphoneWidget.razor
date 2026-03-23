@@ -4,8 +4,9 @@
 @inject ISelectedServerService ServerSvc
 @inject IStringLocalizer<SharedStrings> L
 
-<!-- Hidden audio element for remote media -->
+<!-- Hidden audio elements for remote media and ringback tone -->
 <audio id="softphone-remote-audio" autoplay style="display:none;"></audio>
+<audio id="softphone-ringback" loop style="display:none;"></audio>
 
 <!-- Incoming call overlay (visible regardless of popup) -->
 <IncomingCallOverlay />
