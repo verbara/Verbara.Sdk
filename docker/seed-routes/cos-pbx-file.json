@@ -1,0 +1,47 @@
+{
+  "NextId": 8,
+  "Levels": [
+    { "Id": 1, "ServerId": "pbx-file", "Name": "Emergency Only", "Description": "Can only dial emergency numbers", "Priority": 0, "AsteriskContext": "cos-emergency-only", "IsBuiltIn": true, "AllowPremium": false, "AllowMobile": false, "AllowForwardExternal": false, "AllowConferenceExternal": false, "AllowRecordingControl": false, "Enabled": true },
+    { "Id": 2, "ServerId": "pbx-file", "Name": "Receive Only", "Priority": 1, "AsteriskContext": "cos-receive-only", "IsBuiltIn": true, "AllowPremium": false, "AllowMobile": false, "AllowForwardExternal": false, "AllowConferenceExternal": false, "AllowRecordingControl": false, "Enabled": true },
+    { "Id": 3, "ServerId": "pbx-file", "Name": "Internal Only", "Priority": 2, "AsteriskContext": "cos-internal-only", "IsBuiltIn": true, "AllowPremium": false, "AllowMobile": false, "AllowForwardExternal": false, "AllowConferenceExternal": false, "AllowRecordingControl": false, "Enabled": true },
+    { "Id": 4, "ServerId": "pbx-file", "Name": "Local", "Priority": 3, "AsteriskContext": "cos-local", "IsBuiltIn": true, "AllowPremium": false, "AllowMobile": true, "AllowForwardExternal": false, "AllowConferenceExternal": false, "AllowRecordingControl": false, "Enabled": true },
+    { "Id": 5, "ServerId": "pbx-file", "Name": "National", "Priority": 4, "AsteriskContext": "cos-national", "IsBuiltIn": true, "AllowPremium": false, "AllowMobile": true, "AllowForwardExternal": true, "AllowConferenceExternal": true, "AllowRecordingControl": false, "Enabled": true },
+    { "Id": 6, "ServerId": "pbx-file", "Name": "International", "Priority": 5, "AsteriskContext": "cos-international", "IsBuiltIn": true, "AllowPremium": false, "AllowMobile": true, "AllowForwardExternal": true, "AllowConferenceExternal": true, "AllowRecordingControl": false, "Enabled": true },
+    { "Id": 7, "ServerId": "pbx-file", "Name": "Unrestricted", "Priority": 6, "AsteriskContext": "cos-unrestricted", "IsBuiltIn": true, "AllowPremium": true, "AllowMobile": true, "AllowForwardExternal": true, "AllowConferenceExternal": true, "AllowRecordingControl": true, "Enabled": true }
+  ],
+  "Rules": [
+    { "Id": 1, "CosLevelId": 1, "PatternGroupId": 1, "Action": "ALLOW", "Sequence": 1 },
+    { "Id": 2, "CosLevelId": 2, "PatternGroupId": 1, "Action": "ALLOW", "Sequence": 1 },
+    { "Id": 3, "CosLevelId": 3, "PatternGroupId": 1, "Action": "ALLOW", "Sequence": 1 },
+    { "Id": 4, "CosLevelId": 4, "PatternGroupId": 1, "Action": "ALLOW", "Sequence": 1 },
+    { "Id": 5, "CosLevelId": 4, "PatternGroupId": 2, "Action": "ALLOW", "Sequence": 2 },
+    { "Id": 6, "CosLevelId": 5, "PatternGroupId": 1, "Action": "ALLOW", "Sequence": 1 },
+    { "Id": 7, "CosLevelId": 5, "PatternGroupId": 2, "Action": "ALLOW", "Sequence": 2 },
+    { "Id": 8, "CosLevelId": 5, "PatternGroupId": 3, "Action": "ALLOW", "Sequence": 3 },
+    { "Id": 9, "CosLevelId": 5, "PatternGroupId": 5, "Action": "ALLOW", "Sequence": 4 },
+    { "Id": 10, "CosLevelId": 5, "PatternGroupId": 6, "Action": "ALLOW", "Sequence": 5 },
+    { "Id": 11, "CosLevelId": 6, "PatternGroupId": 1, "Action": "ALLOW", "Sequence": 1 },
+    { "Id": 12, "CosLevelId": 6, "PatternGroupId": 2, "Action": "ALLOW", "Sequence": 2 },
+    { "Id": 13, "CosLevelId": 6, "PatternGroupId": 3, "Action": "ALLOW", "Sequence": 3 },
+    { "Id": 14, "CosLevelId": 6, "PatternGroupId": 5, "Action": "ALLOW", "Sequence": 4 },
+    { "Id": 15, "CosLevelId": 6, "PatternGroupId": 6, "Action": "ALLOW", "Sequence": 5 },
+    { "Id": 16, "CosLevelId": 6, "PatternGroupId": 4, "Action": "ALLOW", "Sequence": 6 },
+    { "Id": 17, "CosLevelId": 7, "PatternGroupId": 1, "Action": "ALLOW", "Sequence": 1 },
+    { "Id": 18, "CosLevelId": 7, "PatternGroupId": 2, "Action": "ALLOW", "Sequence": 2 },
+    { "Id": 19, "CosLevelId": 7, "PatternGroupId": 3, "Action": "ALLOW", "Sequence": 3 },
+    { "Id": 20, "CosLevelId": 7, "PatternGroupId": 5, "Action": "ALLOW", "Sequence": 4 },
+    { "Id": 21, "CosLevelId": 7, "PatternGroupId": 6, "Action": "ALLOW", "Sequence": 5 },
+    { "Id": 22, "CosLevelId": 7, "PatternGroupId": 4, "Action": "ALLOW", "Sequence": 6 }
+  ],
+  "ExtensionOverrides": [
+    { "Id": 1, "ServerId": "pbx-file", "Extension": "4001", "CosLevelId": 5 },
+    { "Id": 2, "ServerId": "pbx-file", "Extension": "4002", "CosLevelId": 5 },
+    { "Id": 3, "ServerId": "pbx-file", "Extension": "4003", "CosLevelId": 5 },
+    { "Id": 4, "ServerId": "pbx-file", "Extension": "5001", "CosLevelId": 4 },
+    { "Id": 5, "ServerId": "pbx-file", "Extension": "5002", "CosLevelId": 4 },
+    { "Id": 6, "ServerId": "pbx-file", "Extension": "5003", "CosLevelId": 4 }
+  ],
+  "TimeWindows": [],
+  "TimeOverrides": [],
+  "AuditLog": []
+}

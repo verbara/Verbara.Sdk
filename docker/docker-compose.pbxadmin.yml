@@ -36,6 +36,7 @@ services:
       - ./asterisk-config-realtime/confbridge.conf:/etc/asterisk/confbridge.conf:ro
       - ./asterisk-config-realtime/extconfig.conf:/etc/asterisk/extconfig.conf:ro
       - ./asterisk-config-realtime/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./asterisk-config-realtime/extensions-cos.conf:/etc/asterisk/extensions-cos.conf
       - ./asterisk-config-realtime/features.conf:/etc/asterisk/features.conf:ro
       - ./asterisk-config-realtime/geolocation.conf:/etc/asterisk/geolocation.conf:ro
       - ./asterisk-config-realtime/http.conf:/etc/asterisk/http.conf
@@ -82,6 +83,7 @@ services:
       - ./asterisk-config-file/asterisk.conf:/etc/asterisk/asterisk.conf:ro
       - ./asterisk-config-file/confbridge.conf:/etc/asterisk/confbridge.conf
       - ./asterisk-config-file/extensions.conf:/etc/asterisk/extensions.conf
+      - ./asterisk-config-file/extensions-cos.conf:/etc/asterisk/extensions-cos.conf
       - ./asterisk-config-file/features.conf:/etc/asterisk/features.conf
       - ./asterisk-config-file/http.conf:/etc/asterisk/http.conf:ro
       - ./asterisk-config-file/manager.conf:/etc/asterisk/manager.conf:ro
@@ -144,6 +146,8 @@ services:
       - ./moh:/var/lib/asterisk/moh:ro
       # Seed route data for file-mode server (JSON-based route repository)
       - ./seed-routes:/app/data/routes
+      # COS seed data for file-mode server (JSON-based COS repository)
+      - ./seed-routes:/app/data/cos
     environment:
       - DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE=false
       - Logging__LogLevel__Default=Debug

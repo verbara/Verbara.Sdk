@@ -1,0 +1,11 @@
+{
+  "NextId": 7,
+  "Groups": [
+    { "Id": 1, "ServerId": "pbx-file", "Name": "Emergency (Universal)", "Description": "Emergency numbers worldwide", "Patterns": ["_911", "_112", "_999"], "CountryCode": null, "IsBuiltIn": true },
+    { "Id": 2, "ServerId": "pbx-file", "Name": "Local (Colombia)", "Description": "Colombia local 7-digit", "Patterns": ["_NXXXXXX"], "CountryCode": "CO", "IsBuiltIn": true },
+    { "Id": 3, "ServerId": "pbx-file", "Name": "National (Colombia)", "Description": "Colombia national 0+10 digits", "Patterns": ["_0NXXXXXXXXX"], "CountryCode": "CO", "IsBuiltIn": true },
+    { "Id": 4, "ServerId": "pbx-file", "Name": "International", "Description": "International dialing universal", "Patterns": ["_00.", "_+."], "CountryCode": null, "IsBuiltIn": true },
+    { "Id": 5, "ServerId": "pbx-file", "Name": "Premium (Colombia)", "Description": "Colombia premium 900/901", "Patterns": ["_900XXXXXXX", "_901XXXXXXX"], "CountryCode": "CO", "IsBuiltIn": true },
+    { "Id": 6, "ServerId": "pbx-file", "Name": "Mobile (Colombia)", "Description": "Colombia mobile 3+9 digits", "Patterns": ["_3XXXXXXXXX"], "CountryCode": "CO", "IsBuiltIn": true }
+  ]
+}
