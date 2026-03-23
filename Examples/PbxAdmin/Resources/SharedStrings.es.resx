@@ -1262,4 +1262,22 @@
   <data name="CF_HideDialplan" xml:space="preserve"><value>Ocultar dialplan</value></data>
   <data name="CF_EditEntity" xml:space="preserve"><value>Editar</value></data>
   <data name="CF_FlowFor" xml:space="preserve"><value>Flujo para</value></data>
+  <data name="CF_TraceNumber" xml:space="preserve"><value>Trazar llamada a:</value></data>
+  <data name="CF_TraceTime" xml:space="preserve"><value>A la hora:</value></data>
+  <data name="CF_TraceOverride" xml:space="preserve"><value>Modo override:</value></data>
+  <data name="CF_TraceBtn" xml:space="preserve"><value>Trazar</value></data>
+  <data name="CF_TraceClear" xml:space="preserve"><value>Limpiar</value></data>
+  <data name="CF_OverrideLive" xml:space="preserve"><value>En vivo (actual)</value></data>
+  <data name="CF_OverrideNone" xml:space="preserve"><value>Sin overrides</value></data>
+  <data name="CF_OverrideAllOpen" xml:space="preserve"><value>Todo abierto</value></data>
+  <data name="CF_OverrideAllClosed" xml:space="preserve"><value>Todo cerrado</value></data>
+  <data name="CF_TraceResult" xml:space="preserve"><value>Resultado del Rastreo</value></data>
+  <data name="CF_TraceNoRoute" xml:space="preserve"><value>No se encontr&#243; ruta para este n&#250;mero.</value></data>
+  <data name="CF_TraceInbound" xml:space="preserve"><value>Entrante</value></data>
+  <data name="CF_TraceOutbound" xml:space="preserve"><value>Saliente</value></data>
+  <data name="CF_TraceStep" xml:space="preserve"><value>Paso</value></data>
+  <data name="CF_TraceInspect" xml:space="preserve"><value>Inspeccionar dialplan</value></data>
+  <data name="CF_TraceMatched" xml:space="preserve"><value>Coincide</value></data>
+  <data name="CF_TraceNotMatched" xml:space="preserve"><value>No coincide</value></data>
+  <data name="CF_TraceSkipped" xml:space="preserve"><value>Omitido</value></data>
 </root>
