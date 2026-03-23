@@ -1,0 +1,139 @@
+@page "/dial-simulator"
+@using PbxAdmin.Models
+@using PbxAdmin.Services
+@inject DialSimulator Simulator
+@inject ISelectedServerService ServerSvc
+@inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
+
+<PageTitle>@L["Sim_Title"]</PageTitle>
+
+<a href="/calling-permissions" class="back-link">@L["COS_Heading"]</a>
+<h2>@L["Sim_Heading"]</h2>
+
+<div class="form-section">
+    <div class="form-grid">
+        <div class="form-field">
+            <label class="form-label">@L["Sim_Extension"]</label>
+            <input class="input" @bind="_extension" placeholder="1001" />
+        </div>
+        <div class="form-field">
+            <label class="form-label">@L["Sim_DialNumber"]</label>
+            <input class="input" @bind="_dialNumber" placeholder="+18005551234" />
+        </div>
+    </div>
+    <div style="margin-top: 0.75rem;">
+        <button class="btn btn-primary" @onclick="Test" disabled="@_testing">@(_testing ? L["Lbl_Loading"] : L["Sim_TestBtn"])</button>
+    </div>
+</div>
+
+@if (_result is not null)
+{
+    <div class="form-section">
+        <h3>@L["Sim_Result"]</h3>
+        <div style="margin-bottom: 0.75rem;">
+            <span class="badge @VerdictBadge(_result.Verdict)" style="font-size: 1rem; padding: 0.4rem 0.75rem;">
+                @_result.Verdict
+            </span>
+            @if (_result.ResolvedCosName is not null)
+            {
+                <span class="text-muted" style="margin-left: 0.5rem;">COS: @_result.ResolvedCosName</span>
+            }
+            @if (_result.MatchingRuleName is not null)
+            {
+                <span class="text-muted" style="margin-left: 0.5rem;">Rule: @_result.MatchingRuleName</span>
+            }
+            @if (_result.MatchingPattern is not null)
+            {
+                <span class="text-muted" style="margin-left: 0.5rem;">Pattern: @_result.MatchingPattern</span>
+            }
+        </div>
+
+        @if (_result.ErrorMessage is not null)
+        {
+            <div class="alert alert-danger">@_result.ErrorMessage</div>
+        }
+    </div>
+
+    @if (_result.FlagChecks.Count > 0)
+    {
+        <div class="form-section">
+            <h3>@L["Sim_FlagChecks"]</h3>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Flag</th>
+                        <th>Pattern Match</th>
+                        <th>Allowed</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var check in _result.FlagChecks)
+                    {
+                        <tr>
+                            <td>@check.FlagName</td>
+                            <td>
+                                <span class="badge @(check.PatternMatches ? "badge-green" : "badge-muted")">
+                                    @(check.PatternMatches ? "Yes" : "No")
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge @(check.FlagAllowed ? "badge-green" : "badge-red")">
+                                    @(check.FlagAllowed ? "Yes" : "No")
+                                </span>
+                            </td>
+                            <td>@check.Result</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (_result.TraceLog.Count > 0)
+    {
+        <div class="form-section">
+            <h3>@L["Sim_Trace"]</h3>
+            <div style="background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; font-family: monospace; font-size: 0.85rem; max-height: 300px; overflow-y: auto;">
+                @foreach (var line in _result.TraceLog)
+                {
+                    <div>@line</div>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private string _extension = "";
+    private string _dialNumber = "";
+    private bool _testing;
+    private DialSimulatorResult? _result;
+
+    private async Task Test()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null || string.IsNullOrWhiteSpace(_extension) || string.IsNullOrWhiteSpace(_dialNumber))
+            return;
+
+        _testing = true;
+        _result = null;
+
+        try
+        {
+            _result = await Simulator.SimulateAsync(serverId, _extension.Trim(), _dialNumber.Trim());
+        }
+        finally
+        {
+            _testing = false;
+        }
+    }
+
+    private static string VerdictBadge(DialSimulatorVerdict verdict) => verdict switch
+    {
+        DialSimulatorVerdict.Allowed => "badge-green",
+        DialSimulatorVerdict.Denied => "badge-red",
+        _ => "badge-yellow"
+    };
+}

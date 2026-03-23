@@ -1,0 +1,156 @@
+@page "/calling-permissions/bulk-assign"
+@using PbxAdmin.Models
+@using PbxAdmin.Services
+@inject CosService CosSvc
+@inject IExtensionService ExtSvc
+@inject ISelectedServerService ServerSvc
+@inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
+@inject IToastService Toast
+
+<PageTitle>@L["COS_BulkTitle"]</PageTitle>
+
+<a href="/calling-permissions" class="back-link">@L["COS_Heading"]</a>
+<h2>@L["COS_BulkHeading"]</h2>
+
+@if (_loading)
+{
+    <p>@L["Lbl_Loading"]</p>
+}
+else
+{
+    <div class="form-section">
+        <div class="form-field">
+            <label class="form-label">@L["COS_TargetCos"]</label>
+            <select class="input" @bind="_selectedCosId">
+                <option value="0">-- Select --</option>
+                @foreach (var level in _levels)
+                {
+                    <option value="@level.Id">@level.Name (P@level.Priority)</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>@L["COS_Extensions"] (@_selectedExtensions.Count selected)</h3>
+        <div style="margin-bottom: 0.5rem;">
+            <button class="btn btn-sm" @onclick="SelectAll">@L["Lbl_All"]</button>
+            <button class="btn btn-sm" @onclick="SelectNone">None</button>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.35rem; max-height: 300px; overflow-y: auto; padding: 0.5rem; border: 1px solid var(--border); border-radius: 8px;">
+            @foreach (var ext in _extensions)
+            {
+                var isChecked = _selectedExtensions.Contains(ext.Extension);
+                <label class="codec-check">
+                    <input type="checkbox" checked="@isChecked"
+                           @onchange="() => ToggleExtension(ext.Extension)" />
+                    @ext.Extension
+                </label>
+            }
+        </div>
+    </div>
+
+    @if (_result is not null)
+    {
+        <div class="alert @(_result.Value.Failed > 0 ? "alert-danger" : "alert-success")">
+            @string.Format(L["COS_BulkResult"], _result.Value.Succeeded, _result.Value.Failed)
+        </div>
+    }
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+
+    <div class="form-actions">
+        <button class="btn btn-green" @onclick="Apply" disabled="@(_applying || _selectedCosId == 0 || _selectedExtensions.Count == 0)">
+            @(_applying ? L["Btn_Saving"] : L["COS_ApplyBtn"])
+        </button>
+        <button class="btn" @onclick="NavigateBack">@L["Btn_Cancel"]</button>
+    </div>
+
+    @if (_applying)
+    {
+        <div class="text-muted" style="margin-top: 0.5rem;">
+            @_progress / @_selectedExtensions.Count
+        </div>
+    }
+}
+
+@code {
+    private List<CosLevel> _levels = [];
+    private List<ExtensionViewModel> _extensions = [];
+    private HashSet<string> _selectedExtensions = [];
+    private int _selectedCosId;
+    private bool _loading = true;
+    private bool _applying;
+    private int _progress;
+    private string? _error;
+    private (int Succeeded, int Failed)? _result;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        _levels = await CosSvc.GetLevelsAsync(serverId);
+        _extensions = await ExtSvc.GetExtensionsAsync(serverId);
+        _loading = false;
+    }
+
+    private void ToggleExtension(string ext)
+    {
+        if (!_selectedExtensions.Remove(ext))
+            _selectedExtensions.Add(ext);
+    }
+
+    private void SelectAll()
+    {
+        _selectedExtensions = [.. _extensions.Select(e => e.Extension)];
+    }
+
+    private void SelectNone()
+    {
+        _selectedExtensions.Clear();
+    }
+
+    private async Task Apply()
+    {
+        if (_selectedCosId == 0 || _selectedExtensions.Count == 0) return;
+
+        var serverId = ServerSvc.SelectedServerId;
+        if (serverId is null) return;
+
+        _error = null;
+        _result = null;
+        _applying = true;
+        _progress = 0;
+
+        try
+        {
+            var (succeeded, failed, errors) = await CosSvc.BulkAssignAsync(
+                serverId,
+                [.. _selectedExtensions],
+                _selectedCosId,
+                p => { _progress = p; InvokeAsync(StateHasChanged); });
+
+            _result = (succeeded, failed);
+            if (errors.Count > 0)
+                _error = string.Join("; ", errors);
+
+            Toast.Show(L["COS_BulkResult", succeeded, failed],
+                failed > 0 ? ToastLevel.Warning : ToastLevel.Success);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _applying = false;
+        }
+    }
+
+    private void NavigateBack() => Nav.NavigateTo("/calling-permissions");
+}
