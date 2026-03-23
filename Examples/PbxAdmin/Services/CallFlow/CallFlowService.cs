@@ -106,6 +106,22 @@ public sealed class CallFlowService
         return GetReferencesFor(graph, entityType, entityId);
     }
 
+    /// <summary>
+    /// Traces a call through the routing engine, showing each step the call would take.
+    /// </summary>
+    public async Task<CallFlowTrace> TraceCallAsync(
+        string serverId, string number, DateTime time,
+        string overrideMode = "Live", CancellationToken ct = default)
+    {
+        var inbound = await _routeService.GetAllInboundConfigsAsync(serverId, ct);
+        var outbound = await _routeService.GetAllOutboundConfigsAsync(serverId, ct);
+        var tcs = await LoadTimeConditionsAsync(serverId, ct);
+        var overrides = await _tcService.GetOverridesBatchAsync(serverId, ct);
+        var menus = await _ivrRepo.GetMenusAsync(serverId, ct);
+
+        return TraceCall(serverId, inbound, outbound, tcs, overrides, menus, number, time, overrideMode);
+    }
+
     /// <summary>Removes cached graph for a server.</summary>
     public void InvalidateCache(string serverId)
     {
@@ -262,6 +278,410 @@ public sealed class CallFlowService
             InboundFlows = flows,
             Warnings = warnings,
         };
+    }
+
+    // -----------------------------------------------------------------------
+    // Asterisk pattern matching
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Matches a number against an Asterisk dialplan pattern.
+    /// Pattern rules: _X=[0-9], Z=[1-9], N=[2-9], .=1+ chars, !=0+ chars.
+    /// Without leading underscore, the pattern is an exact match.
+    /// </summary>
+    internal static bool MatchesAsteriskPattern(string pattern, string number)
+    {
+        if (string.IsNullOrEmpty(pattern) || string.IsNullOrEmpty(number))
+            return false;
+
+        // No underscore prefix = exact match
+        if (!pattern.StartsWith('_'))
+            return string.Equals(pattern, number, StringComparison.Ordinal);
+
+        // Skip the underscore
+        var patternSpan = pattern.AsSpan(1);
+        var numberSpan = number.AsSpan();
+        int pi = 0, ni = 0;
+
+        while (pi < patternSpan.Length && ni < numberSpan.Length)
+        {
+            char pc = patternSpan[pi];
+            char nc = numberSpan[ni];
+
+            switch (pc)
+            {
+                case '.':
+                    // Match one or more remaining characters — must consume at least one
+                    return ni < numberSpan.Length;
+
+                case '!':
+                    // Match zero or more remaining characters
+                    return true;
+
+                case 'X':
+                    if (nc is < '0' or > '9') return false;
+                    break;
+
+                case 'Z':
+                    if (nc is < '1' or > '9') return false;
+                    break;
+
+                case 'N':
+                    if (nc is < '2' or > '9') return false;
+                    break;
+
+                default:
+                    if (pc != nc) return false;
+                    break;
+            }
+
+            pi++;
+            ni++;
+        }
+
+        // Handle trailing wildcards
+        if (pi < patternSpan.Length)
+        {
+            char remaining = patternSpan[pi];
+            if (remaining == '!') return true; // ! matches zero remaining
+        }
+
+        return pi == patternSpan.Length && ni == numberSpan.Length;
+    }
+
+    // -----------------------------------------------------------------------
+    // Call trace (pure function, testable without mocks)
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Traces a call through inbound/outbound routing, evaluating time conditions
+    /// and IVR menus along the way. Returns a step-by-step trace.
+    /// </summary>
+    internal static CallFlowTrace TraceCall(
+        string serverId,
+        List<InboundRouteConfig> inboundRoutes,
+        List<OutboundRouteConfig> outboundRoutes,
+        List<TimeConditionConfig> timeConditions,
+        Dictionary<string, string> tcOverrides,
+        List<IvrMenuConfig> ivrMenus,
+        string number, DateTime time, string overrideMode)
+    {
+        var tcByName = timeConditions.ToDictionary(tc => tc.Name, StringComparer.OrdinalIgnoreCase);
+        var ivrByName = ivrMenus.ToDictionary(m => m.Name, StringComparer.OrdinalIgnoreCase);
+        var steps = new List<CallFlowTraceStep>();
+        int stepNum = 0;
+
+        // 1. Try inbound routes first (ordered by priority)
+        var matchedInbound = inboundRoutes
+            .Where(r => r.Enabled)
+            .OrderBy(r => r.Priority)
+            .FirstOrDefault(r => MatchesAsteriskPattern(r.DidPattern, number));
+
+        if (matchedInbound is not null)
+        {
+            steps.Add(new CallFlowTraceStep
+            {
+                StepNumber = ++stepNum,
+                Description = $"Inbound route matched: {matchedInbound.Name} (DID {matchedInbound.DidPattern}, priority {matchedInbound.Priority.ToString(CultureInfo.InvariantCulture)})",
+                Result = "Matched",
+                EntityType = "InboundRoute",
+                EntityId = matchedInbound.Id.ToString(CultureInfo.InvariantCulture),
+                EditUrl = $"/routes/inbound/edit/{matchedInbound.Id}",
+                DialplanLines = [$"exten => {matchedInbound.DidPattern},1,Goto({matchedInbound.DestinationType}-{matchedInbound.Destination},s,1)"],
+            });
+
+            TraceDestination(
+                serverId, matchedInbound.DestinationType, matchedInbound.Destination,
+                tcByName, ivrByName, tcOverrides,
+                time, overrideMode, steps, ref stepNum,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+            return new CallFlowTrace
+            {
+                InputNumber = number,
+                InputTime = time,
+                Direction = "Inbound",
+                OverrideMode = overrideMode,
+                Steps = steps,
+                RouteFound = true,
+            };
+        }
+
+        // 2. Try outbound routes
+        var matchedOutbound = outboundRoutes
+            .Where(r => r.Enabled)
+            .OrderBy(r => r.Priority)
+            .FirstOrDefault(r => MatchesAsteriskPattern(r.DialPattern, number));
+
+        if (matchedOutbound is not null)
+        {
+            steps.Add(new CallFlowTraceStep
+            {
+                StepNumber = ++stepNum,
+                Description = $"Outbound route matched: {matchedOutbound.Name} (pattern {matchedOutbound.DialPattern})",
+                Result = "Matched",
+                EntityType = "OutboundRoute",
+                EntityId = matchedOutbound.Id.ToString(CultureInfo.InvariantCulture),
+                EditUrl = $"/routes/outbound/edit/{matchedOutbound.Id}",
+                DialplanLines = [$"exten => {matchedOutbound.DialPattern},1,NoOp(Outbound route: {matchedOutbound.Name})"],
+            });
+
+            // Number manipulation
+            if (!string.IsNullOrEmpty(matchedOutbound.Prefix) || !string.IsNullOrEmpty(matchedOutbound.Prepend))
+            {
+                var transformed = NumberManipulator.Apply(number, matchedOutbound.Prefix, matchedOutbound.Prepend);
+                var dialplanLine = $"exten => {matchedOutbound.DialPattern},n,Set(DIAL_NUMBER={transformed})";
+                steps.Add(new CallFlowTraceStep
+                {
+                    StepNumber = ++stepNum,
+                    Description = $"Number manipulation: {number} -> {transformed} (prefix strip '{matchedOutbound.Prefix ?? ""}', prepend '{matchedOutbound.Prepend ?? ""}')",
+                    Result = "Applied",
+                    EntityType = "OutboundRoute",
+                    EntityId = matchedOutbound.Id.ToString(CultureInfo.InvariantCulture),
+                    EditUrl = $"/routes/outbound/edit/{matchedOutbound.Id}",
+                    DialplanLines = [dialplanLine],
+                });
+            }
+
+            // Trunks in sequence
+            foreach (var trunk in matchedOutbound.Trunks.OrderBy(t => t.Sequence))
+            {
+                steps.Add(new CallFlowTraceStep
+                {
+                    StepNumber = ++stepNum,
+                    Description = $"Dial trunk: {trunk.TrunkName} ({trunk.TrunkTechnology}, sequence {trunk.Sequence.ToString(CultureInfo.InvariantCulture)})",
+                    Result = "Dial",
+                    EntityType = "Trunk",
+                    EntityId = trunk.TrunkName,
+                    DialplanLines = [$"exten => {matchedOutbound.DialPattern},n,Dial({trunk.TrunkTechnology}/{trunk.TrunkName}/${{DIAL_NUMBER}})"],
+                });
+            }
+
+            return new CallFlowTrace
+            {
+                InputNumber = number,
+                InputTime = time,
+                Direction = "Outbound",
+                OverrideMode = overrideMode,
+                Steps = steps,
+                RouteFound = true,
+            };
+        }
+
+        // 3. No match
+        steps.Add(new CallFlowTraceStep
+        {
+            StepNumber = ++stepNum,
+            Description = $"No route found for {number}",
+            Result = "NotFound",
+            EntityType = "",
+            EntityId = "",
+            DialplanLines = [],
+        });
+
+        return new CallFlowTrace
+        {
+            InputNumber = number,
+            InputTime = time,
+            Direction = "Unknown",
+            OverrideMode = overrideMode,
+            Steps = steps,
+            RouteFound = false,
+        };
+    }
+
+    private static void TraceDestination(
+        string serverId, string destType, string destTarget,
+        Dictionary<string, TimeConditionConfig> tcByName,
+        Dictionary<string, IvrMenuConfig> ivrByName,
+        Dictionary<string, string> tcOverrides,
+        DateTime time, string overrideMode,
+        List<CallFlowTraceStep> steps, ref int stepNum,
+        HashSet<string> visited)
+    {
+        if (string.IsNullOrEmpty(destType)) return;
+
+        switch (destType)
+        {
+            case "extension":
+                steps.Add(new CallFlowTraceStep
+                {
+                    StepNumber = ++stepNum,
+                    Description = $"Destination: Extension {destTarget}",
+                    Result = "Terminal",
+                    EntityType = "Extension",
+                    EntityId = destTarget,
+                    EditUrl = $"/extensions/edit/{serverId}/{destTarget}",
+                    DialplanLines = [$"exten => s,n,Dial(PJSIP/{destTarget})"],
+                });
+                break;
+
+            case "queue":
+                steps.Add(new CallFlowTraceStep
+                {
+                    StepNumber = ++stepNum,
+                    Description = $"Destination: Queue '{destTarget}'",
+                    Result = "Terminal",
+                    EntityType = "Queue",
+                    EntityId = destTarget,
+                    EditUrl = $"/queue-config/{serverId}/{destTarget}",
+                    DialplanLines = [$"exten => s,n,Queue({destTarget})"],
+                });
+                break;
+
+            case "time_condition":
+            {
+                var visitKey = $"tc:{destTarget}";
+                if (!visited.Add(visitKey)) return; // cycle prevention
+
+                if (!tcByName.TryGetValue(destTarget, out var tc))
+                {
+                    steps.Add(new CallFlowTraceStep
+                    {
+                        StepNumber = ++stepNum,
+                        Description = $"Time condition '{destTarget}' not found",
+                        Result = "Error",
+                        EntityType = "TimeCondition",
+                        EntityId = destTarget,
+                        DialplanLines = [],
+                    });
+                    return;
+                }
+
+                steps.Add(new CallFlowTraceStep
+                {
+                    StepNumber = ++stepNum,
+                    Description = $"Enter time condition '{tc.Name}'",
+                    Result = "Entered",
+                    EntityType = "TimeCondition",
+                    EntityId = tc.Id.ToString(CultureInfo.InvariantCulture),
+                    EditUrl = $"/time-conditions/edit/{tc.Id}",
+                    DialplanLines = [$"Goto(tc-{tc.Name},s,1)"],
+                });
+
+                // Evaluate schedule
+                bool isOpen;
+                string evaluation;
+
+                if (string.Equals(overrideMode, "AllOpen", StringComparison.OrdinalIgnoreCase))
+                {
+                    isOpen = true;
+                    evaluation = "Override mode: AllOpen (forced open)";
+                }
+                else if (string.Equals(overrideMode, "AllClosed", StringComparison.OrdinalIgnoreCase))
+                {
+                    isOpen = false;
+                    evaluation = "Override mode: AllClosed (forced closed)";
+                }
+                else if (string.Equals(overrideMode, "Live", StringComparison.OrdinalIgnoreCase) &&
+                         tcOverrides.TryGetValue(tc.Name, out var overrideVal))
+                {
+                    isOpen = string.Equals(overrideVal, "OPEN", StringComparison.OrdinalIgnoreCase);
+                    evaluation = $"Live override: {overrideVal} (forced {(isOpen ? "open" : "closed")})";
+                }
+                else
+                {
+                    var state = TimeConditionService.EvaluateState(tc.Ranges, tc.Holidays, time);
+                    isOpen = state == TimeConditionState.Open;
+                    evaluation = isOpen
+                        ? $"Schedule matched at {time:ddd HH:mm} — within configured time range"
+                        : $"Schedule not matched at {time:ddd HH:mm} — outside configured time ranges";
+                }
+
+                steps.Add(new CallFlowTraceStep
+                {
+                    StepNumber = ++stepNum,
+                    Description = $"Evaluate schedule: {evaluation}",
+                    Evaluation = evaluation,
+                    Result = isOpen ? "Matched" : "NotMatched",
+                    EntityType = "TimeCondition",
+                    EntityId = tc.Id.ToString(CultureInfo.InvariantCulture),
+                    EditUrl = $"/time-conditions/edit/{tc.Id}",
+                    DialplanLines = [isOpen
+                        ? $"GotoIf($[...matches...]?{tc.MatchDestType}-{tc.MatchDest},s,1)"
+                        : $"Goto({tc.NoMatchDestType}-{tc.NoMatchDest},s,1)"],
+                });
+
+                // Follow the appropriate branch
+                if (isOpen)
+                {
+                    TraceDestination(serverId, tc.MatchDestType, tc.MatchDest,
+                        tcByName, ivrByName, tcOverrides,
+                        time, overrideMode, steps, ref stepNum, visited);
+                }
+                else
+                {
+                    TraceDestination(serverId, tc.NoMatchDestType, tc.NoMatchDest,
+                        tcByName, ivrByName, tcOverrides,
+                        time, overrideMode, steps, ref stepNum, visited);
+                }
+
+                visited.Remove(visitKey);
+                break;
+            }
+
+            case "ivr":
+            {
+                var ivrVisitKey = $"ivr:{destTarget}";
+                if (!visited.Add(ivrVisitKey)) return;
+
+                if (!ivrByName.TryGetValue(destTarget, out var ivr))
+                {
+                    steps.Add(new CallFlowTraceStep
+                    {
+                        StepNumber = ++stepNum,
+                        Description = $"IVR menu '{destTarget}' not found",
+                        Result = "Error",
+                        EntityType = "IvrMenu",
+                        EntityId = destTarget,
+                        DialplanLines = [],
+                    });
+                    return;
+                }
+
+                var optionsSummary = string.Join(", ", ivr.Items.Select(i =>
+                    $"{i.Digit}: {i.Label ?? $"{i.DestType} {i.DestTarget}"}"));
+
+                steps.Add(new CallFlowTraceStep
+                {
+                    StepNumber = ++stepNum,
+                    Description = $"Enter IVR menu '{ivr.Name}'",
+                    Evaluation = $"Options: {optionsSummary}",
+                    Result = "Entered",
+                    EntityType = "IvrMenu",
+                    EntityId = ivr.Id.ToString(CultureInfo.InvariantCulture),
+                    EditUrl = $"/ivr-menus/edit/{ivr.Id}",
+                    DialplanLines = [$"Goto(ivr-{ivr.Name},s,1)"],
+                });
+
+                visited.Remove(ivrVisitKey);
+                break;
+            }
+
+            case "voicemail":
+                steps.Add(new CallFlowTraceStep
+                {
+                    StepNumber = ++stepNum,
+                    Description = $"Destination: Voicemail {destTarget}",
+                    Result = "Terminal",
+                    EntityType = "Voicemail",
+                    EntityId = destTarget,
+                    DialplanLines = [$"exten => s,n,VoiceMail({destTarget}@default)"],
+                });
+                break;
+
+            case "hangup":
+                steps.Add(new CallFlowTraceStep
+                {
+                    StepNumber = ++stepNum,
+                    Description = "Destination: Hangup",
+                    Result = "Terminal",
+                    EntityType = "Hangup",
+                    EntityId = "hangup",
+                    DialplanLines = ["exten => s,n,Hangup()"],
+                });
+                break;
+        }
     }
 
     // -----------------------------------------------------------------------
