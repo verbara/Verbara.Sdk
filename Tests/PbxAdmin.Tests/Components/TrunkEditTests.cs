@@ -28,7 +28,8 @@ public sealed class TrunkEditTests : IDisposable
             new EventLogService(),
             Substitute.For<ICallSessionManager>(),
             new ConfigurationBuilder().Build(),
-            NullLogger<AsteriskMonitorService>.Instance);
+            NullLogger<AsteriskMonitorService>.Instance,
+            Substitute.For<IServiceProvider>());
 
         var trunkSvc = Substitute.For<ITrunkService>();
         var configOp = Substitute.For<IConfigOperationState>();
