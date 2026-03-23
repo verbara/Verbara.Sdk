@@ -1,9 +1,12 @@
 @page "/routes"
 @using PbxAdmin.Services
+@using PbxAdmin.Services.CallFlow
 @using PbxAdmin.Models
 @inject ISelectedServerService ServerSvc
 @inject RouteService RouteSvc
 @inject TimeConditionService TcSvc
+@inject CallFlowService FlowSvc
+@inject ITrunkService TrunkSvc
 @inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
 @inject IStringLocalizer<SharedStrings> L
@@ -62,6 +65,13 @@
                     <td>
                         <span class="badge @GetDestBadge(route.DestinationType)">@GetDestTypeLabel(route.DestinationType)</span>
                         @(route.DestinationLabel ?? route.Destination)
+                        @{
+                            var flowSummary = GetFlowSummary(route);
+                        }
+                        @if (flowSummary is not null)
+                        {
+                            <div class="route-flow-summary">@flowSummary</div>
+                        }
                     </td>
                     <td>
                         <span class="badge @(route.Enabled ? "badge-green" : "badge-muted")">@(route.Enabled ? L["Lbl_Enabled"] : L["Lbl_Disabled"])</span>
@@ -101,21 +111,45 @@ else
                 <tr>
                     <td>@route.Priority</td>
                     <td>@route.Name</td>
-                    <td><code>@route.DialPattern</code></td>
                     <td>
-                        @foreach (var trunk in route.Trunks.OrderBy(t => t.Sequence))
+                        <code>@route.DialPattern</code>
+                        @{
+                            var humanDesc = DialPatternHumanizer.Describe(route.DialPattern ?? "");
+                        }
+                        @if (!string.IsNullOrEmpty(humanDesc) && humanDesc != (route.DialPattern ?? ""))
                         {
-                            <span class="badge badge-blue" style="margin-right: 0.25rem;">@trunk.TrunkName</span>
+                            <div class="text-muted" style="font-size: 0.78rem;">@humanDesc</div>
+                        }
+                    </td>
+                    <td>
+                        @{
+                            var orderedTrunks = route.Trunks.OrderBy(t => t.Sequence).ToList();
+                        }
+                        @for (var i = 0; i < orderedTrunks.Count; i++)
+                        {
+                            var trunk = orderedTrunks[i];
+                            var isUp = _trunkStatus.TryGetValue(trunk.TrunkName, out var registered) && registered;
+                            @if (i > 0)
+                            {
+                                <span style="margin: 0 0.15rem; color: var(--text-muted);">&rarr;</span>
+                            }
+                            <span class="badge badge-blue" style="margin-right: 0.15rem;">@(i + 1). @trunk.TrunkName <span class="trunk-dot @(isUp ? "dot-green" : "dot-red")"></span></span>
                         }
                     </td>
                     <td>
                         @{
                             var prepend = _outboundConfigs.TryGetValue(route.Id, out var cfg) ? cfg.Prepend : null;
                             var prefix = cfg?.Prefix;
+                            var preview = NumberManipulator.Preview(prefix, prepend);
                         }
-                        @if (!string.IsNullOrEmpty(prepend)) { <span>P: @prepend</span> }
-                        @if (!string.IsNullOrEmpty(prefix)) { <span style="margin-left: 0.25rem;">X: @prefix</span> }
-                        @if (string.IsNullOrEmpty(prepend) && string.IsNullOrEmpty(prefix)) { <span class="text-muted">—</span> }
+                        @if (!string.IsNullOrEmpty(preview))
+                        {
+                            <code style="font-size: 0.8rem;">@preview</code>
+                        }
+                        else
+                        {
+                            <span class="text-muted">&mdash;</span>
+                        }
                     </td>
                     <td>
                         <span class="badge @(route.Enabled ? "badge-green" : "badge-muted")">@(route.Enabled ? L["Lbl_Enabled"] : L["Lbl_Disabled"])</span>
@@ -165,6 +199,10 @@ else
     .badge-green { background: #22c55e22; color: #4ade80; }
     .badge-blue { background: #3b82f622; color: #60a5fa; }
     .badge-purple { background: #a855f722; color: #c084fc; }
+    .trunk-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-left: 4px; vertical-align: middle; }
+    .dot-green { background: #4ade80; }
+    .dot-red { background: #f87171; }
+    .route-flow-summary { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem; }
 </style>
 
 @code {
@@ -172,6 +210,8 @@ else
     private List<InboundRouteViewModel> _inbound = [];
     private List<OutboundRouteViewModel> _outbound = [];
     private Dictionary<int, OutboundRouteConfig> _outboundConfigs = new();
+    private Dictionary<string, bool> _trunkStatus = new(StringComparer.OrdinalIgnoreCase);
+    private CallFlowGraph? _graph;
     private string? _deletingName;
     private int _deletingId;
     private bool _deletingIsInbound;
@@ -202,6 +242,16 @@ else
             var cfg = await RouteSvc.GetOutboundRouteAsync(ob.Id);
             if (cfg is not null) _outboundConfigs[ob.Id] = cfg;
         }
+
+        // Load trunk status for health indicators
+        var trunks = await TrunkSvc.GetTrunksAsync(serverId);
+        _trunkStatus = trunks.ToDictionary(
+            t => t.Name,
+            t => t.Status == TrunkStatus.Registered,
+            StringComparer.OrdinalIgnoreCase);
+
+        // Load call flow graph for inbound flow summaries
+        _graph = await FlowSvc.BuildFlowAsync(serverId);
     }
 
     private void ConfirmDeleteInbound(InboundRouteViewModel route)
@@ -250,6 +300,32 @@ else
             Toast.Show(L["Toast_Error"], ToastLevel.Error, ex.Message);
         }
     }
+
+    private string? GetFlowSummary(InboundRouteViewModel route)
+    {
+        if (_graph is null) return null;
+        var did = _graph.InboundFlows.FirstOrDefault(d =>
+            string.Equals(d.RouteName, route.Name, StringComparison.OrdinalIgnoreCase));
+        if (did?.Destination is null) return null;
+        return did.Destination switch
+        {
+            TimeConditionNode tc => $"\u2192 TC {tc.Label}: Open \u2192 {DescribeNode(tc.OpenBranch)} / Closed \u2192 {DescribeNode(tc.ClosedBranch)}",
+            IvrNode ivr => $"\u2192 IVR {ivr.Label} ({ivr.Options.Count} options)",
+            QueueNode q => $"\u2192 Queue {q.Label}",
+            ExtensionNode ext => $"\u2192 Ext {ext.Number}",
+            _ => null
+        };
+    }
+
+    private static string DescribeNode(CallFlowNode? node) => node switch
+    {
+        QueueNode q => $"Queue {q.Label}",
+        ExtensionNode ext => $"Ext {ext.Number}",
+        IvrNode ivr => $"IVR {ivr.Label}",
+        VoicemailNode vm => $"VM {vm.Extension}",
+        HangupNode => "Hangup",
+        _ => "?"
+    };
 
     private static string GetDestBadge(string type) => type switch
     {
