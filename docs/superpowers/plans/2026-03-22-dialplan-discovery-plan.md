@@ -144,13 +144,25 @@ git commit -m "feat(dialplan): add DialplanSnapshot model types"
 - [ ] **Step 1: Write discovery service tests**
 
 Test scenarios:
+
+**Snapshot building (from ListDialplanEvent list):**
 - `BuildSnapshot_ShouldGroupEventsByContext` — given a list of `ListDialplanEvent`, builds correct `DialplanSnapshot` with contexts, extensions, priorities
 - `BuildSnapshot_ShouldDetectSystemContexts` — contexts from `func_periodic_hook`, `res_parking` are marked `IsSystem = true`
 - `BuildSnapshot_ShouldParseIncludes` — events with `IncludeContext` populate the `Includes` list
 - `BuildSnapshot_ShouldParseLabels` — events with `ExtensionLabel` populate `Label` on priorities
+- `BuildSnapshot_ShouldHandleEmptyEventList` — empty list returns snapshot with zero contexts
+- `BuildSnapshot_ShouldSkipEventsWithNullContext` — events with null Context are skipped gracefully
+- `BuildSnapshot_RealtimeMode_ShouldMergeDbContexts` — contexts from SQL `SELECT DISTINCT context` are merged with AMI results
+
+**Filtering and lookup:**
 - `GetUserContextsAsync_ShouldFilterSystemContexts` — only returns contexts where `IsSystem == false`
-- `ContextExistsAsync_ShouldReturnCorrectResult` — true for known context, false for unknown
+- `ContextExistsAsync_ShouldReturnTrue_WhenContextKnown` — true for known context
+- `ContextExistsAsync_ShouldReturnFalse_WhenContextUnknown` — false for unknown
+
+**Cache behavior:**
 - `Cache_ShouldReturnStaleData_WhenWithinTtl` — second call within TTL doesn't re-query AMI
+- `Cache_ShouldRefresh_WhenTtlExpired` — call after TTL triggers new AMI query
+- `RefreshAsync_ShouldForceImmediateReload` — ignores TTL, rebuilds snapshot
 
 **Test helper:** Create a mock `IConfigProviderResolver` + `IConfigProvider` that returns a predefined set of `ListDialplanEvent` objects. Since `ShowDialplanAction` uses `SendActionAsync<ShowDialplanCompleteEvent>` with event collection, the test needs to mock `AsteriskMonitorService.GetServer(serverId).ConfigConnection.SendActionAsync(...)`. This is complex to mock directly — instead, extract the event-to-snapshot logic into a `internal static` method `BuildSnapshot(string serverId, List<ListDialplanEvent> events)` that tests can call directly.
 
@@ -241,6 +253,9 @@ Test scenarios:
 - `CreateContextAsync_ShouldAddNoOpPlaceholder` — creates a `NoOp(placeholder)` extension
 - `RemoveContextAsync_ShouldCallAmiRemoveContext` — verifies AMI `dialplan remove context`
 - `AllMutations_ShouldRefreshCache` — verifies `DialplanDiscoveryService.RefreshAsync` is called after each mutation
+- `AddExtensionAsync_FileMode_ShouldRevert_WhenSaveFails` — if `dialplan save` fails, calls `dialplan remove extension` to revert
+- `AddExtensionAsync_RealtimeMode_ShouldReturnError_WhenSqlFails` — returns error tuple on SQL exception
+- `AddExtensionAsync_RealtimeMode_ShouldWarn_WhenReloadFails` — returns success with warning when `dialplan reload` fails but DB write succeeded
 
 Mock pattern: mock `IConfigProviderResolver` to return a mock `IConfigProvider` with `ExecuteCommandAsync` that records calls. Mock `DialplanDiscoveryService.RefreshAsync`. For Realtime tests, use NSubstitute for the connection string from `IConfiguration`.
 
@@ -341,17 +356,40 @@ if (discoveryService is not null)
     await discoveryService.RefreshAsync(serverId, ct);
 ```
 
-- [ ] **Step 3: Build and run all tests**
+- [ ] **Step 3: Hook initial refresh into AsteriskMonitorService connection lifecycle**
+
+In `AsteriskMonitorService`, after successfully connecting to a server (where `MonitorServiceLog.Connected` is logged), add a call to refresh the dialplan cache. Add `DialplanDiscoveryService?` as a nullable constructor parameter (backward compatible). After the server connects, call:
+```csharp
+if (_discoveryService is not null)
+    _ = _discoveryService.RefreshAsync(serverId); // fire-and-forget, non-blocking
+```
+
+This ensures the cache is populated on startup without blocking the connection flow.
+
+- [ ] **Step 4: Add context validation to ExtensionService**
+
+In `ExtensionService`, add nullable `DialplanDiscoveryService?` constructor parameter. In `CreateExtensionAsync` and `UpdateExtensionAsync`, after existing validations, add context warning:
+```csharp
+if (_discoveryService is not null && !await _discoveryService.ContextExistsAsync(serverId, config.Context))
+    // Don't block — warn but allow saving (context might be created later)
+    // Log warning
+```
+
+This is a soft validation: it logs a warning but does not reject the operation (per spec section 6.2: "warn the user but allow saving").
+
+- [ ] **Step 5: Build and run all tests**
 
 Run: `dotnet build Asterisk.Sdk.slnx && dotnet test Tests/PbxAdmin.Tests/`
 Expected: 0 errors, 0 warnings, all tests pass
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add Examples/PbxAdmin/Program.cs \
-  Examples/PbxAdmin/Services/Dialplan/DialplanRegenerator.cs
-git commit -m "feat(dialplan): register discovery/editor services and integrate with regenerator"
+  Examples/PbxAdmin/Services/Dialplan/DialplanRegenerator.cs \
+  Examples/PbxAdmin/Services/AsteriskMonitorService.cs \
+  Examples/PbxAdmin/Services/ExtensionService.cs
+git commit -m "feat(dialplan): register services, hook startup refresh, add context validation"
 ```
 
 ---
@@ -360,6 +398,7 @@ git commit -m "feat(dialplan): register discovery/editor services and integrate 
 
 **Files:**
 - Create: `Examples/PbxAdmin/Components/Pages/Dialplan.razor`
+- Create: `Examples/PbxAdmin/Components/Pages/DialplanContextDetail.razor`
 - Modify: `Examples/PbxAdmin/Components/Layout/MainLayout.razor`
 - Modify: `Examples/PbxAdmin/Resources/SharedStrings.resx`
 - Modify: `Examples/PbxAdmin/Resources/SharedStrings.es.resx`
@@ -375,9 +414,9 @@ After the Time Conditions nav link (around line 34), add:
 
 Add all `DP_*` keys from spec section 5.3 to both `SharedStrings.resx` (EN) and `SharedStrings.es.resx` (ES). Also add `Lbl_System` if not present.
 
-- [ ] **Step 3: Create Dialplan.razor**
+- [ ] **Step 3: Create Dialplan.razor (left panel + page shell)**
 
-Single-file Razor component with two-panel layout. Left panel: KPI cards + context list with search/filter. Right panel: context detail (includes, included-by, extensions table with expand). Full CRUD modals.
+Page shell with two-panel layout. Left panel has context list, right panel hosts `DialplanContextDetail` component.
 
 Key sections:
 - `@page "/dialplan"`
@@ -386,15 +425,28 @@ Key sections:
 - `@inject ISelectedServerService ServerSvc`
 - `@inject IStringLocalizer<SharedStrings> L`
 - KPI row: total contexts, user contexts, total extensions
-- Context cards with Name, extension count badge, System badge
-- Context detail: includes section (add/remove), extensions table (add/edit/delete), included-by reverse lookup
+- Search/filter input for context list
+- Context cards with Name, extension count badge, System badge — click sets `_selectedContext`
 - "New Context" modal: name input → calls `EditorSvc.CreateContextAsync`
-- "Add Extension" modal: pattern, priorities list (app dropdown + appData), add/remove rows
-- "View Tree" modal: recursive include tree with cycle detection, indented with `├── └──` characters
 - "Refresh" button with `RefreshedAt` timestamp
-- "Delete Context" button (disabled if System or has IncludedBy)
+- Right panel: `<DialplanContextDetail Context="_selectedContext" ... />` when selected
 
 Follow existing PbxAdmin Razor patterns: `_loading`, `_error`, `OnInitializedAsync`, `StateHasChanged()`.
+
+- [ ] **Step 4: Create DialplanContextDetail.razor (right panel component)**
+
+Separate component for context detail, keeping the page file focused and the detail panel testable independently.
+
+Parameters: `[Parameter] DiscoveredContext? Context`, `[Parameter] EventCallback OnChanged`
+
+Sections:
+- Header: context name, CreatedBy badge, System/User badge
+- **Includes section:** list with "Remove" button + "Add Include" dropdown of other contexts
+- **Included By section:** read-only reverse lookup from parent snapshot
+- **Extensions section:** table (Pattern | Priority Count | First App | Actions), click expands priorities, "Add/Edit/Delete" buttons
+- "Add Extension" modal: pattern + priorities list (app dropdown from spec list + free text AppData), add/remove rows, up/down reorder
+- "View Tree" modal: recursive include tree with `├── └──` indentation, cycle detection (show "↻ cycle" and stop)
+- "Delete Context" button (red, disabled if System or has IncludedBy, confirmation dialog)
 
 - [ ] **Step 4: Build and verify**
 
@@ -405,6 +457,7 @@ Expected: 0 errors, 0 warnings
 
 ```bash
 git add Examples/PbxAdmin/Components/Pages/Dialplan.razor \
+  Examples/PbxAdmin/Components/Pages/DialplanContextDetail.razor \
   Examples/PbxAdmin/Components/Layout/MainLayout.razor \
   Examples/PbxAdmin/Resources/SharedStrings.resx \
   Examples/PbxAdmin/Resources/SharedStrings.es.resx
@@ -500,6 +553,7 @@ If tests fail due to `DialplanRegenerator` constructor change (new nullable para
 - [ ] **Step 4: Commit fixes (if any)**
 
 ```bash
-git add -A
+# Add only the specific test files that needed fixes
+git add Tests/PbxAdmin.Tests/
 git commit -m "test: fix regressions from dialplan discovery integration"
 ```
