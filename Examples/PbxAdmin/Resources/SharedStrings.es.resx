@@ -758,7 +758,7 @@
   <data name="Help_Password_Title" xml:space="preserve"><value>Contraseña</value></data>
   <data name="Help_Password" xml:space="preserve"><value>La clave que el teléfono usa para registrarse en la central. Use una contraseña fuerte y aleatoria (el botón Generar le ayuda). Mínimo 8 caracteres.</value></data>
   <data name="Help_Context_Title" xml:space="preserve"><value>Contexto</value></data>
-  <data name="Help_Context" xml:space="preserve"><value>Controla qué llamadas puede hacer este teléfono. 'from-internal' permite llamar a otras extensiones y líneas externas. Piense en ello como un grupo de permisos.</value></data>
+  <data name="Help_Context" xml:space="preserve"><value>Controla qué llamadas puede hacer este teléfono. 'default' permite llamar a otras extensiones y líneas externas. Piense en ello como un grupo de permisos.</value></data>
   <data name="Help_CallGroup_Title" xml:space="preserve"><value>Grupo de Llamada</value></data>
   <data name="Help_CallGroup" xml:space="preserve"><value>Número de grupo para captura de llamadas. Los teléfonos en el mismo grupo pueden contestar las llamadas de los demás. Normalmente '1' para la oficina principal.</value></data>
   <data name="Help_PickupGroup_Title" xml:space="preserve"><value>Grupo de Captura</value></data>
@@ -838,8 +838,8 @@
   <data name="Glossary_Extension_Category" xml:space="preserve"><value>Básico</value></data>
 
   <data name="Glossary_Context" xml:space="preserve"><value>Contexto</value></data>
-  <data name="Glossary_Context_Def" xml:space="preserve"><value>Un grupo de permisos que controla qué llamadas puede hacer un teléfono. 'from-internal' permite llamadas internas y externas. Piense en los contextos como zonas de seguridad.</value></data>
-  <data name="Glossary_Context_Tip" xml:space="preserve"><value>La mayoría de extensiones usan 'from-internal'. Teléfonos de recepción podrían usar un contexto restringido.</value></data>
+  <data name="Glossary_Context_Def" xml:space="preserve"><value>Un grupo de permisos que controla qué llamadas puede hacer un teléfono. 'default' permite llamadas internas y externas. Piense en los contextos como zonas de seguridad.</value></data>
+  <data name="Glossary_Context_Tip" xml:space="preserve"><value>La mayoría de extensiones usan 'default'. Teléfonos de recepción podrían usar un contexto restringido.</value></data>
   <data name="Glossary_Context_Category" xml:space="preserve"><value>Dialplan</value></data>
 
   <data name="Glossary_Codec" xml:space="preserve"><value>Códec</value></data>

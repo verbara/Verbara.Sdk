@@ -12,7 +12,7 @@ public class ExtensionConfigTests
         var endpoint = config.ToPjsipEndpoint();
 
         endpoint["type"].Should().Be("endpoint");
-        endpoint["context"].Should().Be("from-internal");
+        endpoint["context"].Should().Be("default");
         endpoint["disallow"].Should().Be("all");
         endpoint["allow"].Should().Be("ulaw,alaw");
         endpoint["aors"].Should().Be("1001-aor");
@@ -92,7 +92,7 @@ public class ExtensionConfigTests
         peer["type"].Should().Be("friend");
         peer["host"].Should().Be("dynamic");
         peer["secret"].Should().Be("secret123");
-        peer["context"].Should().Be("from-internal");
+        peer["context"].Should().Be("default");
         peer["callerid"].Should().Be("\"Test User\" <1001>");
     }
 
@@ -107,7 +107,7 @@ public class ExtensionConfigTests
         peer["type"].Should().Be("friend");
         peer["host"].Should().Be("dynamic");
         peer["secret"].Should().Be("secret123");
-        peer["context"].Should().Be("from-internal");
+        peer["context"].Should().Be("default");
         peer.Should().NotContainKey("trunk");
     }
 
@@ -117,7 +117,7 @@ public class ExtensionConfigTests
         var endpoint = new Dictionary<string, string>
         {
             ["type"] = "endpoint",
-            ["context"] = "from-internal",
+            ["context"] = "default",
             ["allow"] = "ulaw,alaw",
             ["dtmf_mode"] = "rfc4733",
             ["transport"] = "transport-udp",
@@ -148,7 +148,7 @@ public class ExtensionConfigTests
         config.Technology.Should().Be(ExtensionTechnology.PjSip);
         config.Name.Should().Be("Test User");
         config.Password.Should().Be("secret123");
-        config.Context.Should().Be("from-internal");
+        config.Context.Should().Be("default");
         config.DirectMedia.Should().BeTrue();
         config.CallGroup.Should().Be("1");
         config.PickupGroup.Should().Be("2");
@@ -173,7 +173,7 @@ public class ExtensionConfigTests
         restored.Technology.Should().Be(ExtensionTechnology.PjSip);
         restored.Name.Should().Be("Test User");
         restored.Password.Should().Be("secret123");
-        restored.Context.Should().Be("from-internal");
+        restored.Context.Should().Be("default");
         restored.Codecs.Should().Be("ulaw,alaw");
         restored.CallGroup.Should().Be("1");
         restored.PickupGroup.Should().Be("2");
@@ -188,7 +188,7 @@ public class ExtensionConfigTests
             ["type"] = "friend",
             ["host"] = "dynamic",
             ["secret"] = "secret123",
-            ["context"] = "from-internal",
+            ["context"] = "default",
             ["allow"] = "ulaw,alaw",
             ["dtmfmode"] = "rfc4733",
             ["callerid"] = "\"Test User\" <1001>",
@@ -204,7 +204,7 @@ public class ExtensionConfigTests
         config.Technology.Should().Be(ExtensionTechnology.Sip);
         config.Name.Should().Be("Test User");
         config.Password.Should().Be("secret123");
-        config.Context.Should().Be("from-internal");
+        config.Context.Should().Be("default");
         config.CallGroup.Should().Be("1");
         config.PickupGroup.Should().Be("2");
         config.ForceRport.Should().BeTrue();
@@ -226,7 +226,7 @@ public class ExtensionConfigTests
         restored.Technology.Should().Be(ExtensionTechnology.Sip);
         restored.Name.Should().Be("Test User");
         restored.Password.Should().Be("secret123");
-        restored.Context.Should().Be("from-internal");
+        restored.Context.Should().Be("default");
         restored.Codecs.Should().Be("ulaw,alaw");
         restored.DirectMedia.Should().BeFalse();
     }
@@ -243,7 +243,7 @@ public class ExtensionConfigTests
         restored.Extension.Should().Be("1001");
         restored.Technology.Should().Be(ExtensionTechnology.Iax2);
         restored.Password.Should().Be("secret123");
-        restored.Context.Should().Be("from-internal");
+        restored.Context.Should().Be("default");
         restored.Codecs.Should().Be("ulaw,alaw");
     }
 
@@ -266,7 +266,7 @@ public class ExtensionConfigTests
         Name = "Test User",
         Technology = ExtensionTechnology.PjSip,
         Password = "secret123",
-        Context = "from-internal",
+        Context = "default",
         Codecs = "ulaw,alaw",
         DtmfMode = "rfc4733",
         Transport = "udp",

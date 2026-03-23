@@ -4,6 +4,8 @@ namespace PbxAdmin.Models;
 
 public sealed class ExtensionConfig
 {
+    private const string DefaultContext = "default";
+
     // Identity
     public string Extension { get; set; } = "";
     public string? Name { get; set; }
@@ -13,7 +15,7 @@ public sealed class ExtensionConfig
     public string? Password { get; set; }
 
     // Dialplan
-    public string Context { get; set; } = "from-internal";
+    public string Context { get; set; } = DefaultContext;
     public string? CallGroup { get; set; }
     public string? PickupGroup { get; set; }
 
@@ -157,7 +159,7 @@ public sealed class ExtensionConfig
 
         if (endpoint is not null)
         {
-            config.Context = endpoint.GetValueOrDefault("context", "from-internal");
+            config.Context = endpoint.GetValueOrDefault("context", DefaultContext);
             config.Codecs = endpoint.GetValueOrDefault("allow", "ulaw,alaw");
             config.DtmfMode = endpoint.GetValueOrDefault("dtmf_mode", "rfc4733");
             config.ForceRport = endpoint.GetValueOrDefault("force_rport", "no") == "yes";
@@ -193,7 +195,7 @@ public sealed class ExtensionConfig
             Extension = name,
             Technology = ExtensionTechnology.Sip,
             Password = section.GetValueOrDefault("secret", ""),
-            Context = section.GetValueOrDefault("context", "from-internal"),
+            Context = section.GetValueOrDefault("context", DefaultContext),
             Codecs = section.GetValueOrDefault("allow", "ulaw,alaw"),
             DtmfMode = section.GetValueOrDefault("dtmfmode", "rfc4733"),
         };
@@ -221,7 +223,7 @@ public sealed class ExtensionConfig
             Extension = name,
             Technology = ExtensionTechnology.Iax2,
             Password = section.GetValueOrDefault("secret", ""),
-            Context = section.GetValueOrDefault("context", "from-internal"),
+            Context = section.GetValueOrDefault("context", DefaultContext),
             Codecs = section.GetValueOrDefault("allow", "ulaw,alaw"),
         };
 

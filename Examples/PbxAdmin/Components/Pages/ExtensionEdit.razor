@@ -148,7 +148,7 @@ else
         <div class="form-grid">
             <div class="form-field">
                 <label class="form-label">@L["Lbl_Context"] <HelpIcon HelpKey="Context" /></label>
-                <input class="input" @bind="_config.Context" placeholder="from-internal" />
+                <input class="input" @bind="_config.Context" placeholder="default" />
             </div>
             <div class="form-field">
                 <label class="form-label">@L["ExtEdit_CallGroup"] <HelpIcon HelpKey="CallGroup" /></label>
@@ -318,7 +318,7 @@ else
                 _config.Extension = detail.Extension;
                 _config.Name = detail.Name;
                 _config.Technology = detail.Technology;
-                _config.Context = detail.Context ?? "from-internal";
+                _config.Context = detail.Context ?? "default";
                 _config.CallGroup = detail.CallGroup;
                 _config.PickupGroup = detail.PickupGroup;
                 _config.Codecs = detail.Codecs ?? "ulaw,alaw";

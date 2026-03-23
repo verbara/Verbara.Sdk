@@ -758,7 +758,7 @@
   <data name="Help_Password_Title" xml:space="preserve"><value>Password</value></data>
   <data name="Help_Password" xml:space="preserve"><value>The secret the phone uses to register with the PBX. Use a strong, random password (the Generate button helps). Minimum 8 characters.</value></data>
   <data name="Help_Context_Title" xml:space="preserve"><value>Context</value></data>
-  <data name="Help_Context" xml:space="preserve"><value>Controls which calls this phone can make. 'from-internal' means it can call other extensions and outside lines. Think of it as a permission group.</value></data>
+  <data name="Help_Context" xml:space="preserve"><value>Controls which calls this phone can make. 'default' means it can call other extensions and outside lines. Think of it as a permission group.</value></data>
   <data name="Help_CallGroup_Title" xml:space="preserve"><value>Call Group</value></data>
   <data name="Help_CallGroup" xml:space="preserve"><value>Group number for call pickup. Phones in the same group can pick up each other's ringing calls. Usually '1' for the main office.</value></data>
   <data name="Help_PickupGroup_Title" xml:space="preserve"><value>Pickup Group</value></data>
@@ -838,8 +838,8 @@
   <data name="Glossary_Extension_Category" xml:space="preserve"><value>Basics</value></data>
 
   <data name="Glossary_Context" xml:space="preserve"><value>Context</value></data>
-  <data name="Glossary_Context_Def" xml:space="preserve"><value>A permission group that controls what calls a phone can make. 'from-internal' allows internal and external calls. Think of contexts as security zones.</value></data>
-  <data name="Glossary_Context_Tip" xml:space="preserve"><value>Most extensions use 'from-internal'. Lobby phones might use a restricted context.</value></data>
+  <data name="Glossary_Context_Def" xml:space="preserve"><value>A permission group that controls what calls a phone can make. 'default' allows internal and external calls. Think of contexts as security zones.</value></data>
+  <data name="Glossary_Context_Tip" xml:space="preserve"><value>Most extensions use 'default'. Lobby phones might use a restricted context.</value></data>
   <data name="Glossary_Context_Category" xml:space="preserve"><value>Dialplan</value></data>
 
   <data name="Glossary_Codec" xml:space="preserve"><value>Codec</value></data>
