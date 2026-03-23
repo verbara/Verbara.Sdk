@@ -1,7 +1,9 @@
 @page "/time-conditions"
 @using PbxAdmin.Services
+@using PbxAdmin.Services.CallFlow
 @using PbxAdmin.Models
 @inject TimeConditionService TcSvc
+@inject CallFlowService FlowSvc
 @inject ISelectedServerService ServerSvc
 @inject IConfigOperationState ConfigOp
 @inject NavigationManager Nav
@@ -38,6 +40,17 @@
                     <div>Match: <span class="badge badge-green" style="font-size: 0.8rem;">@(tc.MatchDestLabel ?? tc.MatchDest)</span></div>
                     <div>No match: <span class="badge badge-muted" style="font-size: 0.8rem;">@(tc.NoMatchDestLabel ?? tc.NoMatchDest)</span></div>
                 </div>
+            </div>
+            <div class="xref-line">
+                @{ var refs = GetRefsForTc(tc.Name); }
+                @if (refs.Count > 0)
+                {
+                    <span class="text-muted">@L["XRef_UsedBy"] @string.Join(", ", refs.Select(r => r.SourceLabel))</span>
+                }
+                else
+                {
+                    <span class="xref-warning">@L["XRef_NotReferenced"]</span>
+                }
             </div>
             <div class="tc-card-actions" @onclick:stopPropagation="true">
                 <button class="btn btn-sm btn-green" @onclick="() => SetOverride(tc, true)">@L["TC_ForceOpen"]</button>
@@ -93,10 +106,13 @@
     .badge-green { background: #22c55e22; color: #4ade80; }
     .badge-orange { background: #f9731622; color: #fb923c; }
     .badge-red-state { background: #ef444422; color: #f87171; }
+    .xref-line { padding: 0.25rem 1rem 0.5rem; font-size: 0.8rem; }
+    .xref-warning { color: #fbbf24; font-size: 0.8rem; font-style: italic; }
 </style>
 
 @code {
     private List<TimeConditionViewModel> _conditions = [];
+    private CallFlowGraph? _graph;
     private TimeConditionViewModel? _deletingTc;
     private ConfirmDialog? _deleteDialog;
 
@@ -114,6 +130,7 @@
         if (serverId is null) return;
 
         _conditions = await TcSvc.GetTimeConditionsAsync(serverId);
+        _graph = await FlowSvc.BuildFlowAsync(serverId);
 
         // Enrich with override state
         var overrides = await TcSvc.GetOverridesBatchAsync(serverId);
@@ -191,4 +208,10 @@
         TimeConditionState.OverrideClosed => "OVERRIDE: CLOSED",
         _ => "Unknown"
     };
+
+    private List<CrossReference> GetRefsForTc(string name)
+    {
+        if (_graph is null) return [];
+        return CallFlowService.GetReferencesFor(_graph, "time_condition", name);
+    }
 }
