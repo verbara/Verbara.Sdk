@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using PbxAdmin.Models;
+using PbxAdmin.Services.CallFlow;
 using PbxAdmin.Services.Dialplan;
 using PbxAdmin.Services.Repositories;
 
@@ -38,17 +39,20 @@ public sealed partial class IvrMenuService
     private readonly DialplanRegenerator _regenerator;
     private readonly SystemSoundService _soundSvc;
     private readonly ILogger<IvrMenuService> _logger;
+    private readonly CallFlowService? _callFlowService;
 
     public IvrMenuService(
         IIvrMenuRepository repo,
         DialplanRegenerator regenerator,
         SystemSoundService soundSvc,
-        ILogger<IvrMenuService> logger)
+        ILogger<IvrMenuService> logger,
+        CallFlowService? callFlowService = null)
     {
         _repo = repo;
         _regenerator = regenerator;
         _soundSvc = soundSvc;
         _logger = logger;
+        _callFlowService = callFlowService;
     }
 
     // ─── Queries ───
@@ -154,6 +158,7 @@ public sealed partial class IvrMenuService
         {
             await _repo.CreateMenuAsync(config, ct);
             var (regenOk1, regenError1) = await _regenerator.RegenerateAsync(serverId, ct);
+            _callFlowService?.InvalidateCache(serverId);
             if (!regenOk1) return (true, $"Saved but: {regenError1}");
             IvrMenuServiceLog.Created(_logger, serverId, config.Name);
             return (true, null);
@@ -193,6 +198,7 @@ public sealed partial class IvrMenuService
         {
             await _repo.UpdateMenuAsync(config, ct);
             var (regenOk2, regenError2) = await _regenerator.RegenerateAsync(config.ServerId, ct);
+            _callFlowService?.InvalidateCache(config.ServerId);
             if (!regenOk2) return (true, $"Saved but: {regenError2}");
             IvrMenuServiceLog.Updated(_logger, config.ServerId, config.Name);
             return (true, null);
@@ -214,6 +220,7 @@ public sealed partial class IvrMenuService
         {
             await _repo.DeleteMenuAsync(id, ct);
             var (regenOk3, regenError3) = await _regenerator.RegenerateAsync(serverId, ct);
+            _callFlowService?.InvalidateCache(serverId);
             if (!regenOk3) return (true, $"Saved but: {regenError3}");
             IvrMenuServiceLog.Deleted(_logger, serverId, id);
             return (true, null);
