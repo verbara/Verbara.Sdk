@@ -67,6 +67,8 @@ builder.Services.AddSingleton<QueueService>();
 builder.Services.AddSingleton<IRouteRepositoryResolver, RouteRepositoryResolver>();
 builder.Services.AddSingleton<IDialplanProviderResolver, DialplanProviderResolver>();
 builder.Services.AddSingleton<DialplanRegenerator>();
+builder.Services.AddSingleton<DialplanDiscoveryService>();
+builder.Services.AddSingleton<DialplanEditorService>();
 builder.Services.AddSingleton<RouteService>();
 builder.Services.AddSingleton<TimeConditionService>();
 
