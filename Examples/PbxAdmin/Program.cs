@@ -3,6 +3,7 @@ using PbxAdmin;
 using PbxAdmin.Services;
 using PbxAdmin.Services.Repositories;
 using PbxAdmin.Services.Dialplan;
+using PbxAdmin.Services.CallFlow;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Localization;
@@ -69,6 +70,7 @@ builder.Services.AddSingleton<IDialplanProviderResolver, DialplanProviderResolve
 builder.Services.AddSingleton<DialplanRegenerator>();
 builder.Services.AddSingleton<DialplanDiscoveryService>();
 builder.Services.AddSingleton<DialplanEditorService>();
+builder.Services.AddSingleton<CallFlowService>();
 builder.Services.AddSingleton<RouteService>();
 builder.Services.AddSingleton<TimeConditionService>();
 

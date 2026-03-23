@@ -1237,4 +1237,29 @@
   <data name="DP_LastRefresh" xml:space="preserve"><value>Last refresh</value></data>
   <data name="DP_SelectContext" xml:space="preserve"><value>Select a context from the list to view details.</value></data>
   <data name="DP_IncludeNotSupported" xml:space="preserve"><value>Include management is not supported in Realtime mode.</value></data>
+  <data name="Nav_CallFlow" xml:space="preserve"><value>Call Flow</value></data>
+  <data name="Nav_AdvDialplan" xml:space="preserve"><value>Adv. Dialplan</value></data>
+  <data name="CF_Title" xml:space="preserve"><value>Call Flow</value></data>
+  <data name="CF_Heading" xml:space="preserve"><value>Call Flow Overview</value></data>
+  <data name="CF_ActiveDids" xml:space="preserve"><value>Active DIDs</value></data>
+  <data name="CF_TcStatus" xml:space="preserve"><value>Time Conditions</value></data>
+  <data name="CF_QueueHealth" xml:space="preserve"><value>Queue Health</value></data>
+  <data name="CF_TrunkStatus" xml:space="preserve"><value>Trunk Status</value></data>
+  <data name="CF_Open" xml:space="preserve"><value>open</value></data>
+  <data name="CF_Closed" xml:space="preserve"><value>closed</value></data>
+  <data name="CF_Override" xml:space="preserve"><value>override</value></data>
+  <data name="CF_Healthy" xml:space="preserve"><value>healthy</value></data>
+  <data name="CF_Empty" xml:space="preserve"><value>empty</value></data>
+  <data name="CF_Up" xml:space="preserve"><value>registered</value></data>
+  <data name="CF_Down" xml:space="preserve"><value>down</value></data>
+  <data name="CF_HealthWarnings" xml:space="preserve"><value>Health Warnings</value></data>
+  <data name="CF_NoWarnings" xml:space="preserve"><value>All systems healthy. No issues detected.</value></data>
+  <data name="CF_InboundFlow" xml:space="preserve"><value>Inbound Call Flow</value></data>
+  <data name="CF_SearchDids" xml:space="preserve"><value>Search DIDs...</value></data>
+  <data name="CF_SelectDid" xml:space="preserve"><value>Select an inbound route to view its call flow.</value></data>
+  <data name="CF_NoDids" xml:space="preserve"><value>No inbound routes configured.</value></data>
+  <data name="CF_ShowDialplan" xml:space="preserve"><value>Show dialplan</value></data>
+  <data name="CF_HideDialplan" xml:space="preserve"><value>Hide dialplan</value></data>
+  <data name="CF_EditEntity" xml:space="preserve"><value>Edit</value></data>
+  <data name="CF_FlowFor" xml:space="preserve"><value>Call Flow for</value></data>
 </root>
