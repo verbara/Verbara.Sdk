@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using PbxAdmin.Models;
+using Microsoft.Extensions.DependencyInjection;
 using PbxAdmin.Services.CallFlow;
 using PbxAdmin.Services.Dialplan;
 using PbxAdmin.Services.Repositories;
@@ -39,20 +40,20 @@ public sealed partial class RouteService
     private readonly DialplanRegenerator _regenerator;
     private readonly AsteriskMonitorService _monitor;
     private readonly ILogger<RouteService> _logger;
-    private readonly CallFlowService? _callFlowService;
+    private readonly IServiceProvider _serviceProvider;
 
     public RouteService(
         IRouteRepositoryResolver repoResolver,
         DialplanRegenerator regenerator,
         AsteriskMonitorService monitor,
         ILogger<RouteService> logger,
-        CallFlowService? callFlowService = null)
+        IServiceProvider serviceProvider)
     {
         _repoResolver = repoResolver;
         _regenerator = regenerator;
         _monitor = monitor;
         _logger = logger;
-        _callFlowService = callFlowService;
+        _serviceProvider = serviceProvider;
     }
 
     // -----------------------------------------------------------------------
@@ -294,7 +295,7 @@ public sealed partial class RouteService
     private async Task<(bool, string?)> RegenerateDialplanAsync(string serverId, CancellationToken ct)
     {
         var result = await _regenerator.RegenerateAsync(serverId, ct);
-        _callFlowService?.InvalidateCache(serverId);
+        _serviceProvider.GetService<CallFlowService>()?.InvalidateCache(serverId);
         return result;
     }
 }
