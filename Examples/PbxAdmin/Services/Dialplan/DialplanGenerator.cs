@@ -14,6 +14,8 @@ internal static class DialplanGenerator
         GenerateTimeConditions(data.TimeConditions, lines);
         if (data.IvrMenus is not null)
             GenerateIvrMenus(data.IvrMenus, lines);
+        if (data.CosContexts is not null)
+            lines.AddRange(data.CosContexts);
         return lines;
     }
 
