@@ -1280,4 +1280,8 @@
   <data name="CF_TraceMatched" xml:space="preserve"><value>Matched</value></data>
   <data name="CF_TraceNotMatched" xml:space="preserve"><value>Not matched</value></data>
   <data name="CF_TraceSkipped" xml:space="preserve"><value>Skipped</value></data>
+  <data name="XRef_UsedBy" xml:space="preserve"><value>Used by:</value></data>
+  <data name="XRef_ReferencedBy" xml:space="preserve"><value>Referenced by:</value></data>
+  <data name="XRef_NotReferenced" xml:space="preserve"><value>Not referenced by any route</value></data>
+  <data name="XRef_ReceivesFrom" xml:space="preserve"><value>Receives calls from:</value></data>
 </root>
