@@ -70,6 +70,14 @@ builder.Services.AddSingleton<DialplanRegenerator>();
 builder.Services.AddSingleton<RouteService>();
 builder.Services.AddSingleton<TimeConditionService>();
 
+// Class-of-Service (COS)
+builder.Services.AddSingleton<ICosRepositoryResolver, CosRepositoryResolver>();
+builder.Services.AddSingleton<CosService>();
+builder.Services.AddSingleton<CosPatternGroupService>();
+builder.Services.AddSingleton<CosDialplanGenerator>();
+builder.Services.AddSingleton<CosContextDiscovery>();
+builder.Services.AddSingleton<DialSimulator>();
+
 builder.Services.AddSingleton<IQueueConfigRepository>(sp =>
 {
     var cfg = sp.GetRequiredService<IConfiguration>();

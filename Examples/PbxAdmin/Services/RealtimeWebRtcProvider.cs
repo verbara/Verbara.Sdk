@@ -2,6 +2,7 @@ using System.Globalization;
 using Dapper;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using PbxAdmin.Services.Repositories;
 
 namespace PbxAdmin.Services;
 
@@ -24,17 +25,20 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
     private readonly SoftphoneOptions _options;
     private readonly IConfiguration _configuration;
     private readonly ILogger<RealtimeWebRtcProvider> _logger;
+    private readonly ICosRepositoryResolver? _cosResolver;
 
     public RealtimeWebRtcProvider(
         IConfigProviderResolver resolver,
         IOptions<SoftphoneOptions> options,
         IConfiguration configuration,
-        ILogger<RealtimeWebRtcProvider> logger)
+        ILogger<RealtimeWebRtcProvider> logger,
+        ICosRepositoryResolver? cosResolver = null)
     {
         _resolver = resolver;
         _options = options.Value;
         _configuration = configuration;
         _logger = logger;
+        _cosResolver = cosResolver;
     }
 
     public async Task<WebRtcCredentials> ProvisionAsync(string serverId, CancellationToken ct = default)
@@ -80,7 +84,7 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
                 transport = _options.UseTls ? "transport-wss" : "transport-ws",
                 aors = extensionId,
                 auth = $"{extensionId}-auth",
-                context = _options.Context,
+                context = await ResolveCosContextAsync(serverId, ct) ?? _options.Context,
                 codecs = _options.DefaultCodecs,
             }, commandTimeout: 15, cancellationToken: ct));
 
@@ -125,6 +129,14 @@ public sealed class RealtimeWebRtcProvider : IWebRtcExtensionProvider
             RealtimeWebRtcLog.ProvisionFailed(_logger, ex, serverId, extensionId);
             throw;
         }
+    }
+
+    private async Task<string?> ResolveCosContextAsync(string serverId, CancellationToken ct)
+    {
+        if (_options.DefaultCosLevelId is null || _cosResolver is null) return null;
+        var repo = _cosResolver.GetCosRepository(serverId);
+        var level = await repo.GetLevelAsync(_options.DefaultCosLevelId.Value, ct);
+        return level?.AsteriskContext;
     }
 
     public async Task<bool> ExistsAsync(string serverId, string extensionId, CancellationToken ct = default)

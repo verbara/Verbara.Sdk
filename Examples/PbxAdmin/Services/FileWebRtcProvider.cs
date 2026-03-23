@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Options;
+using PbxAdmin.Services.Repositories;
 
 namespace PbxAdmin.Services;
 
@@ -27,6 +28,7 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
     private readonly SoftphoneOptions _options;
     private readonly IConfiguration _configuration;
     private readonly ILogger<FileWebRtcProvider> _logger;
+    private readonly ICosRepositoryResolver? _cosResolver;
 
     /// <summary>Config filename targeted by all operations in this provider.</summary>
     private const string PjsipConf = "pjsip.conf";
@@ -38,12 +40,14 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
         IConfigProviderResolver resolver,
         IOptions<SoftphoneOptions> options,
         IConfiguration configuration,
-        ILogger<FileWebRtcProvider> logger)
+        ILogger<FileWebRtcProvider> logger,
+        ICosRepositoryResolver? cosResolver = null)
     {
         _resolver = resolver;
         _options = options.Value;
         _configuration = configuration;
         _logger = logger;
+        _cosResolver = cosResolver;
     }
 
     public async Task<WebRtcCredentials> ProvisionAsync(string serverId, CancellationToken ct = default)
@@ -60,7 +64,8 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
             var configProvider = _resolver.GetProvider(serverId);
             var range = ExtensionService.GetExtensionRange(_configuration, serverId);
             var extensionId = await FindNextAvailableExtensionAsync(serverId, configProvider, range, ct);
-            var endpointVars = BuildEndpointVariables(extensionId);
+            var cosContext = await ResolveCosContextAsync(serverId, ct);
+            var endpointVars = BuildEndpointVariables(extensionId, cosContext);
             var authVars = BuildAuthVariables(extensionId, password);
             var aorVars = BuildAorVariables();
 
@@ -98,14 +103,14 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
     // Variable builders
     // -----------------------------------------------------------------------
 
-    private Dictionary<string, string> BuildEndpointVariables(string extensionId) =>
+    private Dictionary<string, string> BuildEndpointVariables(string extensionId, string? cosContext = null) =>
         new(StringComparer.OrdinalIgnoreCase)
         {
             ["type"] = "endpoint",
             ["transport"] = _options.UseTls ? "transport-wss" : "transport-ws",
             ["aors"] = extensionId,
             ["auth"] = $"{extensionId}-auth",
-            ["context"] = _options.Context,
+            ["context"] = cosContext ?? _options.Context,
             ["disallow"] = "all",
             ["allow"] = _options.DefaultCodecs,
             ["direct_media"] = "no",
@@ -170,6 +175,14 @@ public sealed class FileWebRtcProvider : IWebRtcExtensionProvider
         sb.AppendLine("remove_existing=yes");
 
         return sb.ToString();
+    }
+
+    private async Task<string?> ResolveCosContextAsync(string serverId, CancellationToken ct)
+    {
+        if (_options.DefaultCosLevelId is null || _cosResolver is null) return null;
+        var repo = _cosResolver.GetCosRepository(serverId);
+        var level = await repo.GetLevelAsync(_options.DefaultCosLevelId.Value, ct);
+        return level?.AsteriskContext;
     }
 
     // -----------------------------------------------------------------------

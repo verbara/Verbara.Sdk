@@ -8,4 +8,5 @@ public sealed class SoftphoneOptions
     public bool UseTls { get; set; }
     public string DefaultCodecs { get; set; } = "opus,ulaw";
     public string Context { get; set; } = "default";
+    public int? DefaultCosLevelId { get; set; }
 }

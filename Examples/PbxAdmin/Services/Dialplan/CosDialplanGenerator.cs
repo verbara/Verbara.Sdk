@@ -8,7 +8,7 @@ namespace PbxAdmin.Services.Dialplan;
 /// Produces pattern contexts (outbound-*), COS hierarchy contexts (cos-*),
 /// and shared utility contexts (local-extensions, services).
 /// </summary>
-internal sealed class CosDialplanGenerator(ICosRepositoryResolver repoResolver)
+public sealed class CosDialplanGenerator(ICosRepositoryResolver repoResolver)
 {
     /// <summary>
     /// Special exten value used for include directives in <see cref="DialplanLine"/>.

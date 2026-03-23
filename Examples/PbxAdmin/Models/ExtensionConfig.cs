@@ -14,6 +14,7 @@ public sealed class ExtensionConfig
 
     // Dialplan
     public string Context { get; set; } = "from-internal";
+    public int? CosLevelId { get; set; }
     public string? CallGroup { get; set; }
     public string? PickupGroup { get; set; }
 
