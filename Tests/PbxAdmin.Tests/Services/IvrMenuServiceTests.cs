@@ -341,7 +341,7 @@ public class IvrMenuServiceTests
         var regen = new DialplanRegenerator(routeRepoResolver, dialplanResolver, repo);
         var logger = Substitute.For<ILogger<IvrMenuService>>();
         var soundSvc = new SystemSoundService(Substitute.For<IConfiguration>(), new AudioFileService(NullLogger<AudioFileService>.Instance));
-        var sut = new IvrMenuService(repo, regen, soundSvc, logger);
+        var sut = new IvrMenuService(repo, regen, soundSvc, logger, Substitute.For<IServiceProvider>());
         return (sut, repo, regen);
     }
 

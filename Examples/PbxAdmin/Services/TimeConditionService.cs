@@ -3,6 +3,8 @@ using Asterisk.Sdk;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Responses;
 using PbxAdmin.Models;
+using Microsoft.Extensions.DependencyInjection;
+using PbxAdmin.Services.CallFlow;
 using PbxAdmin.Services.Dialplan;
 using PbxAdmin.Services.Repositories;
 
@@ -38,17 +40,20 @@ public sealed class TimeConditionService
     private readonly DialplanRegenerator _regenerator;
     private readonly AsteriskMonitorService _monitor;
     private readonly ILogger<TimeConditionService> _logger;
+    private readonly IServiceProvider _serviceProvider;
 
     public TimeConditionService(
         IRouteRepositoryResolver repoResolver,
         DialplanRegenerator regenerator,
         AsteriskMonitorService monitor,
-        ILogger<TimeConditionService> logger)
+        ILogger<TimeConditionService> logger,
+        IServiceProvider serviceProvider)
     {
         _repoResolver = repoResolver;
         _regenerator = regenerator;
         _monitor = monitor;
         _logger = logger;
+        _serviceProvider = serviceProvider;
     }
 
     // -----------------------------------------------------------------------
@@ -339,6 +344,8 @@ public sealed class TimeConditionService
 
     private async Task<(bool, string?)> RegenerateDialplanAsync(string serverId, CancellationToken ct)
     {
-        return await _regenerator.RegenerateAsync(serverId, ct);
+        var result = await _regenerator.RegenerateAsync(serverId, ct);
+        _serviceProvider.GetService<CallFlowService>()?.InvalidateCache(serverId);
+        return result;
     }
 }
