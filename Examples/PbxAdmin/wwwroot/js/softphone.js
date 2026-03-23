@@ -8,6 +8,7 @@ window.Softphone = {
     _audioElement: null,
     _ringbackElement: null,
     _ringbackReady: false,
+    _dtmfCtx: null,
 
     async register(wssUrl, extension, password, displayName, dotNetRef) {
         this._dotNetRef = dotNetRef;
@@ -16,6 +17,12 @@ window.Softphone = {
 
         // Pre-build ringback WAV and prime the audio element
         this._prepareRingback();
+
+        // Create AudioContext for DTMF tones — must happen during user gesture
+        try {
+            this._dtmfCtx = new AudioContext();
+            if (this._dtmfCtx.state === "suspended") this._dtmfCtx.resume();
+        } catch (e) { /* no DTMF tones available */ }
 
         try {
             const uri = SIP.UserAgent.makeURI("sip:" + extension + "@" + new URL(wssUrl).hostname);
@@ -152,6 +159,45 @@ window.Softphone = {
         this._ua = null;
         this._registerer = null;
         this._session = null;
+    },
+
+    // --- DTMF dial tones ---
+
+    _dtmfFreqs: {
+        "1": [697, 1209], "2": [697, 1336], "3": [697, 1477],
+        "4": [770, 1209], "5": [770, 1336], "6": [770, 1477],
+        "7": [852, 1209], "8": [852, 1336], "9": [852, 1477],
+        "*": [941, 1209], "0": [941, 1336], "#": [941, 1477]
+    },
+
+    playDtmfTone(digit) {
+        var ctx = this._dtmfCtx;
+        if (!ctx) return;
+        if (ctx.state === "suspended") ctx.resume();
+
+        var freqs = this._dtmfFreqs[digit];
+        if (!freqs) return;
+
+        var gain = ctx.createGain();
+        gain.gain.value = 0.15;
+        gain.connect(ctx.destination);
+
+        var osc1 = ctx.createOscillator();
+        osc1.frequency.value = freqs[0];
+        osc1.connect(gain);
+
+        var osc2 = ctx.createOscillator();
+        osc2.frequency.value = freqs[1];
+        osc2.connect(gain);
+
+        var now = ctx.currentTime;
+        osc1.start(now);
+        osc2.start(now);
+        // 150ms tone then quick fade-out
+        gain.gain.setValueAtTime(0.15, now + 0.15);
+        gain.gain.linearRampToValueAtTime(0, now + 0.18);
+        osc1.stop(now + 0.2);
+        osc2.stop(now + 0.2);
     },
 
     // --- Ringback tone ---

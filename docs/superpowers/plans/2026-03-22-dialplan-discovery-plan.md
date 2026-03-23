@@ -1,6 +1,6 @@
 # Dialplan Discovery & Editor Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add dialplan discovery, visualization, and editing to PbxAdmin so admins can see and manage Asterisk contexts without SSH access, and extension/trunk forms use validated dropdowns instead of free text.
 
@@ -47,7 +47,7 @@
 - Modify: `src/Asterisk.Sdk.Ami/Events/ListDialplanEvent.cs`
 - Modify: `src/Asterisk.Sdk.Ami/Actions/ShowDialplanAction.cs`
 
-- [ ] **Step 1: Add Context and Priority to ListDialplanEvent**
+- [x] **Step 1: Add Context and Priority to ListDialplanEvent**
 
 Add the two missing properties that Asterisk sends but the SDK doesn't map:
 
@@ -56,18 +56,18 @@ public string? Context { get; set; }
 public int? Priority { get; set; }
 ```
 
-- [ ] **Step 2: Add optional Context filter to ShowDialplanAction**
+- [x] **Step 2: Add optional Context filter to ShowDialplanAction**
 
 ```csharp
 public string? Context { get; set; }
 ```
 
-- [ ] **Step 3: Build and verify**
+- [x] **Step 3: Build and verify**
 
 Run: `dotnet build Asterisk.Sdk.slnx`
 Expected: 0 errors, 0 warnings
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/Asterisk.Sdk.Ami/Events/ListDialplanEvent.cs \
@@ -82,7 +82,7 @@ git commit -m "feat(ami): add Context and Priority to ListDialplanEvent, Context
 **Files:**
 - Create: `Examples/PbxAdmin/Models/DialplanSnapshot.cs`
 
-- [ ] **Step 1: Create model file**
+- [x] **Step 1: Create model file**
 
 ```csharp
 namespace PbxAdmin.Models;
@@ -121,12 +121,12 @@ public sealed class DialplanPriority
 
 Use `init` setters and `IReadOnlyList` since these are immutable cache objects shared across Blazor circuits.
 
-- [ ] **Step 2: Build and verify**
+- [x] **Step 2: Build and verify**
 
 Run: `dotnet build Asterisk.Sdk.slnx`
 Expected: 0 errors, 0 warnings
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add Examples/PbxAdmin/Models/DialplanSnapshot.cs
@@ -141,7 +141,7 @@ git commit -m "feat(dialplan): add DialplanSnapshot model types"
 - Create: `Examples/PbxAdmin/Services/Dialplan/DialplanDiscoveryService.cs`
 - Create: `Tests/PbxAdmin.Tests/Services/Dialplan/DialplanDiscoveryServiceTests.cs`
 
-- [ ] **Step 1: Write discovery service tests**
+- [x] **Step 1: Write discovery service tests**
 
 Test scenarios:
 
@@ -166,12 +166,12 @@ Test scenarios:
 
 **Test helper:** Create a mock `IConfigProviderResolver` + `IConfigProvider` that returns a predefined set of `ListDialplanEvent` objects. Since `ShowDialplanAction` uses `SendActionAsync<ShowDialplanCompleteEvent>` with event collection, the test needs to mock `AsteriskMonitorService.GetServer(serverId).ConfigConnection.SendActionAsync(...)`. This is complex to mock directly — instead, extract the event-to-snapshot logic into a `internal static` method `BuildSnapshot(string serverId, List<ListDialplanEvent> events)` that tests can call directly.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `dotnet test Tests/PbxAdmin.Tests/ --filter "DialplanDiscoveryService"`
 Expected: FAIL
 
-- [ ] **Step 3: Implement DialplanDiscoveryService**
+- [x] **Step 3: Implement DialplanDiscoveryService**
 
 ```csharp
 using PbxAdmin.Models;
@@ -220,12 +220,12 @@ Key methods:
 
 For Realtime mode supplement: after AMI discovery, also query `SELECT DISTINCT context FROM extensions` and merge any contexts not already in the snapshot.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `dotnet test Tests/PbxAdmin.Tests/ --filter "DialplanDiscoveryService"`
 Expected: ALL PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Examples/PbxAdmin/Services/Dialplan/DialplanDiscoveryService.cs \
@@ -241,7 +241,7 @@ git commit -m "feat(dialplan): add DialplanDiscoveryService with AMI-based disco
 - Create: `Examples/PbxAdmin/Services/Dialplan/DialplanEditorService.cs`
 - Create: `Tests/PbxAdmin.Tests/Services/Dialplan/DialplanEditorServiceTests.cs`
 
-- [ ] **Step 1: Write editor service tests**
+- [x] **Step 1: Write editor service tests**
 
 Test scenarios:
 - `AddExtensionAsync_FileMode_ShouldCallAmiCommand` — verifies AMI `dialplan add extension` is sent
@@ -259,12 +259,12 @@ Test scenarios:
 
 Mock pattern: mock `IConfigProviderResolver` to return a mock `IConfigProvider` with `ExecuteCommandAsync` that records calls. Mock `DialplanDiscoveryService.RefreshAsync`. For Realtime tests, use NSubstitute for the connection string from `IConfiguration`.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `dotnet test Tests/PbxAdmin.Tests/ --filter "DialplanEditorService"`
 Expected: FAIL
 
-- [ ] **Step 3: Implement DialplanEditorService**
+- [x] **Step 3: Implement DialplanEditorService**
 
 ```csharp
 namespace PbxAdmin.Services.Dialplan;
@@ -309,12 +309,12 @@ All methods call `_discovery.RefreshAsync(serverId)` at the end.
 
 Detect File vs Realtime: read `IConfiguration` section `Asterisk:Servers` for the matching server's `ConfigMode`.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `dotnet test Tests/PbxAdmin.Tests/ --filter "DialplanEditorService"`
 Expected: ALL PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Examples/PbxAdmin/Services/Dialplan/DialplanEditorService.cs \
@@ -330,7 +330,7 @@ git commit -m "feat(dialplan): add DialplanEditorService with dual File/Realtime
 - Modify: `Examples/PbxAdmin/Program.cs`
 - Modify: `Examples/PbxAdmin/Services/Dialplan/DialplanRegenerator.cs`
 
-- [ ] **Step 1: Register services in Program.cs**
+- [x] **Step 1: Register services in Program.cs**
 
 After existing dialplan service registrations (around line 69-71), add:
 ```csharp
@@ -338,7 +338,7 @@ builder.Services.AddSingleton<DialplanDiscoveryService>();
 builder.Services.AddSingleton<DialplanEditorService>();
 ```
 
-- [ ] **Step 2: Add DialplanDiscoveryService to DialplanRegenerator**
+- [x] **Step 2: Add DialplanDiscoveryService to DialplanRegenerator**
 
 Add nullable parameter with default (backward compatible):
 
@@ -356,7 +356,7 @@ if (discoveryService is not null)
     await discoveryService.RefreshAsync(serverId, ct);
 ```
 
-- [ ] **Step 3: Hook initial refresh into AsteriskMonitorService connection lifecycle**
+- [x] **Step 3: Hook initial refresh into AsteriskMonitorService connection lifecycle**
 
 In `AsteriskMonitorService`, after successfully connecting to a server (where `MonitorServiceLog.Connected` is logged), add a call to refresh the dialplan cache. Add `DialplanDiscoveryService?` as a nullable constructor parameter (backward compatible). After the server connects, call:
 ```csharp
@@ -366,7 +366,7 @@ if (_discoveryService is not null)
 
 This ensures the cache is populated on startup without blocking the connection flow.
 
-- [ ] **Step 4: Add context validation to ExtensionService**
+- [x] **Step 4: Add context validation to ExtensionService**
 
 In `ExtensionService`, add nullable `DialplanDiscoveryService?` constructor parameter. In `CreateExtensionAsync` and `UpdateExtensionAsync`, after existing validations, add context warning:
 ```csharp
@@ -377,12 +377,12 @@ if (_discoveryService is not null && !await _discoveryService.ContextExistsAsync
 
 This is a soft validation: it logs a warning but does not reject the operation (per spec section 6.2: "warn the user but allow saving").
 
-- [ ] **Step 5: Build and run all tests**
+- [x] **Step 5: Build and run all tests**
 
 Run: `dotnet build Asterisk.Sdk.slnx && dotnet test Tests/PbxAdmin.Tests/`
 Expected: 0 errors, 0 warnings, all tests pass
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Examples/PbxAdmin/Program.cs \
@@ -403,18 +403,18 @@ git commit -m "feat(dialplan): register services, hook startup refresh, add cont
 - Modify: `Examples/PbxAdmin/Resources/SharedStrings.resx`
 - Modify: `Examples/PbxAdmin/Resources/SharedStrings.es.resx`
 
-- [ ] **Step 1: Add nav link in MainLayout.razor**
+- [x] **Step 1: Add nav link in MainLayout.razor**
 
 After the Time Conditions nav link (around line 34), add:
 ```razor
 <NavLink href="/dialplan" class="nav-item">@L["Nav_Dialplan"]</NavLink>
 ```
 
-- [ ] **Step 2: Add localization keys**
+- [x] **Step 2: Add localization keys**
 
 Add all `DP_*` keys from spec section 5.3 to both `SharedStrings.resx` (EN) and `SharedStrings.es.resx` (ES). Also add `Lbl_System` if not present.
 
-- [ ] **Step 3: Create Dialplan.razor (left panel + page shell)**
+- [x] **Step 3: Create Dialplan.razor (left panel + page shell)**
 
 Page shell with two-panel layout. Left panel has context list, right panel hosts `DialplanContextDetail` component.
 
@@ -433,7 +433,7 @@ Key sections:
 
 Follow existing PbxAdmin Razor patterns: `_loading`, `_error`, `OnInitializedAsync`, `StateHasChanged()`.
 
-- [ ] **Step 4: Create DialplanContextDetail.razor (right panel component)**
+- [x] **Step 4: Create DialplanContextDetail.razor (right panel component)**
 
 Separate component for context detail, keeping the page file focused and the detail panel testable independently.
 
@@ -448,12 +448,12 @@ Sections:
 - "View Tree" modal: recursive include tree with `├── └──` indentation, cycle detection (show "↻ cycle" and stop)
 - "Delete Context" button (red, disabled if System or has IncludedBy, confirmation dialog)
 
-- [ ] **Step 4: Build and verify**
+- [x] **Step 4: Build and verify**
 
 Run: `dotnet build Asterisk.Sdk.slnx`
 Expected: 0 errors, 0 warnings
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Examples/PbxAdmin/Components/Pages/Dialplan.razor \
@@ -472,7 +472,7 @@ git commit -m "feat(dialplan): add Dialplan page with context viewer, editor, an
 - Modify: `Examples/PbxAdmin/Components/Pages/ExtensionEdit.razor`
 - Modify: `Examples/PbxAdmin/Components/Pages/TrunkEdit.razor`
 
-- [ ] **Step 1: Modify ExtensionEdit.razor**
+- [x] **Step 1: Modify ExtensionEdit.razor**
 
 1. Add `@inject DialplanDiscoveryService DiscoverySvc` at the top
 2. Add field: `private List<DiscoveredContext> _userContexts = [];`
@@ -505,18 +505,18 @@ git commit -m "feat(dialplan): add Dialplan page with context viewer, editor, an
 
 The fallback ensures: if contexts can't be loaded (AMI down), the current value is preserved. If the current value isn't in the discovered list, it shows with "(custom)" suffix.
 
-- [ ] **Step 2: Modify TrunkEdit.razor**
+- [x] **Step 2: Modify TrunkEdit.razor**
 
 Same pattern as ExtensionEdit. Replace context text input with dropdown. Default value `from-trunk` shows all discovered contexts.
 
-- [ ] **Step 3: Build and run all tests**
+- [x] **Step 3: Build and run all tests**
 
 Run: `dotnet build Asterisk.Sdk.slnx && dotnet test Tests/PbxAdmin.Tests/`
 Expected: ALL PASS
 
 > **Note:** If `ExtensionEditTests` fail due to missing `DialplanDiscoveryService` in DI, register a mock in the test setup.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add Examples/PbxAdmin/Components/Pages/ExtensionEdit.razor \
@@ -530,17 +530,17 @@ git commit -m "feat(dialplan): replace context text inputs with discovered conte
 
 **Files:** Any test files that need fixing
 
-- [ ] **Step 1: Run full PbxAdmin test suite**
+- [x] **Step 1: Run full PbxAdmin test suite**
 
 Run: `dotnet test Tests/PbxAdmin.Tests/`
 Expected: ALL PASS
 
-- [ ] **Step 2: Run full solution build**
+- [x] **Step 2: Run full solution build**
 
 Run: `dotnet build Asterisk.Sdk.slnx`
 Expected: 0 errors, 0 warnings
 
-- [ ] **Step 3: Fix any regressions**
+- [x] **Step 3: Fix any regressions**
 
 If tests fail due to `DialplanDiscoveryService` DI registration in bUnit tests, add mock registrations:
 ```csharp
@@ -550,7 +550,7 @@ var discoverySvc = Substitute.For<DialplanDiscoveryService>();
 
 If tests fail due to `DialplanRegenerator` constructor change (new nullable parameter), existing code should still compile since the parameter has a default value.
 
-- [ ] **Step 4: Commit fixes (if any)**
+- [x] **Step 4: Commit fixes (if any)**
 
 ```bash
 # Add only the specific test files that needed fixes
