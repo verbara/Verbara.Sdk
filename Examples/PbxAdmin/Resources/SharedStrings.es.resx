@@ -1237,4 +1237,29 @@
   <data name="DP_LastRefresh" xml:space="preserve"><value>&#218;ltima actualizaci&#243;n</value></data>
   <data name="DP_SelectContext" xml:space="preserve"><value>Seleccione un contexto de la lista para ver detalles.</value></data>
   <data name="DP_IncludeNotSupported" xml:space="preserve"><value>La gesti&#243;n de includes no est&#225; soportada en modo Realtime.</value></data>
+  <data name="Nav_CallFlow" xml:space="preserve"><value>Flujo de Llamadas</value></data>
+  <data name="Nav_AdvDialplan" xml:space="preserve"><value>Dialplan Avz.</value></data>
+  <data name="CF_Title" xml:space="preserve"><value>Flujo de Llamadas</value></data>
+  <data name="CF_Heading" xml:space="preserve"><value>Vista General del Flujo</value></data>
+  <data name="CF_ActiveDids" xml:space="preserve"><value>DIDs Activos</value></data>
+  <data name="CF_TcStatus" xml:space="preserve"><value>Condiciones de Tiempo</value></data>
+  <data name="CF_QueueHealth" xml:space="preserve"><value>Salud de Colas</value></data>
+  <data name="CF_TrunkStatus" xml:space="preserve"><value>Estado de Troncales</value></data>
+  <data name="CF_Open" xml:space="preserve"><value>abierto</value></data>
+  <data name="CF_Closed" xml:space="preserve"><value>cerrado</value></data>
+  <data name="CF_Override" xml:space="preserve"><value>override</value></data>
+  <data name="CF_Healthy" xml:space="preserve"><value>saludable</value></data>
+  <data name="CF_Empty" xml:space="preserve"><value>vac&#237;a</value></data>
+  <data name="CF_Up" xml:space="preserve"><value>registrado</value></data>
+  <data name="CF_Down" xml:space="preserve"><value>ca&#237;do</value></data>
+  <data name="CF_HealthWarnings" xml:space="preserve"><value>Alertas de Salud</value></data>
+  <data name="CF_NoWarnings" xml:space="preserve"><value>Todo en orden. No se detectaron problemas.</value></data>
+  <data name="CF_InboundFlow" xml:space="preserve"><value>Flujo de Llamadas Entrantes</value></data>
+  <data name="CF_SearchDids" xml:space="preserve"><value>Buscar DIDs...</value></data>
+  <data name="CF_SelectDid" xml:space="preserve"><value>Seleccione una ruta entrante para ver su flujo.</value></data>
+  <data name="CF_NoDids" xml:space="preserve"><value>No hay rutas entrantes configuradas.</value></data>
+  <data name="CF_ShowDialplan" xml:space="preserve"><value>Ver dialplan</value></data>
+  <data name="CF_HideDialplan" xml:space="preserve"><value>Ocultar dialplan</value></data>
+  <data name="CF_EditEntity" xml:space="preserve"><value>Editar</value></data>
+  <data name="CF_FlowFor" xml:space="preserve"><value>Flujo para</value></data>
 </root>
