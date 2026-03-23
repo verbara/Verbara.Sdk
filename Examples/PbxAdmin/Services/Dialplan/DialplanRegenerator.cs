@@ -5,7 +5,8 @@ namespace PbxAdmin.Services.Dialplan;
 public sealed class DialplanRegenerator(
     IRouteRepositoryResolver repoResolver,
     IDialplanProviderResolver dialplanResolver,
-    IIvrMenuRepository ivrRepo)
+    IIvrMenuRepository ivrRepo,
+    DialplanDiscoveryService? discoveryService = null)
 {
     public async Task<(bool Success, string? Error)> RegenerateAsync(string serverId, CancellationToken ct = default)
     {
@@ -21,6 +22,10 @@ public sealed class DialplanRegenerator(
             var provider = dialplanResolver.GetProvider(serverId);
             await provider.GenerateDialplanAsync(serverId, data, ct);
             await provider.ReloadAsync(serverId, ct);
+
+            if (discoveryService is not null)
+                await discoveryService.RefreshAsync(serverId, ct);
+
             return (true, null);
         }
         catch (Exception ex)

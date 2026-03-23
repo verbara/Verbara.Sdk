@@ -1,4 +1,5 @@
 @namespace PbxAdmin.Components.Shared
+@inject IJSRuntime JS
 
 <div class="softphone-input-wrap">
     <input class="softphone-input" value="@_number" @oninput="OnInput" placeholder="Enter number..." />
@@ -35,7 +36,11 @@
         ("*", ""), ("0", "+"), ("#", "")
     ];
 
-    private void AppendDigit(string digit) => _number += digit;
+    private async Task AppendDigit(string digit)
+    {
+        _number += digit;
+        await JS.InvokeVoidAsync("Softphone.playDtmfTone", digit);
+    }
     private void Backspace() { if (_number.Length > 0) _number = _number[..^1]; }
     private void OnInput(ChangeEventArgs e) => _number = e.Value?.ToString() ?? "";
     private async Task HandleCall() { if (_number.Length > 0) await OnCall.InvokeAsync(_number); }

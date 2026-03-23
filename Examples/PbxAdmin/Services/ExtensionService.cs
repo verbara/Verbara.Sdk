@@ -1,6 +1,7 @@
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Responses;
 using PbxAdmin.Models;
+using PbxAdmin.Services.Dialplan;
 using PbxAdmin.Services.Helpers;
 
 namespace PbxAdmin.Services;
@@ -27,6 +28,9 @@ internal static partial class ExtensionServiceLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "[EXT] Module reload failed after deleting extension {Extension}")]
     public static partial void ReloadFailedDelete(ILogger logger, string extension);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[EXT] Context '{Context}' not found in dialplan for server={ServerId}. Extension {Extension} may not route calls correctly.")]
+    public static partial void ContextNotFound(ILogger logger, string context, string serverId, string extension);
 }
 
 /// <summary>
@@ -40,12 +44,14 @@ public sealed class ExtensionService : IExtensionService
     private readonly ILogger<ExtensionService> _logger;
     private readonly VoicemailHelper _voicemail;
     private readonly DeviceFeatureHelper _features;
+    private readonly DialplanDiscoveryService? _discoveryService;
 
     public ExtensionService(
         IConfigProviderResolver resolver,
         AsteriskMonitorService monitor,
         IConfiguration configuration,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        DialplanDiscoveryService? discoveryService = null)
     {
         _resolver = resolver;
         _monitor = monitor;
@@ -53,6 +59,7 @@ public sealed class ExtensionService : IExtensionService
         _logger = loggerFactory.CreateLogger<ExtensionService>();
         _voicemail = new VoicemailHelper(resolver, loggerFactory.CreateLogger<VoicemailHelper>());
         _features = new DeviceFeatureHelper(monitor, loggerFactory.CreateLogger<DeviceFeatureHelper>());
+        _discoveryService = discoveryService;
     }
 
     // -----------------------------------------------------------------------
@@ -310,6 +317,9 @@ public sealed class ExtensionService : IExtensionService
         if (string.IsNullOrWhiteSpace(config.Codecs))
             return false;
 
+        // Soft validation: warn if context doesn't exist in dialplan
+        await WarnIfContextMissingAsync(serverId, config.Context, config.Extension, ct);
+
         var configProvider = _resolver.GetProvider(serverId);
         var filename = GetConfigFilename(config.Technology);
         bool success;
@@ -368,6 +378,9 @@ public sealed class ExtensionService : IExtensionService
                 config.Password = existing.Password;
             }
         }
+
+        // Soft validation: warn if context doesn't exist in dialplan
+        await WarnIfContextMissingAsync(serverId, config.Context, config.Extension, ct);
 
         // Delete + Create pattern
         if (!await DeleteSectionsAsync(serverId, extension, config.Technology, ct))
@@ -695,6 +708,23 @@ public sealed class ExtensionService : IExtensionService
         var endQuote = callerid.IndexOf('"', startQuote + 1);
         if (endQuote < 0) return null;
         return callerid[(startQuote + 1)..endQuote];
+    }
+
+    private async Task WarnIfContextMissingAsync(string serverId, string context, string extension, CancellationToken ct)
+    {
+        if (_discoveryService is null)
+            return;
+
+        try
+        {
+            var snapshot = await _discoveryService.GetSnapshotAsync(serverId, ct);
+            if (snapshot is not null && !DialplanDiscoveryService.ContextExists(snapshot, context))
+                ExtensionServiceLog.ContextNotFound(_logger, context, serverId, extension);
+        }
+        catch
+        {
+            // Context validation is best-effort; never block the operation
+        }
     }
 
     internal static string? ExtractIpFromContact(string? contactUri)

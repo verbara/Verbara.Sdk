@@ -2,15 +2,27 @@ FROM andrius/asterisk:22
 
 USER root
 
-# Install ODBC drivers for realtime, libopus, and codec_opus binary
+# Install ODBC drivers for realtime, libopus, codec_opus binary, and sound files
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates unixodbc odbc-postgresql libopus0 \
     && rm -rf /var/lib/apt/lists/* \
+    # codec_opus
     && cd /tmp \
     && curl -fsSL https://downloads.digium.com/pub/telephony/codec_opus/asterisk-22.0/x86-64/codec_opus-22.0_1.3.0-x86_64.tar.gz -o codec_opus.tar.gz \
     && tar xzf codec_opus.tar.gz \
     && cp codec_opus-22.0_1.3.0-x86_64/codec_opus.so /usr/lib/asterisk/modules/ \
     && cp codec_opus-22.0_1.3.0-x86_64/format_ogg_opus.so /usr/lib/asterisk/modules/ \
-    && rm -rf codec_opus.tar.gz codec_opus-22.0_1.3.0-x86_64
+    && rm -rf codec_opus.tar.gz codec_opus-22.0_1.3.0-x86_64 \
+    # Asterisk core sounds (English, ulaw + gsm + sln16)
+    && mkdir -p /var/lib/asterisk/sounds/en \
+    && cd /var/lib/asterisk/sounds/en \
+    && curl -fsSL https://downloads.asterisk.org/pub/telephony/sounds/asterisk-core-sounds-en-ulaw-current.tar.gz | tar xz \
+    && curl -fsSL https://downloads.asterisk.org/pub/telephony/sounds/asterisk-core-sounds-en-gsm-current.tar.gz | tar xz \
+    && curl -fsSL https://downloads.asterisk.org/pub/telephony/sounds/asterisk-core-sounds-en-sln16-current.tar.gz | tar xz \
+    # Asterisk extra sounds (tt-monkeys, tt-weasels, etc.)
+    && curl -fsSL https://downloads.asterisk.org/pub/telephony/sounds/asterisk-extra-sounds-en-ulaw-current.tar.gz | tar xz \
+    && curl -fsSL https://downloads.asterisk.org/pub/telephony/sounds/asterisk-extra-sounds-en-gsm-current.tar.gz | tar xz \
+    && curl -fsSL https://downloads.asterisk.org/pub/telephony/sounds/asterisk-extra-sounds-en-sln16-current.tar.gz | tar xz \
+    && chown -R asterisk:asterisk /var/lib/asterisk/sounds
 
 USER asterisk

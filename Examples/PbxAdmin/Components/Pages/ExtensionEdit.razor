@@ -1,6 +1,7 @@
 @page "/extensions/new"
 @page "/extensions/edit/{ServerId}/{Extension}"
 @using PbxAdmin.Services
+@using PbxAdmin.Services.Dialplan
 @using PbxAdmin.Models
 @inject IExtensionService ExtSvc
 @inject ISelectedServerService ServerSvc
@@ -10,6 +11,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject IExtensionTemplateService TemplateSvc
+@inject DialplanDiscoveryService DiscoverySvc
 
 <PageTitle>@(_isNew ? L["ExtEdit_NewTitle"] : L["ExtEdit_EditTitle", Extension ?? ""]) — Asterisk PBX Admin</PageTitle>
 
@@ -148,7 +150,23 @@ else
         <div class="form-grid">
             <div class="form-field">
                 <label class="form-label">@L["Lbl_Context"] <HelpIcon HelpKey="Context" /></label>
-                <input class="input" @bind="_config.Context" placeholder="from-internal" />
+                <select class="input" @bind="_config.Context">
+                    @if (_userContexts.Count == 0)
+                    {
+                        <option value="@_config.Context">@_config.Context</option>
+                    }
+                    else
+                    {
+                        @foreach (var ctx in _userContexts)
+                        {
+                            <option value="@ctx.Name">@ctx.Name (@ctx.Extensions.Count ext)</option>
+                        }
+                        @if (!_userContexts.Any(c => c.Name == _config.Context))
+                        {
+                            <option value="@_config.Context">@_config.Context (custom)</option>
+                        }
+                    }
+                </select>
             </div>
             <div class="form-field">
                 <label class="form-label">@L["ExtEdit_CallGroup"] <HelpIcon HelpKey="CallGroup" /></label>
@@ -279,6 +297,7 @@ else
     private int _rangeEnd = 999;
 
     private bool _isAdvanced;
+    private List<DiscoveredContext> _userContexts = [];
     private List<ExtensionTemplate> _templates = [];
     private bool _extTouched, _nameTouched, _pwdTouched, _codecTouched, _vmPinTouched, _cfnaTouched;
     private bool _showSaveTemplate;
@@ -318,7 +337,7 @@ else
                 _config.Extension = detail.Extension;
                 _config.Name = detail.Name;
                 _config.Technology = detail.Technology;
-                _config.Context = detail.Context ?? "from-internal";
+                _config.Context = detail.Context ?? "default";
                 _config.CallGroup = detail.CallGroup;
                 _config.PickupGroup = detail.PickupGroup;
                 _config.Codecs = detail.Codecs ?? "ulaw,alaw";
@@ -333,6 +352,14 @@ else
         }
 
         if (_isNew) _templates = (await TemplateSvc.GetAllAsync()).ToList();
+
+        // Load discovered contexts for dropdown
+        if (serverId is not null)
+        {
+            var snapshot = await DiscoverySvc.GetSnapshotAsync(serverId);
+            if (snapshot is not null)
+                _userContexts = DialplanDiscoveryService.GetUserContexts(snapshot).ToList();
+        }
 
         _loading = false;
     }
