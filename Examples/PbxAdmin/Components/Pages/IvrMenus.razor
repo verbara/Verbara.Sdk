@@ -1,7 +1,9 @@
 @page "/ivr-menus"
 @using PbxAdmin.Models
 @using PbxAdmin.Services
+@using PbxAdmin.Services.CallFlow
 @inject IvrMenuService IvrSvc
+@inject CallFlowService FlowSvc
 @inject ISelectedServerService ServerSvc
 @inject NavigationManager Nav
 @inject IStringLocalizer<SharedStrings> L
@@ -58,6 +60,17 @@ else
                         }
                     </div>
                 </div>
+                <div class="xref-line">
+                    @{ var refs = GetRefsForIvr(menu.Name); }
+                    @if (refs.Count > 0)
+                    {
+                        <span class="text-muted">@L["XRef_ReferencedBy"] @string.Join(", ", refs.Select(r => r.SourceLabel))</span>
+                    }
+                    else
+                    {
+                        <span class="xref-warning">@L["XRef_NotReferenced"]</span>
+                    }
+                </div>
                 <div class="card-footer">
                     <button class="btn btn-sm btn-danger" @onclick:stopPropagation="true"
                             @onclick="() => DeleteMenu(menu)">@L["Btn_Delete"]</button>
@@ -72,8 +85,14 @@ else
     <div class="alert alert-danger">@_error</div>
 }
 
+<style>
+    .xref-line { padding: 0.25rem 1rem 0.5rem; font-size: 0.8rem; }
+    .xref-warning { color: #fbbf24; font-size: 0.8rem; font-style: italic; }
+</style>
+
 @code {
     private List<IvrMenuViewModel> _menus = [];
+    private CallFlowGraph? _graph;
     private bool _loading = true;
     private string? _error;
 
@@ -81,12 +100,21 @@ else
     {
         var serverId = ServerSvc.SelectedServerId;
         if (serverId is not null)
+        {
             _menus = await IvrSvc.GetRootMenusAsync(serverId);
+            _graph = await FlowSvc.BuildFlowAsync(serverId);
+        }
         _loading = false;
     }
 
     private void NewMenu() => Nav.NavigateTo("/ivr-menus/edit/new");
     private void EditMenu(int id) => Nav.NavigateTo($"/ivr-menus/edit/{id}");
+
+    private List<CrossReference> GetRefsForIvr(string name)
+    {
+        if (_graph is null) return [];
+        return CallFlowService.GetReferencesFor(_graph, "ivr", name);
+    }
 
     private async Task DeleteMenu(IvrMenuViewModel menu)
     {
