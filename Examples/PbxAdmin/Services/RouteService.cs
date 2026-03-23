@@ -199,6 +199,20 @@ public sealed partial class RouteService
         return null;
     }
 
+    /// <summary>Returns all raw inbound route configs for a server. Used by CallFlowService to build the call flow graph.</summary>
+    public async Task<List<InboundRouteConfig>> GetAllInboundConfigsAsync(string serverId, CancellationToken ct = default)
+    {
+        var repo = _repoResolver.GetRepository(serverId);
+        return await repo.GetInboundRoutesAsync(serverId, ct);
+    }
+
+    /// <summary>Returns all raw outbound route configs for a server. Used by CallFlowService to build the call flow graph.</summary>
+    public async Task<List<OutboundRouteConfig>> GetAllOutboundConfigsAsync(string serverId, CancellationToken ct = default)
+    {
+        var repo = _repoResolver.GetRepository(serverId);
+        return await repo.GetOutboundRoutesAsync(serverId, ct);
+    }
+
     /// <summary>Creates an outbound route after validation.</summary>
     public async Task<(bool Success, string? Error)> CreateOutboundRouteAsync(OutboundRouteConfig config, CancellationToken ct = default)
     {
