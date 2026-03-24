@@ -116,6 +116,11 @@ public sealed class AsteriskMonitorService : IHostedService, IAsyncDisposable
                 var discoveryService = _serviceProvider.GetService<DialplanDiscoveryService>();
                 if (discoveryService is not null)
                     _ = discoveryService.RefreshAsync(id, CancellationToken.None);
+
+                // Regenerate dialplan on startup so DB-seeded IVR/routes are active
+                var regenerator = _serviceProvider.GetService<DialplanRegenerator>();
+                if (regenerator is not null)
+                    _ = regenerator.RegenerateAsync(id, CancellationToken.None);
             }
             catch (Exception ex)
             {
