@@ -10,7 +10,8 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <!-- Suppress CS1591 (missing XML comment) during initial development -->
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- RS0016/RS0037/RS0041: PublicApiAnalyzers — temporarily suppressed until API files are populated -->
+    <NoWarn>$(NoWarn);CS1591;RS0016;RS0017;RS0037;RS0041</NoWarn>
   </PropertyGroup>
 
   <!-- Native AOT readiness -->
@@ -34,6 +35,33 @@
     <PackageTags>asterisk;ami;agi;ari;voip;pbx;telephony;native-aot;sdk</PackageTags>
     <PackageVersion>1.5.0</PackageVersion>
   </PropertyGroup>
+
+  <!-- Package validation: detect binary breaking changes against baseline -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('src'))">
+    <EnablePackageValidation>true</EnablePackageValidation>
+  </PropertyGroup>
+
+  <!-- Analyzers for all projects (except SourceGenerators which targets netstandard2.0) -->
+  <ItemGroup Condition="!$(MSBuildProjectName.Contains('SourceGenerators'))">
+    <PackageReference Include="Meziantou.Analyzer" PrivateAssets="all" />
+    <PackageReference Include="IDisposableAnalyzers" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Analyzers for source projects only (exclude SourceGenerators) -->
+  <ItemGroup Condition="$(MSBuildProjectDirectory.Contains('src')) And !$(MSBuildProjectName.Contains('SourceGenerators'))">
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" Link="BannedSymbols.txt" />
+    <AdditionalFiles Include="$(MSBuildProjectDirectory)\PublicAPI.Shipped.txt" Condition="Exists('$(MSBuildProjectDirectory)\PublicAPI.Shipped.txt')" />
+    <AdditionalFiles Include="$(MSBuildProjectDirectory)\PublicAPI.Unshipped.txt" Condition="Exists('$(MSBuildProjectDirectory)\PublicAPI.Unshipped.txt')" />
+  </ItemGroup>
+
+  <!-- Analyzers and tools for test projects only -->
+  <ItemGroup Condition="$(MSBuildProjectDirectory.Contains('Tests'))">
+    <PackageReference Include="xunit.analyzers" PrivateAssets="all" />
+    <PackageReference Include="NSubstitute.Analyzers.CSharp" PrivateAssets="all" />
+  </ItemGroup>
 
   <!-- Source projects: output to src/ -->
   <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('src'))">

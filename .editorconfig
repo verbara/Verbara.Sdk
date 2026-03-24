@@ -38,6 +38,59 @@ csharp_style_conditional_delegate_call = true:warning
 # Using directives
 dotnet_sort_system_directives_first = true
 
+# Meziantou.Analyzer — rules tuned for SDK patterns
+dotnet_diagnostic.MA0048.severity = none        # File name must match type name — SDK groups related types deliberately
+dotnet_diagnostic.MA0046.severity = none        # Event delegate signature — SDK uses Asterisk protocol patterns, not EventHandler<T>
+dotnet_diagnostic.MA0016.severity = suggestion  # Collection abstractions — JSON serialization needs concrete types
+dotnet_diagnostic.MA0008.severity = suggestion  # StructLayoutAttribute — not needed for simple readonly structs
+dotnet_diagnostic.MA0004.severity = suggestion  # ConfigureAwait(false) — valid for libraries, but 676 existing calls; enforce gradually
+dotnet_diagnostic.MA0051.severity = suggestion  # Method too long — protocol handlers are intentionally verbose
+dotnet_diagnostic.MA0002.severity = suggestion  # StringComparer overload — enforce gradually
+dotnet_diagnostic.MA0006.severity = suggestion  # string.Equals — enforce gradually
+dotnet_diagnostic.MA0011.severity = suggestion  # IFormatProvider in TryParse — enforce gradually
+
+# IDisposableAnalyzers — tuned for DI-heavy SDK
+dotnet_diagnostic.IDISP001.severity = suggestion  # Dispose created — many false positives with DI/factory patterns
+dotnet_diagnostic.IDISP003.severity = suggestion  # Dispose previous before re-assign — false positives with reconnection
+dotnet_diagnostic.IDISP004.severity = suggestion  # Don't ignore created IDisposable
+dotnet_diagnostic.IDISP007.severity = none        # Don't dispose injected — too many false positives with DI
+dotnet_diagnostic.IDISP008.severity = suggestion  # Don't assign injected + created — complex ownership patterns
+dotnet_diagnostic.IDISP016.severity = warning     # Don't use disposed instance — real bug
+dotnet_diagnostic.IDISP017.severity = suggestion  # Prefer using
+dotnet_diagnostic.IDISP024.severity = suggestion  # GC.SuppressFinalize — sealed types without finalizers
+dotnet_diagnostic.IDISP026.severity = suggestion  # Sealed async disposable — base classes need inheritance
+
+# VSTHRD — threading analyzers
+dotnet_diagnostic.VSTHRD003.severity = suggestion  # Avoid awaiting foreign tasks — false positives with SDK patterns
+dotnet_diagnostic.VSTHRD100.severity = warning     # Avoid async void
+dotnet_diagnostic.VSTHRD103.severity = suggestion  # .Complete() synchronously blocks — protocol requires sync completion in some cases
+dotnet_diagnostic.VSTHRD110.severity = warning     # Observe result of async calls
+dotnet_diagnostic.VSTHRD200.severity = none        # Use Async suffix — existing API is frozen, would break semver
+
+# PublicApiAnalyzers — tuned
+dotnet_diagnostic.RS0026.severity = suggestion  # Optional parameter overloads — existing API
+
+# Examples — relaxed rules (demo code, not production)
+[Examples/**/*.cs]
+dotnet_diagnostic.MA0047.severity = none          # Type not in namespace — top-level programs
+dotnet_diagnostic.MA0061.severity = suggestion    # Default value overrides
+
+# Test projects — relaxed rules
+[{Tests/**/*.cs,*Tests/**/*.cs}]
+dotnet_diagnostic.IDISP013.severity = suggestion  # Await in using — test patterns often need this
+dotnet_diagnostic.IDISP026.severity = suggestion  # Sealed async disposable — test fixtures
+dotnet_diagnostic.IDISP002.severity = suggestion  # Dispose member — test fixtures manage lifecycle differently
+dotnet_diagnostic.IDISP006.severity = suggestion  # Implement IDisposable — test fixtures
+dotnet_diagnostic.MA0009.severity = suggestion    # Regex DoS — test code, not production
+dotnet_diagnostic.MA0023.severity = suggestion    # Regex ExplicitCapture — test code
+dotnet_diagnostic.MA0047.severity = none          # Type not in namespace — test helpers
+dotnet_diagnostic.VSTHRD105.severity = suggestion # TaskScheduler.Current — test code
+dotnet_diagnostic.IDISP024.severity = suggestion  # GC.SuppressFinalize — test fixtures without finalizers
+dotnet_diagnostic.IDISP025.severity = suggestion  # Sealed disposable — base test fixtures need inheritance
+dotnet_diagnostic.IDISP016.severity = suggestion  # Disposed instance — intentional in dispose-verification tests
+dotnet_diagnostic.VSTHRD002.severity = suggestion # Sync-over-async — xUnit attributes require sync code
+dotnet_diagnostic.MA0061.severity = suggestion    # Default value overrides — test helpers
+
 # Naming conventions
 dotnet_naming_rule.private_fields_should_be_camel_case.severity = warning
 dotnet_naming_rule.private_fields_should_be_camel_case.symbols = private_fields

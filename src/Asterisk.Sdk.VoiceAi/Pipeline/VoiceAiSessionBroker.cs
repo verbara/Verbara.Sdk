@@ -39,7 +39,9 @@ public sealed class VoiceAiSessionBroker : IHostedService
                 .AsTask()
                 .ContinueWith(
                     t => VoiceAiLog.SessionError(_logger, session.ChannelId, t.Exception!),
-                    TaskContinuationOptions.OnlyOnFaulted);
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted,
+                    TaskScheduler.Default);
             return ValueTask.CompletedTask;
         };
 

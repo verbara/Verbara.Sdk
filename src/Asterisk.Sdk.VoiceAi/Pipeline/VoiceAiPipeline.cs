@@ -328,7 +328,7 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return ValueTask.CompletedTask;
 
-        GC.SuppressFinalize(this);
+        _ttsCts?.Dispose();
         _events.OnCompleted();
         _events.Dispose();
         return ValueTask.CompletedTask;
