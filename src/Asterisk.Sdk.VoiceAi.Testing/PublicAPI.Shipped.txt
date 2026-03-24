@@ -1,1 +1,27 @@
 #nullable enable
+Asterisk.Sdk.VoiceAi.Testing.FakeConversationHandler
+Asterisk.Sdk.VoiceAi.Testing.FakeConversationHandler.CallCount.get -> int
+Asterisk.Sdk.VoiceAi.Testing.FakeConversationHandler.FakeConversationHandler() -> void
+Asterisk.Sdk.VoiceAi.Testing.FakeConversationHandler.HandleAsync(string! transcript, Asterisk.Sdk.VoiceAi.ConversationContext! context, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
+Asterisk.Sdk.VoiceAi.Testing.FakeConversationHandler.ReceivedTranscripts.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Asterisk.Sdk.VoiceAi.Testing.FakeConversationHandler.WithDelay(System.TimeSpan delay) -> Asterisk.Sdk.VoiceAi.Testing.FakeConversationHandler!
+Asterisk.Sdk.VoiceAi.Testing.FakeConversationHandler.WithResponses(System.Collections.Generic.IEnumerable<string!>! responses) -> Asterisk.Sdk.VoiceAi.Testing.FakeConversationHandler!
+Asterisk.Sdk.VoiceAi.Testing.FakeConversationHandler.WithResponse(string! response) -> Asterisk.Sdk.VoiceAi.Testing.FakeConversationHandler!
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.CallCount.get -> int
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.FakeSpeechRecognizer() -> void
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.ReceivedFrameCounts.get -> System.Collections.Generic.IReadOnlyList<int>!
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.WithDelay(System.TimeSpan delay) -> Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer!
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.WithError(System.Exception! exception, int afterCount = 0) -> Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer!
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.WithTranscripts(System.Collections.Generic.IEnumerable<string!>! transcripts) -> Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer!
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.WithTranscript(string! transcript, float confidence = 1) -> Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer!
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.CallCount.get -> int
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.FakeSpeechSynthesizer() -> void
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.SynthesizedTexts.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.WithAudio(System.ReadOnlyMemory<byte> pcmAudio) -> Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer!
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.WithDelay(System.TimeSpan delay) -> Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer!
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.WithError(System.Exception! exception, int afterCount = 0) -> Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer!
+Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.WithSilence(System.TimeSpan duration) -> Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer!
+override Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
+override Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.SynthesizeAsync(string! text, Asterisk.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!

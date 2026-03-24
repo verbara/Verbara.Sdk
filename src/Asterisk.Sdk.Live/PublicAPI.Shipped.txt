@@ -1,1 +1,370 @@
 #nullable enable
+abstract Asterisk.Sdk.Live.LiveObjectBase.Id.get -> string!
+Asterisk.Sdk.Live.Agents.AgentManager
+Asterisk.Sdk.Live.Agents.AgentManager.AgentConnected -> System.Action<string!, string?, string?>?
+Asterisk.Sdk.Live.Agents.AgentManager.AgentCount.get -> int
+Asterisk.Sdk.Live.Agents.AgentManager.AgentLoggedIn -> System.Action<Asterisk.Sdk.Live.Agents.AsteriskAgent!>?
+Asterisk.Sdk.Live.Agents.AgentManager.AgentLoggedOff -> System.Action<Asterisk.Sdk.Live.Agents.AsteriskAgent!>?
+Asterisk.Sdk.Live.Agents.AgentManager.AgentManager(Microsoft.Extensions.Logging.ILogger! logger) -> void
+Asterisk.Sdk.Live.Agents.AgentManager.Agents.get -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Live.Agents.AsteriskAgent!>!
+Asterisk.Sdk.Live.Agents.AgentManager.AgentStateChanged -> System.Action<Asterisk.Sdk.Live.Agents.AsteriskAgent!>?
+Asterisk.Sdk.Live.Agents.AgentManager.Clear() -> void
+Asterisk.Sdk.Live.Agents.AgentManager.GetAgentsByState(Asterisk.Sdk.Live.Agents.AgentState state) -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Live.Agents.AsteriskAgent!>!
+Asterisk.Sdk.Live.Agents.AgentManager.GetAgentsWhere(System.Func<Asterisk.Sdk.Live.Agents.AsteriskAgent!, bool>! predicate) -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Live.Agents.AsteriskAgent!>!
+Asterisk.Sdk.Live.Agents.AgentManager.GetById(string! agentId) -> Asterisk.Sdk.Live.Agents.AsteriskAgent?
+Asterisk.Sdk.Live.Agents.AgentManager.OnAgentComplete(string! agentId, long talkTimeSecs = 0, long holdTimeSecs = 0) -> void
+Asterisk.Sdk.Live.Agents.AgentManager.OnAgentConnect(string! agentId, string? talkingTo = null, string? linkedId = null, string? memberInterface = null) -> void
+Asterisk.Sdk.Live.Agents.AgentManager.OnAgentLogin(string! agentId, string? channel = null) -> void
+Asterisk.Sdk.Live.Agents.AgentManager.OnAgentLogoff(string! agentId) -> void
+Asterisk.Sdk.Live.Agents.AgentManager.OnAgentPaused(string! agentId, bool paused) -> void
+Asterisk.Sdk.Live.Agents.AgentManager.RegisterAgent(string! agentId, string? name = null) -> void
+Asterisk.Sdk.Live.Agents.AgentState
+Asterisk.Sdk.Live.Agents.AgentState.Available = 2 -> Asterisk.Sdk.Live.Agents.AgentState
+Asterisk.Sdk.Live.Agents.AgentState.LoggedOff = 1 -> Asterisk.Sdk.Live.Agents.AgentState
+Asterisk.Sdk.Live.Agents.AgentState.OnCall = 3 -> Asterisk.Sdk.Live.Agents.AgentState
+Asterisk.Sdk.Live.Agents.AgentState.Paused = 4 -> Asterisk.Sdk.Live.Agents.AgentState
+Asterisk.Sdk.Live.Agents.AgentState.Unknown = 0 -> Asterisk.Sdk.Live.Agents.AgentState
+Asterisk.Sdk.Live.Agents.AsteriskAgent
+Asterisk.Sdk.Live.Agents.AsteriskAgent.AgentId.get -> string!
+Asterisk.Sdk.Live.Agents.AsteriskAgent.AgentId.init -> void
+Asterisk.Sdk.Live.Agents.AsteriskAgent.AsteriskAgent() -> void
+Asterisk.Sdk.Live.Agents.AsteriskAgent.AvgTalkTimeSecs.get -> double
+Asterisk.Sdk.Live.Agents.AsteriskAgent.CallsTaken.get -> int
+Asterisk.Sdk.Live.Agents.AsteriskAgent.CallsTaken.set -> void
+Asterisk.Sdk.Live.Agents.AsteriskAgent.Channel.get -> string?
+Asterisk.Sdk.Live.Agents.AsteriskAgent.Channel.set -> void
+Asterisk.Sdk.Live.Agents.AsteriskAgent.LastCallTalkTimeSecs.get -> long
+Asterisk.Sdk.Live.Agents.AsteriskAgent.LastCallTalkTimeSecs.set -> void
+Asterisk.Sdk.Live.Agents.AsteriskAgent.LastStateChangeAt.get -> System.DateTimeOffset?
+Asterisk.Sdk.Live.Agents.AsteriskAgent.LastStateChangeAt.set -> void
+Asterisk.Sdk.Live.Agents.AsteriskAgent.LoggedInAt.get -> System.DateTimeOffset?
+Asterisk.Sdk.Live.Agents.AsteriskAgent.LoggedInAt.set -> void
+Asterisk.Sdk.Live.Agents.AsteriskAgent.Name.get -> string?
+Asterisk.Sdk.Live.Agents.AsteriskAgent.Name.set -> void
+Asterisk.Sdk.Live.Agents.AsteriskAgent.SetName(string! name) -> void
+Asterisk.Sdk.Live.Agents.AsteriskAgent.StateElapsed.get -> System.TimeSpan
+Asterisk.Sdk.Live.Agents.AsteriskAgent.State.get -> Asterisk.Sdk.Live.Agents.AgentState
+Asterisk.Sdk.Live.Agents.AsteriskAgent.State.set -> void
+Asterisk.Sdk.Live.Agents.AsteriskAgent.TalkingTo.get -> string?
+Asterisk.Sdk.Live.Agents.AsteriskAgent.TalkingTo.set -> void
+Asterisk.Sdk.Live.Agents.AsteriskAgent.TotalHoldTimeSecs.get -> long
+Asterisk.Sdk.Live.Agents.AsteriskAgent.TotalHoldTimeSecs.set -> void
+Asterisk.Sdk.Live.Agents.AsteriskAgent.TotalTalkTimeSecs.get -> long
+Asterisk.Sdk.Live.Agents.AsteriskAgent.TotalTalkTimeSecs.set -> void
+Asterisk.Sdk.Live.AmaFlags
+Asterisk.Sdk.Live.AmaFlags.Billing = 2 -> Asterisk.Sdk.Live.AmaFlags
+Asterisk.Sdk.Live.AmaFlags.Default = 4 -> Asterisk.Sdk.Live.AmaFlags
+Asterisk.Sdk.Live.AmaFlags.Documentation = 3 -> Asterisk.Sdk.Live.AmaFlags
+Asterisk.Sdk.Live.AmaFlags.Omit = 1 -> Asterisk.Sdk.Live.AmaFlags
+Asterisk.Sdk.Live.AmaFlags.Unknown = 0 -> Asterisk.Sdk.Live.AmaFlags
+Asterisk.Sdk.Live.AmiCommunicationException
+Asterisk.Sdk.Live.AmiCommunicationException.AmiCommunicationException(string! message, System.Exception? inner = null) -> void
+Asterisk.Sdk.Live.Bridges.AsteriskBridge
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.AsteriskBridge() -> void
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.BridgeType.get -> string?
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.BridgeType.set -> void
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.BridgeUniqueid.get -> string!
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.BridgeUniqueid.init -> void
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.Channels.get -> System.Collections.Concurrent.ConcurrentDictionary<string!, byte>!
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.CreatedAt.get -> System.DateTimeOffset
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.CreatedAt.init -> void
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.Creator.get -> string?
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.Creator.set -> void
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.DestroyedAt.get -> System.DateTimeOffset?
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.DestroyedAt.set -> void
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.Name.get -> string?
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.Name.set -> void
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.NumChannels.get -> int
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.Technology.get -> string?
+Asterisk.Sdk.Live.Bridges.AsteriskBridge.Technology.set -> void
+Asterisk.Sdk.Live.Bridges.BridgeManager
+Asterisk.Sdk.Live.Bridges.BridgeManager.ActiveBridges.get -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Live.Bridges.AsteriskBridge!>!
+Asterisk.Sdk.Live.Bridges.BridgeManager.BridgeCount.get -> int
+Asterisk.Sdk.Live.Bridges.BridgeManager.BridgeCreated -> System.Action<Asterisk.Sdk.Live.Bridges.AsteriskBridge!>?
+Asterisk.Sdk.Live.Bridges.BridgeManager.BridgeDestroyed -> System.Action<Asterisk.Sdk.Live.Bridges.AsteriskBridge!>?
+Asterisk.Sdk.Live.Bridges.BridgeManager.BridgeManager(Microsoft.Extensions.Logging.ILogger! logger) -> void
+Asterisk.Sdk.Live.Bridges.BridgeManager.ChannelEntered -> System.Action<Asterisk.Sdk.Live.Bridges.AsteriskBridge!, string!>?
+Asterisk.Sdk.Live.Bridges.BridgeManager.ChannelLeft -> System.Action<Asterisk.Sdk.Live.Bridges.AsteriskBridge!, string!>?
+Asterisk.Sdk.Live.Bridges.BridgeManager.Clear() -> void
+Asterisk.Sdk.Live.Bridges.BridgeManager.GetBridgeForChannel(string! uniqueId) -> Asterisk.Sdk.Live.Bridges.AsteriskBridge?
+Asterisk.Sdk.Live.Bridges.BridgeManager.GetById(string! bridgeId) -> Asterisk.Sdk.Live.Bridges.AsteriskBridge?
+Asterisk.Sdk.Live.Bridges.BridgeManager.OnAttendedTransfer(string! origBridgeId, string? secondBridgeId, string? destType, string? result) -> void
+Asterisk.Sdk.Live.Bridges.BridgeManager.OnBlindTransfer(string! bridgeId, string? targetChannel, string? extension, string? context) -> void
+Asterisk.Sdk.Live.Bridges.BridgeManager.OnBridgeCreated(string! bridgeId, string? type, string? technology, string? creator, string? name) -> void
+Asterisk.Sdk.Live.Bridges.BridgeManager.OnBridgeDestroyed(string! bridgeId) -> void
+Asterisk.Sdk.Live.Bridges.BridgeManager.OnChannelEntered(string! bridgeId, string! uniqueId) -> void
+Asterisk.Sdk.Live.Bridges.BridgeManager.OnChannelLeft(string! bridgeId, string! uniqueId) -> void
+Asterisk.Sdk.Live.Bridges.BridgeManager.TransferOccurred -> System.Action<Asterisk.Sdk.Live.Bridges.BridgeTransferInfo!>?
+Asterisk.Sdk.Live.Bridges.BridgeTransferInfo
+Asterisk.Sdk.Live.Bridges.BridgeTransferInfo.BridgeId.get -> string!
+Asterisk.Sdk.Live.Bridges.BridgeTransferInfo.BridgeId.init -> void
+Asterisk.Sdk.Live.Bridges.BridgeTransferInfo.BridgeTransferInfo(string! BridgeId, string! TransferType, string? TargetChannel, string? SecondBridgeId, string? DestType, string? Result) -> void
+Asterisk.Sdk.Live.Bridges.BridgeTransferInfo.DestType.get -> string?
+Asterisk.Sdk.Live.Bridges.BridgeTransferInfo.DestType.init -> void
+Asterisk.Sdk.Live.Bridges.BridgeTransferInfo.Result.get -> string?
+Asterisk.Sdk.Live.Bridges.BridgeTransferInfo.Result.init -> void
+Asterisk.Sdk.Live.Bridges.BridgeTransferInfo.SecondBridgeId.get -> string?
+Asterisk.Sdk.Live.Bridges.BridgeTransferInfo.SecondBridgeId.init -> void
+Asterisk.Sdk.Live.Bridges.BridgeTransferInfo.TargetChannel.get -> string?
+Asterisk.Sdk.Live.Bridges.BridgeTransferInfo.TargetChannel.init -> void
+Asterisk.Sdk.Live.Bridges.BridgeTransferInfo.TransferType.get -> string!
+Asterisk.Sdk.Live.Bridges.BridgeTransferInfo.TransferType.init -> void
+Asterisk.Sdk.Live.ChannelNotFoundException
+Asterisk.Sdk.Live.ChannelNotFoundException.ChannelNotFoundException(string! channelName) -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel
+Asterisk.Sdk.Live.Channels.AsteriskChannel.AsteriskChannel() -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.CallerIdName.get -> string?
+Asterisk.Sdk.Live.Channels.AsteriskChannel.CallerIdName.set -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.CallerIdNum.get -> string?
+Asterisk.Sdk.Live.Channels.AsteriskChannel.CallerIdNum.set -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.ConnectedLineNum.get -> string?
+Asterisk.Sdk.Live.Channels.AsteriskChannel.ConnectedLineNum.set -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.Context.get -> string?
+Asterisk.Sdk.Live.Channels.AsteriskChannel.Context.set -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.CreatedAt.get -> System.DateTimeOffset
+Asterisk.Sdk.Live.Channels.AsteriskChannel.CreatedAt.init -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.DialedChannel.get -> string?
+Asterisk.Sdk.Live.Channels.AsteriskChannel.DialedChannel.set -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.DialStatus.get -> string?
+Asterisk.Sdk.Live.Channels.AsteriskChannel.DialStatus.set -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.Extension.get -> string?
+Asterisk.Sdk.Live.Channels.AsteriskChannel.ExtensionHistory.get -> System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Live.Channels.ExtensionHistoryEntry!>!
+Asterisk.Sdk.Live.Channels.AsteriskChannel.Extension.set -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.HangupCause.get -> Asterisk.Sdk.Enums.HangupCause
+Asterisk.Sdk.Live.Channels.AsteriskChannel.HangupCause.set -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.HoldMusicClass.get -> string?
+Asterisk.Sdk.Live.Channels.AsteriskChannel.HoldMusicClass.set -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.IsOnHold.get -> bool
+Asterisk.Sdk.Live.Channels.AsteriskChannel.IsOnHold.set -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.LinkedChannel.get -> Asterisk.Sdk.Live.Channels.AsteriskChannel?
+Asterisk.Sdk.Live.Channels.AsteriskChannel.LinkedChannel.set -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.LinkedId.get -> string?
+Asterisk.Sdk.Live.Channels.AsteriskChannel.LinkedId.init -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.Name.get -> string!
+Asterisk.Sdk.Live.Channels.AsteriskChannel.Name.set -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.Priority.get -> int
+Asterisk.Sdk.Live.Channels.AsteriskChannel.Priority.set -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.State.get -> Asterisk.Sdk.Enums.ChannelState
+Asterisk.Sdk.Live.Channels.AsteriskChannel.State.set -> void
+Asterisk.Sdk.Live.Channels.AsteriskChannel.UniqueId.get -> string!
+Asterisk.Sdk.Live.Channels.AsteriskChannel.UniqueId.init -> void
+Asterisk.Sdk.Live.Channels.ChannelManager
+Asterisk.Sdk.Live.Channels.ChannelManager.ActiveChannels.get -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Live.Channels.AsteriskChannel!>!
+Asterisk.Sdk.Live.Channels.ChannelManager.ChannelAdded -> System.Action<Asterisk.Sdk.Live.Channels.AsteriskChannel!>?
+Asterisk.Sdk.Live.Channels.ChannelManager.ChannelCount.get -> int
+Asterisk.Sdk.Live.Channels.ChannelManager.ChannelDialBegin -> System.Action<Asterisk.Sdk.Live.Channels.AsteriskChannel!>?
+Asterisk.Sdk.Live.Channels.ChannelManager.ChannelDialEnd -> System.Action<Asterisk.Sdk.Live.Channels.AsteriskChannel!>?
+Asterisk.Sdk.Live.Channels.ChannelManager.ChannelHeld -> System.Action<Asterisk.Sdk.Live.Channels.AsteriskChannel!>?
+Asterisk.Sdk.Live.Channels.ChannelManager.ChannelManager(Microsoft.Extensions.Logging.ILogger! logger) -> void
+Asterisk.Sdk.Live.Channels.ChannelManager.ChannelRemoved -> System.Action<Asterisk.Sdk.Live.Channels.AsteriskChannel!>?
+Asterisk.Sdk.Live.Channels.ChannelManager.ChannelStateChanged -> System.Action<Asterisk.Sdk.Live.Channels.AsteriskChannel!>?
+Asterisk.Sdk.Live.Channels.ChannelManager.ChannelUnheld -> System.Action<Asterisk.Sdk.Live.Channels.AsteriskChannel!>?
+Asterisk.Sdk.Live.Channels.ChannelManager.Clear() -> void
+Asterisk.Sdk.Live.Channels.ChannelManager.CountChannelsByTechnology(string! technology) -> int
+Asterisk.Sdk.Live.Channels.ChannelManager.GetByName(string! name) -> Asterisk.Sdk.Live.Channels.AsteriskChannel?
+Asterisk.Sdk.Live.Channels.ChannelManager.GetByUniqueId(string! uniqueId) -> Asterisk.Sdk.Live.Channels.AsteriskChannel?
+Asterisk.Sdk.Live.Channels.ChannelManager.GetChannelsByState(Asterisk.Sdk.Enums.ChannelState state) -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Live.Channels.AsteriskChannel!>!
+Asterisk.Sdk.Live.Channels.ChannelManager.GetChannelsByTechnology(string! technology) -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Live.Channels.AsteriskChannel!>!
+Asterisk.Sdk.Live.Channels.ChannelManager.OnDialBegin(string! uniqueId, string! destUniqueId, string! destChannel, string? dialString) -> void
+Asterisk.Sdk.Live.Channels.ChannelManager.OnDialEnd(string! uniqueId, string? dialStatus) -> void
+Asterisk.Sdk.Live.Channels.ChannelManager.OnHangup(string! uniqueId, Asterisk.Sdk.Enums.HangupCause cause = Asterisk.Sdk.Enums.HangupCause.NormalClearing) -> void
+Asterisk.Sdk.Live.Channels.ChannelManager.OnHold(string! uniqueId, string? musicClass) -> void
+Asterisk.Sdk.Live.Channels.ChannelManager.OnLink(string! uniqueId1, string! uniqueId2) -> void
+Asterisk.Sdk.Live.Channels.ChannelManager.OnNewChannel(string! uniqueId, string! channelName, Asterisk.Sdk.Enums.ChannelState state, string? callerIdNum = null, string? callerIdName = null, string? context = null, string? exten = null, int priority = 1, string? linkedId = null) -> void
+Asterisk.Sdk.Live.Channels.ChannelManager.OnNewState(string! uniqueId, Asterisk.Sdk.Enums.ChannelState newState, string? channelName = null) -> void
+Asterisk.Sdk.Live.Channels.ChannelManager.OnRename(string! uniqueId, string! newName) -> void
+Asterisk.Sdk.Live.Channels.ChannelManager.OnUnhold(string! uniqueId) -> void
+Asterisk.Sdk.Live.Channels.ChannelManager.OnUnlink(string! uniqueId1, string! uniqueId2) -> void
+Asterisk.Sdk.Live.Channels.ExtensionHistoryEntry
+Asterisk.Sdk.Live.Channels.ExtensionHistoryEntry.Context.get -> string!
+Asterisk.Sdk.Live.Channels.ExtensionHistoryEntry.Context.init -> void
+Asterisk.Sdk.Live.Channels.ExtensionHistoryEntry.Extension.get -> string!
+Asterisk.Sdk.Live.Channels.ExtensionHistoryEntry.ExtensionHistoryEntry(string! Context, string! Extension, int Priority, System.DateTimeOffset Timestamp) -> void
+Asterisk.Sdk.Live.Channels.ExtensionHistoryEntry.Extension.init -> void
+Asterisk.Sdk.Live.Channels.ExtensionHistoryEntry.Priority.get -> int
+Asterisk.Sdk.Live.Channels.ExtensionHistoryEntry.Priority.init -> void
+Asterisk.Sdk.Live.Channels.ExtensionHistoryEntry.Timestamp.get -> System.DateTimeOffset
+Asterisk.Sdk.Live.Channels.ExtensionHistoryEntry.Timestamp.init -> void
+Asterisk.Sdk.Live.Diagnostics.LiveMetrics
+Asterisk.Sdk.Live.Disposition
+Asterisk.Sdk.Live.Disposition.Answered = 4 -> Asterisk.Sdk.Live.Disposition
+Asterisk.Sdk.Live.Disposition.Busy = 3 -> Asterisk.Sdk.Live.Disposition
+Asterisk.Sdk.Live.Disposition.Congestion = 5 -> Asterisk.Sdk.Live.Disposition
+Asterisk.Sdk.Live.Disposition.Failed = 2 -> Asterisk.Sdk.Live.Disposition
+Asterisk.Sdk.Live.Disposition.NoAnswer = 1 -> Asterisk.Sdk.Live.Disposition
+Asterisk.Sdk.Live.Disposition.Unknown = 0 -> Asterisk.Sdk.Live.Disposition
+Asterisk.Sdk.Live.ILiveObject
+Asterisk.Sdk.Live.ILiveObject.Id.get -> string!
+Asterisk.Sdk.Live.InterfaceNotFoundException
+Asterisk.Sdk.Live.InterfaceNotFoundException.InterfaceNotFoundException(string! interfaceName) -> void
+Asterisk.Sdk.Live.InvalidPenaltyException
+Asterisk.Sdk.Live.InvalidPenaltyException.InvalidPenaltyException(int penalty) -> void
+Asterisk.Sdk.Live.LiveException
+Asterisk.Sdk.Live.LiveException.LiveException(string! message, System.Exception? inner = null) -> void
+Asterisk.Sdk.Live.LiveObjectBase
+Asterisk.Sdk.Live.LiveObjectBase.LiveObjectBase() -> void
+Asterisk.Sdk.Live.LiveObjectBase.OnPropertyChanged(string! propertyName) -> void
+Asterisk.Sdk.Live.LiveObjectBase.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
+Asterisk.Sdk.Live.LiveObjectBase.SetField<T>(ref T field, T value, string! propertyName) -> bool
+Asterisk.Sdk.Live.MeetMe.MeetMeManager
+Asterisk.Sdk.Live.MeetMe.MeetMeManager.Clear() -> void
+Asterisk.Sdk.Live.MeetMe.MeetMeManager.GetRoom(string! roomNumber) -> Asterisk.Sdk.Live.MeetMe.MeetMeRoom?
+Asterisk.Sdk.Live.MeetMe.MeetMeManager.MeetMeManager(Microsoft.Extensions.Logging.ILogger! logger) -> void
+Asterisk.Sdk.Live.MeetMe.MeetMeManager.OnUserJoined(string! roomNumber, int userNum, string! channel) -> void
+Asterisk.Sdk.Live.MeetMe.MeetMeManager.OnUserLeft(string! roomNumber, int userNum) -> void
+Asterisk.Sdk.Live.MeetMe.MeetMeManager.Rooms.get -> System.Collections.Generic.IReadOnlyCollection<Asterisk.Sdk.Live.MeetMe.MeetMeRoom!>!
+Asterisk.Sdk.Live.MeetMe.MeetMeManager.UserJoined -> System.Action<Asterisk.Sdk.Live.MeetMe.MeetMeRoom!, Asterisk.Sdk.Live.MeetMe.MeetMeUser!>?
+Asterisk.Sdk.Live.MeetMe.MeetMeManager.UserLeft -> System.Action<Asterisk.Sdk.Live.MeetMe.MeetMeRoom!, Asterisk.Sdk.Live.MeetMe.MeetMeUser!>?
+Asterisk.Sdk.Live.MeetMe.MeetMeRoom
+Asterisk.Sdk.Live.MeetMe.MeetMeRoom.MeetMeRoom() -> void
+Asterisk.Sdk.Live.MeetMe.MeetMeRoom.RoomNumber.get -> string!
+Asterisk.Sdk.Live.MeetMe.MeetMeRoom.RoomNumber.init -> void
+Asterisk.Sdk.Live.MeetMe.MeetMeRoom.UserCount.get -> int
+Asterisk.Sdk.Live.MeetMe.MeetMeRoom.Users.get -> System.Collections.Concurrent.ConcurrentDictionary<int, Asterisk.Sdk.Live.MeetMe.MeetMeUser!>!
+Asterisk.Sdk.Live.MeetMe.MeetMeUser
+Asterisk.Sdk.Live.MeetMe.MeetMeUser.Channel.get -> string!
+Asterisk.Sdk.Live.MeetMe.MeetMeUser.Channel.init -> void
+Asterisk.Sdk.Live.MeetMe.MeetMeUser.MeetMeUser() -> void
+Asterisk.Sdk.Live.MeetMe.MeetMeUser.Muted.get -> bool
+Asterisk.Sdk.Live.MeetMe.MeetMeUser.Muted.set -> void
+Asterisk.Sdk.Live.MeetMe.MeetMeUser.State.get -> Asterisk.Sdk.Live.MeetMeUserState
+Asterisk.Sdk.Live.MeetMe.MeetMeUser.State.set -> void
+Asterisk.Sdk.Live.MeetMe.MeetMeUser.Talking.get -> bool
+Asterisk.Sdk.Live.MeetMe.MeetMeUser.Talking.set -> void
+Asterisk.Sdk.Live.MeetMe.MeetMeUser.UserNum.get -> int
+Asterisk.Sdk.Live.MeetMe.MeetMeUser.UserNum.init -> void
+Asterisk.Sdk.Live.MeetMeUserState
+Asterisk.Sdk.Live.MeetMeUserState.Joined = 0 -> Asterisk.Sdk.Live.MeetMeUserState
+Asterisk.Sdk.Live.MeetMeUserState.Left = 1 -> Asterisk.Sdk.Live.MeetMeUserState
+Asterisk.Sdk.Live.MeetMeUserState.Talking = 2 -> Asterisk.Sdk.Live.MeetMeUserState
+Asterisk.Sdk.Live.QueueEntryState
+Asterisk.Sdk.Live.QueueEntryState.Abandoned = 1 -> Asterisk.Sdk.Live.QueueEntryState
+Asterisk.Sdk.Live.QueueEntryState.Completed = 2 -> Asterisk.Sdk.Live.QueueEntryState
+Asterisk.Sdk.Live.QueueEntryState.Joined = 0 -> Asterisk.Sdk.Live.QueueEntryState
+Asterisk.Sdk.Live.QueueMemberState
+Asterisk.Sdk.Live.QueueMemberState.DeviceBusy = 3 -> Asterisk.Sdk.Live.QueueMemberState
+Asterisk.Sdk.Live.QueueMemberState.DeviceInUse = 2 -> Asterisk.Sdk.Live.QueueMemberState
+Asterisk.Sdk.Live.QueueMemberState.DeviceInvalid = 4 -> Asterisk.Sdk.Live.QueueMemberState
+Asterisk.Sdk.Live.QueueMemberState.DeviceNotInUse = 1 -> Asterisk.Sdk.Live.QueueMemberState
+Asterisk.Sdk.Live.QueueMemberState.DeviceOnHold = 8 -> Asterisk.Sdk.Live.QueueMemberState
+Asterisk.Sdk.Live.QueueMemberState.DeviceRinging = 6 -> Asterisk.Sdk.Live.QueueMemberState
+Asterisk.Sdk.Live.QueueMemberState.DeviceRingInUse = 7 -> Asterisk.Sdk.Live.QueueMemberState
+Asterisk.Sdk.Live.QueueMemberState.DeviceUnavailable = 5 -> Asterisk.Sdk.Live.QueueMemberState
+Asterisk.Sdk.Live.QueueMemberState.DeviceUnknown = 0 -> Asterisk.Sdk.Live.QueueMemberState
+Asterisk.Sdk.Live.Queues.AsteriskQueue
+Asterisk.Sdk.Live.Queues.AsteriskQueue.Abandoned.get -> int
+Asterisk.Sdk.Live.Queues.AsteriskQueue.Abandoned.set -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueue.AsteriskQueue() -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueue.Calls.get -> int
+Asterisk.Sdk.Live.Queues.AsteriskQueue.Calls.set -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueue.Completed.get -> int
+Asterisk.Sdk.Live.Queues.AsteriskQueue.Completed.set -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueue.Entries.get -> System.Collections.Concurrent.ConcurrentDictionary<string!, Asterisk.Sdk.Live.Queues.AsteriskQueueEntry!>!
+Asterisk.Sdk.Live.Queues.AsteriskQueueEntry
+Asterisk.Sdk.Live.Queues.AsteriskQueueEntry.AsteriskQueueEntry() -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueueEntry.CallerId.get -> string?
+Asterisk.Sdk.Live.Queues.AsteriskQueueEntry.CallerId.set -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueueEntry.Channel.get -> string!
+Asterisk.Sdk.Live.Queues.AsteriskQueueEntry.Channel.init -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueue.EntryCount.get -> int
+Asterisk.Sdk.Live.Queues.AsteriskQueueEntry.JoinedAt.get -> System.DateTimeOffset
+Asterisk.Sdk.Live.Queues.AsteriskQueueEntry.JoinedAt.init -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueueEntry.Position.get -> int
+Asterisk.Sdk.Live.Queues.AsteriskQueueEntry.Position.set -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueue.HoldTime.get -> int
+Asterisk.Sdk.Live.Queues.AsteriskQueue.HoldTime.set -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueue.Max.get -> int
+Asterisk.Sdk.Live.Queues.AsteriskQueue.Max.set -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.AsteriskQueueMember() -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.CallsTaken.get -> int
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.CallsTaken.set -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueue.MemberCount.get -> int
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.Interface.get -> string!
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.Interface.init -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.MemberName.get -> string?
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.MemberName.set -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.Paused.get -> bool
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.PausedReason.get -> string?
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.PausedReason.set -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.Paused.set -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.Penalty.get -> int
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.Penalty.set -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueue.Members.get -> System.Collections.Concurrent.ConcurrentDictionary<string!, Asterisk.Sdk.Live.Queues.AsteriskQueueMember!>!
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.Status.get -> Asterisk.Sdk.Live.QueueMemberState
+Asterisk.Sdk.Live.Queues.AsteriskQueueMember.Status.set -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueue.Name.get -> string!
+Asterisk.Sdk.Live.Queues.AsteriskQueue.Name.init -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueue.Strategy.get -> string?
+Asterisk.Sdk.Live.Queues.AsteriskQueue.Strategy.set -> void
+Asterisk.Sdk.Live.Queues.AsteriskQueue.TalkTime.get -> int
+Asterisk.Sdk.Live.Queues.AsteriskQueue.TalkTime.set -> void
+Asterisk.Sdk.Live.Queues.QueueManager
+Asterisk.Sdk.Live.Queues.QueueManager.CallerJoined -> System.Action<string!, Asterisk.Sdk.Live.Queues.AsteriskQueueEntry!>?
+Asterisk.Sdk.Live.Queues.QueueManager.CallerLeft -> System.Action<string!, Asterisk.Sdk.Live.Queues.AsteriskQueueEntry!>?
+Asterisk.Sdk.Live.Queues.QueueManager.Clear() -> void
+Asterisk.Sdk.Live.Queues.QueueManager.GetByName(string! name) -> Asterisk.Sdk.Live.Queues.AsteriskQueue?
+Asterisk.Sdk.Live.Queues.QueueManager.GetMembersWhere(string! queueName, System.Func<Asterisk.Sdk.Live.Queues.AsteriskQueueMember!, bool>! predicate) -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Live.Queues.AsteriskQueueMember!>!
+Asterisk.Sdk.Live.Queues.QueueManager.GetQueueObjectsForMember(string! memberInterface) -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Live.Queues.AsteriskQueue!>!
+Asterisk.Sdk.Live.Queues.QueueManager.GetQueuesForMember(string! memberInterface) -> System.Collections.Generic.IEnumerable<string!>!
+Asterisk.Sdk.Live.Queues.QueueManager.MemberAdded -> System.Action<string!, Asterisk.Sdk.Live.Queues.AsteriskQueueMember!>?
+Asterisk.Sdk.Live.Queues.QueueManager.MemberRemoved -> System.Action<string!, Asterisk.Sdk.Live.Queues.AsteriskQueueMember!>?
+Asterisk.Sdk.Live.Queues.QueueManager.MemberStatusChanged -> System.Action<string!, Asterisk.Sdk.Live.Queues.AsteriskQueueMember!>?
+Asterisk.Sdk.Live.Queues.QueueManager.OnCallerJoined(string! queueName, string! channel, string? callerId, int position) -> void
+Asterisk.Sdk.Live.Queues.QueueManager.OnCallerLeft(string! queueName, string! channel) -> void
+Asterisk.Sdk.Live.Queues.QueueManager.OnDeviceStateChanged(string! device, string! state) -> void
+Asterisk.Sdk.Live.Queues.QueueManager.OnMemberAdded(string! queueName, string! iface, string? memberName, int penalty, bool paused, int status) -> void
+Asterisk.Sdk.Live.Queues.QueueManager.OnMemberPaused(string! queueName, string! iface, bool paused, string? reason = null) -> void
+Asterisk.Sdk.Live.Queues.QueueManager.OnMemberRemoved(string! queueName, string! iface) -> void
+Asterisk.Sdk.Live.Queues.QueueManager.OnMemberStatusChanged(string! queueName, string! iface, int status) -> void
+Asterisk.Sdk.Live.Queues.QueueManager.OnQueueParams(string! queueName, int max, string? strategy, int calls, int holdTime, int talkTime, int completed, int abandoned) -> void
+Asterisk.Sdk.Live.Queues.QueueManager.QueueCount.get -> int
+Asterisk.Sdk.Live.Queues.QueueManager.QueueManager(Microsoft.Extensions.Logging.ILogger! logger) -> void
+Asterisk.Sdk.Live.Queues.QueueManager.Queues.get -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Live.Queues.AsteriskQueue!>!
+Asterisk.Sdk.Live.Queues.QueueManager.QueueUpdated -> System.Action<Asterisk.Sdk.Live.Queues.AsteriskQueue!>?
+Asterisk.Sdk.Live.Queues.QueueManager.RemoveQueue(string! queueName) -> bool
+Asterisk.Sdk.Live.Server.AsteriskServer
+Asterisk.Sdk.Live.Server.AsteriskServer.Agents.get -> Asterisk.Sdk.Live.Agents.AgentManager!
+Asterisk.Sdk.Live.Server.AsteriskServer.AsteriskServer(Asterisk.Sdk.IAmiConnection! connection, Microsoft.Extensions.Logging.ILogger<Asterisk.Sdk.Live.Server.AsteriskServer!>! logger) -> void
+Asterisk.Sdk.Live.Server.AsteriskServer.AsteriskVersion.get -> string?
+Asterisk.Sdk.Live.Server.AsteriskServer.Bridges.get -> Asterisk.Sdk.Live.Bridges.BridgeManager!
+Asterisk.Sdk.Live.Server.AsteriskServer.Channels.get -> Asterisk.Sdk.Live.Channels.ChannelManager!
+Asterisk.Sdk.Live.Server.AsteriskServer.Connection.get -> Asterisk.Sdk.IAmiConnection!
+Asterisk.Sdk.Live.Server.AsteriskServer.ConnectionLost -> System.Action<System.Exception?>?
+Asterisk.Sdk.Live.Server.AsteriskServer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Live.Server.AsteriskServer.MeetMe.get -> Asterisk.Sdk.Live.MeetMe.MeetMeManager!
+Asterisk.Sdk.Live.Server.AsteriskServer.OriginateAsync(string! channel, string! context, string! extension, int priority = 1, string? callerId = null, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Live.Server.OriginateResult!>
+Asterisk.Sdk.Live.Server.AsteriskServerPool
+Asterisk.Sdk.Live.Server.AsteriskServerPool.AddExistingServer(string! serverId, Asterisk.Sdk.Live.Server.AsteriskServer! server) -> void
+Asterisk.Sdk.Live.Server.AsteriskServerPool.AddServerAsync(string! serverId, Asterisk.Sdk.Ami.Connection.AmiConnectionOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Live.Server.AsteriskServer!>
+Asterisk.Sdk.Live.Server.AsteriskServerPool.AsteriskServerPool(Asterisk.Sdk.Ami.Connection.IAmiConnectionFactory! connectionFactory, Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> void
+Asterisk.Sdk.Live.Server.AsteriskServerPool.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Live.Server.AsteriskServerPool.GetServerForAgent(string! agentId) -> Asterisk.Sdk.Live.Server.AsteriskServer?
+Asterisk.Sdk.Live.Server.AsteriskServerPool.GetServer(string! serverId) -> Asterisk.Sdk.Live.Server.AsteriskServer?
+Asterisk.Sdk.Live.Server.AsteriskServerPool.RemoveServerAsync(string! serverId) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Live.Server.AsteriskServerPool.ServerCount.get -> int
+Asterisk.Sdk.Live.Server.AsteriskServerPool.Servers.get -> System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, Asterisk.Sdk.Live.Server.AsteriskServer!>>!
+Asterisk.Sdk.Live.Server.AsteriskServerPool.TotalAgentCount.get -> int
+Asterisk.Sdk.Live.Server.AsteriskServer.Queues.get -> Asterisk.Sdk.Live.Queues.QueueManager!
+Asterisk.Sdk.Live.Server.AsteriskServer.RequestInitialStateAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Live.Server.AsteriskServer.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.Live.Server.OriginateResult
+Asterisk.Sdk.Live.Server.OriginateResult.ChannelId.get -> string?
+Asterisk.Sdk.Live.Server.OriginateResult.ChannelId.init -> void
+Asterisk.Sdk.Live.Server.OriginateResult.Message.get -> string?
+Asterisk.Sdk.Live.Server.OriginateResult.Message.init -> void
+Asterisk.Sdk.Live.Server.OriginateResult.OriginateResult() -> void
+Asterisk.Sdk.Live.Server.OriginateResult.Success.get -> bool
+Asterisk.Sdk.Live.Server.OriginateResult.Success.init -> void
+override Asterisk.Sdk.Live.Agents.AsteriskAgent.Id.get -> string!
+override Asterisk.Sdk.Live.Bridges.AsteriskBridge.Id.get -> string!
+override Asterisk.Sdk.Live.Channels.AsteriskChannel.Id.get -> string!
+static readonly Asterisk.Sdk.Live.Diagnostics.LiveMetrics.AgentStateChanges -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Live.Diagnostics.LiveMetrics.BridgesCreated -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Live.Diagnostics.LiveMetrics.BridgesDestroyed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Live.Diagnostics.LiveMetrics.ChannelsCreated -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Live.Diagnostics.LiveMetrics.ChannelsDestroyed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Live.Diagnostics.LiveMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Asterisk.Sdk.Live.Diagnostics.LiveMetrics.QueueCallsJoined -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Live.Diagnostics.LiveMetrics.QueueCallsLeft -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Live.Diagnostics.LiveMetrics.QueueWaitTimeMs -> System.Diagnostics.Metrics.Histogram<double>!

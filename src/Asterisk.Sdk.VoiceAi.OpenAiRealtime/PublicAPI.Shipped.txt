@@ -1,1 +1,66 @@
 #nullable enable
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection.RealtimeServiceCollectionExtensions
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling.IRealtimeFunctionHandler
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling.IRealtimeFunctionHandler.Description.get -> string!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling.IRealtimeFunctionHandler.ExecuteAsync(string! argumentsJson, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling.IRealtimeFunctionHandler.Name.get -> string!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling.IRealtimeFunctionHandler.ParametersSchema.get -> string!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeBridge
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeBridge.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeBridge.Events.get -> System.IObservable<Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent!>!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeBridge.HandleSessionAsync(Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession! session, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.ApiKey.get -> string!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.ApiKey.set -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.InputFormat.get -> Asterisk.Sdk.Audio.AudioFormat
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.InputFormat.set -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.Instructions.get -> string!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.Instructions.set -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.Model.get -> string!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.Model.set -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.OpenAiRealtimeOptions() -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.VadMode.get -> Asterisk.Sdk.VoiceAi.OpenAiRealtime.VadMode
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.VadMode.set -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptionsValidator
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptionsValidator.OpenAiRealtimeOptionsValidator() -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.Voice.get -> string!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.Voice.set -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.Message.get -> string!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.Message.init -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.RealtimeErrorEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp, string! Message) -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.ChannelId.get -> System.Guid
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.ChannelId.init -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.RealtimeEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp) -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.Timestamp.get -> System.DateTimeOffset
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.Timestamp.init -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.ArgumentsJson.get -> string!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.ArgumentsJson.init -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.FunctionName.get -> string!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.FunctionName.init -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.RealtimeFunctionCalledEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp, string! FunctionName, string! ArgumentsJson, string! ResultJson) -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.ResultJson.get -> string!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.ResultJson.init -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.Duration.get -> System.TimeSpan
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.Duration.init -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.RealtimeResponseEndedEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp, System.TimeSpan Duration) -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent.RealtimeResponseStartedEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp) -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent.RealtimeSpeechStartedEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp) -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent.RealtimeSpeechStoppedEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp) -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.IsFinal.get -> bool
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.IsFinal.init -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.RealtimeTranscriptEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp, string! Transcript, bool IsFinal) -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.Transcript.get -> string!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.Transcript.init -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.VadMode
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.VadMode.Disabled = 1 -> Asterisk.Sdk.VoiceAi.OpenAiRealtime.VadMode
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.VadMode.ServerSide = 0 -> Asterisk.Sdk.VoiceAi.OpenAiRealtime.VadMode
+static Asterisk.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection.RealtimeServiceCollectionExtensions.AddFunction<THandler>(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Asterisk.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection.RealtimeServiceCollectionExtensions.AddOpenAiRealtimeBridge(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

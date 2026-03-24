@@ -1,1 +1,25 @@
 #nullable enable
+Asterisk.Sdk.Hosting.AmiConnectionHostedService
+Asterisk.Sdk.Hosting.AmiConnectionHostedService.AmiConnectionHostedService(Asterisk.Sdk.IAmiConnection! connection) -> void
+Asterisk.Sdk.Hosting.AmiConnectionHostedService.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.Hosting.AmiConnectionHostedService.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.Hosting.AsteriskOptions
+Asterisk.Sdk.Hosting.AsteriskOptions.AgiMappingStrategy.get -> Asterisk.Sdk.Agi.Mapping.IMappingStrategy?
+Asterisk.Sdk.Hosting.AsteriskOptions.AgiMappingStrategy.set -> void
+Asterisk.Sdk.Hosting.AsteriskOptions.AgiPort.get -> int
+Asterisk.Sdk.Hosting.AsteriskOptions.AgiPort.set -> void
+Asterisk.Sdk.Hosting.AsteriskOptions.Ami.get -> Asterisk.Sdk.Ami.Connection.AmiConnectionOptions!
+Asterisk.Sdk.Hosting.AsteriskOptions.Ami.set -> void
+Asterisk.Sdk.Hosting.AsteriskOptions.Ari.get -> Asterisk.Sdk.Ari.Client.AriClientOptions?
+Asterisk.Sdk.Hosting.AsteriskOptions.Ari.set -> void
+Asterisk.Sdk.Hosting.AsteriskOptions.AsteriskOptions() -> void
+Asterisk.Sdk.Hosting.AsteriskServerHostedService
+Asterisk.Sdk.Hosting.AsteriskServerHostedService.AsteriskServerHostedService(Asterisk.Sdk.IAsteriskServer! server) -> void
+Asterisk.Sdk.Hosting.AsteriskServerHostedService.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.Hosting.AsteriskServerHostedService.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.Hosting.ServiceCollectionExtensions
+static Asterisk.Sdk.Hosting.ServiceCollectionExtensions.AddAsteriskMultiServer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Asterisk.Sdk.Hosting.ServiceCollectionExtensions.AddAsteriskSessionsMultiServer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Sessions.Manager.SessionOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Asterisk.Sdk.Hosting.ServiceCollectionExtensions.AddAsteriskSessions(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Sessions.Manager.SessionOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Asterisk.Sdk.Hosting.ServiceCollectionExtensions.AddAsterisk(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfiguration! configuration) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Asterisk.Sdk.Hosting.ServiceCollectionExtensions.AddAsterisk(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Hosting.AsteriskOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

@@ -1,1 +1,68 @@
 #nullable enable
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketClient
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketClient.AudioSocketClient(string! host, int port, System.Guid channelId) -> void
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketClient.ConnectAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketClient.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketClient.ReadAudioAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketClient.SendAudioAsync(System.ReadOnlyMemory<byte> pcmData, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketClient.SendHangupAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrame
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.AudioSocketFrame(Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType Type, System.ReadOnlyMemory<byte> Payload) -> void
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.AudioSocketFrame() -> void
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.Payload.get -> System.ReadOnlyMemory<byte>
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.Payload.init -> void
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Audio = 1 -> Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin12 = 17 -> Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin16 = 18 -> Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin192 = 24 -> Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin24 = 19 -> Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin32 = 20 -> Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin44 = 21 -> Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin48 = 22 -> Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin96 = 23 -> Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Error = 4 -> Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameTypeExtensions
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.Type.get -> Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Hangup = 255 -> Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.Type.init -> void
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Silence = 2 -> Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Uuid = 0 -> Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.AudioSocketOptions() -> void
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.ConnectionTimeout.get -> System.TimeSpan
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.ConnectionTimeout.set -> void
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.DefaultFormat.get -> Asterisk.Sdk.Audio.AudioFormat
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.DefaultFormat.set -> void
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.ListenAddress.get -> string!
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.ListenAddress.set -> void
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.MaxConcurrentSessions.get -> int
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.MaxConcurrentSessions.set -> void
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.Port.get -> int
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.Port.set -> void
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.ReceiveBufferSize.get -> int
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.ReceiveBufferSize.set -> void
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketServer
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketServer.ActiveSessionCount.get -> int
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketServer.AudioSocketServer(Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions! options, Microsoft.Extensions.Logging.ILogger<Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketServer!>! logger) -> void
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketServer.BoundPort.get -> int
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketServer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketServer.OnSessionStarted -> System.Func<Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession!, System.Threading.Tasks.ValueTask>?
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketServer.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketServer.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession.ChannelId.get -> System.Guid
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession.HangupAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession.InputFormat.get -> Asterisk.Sdk.Audio.AudioFormat
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession.IsConnected.get -> bool
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession.OnHangup -> System.Action?
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession.ReadAudioAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession.RemoteEndpoint.get -> string!
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession.WriteAudioAsync(System.ReadOnlyMemory<byte> pcmData, Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType frameType, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession.WriteAudioAsync(System.ReadOnlyMemory<byte> pcmData, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession.WriteSilenceAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.AudioSocket.DependencyInjection.AudioSocketServiceCollectionExtensions
+static Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameTypeExtensions.GetSampleRate(this Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType type) -> int
+static Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameTypeExtensions.IsAudio(this Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType type) -> bool
+static Asterisk.Sdk.VoiceAi.AudioSocket.DependencyInjection.AudioSocketServiceCollectionExtensions.AddAudioSocketServer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

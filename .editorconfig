@@ -68,6 +68,7 @@ dotnet_diagnostic.VSTHRD110.severity = warning     # Observe result of async cal
 dotnet_diagnostic.VSTHRD200.severity = none        # Use Async suffix — existing API is frozen, would break semver
 
 # PublicApiAnalyzers — tuned
+dotnet_diagnostic.RS0016.severity = warning  # Undeclared public API — catch new API additions
 dotnet_diagnostic.RS0026.severity = suggestion  # Optional parameter overloads — existing API
 
 # Examples — relaxed rules (demo code, not production)
