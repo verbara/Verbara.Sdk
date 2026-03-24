@@ -141,6 +141,10 @@ window.Softphone = {
         }
     },
 
+    setVolume(level) {
+        if (this._audioElement) this._audioElement.volume = level;
+    },
+
     sendDtmf(digit) {
         if (!this._session) return;
         try {

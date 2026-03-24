@@ -62,10 +62,72 @@ public sealed partial class IvrMenuService
     {
         var allMenus = await _repo.GetMenusAsync(serverId, ct);
 
-        var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Determine which menus are "children" (sub-menus called from a parent).
+        // A menu X is a child of Y if Y references X AND X does NOT reference Y back.
+        // If both reference each other (parent→child + child→"back to parent"), the
+        // DEEPER menu is the child. We use a simple heuristic: build a directed graph
+        // of IVR references, then find roots (menus with no incoming edges from non-children).
+        //
+        // Simple approach: a menu is root if no OTHER menu references it,
+        // OR if every menu that references it is itself referenced BY this menu
+        // (i.e., it's a mutual back-reference = parent↔child relationship).
+        var referencedBy = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var references = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var menu in allMenus)
+        {
+            if (!references.ContainsKey(menu.Name))
+                references[menu.Name] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in menu.Items.Where(i => i.DestType == "ivr"))
-                referenced.Add(item.DestTarget);
+            {
+                references[menu.Name].Add(item.DestTarget);
+                if (!referencedBy.TryGetValue(item.DestTarget, out var parents))
+                {
+                    parents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    referencedBy[item.DestTarget] = parents;
+                }
+                parents.Add(menu.Name);
+            }
+        }
+
+        // A menu is a sub-menu (not root) if at least one menu references it
+        // AND that referencing menu is NOT also referenced back by this menu.
+        // Example: empresa→ventas (parent→child). ventas→empresa (back-ref).
+        // "ventas" is referenced by "empresa", but "ventas" also references "empresa" back.
+        // However, "empresa" is the parent because it references ventas/soporte/facturacion
+        // while they only reference empresa (back). The one with MORE outgoing IVR refs is the parent.
+        var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (menuName, parents) in referencedBy)
+        {
+            foreach (var parent in parents)
+            {
+                if (string.Equals(parent, menuName, StringComparison.OrdinalIgnoreCase))
+                    continue; // self-ref
+
+                // Check if this is a back-reference: does menuName also reference parent?
+                var menuRefs = references.GetValueOrDefault(menuName);
+                var isBackRef = menuRefs is not null && menuRefs.Contains(parent);
+
+                if (!isBackRef)
+                {
+                    // parent references menuName but menuName does NOT reference parent back
+                    // → menuName is clearly a child of parent
+                    referenced.Add(menuName);
+                    break;
+                }
+
+                // Mutual reference: both reference each other.
+                // The one with MORE outgoing IVR references is the parent.
+                var parentRefs = references.GetValueOrDefault(parent);
+                var parentOutCount = parentRefs?.Count ?? 0;
+                var menuOutCount = menuRefs?.Count ?? 0;
+                if (parentOutCount > menuOutCount)
+                {
+                    // parent has more children → menuName is the child
+                    referenced.Add(menuName);
+                    break;
+                }
+            }
+        }
 
         var byName = allMenus.ToDictionary(m => m.Name, StringComparer.OrdinalIgnoreCase);
 

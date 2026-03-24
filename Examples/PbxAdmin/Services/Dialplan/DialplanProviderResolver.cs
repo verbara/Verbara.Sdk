@@ -28,7 +28,7 @@ public sealed class DialplanProviderResolver : IDialplanProviderResolver
                 var connStr = section["RealtimeConnectionString"]
                     ?? throw new InvalidOperationException(
                         $"Asterisk:Servers entry '{id}' has ConfigMode=Realtime but no RealtimeConnectionString.");
-                dict[id] = new RealtimeDialplanProvider(connStr, loggerFactory.CreateLogger<RealtimeDialplanProvider>());
+                dict[id] = new RealtimeDialplanProvider(connStr, amiProvider, loggerFactory.CreateLogger<RealtimeDialplanProvider>());
             }
             else
             {
