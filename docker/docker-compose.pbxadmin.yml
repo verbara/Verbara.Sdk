@@ -35,7 +35,7 @@ services:
       - ./asterisk-config-realtime/cel_odbc.conf:/etc/asterisk/cel_odbc.conf:ro
       - ./asterisk-config-realtime/confbridge.conf:/etc/asterisk/confbridge.conf:ro
       - ./asterisk-config-realtime/extconfig.conf:/etc/asterisk/extconfig.conf:ro
-      - ./asterisk-config-realtime/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./asterisk-config-realtime/extensions.conf:/etc/asterisk/extensions.conf
       - ./asterisk-config-realtime/features.conf:/etc/asterisk/features.conf:ro
       - ./asterisk-config-realtime/geolocation.conf:/etc/asterisk/geolocation.conf:ro
       - ./asterisk-config-realtime/http.conf:/etc/asterisk/http.conf
@@ -55,6 +55,7 @@ services:
       - ./certs/asterisk.pem:/etc/asterisk/keys/asterisk.pem:ro
       - ./certs/asterisk.key:/etc/asterisk/keys/asterisk.key:ro
       - ./moh:/var/lib/asterisk/moh:ro
+      - ./sounds/es-custom:/var/lib/asterisk/sounds/es-custom:ro
       - recordings-realtime:/var/spool/asterisk/monitor
       - ./sample-recordings:/var/spool/asterisk/monitor/samples
     depends_on:
@@ -94,6 +95,7 @@ services:
       - ./certs/asterisk.pem:/etc/asterisk/keys/asterisk.pem:ro
       - ./certs/asterisk.key:/etc/asterisk/keys/asterisk.key:ro
       - ./moh:/var/lib/asterisk/moh:ro
+      - ./sounds/es-custom:/var/lib/asterisk/sounds/es-custom:ro
       - recordings-file:/var/spool/asterisk/monitor
       - ./sample-recordings:/var/spool/asterisk/monitor/samples:ro
     healthcheck:
