@@ -55,6 +55,7 @@ services:
       - ./certs/asterisk.pem:/etc/asterisk/keys/asterisk.pem:ro
       - ./certs/asterisk.key:/etc/asterisk/keys/asterisk.key:ro
       - ./moh:/var/lib/asterisk/moh:ro
+      - ./sounds/es-custom:/var/lib/asterisk/sounds/es-custom:ro
       - recordings-realtime:/var/spool/asterisk/monitor
       - ./sample-recordings:/var/spool/asterisk/monitor/samples
     depends_on:
@@ -94,6 +95,7 @@ services:
       - ./certs/asterisk.pem:/etc/asterisk/keys/asterisk.pem:ro
       - ./certs/asterisk.key:/etc/asterisk/keys/asterisk.key:ro
       - ./moh:/var/lib/asterisk/moh:ro
+      - ./sounds/es-custom:/var/lib/asterisk/sounds/es-custom:ro
       - recordings-file:/var/spool/asterisk/monitor
       - ./sample-recordings:/var/spool/asterisk/monitor/samples:ro
     healthcheck:
