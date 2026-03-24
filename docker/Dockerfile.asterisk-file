@@ -23,6 +23,12 @@ RUN apt-get update \
     && curl -fsSL https://downloads.asterisk.org/pub/telephony/sounds/asterisk-extra-sounds-en-ulaw-current.tar.gz | tar xz \
     && curl -fsSL https://downloads.asterisk.org/pub/telephony/sounds/asterisk-extra-sounds-en-gsm-current.tar.gz | tar xz \
     && curl -fsSL https://downloads.asterisk.org/pub/telephony/sounds/asterisk-extra-sounds-en-sln16-current.tar.gz | tar xz \
+    # Asterisk core sounds (Spanish, ulaw + gsm + sln16)
+    && mkdir -p /var/lib/asterisk/sounds/es \
+    && cd /var/lib/asterisk/sounds/es \
+    && curl -fsSL https://downloads.asterisk.org/pub/telephony/sounds/asterisk-core-sounds-es-ulaw-current.tar.gz | tar xz \
+    && curl -fsSL https://downloads.asterisk.org/pub/telephony/sounds/asterisk-core-sounds-es-gsm-current.tar.gz | tar xz \
+    && curl -fsSL https://downloads.asterisk.org/pub/telephony/sounds/asterisk-core-sounds-es-sln16-current.tar.gz | tar xz \
     && chown -R asterisk:asterisk /var/lib/asterisk/sounds
 
 USER asterisk
