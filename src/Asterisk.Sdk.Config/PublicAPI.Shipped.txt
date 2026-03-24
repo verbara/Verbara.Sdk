@@ -1,1 +1,68 @@
 #nullable enable
+Asterisk.Sdk.Config.ConfigCategory
+Asterisk.Sdk.Config.ConfigCategory.ConfigCategory() -> void
+Asterisk.Sdk.Config.ConfigCategory.Name.get -> string!
+Asterisk.Sdk.Config.ConfigCategory.Name.init -> void
+Asterisk.Sdk.Config.ConfigCategory.OrderedVariables.get -> System.Collections.Generic.List<Asterisk.Sdk.Config.ConfigVariable!>!
+Asterisk.Sdk.Config.ConfigCategory.Template.get -> string?
+Asterisk.Sdk.Config.ConfigCategory.Template.init -> void
+Asterisk.Sdk.Config.ConfigCategory.Variables.get -> System.Collections.Generic.Dictionary<string!, string!>!
+Asterisk.Sdk.Config.ConfigDirective
+Asterisk.Sdk.Config.ConfigDirective.ConfigDirective() -> void
+Asterisk.Sdk.Config.ConfigDirective.LineNumber.get -> int
+Asterisk.Sdk.Config.ConfigDirective.LineNumber.init -> void
+Asterisk.Sdk.Config.ConfigFile
+Asterisk.Sdk.Config.ConfigFile.Categories.get -> System.Collections.Generic.List<Asterisk.Sdk.Config.ConfigCategory!>!
+Asterisk.Sdk.Config.ConfigFile.ConfigFile() -> void
+Asterisk.Sdk.Config.ConfigFile.Directives.get -> System.Collections.Generic.List<Asterisk.Sdk.Config.ConfigDirective!>!
+Asterisk.Sdk.Config.ConfigFile.FileName.get -> string!
+Asterisk.Sdk.Config.ConfigFile.FileName.set -> void
+Asterisk.Sdk.Config.ConfigFile.GetCategory(string! name) -> Asterisk.Sdk.Config.ConfigCategory?
+Asterisk.Sdk.Config.ConfigFileReader
+Asterisk.Sdk.Config.ConfigFileReader.ConfigFileReader() -> void
+Asterisk.Sdk.Config.ConfigParseException
+Asterisk.Sdk.Config.ConfigParseException.ConfigParseException(string! message) -> void
+Asterisk.Sdk.Config.ConfigVariable
+Asterisk.Sdk.Config.ConfigVariable.ConfigVariable() -> void
+Asterisk.Sdk.Config.ConfigVariable.IsAppend.get -> bool
+Asterisk.Sdk.Config.ConfigVariable.IsAppend.init -> void
+Asterisk.Sdk.Config.ConfigVariable.Key.get -> string!
+Asterisk.Sdk.Config.ConfigVariable.Key.init -> void
+Asterisk.Sdk.Config.ConfigVariable.LineNumber.get -> int
+Asterisk.Sdk.Config.ConfigVariable.LineNumber.init -> void
+Asterisk.Sdk.Config.ConfigVariable.Value.get -> string!
+Asterisk.Sdk.Config.ConfigVariable.Value.init -> void
+Asterisk.Sdk.Config.DialplanContext
+Asterisk.Sdk.Config.DialplanContext.DialplanContext() -> void
+Asterisk.Sdk.Config.DialplanContext.Extensions.get -> System.Collections.Generic.List<Asterisk.Sdk.Config.DialplanExtension!>!
+Asterisk.Sdk.Config.DialplanContext.Includes.get -> System.Collections.Generic.List<string!>!
+Asterisk.Sdk.Config.DialplanContext.Name.get -> string!
+Asterisk.Sdk.Config.DialplanContext.Name.init -> void
+Asterisk.Sdk.Config.DialplanExtension
+Asterisk.Sdk.Config.DialplanExtension.Application.get -> string!
+Asterisk.Sdk.Config.DialplanExtension.Application.init -> void
+Asterisk.Sdk.Config.DialplanExtension.DialplanExtension() -> void
+Asterisk.Sdk.Config.DialplanExtension.Extension.get -> string!
+Asterisk.Sdk.Config.DialplanExtension.Extension.init -> void
+Asterisk.Sdk.Config.DialplanExtension.Priority.get -> int
+Asterisk.Sdk.Config.DialplanExtension.Priority.init -> void
+Asterisk.Sdk.Config.ExecDirective
+Asterisk.Sdk.Config.ExecDirective.Command.get -> string!
+Asterisk.Sdk.Config.ExecDirective.Command.init -> void
+Asterisk.Sdk.Config.ExecDirective.ExecDirective() -> void
+Asterisk.Sdk.Config.ExtensionsConfigFile
+Asterisk.Sdk.Config.ExtensionsConfigFile.Contexts.get -> System.Collections.Generic.List<Asterisk.Sdk.Config.DialplanContext!>!
+Asterisk.Sdk.Config.ExtensionsConfigFile.ExtensionsConfigFile() -> void
+Asterisk.Sdk.Config.ExtensionsConfigFile.FileName.get -> string!
+Asterisk.Sdk.Config.ExtensionsConfigFile.FileName.set -> void
+Asterisk.Sdk.Config.ExtensionsConfigFile.GetContext(string! name) -> Asterisk.Sdk.Config.DialplanContext?
+Asterisk.Sdk.Config.ExtensionsConfigFileReader
+Asterisk.Sdk.Config.ExtensionsConfigFileReader.ExtensionsConfigFileReader() -> void
+Asterisk.Sdk.Config.IncludeDirective
+Asterisk.Sdk.Config.IncludeDirective.IncludeDirective() -> void
+Asterisk.Sdk.Config.IncludeDirective.Path.get -> string!
+Asterisk.Sdk.Config.IncludeDirective.Path.init -> void
+static Asterisk.Sdk.Config.ConfigFileReader.Parse(string! filePath) -> Asterisk.Sdk.Config.ConfigFile!
+static Asterisk.Sdk.Config.ConfigFileReader.Parse(System.IO.TextReader! reader, string? fileName = null) -> Asterisk.Sdk.Config.ConfigFile!
+static Asterisk.Sdk.Config.ExtensionsConfigFileReader.Parse(string! filePath) -> Asterisk.Sdk.Config.ExtensionsConfigFile!
+static Asterisk.Sdk.Config.ExtensionsConfigFileReader.Parse(System.IO.TextReader! reader, string? fileName = null) -> Asterisk.Sdk.Config.ExtensionsConfigFile!

@@ -1,1 +1,39 @@
 #nullable enable
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions.ApiKey.get -> string!
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions.ApiKey.set -> void
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions.AzureTtsOptions() -> void
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions.Language.get -> string!
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions.Language.set -> void
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions.OutputFormat.get -> string!
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions.OutputFormat.set -> void
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions.Region.get -> string!
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions.Region.set -> void
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions.VoiceName.get -> string!
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions.VoiceName.set -> void
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOutputFormat
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsSpeechSynthesizer
+Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsSpeechSynthesizer.AzureTtsSpeechSynthesizer(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions!>! options, System.Net.Http.HttpClient! http) -> void
+Asterisk.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions
+Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions
+Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.ApiKey.get -> string!
+Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.ApiKey.set -> void
+Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.ElevenLabsOptions() -> void
+Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.ModelId.get -> string!
+Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.ModelId.set -> void
+Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.SimilarityBoost.get -> float
+Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.SimilarityBoost.set -> void
+Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.Stability.get -> float
+Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.Stability.set -> void
+Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.VoiceId.get -> string!
+Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.VoiceId.set -> void
+Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsSpeechSynthesizer
+Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsSpeechSynthesizer.ElevenLabsSpeechSynthesizer(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions!>! options) -> void
+const Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOutputFormat.Raw16Khz16BitMonoPcm = "raw-16khz-16bit-mono-pcm" -> string!
+const Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOutputFormat.Raw24Khz16BitMonoPcm = "raw-24khz-16bit-mono-pcm" -> string!
+const Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOutputFormat.Raw48Khz16BitMonoPcm = "raw-48khz-16bit-mono-pcm" -> string!
+const Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOutputFormat.Raw8Khz16BitMonoPcm = "raw-8khz-16bit-mono-pcm" -> string!
+override Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsSpeechSynthesizer.SynthesizeAsync(string! text, Asterisk.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+override Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsSpeechSynthesizer.SynthesizeAsync(string! text, Asterisk.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+static Asterisk.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions.AddAzureTtsSpeechSynthesizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Asterisk.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions.AddElevenLabsSpeechSynthesizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

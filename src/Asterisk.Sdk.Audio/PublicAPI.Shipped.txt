@@ -1,1 +1,46 @@
 #nullable enable
+Asterisk.Sdk.Audio.AudioEncoding
+Asterisk.Sdk.Audio.AudioEncoding.IeeeFloat = 1 -> Asterisk.Sdk.Audio.AudioEncoding
+Asterisk.Sdk.Audio.AudioEncoding.LinearPcm = 0 -> Asterisk.Sdk.Audio.AudioEncoding
+Asterisk.Sdk.Audio.AudioFormat
+Asterisk.Sdk.Audio.AudioFormat.AudioFormat(int SampleRate, int Channels, int BitsPerSample, Asterisk.Sdk.Audio.AudioEncoding Encoding) -> void
+Asterisk.Sdk.Audio.AudioFormat.AudioFormat() -> void
+Asterisk.Sdk.Audio.AudioFormat.BitsPerSample.get -> int
+Asterisk.Sdk.Audio.AudioFormat.BitsPerSample.init -> void
+Asterisk.Sdk.Audio.AudioFormat.BytesPerFrame(System.TimeSpan frameDuration) -> int
+Asterisk.Sdk.Audio.AudioFormat.BytesPerSample.get -> int
+Asterisk.Sdk.Audio.AudioFormat.Channels.get -> int
+Asterisk.Sdk.Audio.AudioFormat.Channels.init -> void
+Asterisk.Sdk.Audio.AudioFormat.Encoding.get -> Asterisk.Sdk.Audio.AudioEncoding
+Asterisk.Sdk.Audio.AudioFormat.Encoding.init -> void
+Asterisk.Sdk.Audio.AudioFormat.SampleRate.get -> int
+Asterisk.Sdk.Audio.AudioFormat.SampleRate.init -> void
+Asterisk.Sdk.Audio.AudioFormat.SamplesPerFrame(System.TimeSpan frameDuration) -> int
+Asterisk.Sdk.Audio.IAudioTransform
+Asterisk.Sdk.Audio.IAudioTransform.InputFormat.get -> Asterisk.Sdk.Audio.AudioFormat
+Asterisk.Sdk.Audio.IAudioTransform.MaxOutputBytes(int inputBytes) -> int
+Asterisk.Sdk.Audio.IAudioTransform.OutputFormat.get -> Asterisk.Sdk.Audio.AudioFormat
+Asterisk.Sdk.Audio.IAudioTransform.Process(System.ReadOnlySpan<byte> input, System.Span<byte> output) -> int
+Asterisk.Sdk.Audio.Processing.AudioProcessor
+Asterisk.Sdk.Audio.Resampling.PolyphaseResampler
+Asterisk.Sdk.Audio.Resampling.PolyphaseResampler.Dispose() -> void
+Asterisk.Sdk.Audio.Resampling.PolyphaseResampler.InputFormat.get -> Asterisk.Sdk.Audio.AudioFormat
+Asterisk.Sdk.Audio.Resampling.PolyphaseResampler.MaxOutputBytes(int inputBytes) -> int
+Asterisk.Sdk.Audio.Resampling.PolyphaseResampler.OutputFormat.get -> Asterisk.Sdk.Audio.AudioFormat
+Asterisk.Sdk.Audio.Resampling.PolyphaseResampler.Process(System.ReadOnlySpan<byte> input, System.Span<byte> output) -> int
+Asterisk.Sdk.Audio.Resampling.PolyphaseResampler.Process(System.ReadOnlySpan<short> input, System.Span<short> output) -> int
+Asterisk.Sdk.Audio.Resampling.PolyphaseResampler.Reset() -> void
+Asterisk.Sdk.Audio.Resampling.ResamplerFactory
+static Asterisk.Sdk.Audio.Processing.AudioProcessor.ApplyGain(System.Span<short> samples, float gainDb) -> void
+static Asterisk.Sdk.Audio.Processing.AudioProcessor.CalculateRmsEnergy(System.ReadOnlySpan<short> samples) -> double
+static Asterisk.Sdk.Audio.Processing.AudioProcessor.ConvertToFloat32(System.ReadOnlySpan<short> pcm16, System.Span<float> destination) -> void
+static Asterisk.Sdk.Audio.Processing.AudioProcessor.ConvertToPcm16(System.ReadOnlySpan<float> source, System.Span<short> destination) -> void
+static Asterisk.Sdk.Audio.Processing.AudioProcessor.IsSilence(System.ReadOnlySpan<short> samples, double thresholdDb = -40) -> bool
+static Asterisk.Sdk.Audio.Resampling.ResamplerFactory.CalculateOutputSize(int inputSamples, int inputRate, int outputRate) -> int
+static Asterisk.Sdk.Audio.Resampling.ResamplerFactory.Create(int inputRate, int outputRate) -> Asterisk.Sdk.Audio.Resampling.PolyphaseResampler!
+static Asterisk.Sdk.Audio.Resampling.ResamplerFactory.IsSupported(int inputRate, int outputRate) -> bool
+static readonly Asterisk.Sdk.Audio.AudioFormat.Float32Mono16kHz -> Asterisk.Sdk.Audio.AudioFormat
+static readonly Asterisk.Sdk.Audio.AudioFormat.Slin16Mono16kHz -> Asterisk.Sdk.Audio.AudioFormat
+static readonly Asterisk.Sdk.Audio.AudioFormat.Slin16Mono24kHz -> Asterisk.Sdk.Audio.AudioFormat
+static readonly Asterisk.Sdk.Audio.AudioFormat.Slin16Mono48kHz -> Asterisk.Sdk.Audio.AudioFormat
+static readonly Asterisk.Sdk.Audio.AudioFormat.Slin16Mono8kHz -> Asterisk.Sdk.Audio.AudioFormat

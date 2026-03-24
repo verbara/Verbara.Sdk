@@ -1,1 +1,110 @@
 #nullable enable
+abstract Asterisk.Sdk.VoiceAi.SpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
+abstract Asterisk.Sdk.VoiceAi.SpeechSynthesizer.SynthesizeAsync(string! text, Asterisk.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+Asterisk.Sdk.VoiceAi.ConversationContext
+Asterisk.Sdk.VoiceAi.ConversationContext.ChannelId.get -> System.Guid
+Asterisk.Sdk.VoiceAi.ConversationContext.ChannelId.init -> void
+Asterisk.Sdk.VoiceAi.ConversationContext.ConversationContext() -> void
+Asterisk.Sdk.VoiceAi.ConversationContext.History.get -> System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.VoiceAi.ConversationTurn>!
+Asterisk.Sdk.VoiceAi.ConversationContext.History.init -> void
+Asterisk.Sdk.VoiceAi.ConversationContext.InputFormat.get -> Asterisk.Sdk.Audio.AudioFormat
+Asterisk.Sdk.VoiceAi.ConversationContext.InputFormat.init -> void
+Asterisk.Sdk.VoiceAi.ConversationTurn
+Asterisk.Sdk.VoiceAi.ConversationTurn.AssistantResponse.get -> string!
+Asterisk.Sdk.VoiceAi.ConversationTurn.AssistantResponse.init -> void
+Asterisk.Sdk.VoiceAi.ConversationTurn.ConversationTurn(string! UserTranscript, string! AssistantResponse, System.DateTimeOffset Timestamp) -> void
+Asterisk.Sdk.VoiceAi.ConversationTurn.ConversationTurn() -> void
+Asterisk.Sdk.VoiceAi.ConversationTurn.Timestamp.get -> System.DateTimeOffset
+Asterisk.Sdk.VoiceAi.ConversationTurn.Timestamp.init -> void
+Asterisk.Sdk.VoiceAi.ConversationTurn.UserTranscript.get -> string!
+Asterisk.Sdk.VoiceAi.ConversationTurn.UserTranscript.init -> void
+Asterisk.Sdk.VoiceAi.DependencyInjection.VoiceAiServiceCollectionExtensions
+Asterisk.Sdk.VoiceAi.Events.BargInDetectedEvent
+Asterisk.Sdk.VoiceAi.Events.BargInDetectedEvent.BargInDetectedEvent(System.DateTimeOffset Timestamp) -> void
+Asterisk.Sdk.VoiceAi.Events.PipelineErrorEvent
+Asterisk.Sdk.VoiceAi.Events.PipelineErrorEvent.Exception.get -> System.Exception?
+Asterisk.Sdk.VoiceAi.Events.PipelineErrorEvent.Exception.init -> void
+Asterisk.Sdk.VoiceAi.Events.PipelineErrorEvent.Message.get -> string!
+Asterisk.Sdk.VoiceAi.Events.PipelineErrorEvent.Message.init -> void
+Asterisk.Sdk.VoiceAi.Events.PipelineErrorEvent.PipelineErrorEvent(System.DateTimeOffset Timestamp, string! Message, System.Exception? Exception, Asterisk.Sdk.VoiceAi.Events.PipelineErrorSource Source) -> void
+Asterisk.Sdk.VoiceAi.Events.PipelineErrorEvent.Source.get -> Asterisk.Sdk.VoiceAi.Events.PipelineErrorSource
+Asterisk.Sdk.VoiceAi.Events.PipelineErrorEvent.Source.init -> void
+Asterisk.Sdk.VoiceAi.Events.PipelineErrorSource
+Asterisk.Sdk.VoiceAi.Events.PipelineErrorSource.Handler = 2 -> Asterisk.Sdk.VoiceAi.Events.PipelineErrorSource
+Asterisk.Sdk.VoiceAi.Events.PipelineErrorSource.Stt = 0 -> Asterisk.Sdk.VoiceAi.Events.PipelineErrorSource
+Asterisk.Sdk.VoiceAi.Events.PipelineErrorSource.Tts = 1 -> Asterisk.Sdk.VoiceAi.Events.PipelineErrorSource
+Asterisk.Sdk.VoiceAi.Events.ResponseGeneratedEvent
+Asterisk.Sdk.VoiceAi.Events.ResponseGeneratedEvent.ResponseGeneratedEvent(System.DateTimeOffset Timestamp, string! Response) -> void
+Asterisk.Sdk.VoiceAi.Events.ResponseGeneratedEvent.Response.get -> string!
+Asterisk.Sdk.VoiceAi.Events.ResponseGeneratedEvent.Response.init -> void
+Asterisk.Sdk.VoiceAi.Events.SpeechEndedEvent
+Asterisk.Sdk.VoiceAi.Events.SpeechEndedEvent.Duration.get -> System.TimeSpan
+Asterisk.Sdk.VoiceAi.Events.SpeechEndedEvent.Duration.init -> void
+Asterisk.Sdk.VoiceAi.Events.SpeechEndedEvent.SpeechEndedEvent(System.DateTimeOffset Timestamp, System.TimeSpan Duration) -> void
+Asterisk.Sdk.VoiceAi.Events.SpeechStartedEvent
+Asterisk.Sdk.VoiceAi.Events.SpeechStartedEvent.SpeechStartedEvent(System.DateTimeOffset Timestamp) -> void
+Asterisk.Sdk.VoiceAi.Events.SynthesisEndedEvent
+Asterisk.Sdk.VoiceAi.Events.SynthesisEndedEvent.Duration.get -> System.TimeSpan
+Asterisk.Sdk.VoiceAi.Events.SynthesisEndedEvent.Duration.init -> void
+Asterisk.Sdk.VoiceAi.Events.SynthesisEndedEvent.SynthesisEndedEvent(System.DateTimeOffset Timestamp, System.TimeSpan Duration) -> void
+Asterisk.Sdk.VoiceAi.Events.SynthesisStartedEvent
+Asterisk.Sdk.VoiceAi.Events.SynthesisStartedEvent.SynthesisStartedEvent(System.DateTimeOffset Timestamp) -> void
+Asterisk.Sdk.VoiceAi.Events.TranscriptReceivedEvent
+Asterisk.Sdk.VoiceAi.Events.TranscriptReceivedEvent.Confidence.get -> float
+Asterisk.Sdk.VoiceAi.Events.TranscriptReceivedEvent.Confidence.init -> void
+Asterisk.Sdk.VoiceAi.Events.TranscriptReceivedEvent.IsFinal.get -> bool
+Asterisk.Sdk.VoiceAi.Events.TranscriptReceivedEvent.IsFinal.init -> void
+Asterisk.Sdk.VoiceAi.Events.TranscriptReceivedEvent.Transcript.get -> string!
+Asterisk.Sdk.VoiceAi.Events.TranscriptReceivedEvent.Transcript.init -> void
+Asterisk.Sdk.VoiceAi.Events.TranscriptReceivedEvent.TranscriptReceivedEvent(System.DateTimeOffset Timestamp, string! Transcript, float Confidence, bool IsFinal) -> void
+Asterisk.Sdk.VoiceAi.Events.VoiceAiPipelineEvent
+Asterisk.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.Timestamp.get -> System.DateTimeOffset
+Asterisk.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.Timestamp.init -> void
+Asterisk.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.VoiceAiPipelineEvent(System.DateTimeOffset Timestamp) -> void
+Asterisk.Sdk.VoiceAi.IConversationHandler
+Asterisk.Sdk.VoiceAi.IConversationHandler.HandleAsync(string! transcript, Asterisk.Sdk.VoiceAi.ConversationContext! context, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
+Asterisk.Sdk.VoiceAi.ISessionHandler
+Asterisk.Sdk.VoiceAi.ISessionHandler.HandleSessionAsync(Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession! session, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipeline
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipeline.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipeline.Events.get -> System.IObservable<Asterisk.Sdk.VoiceAi.Events.VoiceAiPipelineEvent!>!
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipeline.HandleSessionAsync(Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession! session, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.BargInVoiceThreshold.get -> System.TimeSpan
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.BargInVoiceThreshold.set -> void
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.EndOfUtteranceSilence.get -> System.TimeSpan
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.EndOfUtteranceSilence.set -> void
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.InputFormat.get -> Asterisk.Sdk.Audio.AudioFormat
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.InputFormat.set -> void
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.MaxHistoryTurns.get -> int
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.MaxHistoryTurns.set -> void
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.MaxUtteranceDuration.get -> System.TimeSpan
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.MaxUtteranceDuration.set -> void
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.OutputFormat.get -> Asterisk.Sdk.Audio.AudioFormat
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.OutputFormat.set -> void
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.SilenceThresholdDb.get -> double
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.SilenceThresholdDb.set -> void
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.VoiceAiPipelineOptions() -> void
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipeline.VoiceAiPipeline(Asterisk.Sdk.VoiceAi.SpeechRecognizer! stt, Asterisk.Sdk.VoiceAi.SpeechSynthesizer! tts, Microsoft.Extensions.DependencyInjection.IServiceScopeFactory! scopeFactory, Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions!>! options, Microsoft.Extensions.Logging.ILogger<Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipeline!>! logger) -> void
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiSessionBroker
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiSessionBroker.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiSessionBroker.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiSessionBroker.VoiceAiSessionBroker(Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketServer! server, Asterisk.Sdk.VoiceAi.ISessionHandler! handler, Microsoft.Extensions.Logging.ILogger<Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiSessionBroker!>! logger) -> void
+Asterisk.Sdk.VoiceAi.SpeechRecognitionResult
+Asterisk.Sdk.VoiceAi.SpeechRecognitionResult.Confidence.get -> float
+Asterisk.Sdk.VoiceAi.SpeechRecognitionResult.Confidence.init -> void
+Asterisk.Sdk.VoiceAi.SpeechRecognitionResult.Duration.get -> System.TimeSpan
+Asterisk.Sdk.VoiceAi.SpeechRecognitionResult.Duration.init -> void
+Asterisk.Sdk.VoiceAi.SpeechRecognitionResult.IsFinal.get -> bool
+Asterisk.Sdk.VoiceAi.SpeechRecognitionResult.IsFinal.init -> void
+Asterisk.Sdk.VoiceAi.SpeechRecognitionResult.SpeechRecognitionResult(string! Transcript, float Confidence, bool IsFinal, System.TimeSpan Duration) -> void
+Asterisk.Sdk.VoiceAi.SpeechRecognitionResult.SpeechRecognitionResult() -> void
+Asterisk.Sdk.VoiceAi.SpeechRecognitionResult.Transcript.get -> string!
+Asterisk.Sdk.VoiceAi.SpeechRecognitionResult.Transcript.init -> void
+Asterisk.Sdk.VoiceAi.SpeechRecognizer
+Asterisk.Sdk.VoiceAi.SpeechRecognizer.SpeechRecognizer() -> void
+Asterisk.Sdk.VoiceAi.SpeechSynthesizer
+Asterisk.Sdk.VoiceAi.SpeechSynthesizer.SpeechSynthesizer() -> void
+static Asterisk.Sdk.VoiceAi.DependencyInjection.VoiceAiServiceCollectionExtensions.AddVoiceAiPipeline<THandler>(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+virtual Asterisk.Sdk.VoiceAi.SpeechRecognizer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+virtual Asterisk.Sdk.VoiceAi.SpeechSynthesizer.DisposeAsync() -> System.Threading.Tasks.ValueTask

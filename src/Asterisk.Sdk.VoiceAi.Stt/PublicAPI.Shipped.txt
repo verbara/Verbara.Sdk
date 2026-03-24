@@ -1,1 +1,58 @@
 #nullable enable
+Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions
+Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.ApiKey.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.ApiKey.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.DeepgramOptions() -> void
+Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.InterimResults.get -> bool
+Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.InterimResults.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.Language.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.Language.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.Model.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.Model.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.Punctuate.get -> bool
+Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.Punctuate.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramSpeechRecognizer
+Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramSpeechRecognizer.DeepgramSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions!>! options) -> void
+Asterisk.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions
+Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions
+Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.ApiKey.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.ApiKey.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.GoogleSpeechOptions() -> void
+Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.LanguageCode.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.LanguageCode.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.Model.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.Model.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechRecognizer
+Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechRecognizer.GoogleSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions!>! options, System.Net.Http.HttpClient! http) -> void
+Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions
+Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.ApiKey.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.ApiKey.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.ApiVersion.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.ApiVersion.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.AzureWhisperOptions() -> void
+Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.Deployment.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.Deployment.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.Endpoint.get -> System.Uri!
+Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.Endpoint.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperSpeechRecognizer
+Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperSpeechRecognizer.AzureWhisperSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions!>! options, System.Net.Http.HttpClient! http) -> void
+Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions
+Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.ApiKey.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.ApiKey.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.Endpoint.get -> System.Uri!
+Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.Endpoint.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.Language.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.Language.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.Model.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.Model.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.WhisperOptions() -> void
+Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperSpeechRecognizer
+Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperSpeechRecognizer.WhisperSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions!>! options, System.Net.Http.HttpClient! http) -> void
+override Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
+override Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
+override Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
+override Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
+static Asterisk.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddAzureWhisperSpeechRecognizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Asterisk.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddDeepgramSpeechRecognizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Asterisk.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddGoogleSpeechRecognizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Asterisk.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddWhisperSpeechRecognizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

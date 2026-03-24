@@ -10,8 +10,10 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <!-- Suppress CS1591 (missing XML comment) during initial development -->
-    <!-- RS0016/RS0037/RS0041: PublicApiAnalyzers — temporarily suppressed until API files are populated -->
-    <NoWarn>$(NoWarn);CS1591;RS0016;RS0017;RS0037;RS0041</NoWarn>
+    <!-- RS0016: source-generated code in obj/ produces undeclared API (editorconfig can't suppress obj/) -->
+    <!-- RS0037: auto-populated API files; RS0041: internal API tracking not needed -->
+    <NoWarn>$(NoWarn);CS1591;RS0016;RS0037;RS0041</NoWarn>
+    <!-- RS0016 severity controlled in .editorconfig for user-authored code (warning level) -->
   </PropertyGroup>
 
   <!-- Native AOT readiness -->

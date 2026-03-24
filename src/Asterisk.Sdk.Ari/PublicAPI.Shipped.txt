@@ -1,1 +1,548 @@
 #nullable enable
+Asterisk.Sdk.Ari.AriConflictException
+Asterisk.Sdk.Ari.AriConflictException.AriConflictException(string! message, System.Exception? innerException = null) -> void
+Asterisk.Sdk.Ari.AriException
+Asterisk.Sdk.Ari.AriException.AriException(string! message, int? statusCode = null, System.Exception? innerException = null) -> void
+Asterisk.Sdk.Ari.AriException.StatusCode.get -> int?
+Asterisk.Sdk.Ari.AriNotFoundException
+Asterisk.Sdk.Ari.AriNotFoundException.AriNotFoundException(string! message, System.Exception? innerException = null) -> void
+Asterisk.Sdk.Ari.Audio.AudioChannelVars
+Asterisk.Sdk.Ari.Audio.AudioFrameType
+Asterisk.Sdk.Ari.Audio.AudioFrameType.Audio = 1 -> Asterisk.Sdk.Ari.Audio.AudioFrameType
+Asterisk.Sdk.Ari.Audio.AudioFrameType.Error = 16 -> Asterisk.Sdk.Ari.Audio.AudioFrameType
+Asterisk.Sdk.Ari.Audio.AudioFrameType.Hangup = 255 -> Asterisk.Sdk.Ari.Audio.AudioFrameType
+Asterisk.Sdk.Ari.Audio.AudioFrameType.Silence = 2 -> Asterisk.Sdk.Ari.Audio.AudioFrameType
+Asterisk.Sdk.Ari.Audio.AudioFrameType.Uuid = 0 -> Asterisk.Sdk.Ari.Audio.AudioFrameType
+Asterisk.Sdk.Ari.Audio.AudioServerOptions
+Asterisk.Sdk.Ari.Audio.AudioServerOptions.AudioServerOptions() -> void
+Asterisk.Sdk.Ari.Audio.AudioServerOptions.AudioSocketPort.get -> int
+Asterisk.Sdk.Ari.Audio.AudioServerOptions.AudioSocketPort.set -> void
+Asterisk.Sdk.Ari.Audio.AudioServerOptions.DefaultFormat.get -> string!
+Asterisk.Sdk.Ari.Audio.AudioServerOptions.DefaultFormat.set -> void
+Asterisk.Sdk.Ari.Audio.AudioServerOptions.IdleTimeout.get -> System.TimeSpan
+Asterisk.Sdk.Ari.Audio.AudioServerOptions.IdleTimeout.set -> void
+Asterisk.Sdk.Ari.Audio.AudioServerOptions.ListenAddress.get -> string!
+Asterisk.Sdk.Ari.Audio.AudioServerOptions.ListenAddress.set -> void
+Asterisk.Sdk.Ari.Audio.AudioServerOptions.MaxConcurrentStreams.get -> int
+Asterisk.Sdk.Ari.Audio.AudioServerOptions.MaxConcurrentStreams.set -> void
+Asterisk.Sdk.Ari.Audio.AudioServerOptions.WebSocketPort.get -> int
+Asterisk.Sdk.Ari.Audio.AudioServerOptions.WebSocketPort.set -> void
+Asterisk.Sdk.Ari.Audio.AudioSocketServer
+Asterisk.Sdk.Ari.Audio.AudioSocketServer.ActiveStreamCount.get -> int
+Asterisk.Sdk.Ari.Audio.AudioSocketServer.ActiveStreams.get -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.IAudioStream!>!
+Asterisk.Sdk.Ari.Audio.AudioSocketServer.AudioSocketServer(Asterisk.Sdk.Ari.Audio.AudioServerOptions! options, Microsoft.Extensions.Logging.ILogger<Asterisk.Sdk.Ari.Audio.AudioSocketServer!>! logger) -> void
+Asterisk.Sdk.Ari.Audio.AudioSocketServer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Audio.AudioSocketServer.GetStream(string! channelId) -> Asterisk.Sdk.IAudioStream?
+Asterisk.Sdk.Ari.Audio.AudioSocketServer.IsRunning.get -> bool
+Asterisk.Sdk.Ari.Audio.AudioSocketServer.OnStreamConnected.get -> System.IObservable<Asterisk.Sdk.IAudioStream!>!
+Asterisk.Sdk.Ari.Audio.AudioSocketServer.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Audio.AudioSocketServer.StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Audio.CompositeAudioServer
+Asterisk.Sdk.Ari.Audio.CompositeAudioServer.ActiveStreamCount.get -> int
+Asterisk.Sdk.Ari.Audio.CompositeAudioServer.ActiveStreams.get -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.IAudioStream!>!
+Asterisk.Sdk.Ari.Audio.CompositeAudioServer.CompositeAudioServer(System.Collections.Generic.IEnumerable<Asterisk.Sdk.IAudioServer!>! servers) -> void
+Asterisk.Sdk.Ari.Audio.CompositeAudioServer.GetStream(string! channelId) -> Asterisk.Sdk.IAudioStream?
+Asterisk.Sdk.Ari.Audio.CompositeAudioServer.OnStreamConnected.get -> System.IObservable<Asterisk.Sdk.IAudioStream!>!
+Asterisk.Sdk.Ari.Audio.WebSocketAudioServer
+Asterisk.Sdk.Ari.Audio.WebSocketAudioServer.ActiveStreamCount.get -> int
+Asterisk.Sdk.Ari.Audio.WebSocketAudioServer.ActiveStreams.get -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.IAudioStream!>!
+Asterisk.Sdk.Ari.Audio.WebSocketAudioServer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Audio.WebSocketAudioServer.GetStream(string! channelId) -> Asterisk.Sdk.IAudioStream?
+Asterisk.Sdk.Ari.Audio.WebSocketAudioServer.IsRunning.get -> bool
+Asterisk.Sdk.Ari.Audio.WebSocketAudioServer.OnStreamConnected.get -> System.IObservable<Asterisk.Sdk.IAudioStream!>!
+Asterisk.Sdk.Ari.Audio.WebSocketAudioServer.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Audio.WebSocketAudioServer.StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Audio.WebSocketAudioServer.WebSocketAudioServer(Asterisk.Sdk.Ari.Audio.AudioServerOptions! options, Microsoft.Extensions.Logging.ILogger<Asterisk.Sdk.Ari.Audio.WebSocketAudioServer!>! logger) -> void
+Asterisk.Sdk.Ari.Client.AriClient
+Asterisk.Sdk.Ari.Client.AriClient.Applications.get -> Asterisk.Sdk.IAriApplicationsResource!
+Asterisk.Sdk.Ari.Client.AriClient.AriClient(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.Ari.Client.AriClientOptions!>! options, Microsoft.Extensions.Logging.ILogger<Asterisk.Sdk.Ari.Client.AriClient!>! logger, Asterisk.Sdk.IAudioServer? audioServer = null) -> void
+Asterisk.Sdk.Ari.Client.AriClient.Asterisk.get -> Asterisk.Sdk.IAriAsteriskResource!
+Asterisk.Sdk.Ari.Client.AriClient.AudioServer.get -> Asterisk.Sdk.IAudioServer?
+Asterisk.Sdk.Ari.Client.AriClient.Bridges.get -> Asterisk.Sdk.IAriBridgesResource!
+Asterisk.Sdk.Ari.Client.AriClient.Channels.get -> Asterisk.Sdk.IAriChannelsResource!
+Asterisk.Sdk.Ari.Client.AriClient.ConnectAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Client.AriClient.DeviceStates.get -> Asterisk.Sdk.IAriDeviceStatesResource!
+Asterisk.Sdk.Ari.Client.AriClient.DisconnectAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Client.AriClient.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Client.AriClient.Endpoints.get -> Asterisk.Sdk.IAriEndpointsResource!
+Asterisk.Sdk.Ari.Client.AriClient.GenerateUserEventAsync(string! eventName, string! application, string? source = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Client.AriClient.IsConnected.get -> bool
+Asterisk.Sdk.Ari.Client.AriClient.Mailboxes.get -> Asterisk.Sdk.IAriMailboxesResource!
+Asterisk.Sdk.Ari.Client.AriClientOptions
+Asterisk.Sdk.Ari.Client.AriClientOptions.Application.get -> string!
+Asterisk.Sdk.Ari.Client.AriClientOptions.Application.set -> void
+Asterisk.Sdk.Ari.Client.AriClientOptions.AriClientOptions() -> void
+Asterisk.Sdk.Ari.Client.AriClientOptions.AutoReconnect.get -> bool
+Asterisk.Sdk.Ari.Client.AriClientOptions.AutoReconnect.set -> void
+Asterisk.Sdk.Ari.Client.AriClientOptions.BaseUrl.get -> string!
+Asterisk.Sdk.Ari.Client.AriClientOptions.BaseUrl.set -> void
+Asterisk.Sdk.Ari.Client.AriClientOptions.ConfigureAudioServer.get -> System.Action<Asterisk.Sdk.Ari.Audio.AudioServerOptions!>?
+Asterisk.Sdk.Ari.Client.AriClientOptions.ConfigureAudioServer.set -> void
+Asterisk.Sdk.Ari.Client.AriClientOptions.MaxReconnectAttempts.get -> int
+Asterisk.Sdk.Ari.Client.AriClientOptions.MaxReconnectAttempts.set -> void
+Asterisk.Sdk.Ari.Client.AriClientOptions.Password.get -> string!
+Asterisk.Sdk.Ari.Client.AriClientOptions.Password.set -> void
+Asterisk.Sdk.Ari.Client.AriClientOptions.ReconnectInitialDelay.get -> System.TimeSpan
+Asterisk.Sdk.Ari.Client.AriClientOptions.ReconnectInitialDelay.set -> void
+Asterisk.Sdk.Ari.Client.AriClientOptions.ReconnectMaxDelay.get -> System.TimeSpan
+Asterisk.Sdk.Ari.Client.AriClientOptions.ReconnectMaxDelay.set -> void
+Asterisk.Sdk.Ari.Client.AriClientOptions.ReconnectMultiplier.get -> double
+Asterisk.Sdk.Ari.Client.AriClientOptions.ReconnectMultiplier.set -> void
+Asterisk.Sdk.Ari.Client.AriClientOptions.Username.get -> string!
+Asterisk.Sdk.Ari.Client.AriClientOptions.Username.set -> void
+Asterisk.Sdk.Ari.Client.AriClientOptionsValidator
+Asterisk.Sdk.Ari.Client.AriClientOptionsValidator.AriClientOptionsValidator() -> void
+Asterisk.Sdk.Ari.Client.AriClient.Playbacks.get -> Asterisk.Sdk.IAriPlaybacksResource!
+Asterisk.Sdk.Ari.Client.AriClient.Recordings.get -> Asterisk.Sdk.IAriRecordingsResource!
+Asterisk.Sdk.Ari.Client.AriClient.Sounds.get -> Asterisk.Sdk.IAriSoundsResource!
+Asterisk.Sdk.Ari.Client.AriClient.State.get -> Asterisk.Sdk.Enums.AriConnectionState
+Asterisk.Sdk.Ari.Client.AriClient.Subscribe(System.IObserver<Asterisk.Sdk.AriEvent!>! observer) -> System.IDisposable!
+Asterisk.Sdk.Ari.Diagnostics.AriActivitySource
+Asterisk.Sdk.Ari.Diagnostics.AriHealthCheck
+Asterisk.Sdk.Ari.Diagnostics.AriHealthCheck.AriHealthCheck(Asterisk.Sdk.IAriClient! client) -> void
+Asterisk.Sdk.Ari.Diagnostics.AriHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Asterisk.Sdk.Ari.Diagnostics.AriMetrics
+Asterisk.Sdk.Ari.Diagnostics.AudioStreamMetrics
+Asterisk.Sdk.Ari.Events.ApplicationMoveFailedEvent
+Asterisk.Sdk.Ari.Events.ApplicationMoveFailedEvent.ApplicationMoveFailedEvent() -> void
+Asterisk.Sdk.Ari.Events.ApplicationMoveFailedEvent.Args.get -> string![]?
+Asterisk.Sdk.Ari.Events.ApplicationMoveFailedEvent.Args.set -> void
+Asterisk.Sdk.Ari.Events.ApplicationMoveFailedEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ApplicationMoveFailedEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ApplicationMoveFailedEvent.Destination.get -> string?
+Asterisk.Sdk.Ari.Events.ApplicationMoveFailedEvent.Destination.set -> void
+Asterisk.Sdk.Ari.Events.ApplicationRegisteredEvent
+Asterisk.Sdk.Ari.Events.ApplicationRegisteredEvent.ApplicationRegisteredEvent() -> void
+Asterisk.Sdk.Ari.Events.ApplicationRegisteredEvent.RegisteredApplication.get -> Asterisk.Sdk.AriApplication?
+Asterisk.Sdk.Ari.Events.ApplicationRegisteredEvent.RegisteredApplication.set -> void
+Asterisk.Sdk.Ari.Events.ApplicationReplacedEvent
+Asterisk.Sdk.Ari.Events.ApplicationReplacedEvent.ApplicationReplacedEvent() -> void
+Asterisk.Sdk.Ari.Events.ApplicationUnregisteredEvent
+Asterisk.Sdk.Ari.Events.ApplicationUnregisteredEvent.ApplicationUnregisteredEvent() -> void
+Asterisk.Sdk.Ari.Events.ApplicationUnregisteredEvent.UnregisteredApplication.get -> Asterisk.Sdk.AriApplication?
+Asterisk.Sdk.Ari.Events.ApplicationUnregisteredEvent.UnregisteredApplication.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.BridgeAttendedTransferEvent() -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationApplication.get -> string?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationApplication.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationBridge.get -> string?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationBridge.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationLinkFirstLeg.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationLinkFirstLeg.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationLinkSecondLeg.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationLinkSecondLeg.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationThreewayBridge.get -> Asterisk.Sdk.AriBridge?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationThreewayBridge.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationThreewayChannel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationThreewayChannel.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationType.get -> string?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationType.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.IsExternal.get -> bool
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.IsExternal.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.ReplaceChannel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.ReplaceChannel.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.Result.get -> string?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.Result.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.Transferee.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.Transferee.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererFirstLegBridge.get -> Asterisk.Sdk.AriBridge?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererFirstLegBridge.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererFirstLeg.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererFirstLeg.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererSecondLegBridge.get -> Asterisk.Sdk.AriBridge?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererSecondLegBridge.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererSecondLeg.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererSecondLeg.set -> void
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransferTarget.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransferTarget.set -> void
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.BridgeBlindTransferEvent() -> void
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.Bridge.get -> Asterisk.Sdk.AriBridge?
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.Bridge.set -> void
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.Context.get -> string?
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.Context.set -> void
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.Exten.get -> string?
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.Exten.set -> void
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.IsExternal.get -> bool
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.IsExternal.set -> void
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.ReplaceChannel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.ReplaceChannel.set -> void
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.Result.get -> string?
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.Result.set -> void
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.Transferee.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.Transferee.set -> void
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.Transferer.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.BridgeBlindTransferEvent.Transferer.set -> void
+Asterisk.Sdk.Ari.Events.BridgeCreatedEvent
+Asterisk.Sdk.Ari.Events.BridgeCreatedEvent.BridgeCreatedEvent() -> void
+Asterisk.Sdk.Ari.Events.BridgeCreatedEvent.Bridge.get -> Asterisk.Sdk.AriBridge?
+Asterisk.Sdk.Ari.Events.BridgeCreatedEvent.Bridge.set -> void
+Asterisk.Sdk.Ari.Events.BridgeDestroyedEvent
+Asterisk.Sdk.Ari.Events.BridgeDestroyedEvent.BridgeDestroyedEvent() -> void
+Asterisk.Sdk.Ari.Events.BridgeDestroyedEvent.Bridge.get -> Asterisk.Sdk.AriBridge?
+Asterisk.Sdk.Ari.Events.BridgeDestroyedEvent.Bridge.set -> void
+Asterisk.Sdk.Ari.Events.BridgeMergedEvent
+Asterisk.Sdk.Ari.Events.BridgeMergedEvent.BridgeFrom.get -> Asterisk.Sdk.AriBridge?
+Asterisk.Sdk.Ari.Events.BridgeMergedEvent.BridgeFrom.set -> void
+Asterisk.Sdk.Ari.Events.BridgeMergedEvent.Bridge.get -> Asterisk.Sdk.AriBridge?
+Asterisk.Sdk.Ari.Events.BridgeMergedEvent.BridgeMergedEvent() -> void
+Asterisk.Sdk.Ari.Events.BridgeMergedEvent.Bridge.set -> void
+Asterisk.Sdk.Ari.Events.BridgeVideoSourceChangedEvent
+Asterisk.Sdk.Ari.Events.BridgeVideoSourceChangedEvent.Bridge.get -> Asterisk.Sdk.AriBridge?
+Asterisk.Sdk.Ari.Events.BridgeVideoSourceChangedEvent.Bridge.set -> void
+Asterisk.Sdk.Ari.Events.BridgeVideoSourceChangedEvent.BridgeVideoSourceChangedEvent() -> void
+Asterisk.Sdk.Ari.Events.BridgeVideoSourceChangedEvent.OldVideoSourceId.get -> string?
+Asterisk.Sdk.Ari.Events.BridgeVideoSourceChangedEvent.OldVideoSourceId.set -> void
+Asterisk.Sdk.Ari.Events.ChannelCallerIdEvent
+Asterisk.Sdk.Ari.Events.ChannelCallerIdEvent.CallerPresentation.get -> int?
+Asterisk.Sdk.Ari.Events.ChannelCallerIdEvent.CallerPresentation.set -> void
+Asterisk.Sdk.Ari.Events.ChannelCallerIdEvent.CallerPresentationTxt.get -> string?
+Asterisk.Sdk.Ari.Events.ChannelCallerIdEvent.CallerPresentationTxt.set -> void
+Asterisk.Sdk.Ari.Events.ChannelCallerIdEvent.ChannelCallerIdEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelCallerIdEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelCallerIdEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelConnectedLineEvent
+Asterisk.Sdk.Ari.Events.ChannelConnectedLineEvent.ChannelConnectedLineEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelConnectedLineEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelConnectedLineEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelCreatedEvent
+Asterisk.Sdk.Ari.Events.ChannelCreatedEvent.ChannelCreatedEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelCreatedEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelCreatedEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelDestroyedEvent
+Asterisk.Sdk.Ari.Events.ChannelDestroyedEvent.Cause.get -> int?
+Asterisk.Sdk.Ari.Events.ChannelDestroyedEvent.Cause.set -> void
+Asterisk.Sdk.Ari.Events.ChannelDestroyedEvent.CauseTxt.get -> string?
+Asterisk.Sdk.Ari.Events.ChannelDestroyedEvent.CauseTxt.set -> void
+Asterisk.Sdk.Ari.Events.ChannelDestroyedEvent.ChannelDestroyedEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelDestroyedEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelDestroyedEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelDestroyedEvent.TechCause.get -> string?
+Asterisk.Sdk.Ari.Events.ChannelDestroyedEvent.TechCause.set -> void
+Asterisk.Sdk.Ari.Events.ChannelDialplanEvent
+Asterisk.Sdk.Ari.Events.ChannelDialplanEvent.ChannelDialplanEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelDialplanEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelDialplanEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelDialplanEvent.DialplanAppData.get -> string?
+Asterisk.Sdk.Ari.Events.ChannelDialplanEvent.DialplanAppData.set -> void
+Asterisk.Sdk.Ari.Events.ChannelDialplanEvent.DialplanApp.get -> string?
+Asterisk.Sdk.Ari.Events.ChannelDialplanEvent.DialplanApp.set -> void
+Asterisk.Sdk.Ari.Events.ChannelDtmfReceivedEvent
+Asterisk.Sdk.Ari.Events.ChannelDtmfReceivedEvent.ChannelDtmfReceivedEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelDtmfReceivedEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelDtmfReceivedEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelDtmfReceivedEvent.Digit.get -> string?
+Asterisk.Sdk.Ari.Events.ChannelDtmfReceivedEvent.Digit.set -> void
+Asterisk.Sdk.Ari.Events.ChannelDtmfReceivedEvent.DurationMs.get -> int?
+Asterisk.Sdk.Ari.Events.ChannelDtmfReceivedEvent.DurationMs.set -> void
+Asterisk.Sdk.Ari.Events.ChannelEnteredBridgeEvent
+Asterisk.Sdk.Ari.Events.ChannelEnteredBridgeEvent.Bridge.get -> Asterisk.Sdk.AriBridge?
+Asterisk.Sdk.Ari.Events.ChannelEnteredBridgeEvent.Bridge.set -> void
+Asterisk.Sdk.Ari.Events.ChannelEnteredBridgeEvent.ChannelEnteredBridgeEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelEnteredBridgeEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelEnteredBridgeEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelHangupRequestEvent
+Asterisk.Sdk.Ari.Events.ChannelHangupRequestEvent.Cause.get -> int?
+Asterisk.Sdk.Ari.Events.ChannelHangupRequestEvent.Cause.set -> void
+Asterisk.Sdk.Ari.Events.ChannelHangupRequestEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelHangupRequestEvent.ChannelHangupRequestEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelHangupRequestEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelHangupRequestEvent.TechCause.get -> string?
+Asterisk.Sdk.Ari.Events.ChannelHangupRequestEvent.TechCause.set -> void
+Asterisk.Sdk.Ari.Events.ChannelHoldEvent
+Asterisk.Sdk.Ari.Events.ChannelHoldEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelHoldEvent.ChannelHoldEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelHoldEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelHoldEvent.MusicClass.get -> string?
+Asterisk.Sdk.Ari.Events.ChannelHoldEvent.MusicClass.set -> void
+Asterisk.Sdk.Ari.Events.ChannelLeftBridgeEvent
+Asterisk.Sdk.Ari.Events.ChannelLeftBridgeEvent.Bridge.get -> Asterisk.Sdk.AriBridge?
+Asterisk.Sdk.Ari.Events.ChannelLeftBridgeEvent.Bridge.set -> void
+Asterisk.Sdk.Ari.Events.ChannelLeftBridgeEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelLeftBridgeEvent.ChannelLeftBridgeEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelLeftBridgeEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelStateChangeEvent
+Asterisk.Sdk.Ari.Events.ChannelStateChangeEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelStateChangeEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelStateChangeEvent.ChannelStateChangeEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelTalkingFinishedEvent
+Asterisk.Sdk.Ari.Events.ChannelTalkingFinishedEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelTalkingFinishedEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelTalkingFinishedEvent.ChannelTalkingFinishedEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelTalkingFinishedEvent.Duration.get -> int?
+Asterisk.Sdk.Ari.Events.ChannelTalkingFinishedEvent.Duration.set -> void
+Asterisk.Sdk.Ari.Events.ChannelTalkingStartedEvent
+Asterisk.Sdk.Ari.Events.ChannelTalkingStartedEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelTalkingStartedEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelTalkingStartedEvent.ChannelTalkingStartedEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelToneDetectedEvent
+Asterisk.Sdk.Ari.Events.ChannelToneDetectedEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelToneDetectedEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelToneDetectedEvent.ChannelToneDetectedEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelTransferEvent
+Asterisk.Sdk.Ari.Events.ChannelTransferEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelTransferEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelTransferEvent.ChannelTransferEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelUnholdEvent
+Asterisk.Sdk.Ari.Events.ChannelUnholdEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelUnholdEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelUnholdEvent.ChannelUnholdEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelUsereventEvent
+Asterisk.Sdk.Ari.Events.ChannelUsereventEvent.Bridge.get -> Asterisk.Sdk.AriBridge?
+Asterisk.Sdk.Ari.Events.ChannelUsereventEvent.Bridge.set -> void
+Asterisk.Sdk.Ari.Events.ChannelUsereventEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelUsereventEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelUsereventEvent.ChannelUsereventEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelUsereventEvent.Endpoint.get -> Asterisk.Sdk.AriEndpoint?
+Asterisk.Sdk.Ari.Events.ChannelUsereventEvent.Endpoint.set -> void
+Asterisk.Sdk.Ari.Events.ChannelUsereventEvent.Eventname.get -> string?
+Asterisk.Sdk.Ari.Events.ChannelUsereventEvent.Eventname.set -> void
+Asterisk.Sdk.Ari.Events.ChannelVarsetEvent
+Asterisk.Sdk.Ari.Events.ChannelVarsetEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ChannelVarsetEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ChannelVarsetEvent.ChannelVarsetEvent() -> void
+Asterisk.Sdk.Ari.Events.ChannelVarsetEvent.Value.get -> string?
+Asterisk.Sdk.Ari.Events.ChannelVarsetEvent.Value.set -> void
+Asterisk.Sdk.Ari.Events.ChannelVarsetEvent.Variable.get -> string?
+Asterisk.Sdk.Ari.Events.ChannelVarsetEvent.Variable.set -> void
+Asterisk.Sdk.Ari.Events.ContactStatusChangeEvent
+Asterisk.Sdk.Ari.Events.ContactStatusChangeEvent.ContactInfo.get -> Asterisk.Sdk.AriContactInfo?
+Asterisk.Sdk.Ari.Events.ContactStatusChangeEvent.ContactInfo.set -> void
+Asterisk.Sdk.Ari.Events.ContactStatusChangeEvent.ContactStatusChangeEvent() -> void
+Asterisk.Sdk.Ari.Events.ContactStatusChangeEvent.Endpoint.get -> Asterisk.Sdk.AriEndpoint?
+Asterisk.Sdk.Ari.Events.ContactStatusChangeEvent.Endpoint.set -> void
+Asterisk.Sdk.Ari.Events.DeviceStateChangedEvent
+Asterisk.Sdk.Ari.Events.DeviceStateChangedEvent.DeviceStateChangedEvent() -> void
+Asterisk.Sdk.Ari.Events.DeviceStateChangedEvent.DeviceState.get -> Asterisk.Sdk.AriDeviceState?
+Asterisk.Sdk.Ari.Events.DeviceStateChangedEvent.DeviceState.set -> void
+Asterisk.Sdk.Ari.Events.DialEvent
+Asterisk.Sdk.Ari.Events.DialEvent.Caller.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.DialEvent.Caller.set -> void
+Asterisk.Sdk.Ari.Events.DialEvent.DialEvent() -> void
+Asterisk.Sdk.Ari.Events.DialEvent.Dialstatus.get -> string?
+Asterisk.Sdk.Ari.Events.DialEvent.Dialstatus.set -> void
+Asterisk.Sdk.Ari.Events.DialEvent.Peer.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.DialEvent.Peer.set -> void
+Asterisk.Sdk.Ari.Events.EndpointStateChangeEvent
+Asterisk.Sdk.Ari.Events.EndpointStateChangeEvent.Endpoint.get -> Asterisk.Sdk.AriEndpoint?
+Asterisk.Sdk.Ari.Events.EndpointStateChangeEvent.Endpoint.set -> void
+Asterisk.Sdk.Ari.Events.EndpointStateChangeEvent.EndpointStateChangeEvent() -> void
+Asterisk.Sdk.Ari.Events.MissingParamsEvent
+Asterisk.Sdk.Ari.Events.MissingParamsEvent.MissingParamsEvent() -> void
+Asterisk.Sdk.Ari.Events.MissingParamsEvent.Params.get -> string![]?
+Asterisk.Sdk.Ari.Events.MissingParamsEvent.Params.set -> void
+Asterisk.Sdk.Ari.Events.PeerStatusChangeEvent
+Asterisk.Sdk.Ari.Events.PeerStatusChangeEvent.Endpoint.get -> Asterisk.Sdk.AriEndpoint?
+Asterisk.Sdk.Ari.Events.PeerStatusChangeEvent.Endpoint.set -> void
+Asterisk.Sdk.Ari.Events.PeerStatusChangeEvent.Peer.get -> Asterisk.Sdk.AriPeer?
+Asterisk.Sdk.Ari.Events.PeerStatusChangeEvent.Peer.set -> void
+Asterisk.Sdk.Ari.Events.PeerStatusChangeEvent.PeerStatusChangeEvent() -> void
+Asterisk.Sdk.Ari.Events.PlaybackContinuingEvent
+Asterisk.Sdk.Ari.Events.PlaybackContinuingEvent.PlaybackContinuingEvent() -> void
+Asterisk.Sdk.Ari.Events.PlaybackContinuingEvent.Playback.get -> Asterisk.Sdk.AriPlayback?
+Asterisk.Sdk.Ari.Events.PlaybackContinuingEvent.Playback.set -> void
+Asterisk.Sdk.Ari.Events.PlaybackFinishedEvent
+Asterisk.Sdk.Ari.Events.PlaybackFinishedEvent.PlaybackFinishedEvent() -> void
+Asterisk.Sdk.Ari.Events.PlaybackFinishedEvent.Playback.get -> Asterisk.Sdk.AriPlayback?
+Asterisk.Sdk.Ari.Events.PlaybackFinishedEvent.Playback.set -> void
+Asterisk.Sdk.Ari.Events.PlaybackStartedEvent
+Asterisk.Sdk.Ari.Events.PlaybackStartedEvent.Playback.get -> Asterisk.Sdk.AriPlayback?
+Asterisk.Sdk.Ari.Events.PlaybackStartedEvent.Playback.set -> void
+Asterisk.Sdk.Ari.Events.PlaybackStartedEvent.PlaybackStartedEvent() -> void
+Asterisk.Sdk.Ari.Events.RecordingFailedEvent
+Asterisk.Sdk.Ari.Events.RecordingFailedEvent.RecordingFailedEvent() -> void
+Asterisk.Sdk.Ari.Events.RecordingFailedEvent.Recording.get -> Asterisk.Sdk.AriLiveRecording?
+Asterisk.Sdk.Ari.Events.RecordingFailedEvent.Recording.set -> void
+Asterisk.Sdk.Ari.Events.RecordingFinishedEvent
+Asterisk.Sdk.Ari.Events.RecordingFinishedEvent.RecordingFinishedEvent() -> void
+Asterisk.Sdk.Ari.Events.RecordingFinishedEvent.Recording.get -> Asterisk.Sdk.AriLiveRecording?
+Asterisk.Sdk.Ari.Events.RecordingFinishedEvent.Recording.set -> void
+Asterisk.Sdk.Ari.Events.RecordingStartedEvent
+Asterisk.Sdk.Ari.Events.RecordingStartedEvent.Recording.get -> Asterisk.Sdk.AriLiveRecording?
+Asterisk.Sdk.Ari.Events.RecordingStartedEvent.Recording.set -> void
+Asterisk.Sdk.Ari.Events.RecordingStartedEvent.RecordingStartedEvent() -> void
+Asterisk.Sdk.Ari.Events.ReferredByEvent
+Asterisk.Sdk.Ari.Events.ReferredByEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ReferredByEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ReferredByEvent.ReferredByEvent() -> void
+Asterisk.Sdk.Ari.Events.ReferredByEvent.ReferredBy.get -> string?
+Asterisk.Sdk.Ari.Events.ReferredByEvent.ReferredBy.set -> void
+Asterisk.Sdk.Ari.Events.ReferToEvent
+Asterisk.Sdk.Ari.Events.ReferToEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.ReferToEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.ReferToEvent.ReferredBy.get -> string?
+Asterisk.Sdk.Ari.Events.ReferToEvent.ReferredBy.set -> void
+Asterisk.Sdk.Ari.Events.ReferToEvent.ReferToEvent() -> void
+Asterisk.Sdk.Ari.Events.ReferToEvent.ReferTo.get -> string?
+Asterisk.Sdk.Ari.Events.ReferToEvent.ReferTo.set -> void
+Asterisk.Sdk.Ari.Events.RequiredDestinationEvent
+Asterisk.Sdk.Ari.Events.RequiredDestinationEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.RequiredDestinationEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.RequiredDestinationEvent.RequiredDestinationEvent() -> void
+Asterisk.Sdk.Ari.Events.StasisEndEvent
+Asterisk.Sdk.Ari.Events.StasisEndEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.StasisEndEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.StasisEndEvent.StasisEndEvent() -> void
+Asterisk.Sdk.Ari.Events.StasisStartEvent
+Asterisk.Sdk.Ari.Events.StasisStartEvent.Args.get -> string![]?
+Asterisk.Sdk.Ari.Events.StasisStartEvent.Args.set -> void
+Asterisk.Sdk.Ari.Events.StasisStartEvent.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Ari.Events.StasisStartEvent.Channel.set -> void
+Asterisk.Sdk.Ari.Events.StasisStartEvent.StasisStartEvent() -> void
+Asterisk.Sdk.Ari.Events.TextMessageReceivedEvent
+Asterisk.Sdk.Ari.Events.TextMessageReceivedEvent.Endpoint.get -> Asterisk.Sdk.AriEndpoint?
+Asterisk.Sdk.Ari.Events.TextMessageReceivedEvent.Endpoint.set -> void
+Asterisk.Sdk.Ari.Events.TextMessageReceivedEvent.Message.get -> Asterisk.Sdk.AriTextMessage?
+Asterisk.Sdk.Ari.Events.TextMessageReceivedEvent.Message.set -> void
+Asterisk.Sdk.Ari.Events.TextMessageReceivedEvent.TextMessageReceivedEvent() -> void
+Asterisk.Sdk.Ari.Internal.AriEventPump
+Asterisk.Sdk.Ari.Internal.AriEventPump.AriEventPump(int capacity = 20000) -> void
+Asterisk.Sdk.Ari.Internal.AriEventPump.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Internal.AriEventPump.DroppedEvents.get -> long
+Asterisk.Sdk.Ari.Internal.AriEventPump.OnEventDropped.get -> System.Action<Asterisk.Sdk.AriEvent!>?
+Asterisk.Sdk.Ari.Internal.AriEventPump.OnEventDropped.set -> void
+Asterisk.Sdk.Ari.Internal.AriEventPump.PendingCount.get -> int
+Asterisk.Sdk.Ari.Internal.AriEventPump.ProcessedEvents.get -> long
+Asterisk.Sdk.Ari.Internal.AriEventPump.Start(System.Func<Asterisk.Sdk.AriEvent!, System.Threading.Tasks.ValueTask>! handler) -> void
+Asterisk.Sdk.Ari.Internal.AriEventPump.TryEnqueue(Asterisk.Sdk.AriEvent! evt) -> bool
+Asterisk.Sdk.Ari.Resources.AriApplicationsResource
+Asterisk.Sdk.Ari.Resources.AriApplicationsResource.GetAsync(string! applicationName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriApplication!>
+Asterisk.Sdk.Ari.Resources.AriApplicationsResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriApplication![]!>
+Asterisk.Sdk.Ari.Resources.AriApplicationsResource.SetEventFilterAsync(string! applicationName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriApplication!>
+Asterisk.Sdk.Ari.Resources.AriApplicationsResource.SubscribeAsync(string! applicationName, string! eventSource, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriApplication!>
+Asterisk.Sdk.Ari.Resources.AriApplicationsResource.UnsubscribeAsync(string! applicationName, string! eventSource, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriApplication!>
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.AddLogChannelAsync(string! logChannelName, string! configuration, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.DeleteConfigAsync(string! configClass, string! objectType, string! id, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.DeleteLogChannelAsync(string! logChannelName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.GetConfigAsync(string! configClass, string! objectType, string! id, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriConfigTuple![]!>
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.GetInfoAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriAsteriskInfo!>
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.GetModuleAsync(string! moduleName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriModule!>
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.GetVariableAsync(string! variable, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.ListLoggingAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriLogChannel![]!>
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.ListModulesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriModule![]!>
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.LoadModuleAsync(string! moduleName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.PingAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriAsteriskPing!>
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.ReloadModuleAsync(string! moduleName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.RotateLogChannelAsync(string! logChannelName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.SetVariableAsync(string! variable, string! value, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.UnloadModuleAsync(string! moduleName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriAsteriskResource.UpdateConfigAsync(string! configClass, string! objectType, string! id, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriBridgesResource
+Asterisk.Sdk.Ari.Resources.AriBridgesResource.AddChannelAsync(string! bridgeId, string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriBridgesResource.ClearVideoSourceAsync(string! bridgeId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriBridgesResource.CreateAsync(string? type = null, string? name = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriBridge!>
+Asterisk.Sdk.Ari.Resources.AriBridgesResource.CreateWithIdAsync(string! bridgeId, string? type = null, string? name = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriBridge!>
+Asterisk.Sdk.Ari.Resources.AriBridgesResource.DestroyAsync(string! bridgeId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriBridgesResource.GetAsync(string! bridgeId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriBridge!>
+Asterisk.Sdk.Ari.Resources.AriBridgesResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriBridge![]!>
+Asterisk.Sdk.Ari.Resources.AriBridgesResource.PlayAsync(string! bridgeId, string! media, string? lang = null, int? offsetms = null, int? skipms = null, string? playbackId = null, string? format = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriPlayback!>
+Asterisk.Sdk.Ari.Resources.AriBridgesResource.RecordAsync(string! bridgeId, string! name, string! recordingFormat, int? maxDurationSeconds = null, int? maxSilenceSeconds = null, string? ifExists = null, bool? beep = null, string? terminateOn = null, string? format = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriLiveRecording!>
+Asterisk.Sdk.Ari.Resources.AriBridgesResource.RemoveChannelAsync(string! bridgeId, string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriBridgesResource.SetVideoSourceAsync(string! bridgeId, string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriBridgesResource.StartMohAsync(string! bridgeId, string? mohClass = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriBridgesResource.StopMohAsync(string! bridgeId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.AnswerAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.ContinueAsync(string! channelId, string? context = null, string? extension = null, int? priority = null, string? label = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.CreateAsync(string! endpoint, string? app = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriChannel!>
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.CreateExternalMediaAsync(string! app, string! externalHost, string! format, string? encapsulation = null, string? transport = null, string? connectionType = null, string? direction = null, string? data = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriChannel!>
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.CreateWithoutDialAsync(string! endpoint, string! app, string? channelId = null, string? otherChannelId = null, string? originator = null, System.Collections.Generic.IReadOnlyDictionary<string!, string!>? variables = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriChannel!>
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.DialAsync(string! channelId, string? caller = null, int? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.GetAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriChannel!>
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.GetRtpStatisticsAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriRtpStats!>
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.GetVariableAsync(string! channelId, string! variable, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriVariable!>
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.HangupAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.HoldAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriChannel![]!>
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.MoveAsync(string! channelId, string! app, string? appArgs = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.MuteAsync(string! channelId, string? direction = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.OriginateAsync(string! endpoint, string? extension = null, string? context = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriChannel!>
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.PlayAsync(string! channelId, string! media, string? lang = null, int? offsetms = null, int? skipms = null, string? playbackId = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriPlayback!>
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.ProgressAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.RecordAsync(string! channelId, string! name, string! format, int? maxDurationSeconds = null, int? maxSilenceSeconds = null, string? ifExists = null, bool? beep = null, string? terminateOn = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriLiveRecording!>
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.RedirectAsync(string! channelId, string! endpoint, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.RingAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.SendDtmfAsync(string! channelId, string! dtmf, int? before = null, int? between = null, int? duration = null, int? after = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.SetVariableAsync(string! channelId, string! variable, string! value, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.SilenceAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.SnoopAsync(string! channelId, string! app, string? spy = null, string? whisper = null, string? snoopId = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriChannel!>
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.StartMohAsync(string! channelId, string? mohClass = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.StopMohAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.StopRingAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.StopSilenceAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.UnholdAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriChannelsResource.UnmuteAsync(string! channelId, string? direction = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriDeviceStatesResource
+Asterisk.Sdk.Ari.Resources.AriDeviceStatesResource.DeleteAsync(string! deviceName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriDeviceStatesResource.GetAsync(string! deviceName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriDeviceState!>
+Asterisk.Sdk.Ari.Resources.AriDeviceStatesResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriDeviceState![]!>
+Asterisk.Sdk.Ari.Resources.AriDeviceStatesResource.UpdateAsync(string! deviceName, string! deviceState, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriEndpointsResource
+Asterisk.Sdk.Ari.Resources.AriEndpointsResource.GetAsync(string! tech, string! resource, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriEndpoint!>
+Asterisk.Sdk.Ari.Resources.AriEndpointsResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriEndpoint![]!>
+Asterisk.Sdk.Ari.Resources.AriEndpointsResource.ListByTechAsync(string! tech, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriEndpoint![]!>
+Asterisk.Sdk.Ari.Resources.AriEndpointsResource.SendMessageAsync(string! destination, string! from, string? body = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriEndpointsResource.SendMessageToEndpointAsync(string! tech, string! resource, string! from, string? body = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriJsonContext
+Asterisk.Sdk.Ari.Resources.AriMailboxesResource
+Asterisk.Sdk.Ari.Resources.AriMailboxesResource.DeleteAsync(string! mailboxName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriMailboxesResource.GetAsync(string! mailboxName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriMailbox!>
+Asterisk.Sdk.Ari.Resources.AriMailboxesResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriMailbox![]!>
+Asterisk.Sdk.Ari.Resources.AriMailboxesResource.UpdateAsync(string! mailboxName, int oldMessages, int newMessages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriPlaybacksResource
+Asterisk.Sdk.Ari.Resources.AriPlaybacksResource.ControlAsync(string! playbackId, string! operation, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriPlaybacksResource.GetAsync(string! playbackId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriPlayback!>
+Asterisk.Sdk.Ari.Resources.AriPlaybacksResource.StopAsync(string! playbackId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriRecordingsResource
+Asterisk.Sdk.Ari.Resources.AriRecordingsResource.CancelAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriRecordingsResource.CopyStoredAsync(string! recordingName, string! destinationRecordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriStoredRecording!>
+Asterisk.Sdk.Ari.Resources.AriRecordingsResource.DeleteStoredAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriRecordingsResource.GetLiveAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriLiveRecording!>
+Asterisk.Sdk.Ari.Resources.AriRecordingsResource.GetStoredAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriStoredRecording!>
+Asterisk.Sdk.Ari.Resources.AriRecordingsResource.GetStoredFileAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.IO.Stream!>
+Asterisk.Sdk.Ari.Resources.AriRecordingsResource.ListStoredAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriStoredRecording![]!>
+Asterisk.Sdk.Ari.Resources.AriRecordingsResource.MuteAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriRecordingsResource.PauseAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriRecordingsResource.StopAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriRecordingsResource.UnmuteAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriRecordingsResource.UnpauseAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Resources.AriSoundsResource
+Asterisk.Sdk.Ari.Resources.AriSoundsResource.GetAsync(string! soundId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriSound!>
+Asterisk.Sdk.Ari.Resources.AriSoundsResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.AriSound![]!>
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.Alaw = "alaw" -> string!
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.ExternalMediaAddress = "EXTERNALMEDIA_ADDRESS" -> string!
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.ExternalMediaProtocol = "EXTERNALMEDIA_PROTOCOL" -> string!
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.G729 = "g729" -> string!
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.Opus = "opus" -> string!
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.PeerIp = "CHANNEL(peerip)" -> string!
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.ReadFormat = "CHANNEL(readformat)" -> string!
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.Slin16 = "slin16" -> string!
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.Slin48 = "slin48" -> string!
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.Slin8 = "slin" -> string!
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.Ulaw = "ulaw" -> string!
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.WebSocketGuid = "WEBSOCKET_GUID" -> string!
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.WebSocketProtocol = "WEBSOCKET_PROTOCOL" -> string!
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.WebSocketUri = "WEBSOCKET_URI" -> string!
+const Asterisk.Sdk.Ari.Audio.AudioChannelVars.WriteFormat = "CHANNEL(writeformat)" -> string!
+const Asterisk.Sdk.Ari.Internal.AriEventPump.DefaultCapacity = 20000 -> int
+static readonly Asterisk.Sdk.Ari.Diagnostics.AriActivitySource.Source -> System.Diagnostics.ActivitySource!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AriMetrics.EventDispatchMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AriMetrics.EventsDispatched -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AriMetrics.EventsDropped -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AriMetrics.EventsReceived -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AriMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AriMetrics.Reconnections -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AriMetrics.RestRequestsSent -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AriMetrics.RestRoundtripMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AudioStreamMetrics.BufferUnderruns -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AudioStreamMetrics.BytesReceived -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AudioStreamMetrics.BytesSent -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AudioStreamMetrics.ErrorFrames -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AudioStreamMetrics.FrameLatency -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AudioStreamMetrics.FramesReceived -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AudioStreamMetrics.FramesSent -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AudioStreamMetrics.HangupFrames -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AudioStreamMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AudioStreamMetrics.StreamsClosed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Ari.Diagnostics.AudioStreamMetrics.StreamsOpened -> System.Diagnostics.Metrics.Counter<long>!

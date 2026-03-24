@@ -1,1 +1,217 @@
 #nullable enable
+abstract Asterisk.Sdk.Activities.Activities.ActivityBase.ExecuteAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+abstract Asterisk.Sdk.Activities.Activities.AriActivityBase.ExecuteAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Activities.Activities.ActivityBase
+Asterisk.Sdk.Activities.Activities.ActivityBase.ActivityBase(Asterisk.Sdk.IAgiChannel! channel) -> void
+Asterisk.Sdk.Activities.Activities.ActivityBase.CancelAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Activities.Activities.ActivityBase.Channel.get -> Asterisk.Sdk.IAgiChannel!
+Asterisk.Sdk.Activities.Activities.ActivityBase.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Activities.Activities.ActivityBase.SetStatus(Asterisk.Sdk.Activities.Activities.ActivityStatus status) -> void
+Asterisk.Sdk.Activities.Activities.ActivityBase.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Activities.Activities.ActivityBase.StatusChanges.get -> System.IObservable<Asterisk.Sdk.Activities.Activities.ActivityStatus>!
+Asterisk.Sdk.Activities.Activities.ActivityBase.Status.get -> Asterisk.Sdk.Activities.Activities.ActivityStatus
+Asterisk.Sdk.Activities.Activities.ActivityStatus
+Asterisk.Sdk.Activities.Activities.ActivityStatus.Cancelled = 5 -> Asterisk.Sdk.Activities.Activities.ActivityStatus
+Asterisk.Sdk.Activities.Activities.ActivityStatus.Completed = 3 -> Asterisk.Sdk.Activities.Activities.ActivityStatus
+Asterisk.Sdk.Activities.Activities.ActivityStatus.Failed = 4 -> Asterisk.Sdk.Activities.Activities.ActivityStatus
+Asterisk.Sdk.Activities.Activities.ActivityStatus.InProgress = 2 -> Asterisk.Sdk.Activities.Activities.ActivityStatus
+Asterisk.Sdk.Activities.Activities.ActivityStatus.Pending = 0 -> Asterisk.Sdk.Activities.Activities.ActivityStatus
+Asterisk.Sdk.Activities.Activities.ActivityStatus.Starting = 1 -> Asterisk.Sdk.Activities.Activities.ActivityStatus
+Asterisk.Sdk.Activities.Activities.AriActivityBase
+Asterisk.Sdk.Activities.Activities.AriActivityBase.AriActivityBase(Asterisk.Sdk.IAriClient! ariClient) -> void
+Asterisk.Sdk.Activities.Activities.AriActivityBase.AriClient.get -> Asterisk.Sdk.IAriClient!
+Asterisk.Sdk.Activities.Activities.AriActivityBase.CancelAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Activities.Activities.AriActivityBase.SetStatus(Asterisk.Sdk.Activities.Activities.ActivityStatus status) -> void
+Asterisk.Sdk.Activities.Activities.AriActivityBase.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Activities.Activities.AriActivityBase.StatusChanges.get -> System.IObservable<Asterisk.Sdk.Activities.Activities.ActivityStatus>!
+Asterisk.Sdk.Activities.Activities.AriActivityBase.Status.get -> Asterisk.Sdk.Activities.Activities.ActivityStatus
+Asterisk.Sdk.Activities.Activities.BlindTransferActivity
+Asterisk.Sdk.Activities.Activities.BlindTransferActivity.BlindTransferActivity(Asterisk.Sdk.IAgiChannel! channel) -> void
+Asterisk.Sdk.Activities.Activities.BlindTransferActivity.Destination.get -> Asterisk.Sdk.Activities.Models.DialPlanExtension!
+Asterisk.Sdk.Activities.Activities.BlindTransferActivity.Destination.init -> void
+Asterisk.Sdk.Activities.Activities.BridgeActivity
+Asterisk.Sdk.Activities.Activities.BridgeActivity.BridgeActivity(Asterisk.Sdk.IAgiChannel! channel) -> void
+Asterisk.Sdk.Activities.Activities.BridgeActivity.TargetChannel.get -> string!
+Asterisk.Sdk.Activities.Activities.BridgeActivity.TargetChannel.init -> void
+Asterisk.Sdk.Activities.Activities.DialActivity
+Asterisk.Sdk.Activities.Activities.DialActivity.DialActivity(Asterisk.Sdk.IAgiChannel! channel) -> void
+Asterisk.Sdk.Activities.Activities.DialActivity.DialStatus.get -> string?
+Asterisk.Sdk.Activities.Activities.DialActivity.Options.get -> string?
+Asterisk.Sdk.Activities.Activities.DialActivity.Options.init -> void
+Asterisk.Sdk.Activities.Activities.DialActivity.Target.get -> Asterisk.Sdk.Activities.Models.EndPoint!
+Asterisk.Sdk.Activities.Activities.DialActivity.Target.init -> void
+Asterisk.Sdk.Activities.Activities.DialActivity.Timeout.get -> System.TimeSpan
+Asterisk.Sdk.Activities.Activities.DialActivity.Timeout.init -> void
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.App.get -> string!
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.App.init -> void
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.AudioStream.get -> Asterisk.Sdk.IAudioStream?
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.Channel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.ConnectionTimeout.get -> System.TimeSpan
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.ConnectionTimeout.init -> void
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.Encapsulation.get -> string?
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.Encapsulation.init -> void
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.ExternalHost.get -> string!
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.ExternalHost.init -> void
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.ExternalMediaActivity(Asterisk.Sdk.IAriClient! ariClient, Asterisk.Sdk.Ari.Audio.AudioSocketServer? audioSocketServer = null, Asterisk.Sdk.Ari.Audio.WebSocketAudioServer? webSocketServer = null) -> void
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.Format.get -> string!
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.Format.init -> void
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.Transport.get -> string?
+Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.Transport.init -> void
+Asterisk.Sdk.Activities.Activities.HangupActivity
+Asterisk.Sdk.Activities.Activities.HangupActivity.CauseCode.get -> int?
+Asterisk.Sdk.Activities.Activities.HangupActivity.CauseCode.init -> void
+Asterisk.Sdk.Activities.Activities.HangupActivity.HangupActivity(Asterisk.Sdk.IAgiChannel! channel) -> void
+Asterisk.Sdk.Activities.Activities.HoldActivity
+Asterisk.Sdk.Activities.Activities.HoldActivity.HoldActivity(Asterisk.Sdk.IAgiChannel! channel) -> void
+Asterisk.Sdk.Activities.Activities.HoldActivity.MusicOnHoldClass.get -> string?
+Asterisk.Sdk.Activities.Activities.HoldActivity.MusicOnHoldClass.init -> void
+Asterisk.Sdk.Activities.Activities.IActivity
+Asterisk.Sdk.Activities.Activities.IActivity.CancelAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Activities.Activities.IActivity.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Activities.Activities.IActivity.StatusChanges.get -> System.IObservable<Asterisk.Sdk.Activities.Activities.ActivityStatus>!
+Asterisk.Sdk.Activities.Activities.IActivity.Status.get -> Asterisk.Sdk.Activities.Activities.ActivityStatus
+Asterisk.Sdk.Activities.Activities.MeetmeActivity
+Asterisk.Sdk.Activities.Activities.MeetmeActivity.MeetmeActivity(Asterisk.Sdk.IAgiChannel! channel) -> void
+Asterisk.Sdk.Activities.Activities.MeetmeActivity.Options.get -> string?
+Asterisk.Sdk.Activities.Activities.MeetmeActivity.Options.init -> void
+Asterisk.Sdk.Activities.Activities.MeetmeActivity.RoomNumber.get -> string!
+Asterisk.Sdk.Activities.Activities.MeetmeActivity.RoomNumber.init -> void
+Asterisk.Sdk.Activities.Activities.MeetmeActivity.UseConfBridge.get -> bool
+Asterisk.Sdk.Activities.Activities.MeetmeActivity.UseConfBridge.init -> void
+Asterisk.Sdk.Activities.Activities.ParkActivity
+Asterisk.Sdk.Activities.Activities.ParkActivity.ParkActivity(Asterisk.Sdk.IAgiChannel! channel) -> void
+Asterisk.Sdk.Activities.Activities.ParkActivity.ParkingLot.get -> string?
+Asterisk.Sdk.Activities.Activities.ParkActivity.ParkingLot.init -> void
+Asterisk.Sdk.Activities.Activities.PlayMessageActivity
+Asterisk.Sdk.Activities.Activities.PlayMessageActivity.EscapeDigits.get -> string!
+Asterisk.Sdk.Activities.Activities.PlayMessageActivity.EscapeDigits.init -> void
+Asterisk.Sdk.Activities.Activities.PlayMessageActivity.FileName.get -> string!
+Asterisk.Sdk.Activities.Activities.PlayMessageActivity.FileName.init -> void
+Asterisk.Sdk.Activities.Activities.PlayMessageActivity.PlayMessageActivity(Asterisk.Sdk.IAgiChannel! channel) -> void
+Asterisk.Sdk.Activities.Activities.QueueActivity
+Asterisk.Sdk.Activities.Activities.QueueActivity.Options.get -> string?
+Asterisk.Sdk.Activities.Activities.QueueActivity.Options.init -> void
+Asterisk.Sdk.Activities.Activities.QueueActivity.QueueActivity(Asterisk.Sdk.IAgiChannel! channel) -> void
+Asterisk.Sdk.Activities.Activities.QueueActivity.QueueName.get -> string!
+Asterisk.Sdk.Activities.Activities.QueueActivity.QueueName.init -> void
+Asterisk.Sdk.Activities.Activities.QueueActivity.QueueStatus.get -> string?
+Asterisk.Sdk.Activities.Activities.QueueActivity.Timeout.get -> System.TimeSpan?
+Asterisk.Sdk.Activities.Activities.QueueActivity.Timeout.init -> void
+Asterisk.Sdk.Activities.Activities.VoicemailActivity
+Asterisk.Sdk.Activities.Activities.VoicemailActivity.Context.get -> string?
+Asterisk.Sdk.Activities.Activities.VoicemailActivity.Context.init -> void
+Asterisk.Sdk.Activities.Activities.VoicemailActivity.Mailbox.get -> string!
+Asterisk.Sdk.Activities.Activities.VoicemailActivity.Mailbox.init -> void
+Asterisk.Sdk.Activities.Activities.VoicemailActivity.Urgent.get -> bool
+Asterisk.Sdk.Activities.Activities.VoicemailActivity.Urgent.init -> void
+Asterisk.Sdk.Activities.Activities.VoicemailActivity.VoicemailActivity(Asterisk.Sdk.IAgiChannel! channel) -> void
+Asterisk.Sdk.Activities.ActivityException
+Asterisk.Sdk.Activities.ActivityException.ActivityException(string! message, System.Exception? inner = null) -> void
+Asterisk.Sdk.Activities.ActivityFailedException
+Asterisk.Sdk.Activities.ActivityFailedException.ActivityFailedException(string! activityName, string! reason) -> void
+Asterisk.Sdk.Activities.InvalidChannelNameException
+Asterisk.Sdk.Activities.InvalidChannelNameException.InvalidChannelNameException(string! channelName) -> void
+Asterisk.Sdk.Activities.Models.Call
+Asterisk.Sdk.Activities.Models.Call.AddChannel(Asterisk.Sdk.Activities.Models.PbxChannel! channel) -> void
+Asterisk.Sdk.Activities.Models.Call.AnsweredAt.get -> System.DateTimeOffset?
+Asterisk.Sdk.Activities.Models.Call.AnsweredAt.set -> void
+Asterisk.Sdk.Activities.Models.Call.Call() -> void
+Asterisk.Sdk.Activities.Models.Call.Channels.get -> System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Activities.Models.IPbxChannel!>!
+Asterisk.Sdk.Activities.Models.Call.CreatedAt.get -> System.DateTimeOffset
+Asterisk.Sdk.Activities.Models.Call.CreatedAt.init -> void
+Asterisk.Sdk.Activities.Models.CallDirection
+Asterisk.Sdk.Activities.Models.Call.Direction.get -> Asterisk.Sdk.Activities.Models.CallDirection
+Asterisk.Sdk.Activities.Models.CallDirection.Inbound = 0 -> Asterisk.Sdk.Activities.Models.CallDirection
+Asterisk.Sdk.Activities.Models.Call.Direction.init -> void
+Asterisk.Sdk.Activities.Models.CallDirection.Outbound = 1 -> Asterisk.Sdk.Activities.Models.CallDirection
+Asterisk.Sdk.Activities.Models.Call.EndedAt.get -> System.DateTimeOffset?
+Asterisk.Sdk.Activities.Models.Call.EndedAt.set -> void
+Asterisk.Sdk.Activities.Models.CallerId
+Asterisk.Sdk.Activities.Models.CallerId.CallerId(string! Number, string? Name = null) -> void
+Asterisk.Sdk.Activities.Models.CallerId.Name.get -> string?
+Asterisk.Sdk.Activities.Models.CallerId.Name.init -> void
+Asterisk.Sdk.Activities.Models.CallerId.Number.get -> string!
+Asterisk.Sdk.Activities.Models.CallerId.Number.init -> void
+Asterisk.Sdk.Activities.Models.Call.Id.get -> string!
+Asterisk.Sdk.Activities.Models.Call.Id.init -> void
+Asterisk.Sdk.Activities.Models.Call.RemoveChannel(string! uniqueId) -> void
+Asterisk.Sdk.Activities.Models.CallState
+Asterisk.Sdk.Activities.Models.CallState.Answered = 2 -> Asterisk.Sdk.Activities.Models.CallState
+Asterisk.Sdk.Activities.Models.CallState.Completed = 6 -> Asterisk.Sdk.Activities.Models.CallState
+Asterisk.Sdk.Activities.Models.CallState.Failed = 7 -> Asterisk.Sdk.Activities.Models.CallState
+Asterisk.Sdk.Activities.Models.Call.State.get -> Asterisk.Sdk.Activities.Models.CallState
+Asterisk.Sdk.Activities.Models.CallState.New = 0 -> Asterisk.Sdk.Activities.Models.CallState
+Asterisk.Sdk.Activities.Models.CallState.OnHold = 3 -> Asterisk.Sdk.Activities.Models.CallState
+Asterisk.Sdk.Activities.Models.CallState.Parked = 5 -> Asterisk.Sdk.Activities.Models.CallState
+Asterisk.Sdk.Activities.Models.CallState.Ringing = 1 -> Asterisk.Sdk.Activities.Models.CallState
+Asterisk.Sdk.Activities.Models.Call.State.set -> void
+Asterisk.Sdk.Activities.Models.CallState.Transferred = 4 -> Asterisk.Sdk.Activities.Models.CallState
+Asterisk.Sdk.Activities.Models.DialPlanExtension
+Asterisk.Sdk.Activities.Models.DialPlanExtension.Context.get -> string!
+Asterisk.Sdk.Activities.Models.DialPlanExtension.Context.init -> void
+Asterisk.Sdk.Activities.Models.DialPlanExtension.DialPlanExtension(string! Context, string! Extension, int Priority = 1) -> void
+Asterisk.Sdk.Activities.Models.DialPlanExtension.Extension.get -> string!
+Asterisk.Sdk.Activities.Models.DialPlanExtension.Extension.init -> void
+Asterisk.Sdk.Activities.Models.DialPlanExtension.Priority.get -> int
+Asterisk.Sdk.Activities.Models.DialPlanExtension.Priority.init -> void
+Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.A = 65 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.B = 66 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.C = 67 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.D = 68 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.Eight = 56 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.Five = 53 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.Four = 52 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.Nine = 57 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.One = 49 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.Pound = 35 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.Seven = 55 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.Six = 54 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.Star = 42 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.Three = 51 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.Two = 50 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.DtmfTone.Zero = 48 -> Asterisk.Sdk.Activities.Models.DtmfTone
+Asterisk.Sdk.Activities.Models.EndPoint
+Asterisk.Sdk.Activities.Models.EndPoint.EndPoint(Asterisk.Sdk.Activities.Models.TechType Tech, string! Resource) -> void
+Asterisk.Sdk.Activities.Models.EndPoint.Resource.get -> string!
+Asterisk.Sdk.Activities.Models.EndPoint.Resource.init -> void
+Asterisk.Sdk.Activities.Models.EndPoint.Tech.get -> Asterisk.Sdk.Activities.Models.TechType
+Asterisk.Sdk.Activities.Models.EndPoint.Tech.init -> void
+Asterisk.Sdk.Activities.Models.ICall
+Asterisk.Sdk.Activities.Models.ICall.Channels.get -> System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Activities.Models.IPbxChannel!>!
+Asterisk.Sdk.Activities.Models.ICall.Direction.get -> Asterisk.Sdk.Activities.Models.CallDirection
+Asterisk.Sdk.Activities.Models.ICall.Id.get -> string!
+Asterisk.Sdk.Activities.Models.ICall.State.get -> Asterisk.Sdk.Activities.Models.CallState
+Asterisk.Sdk.Activities.Models.IPbxChannel
+Asterisk.Sdk.Activities.Models.IPbxChannel.EndPoint.get -> Asterisk.Sdk.Activities.Models.EndPoint?
+Asterisk.Sdk.Activities.Models.IPbxChannel.Name.get -> string!
+Asterisk.Sdk.Activities.Models.IPbxChannel.UniqueId.get -> string!
+Asterisk.Sdk.Activities.Models.PbxChannel
+Asterisk.Sdk.Activities.Models.PbxChannel.EndPoint.get -> Asterisk.Sdk.Activities.Models.EndPoint?
+Asterisk.Sdk.Activities.Models.PbxChannel.EndPoint.init -> void
+Asterisk.Sdk.Activities.Models.PbxChannel.Name.get -> string!
+Asterisk.Sdk.Activities.Models.PbxChannel.Name.init -> void
+Asterisk.Sdk.Activities.Models.PbxChannel.PbxChannel() -> void
+Asterisk.Sdk.Activities.Models.PbxChannel.UniqueId.get -> string!
+Asterisk.Sdk.Activities.Models.PbxChannel.UniqueId.init -> void
+Asterisk.Sdk.Activities.Models.PhoneNumber
+Asterisk.Sdk.Activities.Models.PhoneNumber.Name.get -> string?
+Asterisk.Sdk.Activities.Models.PhoneNumber.Name.init -> void
+Asterisk.Sdk.Activities.Models.PhoneNumber.Number.get -> string!
+Asterisk.Sdk.Activities.Models.PhoneNumber.Number.init -> void
+Asterisk.Sdk.Activities.Models.PhoneNumber.PhoneNumber(string! Number, string? Name = null) -> void
+Asterisk.Sdk.Activities.Models.TechType
+Asterisk.Sdk.Activities.Models.TechType.Agent = 5 -> Asterisk.Sdk.Activities.Models.TechType
+Asterisk.Sdk.Activities.Models.TechType.DAHDI = 3 -> Asterisk.Sdk.Activities.Models.TechType
+Asterisk.Sdk.Activities.Models.TechType.IAX2 = 2 -> Asterisk.Sdk.Activities.Models.TechType
+Asterisk.Sdk.Activities.Models.TechType.Local = 4 -> Asterisk.Sdk.Activities.Models.TechType
+Asterisk.Sdk.Activities.Models.TechType.PJSIP = 1 -> Asterisk.Sdk.Activities.Models.TechType
+Asterisk.Sdk.Activities.Models.TechType.SIP = 0 -> Asterisk.Sdk.Activities.Models.TechType
+Asterisk.Sdk.Activities.Models.TechType.WebSocket = 6 -> Asterisk.Sdk.Activities.Models.TechType
+override Asterisk.Sdk.Activities.Activities.ExternalMediaActivity.DisposeAsync() -> System.Threading.Tasks.ValueTask
+override Asterisk.Sdk.Activities.Models.EndPoint.ToString() -> string!
+override Asterisk.Sdk.Activities.Models.PhoneNumber.ToString() -> string!
+static Asterisk.Sdk.Activities.Models.EndPoint.Parse(string! channelString) -> Asterisk.Sdk.Activities.Models.EndPoint?
+virtual Asterisk.Sdk.Activities.Activities.AriActivityBase.DisposeAsync() -> System.Threading.Tasks.ValueTask
+virtual Asterisk.Sdk.Activities.Activities.AriActivityBase.OnCancellingAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask

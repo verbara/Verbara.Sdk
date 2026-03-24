@@ -1,1 +1,456 @@
 #nullable enable
+abstract Asterisk.Sdk.Agi.Commands.AgiCommandBase.BuildCommand() -> string!
+Asterisk.Sdk.Agi.Commands.AgiCommand
+Asterisk.Sdk.Agi.Commands.AgiCommand.AgiCommand() -> void
+Asterisk.Sdk.Agi.Commands.AgiCommand.Args.get -> string?
+Asterisk.Sdk.Agi.Commands.AgiCommand.Args.set -> void
+Asterisk.Sdk.Agi.Commands.AgiCommandBase
+Asterisk.Sdk.Agi.Commands.AgiCommandBase.AgiCommandBase() -> void
+Asterisk.Sdk.Agi.Commands.AgiCommand.Command.get -> string?
+Asterisk.Sdk.Agi.Commands.AgiCommand.Command.set -> void
+Asterisk.Sdk.Agi.Commands.AnswerCommand
+Asterisk.Sdk.Agi.Commands.AnswerCommand.AnswerCommand() -> void
+Asterisk.Sdk.Agi.Commands.AsyncAgiBreakCommand
+Asterisk.Sdk.Agi.Commands.AsyncAgiBreakCommand.AsyncAgiBreakCommand() -> void
+Asterisk.Sdk.Agi.Commands.BridgeCommand
+Asterisk.Sdk.Agi.Commands.BridgeCommand.BridgeCommand() -> void
+Asterisk.Sdk.Agi.Commands.BridgeCommand.Channel.get -> string?
+Asterisk.Sdk.Agi.Commands.BridgeCommand.Channel.set -> void
+Asterisk.Sdk.Agi.Commands.BridgeCommand.Options.get -> string?
+Asterisk.Sdk.Agi.Commands.BridgeCommand.Options.set -> void
+Asterisk.Sdk.Agi.Commands.ChannelStatusCommand
+Asterisk.Sdk.Agi.Commands.ChannelStatusCommand.Channel.get -> string?
+Asterisk.Sdk.Agi.Commands.ChannelStatusCommand.Channel.set -> void
+Asterisk.Sdk.Agi.Commands.ChannelStatusCommand.ChannelStatusCommand() -> void
+Asterisk.Sdk.Agi.Commands.ConfbridgeCommand
+Asterisk.Sdk.Agi.Commands.ConfbridgeCommand.BridgeProfile.get -> string?
+Asterisk.Sdk.Agi.Commands.ConfbridgeCommand.BridgeProfile.set -> void
+Asterisk.Sdk.Agi.Commands.ConfbridgeCommand.ConfbridgeCommand() -> void
+Asterisk.Sdk.Agi.Commands.ConfbridgeCommand.Conference.get -> string?
+Asterisk.Sdk.Agi.Commands.ConfbridgeCommand.Conference.set -> void
+Asterisk.Sdk.Agi.Commands.ConfbridgeCommand.Menu.get -> string?
+Asterisk.Sdk.Agi.Commands.ConfbridgeCommand.Menu.set -> void
+Asterisk.Sdk.Agi.Commands.ConfbridgeCommand.UserProfile.get -> string?
+Asterisk.Sdk.Agi.Commands.ConfbridgeCommand.UserProfile.set -> void
+Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand
+Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand.ControlStreamFileCommand() -> void
+Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand.EscapeDigits.get -> string?
+Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand.EscapeDigits.set -> void
+Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand.File.get -> string?
+Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand.File.set -> void
+Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand.ForwardDigit.get -> string?
+Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand.ForwardDigit.set -> void
+Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand.Offset.get -> int?
+Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand.Offset.set -> void
+Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand.PauseDigit.get -> string?
+Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand.PauseDigit.set -> void
+Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand.RewindDigit.get -> string?
+Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand.RewindDigit.set -> void
+Asterisk.Sdk.Agi.Commands.DatabaseDelCommand
+Asterisk.Sdk.Agi.Commands.DatabaseDelCommand.DatabaseDelCommand() -> void
+Asterisk.Sdk.Agi.Commands.DatabaseDelCommand.Family.get -> string?
+Asterisk.Sdk.Agi.Commands.DatabaseDelCommand.Family.set -> void
+Asterisk.Sdk.Agi.Commands.DatabaseDelCommand.KeyTree.get -> string?
+Asterisk.Sdk.Agi.Commands.DatabaseDelCommand.KeyTree.set -> void
+Asterisk.Sdk.Agi.Commands.DatabaseDelTreeCommand
+Asterisk.Sdk.Agi.Commands.DatabaseDelTreeCommand.DatabaseDelTreeCommand() -> void
+Asterisk.Sdk.Agi.Commands.DatabaseDelTreeCommand.Family.get -> string?
+Asterisk.Sdk.Agi.Commands.DatabaseDelTreeCommand.Family.set -> void
+Asterisk.Sdk.Agi.Commands.DatabaseDelTreeCommand.KeyTree.get -> string?
+Asterisk.Sdk.Agi.Commands.DatabaseDelTreeCommand.KeyTree.set -> void
+Asterisk.Sdk.Agi.Commands.DatabaseGetCommand
+Asterisk.Sdk.Agi.Commands.DatabaseGetCommand.DatabaseGetCommand() -> void
+Asterisk.Sdk.Agi.Commands.DatabaseGetCommand.Family.get -> string?
+Asterisk.Sdk.Agi.Commands.DatabaseGetCommand.Family.set -> void
+Asterisk.Sdk.Agi.Commands.DatabaseGetCommand.Key.get -> string?
+Asterisk.Sdk.Agi.Commands.DatabaseGetCommand.Key.set -> void
+Asterisk.Sdk.Agi.Commands.DatabasePutCommand
+Asterisk.Sdk.Agi.Commands.DatabasePutCommand.DatabasePutCommand() -> void
+Asterisk.Sdk.Agi.Commands.DatabasePutCommand.Family.get -> string?
+Asterisk.Sdk.Agi.Commands.DatabasePutCommand.Family.set -> void
+Asterisk.Sdk.Agi.Commands.DatabasePutCommand.Key.get -> string?
+Asterisk.Sdk.Agi.Commands.DatabasePutCommand.Key.set -> void
+Asterisk.Sdk.Agi.Commands.DatabasePutCommand.Value.get -> string?
+Asterisk.Sdk.Agi.Commands.DatabasePutCommand.Value.set -> void
+Asterisk.Sdk.Agi.Commands.DialCommand
+Asterisk.Sdk.Agi.Commands.DialCommand.DialCommand() -> void
+Asterisk.Sdk.Agi.Commands.DialCommand.Options.get -> string?
+Asterisk.Sdk.Agi.Commands.DialCommand.Options.set -> void
+Asterisk.Sdk.Agi.Commands.DialCommand.Target.get -> string?
+Asterisk.Sdk.Agi.Commands.DialCommand.Target.set -> void
+Asterisk.Sdk.Agi.Commands.DialCommand.Timeout.get -> int?
+Asterisk.Sdk.Agi.Commands.DialCommand.Timeout.set -> void
+Asterisk.Sdk.Agi.Commands.ExecCommand
+Asterisk.Sdk.Agi.Commands.ExecCommand.Application.get -> string?
+Asterisk.Sdk.Agi.Commands.ExecCommand.Application.set -> void
+Asterisk.Sdk.Agi.Commands.ExecCommand.ExecCommand() -> void
+Asterisk.Sdk.Agi.Commands.ExecCommand.Options.get -> string?
+Asterisk.Sdk.Agi.Commands.ExecCommand.Options.set -> void
+Asterisk.Sdk.Agi.Commands.GetDataCommand
+Asterisk.Sdk.Agi.Commands.GetDataCommand.File.get -> string?
+Asterisk.Sdk.Agi.Commands.GetDataCommand.File.set -> void
+Asterisk.Sdk.Agi.Commands.GetDataCommand.GetDataCommand() -> void
+Asterisk.Sdk.Agi.Commands.GetDataCommand.MaxDigits.get -> int?
+Asterisk.Sdk.Agi.Commands.GetDataCommand.MaxDigits.set -> void
+Asterisk.Sdk.Agi.Commands.GetDataCommand.Timeout.get -> long?
+Asterisk.Sdk.Agi.Commands.GetDataCommand.Timeout.set -> void
+Asterisk.Sdk.Agi.Commands.GetFullVariableCommand
+Asterisk.Sdk.Agi.Commands.GetFullVariableCommand.Channel.get -> string?
+Asterisk.Sdk.Agi.Commands.GetFullVariableCommand.Channel.set -> void
+Asterisk.Sdk.Agi.Commands.GetFullVariableCommand.GetFullVariableCommand() -> void
+Asterisk.Sdk.Agi.Commands.GetFullVariableCommand.Variable.get -> string?
+Asterisk.Sdk.Agi.Commands.GetFullVariableCommand.Variable.set -> void
+Asterisk.Sdk.Agi.Commands.GetOptionCommand
+Asterisk.Sdk.Agi.Commands.GetOptionCommand.EscapeDigits.get -> string?
+Asterisk.Sdk.Agi.Commands.GetOptionCommand.EscapeDigits.set -> void
+Asterisk.Sdk.Agi.Commands.GetOptionCommand.File.get -> string?
+Asterisk.Sdk.Agi.Commands.GetOptionCommand.File.set -> void
+Asterisk.Sdk.Agi.Commands.GetOptionCommand.GetOptionCommand() -> void
+Asterisk.Sdk.Agi.Commands.GetOptionCommand.Timeout.get -> long?
+Asterisk.Sdk.Agi.Commands.GetOptionCommand.Timeout.set -> void
+Asterisk.Sdk.Agi.Commands.GetVariableCommand
+Asterisk.Sdk.Agi.Commands.GetVariableCommand.GetVariableCommand() -> void
+Asterisk.Sdk.Agi.Commands.GetVariableCommand.Variable.get -> string?
+Asterisk.Sdk.Agi.Commands.GetVariableCommand.Variable.set -> void
+Asterisk.Sdk.Agi.Commands.GosubCommand
+Asterisk.Sdk.Agi.Commands.GosubCommand.Context.get -> string?
+Asterisk.Sdk.Agi.Commands.GosubCommand.Context.set -> void
+Asterisk.Sdk.Agi.Commands.GosubCommand.Extension.get -> string?
+Asterisk.Sdk.Agi.Commands.GosubCommand.Extension.set -> void
+Asterisk.Sdk.Agi.Commands.GosubCommand.GosubCommand() -> void
+Asterisk.Sdk.Agi.Commands.GosubCommand.OptionalArg.get -> string?
+Asterisk.Sdk.Agi.Commands.GosubCommand.OptionalArg.set -> void
+Asterisk.Sdk.Agi.Commands.GosubCommand.Priority.get -> string?
+Asterisk.Sdk.Agi.Commands.GosubCommand.Priority.set -> void
+Asterisk.Sdk.Agi.Commands.HangupCommand
+Asterisk.Sdk.Agi.Commands.HangupCommand.Channel.get -> string?
+Asterisk.Sdk.Agi.Commands.HangupCommand.Channel.set -> void
+Asterisk.Sdk.Agi.Commands.HangupCommand.HangupCommand() -> void
+Asterisk.Sdk.Agi.Commands.MeetmeCommand
+Asterisk.Sdk.Agi.Commands.MeetmeCommand.Conference.get -> string?
+Asterisk.Sdk.Agi.Commands.MeetmeCommand.Conference.set -> void
+Asterisk.Sdk.Agi.Commands.MeetmeCommand.MeetmeCommand() -> void
+Asterisk.Sdk.Agi.Commands.MeetmeCommand.Options.get -> string?
+Asterisk.Sdk.Agi.Commands.MeetmeCommand.Options.set -> void
+Asterisk.Sdk.Agi.Commands.MeetmeCommand.Pin.get -> string?
+Asterisk.Sdk.Agi.Commands.MeetmeCommand.Pin.set -> void
+Asterisk.Sdk.Agi.Commands.NoopCommand
+Asterisk.Sdk.Agi.Commands.NoopCommand.NoopCommand() -> void
+Asterisk.Sdk.Agi.Commands.QueueCommand
+Asterisk.Sdk.Agi.Commands.QueueCommand.Options.get -> string?
+Asterisk.Sdk.Agi.Commands.QueueCommand.Options.set -> void
+Asterisk.Sdk.Agi.Commands.QueueCommand.QueueCommand() -> void
+Asterisk.Sdk.Agi.Commands.QueueCommand.QueueName.get -> string?
+Asterisk.Sdk.Agi.Commands.QueueCommand.QueueName.set -> void
+Asterisk.Sdk.Agi.Commands.ReceiveCharCommand
+Asterisk.Sdk.Agi.Commands.ReceiveCharCommand.ReceiveCharCommand() -> void
+Asterisk.Sdk.Agi.Commands.ReceiveCharCommand.Timeout.get -> int?
+Asterisk.Sdk.Agi.Commands.ReceiveCharCommand.Timeout.set -> void
+Asterisk.Sdk.Agi.Commands.ReceiveTextCommand
+Asterisk.Sdk.Agi.Commands.ReceiveTextCommand.ReceiveTextCommand() -> void
+Asterisk.Sdk.Agi.Commands.ReceiveTextCommand.Timeout.get -> int?
+Asterisk.Sdk.Agi.Commands.ReceiveTextCommand.Timeout.set -> void
+Asterisk.Sdk.Agi.Commands.RecordFileCommand
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.Beep.get -> bool?
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.Beep.set -> void
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.EscapeDigits.get -> string?
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.EscapeDigits.set -> void
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.File.get -> string?
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.File.set -> void
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.Format.get -> string?
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.Format.set -> void
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.MaxSilence.get -> int?
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.MaxSilence.set -> void
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.Offset.get -> int?
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.Offset.set -> void
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.RecordFileCommand() -> void
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.Timeout.get -> int?
+Asterisk.Sdk.Agi.Commands.RecordFileCommand.Timeout.set -> void
+Asterisk.Sdk.Agi.Commands.SayAlphaCommand
+Asterisk.Sdk.Agi.Commands.SayAlphaCommand.EscapeDigits.get -> string?
+Asterisk.Sdk.Agi.Commands.SayAlphaCommand.EscapeDigits.set -> void
+Asterisk.Sdk.Agi.Commands.SayAlphaCommand.SayAlphaCommand() -> void
+Asterisk.Sdk.Agi.Commands.SayAlphaCommand.Text.get -> string?
+Asterisk.Sdk.Agi.Commands.SayAlphaCommand.Text.set -> void
+Asterisk.Sdk.Agi.Commands.SayDateTimeCommand
+Asterisk.Sdk.Agi.Commands.SayDateTimeCommand.EscapeDigits.get -> string?
+Asterisk.Sdk.Agi.Commands.SayDateTimeCommand.EscapeDigits.set -> void
+Asterisk.Sdk.Agi.Commands.SayDateTimeCommand.Format.get -> string?
+Asterisk.Sdk.Agi.Commands.SayDateTimeCommand.Format.set -> void
+Asterisk.Sdk.Agi.Commands.SayDateTimeCommand.SayDateTimeCommand() -> void
+Asterisk.Sdk.Agi.Commands.SayDateTimeCommand.Time.get -> long?
+Asterisk.Sdk.Agi.Commands.SayDateTimeCommand.Time.set -> void
+Asterisk.Sdk.Agi.Commands.SayDateTimeCommand.Timezone.get -> string?
+Asterisk.Sdk.Agi.Commands.SayDateTimeCommand.Timezone.set -> void
+Asterisk.Sdk.Agi.Commands.SayDigitsCommand
+Asterisk.Sdk.Agi.Commands.SayDigitsCommand.Digits.get -> string?
+Asterisk.Sdk.Agi.Commands.SayDigitsCommand.Digits.set -> void
+Asterisk.Sdk.Agi.Commands.SayDigitsCommand.EscapeDigits.get -> string?
+Asterisk.Sdk.Agi.Commands.SayDigitsCommand.EscapeDigits.set -> void
+Asterisk.Sdk.Agi.Commands.SayDigitsCommand.SayDigitsCommand() -> void
+Asterisk.Sdk.Agi.Commands.SayNumberCommand
+Asterisk.Sdk.Agi.Commands.SayNumberCommand.EscapeDigits.get -> string?
+Asterisk.Sdk.Agi.Commands.SayNumberCommand.EscapeDigits.set -> void
+Asterisk.Sdk.Agi.Commands.SayNumberCommand.Number.get -> string?
+Asterisk.Sdk.Agi.Commands.SayNumberCommand.Number.set -> void
+Asterisk.Sdk.Agi.Commands.SayNumberCommand.SayNumberCommand() -> void
+Asterisk.Sdk.Agi.Commands.SayPhoneticCommand
+Asterisk.Sdk.Agi.Commands.SayPhoneticCommand.EscapeDigits.get -> string?
+Asterisk.Sdk.Agi.Commands.SayPhoneticCommand.EscapeDigits.set -> void
+Asterisk.Sdk.Agi.Commands.SayPhoneticCommand.SayPhoneticCommand() -> void
+Asterisk.Sdk.Agi.Commands.SayPhoneticCommand.Text.get -> string?
+Asterisk.Sdk.Agi.Commands.SayPhoneticCommand.Text.set -> void
+Asterisk.Sdk.Agi.Commands.SayTimeCommand
+Asterisk.Sdk.Agi.Commands.SayTimeCommand.EscapeDigits.get -> string?
+Asterisk.Sdk.Agi.Commands.SayTimeCommand.EscapeDigits.set -> void
+Asterisk.Sdk.Agi.Commands.SayTimeCommand.SayTimeCommand() -> void
+Asterisk.Sdk.Agi.Commands.SayTimeCommand.Time.get -> long?
+Asterisk.Sdk.Agi.Commands.SayTimeCommand.Time.set -> void
+Asterisk.Sdk.Agi.Commands.SendImageCommand
+Asterisk.Sdk.Agi.Commands.SendImageCommand.Image.get -> string?
+Asterisk.Sdk.Agi.Commands.SendImageCommand.Image.set -> void
+Asterisk.Sdk.Agi.Commands.SendImageCommand.SendImageCommand() -> void
+Asterisk.Sdk.Agi.Commands.SendTextCommand
+Asterisk.Sdk.Agi.Commands.SendTextCommand.SendTextCommand() -> void
+Asterisk.Sdk.Agi.Commands.SendTextCommand.Text.get -> string?
+Asterisk.Sdk.Agi.Commands.SendTextCommand.Text.set -> void
+Asterisk.Sdk.Agi.Commands.SetAutoHangupCommand
+Asterisk.Sdk.Agi.Commands.SetAutoHangupCommand.SetAutoHangupCommand() -> void
+Asterisk.Sdk.Agi.Commands.SetAutoHangupCommand.Time.get -> int?
+Asterisk.Sdk.Agi.Commands.SetAutoHangupCommand.Time.set -> void
+Asterisk.Sdk.Agi.Commands.SetCallerIdCommand
+Asterisk.Sdk.Agi.Commands.SetCallerIdCommand.CallerId.get -> string?
+Asterisk.Sdk.Agi.Commands.SetCallerIdCommand.CallerId.set -> void
+Asterisk.Sdk.Agi.Commands.SetCallerIdCommand.SetCallerIdCommand() -> void
+Asterisk.Sdk.Agi.Commands.SetContextCommand
+Asterisk.Sdk.Agi.Commands.SetContextCommand.Context.get -> string?
+Asterisk.Sdk.Agi.Commands.SetContextCommand.Context.set -> void
+Asterisk.Sdk.Agi.Commands.SetContextCommand.SetContextCommand() -> void
+Asterisk.Sdk.Agi.Commands.SetExtensionCommand
+Asterisk.Sdk.Agi.Commands.SetExtensionCommand.Extension.get -> string?
+Asterisk.Sdk.Agi.Commands.SetExtensionCommand.Extension.set -> void
+Asterisk.Sdk.Agi.Commands.SetExtensionCommand.SetExtensionCommand() -> void
+Asterisk.Sdk.Agi.Commands.SetMusicOffCommand
+Asterisk.Sdk.Agi.Commands.SetMusicOffCommand.SetMusicOffCommand() -> void
+Asterisk.Sdk.Agi.Commands.SetMusicOnCommand
+Asterisk.Sdk.Agi.Commands.SetMusicOnCommand.MusicOnHoldClass.get -> string?
+Asterisk.Sdk.Agi.Commands.SetMusicOnCommand.MusicOnHoldClass.set -> void
+Asterisk.Sdk.Agi.Commands.SetMusicOnCommand.SetMusicOnCommand() -> void
+Asterisk.Sdk.Agi.Commands.SetPriorityCommand
+Asterisk.Sdk.Agi.Commands.SetPriorityCommand.Priority.get -> string?
+Asterisk.Sdk.Agi.Commands.SetPriorityCommand.Priority.set -> void
+Asterisk.Sdk.Agi.Commands.SetPriorityCommand.SetPriorityCommand() -> void
+Asterisk.Sdk.Agi.Commands.SetVariableCommand
+Asterisk.Sdk.Agi.Commands.SetVariableCommand.SetVariableCommand() -> void
+Asterisk.Sdk.Agi.Commands.SetVariableCommand.Value.get -> string?
+Asterisk.Sdk.Agi.Commands.SetVariableCommand.Value.set -> void
+Asterisk.Sdk.Agi.Commands.SetVariableCommand.Variable.get -> string?
+Asterisk.Sdk.Agi.Commands.SetVariableCommand.Variable.set -> void
+Asterisk.Sdk.Agi.Commands.SpeechActivateGrammarCommand
+Asterisk.Sdk.Agi.Commands.SpeechActivateGrammarCommand.Name.get -> string?
+Asterisk.Sdk.Agi.Commands.SpeechActivateGrammarCommand.Name.set -> void
+Asterisk.Sdk.Agi.Commands.SpeechActivateGrammarCommand.SpeechActivateGrammarCommand() -> void
+Asterisk.Sdk.Agi.Commands.SpeechCreateCommand
+Asterisk.Sdk.Agi.Commands.SpeechCreateCommand.Engine.get -> string?
+Asterisk.Sdk.Agi.Commands.SpeechCreateCommand.Engine.set -> void
+Asterisk.Sdk.Agi.Commands.SpeechCreateCommand.SpeechCreateCommand() -> void
+Asterisk.Sdk.Agi.Commands.SpeechDeactivateGrammarCommand
+Asterisk.Sdk.Agi.Commands.SpeechDeactivateGrammarCommand.Name.get -> string?
+Asterisk.Sdk.Agi.Commands.SpeechDeactivateGrammarCommand.Name.set -> void
+Asterisk.Sdk.Agi.Commands.SpeechDeactivateGrammarCommand.SpeechDeactivateGrammarCommand() -> void
+Asterisk.Sdk.Agi.Commands.SpeechDestroyCommand
+Asterisk.Sdk.Agi.Commands.SpeechDestroyCommand.SpeechDestroyCommand() -> void
+Asterisk.Sdk.Agi.Commands.SpeechLoadGrammarCommand
+Asterisk.Sdk.Agi.Commands.SpeechLoadGrammarCommand.Name.get -> string?
+Asterisk.Sdk.Agi.Commands.SpeechLoadGrammarCommand.Name.set -> void
+Asterisk.Sdk.Agi.Commands.SpeechLoadGrammarCommand.Path.get -> string?
+Asterisk.Sdk.Agi.Commands.SpeechLoadGrammarCommand.Path.set -> void
+Asterisk.Sdk.Agi.Commands.SpeechLoadGrammarCommand.SpeechLoadGrammarCommand() -> void
+Asterisk.Sdk.Agi.Commands.SpeechRecognizeCommand
+Asterisk.Sdk.Agi.Commands.SpeechRecognizeCommand.Offset.get -> int?
+Asterisk.Sdk.Agi.Commands.SpeechRecognizeCommand.Offset.set -> void
+Asterisk.Sdk.Agi.Commands.SpeechRecognizeCommand.Prompt.get -> string?
+Asterisk.Sdk.Agi.Commands.SpeechRecognizeCommand.Prompt.set -> void
+Asterisk.Sdk.Agi.Commands.SpeechRecognizeCommand.SpeechRecognizeCommand() -> void
+Asterisk.Sdk.Agi.Commands.SpeechRecognizeCommand.Timeout.get -> int?
+Asterisk.Sdk.Agi.Commands.SpeechRecognizeCommand.Timeout.set -> void
+Asterisk.Sdk.Agi.Commands.SpeechSetCommand
+Asterisk.Sdk.Agi.Commands.SpeechSetCommand.Name.get -> string?
+Asterisk.Sdk.Agi.Commands.SpeechSetCommand.Name.set -> void
+Asterisk.Sdk.Agi.Commands.SpeechSetCommand.SpeechSetCommand() -> void
+Asterisk.Sdk.Agi.Commands.SpeechSetCommand.Value.get -> string?
+Asterisk.Sdk.Agi.Commands.SpeechSetCommand.Value.set -> void
+Asterisk.Sdk.Agi.Commands.SpeechUnloadGrammarCommand
+Asterisk.Sdk.Agi.Commands.SpeechUnloadGrammarCommand.Name.get -> string?
+Asterisk.Sdk.Agi.Commands.SpeechUnloadGrammarCommand.Name.set -> void
+Asterisk.Sdk.Agi.Commands.SpeechUnloadGrammarCommand.SpeechUnloadGrammarCommand() -> void
+Asterisk.Sdk.Agi.Commands.StreamFileCommand
+Asterisk.Sdk.Agi.Commands.StreamFileCommand.EscapeDigits.get -> string?
+Asterisk.Sdk.Agi.Commands.StreamFileCommand.EscapeDigits.set -> void
+Asterisk.Sdk.Agi.Commands.StreamFileCommand.File.get -> string?
+Asterisk.Sdk.Agi.Commands.StreamFileCommand.File.set -> void
+Asterisk.Sdk.Agi.Commands.StreamFileCommand.Offset.get -> int?
+Asterisk.Sdk.Agi.Commands.StreamFileCommand.Offset.set -> void
+Asterisk.Sdk.Agi.Commands.StreamFileCommand.StreamFileCommand() -> void
+Asterisk.Sdk.Agi.Commands.TddModeCommand
+Asterisk.Sdk.Agi.Commands.TddModeCommand.Mode.get -> string?
+Asterisk.Sdk.Agi.Commands.TddModeCommand.Mode.set -> void
+Asterisk.Sdk.Agi.Commands.TddModeCommand.TddModeCommand() -> void
+Asterisk.Sdk.Agi.Commands.VerboseCommand
+Asterisk.Sdk.Agi.Commands.VerboseCommand.Level.get -> int?
+Asterisk.Sdk.Agi.Commands.VerboseCommand.Level.set -> void
+Asterisk.Sdk.Agi.Commands.VerboseCommand.Message.get -> string?
+Asterisk.Sdk.Agi.Commands.VerboseCommand.Message.set -> void
+Asterisk.Sdk.Agi.Commands.VerboseCommand.VerboseCommand() -> void
+Asterisk.Sdk.Agi.Commands.WaitForDigitCommand
+Asterisk.Sdk.Agi.Commands.WaitForDigitCommand.Timeout.get -> long?
+Asterisk.Sdk.Agi.Commands.WaitForDigitCommand.Timeout.set -> void
+Asterisk.Sdk.Agi.Commands.WaitForDigitCommand.WaitForDigitCommand() -> void
+Asterisk.Sdk.Agi.Diagnostics.AgiActivitySource
+Asterisk.Sdk.Agi.Diagnostics.AgiHealthCheck
+Asterisk.Sdk.Agi.Diagnostics.AgiHealthCheck.AgiHealthCheck(Asterisk.Sdk.IAgiServer! server) -> void
+Asterisk.Sdk.Agi.Diagnostics.AgiHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Asterisk.Sdk.Agi.Diagnostics.AgiMetrics
+Asterisk.Sdk.Agi.Hosting.AgiHostedService
+Asterisk.Sdk.Agi.Hosting.AgiHostedService.AgiHostedService(Asterisk.Sdk.IAgiServer! agiServer) -> void
+Asterisk.Sdk.Agi.Hosting.AgiHostedService.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.Agi.Hosting.AgiHostedService.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.Agi.Mapping.CompositeMappingStrategy
+Asterisk.Sdk.Agi.Mapping.CompositeMappingStrategy.Add(Asterisk.Sdk.Agi.Mapping.IMappingStrategy! strategy) -> void
+Asterisk.Sdk.Agi.Mapping.CompositeMappingStrategy.CompositeMappingStrategy(params Asterisk.Sdk.Agi.Mapping.IMappingStrategy![]! strategies) -> void
+Asterisk.Sdk.Agi.Mapping.CompositeMappingStrategy.Resolve(Asterisk.Sdk.IAgiRequest! request) -> Asterisk.Sdk.IAgiScript?
+Asterisk.Sdk.Agi.Mapping.IMappingStrategy
+Asterisk.Sdk.Agi.Mapping.IMappingStrategy.Resolve(Asterisk.Sdk.IAgiRequest! request) -> Asterisk.Sdk.IAgiScript?
+Asterisk.Sdk.Agi.Mapping.SimpleMappingStrategy
+Asterisk.Sdk.Agi.Mapping.SimpleMappingStrategy.Add(string! scriptName, Asterisk.Sdk.IAgiScript! script) -> void
+Asterisk.Sdk.Agi.Mapping.SimpleMappingStrategy.Remove(string! scriptName) -> bool
+Asterisk.Sdk.Agi.Mapping.SimpleMappingStrategy.Resolve(Asterisk.Sdk.IAgiRequest! request) -> Asterisk.Sdk.IAgiScript?
+Asterisk.Sdk.Agi.Mapping.SimpleMappingStrategy.SimpleMappingStrategy() -> void
+Asterisk.Sdk.Agi.Mapping.TypeNameMappingStrategy
+Asterisk.Sdk.Agi.Mapping.TypeNameMappingStrategy.Register(string! name, System.Func<Asterisk.Sdk.IAgiScript!>! factory) -> void
+Asterisk.Sdk.Agi.Mapping.TypeNameMappingStrategy.Register<TScript>(System.Func<TScript>! factory) -> void
+Asterisk.Sdk.Agi.Mapping.TypeNameMappingStrategy.Resolve(Asterisk.Sdk.IAgiRequest! request) -> Asterisk.Sdk.IAgiScript?
+Asterisk.Sdk.Agi.Mapping.TypeNameMappingStrategy.TypeNameMappingStrategy() -> void
+Asterisk.Sdk.Agi.Server.AgiChannel
+Asterisk.Sdk.Agi.Server.AgiChannel.AgiChannel(Asterisk.Sdk.Agi.Server.FastAgiWriter! writer, Asterisk.Sdk.Agi.Server.FastAgiReader! reader, Microsoft.Extensions.Logging.ILogger? logger = null) -> void
+Asterisk.Sdk.Agi.Server.AgiChannel.AnswerAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Agi.Server.AgiChannel.ExecAsync(string! application, string! args = "", System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Agi.Server.AgiChannel.GetDataAsync(string! file, int timeout = 0, int maxDigits = 0, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
+Asterisk.Sdk.Agi.Server.AgiChannel.GetVariableAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
+Asterisk.Sdk.Agi.Server.AgiChannel.HangupAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Agi.Server.AgiChannel.SendCommandAsync(Asterisk.Sdk.Agi.Commands.AgiCommandBase! command, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Agi.Server.AgiReply!>
+Asterisk.Sdk.Agi.Server.AgiChannel.SendCommandAsync(string! command, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Agi.Server.AgiReply!>
+Asterisk.Sdk.Agi.Server.AgiChannel.SetVariableAsync(string! name, string! value, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Agi.Server.AgiChannel.StreamFileAsync(string! file, string! escapeDigits = "", System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<char>
+Asterisk.Sdk.Agi.Server.AgiException
+Asterisk.Sdk.Agi.Server.AgiException.AgiException(string! message, System.Exception? innerException = null) -> void
+Asterisk.Sdk.Agi.Server.AgiHangupException
+Asterisk.Sdk.Agi.Server.AgiHangupException.AgiHangupException(string! message = "Channel hung up") -> void
+Asterisk.Sdk.Agi.Server.AgiNetworkException
+Asterisk.Sdk.Agi.Server.AgiNetworkException.AgiNetworkException(string! message, System.Exception? innerException = null) -> void
+Asterisk.Sdk.Agi.Server.AgiReply
+Asterisk.Sdk.Agi.Server.AgiReply.AgiReply() -> void
+Asterisk.Sdk.Agi.Server.AgiReply.Extra.get -> string?
+Asterisk.Sdk.Agi.Server.AgiReply.Extra.init -> void
+Asterisk.Sdk.Agi.Server.AgiReply.IsSuccess.get -> bool
+Asterisk.Sdk.Agi.Server.AgiReply.RawLine.get -> string!
+Asterisk.Sdk.Agi.Server.AgiReply.RawLine.init -> void
+Asterisk.Sdk.Agi.Server.AgiReply.ResultAsChar.get -> char
+Asterisk.Sdk.Agi.Server.AgiReply.ResultAsInt.get -> int
+Asterisk.Sdk.Agi.Server.AgiReply.Result.get -> string!
+Asterisk.Sdk.Agi.Server.AgiReply.Result.init -> void
+Asterisk.Sdk.Agi.Server.AgiReply.StatusCode.get -> int
+Asterisk.Sdk.Agi.Server.AgiReply.StatusCode.init -> void
+Asterisk.Sdk.Agi.Server.AgiRequest
+Asterisk.Sdk.Agi.Server.AgiRequest.CallerId.get -> string?
+Asterisk.Sdk.Agi.Server.AgiRequest.CallerIdName.get -> string?
+Asterisk.Sdk.Agi.Server.AgiRequest.Channel.get -> string?
+Asterisk.Sdk.Agi.Server.AgiRequest.Context.get -> string?
+Asterisk.Sdk.Agi.Server.AgiRequest.Extension.get -> string?
+Asterisk.Sdk.Agi.Server.AgiRequest.IsNetwork.get -> bool
+Asterisk.Sdk.Agi.Server.AgiRequest.Language.get -> string?
+Asterisk.Sdk.Agi.Server.AgiRequest.Priority.get -> int
+Asterisk.Sdk.Agi.Server.AgiRequest.Script.get -> string?
+Asterisk.Sdk.Agi.Server.AgiRequest.UniqueId.get -> string?
+Asterisk.Sdk.Agi.Server.AgiRequest.Variables.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+Asterisk.Sdk.Agi.Server.FastAgiReader
+Asterisk.Sdk.Agi.Server.FastAgiReader.FastAgiReader(System.IO.Pipelines.PipeReader! reader) -> void
+Asterisk.Sdk.Agi.Server.FastAgiReader.ReadLineAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
+Asterisk.Sdk.Agi.Server.FastAgiReader.ReadReplyAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Agi.Server.AgiReply?>
+Asterisk.Sdk.Agi.Server.FastAgiReader.ReadRequestAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Agi.Server.AgiRequest!>
+Asterisk.Sdk.Agi.Server.FastAgiServer
+Asterisk.Sdk.Agi.Server.FastAgiServer.ConnectionTimeout.get -> System.TimeSpan
+Asterisk.Sdk.Agi.Server.FastAgiServer.ConnectionTimeout.set -> void
+Asterisk.Sdk.Agi.Server.FastAgiServer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Agi.Server.FastAgiServer.FastAgiServer(int port, Asterisk.Sdk.Agi.Mapping.IMappingStrategy! mappingStrategy, Microsoft.Extensions.Logging.ILogger<Asterisk.Sdk.Agi.Server.FastAgiServer!>! logger) -> void
+Asterisk.Sdk.Agi.Server.FastAgiServer.IsRunning.get -> bool
+Asterisk.Sdk.Agi.Server.FastAgiServer.Port.get -> int
+Asterisk.Sdk.Agi.Server.FastAgiServer.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Agi.Server.FastAgiServer.State.get -> Asterisk.Sdk.Enums.AgiServerState
+Asterisk.Sdk.Agi.Server.FastAgiServer.StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Agi.Server.FastAgiWriter
+Asterisk.Sdk.Agi.Server.FastAgiWriter.FastAgiWriter(System.IO.Pipelines.PipeWriter! writer) -> void
+Asterisk.Sdk.Agi.Server.FastAgiWriter.SendCommandAsync(string! command, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+override Asterisk.Sdk.Agi.Commands.AgiCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.AnswerCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.AsyncAgiBreakCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.BridgeCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.ChannelStatusCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.ConfbridgeCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.ControlStreamFileCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.DatabaseDelCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.DatabaseDelTreeCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.DatabaseGetCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.DatabasePutCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.DialCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.ExecCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.GetDataCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.GetFullVariableCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.GetOptionCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.GetVariableCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.GosubCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.HangupCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.MeetmeCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.NoopCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.QueueCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.ReceiveCharCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.ReceiveTextCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.RecordFileCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SayAlphaCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SayDateTimeCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SayDigitsCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SayNumberCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SayPhoneticCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SayTimeCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SendImageCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SendTextCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SetAutoHangupCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SetCallerIdCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SetContextCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SetExtensionCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SetMusicOffCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SetMusicOnCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SetPriorityCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SetVariableCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SpeechActivateGrammarCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SpeechCreateCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SpeechDeactivateGrammarCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SpeechDestroyCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SpeechLoadGrammarCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SpeechRecognizeCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SpeechSetCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.SpeechUnloadGrammarCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.StreamFileCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.TddModeCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.VerboseCommand.BuildCommand() -> string!
+override Asterisk.Sdk.Agi.Commands.WaitForDigitCommand.BuildCommand() -> string!
+static Asterisk.Sdk.Agi.Server.AgiReply.Parse(string! line) -> Asterisk.Sdk.Agi.Server.AgiReply!
+static Asterisk.Sdk.Agi.Server.AgiRequest.Parse(System.Collections.Generic.IEnumerable<string!>! lines) -> Asterisk.Sdk.Agi.Server.AgiRequest!
+static readonly Asterisk.Sdk.Agi.Diagnostics.AgiActivitySource.Source -> System.Diagnostics.ActivitySource!
+static readonly Asterisk.Sdk.Agi.Diagnostics.AgiMetrics.ConnectionsAccepted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Agi.Diagnostics.AgiMetrics.Hangups -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Agi.Diagnostics.AgiMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Asterisk.Sdk.Agi.Diagnostics.AgiMetrics.ScriptDurationMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Asterisk.Sdk.Agi.Diagnostics.AgiMetrics.ScriptsExecuted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Agi.Diagnostics.AgiMetrics.ScriptsFailed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Agi.Diagnostics.AgiMetrics.ScriptsNotFound -> System.Diagnostics.Metrics.Counter<long>!

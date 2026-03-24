@@ -1,1 +1,258 @@
 #nullable enable
+abstract Asterisk.Sdk.Sessions.Extensions.AgentSelectorBase.SelectAgentAsync(Asterisk.Sdk.Live.Queues.AsteriskQueue! queue, Asterisk.Sdk.Sessions.CallSession! session, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Live.Agents.AsteriskAgent?>
+abstract Asterisk.Sdk.Sessions.Extensions.CallRouterBase.SelectNodeAsync(Asterisk.Sdk.Sessions.CallSession! session, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<string!>
+abstract Asterisk.Sdk.Sessions.Extensions.SessionStoreBase.GetAsync(string! sessionId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Sessions.CallSession?>
+abstract Asterisk.Sdk.Sessions.Extensions.SessionStoreBase.SaveAsync(Asterisk.Sdk.Sessions.CallSession! session, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Sessions.CallConnectedEvent
+Asterisk.Sdk.Sessions.CallConnectedEvent.AgentId.get -> string?
+Asterisk.Sdk.Sessions.CallConnectedEvent.AgentId.init -> void
+Asterisk.Sdk.Sessions.CallConnectedEvent.CallConnectedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string? AgentId, string? QueueName, System.TimeSpan WaitTime) -> void
+Asterisk.Sdk.Sessions.CallConnectedEvent.QueueName.get -> string?
+Asterisk.Sdk.Sessions.CallConnectedEvent.QueueName.init -> void
+Asterisk.Sdk.Sessions.CallConnectedEvent.WaitTime.get -> System.TimeSpan
+Asterisk.Sdk.Sessions.CallConnectedEvent.WaitTime.init -> void
+Asterisk.Sdk.Sessions.CallDirection
+Asterisk.Sdk.Sessions.CallDirection.Inbound = 0 -> Asterisk.Sdk.Sessions.CallDirection
+Asterisk.Sdk.Sessions.CallDirection.Outbound = 1 -> Asterisk.Sdk.Sessions.CallDirection
+Asterisk.Sdk.Sessions.CallEndedEvent
+Asterisk.Sdk.Sessions.CallEndedEvent.CallEndedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, Asterisk.Sdk.Enums.HangupCause? Cause, System.TimeSpan Duration, System.TimeSpan? TalkTime) -> void
+Asterisk.Sdk.Sessions.CallEndedEvent.Cause.get -> Asterisk.Sdk.Enums.HangupCause?
+Asterisk.Sdk.Sessions.CallEndedEvent.Cause.init -> void
+Asterisk.Sdk.Sessions.CallEndedEvent.Duration.get -> System.TimeSpan
+Asterisk.Sdk.Sessions.CallEndedEvent.Duration.init -> void
+Asterisk.Sdk.Sessions.CallEndedEvent.TalkTime.get -> System.TimeSpan?
+Asterisk.Sdk.Sessions.CallEndedEvent.TalkTime.init -> void
+Asterisk.Sdk.Sessions.CallFailedEvent
+Asterisk.Sdk.Sessions.CallFailedEvent.CallFailedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string! Reason) -> void
+Asterisk.Sdk.Sessions.CallFailedEvent.Reason.get -> string!
+Asterisk.Sdk.Sessions.CallFailedEvent.Reason.init -> void
+Asterisk.Sdk.Sessions.CallHeldEvent
+Asterisk.Sdk.Sessions.CallHeldEvent.CallHeldEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp) -> void
+Asterisk.Sdk.Sessions.CallQueuedEvent
+Asterisk.Sdk.Sessions.CallQueuedEvent.CallQueuedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string! QueueName, int? Position) -> void
+Asterisk.Sdk.Sessions.CallQueuedEvent.Position.get -> int?
+Asterisk.Sdk.Sessions.CallQueuedEvent.Position.init -> void
+Asterisk.Sdk.Sessions.CallQueuedEvent.QueueName.get -> string!
+Asterisk.Sdk.Sessions.CallQueuedEvent.QueueName.init -> void
+Asterisk.Sdk.Sessions.CallResumedEvent
+Asterisk.Sdk.Sessions.CallResumedEvent.CallResumedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp) -> void
+Asterisk.Sdk.Sessions.CallRingNoAnswerEvent
+Asterisk.Sdk.Sessions.CallRingNoAnswerEvent.AgentId.get -> string!
+Asterisk.Sdk.Sessions.CallRingNoAnswerEvent.AgentId.init -> void
+Asterisk.Sdk.Sessions.CallRingNoAnswerEvent.CallRingNoAnswerEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string! AgentId, string? QueueName) -> void
+Asterisk.Sdk.Sessions.CallRingNoAnswerEvent.QueueName.get -> string?
+Asterisk.Sdk.Sessions.CallRingNoAnswerEvent.QueueName.init -> void
+Asterisk.Sdk.Sessions.CallSession
+Asterisk.Sdk.Sessions.CallSession.AgentId.get -> string?
+Asterisk.Sdk.Sessions.CallSession.AgentId.set -> void
+Asterisk.Sdk.Sessions.CallSession.AgentInterface.get -> string?
+Asterisk.Sdk.Sessions.CallSession.AgentInterface.set -> void
+Asterisk.Sdk.Sessions.CallSession.BridgeId.get -> string?
+Asterisk.Sdk.Sessions.CallSession.BridgeId.set -> void
+Asterisk.Sdk.Sessions.CallSession.CallerIdName.get -> string?
+Asterisk.Sdk.Sessions.CallSession.CallerIdNum.get -> string?
+Asterisk.Sdk.Sessions.CallSession.CallSession(string! sessionId, string! linkedId, string! serverId, Asterisk.Sdk.Sessions.CallDirection direction) -> void
+Asterisk.Sdk.Sessions.CallSession.CompletedAt.get -> System.DateTimeOffset?
+Asterisk.Sdk.Sessions.CallSession.CompletedAt.set -> void
+Asterisk.Sdk.Sessions.CallSession.ConnectedAt.get -> System.DateTimeOffset?
+Asterisk.Sdk.Sessions.CallSession.ConnectedAt.set -> void
+Asterisk.Sdk.Sessions.CallSession.Context.get -> string?
+Asterisk.Sdk.Sessions.CallSession.CreatedAt.get -> System.DateTimeOffset
+Asterisk.Sdk.Sessions.CallSession.CreatedAt.init -> void
+Asterisk.Sdk.Sessions.CallSession.DialingAt.get -> System.DateTimeOffset?
+Asterisk.Sdk.Sessions.CallSession.DialingAt.set -> void
+Asterisk.Sdk.Sessions.CallSession.Direction.get -> Asterisk.Sdk.Sessions.CallDirection
+Asterisk.Sdk.Sessions.CallSession.Duration.get -> System.TimeSpan
+Asterisk.Sdk.Sessions.CallSessionEvent
+Asterisk.Sdk.Sessions.CallSessionEvent.CallSessionEvent(System.DateTimeOffset Timestamp, Asterisk.Sdk.Sessions.CallSessionEventType Type, string? SourceChannel, string? TargetChannel, string? Detail) -> void
+Asterisk.Sdk.Sessions.CallSessionEvent.Detail.get -> string?
+Asterisk.Sdk.Sessions.CallSessionEvent.Detail.init -> void
+Asterisk.Sdk.Sessions.CallSession.Events.get -> System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Sessions.CallSessionEvent!>!
+Asterisk.Sdk.Sessions.CallSessionEvent.SourceChannel.get -> string?
+Asterisk.Sdk.Sessions.CallSessionEvent.SourceChannel.init -> void
+Asterisk.Sdk.Sessions.CallSessionEvent.TargetChannel.get -> string?
+Asterisk.Sdk.Sessions.CallSessionEvent.TargetChannel.init -> void
+Asterisk.Sdk.Sessions.CallSessionEvent.Timestamp.get -> System.DateTimeOffset
+Asterisk.Sdk.Sessions.CallSessionEvent.Timestamp.init -> void
+Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEventType.AgentConnected = 11 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEventType.Completed = 12 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEventType.Conference = 7 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEventType.Connected = 3 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEventType.Created = 0 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEventType.Dialing = 1 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEventType.Failed = 13 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEvent.Type.get -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEventType.Hold = 4 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEvent.Type.init -> void
+Asterisk.Sdk.Sessions.CallSessionEventType.ParticipantJoined = 8 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEventType.ParticipantLeft = 9 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEventType.QueueJoined = 10 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEventType.Ringing = 2 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEventType.TimedOut = 14 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEventType.Transfer = 6 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSessionEventType.Unhold = 5 -> Asterisk.Sdk.Sessions.CallSessionEventType
+Asterisk.Sdk.Sessions.CallSession.Extension.get -> string?
+Asterisk.Sdk.Sessions.CallSession.HangupCause.get -> Asterisk.Sdk.Enums.HangupCause?
+Asterisk.Sdk.Sessions.CallSession.HangupCause.set -> void
+Asterisk.Sdk.Sessions.CallSession.HoldTime.get -> System.TimeSpan
+Asterisk.Sdk.Sessions.CallSession.LinkedId.get -> string!
+Asterisk.Sdk.Sessions.CallSession.Metadata.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+Asterisk.Sdk.Sessions.CallSession.Participants.get -> System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Sessions.SessionParticipant!>!
+Asterisk.Sdk.Sessions.CallSession.QueuedAt.get -> System.DateTimeOffset?
+Asterisk.Sdk.Sessions.CallSession.QueuedAt.set -> void
+Asterisk.Sdk.Sessions.CallSession.QueueName.get -> string?
+Asterisk.Sdk.Sessions.CallSession.QueueName.set -> void
+Asterisk.Sdk.Sessions.CallSession.RingingAt.get -> System.DateTimeOffset?
+Asterisk.Sdk.Sessions.CallSession.RingingAt.set -> void
+Asterisk.Sdk.Sessions.CallSession.ServerId.get -> string!
+Asterisk.Sdk.Sessions.CallSession.SessionId.get -> string!
+Asterisk.Sdk.Sessions.CallSession.SetMetadata(string! key, string! value) -> void
+Asterisk.Sdk.Sessions.CallSessionState
+Asterisk.Sdk.Sessions.CallSessionState.Completed = 8 -> Asterisk.Sdk.Sessions.CallSessionState
+Asterisk.Sdk.Sessions.CallSessionState.Conference = 7 -> Asterisk.Sdk.Sessions.CallSessionState
+Asterisk.Sdk.Sessions.CallSessionState.Connected = 4 -> Asterisk.Sdk.Sessions.CallSessionState
+Asterisk.Sdk.Sessions.CallSessionState.Created = 0 -> Asterisk.Sdk.Sessions.CallSessionState
+Asterisk.Sdk.Sessions.CallSessionState.Dialing = 1 -> Asterisk.Sdk.Sessions.CallSessionState
+Asterisk.Sdk.Sessions.CallSessionState.Failed = 9 -> Asterisk.Sdk.Sessions.CallSessionState
+Asterisk.Sdk.Sessions.CallSession.State.get -> Asterisk.Sdk.Sessions.CallSessionState
+Asterisk.Sdk.Sessions.CallSessionState.OnHold = 5 -> Asterisk.Sdk.Sessions.CallSessionState
+Asterisk.Sdk.Sessions.CallSessionState.Queued = 3 -> Asterisk.Sdk.Sessions.CallSessionState
+Asterisk.Sdk.Sessions.CallSessionState.Ringing = 2 -> Asterisk.Sdk.Sessions.CallSessionState
+Asterisk.Sdk.Sessions.CallSessionState.TimedOut = 10 -> Asterisk.Sdk.Sessions.CallSessionState
+Asterisk.Sdk.Sessions.CallSessionState.Transferring = 6 -> Asterisk.Sdk.Sessions.CallSessionState
+Asterisk.Sdk.Sessions.CallSession.TalkTime.get -> System.TimeSpan?
+Asterisk.Sdk.Sessions.CallSession.TenantId.get -> string?
+Asterisk.Sdk.Sessions.CallSession.TenantId.set -> void
+Asterisk.Sdk.Sessions.CallSession.WaitTime.get -> System.TimeSpan?
+Asterisk.Sdk.Sessions.CallStartedEvent
+Asterisk.Sdk.Sessions.CallStartedEvent.CallerIdNum.get -> string?
+Asterisk.Sdk.Sessions.CallStartedEvent.CallerIdNum.init -> void
+Asterisk.Sdk.Sessions.CallStartedEvent.CallStartedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, Asterisk.Sdk.Sessions.CallDirection Direction, string? CallerIdNum) -> void
+Asterisk.Sdk.Sessions.CallStartedEvent.Direction.get -> Asterisk.Sdk.Sessions.CallDirection
+Asterisk.Sdk.Sessions.CallStartedEvent.Direction.init -> void
+Asterisk.Sdk.Sessions.CallTransferredEvent
+Asterisk.Sdk.Sessions.CallTransferredEvent.CallTransferredEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string! TransferType, string? TargetChannel) -> void
+Asterisk.Sdk.Sessions.CallTransferredEvent.TargetChannel.get -> string?
+Asterisk.Sdk.Sessions.CallTransferredEvent.TargetChannel.init -> void
+Asterisk.Sdk.Sessions.CallTransferredEvent.TransferType.get -> string!
+Asterisk.Sdk.Sessions.CallTransferredEvent.TransferType.init -> void
+Asterisk.Sdk.Sessions.CallWrapUpEvent
+Asterisk.Sdk.Sessions.CallWrapUpEvent.AgentId.get -> string?
+Asterisk.Sdk.Sessions.CallWrapUpEvent.AgentId.init -> void
+Asterisk.Sdk.Sessions.CallWrapUpEvent.CallWrapUpEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string? AgentId, string? QueueName, System.TimeSpan WrapUpDuration) -> void
+Asterisk.Sdk.Sessions.CallWrapUpEvent.QueueName.get -> string?
+Asterisk.Sdk.Sessions.CallWrapUpEvent.QueueName.init -> void
+Asterisk.Sdk.Sessions.CallWrapUpEvent.WrapUpDuration.get -> System.TimeSpan
+Asterisk.Sdk.Sessions.CallWrapUpEvent.WrapUpDuration.init -> void
+Asterisk.Sdk.Sessions.Diagnostics.SessionMetrics
+Asterisk.Sdk.Sessions.Exceptions.InvalidSessionStateTransitionException
+Asterisk.Sdk.Sessions.Exceptions.InvalidSessionStateTransitionException.InvalidSessionStateTransitionException(Asterisk.Sdk.Sessions.CallSessionState from, Asterisk.Sdk.Sessions.CallSessionState to) -> void
+Asterisk.Sdk.Sessions.Exceptions.SessionException
+Asterisk.Sdk.Sessions.Exceptions.SessionException.SessionException(string! message, System.Exception? inner = null) -> void
+Asterisk.Sdk.Sessions.Extensions.AgentSelectorBase
+Asterisk.Sdk.Sessions.Extensions.AgentSelectorBase.AgentSelectorBase() -> void
+Asterisk.Sdk.Sessions.Extensions.CallRouterBase
+Asterisk.Sdk.Sessions.Extensions.CallRouterBase.CallRouterBase() -> void
+Asterisk.Sdk.Sessions.Extensions.SessionStoreBase
+Asterisk.Sdk.Sessions.Extensions.SessionStoreBase.SessionStoreBase() -> void
+Asterisk.Sdk.Sessions.Manager.CallSessionManager
+Asterisk.Sdk.Sessions.Manager.CallSessionManager.ActiveSessions.get -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Sessions.CallSession!>!
+Asterisk.Sdk.Sessions.Manager.CallSessionManager.AttachToServer(Asterisk.Sdk.Live.Server.AsteriskServer! server, string! serverId) -> void
+Asterisk.Sdk.Sessions.Manager.CallSessionManager.CallSessionManager(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.Sessions.Manager.SessionOptions!>! options, Microsoft.Extensions.Logging.ILogger<Asterisk.Sdk.Sessions.Manager.CallSessionManager!>! logger, Asterisk.Sdk.Sessions.Extensions.SessionStoreBase! store) -> void
+Asterisk.Sdk.Sessions.Manager.CallSessionManager.DetachFromServer(string! serverId) -> void
+Asterisk.Sdk.Sessions.Manager.CallSessionManager.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Sessions.Manager.CallSessionManager.Events.get -> System.IObservable<Asterisk.Sdk.Sessions.SessionDomainEvent!>!
+Asterisk.Sdk.Sessions.Manager.CallSessionManager.GetByBridgeId(string! bridgeId) -> Asterisk.Sdk.Sessions.CallSession?
+Asterisk.Sdk.Sessions.Manager.CallSessionManager.GetByChannelId(string! uniqueId) -> Asterisk.Sdk.Sessions.CallSession?
+Asterisk.Sdk.Sessions.Manager.CallSessionManager.GetById(string! sessionId) -> Asterisk.Sdk.Sessions.CallSession?
+Asterisk.Sdk.Sessions.Manager.CallSessionManager.GetByLinkedId(string! linkedId) -> Asterisk.Sdk.Sessions.CallSession?
+Asterisk.Sdk.Sessions.Manager.CallSessionManager.GetRecentCompleted(int count = 100) -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Sessions.CallSession!>!
+Asterisk.Sdk.Sessions.Manager.CallSessionManager.RegisterReconstructedSession(Asterisk.Sdk.Sessions.CallSession! session) -> bool
+Asterisk.Sdk.Sessions.Manager.ICallSessionManager
+Asterisk.Sdk.Sessions.Manager.ICallSessionManager.ActiveSessions.get -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Sessions.CallSession!>!
+Asterisk.Sdk.Sessions.Manager.ICallSessionManager.AttachToServer(Asterisk.Sdk.Live.Server.AsteriskServer! server, string! serverId) -> void
+Asterisk.Sdk.Sessions.Manager.ICallSessionManager.DetachFromServer(string! serverId) -> void
+Asterisk.Sdk.Sessions.Manager.ICallSessionManager.Events.get -> System.IObservable<Asterisk.Sdk.Sessions.SessionDomainEvent!>!
+Asterisk.Sdk.Sessions.Manager.ICallSessionManager.GetByBridgeId(string! bridgeId) -> Asterisk.Sdk.Sessions.CallSession?
+Asterisk.Sdk.Sessions.Manager.ICallSessionManager.GetByChannelId(string! uniqueId) -> Asterisk.Sdk.Sessions.CallSession?
+Asterisk.Sdk.Sessions.Manager.ICallSessionManager.GetById(string! sessionId) -> Asterisk.Sdk.Sessions.CallSession?
+Asterisk.Sdk.Sessions.Manager.ICallSessionManager.GetByLinkedId(string! linkedId) -> Asterisk.Sdk.Sessions.CallSession?
+Asterisk.Sdk.Sessions.Manager.ICallSessionManager.GetRecentCompleted(int count = 100) -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Sessions.CallSession!>!
+Asterisk.Sdk.Sessions.Manager.ICallSessionManager.RegisterReconstructedSession(Asterisk.Sdk.Sessions.CallSession! session) -> bool
+Asterisk.Sdk.Sessions.Manager.SessionOptions
+Asterisk.Sdk.Sessions.Manager.SessionOptions.CompletedRetention.get -> System.TimeSpan
+Asterisk.Sdk.Sessions.Manager.SessionOptions.CompletedRetention.set -> void
+Asterisk.Sdk.Sessions.Manager.SessionOptions.DialingTimeout.get -> System.TimeSpan
+Asterisk.Sdk.Sessions.Manager.SessionOptions.DialingTimeout.set -> void
+Asterisk.Sdk.Sessions.Manager.SessionOptions.InboundContextPatterns.get -> string![]!
+Asterisk.Sdk.Sessions.Manager.SessionOptions.InboundContextPatterns.set -> void
+Asterisk.Sdk.Sessions.Manager.SessionOptions.MaxCompletedSessions.get -> int
+Asterisk.Sdk.Sessions.Manager.SessionOptions.MaxCompletedSessions.set -> void
+Asterisk.Sdk.Sessions.Manager.SessionOptions.OutboundContextPatterns.get -> string![]!
+Asterisk.Sdk.Sessions.Manager.SessionOptions.OutboundContextPatterns.set -> void
+Asterisk.Sdk.Sessions.Manager.SessionOptions.QueueMetricsWindow.get -> System.TimeSpan
+Asterisk.Sdk.Sessions.Manager.SessionOptions.QueueMetricsWindow.set -> void
+Asterisk.Sdk.Sessions.Manager.SessionOptions.ReconciliationInterval.get -> System.TimeSpan
+Asterisk.Sdk.Sessions.Manager.SessionOptions.ReconciliationInterval.set -> void
+Asterisk.Sdk.Sessions.Manager.SessionOptions.RingingTimeout.get -> System.TimeSpan
+Asterisk.Sdk.Sessions.Manager.SessionOptions.RingingTimeout.set -> void
+Asterisk.Sdk.Sessions.Manager.SessionOptions.SessionOptions() -> void
+Asterisk.Sdk.Sessions.Manager.SessionOptions.SlaThreshold.get -> System.TimeSpan
+Asterisk.Sdk.Sessions.Manager.SessionOptions.SlaThreshold.set -> void
+Asterisk.Sdk.Sessions.ParticipantRole
+Asterisk.Sdk.Sessions.ParticipantRole.Agent = 2 -> Asterisk.Sdk.Sessions.ParticipantRole
+Asterisk.Sdk.Sessions.ParticipantRole.Caller = 0 -> Asterisk.Sdk.Sessions.ParticipantRole
+Asterisk.Sdk.Sessions.ParticipantRole.Conference = 4 -> Asterisk.Sdk.Sessions.ParticipantRole
+Asterisk.Sdk.Sessions.ParticipantRole.Destination = 1 -> Asterisk.Sdk.Sessions.ParticipantRole
+Asterisk.Sdk.Sessions.ParticipantRole.Internal = 5 -> Asterisk.Sdk.Sessions.ParticipantRole
+Asterisk.Sdk.Sessions.ParticipantRole.Transfer = 3 -> Asterisk.Sdk.Sessions.ParticipantRole
+Asterisk.Sdk.Sessions.SessionDomainEvent
+Asterisk.Sdk.Sessions.SessionDomainEvent.ServerId.get -> string!
+Asterisk.Sdk.Sessions.SessionDomainEvent.ServerId.init -> void
+Asterisk.Sdk.Sessions.SessionDomainEvent.SessionDomainEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp) -> void
+Asterisk.Sdk.Sessions.SessionDomainEvent.SessionId.get -> string!
+Asterisk.Sdk.Sessions.SessionDomainEvent.SessionId.init -> void
+Asterisk.Sdk.Sessions.SessionDomainEvent.Timestamp.get -> System.DateTimeOffset
+Asterisk.Sdk.Sessions.SessionDomainEvent.Timestamp.init -> void
+Asterisk.Sdk.Sessions.SessionMergedEvent
+Asterisk.Sdk.Sessions.SessionMergedEvent.MergedSessionId.get -> string!
+Asterisk.Sdk.Sessions.SessionMergedEvent.MergedSessionId.init -> void
+Asterisk.Sdk.Sessions.SessionMergedEvent.SessionMergedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string! MergedSessionId) -> void
+Asterisk.Sdk.Sessions.SessionParticipant
+Asterisk.Sdk.Sessions.SessionParticipant.CallerIdName.get -> string?
+Asterisk.Sdk.Sessions.SessionParticipant.CallerIdName.set -> void
+Asterisk.Sdk.Sessions.SessionParticipant.CallerIdNum.get -> string?
+Asterisk.Sdk.Sessions.SessionParticipant.CallerIdNum.set -> void
+Asterisk.Sdk.Sessions.SessionParticipant.Channel.get -> string!
+Asterisk.Sdk.Sessions.SessionParticipant.Channel.init -> void
+Asterisk.Sdk.Sessions.SessionParticipant.HangupCause.get -> Asterisk.Sdk.Enums.HangupCause?
+Asterisk.Sdk.Sessions.SessionParticipant.HangupCause.set -> void
+Asterisk.Sdk.Sessions.SessionParticipant.JoinedAt.get -> System.DateTimeOffset
+Asterisk.Sdk.Sessions.SessionParticipant.JoinedAt.init -> void
+Asterisk.Sdk.Sessions.SessionParticipant.LeftAt.get -> System.DateTimeOffset?
+Asterisk.Sdk.Sessions.SessionParticipant.LeftAt.set -> void
+Asterisk.Sdk.Sessions.SessionParticipant.Role.get -> Asterisk.Sdk.Sessions.ParticipantRole
+Asterisk.Sdk.Sessions.SessionParticipant.Role.set -> void
+Asterisk.Sdk.Sessions.SessionParticipant.SessionParticipant() -> void
+Asterisk.Sdk.Sessions.SessionParticipant.Technology.get -> string!
+Asterisk.Sdk.Sessions.SessionParticipant.Technology.init -> void
+Asterisk.Sdk.Sessions.SessionParticipant.UniqueId.get -> string!
+Asterisk.Sdk.Sessions.SessionParticipant.UniqueId.init -> void
+static readonly Asterisk.Sdk.Sessions.Diagnostics.SessionMetrics.DurationMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Asterisk.Sdk.Sessions.Diagnostics.SessionMetrics.HoldTimeMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Asterisk.Sdk.Sessions.Diagnostics.SessionMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Asterisk.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsCompleted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsCreated -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsFailed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsOrphaned -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsTimedOut -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Sessions.Diagnostics.SessionMetrics.TalkTimeMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Asterisk.Sdk.Sessions.Diagnostics.SessionMetrics.WaitTimeMs -> System.Diagnostics.Metrics.Histogram<double>!
+virtual Asterisk.Sdk.Sessions.Extensions.AgentSelectorBase.RankAgentsAsync(Asterisk.Sdk.Live.Queues.AsteriskQueue! queue, Asterisk.Sdk.Sessions.CallSession! session, System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Live.Agents.AsteriskAgent!>! candidates, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Live.Agents.AsteriskAgent!>!>
+virtual Asterisk.Sdk.Sessions.Extensions.CallRouterBase.CanRouteAsync(Asterisk.Sdk.Sessions.CallSession! session, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<bool>
+virtual Asterisk.Sdk.Sessions.Extensions.CallRouterBase.SelectNodeForOriginateAsync(string? queueName, string? phoneNumber, System.Collections.Generic.Dictionary<string!, string!>? metadata, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<string!>
+virtual Asterisk.Sdk.Sessions.Extensions.SessionStoreBase.DeleteAsync(string! sessionId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+virtual Asterisk.Sdk.Sessions.Extensions.SessionStoreBase.GetActiveAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IEnumerable<Asterisk.Sdk.Sessions.CallSession!>!>
+virtual Asterisk.Sdk.Sessions.Extensions.SessionStoreBase.GetByLinkedIdAsync(string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Sessions.CallSession?>
+virtual Asterisk.Sdk.Sessions.Extensions.SessionStoreBase.SaveBatchAsync(System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Sessions.CallSession!>! sessions, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
