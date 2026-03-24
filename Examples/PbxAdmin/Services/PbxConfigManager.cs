@@ -177,27 +177,40 @@ public sealed class PbxConfigManager : IConfigProvider
         var entry = _monitor.GetServer(serverId);
         if (entry is null) return false;
 
-        var action = new UpdateConfigAction
-        {
-            SrcFilename = filename,
-            DstFilename = filename,
-        };
-
-        action.AddDeleteCategory(section);
-        action.AddNewCategory(section);
-
-        foreach (var (key, value) in lines)
-        {
-            action.AddAppend(section, key, value);
-        }
-
         var mode = GetConnectionMode(entry);
         PbxConfigLog.OperationStart(_logger, "CreateSectionWithLines", serverId, filename, section, mode);
         var sw = Stopwatch.GetTimestamp();
 
         try
         {
+            // Try delete + create (works when section already exists)
+            var action = new UpdateConfigAction
+            {
+                SrcFilename = filename,
+                DstFilename = filename,
+            };
+            action.AddDeleteCategory(section);
+            action.AddNewCategory(section);
+            foreach (var (key, value) in lines)
+                action.AddAppend(section, key, value);
+
             var response = await entry.ConfigConnection.SendActionAsync(action, ct);
+
+            if (response.Response != "Success")
+            {
+                // Delete failed (section didn't exist) — retry with just create + append
+                var createAction = new UpdateConfigAction
+                {
+                    SrcFilename = filename,
+                    DstFilename = filename,
+                };
+                createAction.AddNewCategory(section);
+                foreach (var (key, value) in lines)
+                    createAction.AddAppend(section, key, value);
+
+                response = await entry.ConfigConnection.SendActionAsync(createAction, ct);
+            }
+
             var ms = ElapsedMs(sw);
             var result = response.Response ?? "null";
             PbxConfigLog.OperationEnd(_logger, "CreateSectionWithLines", serverId, filename, section, result, ms);
