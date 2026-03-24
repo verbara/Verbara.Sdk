@@ -271,6 +271,75 @@ public sealed class CallFlowService
             }
         }
 
+        // Health P2: overlapping outbound patterns
+        var enabledOutbound = outboundRoutes.Where(r => r.Enabled).ToList();
+        for (var i = 0; i < enabledOutbound.Count; i++)
+        {
+            for (var j = i + 1; j < enabledOutbound.Count; j++)
+            {
+                var a = enabledOutbound[i];
+                var b = enabledOutbound[j];
+
+                // Generate example from each pattern and test against the other
+                var exampleA = DialPatternHumanizer.Example(a.DialPattern);
+                var exampleB = DialPatternHumanizer.Example(b.DialPattern);
+
+                bool overlap = (exampleA is not null && MatchesAsteriskPattern(b.DialPattern, exampleA)) ||
+                               (exampleB is not null && MatchesAsteriskPattern(a.DialPattern, exampleB));
+
+                if (overlap)
+                {
+                    if (a.Priority == b.Priority)
+                    {
+                        warnings.Add(new HealthWarning
+                        {
+                            Severity = "Warning",
+                            Category = "Configuration",
+                            Message = $"Outbound patterns overlap with same priority: '{a.DialPattern}' and '{b.DialPattern}'",
+                            EntityType = "OutboundRoute",
+                            EntityId = a.Id.ToString(CultureInfo.InvariantCulture),
+                            NavigateUrl = $"/routes/outbound/edit/{a.Id}",
+                        });
+                    }
+                    else
+                    {
+                        warnings.Add(new HealthWarning
+                        {
+                            Severity = "Info",
+                            Category = "Configuration",
+                            Message = $"Outbound patterns overlap: '{a.DialPattern}' and '{b.DialPattern}' — priority determines which matches first",
+                            EntityType = "OutboundRoute",
+                            EntityId = a.Id.ToString(CultureInfo.InvariantCulture),
+                            NavigateUrl = $"/routes/outbound/edit/{a.Id}",
+                        });
+                    }
+                }
+            }
+        }
+
+        // Health P2: IVR loops
+        DetectIvrLoops(ivrByName, warnings);
+
+        // Health P2: TC without ranges
+        foreach (var tc in timeConditions.Where(t => t.Enabled))
+        {
+            if (tc.Ranges.Count == 0)
+            {
+                warnings.Add(new HealthWarning
+                {
+                    Severity = "Warning",
+                    Category = "Configuration",
+                    Message = $"Time condition '{tc.Name}' has no schedule ranges — will always route to closed destination",
+                    EntityType = "TimeCondition",
+                    EntityId = tc.Id.ToString(CultureInfo.InvariantCulture),
+                    NavigateUrl = $"/time-conditions/edit/{tc.Id}",
+                });
+            }
+        }
+
+        // Health P2: unregistered extension destinations
+        DetectUnregisteredExtensionDestinations(flows, warnings);
+
         return new CallFlowGraph
         {
             ServerId = serverId,
@@ -761,6 +830,115 @@ public sealed class CallFlowService
         if (node is null) return false;
         return string.Equals(node.EntityType, targetType, StringComparison.OrdinalIgnoreCase) &&
                string.Equals(node.EntityId, targetId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // -----------------------------------------------------------------------
+    // Health P2 helpers
+    // -----------------------------------------------------------------------
+
+    private static void DetectIvrLoops(
+        Dictionary<string, IvrMenuConfig> ivrByName,
+        List<HealthWarning> warnings)
+    {
+        foreach (var ivr in ivrByName.Values)
+        {
+            foreach (var item in ivr.Items)
+            {
+                if (!string.Equals(item.DestType, "ivr", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                // Self-loop
+                if (string.Equals(item.DestTarget, ivr.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    warnings.Add(new HealthWarning
+                    {
+                        Severity = "Warning",
+                        Category = "Configuration",
+                        Message = $"IVR '{ivr.Name}' option {item.Digit} loops back to itself",
+                        EntityType = "IvrMenu",
+                        EntityId = ivr.Id.ToString(CultureInfo.InvariantCulture),
+                        NavigateUrl = $"/ivr-menus/edit/{ivr.Id}",
+                    });
+                    continue;
+                }
+
+                // Indirect loop: walk from target and see if we get back
+                var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ivr.Name };
+                if (HasIvrCycle(item.DestTarget, ivrByName, visited))
+                {
+                    warnings.Add(new HealthWarning
+                    {
+                        Severity = "Warning",
+                        Category = "Configuration",
+                        Message = $"IVR '{ivr.Name}' option {item.Digit} creates a loop via '{item.DestTarget}'",
+                        EntityType = "IvrMenu",
+                        EntityId = ivr.Id.ToString(CultureInfo.InvariantCulture),
+                        NavigateUrl = $"/ivr-menus/edit/{ivr.Id}",
+                    });
+                }
+            }
+        }
+    }
+
+    private static bool HasIvrCycle(
+        string menuName,
+        Dictionary<string, IvrMenuConfig> ivrByName,
+        HashSet<string> visited)
+    {
+        if (!visited.Add(menuName))
+            return true; // cycle detected
+
+        if (!ivrByName.TryGetValue(menuName, out var menu))
+            return false;
+
+        foreach (var item in menu.Items)
+        {
+            if (string.Equals(item.DestType, "ivr", StringComparison.OrdinalIgnoreCase) &&
+                HasIvrCycle(item.DestTarget, ivrByName, visited))
+            {
+                return true;
+            }
+        }
+
+        visited.Remove(menuName);
+        return false;
+    }
+
+    private static void DetectUnregisteredExtensionDestinations(
+        List<DidNode> flows, List<HealthWarning> warnings)
+    {
+        foreach (var did in flows)
+        {
+            WalkForUnregisteredExtensions(did.Destination, warnings);
+        }
+    }
+
+    private static void WalkForUnregisteredExtensions(CallFlowNode? node, List<HealthWarning> warnings)
+    {
+        switch (node)
+        {
+            case ExtensionNode ext when !ext.IsRegistered:
+                warnings.Add(new HealthWarning
+                {
+                    Severity = "Warning",
+                    Category = "Operational",
+                    Message = $"Extension {ext.Number} is a route destination but not registered",
+                    EntityType = "Extension",
+                    EntityId = ext.Number,
+                    NavigateUrl = ext.EditUrl,
+                });
+                break;
+
+            case TimeConditionNode tc:
+                WalkForUnregisteredExtensions(tc.OpenBranch, warnings);
+                WalkForUnregisteredExtensions(tc.ClosedBranch, warnings);
+                break;
+
+            case IvrNode ivr:
+                foreach (var option in ivr.Options)
+                    WalkForUnregisteredExtensions(option.Destination, warnings);
+                break;
+        }
     }
 
     // -----------------------------------------------------------------------
