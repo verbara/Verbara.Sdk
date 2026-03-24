@@ -131,3 +131,19 @@ First stable release of Asterisk.Sdk — a .NET 10 Native AOT SDK for Asterisk P
 
 - .NET 10.0.100 or later
 - Asterisk 13+ (tested through Asterisk 21.x LTS)
+
+## v1.5.0 (2026-03-24)
+
+### AMI
+- Add `Context` and `Priority` properties to `ListDialplanEvent`
+- Add optional `Context` filter to `ShowDialplanAction`
+- Fix: accumulate `Output:` headers for AMI Command responses
+- Add `AddDelete(section, key, value)` overload to `UpdateConfigAction`
+
+### Live
+- Add `QueueManager.RemoveQueue()` for runtime queue removal
+- Fix: show logged-off agents in queue member listing
+- Fix: allow file-mode config writes for queue sync
+
+### Notes
+- PbxAdmin example has been moved to its own repository: [Asterisk.Sdk.PbxAdmin](https://github.com/Harol-Reina/Asterisk.Sdk.PbxAdmin)
