@@ -35,7 +35,7 @@ services:
       - ./asterisk-config-realtime/cel_odbc.conf:/etc/asterisk/cel_odbc.conf:ro
       - ./asterisk-config-realtime/confbridge.conf:/etc/asterisk/confbridge.conf:ro
       - ./asterisk-config-realtime/extconfig.conf:/etc/asterisk/extconfig.conf:ro
-      - ./asterisk-config-realtime/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./asterisk-config-realtime/extensions.conf:/etc/asterisk/extensions.conf
       - ./asterisk-config-realtime/features.conf:/etc/asterisk/features.conf:ro
       - ./asterisk-config-realtime/geolocation.conf:/etc/asterisk/geolocation.conf:ro
       - ./asterisk-config-realtime/http.conf:/etc/asterisk/http.conf
