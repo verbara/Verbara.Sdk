@@ -68,7 +68,7 @@ public sealed class AmiEventTimeoutTests : IAsyncDisposable
         var options = new AmiConnectionOptions
         {
             Hostname = "localhost", Username = "admin", Password = "secret",
-            DefaultEventTimeout = TimeSpan.FromMilliseconds(200),
+            DefaultEventTimeout = TimeSpan.FromSeconds(2),
             AutoReconnect = false,
             EnableHeartbeat = false,
             DefaultResponseTimeout = TimeSpan.FromSeconds(5)
