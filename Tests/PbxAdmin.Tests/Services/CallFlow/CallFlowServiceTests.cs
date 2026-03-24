@@ -400,6 +400,353 @@ public class CallFlowServiceTests
     }
 
     // -----------------------------------------------------------------------
+    // Health P2 warnings — overlapping patterns
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void Health_ShouldWarnOverlappingPatterns_WhenSamePriority()
+    {
+        var outbound = new List<OutboundRouteConfig>
+        {
+            new()
+            {
+                Id = 1, ServerId = ServerId, Name = "Local",
+                DialPattern = "_NXXNXXXXXX", Priority = 100, Enabled = true,
+                Trunks = [new() { TrunkName = "carrier-a", TrunkTechnology = "PJSIP", Sequence = 1 }],
+            },
+            new()
+            {
+                Id = 2, ServerId = ServerId, Name = "10-digit alt",
+                DialPattern = "_NXXXXXXXXX", Priority = 100, Enabled = true,
+                Trunks = [new() { TrunkName = "carrier-b", TrunkTechnology = "PJSIP", Sequence = 1 }],
+            },
+        };
+
+        var trunks = new List<CallFlowService.TrunkInfo>
+        {
+            new("carrier-a", true),
+            new("carrier-b", true),
+        };
+
+        var graph = CallFlowService.BuildGraph(
+            ServerId, [], outbound, [], [],
+            [], [], [], trunks);
+
+        graph.Warnings.Should().Contain(w =>
+            w.Severity == "Warning" && w.Category == "Configuration" &&
+            w.Message.Contains("same priority"));
+    }
+
+    [Fact]
+    public void Health_ShouldInfoOverlappingPatterns_WhenDifferentPriority()
+    {
+        var outbound = new List<OutboundRouteConfig>
+        {
+            new()
+            {
+                Id = 1, ServerId = ServerId, Name = "Local",
+                DialPattern = "_NXXNXXXXXX", Priority = 100, Enabled = true,
+                Trunks = [new() { TrunkName = "carrier-a", TrunkTechnology = "PJSIP", Sequence = 1 }],
+            },
+            new()
+            {
+                Id = 2, ServerId = ServerId, Name = "10-digit alt",
+                DialPattern = "_NXXXXXXXXX", Priority = 200, Enabled = true,
+                Trunks = [new() { TrunkName = "carrier-b", TrunkTechnology = "PJSIP", Sequence = 1 }],
+            },
+        };
+
+        var trunks = new List<CallFlowService.TrunkInfo>
+        {
+            new("carrier-a", true),
+            new("carrier-b", true),
+        };
+
+        var graph = CallFlowService.BuildGraph(
+            ServerId, [], outbound, [], [],
+            [], [], [], trunks);
+
+        graph.Warnings.Should().Contain(w =>
+            w.Severity == "Info" && w.Category == "Configuration" &&
+            w.Message.Contains("priority determines"));
+    }
+
+    [Fact]
+    public void Health_ShouldNotWarn_WhenPatternsDoNotOverlap()
+    {
+        var outbound = new List<OutboundRouteConfig>
+        {
+            new()
+            {
+                Id = 1, ServerId = ServerId, Name = "Local",
+                DialPattern = "_NXXNXXXXXX", Priority = 100, Enabled = true,
+                Trunks = [new() { TrunkName = "carrier-a", TrunkTechnology = "PJSIP", Sequence = 1 }],
+            },
+            new()
+            {
+                Id = 2, ServerId = ServerId, Name = "International",
+                DialPattern = "_00X.", Priority = 100, Enabled = true,
+                Trunks = [new() { TrunkName = "carrier-b", TrunkTechnology = "PJSIP", Sequence = 1 }],
+            },
+        };
+
+        var trunks = new List<CallFlowService.TrunkInfo>
+        {
+            new("carrier-a", true),
+            new("carrier-b", true),
+        };
+
+        var graph = CallFlowService.BuildGraph(
+            ServerId, [], outbound, [], [],
+            [], [], [], trunks);
+
+        graph.Warnings.Should().NotContain(w =>
+            w.Category == "Configuration" && w.Message.Contains("overlap"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Health P2 warnings — IVR loops
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void Health_ShouldWarnIvrSelfLoop()
+    {
+        var routes = new List<InboundRouteConfig>
+        {
+            new()
+            {
+                Id = 1, ServerId = ServerId, Name = "IVR Route",
+                DidPattern = "5551234", DestinationType = "ivr",
+                Destination = "main", Priority = 100, Enabled = true,
+            },
+        };
+
+        var menus = new List<IvrMenuConfig>
+        {
+            new()
+            {
+                Id = 20, ServerId = ServerId, Name = "main", Label = "Main Menu",
+                Items =
+                [
+                    new() { Digit = "1", DestType = "extension", DestTarget = "1001" },
+                    new() { Digit = "9", DestType = "ivr", DestTarget = "main" },
+                ],
+            },
+        };
+
+        var extensions = new List<CallFlowService.ExtensionInfo> { new("1001", "Help", true, "PJSIP") };
+
+        var graph = CallFlowService.BuildGraph(
+            ServerId, routes, [], [], [],
+            menus, [], extensions, []);
+
+        graph.Warnings.Should().Contain(w =>
+            w.Severity == "Warning" && w.Category == "Configuration" &&
+            w.Message.Contains("main") && w.Message.Contains("loops"));
+    }
+
+    [Fact]
+    public void Health_ShouldWarnIvrIndirectLoop()
+    {
+        var routes = new List<InboundRouteConfig>
+        {
+            new()
+            {
+                Id = 1, ServerId = ServerId, Name = "IVR Route",
+                DidPattern = "5551234", DestinationType = "ivr",
+                Destination = "a", Priority = 100, Enabled = true,
+            },
+        };
+
+        var menus = new List<IvrMenuConfig>
+        {
+            new()
+            {
+                Id = 20, ServerId = ServerId, Name = "a", Label = "Menu A",
+                Items = [new() { Digit = "1", DestType = "ivr", DestTarget = "b" }],
+            },
+            new()
+            {
+                Id = 21, ServerId = ServerId, Name = "b", Label = "Menu B",
+                Items = [new() { Digit = "1", DestType = "ivr", DestTarget = "a" }],
+            },
+        };
+
+        var graph = CallFlowService.BuildGraph(
+            ServerId, routes, [], [], [],
+            menus, [], [], []);
+
+        graph.Warnings.Should().Contain(w =>
+            w.Severity == "Warning" && w.Category == "Configuration" &&
+            w.Message.Contains("loop"));
+    }
+
+    [Fact]
+    public void Health_ShouldNotWarnIvr_WhenNoLoop()
+    {
+        var routes = new List<InboundRouteConfig>
+        {
+            new()
+            {
+                Id = 1, ServerId = ServerId, Name = "IVR Route",
+                DidPattern = "5551234", DestinationType = "ivr",
+                Destination = "main", Priority = 100, Enabled = true,
+            },
+        };
+
+        var menus = new List<IvrMenuConfig>
+        {
+            new()
+            {
+                Id = 20, ServerId = ServerId, Name = "main", Label = "Main Menu",
+                Items = [new() { Digit = "1", DestType = "ivr", DestTarget = "sub" }],
+            },
+            new()
+            {
+                Id = 21, ServerId = ServerId, Name = "sub", Label = "Sub Menu",
+                Items = [new() { Digit = "1", DestType = "extension", DestTarget = "1001" }],
+            },
+        };
+
+        var extensions = new List<CallFlowService.ExtensionInfo> { new("1001", "Help", true, "PJSIP") };
+
+        var graph = CallFlowService.BuildGraph(
+            ServerId, routes, [], [], [],
+            menus, [], extensions, []);
+
+        graph.Warnings.Should().NotContain(w =>
+            w.Category == "Configuration" && w.Message.Contains("loop"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Health P2 warnings — TC without ranges
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void Health_ShouldWarnTcWithoutRanges()
+    {
+        var routes = new List<InboundRouteConfig>
+        {
+            new()
+            {
+                Id = 1, ServerId = ServerId, Name = "Route",
+                DidPattern = "5551234", DestinationType = "time_condition",
+                Destination = "office", Priority = 100, Enabled = true,
+            },
+        };
+
+        var tcs = new List<TimeConditionConfig>
+        {
+            new()
+            {
+                Id = 10, ServerId = ServerId, Name = "office",
+                MatchDestType = "hangup", MatchDest = "",
+                NoMatchDestType = "hangup", NoMatchDest = "",
+                Enabled = true,
+                Ranges = [],
+            },
+        };
+
+        var graph = CallFlowService.BuildGraph(
+            ServerId, routes, [], tcs, [],
+            [], [], [], []);
+
+        graph.Warnings.Should().Contain(w =>
+            w.Severity == "Warning" && w.Category == "Configuration" &&
+            w.Message.Contains("office") && w.Message.Contains("no schedule ranges"));
+    }
+
+    [Fact]
+    public void Health_ShouldNotWarnTc_WhenRangesExist()
+    {
+        var routes = new List<InboundRouteConfig>
+        {
+            new()
+            {
+                Id = 1, ServerId = ServerId, Name = "Route",
+                DidPattern = "5551234", DestinationType = "time_condition",
+                Destination = "office", Priority = 100, Enabled = true,
+            },
+        };
+
+        var tcs = new List<TimeConditionConfig>
+        {
+            new()
+            {
+                Id = 10, ServerId = ServerId, Name = "office",
+                MatchDestType = "hangup", MatchDest = "",
+                NoMatchDestType = "hangup", NoMatchDest = "",
+                Enabled = true,
+                Ranges = [new() { StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0) }],
+            },
+        };
+
+        var graph = CallFlowService.BuildGraph(
+            ServerId, routes, [], tcs, [],
+            [], [], [], []);
+
+        graph.Warnings.Should().NotContain(w =>
+            w.Category == "Configuration" && w.Message.Contains("no schedule ranges"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Health P2 warnings — unregistered extension destination
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void Health_ShouldWarnUnregisteredExtDest()
+    {
+        var routes = new List<InboundRouteConfig>
+        {
+            new()
+            {
+                Id = 1, ServerId = ServerId, Name = "Route",
+                DidPattern = "5551234", DestinationType = "extension",
+                Destination = "2001", Priority = 100, Enabled = true,
+            },
+        };
+
+        var extensions = new List<CallFlowService.ExtensionInfo>
+        {
+            new("2001", "Admin", false, "PJSIP"),
+        };
+
+        var graph = CallFlowService.BuildGraph(
+            ServerId, routes, [], [], [],
+            [], [], extensions, []);
+
+        graph.Warnings.Should().Contain(w =>
+            w.Severity == "Warning" && w.Category == "Operational" &&
+            w.Message.Contains("2001") && w.Message.Contains("not registered"));
+    }
+
+    [Fact]
+    public void Health_ShouldNotWarn_WhenExtRegistered()
+    {
+        var routes = new List<InboundRouteConfig>
+        {
+            new()
+            {
+                Id = 1, ServerId = ServerId, Name = "Route",
+                DidPattern = "5551234", DestinationType = "extension",
+                Destination = "2001", Priority = 100, Enabled = true,
+            },
+        };
+
+        var extensions = new List<CallFlowService.ExtensionInfo>
+        {
+            new("2001", "Admin", true, "PJSIP"),
+        };
+
+        var graph = CallFlowService.BuildGraph(
+            ServerId, routes, [], [], [],
+            [], [], extensions, []);
+
+        graph.Warnings.Should().NotContain(w =>
+            w.Category == "Operational" && w.Message.Contains("not registered"));
+    }
+
+    // -----------------------------------------------------------------------
     // Cross-references
     // -----------------------------------------------------------------------
 
