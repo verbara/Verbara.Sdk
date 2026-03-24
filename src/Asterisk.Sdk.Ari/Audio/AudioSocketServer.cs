@@ -110,7 +110,9 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
 
             if (string.IsNullOrEmpty(session.ChannelId))
             {
+#pragma warning disable IDISP016 // False positive — session was just created, this is the first dispose
                 await session.DisposeAsync();
+#pragma warning restore IDISP016
                 client.Dispose();
                 return;
             }

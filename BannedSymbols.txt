@@ -1,0 +1,16 @@
+# Banned APIs for AOT-safe SDK development
+# Format: [Documentation ID]:[reason]
+# See: https://github.com/dotnet/roslyn-analyzers/blob/main/src/Microsoft.CodeAnalysis.BannedApiAnalyzers/BannedApiAnalyzers.Help.md
+
+# Reflection — breaks Native AOT
+T:System.Reflection.Assembly;Use source generators instead of runtime reflection
+M:System.Type.GetMethod(System.String);Use source generators instead of runtime reflection
+M:System.Type.GetProperty(System.String);Use source generators instead of runtime reflection
+M:System.Type.GetField(System.String);Use source generators instead of runtime reflection
+M:System.Type.GetMembers;Use source generators instead of runtime reflection
+M:System.Activator.CreateInstance(System.Type);Use source generators or DI instead of Activator
+M:System.Type.InvokeMember(System.String,System.Reflection.BindingFlags,System.Reflection.Binder,System.Object,System.Object[]);Use source generators instead of runtime reflection
+
+# DateTime.Now — use UTC or TimeProvider for testability
+P:System.DateTime.Now;Use DateTime.UtcNow or TimeProvider instead
+P:System.DateTimeOffset.Now;Use DateTimeOffset.UtcNow or TimeProvider instead

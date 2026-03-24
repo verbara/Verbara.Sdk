@@ -125,7 +125,9 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
             if (_sessions.Count >= _options.MaxConcurrentSessions || !_sessions.TryAdd(channelId, session))
             {
                 AudioSocketLog.SessionLimitReached(_logger, _options.MaxConcurrentSessions);
+#pragma warning disable IDISP016 // False positive — session was just created, this is the first dispose
                 await session.DisposeAsync().ConfigureAwait(false);
+#pragma warning restore IDISP016
                 return;
             }
 

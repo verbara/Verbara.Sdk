@@ -117,7 +117,9 @@ public sealed class PolyphaseResamplerTests
 
         short[] input = new short[160];
         short[] output = new short[400];
+#pragma warning disable IDISP016 // Intentional — testing that disposed instance throws
         var act = () => resampler.Process(input.AsSpan(), output.AsSpan());
+#pragma warning restore IDISP016
         act.Should().Throw<ObjectDisposedException>();
     }
 

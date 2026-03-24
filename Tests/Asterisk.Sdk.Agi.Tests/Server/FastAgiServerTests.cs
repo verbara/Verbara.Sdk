@@ -17,7 +17,6 @@ public sealed class FastAgiServerTests : IAsyncDisposable
     {
         if (_sut is not null)
             await _sut.DisposeAsync();
-        GC.SuppressFinalize(this);
     }
 
     private static int GetAvailablePort()

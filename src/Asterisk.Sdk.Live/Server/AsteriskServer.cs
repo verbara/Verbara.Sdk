@@ -103,7 +103,11 @@ public sealed class AsteriskServer : IAsteriskServer
         await RequestInitialStateAsync(cancellationToken);
     }
 
+    // Justification: event handler for Action delegate requires async void.
+    // All exceptions are caught in the try/catch below — no unobserved exceptions.
+#pragma warning disable VSTHRD100 // Avoid async void — required by Action event delegate
     private async void OnReconnected()
+#pragma warning restore VSTHRD100
     {
         try
         {
