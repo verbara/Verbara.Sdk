@@ -216,18 +216,18 @@ public class AmiProtocolReaderTests
         // Write only the first half of a message (no terminating \r\n\r\n)
         await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("Event: Newchannel\r\nChannel: SIP/2000\r\n"));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
-
-        // Read should NOT complete yet — message is incomplete
-        var readTask = reader.ReadMessageAsync(cts.Token).AsTask();
-        var completed = await Task.WhenAny(readTask, Task.Delay(200)) == readTask;
-        completed.Should().BeFalse("reader should block waiting for more data");
+        // Read should NOT complete yet — message is incomplete.
+        // Use a generous delay for slow CI runners.
+        var readTask = reader.ReadMessageAsync(CancellationToken.None).AsTask();
+        var delayTask = Task.Delay(TimeSpan.FromSeconds(1));
+        var winner = await Task.WhenAny(readTask, delayTask);
+        winner.Should().Be(delayTask, "reader should block waiting for more data");
 
         // Now write the terminating blank line
         await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("\r\n"));
 
-        using var cts2 = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        var msg = await readTask;
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var msg = await readTask.WaitAsync(cts.Token);
         msg.Should().NotBeNull();
         msg!.IsEvent.Should().BeTrue();
         msg.EventType.Should().Be("Newchannel");
