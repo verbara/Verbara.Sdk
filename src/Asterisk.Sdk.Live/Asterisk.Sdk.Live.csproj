@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Asterisk.Sdk.Live.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Asterisk.Sdk\Asterisk.Sdk.csproj" />
     <ProjectReference Include="..\Asterisk.Sdk.Ami\Asterisk.Sdk.Ami.csproj" />
   </ItemGroup>
