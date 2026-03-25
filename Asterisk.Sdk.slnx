@@ -55,5 +55,6 @@
     <Project Path="Tests/Asterisk.Sdk.Sessions.Tests/Asterisk.Sdk.Sessions.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Redis.Spike/Asterisk.Sdk.Redis.Spike.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Redis.Spike.Aot/Asterisk.Sdk.Redis.Spike.Aot.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.Hosting.Tests/Asterisk.Sdk.Hosting.Tests.csproj" />
   </Folder>
 </Solution>
