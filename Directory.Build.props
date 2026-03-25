@@ -38,9 +38,19 @@
     <PackageVersion>1.5.0</PackageVersion>
   </PropertyGroup>
 
-  <!-- Package validation: detect binary breaking changes against baseline -->
+  <!-- Deterministic builds + SourceLink (debuggable NuGet packages) -->
+  <PropertyGroup>
+    <Deterministic>true</Deterministic>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(CI)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!-- Package validation: detect binary breaking changes against v1.5.0 baseline -->
   <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('src'))">
     <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>1.5.0</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <!-- Analyzers for all projects (except SourceGenerators which targets netstandard2.0) -->
@@ -50,13 +60,18 @@
     <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" PrivateAssets="all" />
   </ItemGroup>
 
+  <!-- SourceLink for debuggable packages -->
+  <ItemGroup Condition="$(MSBuildProjectDirectory.Contains('src'))">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="all" />
+  </ItemGroup>
+
   <!-- Analyzers for source projects only (exclude SourceGenerators) -->
   <ItemGroup Condition="$(MSBuildProjectDirectory.Contains('src')) And !$(MSBuildProjectName.Contains('SourceGenerators'))">
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" Link="BannedSymbols.txt" />
-    <AdditionalFiles Include="$(MSBuildProjectDirectory)\PublicAPI.Shipped.txt" Condition="Exists('$(MSBuildProjectDirectory)\PublicAPI.Shipped.txt')" />
-    <AdditionalFiles Include="$(MSBuildProjectDirectory)\PublicAPI.Unshipped.txt" Condition="Exists('$(MSBuildProjectDirectory)\PublicAPI.Unshipped.txt')" />
+    <AdditionalFiles Include="$(MSBuildProjectDirectory)/PublicAPI.Shipped.txt" Condition="Exists('$(MSBuildProjectDirectory)/PublicAPI.Shipped.txt')" />
+    <AdditionalFiles Include="$(MSBuildProjectDirectory)/PublicAPI.Unshipped.txt" Condition="Exists('$(MSBuildProjectDirectory)/PublicAPI.Unshipped.txt')" />
   </ItemGroup>
 
   <!-- Analyzers and tools for test projects only -->
