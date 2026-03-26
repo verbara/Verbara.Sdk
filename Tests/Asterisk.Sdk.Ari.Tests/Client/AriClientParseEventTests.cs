@@ -507,4 +507,111 @@ public class AriClientParseEventTests
         evt.Should().BeOfType<RequiredDestinationEvent>();
         ((RequiredDestinationEvent)evt!).Channel!.Id.Should().Be("ch-3");
     }
+
+    // Sprint 6 — Missing event parse coverage
+
+    [Fact]
+    public void ParseEvent_ShouldReturnBridgeDestroyedEvent()
+    {
+        const string json = """{"type":"BridgeDestroyed","bridge":{"id":"br-1","bridge_type":"mixing","channels":[]}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<BridgeDestroyedEvent>();
+        ((BridgeDestroyedEvent)evt!).Bridge!.Id.Should().Be("br-1");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnChannelEnteredBridgeEvent()
+    {
+        const string json = """{"type":"ChannelEnteredBridge","bridge":{"id":"br-2"},"channel":{"id":"ch-5","name":"PJSIP/4000","state":"Up"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ChannelEnteredBridgeEvent>();
+        var entered = (ChannelEnteredBridgeEvent)evt!;
+        entered.Bridge!.Id.Should().Be("br-2");
+        entered.Channel!.Id.Should().Be("ch-5");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnChannelLeftBridgeEvent()
+    {
+        const string json = """{"type":"ChannelLeftBridge","bridge":{"id":"br-3"},"channel":{"id":"ch-6","name":"PJSIP/5000","state":"Up"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ChannelLeftBridgeEvent>();
+        var left = (ChannelLeftBridgeEvent)evt!;
+        left.Bridge!.Id.Should().Be("br-3");
+        left.Channel!.Id.Should().Be("ch-6");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnPlaybackStartedEvent()
+    {
+        const string json = """{"type":"PlaybackStarted","playback":{"id":"pb-1","media_uri":"sound:hello","state":"playing","target_uri":"channel:ch-1"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<PlaybackStartedEvent>();
+        ((PlaybackStartedEvent)evt!).Playback!.Id.Should().Be("pb-1");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnPlaybackFinishedEvent()
+    {
+        const string json = """{"type":"PlaybackFinished","playback":{"id":"pb-2","media_uri":"sound:goodbye","state":"done","target_uri":"channel:ch-2"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<PlaybackFinishedEvent>();
+        ((PlaybackFinishedEvent)evt!).Playback!.Id.Should().Be("pb-2");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnChannelToneDetectedEvent()
+    {
+        const string json = """{"type":"ChannelToneDetected","channel":{"id":"ch-7","name":"PJSIP/6000","state":"Up"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ChannelToneDetectedEvent>();
+        ((ChannelToneDetectedEvent)evt!).Channel!.Id.Should().Be("ch-7");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnChannelTalkingStartedEvent()
+    {
+        const string json = """{"type":"ChannelTalkingStarted","channel":{"id":"ch-8","name":"PJSIP/7000","state":"Up"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ChannelTalkingStartedEvent>();
+        ((ChannelTalkingStartedEvent)evt!).Channel!.Id.Should().Be("ch-8");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnChannelConnectedLineEvent()
+    {
+        const string json = """{"type":"ChannelConnectedLine","channel":{"id":"ch-9","name":"PJSIP/8000","state":"Up"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<ChannelConnectedLineEvent>();
+        ((ChannelConnectedLineEvent)evt!).Channel!.Id.Should().Be("ch-9");
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldReturnRecordingFinishedEvent()
+    {
+        const string json = """{"type":"RecordingFinished","recording":{"name":"rec-done","format":"wav","state":"done"}}""";
+
+        var evt = AriClient.ParseEvent(json);
+
+        evt.Should().BeOfType<RecordingFinishedEvent>();
+        var rec = (RecordingFinishedEvent)evt!;
+        rec.Recording!.Name.Should().Be("rec-done");
+        rec.Recording.State.Should().Be("done");
+    }
 }

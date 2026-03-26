@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using Asterisk.Sdk.Ari.Diagnostics;
 using FluentAssertions;
 
@@ -12,10 +13,25 @@ public sealed class AudioStreamMetricsTests
     }
 
     [Fact]
-    public void StreamsOpened_ShouldBeCounter()
+    public void StreamsOpened_ShouldIncrementCounter()
     {
-        AudioStreamMetrics.StreamsOpened.Should().NotBeNull();
-        AudioStreamMetrics.StreamsOpened.Name.Should().Be("audio.streams.opened");
+        long observed = 0;
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, ml) =>
+        {
+            if (instrument.Name == "audio.streams.opened")
+                ml.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, measurement, _, _) =>
+        {
+            if (instrument.Name == "audio.streams.opened")
+                observed += measurement;
+        });
+        listener.Start();
+
+        AudioStreamMetrics.StreamsOpened.Add(1);
+
+        observed.Should().BeGreaterThanOrEqualTo(1);
     }
 
     [Fact]
@@ -26,10 +42,25 @@ public sealed class AudioStreamMetricsTests
     }
 
     [Fact]
-    public void FramesReceived_ShouldBeCounter()
+    public void FramesReceived_ShouldIncrementCounter()
     {
-        AudioStreamMetrics.FramesReceived.Should().NotBeNull();
-        AudioStreamMetrics.FramesReceived.Name.Should().Be("audio.frames.received");
+        long observed = 0;
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, ml) =>
+        {
+            if (instrument.Name == "audio.frames.received")
+                ml.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, measurement, _, _) =>
+        {
+            if (instrument.Name == "audio.frames.received")
+                observed += measurement;
+        });
+        listener.Start();
+
+        AudioStreamMetrics.FramesReceived.Add(1);
+
+        observed.Should().BeGreaterThanOrEqualTo(1);
     }
 
     [Fact]
@@ -45,9 +76,25 @@ public sealed class AudioStreamMetricsTests
     }
 
     [Fact]
-    public void BytesSent_ShouldBeCounter()
+    public void BytesSent_ShouldIncrementCounter()
     {
-        AudioStreamMetrics.BytesSent.Should().NotBeNull();
+        long observed = 0;
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, ml) =>
+        {
+            if (instrument.Name == "audio.bytes.sent")
+                ml.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, measurement, _, _) =>
+        {
+            if (instrument.Name == "audio.bytes.sent")
+                observed += measurement;
+        });
+        listener.Start();
+
+        AudioStreamMetrics.BytesSent.Add(512);
+
+        observed.Should().BeGreaterThanOrEqualTo(512);
     }
 
     [Fact]
@@ -69,9 +116,24 @@ public sealed class AudioStreamMetricsTests
     }
 
     [Fact]
-    public void FrameLatency_ShouldBeHistogram()
+    public void FrameLatency_ShouldRecordHistogram()
     {
-        AudioStreamMetrics.FrameLatency.Should().NotBeNull();
-        AudioStreamMetrics.FrameLatency.Name.Should().Be("audio.frame.latency");
+        double observed = 0;
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, ml) =>
+        {
+            if (instrument.Name == "audio.frame.latency")
+                ml.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<double>((instrument, measurement, _, _) =>
+        {
+            if (instrument.Name == "audio.frame.latency")
+                observed += measurement;
+        });
+        listener.Start();
+
+        AudioStreamMetrics.FrameLatency.Record(3.14);
+
+        observed.Should().BeGreaterThanOrEqualTo(3.14);
     }
 }
