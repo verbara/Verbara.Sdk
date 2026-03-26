@@ -24,6 +24,24 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.5.0] - 2026-03-24
+
+### Added
+
+- **AMI:** `Context` and `Priority` fields on `ListDialplanEvent`; `Context` filter on `ShowDialplanAction`
+- **AMI:** Accumulate multi-line `Output:` headers for Command responses
+- **CI:** GitHub Actions pipeline with unit tests, AOT verification, and functional tests (Testcontainers)
+
+### Fixed
+
+- **AMI:** Fix `QueueManager.RemoveQueue` to properly clean up secondary indices
+
+### Changed
+
+- **Repo:** PbxAdmin moved to standalone repository ([Asterisk.Sdk.PbxAdmin](https://github.com/Harol-Reina/Asterisk.Sdk.PbxAdmin))
+
+---
+
 ## [1.4.0] - 2026-03-22
 
 ### Added

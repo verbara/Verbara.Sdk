@@ -36,7 +36,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ## Features
 
-- **AMI Client** — Connect to the Asterisk Manager Interface over TCP with MD5 challenge-response authentication, 111 actions, 215 events, and 17 typed responses. Auto-reconnect with configurable exponential backoff. Configurable heartbeat/keepalive with auto-disconnect on timeout.
+- **AMI Client** — Connect to the Asterisk Manager Interface over TCP with MD5 challenge-response authentication, 148 actions, 278 events, and 18 typed responses. Auto-reconnect with configurable exponential backoff. Configurable heartbeat/keepalive with auto-disconnect on timeout.
 - **FastAGI Server** — Async TCP server for the Asterisk Gateway Interface with 54 AGI commands, pluggable script mapping strategies, and zero-copy I/O via `System.IO.Pipelines`. Per-connection timeout, status 511 hangup detection, and `AgiMetrics` instrumentation.
 - **ARI Client** — REST + WebSocket client for the Asterisk REST Interface. Manage channels, bridges, playbacks, recordings, endpoints, applications, and sounds. Domain exceptions (`AriNotFoundException`, `AriConflictException`) for HTTP error mapping. WebSocket reconnect with exponential backoff.
 - **Live API** — Real-time in-memory tracking of channels, queues, agents, and conference rooms from AMI events. Secondary indices for O(1) lookups by name. Observable gauges and event counters via `System.Diagnostics.Metrics`.
@@ -50,23 +50,9 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ---
 
-## What's New in v1.0.0
+## Status
 
-### Voice AI Stack
-
-**`Asterisk.Sdk.Audio`** — Pure C# polyphase FIR resampler with 12 pre-computed rate pairs (8kHz↔16kHz↔24kHz↔48kHz), zero-alloc output buffers, PCM16 processing, RMS energy measurement, and voice activity detection. No external dependencies.
-
-**`Asterisk.Sdk.VoiceAi.AudioSocket`** — AudioSocket server and client using `System.IO.Pipelines` for zero-copy PCM streaming. `AudioSocketSession` handles bidirectional audio with backpressure. `AudioSocketClient` enables local testing without a real Asterisk instance.
-
-**`Asterisk.Sdk.VoiceAi`** — Core pipeline abstractions. `VoiceAiPipeline` orchestrates VAD → STT → conversation handler → TTS in a dual-loop design (audio monitor + pipeline), with barge-in detection via a volatile `CancellationTokenSource`. `ISessionHandler` is the interchange point: both `VoiceAiPipeline` and `OpenAiRealtimeBridge` implement it, making them drop-in replacements.
-
-**`Asterisk.Sdk.VoiceAi.Stt`** — Speech-to-text providers: Deepgram (WebSocket streaming, real-time), OpenAI Whisper (batch REST), Azure Whisper, and Google Speech (REST). All registered via `AddDeepgramSpeechRecognizer()` / `AddWhisperSpeechRecognizer()` / `AddAzureWhisperSpeechRecognizer()` / `AddGoogleSpeechRecognizer()`.
-
-**`Asterisk.Sdk.VoiceAi.Tts`** — Text-to-speech providers: ElevenLabs (WebSocket streaming, ultra-low-latency) and Azure TTS (REST). Registered via `AddElevenLabsSpeechSynthesizer()` / `AddAzureTtsSpeechSynthesizer()`.
-
-**`Asterisk.Sdk.VoiceAi.OpenAiRealtime`** — Bridges Asterisk AudioSocket directly to the [OpenAI Realtime API](https://platform.openai.com/docs/guides/realtime), bypassing the STT+LLM+TTS chain entirely. A single persistent WebSocket carries bidirectional PCM (resampled 8kHz↔24kHz). Supports server-side VAD, function calling (`IRealtimeFunctionHandler`), and emits typed events (`RealtimeSpeechStartedEvent`, `RealtimeTranscriptEvent`, `RealtimeFunctionCalledEvent`, etc.) via `IObservable<RealtimeEvent>`.
-
-**`Asterisk.Sdk.VoiceAi.Testing`** — Fake implementations (`FakeSpeechRecognizer`, `FakeSpeechSynthesizer`, `FakeConversationHandler`) for unit testing Voice AI pipelines without real API calls.
+**v1.5.1** — 17 NuGet packages, 1,430 unit tests, 640 functional tests, 0 build warnings, 0 trim warnings. API coverage: 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%). Compatible with Asterisk 18, 20, 22, and 23.
 
 ---
 
@@ -362,18 +348,6 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 
 ---
 
-## PBX Admin
-
-The `Examples/PbxAdmin` project is a Blazor Server application showcasing the full SDK in a real-world PBX administration panel. It includes:
-
-**Monitoring** — Live call matrix, queue status, agent tracking, channel list, parked calls, traffic analytics, Prometheus-style metrics, event log, and CLI console.
-
-**PBX Management** — CRUD pages for Extensions, Trunks, Routes, IVR Menus, Queue Config, and Time Conditions. Both file-based (AMI `GetConfig`/`UpdateConfig`) and Realtime (PostgreSQL + Dapper) backends.
-
-**Media & Features** — Recording policies with on-demand MixMonitor, Music on Hold class management with audio upload/conversion, ConfBridge profile configuration, Feature Codes with star-code CRUD, and Parking Lot slot/timeout configuration.
-
----
-
 ## Examples
 
 The `Examples/` directory contains standalone console applications demonstrating each SDK layer:
@@ -393,7 +367,8 @@ The `Examples/` directory contains standalone console applications demonstrating
 | `SessionExtensionsExample` | Session Engine extension points: enrichers, policies, event handlers |
 | `VoiceAiExample` | Turn-based Voice AI pipeline: Deepgram STT + ElevenLabs TTS + echo handler |
 | `OpenAiRealtimeExample` | GPT-4o direct bridge via OpenAI Realtime API with function calling |
-| `PbxAdmin` | Full Blazor Server PBX administration panel (see above) |
+
+See also [Asterisk.Sdk.PbxAdmin](https://github.com/Harol-Reina/Asterisk.Sdk.PbxAdmin) — a full Blazor Server PBX administration panel built with this SDK.
 
 ---
 
@@ -418,7 +393,7 @@ composable NuGet packages for clustering, outbound campaigns, event sourcing, an
 ## Requirements
 
 - **.NET 10.0** or later
-- **Asterisk 13+** (tested through Asterisk 21.x LTS)
+- **Asterisk 18+** (tested with Asterisk 18, 20, 22, and 23)
 
 ---
 
