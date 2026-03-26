@@ -60,4 +60,64 @@ public class AriEventPumpTests
         // Should complete without hanging or throwing
         await pump.DisposeAsync();
     }
+
+    [Fact]
+    public async Task PendingCount_ShouldReflectQueuedEvents()
+    {
+        // Don't start the consumer — events stay queued
+        await using var pump = new AriEventPump(capacity: 10);
+
+        pump.TryEnqueue(new AriEvent { Type = "A" });
+        pump.TryEnqueue(new AriEvent { Type = "B" });
+        pump.TryEnqueue(new AriEvent { Type = "C" });
+
+        pump.PendingCount.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task ProcessedEvents_ShouldIncrement_WhenEventsDispatched()
+    {
+        await using var pump = new AriEventPump();
+        var allDone = new TaskCompletionSource();
+
+        pump.Start(evt =>
+        {
+            if (pump.ProcessedEvents >= 3)
+                allDone.TrySetResult();
+            return ValueTask.CompletedTask;
+        });
+
+        pump.TryEnqueue(new AriEvent { Type = "E1" });
+        pump.TryEnqueue(new AriEvent { Type = "E2" });
+        pump.TryEnqueue(new AriEvent { Type = "E3" });
+
+        await allDone.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        pump.ProcessedEvents.Should().BeGreaterOrEqualTo(3);
+    }
+
+    [Fact]
+    public async Task OnEventDropped_ShouldBeNullByDefault_AndSettable()
+    {
+        await using var pump = new AriEventPump();
+
+        pump.OnEventDropped.Should().BeNull();
+
+        Action<AriEvent> callback = _ => { };
+        pump.OnEventDropped = callback;
+
+        pump.OnEventDropped.Should().BeSameAs(callback);
+    }
+
+    [Fact]
+    public void DefaultCapacity_ShouldBe20000()
+    {
+        AriEventPump.DefaultCapacity.Should().Be(20_000);
+    }
+
+    [Fact]
+    public async Task DroppedEvents_ShouldBeZero_WhenNoDrops()
+    {
+        await using var pump = new AriEventPump();
+        pump.DroppedEvents.Should().Be(0);
+    }
 }
