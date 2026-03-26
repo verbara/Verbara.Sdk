@@ -8,7 +8,7 @@
 ## Prerequisites
 
 - **.NET 10.0.100+** (pinned in `global.json`)
-- **Asterisk 13+** with AMI enabled (tested through 21.x LTS)
+- **Asterisk 18+** with AMI enabled (tested with Asterisk 18, 20, 22, and 23)
 - For ARI: Asterisk HTTP and WebSocket enabled
 - For Voice AI: API keys for your chosen providers (Deepgram, ElevenLabs, OpenAI, Azure, Google)
 
@@ -443,8 +443,7 @@ Asterisk.Sdk/
 |   |-- SessionExtensionsExample/
 |   |-- VoiceAiExample/
 |   |-- OpenAiRealtimeExample/
-|   |-- AgiIvrExample/
-|   +-- PbxAdmin/              (Blazor Server dashboard)
+|   +-- AgiIvrExample/
 |-- Tests/
 |   |-- Asterisk.Sdk.Ami.Tests/
 |   |-- Asterisk.Sdk.Agi.Tests/
