@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] - 2026-03-26
+
+### Fixed
+
+- **VoiceAi:** Fixed `CancellationTokenSource` leak in `VoiceAiPipeline.DisposeAsync` — `_ttsCts` was not disposed
+- **VoiceAi:** Fixed `ContinueWith` in `VoiceAiSessionBroker` to use `TaskScheduler.Default`, preventing synchronization context capture
+
+### Improved
+
+- **Build:** Added SourceLink, deterministic builds, and PackageValidation baseline (v1.5.0)
+- **Build:** Added code quality analyzers — Meziantou, IDisposableAnalyzers, Threading Analyzers (Layers 1-3)
+- **Build:** Populated `PublicAPI.Shipped.txt` for all 17 packages (API surface tracking)
+- **Tests:** 1,430 unit tests (+364 since v1.5.0) — all assemblies at 82%+ coverage
+  - Ari: 306 → 357 (AudioSocketServer, WebSocketAudioSession, event parse, metrics)
+  - Ami: 82%, Agi: 86%, Live: 81.6%, Ari: ~83%
+
+### Changed
+
+- **Repo:** PbxAdmin moved to standalone repository (`Asterisk.Sdk.PbxAdmin`)
+
+---
+
 ## [1.4.0] - 2026-03-22
 
 ### Added
