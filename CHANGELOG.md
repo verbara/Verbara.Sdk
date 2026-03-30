@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.3] - 2026-03-30
+
+### Fixed
+
+- **Hosting:** Added `AriAudioHostedService` to start/stop ARI audio servers (`AudioSocketServer`, `WebSocketAudioServer`) automatically with the application host — without this, `ExternalMedia` channels could not connect because TCP listeners were never opened
+
+---
+
+## [1.5.2] - 2026-03-30
+
+### Fixed
+
+- **Hosting:** Registered `AgiHostedService` in DI so the FastAGI server starts automatically with the application host
+- **Hosting:** Added `AriConnectionHostedService` to connect/disconnect the ARI WebSocket client automatically with the application host
+
+---
+
 ## [1.5.1] - 2026-03-26
 
 ### Fixed
