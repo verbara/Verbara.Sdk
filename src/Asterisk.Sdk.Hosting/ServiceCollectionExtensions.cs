@@ -64,6 +64,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<FastAgiServer>>()));
         services.AddHealthChecks()
             .AddCheck<Asterisk.Sdk.Agi.Diagnostics.AgiHealthCheck>("agi");
+        services.AddSingleton<IHostedService, Asterisk.Sdk.Agi.Hosting.AgiHostedService>();
 
         // Live
         services.TryAddSingleton<AsteriskServer>();
@@ -119,6 +120,7 @@ public static class ServiceCollectionExtensions
 
             services.AddHealthChecks()
                 .AddCheck<Asterisk.Sdk.Ari.Diagnostics.AriHealthCheck>("ari");
+            services.AddSingleton<IHostedService, AriConnectionHostedService>();
         }
 
         return services;

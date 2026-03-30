@@ -35,7 +35,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>asterisk;ami;agi;ari;voip;pbx;telephony;native-aot;sdk</PackageTags>
-    <PackageVersion>1.5.1</PackageVersion>
+    <PackageVersion>1.5.2</PackageVersion>
   </PropertyGroup>
 
   <!-- Deterministic builds + SourceLink (debuggable NuGet packages) -->
@@ -50,7 +50,7 @@
   <!-- Package validation: detect binary breaking changes against v1.5.0 baseline -->
   <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('src'))">
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>1.5.0</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>1.5.1</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <!-- Analyzers for all projects (except SourceGenerators which targets netstandard2.0) -->
