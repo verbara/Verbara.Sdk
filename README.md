@@ -52,7 +52,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ## Status
 
-**v1.5.1** — 17 NuGet packages, 1,430 unit tests, 640 functional tests, 0 build warnings, 0 trim warnings. API coverage: 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%). Compatible with Asterisk 18, 20, 22, and 23.
+**v1.5.3** — 17 NuGet packages, 1,430 unit tests, 640 functional tests, 0 build warnings, 0 trim warnings. API coverage: 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%). Compatible with Asterisk 18, 20, 22, and 23.
 
 ---
 
