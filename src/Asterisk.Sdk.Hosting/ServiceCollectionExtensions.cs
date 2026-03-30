@@ -110,6 +110,8 @@ public static class ServiceCollectionExtensions
                     if (ws is not null) servers.Add(ws);
                     return new CompositeAudioServer(servers);
                 });
+
+                services.AddSingleton<IHostedService, AriAudioHostedService>();
             }
 
             // Use factory to safely inject optional IAudioServer
