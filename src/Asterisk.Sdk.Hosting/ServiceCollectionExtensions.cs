@@ -213,6 +213,7 @@ public static class ServiceCollectionExtensions
     {
         services.TryAddSingleton<ISocketConnectionFactory, PipelineSocketConnectionFactory>();
         services.TryAddSingleton<IAmiConnectionFactory, AmiConnectionFactory>();
+        services.TryAddSingleton<IAriClientFactory, Asterisk.Sdk.Ari.Client.AriClientFactory>();
         services.TryAddSingleton<AsteriskServerPool>();
         return services;
     }

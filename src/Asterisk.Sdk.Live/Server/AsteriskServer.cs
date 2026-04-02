@@ -41,6 +41,7 @@ public sealed class AsteriskServer : IAsteriskServer
     private readonly IAmiConnection _connection;
     private readonly ILogger<AsteriskServer> _logger;
     private IDisposable? _subscription;
+    private IAriClient? _ariClient;
 
     public ChannelManager Channels { get; }
     public QueueManager Queues { get; }
@@ -53,6 +54,9 @@ public sealed class AsteriskServer : IAsteriskServer
 
     /// <summary>The underlying AMI connection for this server.</summary>
     public IAmiConnection Connection => _connection;
+
+    /// <summary>The optional ARI client for this server.</summary>
+    public IAriClient? AriClient => _ariClient;
 
     /// <summary>The Asterisk version string.</summary>
     public string? AsteriskVersion => _connection.AsteriskVersion;
@@ -67,6 +71,12 @@ public sealed class AsteriskServer : IAsteriskServer
         MeetMe = new MeetMeManager(logger);
         Bridges = new BridgeManager(logger);
     }
+
+    /// <summary>
+    /// Assign an ARI client to this server post-construction.
+    /// Used by cluster orchestrators that create the ARI connection after AMI is established.
+    /// </summary>
+    public void SetAriClient(IAriClient ariClient) => _ariClient = ariClient;
 
     /// <summary>
     /// Initialize state by subscribing to AMI events and loading current state.
@@ -239,11 +249,12 @@ public sealed class AsteriskServer : IAsteriskServer
         return new OriginateResult { Success = false, Message = "No OriginateResponse received" };
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         _connection.Reconnected -= OnReconnected;
         _subscription?.Dispose();
-        return ValueTask.CompletedTask;
+        if (_ariClient is not null)
+            await _ariClient.DisposeAsync();
     }
 
     /// <summary>Internal observer that dispatches typed AMI events to the appropriate manager.</summary>
