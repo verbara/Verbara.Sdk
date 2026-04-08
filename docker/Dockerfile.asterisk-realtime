@@ -1,0 +1,15 @@
+FROM andrius/asterisk:22
+
+USER root
+
+# Install ca-certificates for HTTPS downloads
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Asterisk realtime config files
+COPY functional/asterisk-realtime-config/ /etc/asterisk/
+
+USER asterisk
+
+ENTRYPOINT ["/usr/sbin/asterisk", "-f"]
