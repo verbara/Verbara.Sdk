@@ -286,6 +286,12 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         using var subscription = connection.Subscribe(new DtmfEventObserver(
             onEnd: e =>
             {
+                // Local channels have two halves (;1 and ;2) — both fire DtmfEnd events.
+                // Filter to only the ;1 half to avoid duplicate digits.
+                var channel = e.RawFields?.GetValueOrDefault("Channel") ?? "";
+                if (channel.Contains(";2", StringComparison.Ordinal))
+                    return;
+
                 var digit = e.RawFields?.GetValueOrDefault("Digit");
                 if (digit is not null)
                 {

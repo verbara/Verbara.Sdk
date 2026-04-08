@@ -224,11 +224,19 @@ public sealed class QueueCallFlowTests : FunctionalTestBase
         var server = new AsteriskServer(connection, LoggerFactory.CreateLogger<AsteriskServer>());
         await server.StartAsync();
 
+        // Capture entry existence inside the CallerJoined callback because
+        // when a member is available, the caller is immediately bridged and
+        // CallerLeft fires shortly after, clearing Entries.
         var callerJoinedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var hadEntryOnJoin = false;
         server.Queues.CallerJoined += (queueName, _) =>
         {
-            if (string.Equals(queueName, TestQueue, StringComparison.OrdinalIgnoreCase))
-                callerJoinedTcs.TrySetResult(true);
+            if (!string.Equals(queueName, TestQueue, StringComparison.OrdinalIgnoreCase))
+                return;
+            var q = server.Queues.GetByName(TestQueue);
+            if (q is not null && !q.Entries.IsEmpty)
+                hadEntryOnJoin = true;
+            callerJoinedTcs.TrySetResult(true);
         };
 
         try
@@ -261,8 +269,8 @@ public sealed class QueueCallFlowTests : FunctionalTestBase
             queue.Should().NotBeNull("queue should exist in QueueManager");
             queue!.Members.Should().ContainKey(TestInterface, "member should be in queue");
 
-            // Verify queue has at least one entry (the caller)
-            queue.Entries.Should().NotBeEmpty("queue should have the caller entry");
+            // Verify an entry existed at join time (may be gone now if member answered quickly)
+            hadEntryOnJoin.Should().BeTrue("queue should have the caller entry at join time");
 
             // Verify channel manager shows active channels
             server.Channels.ChannelCount.Should().BeGreaterThan(0,

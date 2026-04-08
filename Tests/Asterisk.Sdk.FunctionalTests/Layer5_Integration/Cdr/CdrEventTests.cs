@@ -82,15 +82,23 @@ public sealed class CdrEventTests : FunctionalTestBase
         });
         await connection.ConnectAsync();
 
-        var cdrReceived = new TaskCompletionSource<CdrEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var subscription = connection.Subscribe(new CdrObserver(cdrReceived));
+        // Drain any stale CDR events from prior tests
+        await Task.Delay(TimeSpan.FromSeconds(1));
 
-        // ext 999 does not exist — call fails immediately
+        var cdrReceived = new TaskCompletionSource<CdrEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // Filter CDR events to only match our specific originate channel
+        using var subscription = connection.Subscribe(new FilteredCdrObserver(
+            cdr => (cdr.DestinationChannel?.Contains("9998", StringComparison.Ordinal) ?? false)
+                || (cdr.Channel?.Contains("9998", StringComparison.Ordinal) ?? false),
+            cdrReceived));
+
+        // ext 9998 does not exist — call fails immediately with FAILED disposition
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/999@test-functional",
+            Channel = "Local/9998@test-functional",
             Context = "test-functional",
-            Exten = "999",
+            Exten = "9998",
             Priority = 1,
             IsAsync = true,
             Timeout = 5000,
@@ -259,6 +267,20 @@ public sealed class CdrEventTests : FunctionalTestBase
         public void OnNext(ManagerEvent value)
         {
             if (value is CdrEvent cdr)
+                tcs.TrySetResult(cdr);
+        }
+
+        public void OnError(Exception error) { }
+        public void OnCompleted() { }
+    }
+
+    /// <summary>Captures the first CdrEvent matching a predicate.</summary>
+    private sealed class FilteredCdrObserver(Func<CdrEvent, bool> predicate, TaskCompletionSource<CdrEvent> tcs)
+        : IObserver<ManagerEvent>
+    {
+        public void OnNext(ManagerEvent value)
+        {
+            if (value is CdrEvent cdr && predicate(cdr))
                 tcs.TrySetResult(cdr);
         }
 

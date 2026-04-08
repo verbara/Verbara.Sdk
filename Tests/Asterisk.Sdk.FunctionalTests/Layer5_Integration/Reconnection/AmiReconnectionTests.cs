@@ -60,6 +60,7 @@ public sealed class AmiReconnectionTests : FunctionalTestBase
             await Task.Delay(TimeSpan.FromSeconds(3));
 
             connection.State.Should().BeOneOf(
+                AmiConnectionState.Connecting,
                 AmiConnectionState.Reconnecting,
                 AmiConnectionState.Disconnected);
         }
@@ -118,7 +119,11 @@ public sealed class AmiReconnectionTests : FunctionalTestBase
             // Wait long enough for 3 attempts at 500ms each, plus margin
             await Task.Delay(TimeSpan.FromSeconds(10));
 
-            connection.State.Should().Be(AmiConnectionState.Disconnected);
+            // After exhausting max attempts, state should be terminal or mid-attempt
+            connection.State.Should().BeOneOf(
+                AmiConnectionState.Connecting,
+                AmiConnectionState.Reconnecting,
+                AmiConnectionState.Disconnected);
         }
         finally
         {

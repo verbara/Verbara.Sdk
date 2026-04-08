@@ -9,7 +9,7 @@ using Npgsql;
 /// 1. Testcontainers (default) — starts PostgreSQL + Asterisk Realtime automatically.
 /// 2. External (docker-compose) — set REALTIME_DB_HOST to use pre-started containers.
 /// </summary>
-public sealed class RealtimeDbFixture : IAsyncLifetime
+public sealed class RealtimeDbFixture : Xunit.IAsyncLifetime
 {
     private readonly RealtimeFixture? _stack;
     private readonly bool _useExternal;

@@ -30,7 +30,6 @@ services:
       timeout: 3s
       retries: 10
       start_period: 10s
-    restart: unless-stopped
 
   # ── PostgreSQL for Realtime tests ──
   postgres:
@@ -72,4 +71,3 @@ services:
       timeout: 3s
       retries: 10
       start_period: 15s
-    restart: unless-stopped

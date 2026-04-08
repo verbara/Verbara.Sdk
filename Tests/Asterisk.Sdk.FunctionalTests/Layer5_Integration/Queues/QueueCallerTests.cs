@@ -197,7 +197,7 @@ public sealed class QueueCallerTests : FunctionalTestBase
                         break;
                     case QueueMemberEvent qm:
                         server.Queues.OnMemberAdded(
-                            qm.Queue ?? "", qm.Interface ?? "", qm.MemberName,
+                            qm.Queue ?? "", qm.Location ?? qm.Interface ?? "", qm.MemberName,
                             qm.Penalty ?? 0, qm.Paused ?? false, qm.Status ?? 0);
                         break;
                     case QueueEntryEvent qe:
