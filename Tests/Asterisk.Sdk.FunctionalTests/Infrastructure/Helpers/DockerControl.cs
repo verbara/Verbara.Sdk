@@ -4,7 +4,7 @@ using System.Diagnostics;
 
 public static class DockerControl
 {
-    private const string ContainerName = "functional-asterisk";
+    private const string ContainerName = "asterisk-sdk-test";
 
     public static Task KillContainerAsync(string name = ContainerName)
         => RunDockerAsync($"kill {name}");

@@ -1,0 +1,75 @@
+networks:
+  sdk-test:
+    name: sdk-test-net
+
+services:
+  # ── Asterisk (file-based config, no DB) ── used by most functional tests
+  asterisk:
+    image: docker-asterisk:latest
+    container_name: asterisk-sdk-test
+    networks:
+      - sdk-test
+    ports:
+      - "15038:5038"
+    volumes:
+      - ./test-config/manager.conf:/etc/asterisk/manager.conf:ro
+      - ./test-config/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./test-config/modules.conf:/etc/asterisk/modules.conf:ro
+      - ./test-config/pjsip.conf:/etc/asterisk/pjsip.conf:ro
+      - ./test-config/queues.conf:/etc/asterisk/queues.conf:ro
+      - ./test-config/voicemail.conf:/etc/asterisk/voicemail.conf:ro
+      - ./test-config/res_parking.conf:/etc/asterisk/res_parking.conf:ro
+      - ./test-config/confbridge.conf:/etc/asterisk/confbridge.conf:ro
+      - ./test-config/cdr.conf:/etc/asterisk/cdr.conf:ro
+      - ./test-config/cel.conf:/etc/asterisk/cel.conf:ro
+      - ./test-config/cdr_manager.conf:/etc/asterisk/cdr_manager.conf:ro
+      - ./test-config/cel_manager.conf:/etc/asterisk/cel_manager.conf:ro
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show uptime"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── PostgreSQL for Realtime tests ──
+  postgres:
+    image: postgres:18-alpine
+    container_name: asterisk-sdk-test-db
+    networks:
+      - sdk-test
+    environment:
+      POSTGRES_USER: asterisk
+      POSTGRES_PASSWORD: asterisk
+      POSTGRES_DB: asterisk
+    ports:
+      - "15432:5432"
+    volumes:
+      - ./functional/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asterisk"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+      start_period: 5s
+
+  # ── Asterisk Realtime (PJSIP/Queues via PostgreSQL) ── used by RealtimeDb tests
+  asterisk-realtime:
+    image: docker-asterisk:latest
+    container_name: asterisk-sdk-test-realtime
+    networks:
+      - sdk-test
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "15039:5038"
+    volumes:
+      - ./functional/asterisk-realtime-config:/etc/asterisk:ro
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show uptime"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
