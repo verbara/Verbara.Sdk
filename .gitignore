@@ -28,6 +28,7 @@ bld/
 .idea/
 *.swp
 *~
+*.lscache
 
 ## Test Results
 TestResults/
