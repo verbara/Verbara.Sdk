@@ -117,7 +117,7 @@ public sealed class ChannelEventOrderTests : FunctionalTestBase
                 {
                     Channel = "Local/100@test-functional",
                     Application = "Wait",
-                    Data = "2",
+                    Data = "10",
                     IsAsync = true,
                     ActionId = $"concurrent-ch-{i:D4}"
                 });
@@ -149,10 +149,10 @@ public sealed class ChannelEventOrderTests : FunctionalTestBase
         server.Channels.ChannelCount.Should().Be(snapshot.Count,
             "ChannelCount must equal the number of items in ActiveChannels");
 
-        // Wait for all channels to hang up (Wait,2 = 2 second duration)
-        await Task.Delay(TimeSpan.FromSeconds(5));
+        // Wait for all channels to hang up (Wait,10 = 10 second duration)
+        await Task.Delay(TimeSpan.FromSeconds(13));
 
-        // After all 2-second waits complete, manager should be drained
+        // After all 10-second waits complete, manager should be drained
         var remaining = server.Channels.ActiveChannels.ToList();
         var remainingCount = server.Channels.ChannelCount;
         remainingCount.Should().Be(remaining.Count,

@@ -560,6 +560,9 @@ public sealed class AmiConnection : IAmiConnection
             catch (Exception ex)
             {
                 AmiConnectionLog.ReconnectAttemptFailed(_logger, ex);
+                // ConnectAsync sets _state = Connecting; restore to Reconnecting
+                // so the while loop continues.
+                _state = AmiConnectionState.Reconnecting;
             }
 
             delay = TimeSpan.FromMilliseconds(

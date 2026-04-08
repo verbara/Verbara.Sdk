@@ -126,14 +126,24 @@ public sealed class RealtimePjsipTests : FunctionalTestBase
             GetOutput(before).Should().NotContain("Unable to find",
                 "endpoint must exist before deletion");
 
-            // Delete from DB and reload
+            // Delete from DB
             await conn.ExecuteAsync("DELETE FROM ps_aors WHERE id = @Id", new { Id = endpointId });
             await conn.ExecuteAsync("DELETE FROM ps_endpoints WHERE id = @Id", new { Id = endpointId });
+
+            // Verify DB deletion committed
+            var dbCheck = await conn.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM ps_endpoints WHERE id = @Id", new { Id = endpointId });
+            dbCheck.Should().Be(0, "endpoint must be deleted from DB before checking Asterisk");
+
+            // Reload PJSIP and use a fresh AMI connection to avoid stale state
             await ami.SendActionAsync(new CommandAction { Command = "pjsip reload" });
             await Task.Delay(TimeSpan.FromSeconds(3));
 
-            // Query again — endpoint should no longer be found
-            var after = await ami.SendActionAsync(
+            // Use a fresh AMI connection for the verification query
+            await using var ami2 = CreateRealtimeAmiConnection();
+            await ami2.ConnectAsync();
+
+            var after = await ami2.SendActionAsync(
                 new CommandAction { Command = $"pjsip show endpoint {endpointId}" });
 
             var afterOutput = GetOutput(after);
@@ -149,8 +159,14 @@ public sealed class RealtimePjsipTests : FunctionalTestBase
 
     private static string GetOutput(ManagerResponse response)
     {
-        if (response.RawFields is not null && response.RawFields.TryGetValue("Output", out var output))
-            return output;
+        // Asterisk 22+ accumulates multiple Output: lines into __CommandOutput
+        if (response.RawFields is not null)
+        {
+            if (response.RawFields.TryGetValue("__CommandOutput", out var cmdOutput))
+                return cmdOutput;
+            if (response.RawFields.TryGetValue("Output", out var output))
+                return output;
+        }
         return response.Message ?? "";
     }
 

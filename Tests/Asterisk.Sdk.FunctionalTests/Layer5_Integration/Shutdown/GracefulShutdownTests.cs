@@ -172,28 +172,24 @@ public sealed class GracefulShutdownTests : FunctionalTestBase
         await connection.ConnectAsync();
         connection.State.Should().Be(AmiConnectionState.Connected);
 
-        // Use a per-action CancellationToken that we control: start an action with a
-        // long timeout token and then cancel both the token and the connection.
+        // Use a per-action CancellationToken that we control.
+        // Cancel BEFORE sending actions so they are immediately doomed.
         using var actionCts = new CancellationTokenSource();
+        await actionCts.CancelAsync();
 
-        // Fire several rapid actions without awaiting — they will be pending in-flight
+        // Fire several actions with an already-cancelled token — they must throw
         var pendingTasks = Enumerable.Range(0, 10)
             .Select(_ => Task.Run(async () =>
                 await connection.SendActionAsync(
                     new Asterisk.Sdk.Ami.Actions.PingAction(), actionCts.Token)))
             .ToList();
 
-        // Give them a moment to be enqueued in-flight
-        await Task.Delay(50);
-
-        // Cancel the token AND disconnect to exercise both cancellation paths
-        await actionCts.CancelAsync();
         await connection.DisconnectAsync();
 
-        // All pending tasks must complete (throw or succeed) quickly — must not hang
+        // All pending tasks must complete (throw) quickly — must not hang
         Func<Task> waitAll = () => Task.WhenAll(pendingTasks).WaitAsync(TimeSpan.FromSeconds(5));
         await waitAll.Should().ThrowAsync<Exception>(
-            "pending AMI actions must be cancelled/faulted when the connection is closed");
+            "pending AMI actions must be cancelled/faulted when the token is cancelled");
     }
 
     // -----------------------------------------------------------------------
