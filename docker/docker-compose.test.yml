@@ -11,6 +11,7 @@ services:
       - sdk-test
     ports:
       - "15038:5038"
+      - "15088:8088"
     volumes:
       - ./test-config/manager.conf:/etc/asterisk/manager.conf:ro
       - ./test-config/extensions.conf:/etc/asterisk/extensions.conf:ro
@@ -24,6 +25,8 @@ services:
       - ./test-config/cel.conf:/etc/asterisk/cel.conf:ro
       - ./test-config/cdr_manager.conf:/etc/asterisk/cdr_manager.conf:ro
       - ./test-config/cel_manager.conf:/etc/asterisk/cel_manager.conf:ro
+      - ./test-config/http.conf:/etc/asterisk/http.conf:ro
+      - ./test-config/ari.conf:/etc/asterisk/ari.conf:ro
     healthcheck:
       test: ["CMD", "asterisk", "-rx", "core show uptime"]
       interval: 5s
@@ -71,3 +74,16 @@ services:
       timeout: 3s
       retries: 10
       start_period: 15s
+
+  # ── Toxiproxy for network partition tests ──
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    container_name: asterisk-sdk-test-toxiproxy
+    networks:
+      - sdk-test
+    ports:
+      - "8474:8474"
+      - "15138:15038"
+    depends_on:
+      asterisk:
+        condition: service_healthy
