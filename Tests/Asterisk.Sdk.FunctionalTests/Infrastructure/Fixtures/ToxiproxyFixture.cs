@@ -12,7 +12,7 @@ public sealed class ToxiproxyFixture : IAsyncLifetime
         {
             await ToxiproxyControl.ResetAsync();
             await ToxiproxyControl.CreateProxyAsync(
-                AmiProxyName, "0.0.0.0:15038", "functional-asterisk:5038");
+                AmiProxyName, "0.0.0.0:15038", "asterisk:5038");
         }
         catch { /* Toxiproxy not running — tests skip via attribute */ }
     }

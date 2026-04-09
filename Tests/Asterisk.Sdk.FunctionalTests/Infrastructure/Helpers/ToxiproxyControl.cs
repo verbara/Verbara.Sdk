@@ -13,7 +13,9 @@ public static class ToxiproxyControl
     public static string ProxyListenHost =>
         Environment.GetEnvironmentVariable("TOXIPROXY_HOST") ?? "localhost";
 
-    public static int ProxyAmiPort => 15038;
+    public static int ProxyAmiPort => int.Parse(
+        Environment.GetEnvironmentVariable("TOXIPROXY_PROXY_PORT") ?? "15038",
+        System.Globalization.CultureInfo.InvariantCulture);
 
     // POST /proxies — create a proxy
     public static async Task CreateProxyAsync(string name, string listen, string upstream)
