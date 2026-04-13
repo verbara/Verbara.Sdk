@@ -23,3 +23,11 @@ static Asterisk.Sdk.Hosting.ServiceCollectionExtensions.AddAsteriskSessionsMulti
 static Asterisk.Sdk.Hosting.ServiceCollectionExtensions.AddAsteriskSessions(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Sessions.Manager.SessionOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static Asterisk.Sdk.Hosting.ServiceCollectionExtensions.AddAsterisk(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfiguration! configuration) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static Asterisk.Sdk.Hosting.ServiceCollectionExtensions.AddAsterisk(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Hosting.AsteriskOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Asterisk.Sdk.Hosting.AriConnectionHostedService
+Asterisk.Sdk.Hosting.AriConnectionHostedService.AriConnectionHostedService(Asterisk.Sdk.IAriClient! client) -> void
+Asterisk.Sdk.Hosting.AriConnectionHostedService.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.Hosting.AriConnectionHostedService.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.Hosting.AriAudioHostedService
+Asterisk.Sdk.Hosting.AriAudioHostedService.AriAudioHostedService(Asterisk.Sdk.Ari.Audio.AudioSocketServer! audioSocketServer, Asterisk.Sdk.Ari.Audio.WebSocketAudioServer? webSocketAudioServer = null) -> void
+Asterisk.Sdk.Hosting.AriAudioHostedService.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.Hosting.AriAudioHostedService.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!

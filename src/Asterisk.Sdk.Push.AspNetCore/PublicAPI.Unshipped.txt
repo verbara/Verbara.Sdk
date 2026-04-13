@@ -1,5 +1,1 @@
 #nullable enable
-Asterisk.Sdk.Push.AspNetCore.PushAspNetCoreServiceExtensions
-static Asterisk.Sdk.Push.AspNetCore.PushAspNetCoreServiceExtensions.AddAsteriskPushAspNetCore(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Push.Bus.PushEventBusOptions!>? configurePush = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-Asterisk.Sdk.Push.AspNetCore.SsePushEndpoints
-static Asterisk.Sdk.Push.AspNetCore.SsePushEndpoints.MapPushEndpoints(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! app, string! prefix = "/api/v1/push") -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!

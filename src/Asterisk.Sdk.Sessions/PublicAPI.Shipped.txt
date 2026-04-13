@@ -256,3 +256,8 @@ virtual Asterisk.Sdk.Sessions.Extensions.SessionStoreBase.DeleteAsync(string! se
 virtual Asterisk.Sdk.Sessions.Extensions.SessionStoreBase.GetActiveAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IEnumerable<Asterisk.Sdk.Sessions.CallSession!>!>
 virtual Asterisk.Sdk.Sessions.Extensions.SessionStoreBase.GetByLinkedIdAsync(string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Sessions.CallSession?>
 virtual Asterisk.Sdk.Sessions.Extensions.SessionStoreBase.SaveBatchAsync(System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Sessions.CallSession!>! sessions, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Sessions.Diagnostics.SessionActivitySource
+Asterisk.Sdk.Sessions.Diagnostics.SessionHealthCheck
+Asterisk.Sdk.Sessions.Diagnostics.SessionHealthCheck.SessionHealthCheck(Asterisk.Sdk.Sessions.Manager.ICallSessionManager! manager) -> void
+Asterisk.Sdk.Sessions.Diagnostics.SessionHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+static readonly Asterisk.Sdk.Sessions.Diagnostics.SessionActivitySource.Source -> System.Diagnostics.ActivitySource!

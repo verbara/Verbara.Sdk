@@ -368,3 +368,6 @@ static readonly Asterisk.Sdk.Live.Diagnostics.LiveMetrics.Meter -> System.Diagno
 static readonly Asterisk.Sdk.Live.Diagnostics.LiveMetrics.QueueCallsJoined -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Asterisk.Sdk.Live.Diagnostics.LiveMetrics.QueueCallsLeft -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Asterisk.Sdk.Live.Diagnostics.LiveMetrics.QueueWaitTimeMs -> System.Diagnostics.Metrics.Histogram<double>!
+Asterisk.Sdk.Live.Diagnostics.LiveHealthCheck
+Asterisk.Sdk.Live.Diagnostics.LiveHealthCheck.LiveHealthCheck(Asterisk.Sdk.Live.Server.AsteriskServer! server) -> void
+Asterisk.Sdk.Live.Diagnostics.LiveHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
