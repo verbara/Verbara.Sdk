@@ -8,7 +8,8 @@ public sealed record SubscriberContext(
     string TenantId,
     string? UserId,
     IReadOnlySet<string> Roles,
-    IReadOnlySet<string> Permissions)
+    IReadOnlySet<string> Permissions,
+    string? RequestedTopicPattern = null)
 {
     /// <summary>Returns true when the subscriber holds the named role.</summary>
     public bool HasRole(string role) => Roles.Contains(role);

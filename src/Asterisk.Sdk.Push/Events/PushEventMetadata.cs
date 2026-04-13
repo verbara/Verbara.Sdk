@@ -7,4 +7,5 @@ public sealed record PushEventMetadata(
     string TenantId,
     string? UserId,
     DateTimeOffset OccurredAt,
-    string? CorrelationId);
+    string? CorrelationId,
+    string? TopicPath = null);
