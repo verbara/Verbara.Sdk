@@ -1,2 +1,2 @@
 global using Xunit;
-global using IntegrationFixture = Asterisk.Sdk.TestInfrastructure.Stacks.IntegrationFixture;
+global using IntegrationFixture = Asterisk.Sdk.IntegrationTests.Infrastructure.IntegrationTestFixture;
