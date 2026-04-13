@@ -2,3 +2,9 @@
 Asterisk.Sdk.Push.Diagnostics.PushHealthCheck
 Asterisk.Sdk.Push.Diagnostics.PushHealthCheck.PushHealthCheck(Asterisk.Sdk.Push.Subscriptions.ISubscriptionRegistry! registry) -> void
 Asterisk.Sdk.Push.Diagnostics.PushHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Asterisk.Sdk.Push.Topics.TopicName
+Asterisk.Sdk.Push.Topics.TopicName.Equals(Asterisk.Sdk.Push.Topics.TopicName other) -> bool
+Asterisk.Sdk.Push.Topics.TopicName.Segments.get -> System.Collections.Generic.IReadOnlyList<string!>!
+static Asterisk.Sdk.Push.Topics.TopicName.Parse(string! topic) -> Asterisk.Sdk.Push.Topics.TopicName
+static Asterisk.Sdk.Push.Topics.TopicName.operator ==(Asterisk.Sdk.Push.Topics.TopicName left, Asterisk.Sdk.Push.Topics.TopicName right) -> bool
+static Asterisk.Sdk.Push.Topics.TopicName.operator !=(Asterisk.Sdk.Push.Topics.TopicName left, Asterisk.Sdk.Push.Topics.TopicName right) -> bool
