@@ -1,7 +1,9 @@
+using Asterisk.Sdk.Push.Authz;
 using Asterisk.Sdk.Push.Bus;
 using Asterisk.Sdk.Push.Delivery;
 using Asterisk.Sdk.Push.Diagnostics;
 using Asterisk.Sdk.Push.Subscriptions;
+using Asterisk.Sdk.Push.Topics;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -39,6 +41,15 @@ public static class ServiceCollectionExtensions
 
         services.AddHealthChecks()
             .AddCheck<Asterisk.Sdk.Push.Diagnostics.PushHealthCheck>("push");
+
+        // Topic registry — thread-safe, singleton. Consumers register their event→topic
+        // mappings at startup (e.g. inside a hosted service or IConfigureOptions).
+        services.TryAddSingleton<ITopicRegistry, TopicRegistry>();
+
+        // Default authorizer allows every subscription. Platform or other consumers
+        // replace this with an RBAC-aware implementation via TryAddSingleton before
+        // calling AddAsteriskPush, or by overriding after the call.
+        services.TryAddSingleton<ISubscriptionAuthorizer, AllowAllSubscriptionAuthorizer>();
 
         return services;
     }
