@@ -13,18 +13,21 @@ public sealed class RealtimeFixture : IAsyncLifetime
     private readonly INetwork _network;
 
     public PostgresContainer Postgres { get; }
-    public AsteriskContainer Asterisk { get; }
+    public AsteriskContainer Asterisk { get; private set; } = null!;
 
     public RealtimeFixture()
     {
         _network = new NetworkBuilder().Build();
         Postgres = new PostgresContainer(_network);
-        Asterisk = new AsteriskContainer(_network);
     }
 
     public async Task InitializeAsync()
     {
         await _network.CreateAsync().ConfigureAwait(false);
+
+        var image = await AsteriskContainer.CreateImageAsync().ConfigureAwait(false);
+        Asterisk = new AsteriskContainer(_network, image);
+
         await Postgres.StartAsync().ConfigureAwait(false);
         await Asterisk.StartAsync().ConfigureAwait(false);
     }

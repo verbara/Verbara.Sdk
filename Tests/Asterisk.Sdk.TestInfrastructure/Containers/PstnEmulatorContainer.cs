@@ -1,6 +1,7 @@
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
+using DotNet.Testcontainers.Images;
 using DotNet.Testcontainers.Networks;
 
 namespace Asterisk.Sdk.TestInfrastructure.Containers;
@@ -18,13 +19,8 @@ public sealed class PstnEmulatorContainer : IAsyncDisposable
     public int AmiPort => _container.GetMappedPublicPort(5038);
     public string ContainerName => _container.Name;
 
-    public PstnEmulatorContainer(INetwork network)
+    public PstnEmulatorContainer(INetwork network, IImage image)
     {
-        var image = new ImageFromDockerfileBuilder()
-            .WithDockerfile("Dockerfile.asterisk")
-            .WithDockerfileDirectory(DockerPaths.DockerDir)
-            .Build();
-
         _container = new ContainerBuilder()
             .WithImage(image)
             .WithPortBinding(5038, true)

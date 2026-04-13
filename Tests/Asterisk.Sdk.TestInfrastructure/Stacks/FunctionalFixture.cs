@@ -13,8 +13,8 @@ public sealed class FunctionalFixture : IAsyncLifetime
     private readonly INetwork _network;
 
     public PostgresContainer Postgres { get; }
-    public AsteriskContainer Asterisk { get; }
-    public PstnEmulatorContainer PstnEmulator { get; }
+    public AsteriskContainer Asterisk { get; private set; } = null!;
+    public PstnEmulatorContainer PstnEmulator { get; private set; } = null!;
     public ToxiproxyContainer Toxiproxy { get; }
     public SippContainer Sipp { get; }
 
@@ -22,8 +22,6 @@ public sealed class FunctionalFixture : IAsyncLifetime
     {
         _network = new NetworkBuilder().Build();
         Postgres = new PostgresContainer(_network);
-        Asterisk = new AsteriskContainer(_network);
-        PstnEmulator = new PstnEmulatorContainer(_network);
         Toxiproxy = new ToxiproxyContainer(_network);
         Sipp = new SippContainer(_network);
     }
@@ -31,6 +29,10 @@ public sealed class FunctionalFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _network.CreateAsync().ConfigureAwait(false);
+
+        var image = await AsteriskContainer.CreateImageAsync().ConfigureAwait(false);
+        Asterisk = new AsteriskContainer(_network, image);
+        PstnEmulator = new PstnEmulatorContainer(_network, image);
 
         // Postgres must be ready before Asterisk realtime can connect
         await Postgres.StartAsync().ConfigureAwait(false);
