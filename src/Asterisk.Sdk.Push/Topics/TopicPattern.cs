@@ -5,7 +5,7 @@ namespace Asterisk.Sdk.Push.Topics;
 /// <list type="bullet">
 ///   <item><description>Literal segments — match exactly (e.g. <c>queue.42.updated</c>).</description></item>
 ///   <item><description><c>*</c> — matches exactly one segment (single-level wildcard).</description></item>
-///   <item><description><c>#</c> — matches one or more trailing segments (multi-level wildcard, must be the final segment).</description></item>
+///   <item><description><c>**</c> — matches zero or more trailing segments (multi-level wildcard, must be the final segment).</description></item>
 ///   <item><description><c>{self}</c> — resolved to the calling user's identifier at match time.</description></item>
 /// </list>
 /// </summary>
@@ -13,7 +13,7 @@ public readonly struct TopicPattern : IEquatable<TopicPattern>
 {
     private const string SelfPlaceholder = "{self}";
     private const string SingleWildcard = "*";
-    private const string MultiWildcard = "#";
+    private const string MultiWildcard = "**";
 
     private readonly string _raw;
     private readonly string[] _segments;
@@ -26,13 +26,13 @@ public readonly struct TopicPattern : IEquatable<TopicPattern>
 
     /// <summary>
     /// Parses a dot-separated pattern string into a <see cref="TopicPattern"/>.
-    /// Allowed segment values: literal text, <c>*</c>, <c>#</c>, or <c>{self}</c>.
+    /// Allowed segment values: literal text, <c>*</c>, <c>**</c>, or <c>{self}</c>.
     /// </summary>
     /// <param name="pattern">The pattern string to parse.</param>
     /// <returns>A valid <see cref="TopicPattern"/>.</returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="pattern"/> is null/empty, contains an empty segment,
-    /// <c>#</c> is not the final segment, or a segment mixes literal text with wildcards.
+    /// <c>**</c> is not the final segment, or a segment mixes literal text with wildcards.
     /// </exception>
     public static TopicPattern Parse(string pattern)
     {
@@ -52,10 +52,10 @@ public readonly struct TopicPattern : IEquatable<TopicPattern>
 
             if (seg == MultiWildcard)
             {
-                // # is only valid as the last segment
+                // ** is only valid as the last segment
                 if (i != segments.Length - 1)
                     throw new ArgumentException(
-                        "The '#' multi-level wildcard must be the last segment in the pattern.",
+                        "The '**' multi-level wildcard must be the last segment in the pattern.",
                         nameof(pattern));
                 continue;
             }
@@ -64,7 +64,7 @@ public readonly struct TopicPattern : IEquatable<TopicPattern>
                 continue;
 
             // Reject mixed segments such as "a*b" or "foo{self}"
-            if (seg.Contains('*') || seg.Contains('#') || seg.Contains('{') || seg.Contains('}'))
+            if (seg.Contains('*') || seg.Contains('{') || seg.Contains('}'))
                 throw new ArgumentException(
                     $"Invalid segment '{seg}': wildcards and placeholders must occupy a full segment.",
                     nameof(pattern));
@@ -93,8 +93,8 @@ public readonly struct TopicPattern : IEquatable<TopicPattern>
 
             if (seg == MultiWildcard)
             {
-                // # must be last; matches all remaining topic segments (≥1)
-                return i < topicSegments.Count;
+                // ** must be last; matches zero or more remaining topic segments
+                return true;
             }
 
             if (i >= topicSegments.Count)
@@ -123,7 +123,7 @@ public readonly struct TopicPattern : IEquatable<TopicPattern>
     /// <summary>
     /// Attempts to resolve the pattern into a concrete <see cref="TopicName"/> by substituting
     /// <c>{self}</c> with <paramref name="selfUserId"/>.
-    /// Returns <see langword="null"/> when the pattern contains unresolvable wildcards (<c>*</c> or <c>#</c>),
+    /// Returns <see langword="null"/> when the pattern contains unresolvable wildcards (<c>*</c> or <c>**</c>),
     /// or when <c>{self}</c> is present but <paramref name="selfUserId"/> is <see langword="null"/>.
     /// </summary>
     /// <param name="selfUserId">User identifier used to resolve <c>{self}</c>.</param>
@@ -151,6 +151,22 @@ public readonly struct TopicPattern : IEquatable<TopicPattern>
         }
 
         return TopicName.Parse(string.Join('.', resolvedSegments));
+    }
+
+    /// <summary>
+    /// Returns a new <see cref="TopicPattern"/> with every <c>{self}</c> segment replaced
+    /// by <paramref name="selfId"/>. Wildcard segments are preserved as-is.
+    /// </summary>
+    /// <param name="selfId">The identifier to substitute for <c>{self}</c>.</param>
+    /// <returns>A new <see cref="TopicPattern"/> with <c>{self}</c> resolved.</returns>
+    public TopicPattern ResolveSelf(string selfId)
+    {
+        var resolvedSegments = new string[_segments.Length];
+        for (var i = 0; i < _segments.Length; i++)
+            resolvedSegments[i] = _segments[i] == SelfPlaceholder ? selfId : _segments[i];
+
+        var resolvedRaw = string.Join('.', resolvedSegments);
+        return new TopicPattern(resolvedRaw, resolvedSegments);
     }
 
     /// <summary>Returns the original pattern string.</summary>
