@@ -32,7 +32,9 @@ Asterisk.Sdk.Push.Delivery.SubscriberContext.Permissions.get -> System.Collectio
 Asterisk.Sdk.Push.Delivery.SubscriberContext.Permissions.init -> void
 Asterisk.Sdk.Push.Delivery.SubscriberContext.Roles.get -> System.Collections.Generic.IReadOnlySet<string!>!
 Asterisk.Sdk.Push.Delivery.SubscriberContext.Roles.init -> void
-Asterisk.Sdk.Push.Delivery.SubscriberContext.SubscriberContext(string! TenantId, string? UserId, System.Collections.Generic.IReadOnlySet<string!>! Roles, System.Collections.Generic.IReadOnlySet<string!>! Permissions) -> void
+Asterisk.Sdk.Push.Delivery.SubscriberContext.RequestedTopicPattern.get -> string?
+Asterisk.Sdk.Push.Delivery.SubscriberContext.RequestedTopicPattern.init -> void
+Asterisk.Sdk.Push.Delivery.SubscriberContext.SubscriberContext(string! TenantId, string? UserId, System.Collections.Generic.IReadOnlySet<string!>! Roles, System.Collections.Generic.IReadOnlySet<string!>! Permissions, string? RequestedTopicPattern = null) -> void
 Asterisk.Sdk.Push.Delivery.SubscriberContext.TenantId.get -> string!
 Asterisk.Sdk.Push.Delivery.SubscriberContext.TenantId.init -> void
 Asterisk.Sdk.Push.Delivery.SubscriberContext.UserId.get -> string?
@@ -56,7 +58,9 @@ Asterisk.Sdk.Push.Events.PushEventMetadata.CorrelationId.get -> string?
 Asterisk.Sdk.Push.Events.PushEventMetadata.CorrelationId.init -> void
 Asterisk.Sdk.Push.Events.PushEventMetadata.OccurredAt.get -> System.DateTimeOffset
 Asterisk.Sdk.Push.Events.PushEventMetadata.OccurredAt.init -> void
-Asterisk.Sdk.Push.Events.PushEventMetadata.PushEventMetadata(string! TenantId, string? UserId, System.DateTimeOffset OccurredAt, string? CorrelationId) -> void
+Asterisk.Sdk.Push.Events.PushEventMetadata.PushEventMetadata(string! TenantId, string? UserId, System.DateTimeOffset OccurredAt, string? CorrelationId, string? TopicPath = null) -> void
+Asterisk.Sdk.Push.Events.PushEventMetadata.TopicPath.get -> string?
+Asterisk.Sdk.Push.Events.PushEventMetadata.TopicPath.init -> void
 Asterisk.Sdk.Push.Events.PushEventMetadata.TenantId.get -> string!
 Asterisk.Sdk.Push.Events.PushEventMetadata.TenantId.init -> void
 Asterisk.Sdk.Push.Events.PushEventMetadata.UserId.get -> string?
