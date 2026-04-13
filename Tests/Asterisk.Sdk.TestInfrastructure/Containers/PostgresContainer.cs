@@ -35,7 +35,7 @@ public sealed class PostgresContainer : IAsyncDisposable
                     .UntilPortIsAvailable(5432));
 
         if (network is not null)
-            builder = builder.WithNetwork(network);
+            builder = builder.WithNetwork(network).WithNetworkAliases("postgres");
 
         _container = builder.Build();
     }

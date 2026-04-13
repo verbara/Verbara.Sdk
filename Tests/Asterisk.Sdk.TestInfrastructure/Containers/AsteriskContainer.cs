@@ -1,11 +1,15 @@
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
+using DotNet.Testcontainers.Images;
 using DotNet.Testcontainers.Networks;
 
 namespace Asterisk.Sdk.TestInfrastructure.Containers;
 
-/// <summary>Wraps an Asterisk container built from Dockerfile.asterisk-file.</summary>
+/// <summary>
+/// Wraps the unified Asterisk 22 container running in Realtime mode
+/// (PostgreSQL-backed PJSIP). Requires a shared network with PostgresContainer.
+/// </summary>
 public sealed class AsteriskContainer : IAsyncDisposable
 {
     private readonly IContainer _container;
@@ -16,28 +20,31 @@ public sealed class AsteriskContainer : IAsyncDisposable
     public int AgiPort => _container.GetMappedPublicPort(4573);
     public string ContainerName => _container.Name;
 
-    public AsteriskContainer(INetwork? network = null)
+    public AsteriskContainer(INetwork network, IImage image)
     {
-        var image = new ImageFromDockerfileBuilder()
-            .WithDockerfile("Dockerfile.asterisk-file")
-            .WithDockerfileDirectory(DockerPaths.DockerDir)
-            .Build();
-
-        var builder = new ContainerBuilder()
+        _container = new ContainerBuilder()
             .WithImage(image)
             .WithPortBinding(5038, true)
             .WithPortBinding(8088, true)
             .WithPortBinding(4573, true)
-            .WithBindMount(DockerPaths.FunctionalAsteriskConfig, "/etc/asterisk", AccessMode.ReadOnly)
+            .WithBindMount(DockerPaths.AsteriskConfig, "/etc/asterisk", AccessMode.ReadOnly)
+            .WithNetwork(network)
+            .WithNetworkAliases("asterisk")
             .WithWaitStrategy(
                 Wait.ForUnixContainer()
-                    .UntilPortIsAvailable(5038)
-                    .UntilPortIsAvailable(8088));
+                    .UntilCommandIsCompleted("asterisk", "-rx", "core show uptime"))
+            .Build();
+    }
 
-        if (network is not null)
-            builder = builder.WithNetwork(network);
+    public static async Task<IImage> CreateImageAsync(CancellationToken ct = default)
+    {
+        var image = new ImageFromDockerfileBuilder()
+            .WithDockerfile("Dockerfile.asterisk")
+            .WithDockerfileDirectory(DockerPaths.DockerDir)
+            .Build();
 
-        _container = builder.Build();
+        await image.CreateAsync(ct).ConfigureAwait(false);
+        return image;
     }
 
     public Task StartAsync(CancellationToken ct = default) => _container.StartAsync(ct);
