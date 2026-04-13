@@ -35,7 +35,6 @@ jobs:
     name: Functional Tests (Testcontainers)
     runs-on: ubuntu-latest
     needs: unit-tests
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -43,5 +42,4 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Run functional + integration tests
         run: dotnet test Asterisk.Sdk.slnx --filter "Category=Functional|Category=Integration|Category=Realtime" --logger "console;verbosity=detailed"
-        timeout-minutes: 15
-        continue-on-error: true
+        timeout-minutes: 30
