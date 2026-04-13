@@ -26,7 +26,7 @@ public sealed class AriDeviceStatesResource : IAriDeviceStatesResource
     {
         var url = $"deviceStates/{Uri.EscapeDataString(deviceName)}";
         var response = await _http.GetAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("deviceState", deviceName);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriDeviceState)!;
     }
@@ -35,13 +35,13 @@ public sealed class AriDeviceStatesResource : IAriDeviceStatesResource
     {
         var url = $"deviceStates/{Uri.EscapeDataString(deviceName)}?deviceState={Uri.EscapeDataString(deviceState)}";
         var response = await _http.PutAsync(url, null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("deviceState", deviceName);
     }
 
     public async ValueTask DeleteAsync(string deviceName, CancellationToken cancellationToken = default)
     {
         var url = $"deviceStates/{Uri.EscapeDataString(deviceName)}";
         var response = await _http.DeleteAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("deviceState", deviceName);
     }
 }

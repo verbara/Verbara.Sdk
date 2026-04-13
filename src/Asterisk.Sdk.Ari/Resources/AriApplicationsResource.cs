@@ -25,7 +25,7 @@ public sealed class AriApplicationsResource : IAriApplicationsResource
     public async ValueTask<AriApplication> GetAsync(string applicationName, CancellationToken cancellationToken = default)
     {
         var response = await _http.GetAsync($"applications/{Uri.EscapeDataString(applicationName)}", cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("application", applicationName);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriApplication)!;
     }
@@ -34,7 +34,7 @@ public sealed class AriApplicationsResource : IAriApplicationsResource
     {
         var url = $"applications/{Uri.EscapeDataString(applicationName)}/subscription?eventSource={Uri.EscapeDataString(eventSource)}";
         var response = await _http.PostAsync(url, null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("application", applicationName);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriApplication)!;
     }
@@ -43,7 +43,7 @@ public sealed class AriApplicationsResource : IAriApplicationsResource
     {
         var url = $"applications/{Uri.EscapeDataString(applicationName)}/subscription?eventSource={Uri.EscapeDataString(eventSource)}";
         var response = await _http.DeleteAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("application", applicationName);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriApplication)!;
     }
@@ -53,7 +53,7 @@ public sealed class AriApplicationsResource : IAriApplicationsResource
         var url = $"applications/{Uri.EscapeDataString(applicationName)}/eventFilter";
         using var request = new HttpRequestMessage(HttpMethod.Put, url);
         var response = await _http.SendAsync(request, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("application", applicationName);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriApplication)!;
     }

@@ -25,7 +25,7 @@ public sealed class AriSoundsResource : IAriSoundsResource
     public async ValueTask<AriSound> GetAsync(string soundId, CancellationToken cancellationToken = default)
     {
         var response = await _http.GetAsync($"sounds/{Uri.EscapeDataString(soundId)}", cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("sound", soundId);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriSound)!;
     }

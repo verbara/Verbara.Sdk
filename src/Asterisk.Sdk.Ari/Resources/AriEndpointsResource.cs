@@ -26,7 +26,7 @@ public sealed class AriEndpointsResource : IAriEndpointsResource
     {
         var url = $"endpoints/{Uri.EscapeDataString(tech)}/{Uri.EscapeDataString(resource)}";
         var response = await _http.GetAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("endpoint", $"{tech}/{resource}");
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriEndpoint)!;
     }
@@ -35,7 +35,7 @@ public sealed class AriEndpointsResource : IAriEndpointsResource
     {
         var url = $"endpoints/{Uri.EscapeDataString(tech)}";
         var response = await _http.GetAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("endpoint", tech);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriEndpointArray) ?? [];
     }
