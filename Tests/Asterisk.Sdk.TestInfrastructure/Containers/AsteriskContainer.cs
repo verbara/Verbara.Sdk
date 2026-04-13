@@ -32,8 +32,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
             .WithNetworkAliases("asterisk")
             .WithWaitStrategy(
                 Wait.ForUnixContainer()
-                    .UntilPortIsAvailable(5038)
-                    .UntilPortIsAvailable(8088))
+                    .UntilCommandIsCompleted("asterisk", "-rx", "core show uptime"))
             .Build();
     }
 

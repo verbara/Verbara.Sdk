@@ -27,7 +27,7 @@ RUN apt-get update \
     && chown -R asterisk:asterisk /var/lib/asterisk/sounds
 
 COPY entrypoint-asterisk.sh /entrypoint-asterisk.sh
-RUN chmod +x /entrypoint-asterisk.sh
+RUN chmod 755 /entrypoint-asterisk.sh
 
 USER asterisk
 ENTRYPOINT ["/entrypoint-asterisk.sh"]
