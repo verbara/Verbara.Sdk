@@ -8,10 +8,9 @@ public static class DockerPaths
     public static string SolutionRoot => _solutionRoot.Value;
     public static string DockerDir => Path.Combine(SolutionRoot, "docker");
     public static string FunctionalDir => Path.Combine(DockerDir, "functional");
-    public static string FunctionalAsteriskConfig => Path.Combine(FunctionalDir, "asterisk-config");
+    public static string AsteriskConfig => Path.Combine(FunctionalDir, "asterisk-config");
     public static string PstnEmulatorConfig => Path.Combine(FunctionalDir, "pstn-emulator-config");
-    public static string AsteriskFileDockerfile => Path.Combine(DockerDir, "Dockerfile.asterisk-file");
-    public static string AsteriskRealtimeDockerfile => Path.Combine(DockerDir, "Dockerfile.asterisk-realtime");
+    public static string AsteriskDockerfile => Path.Combine(DockerDir, "Dockerfile.asterisk");
     public static string FunctionalSqlDir => Path.Combine(FunctionalDir, "sql");
     public static string SippScenariosDir => Path.Combine(FunctionalDir, "sipp-scenarios");
 
