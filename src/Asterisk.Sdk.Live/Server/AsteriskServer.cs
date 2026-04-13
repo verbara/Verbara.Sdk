@@ -149,6 +149,8 @@ public sealed class AsteriskServer : IAsteriskServer
     /// </summary>
     public async ValueTask RequestInitialStateAsync(CancellationToken cancellationToken = default)
     {
+        using var activity = LiveActivitySource.StartStateLoad(_connection.AsteriskVersion ?? "unknown");
+
         // Populate channels from StatusAction
         await foreach (var evt in _connection.SendEventGeneratingActionAsync(new StatusAction(), cancellationToken))
         {
@@ -191,6 +193,7 @@ public sealed class AsteriskServer : IAsteriskServer
         await PopulateAgentsAsync(cancellationToken);
 
         AsteriskServerLog.InitialStateLoaded(_logger, Channels.ChannelCount, Queues.QueueCount, Agents.AgentCount);
+        LiveActivitySource.SetStateLoadResult(activity, Channels.ChannelCount, Queues.QueueCount, Agents.AgentCount);
     }
 
     private async ValueTask PopulateAgentsAsync(CancellationToken cancellationToken)
@@ -221,6 +224,8 @@ public sealed class AsteriskServer : IAsteriskServer
         string? callerId = null, TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
+        using var activity = LiveActivitySource.StartOriginate(channel, context, extension);
+
         var action = new OriginateAction
         {
             Channel = channel,
@@ -237,6 +242,7 @@ public sealed class AsteriskServer : IAsteriskServer
             if (evt is OriginateResponseEvent ore)
             {
                 var success = string.Equals(ore.Response, "Success", StringComparison.OrdinalIgnoreCase);
+                LiveActivitySource.SetOriginateResult(activity, success, ore.Response);
                 return new OriginateResult
                 {
                     Success = success,
@@ -246,6 +252,7 @@ public sealed class AsteriskServer : IAsteriskServer
             }
         }
 
+        LiveActivitySource.SetOriginateResult(activity, false, "No OriginateResponse received");
         return new OriginateResult { Success = false, Message = "No OriginateResponse received" };
     }
 

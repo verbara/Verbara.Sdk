@@ -1,1 +1,4 @@
 #nullable enable
+Asterisk.Sdk.Push.Diagnostics.PushHealthCheck
+Asterisk.Sdk.Push.Diagnostics.PushHealthCheck.PushHealthCheck(Asterisk.Sdk.Push.Subscriptions.ISubscriptionRegistry! registry) -> void
+Asterisk.Sdk.Push.Diagnostics.PushHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!

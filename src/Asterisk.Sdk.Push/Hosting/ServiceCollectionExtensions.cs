@@ -37,6 +37,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IEventDeliveryFilter, DefaultDeliveryFilter>();
         services.AddSingleton<ISubscriptionRegistry, InMemorySubscriptionRegistry>();
 
+        services.AddHealthChecks()
+            .AddCheck<Asterisk.Sdk.Push.Diagnostics.PushHealthCheck>("push");
+
         return services;
     }
 
