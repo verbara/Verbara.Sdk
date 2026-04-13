@@ -5,28 +5,26 @@ using DotNet.Testcontainers.Networks;
 namespace Asterisk.Sdk.TestInfrastructure.Stacks;
 
 /// <summary>
-/// Realtime fixture: shared network, PostgreSQL starts first, then Asterisk realtime (needs DB).
+/// Realtime fixture: shared network, PostgreSQL + Asterisk (realtime mode).
+/// Equivalent to the Asterisk half of FunctionalFixture, minus PSTN/SIPp/Toxiproxy.
 /// </summary>
 public sealed class RealtimeFixture : IAsyncLifetime
 {
     private readonly INetwork _network;
 
     public PostgresContainer Postgres { get; }
-    public AsteriskRealtimeContainer Asterisk { get; }
+    public AsteriskContainer Asterisk { get; }
 
     public RealtimeFixture()
     {
         _network = new NetworkBuilder().Build();
-
         Postgres = new PostgresContainer(_network);
-        Asterisk = new AsteriskRealtimeContainer(_network);
+        Asterisk = new AsteriskContainer(_network);
     }
 
     public async Task InitializeAsync()
     {
         await _network.CreateAsync().ConfigureAwait(false);
-
-        // PostgreSQL must be ready before Asterisk realtime connects
         await Postgres.StartAsync().ConfigureAwait(false);
         await Asterisk.StartAsync().ConfigureAwait(false);
     }
