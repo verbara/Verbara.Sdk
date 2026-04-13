@@ -62,10 +62,12 @@ public sealed partial class RxPushEventBus : IPushEventBus, IDisposable
         ObjectDisposedException.ThrowIf(_disposed != 0, this);
 
         _metrics.EventsPublished.Add(1);
+        using var activity = PushActivitySource.StartPublish(pushEvent.EventType);
 
         if (_strategy == BackpressureStrategy.Block)
         {
             await _channel.Writer.WriteAsync(pushEvent, ct).ConfigureAwait(false);
+            PushActivitySource.SetPublished(activity);
             return;
         }
 
@@ -75,6 +77,10 @@ public sealed partial class RxPushEventBus : IPushEventBus, IDisposable
         {
             _metrics.EventsDropped.Add(1, new KeyValuePair<string, object?>("reason", "buffer_full"));
             LogDropped(_logger, pushEvent.EventType, _strategy.ToString());
+        }
+        else
+        {
+            PushActivitySource.SetPublished(activity);
         }
     }
 
@@ -90,20 +96,25 @@ public sealed partial class RxPushEventBus : IPushEventBus, IDisposable
             await foreach (var evt in _channel.Reader.ReadAllAsync(_stopCts.Token).ConfigureAwait(false))
             {
                 if (_observers.IsEmpty) continue;
-                var delivered = false;
+                var subscriberCount = _observers.Count;
+                using var deliveryActivity = PushActivitySource.StartDelivery(evt.EventType, subscriberCount);
+                var deliveredCount = 0;
+                var droppedCount = 0;
                 foreach (var kv in _observers)
                 {
                     try
                     {
                         kv.Value.OnNext(evt);
-                        delivered = true;
+                        deliveredCount++;
                     }
                     catch (Exception ex)
                     {
+                        droppedCount++;
                         LogObserverFault(_logger, ex, evt.EventType);
                     }
                 }
-                if (delivered) _metrics.EventsDelivered.Add(1);
+                PushActivitySource.SetDeliveryResult(deliveryActivity, deliveredCount, droppedCount);
+                if (deliveredCount > 0) _metrics.EventsDelivered.Add(1);
             }
         }
         catch (OperationCanceledException)

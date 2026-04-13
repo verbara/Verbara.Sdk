@@ -7,6 +7,7 @@
     <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.Tests" />
     <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.FunctionalTests" />
     <InternalsVisibleTo Include="Asterisk.Sdk.Hosting" />
+    <InternalsVisibleTo Include="Asterisk.Sdk.Hosting.Tests" />
     <InternalsVisibleTo Include="Asterisk.Sdk.Redis.Spike" />
     <InternalsVisibleTo Include="Asterisk.Sdk.Redis.Spike.Aot" />
   </ItemGroup>
@@ -16,6 +17,7 @@
     <ProjectReference Include="..\Asterisk.Sdk.Live\Asterisk.Sdk.Live.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="System.Reactive" />
