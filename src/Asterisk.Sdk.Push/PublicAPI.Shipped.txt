@@ -1,0 +1,75 @@
+#nullable enable
+abstract Asterisk.Sdk.Push.Events.PushEvent.EventType.get -> string!
+Asterisk.Sdk.Push.Bus.BackpressureStrategy
+Asterisk.Sdk.Push.Bus.BackpressureStrategy.Block = 2 -> Asterisk.Sdk.Push.Bus.BackpressureStrategy
+Asterisk.Sdk.Push.Bus.BackpressureStrategy.DropNewest = 1 -> Asterisk.Sdk.Push.Bus.BackpressureStrategy
+Asterisk.Sdk.Push.Bus.BackpressureStrategy.DropOldest = 0 -> Asterisk.Sdk.Push.Bus.BackpressureStrategy
+Asterisk.Sdk.Push.Bus.IPushEventBus
+Asterisk.Sdk.Push.Bus.IPushEventBus.AsObservable() -> System.IObservable<Asterisk.Sdk.Push.Events.PushEvent!>!
+Asterisk.Sdk.Push.Bus.IPushEventBus.OfType<TEvent>() -> System.IObservable<TEvent!>!
+Asterisk.Sdk.Push.Bus.IPushEventBus.PublishAsync<TEvent>(TEvent! pushEvent, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Push.Bus.PushEventBusOptions
+Asterisk.Sdk.Push.Bus.PushEventBusOptions.BackpressureStrategy.get -> Asterisk.Sdk.Push.Bus.BackpressureStrategy
+Asterisk.Sdk.Push.Bus.PushEventBusOptions.BackpressureStrategy.set -> void
+Asterisk.Sdk.Push.Bus.PushEventBusOptions.BufferCapacity.get -> int
+Asterisk.Sdk.Push.Bus.PushEventBusOptions.BufferCapacity.set -> void
+Asterisk.Sdk.Push.Bus.PushEventBusOptions.PushEventBusOptions() -> void
+Asterisk.Sdk.Push.Bus.RxPushEventBus
+Asterisk.Sdk.Push.Bus.RxPushEventBus.AsObservable() -> System.IObservable<Asterisk.Sdk.Push.Events.PushEvent!>!
+Asterisk.Sdk.Push.Bus.RxPushEventBus.Dispose() -> void
+Asterisk.Sdk.Push.Bus.RxPushEventBus.OfType<TEvent>() -> System.IObservable<TEvent!>!
+Asterisk.Sdk.Push.Bus.RxPushEventBus.PublishAsync<TEvent>(TEvent! pushEvent, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Push.Bus.RxPushEventBus.RxPushEventBus(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.Push.Bus.PushEventBusOptions!>! options, Microsoft.Extensions.Logging.ILogger<Asterisk.Sdk.Push.Bus.RxPushEventBus!>! logger, Asterisk.Sdk.Push.Diagnostics.PushMetrics! metrics) -> void
+Asterisk.Sdk.Push.Delivery.DefaultDeliveryFilter
+Asterisk.Sdk.Push.Delivery.DefaultDeliveryFilter.DefaultDeliveryFilter() -> void
+Asterisk.Sdk.Push.Delivery.DefaultDeliveryFilter.IsDeliverableToSubscriber(Asterisk.Sdk.Push.Events.PushEvent! pushEvent, Asterisk.Sdk.Push.Delivery.SubscriberContext! subscriber) -> bool
+Asterisk.Sdk.Push.Delivery.IEventDeliveryFilter
+Asterisk.Sdk.Push.Delivery.IEventDeliveryFilter.IsDeliverableToSubscriber(Asterisk.Sdk.Push.Events.PushEvent! pushEvent, Asterisk.Sdk.Push.Delivery.SubscriberContext! subscriber) -> bool
+Asterisk.Sdk.Push.Delivery.SubscriberContext
+Asterisk.Sdk.Push.Delivery.SubscriberContext.HasPermission(string! permission) -> bool
+Asterisk.Sdk.Push.Delivery.SubscriberContext.HasRole(string! role) -> bool
+Asterisk.Sdk.Push.Delivery.SubscriberContext.Permissions.get -> System.Collections.Generic.IReadOnlySet<string!>!
+Asterisk.Sdk.Push.Delivery.SubscriberContext.Permissions.init -> void
+Asterisk.Sdk.Push.Delivery.SubscriberContext.Roles.get -> System.Collections.Generic.IReadOnlySet<string!>!
+Asterisk.Sdk.Push.Delivery.SubscriberContext.Roles.init -> void
+Asterisk.Sdk.Push.Delivery.SubscriberContext.SubscriberContext(string! TenantId, string? UserId, System.Collections.Generic.IReadOnlySet<string!>! Roles, System.Collections.Generic.IReadOnlySet<string!>! Permissions) -> void
+Asterisk.Sdk.Push.Delivery.SubscriberContext.TenantId.get -> string!
+Asterisk.Sdk.Push.Delivery.SubscriberContext.TenantId.init -> void
+Asterisk.Sdk.Push.Delivery.SubscriberContext.UserId.get -> string?
+Asterisk.Sdk.Push.Delivery.SubscriberContext.UserId.init -> void
+Asterisk.Sdk.Push.Diagnostics.PushMetrics
+Asterisk.Sdk.Push.Diagnostics.PushMetrics.BindActiveSubscribersGauge(System.Func<int>! provider) -> void
+Asterisk.Sdk.Push.Diagnostics.PushMetrics.Dispose() -> void
+Asterisk.Sdk.Push.Diagnostics.PushMetrics.EventsDelivered.get -> System.Diagnostics.Metrics.Counter<long>!
+Asterisk.Sdk.Push.Diagnostics.PushMetrics.EventsDropped.get -> System.Diagnostics.Metrics.Counter<long>!
+Asterisk.Sdk.Push.Diagnostics.PushMetrics.EventsPublished.get -> System.Diagnostics.Metrics.Counter<long>!
+Asterisk.Sdk.Push.Diagnostics.PushMetrics.PushMetrics() -> void
+const Asterisk.Sdk.Push.Diagnostics.PushMetrics.MeterName = "Asterisk.Sdk.Push" -> string!
+Asterisk.Sdk.Push.Events.IPushEvent
+Asterisk.Sdk.Push.Events.IPushEvent.EventType.get -> string!
+Asterisk.Sdk.Push.Events.IPushEvent.Metadata.get -> Asterisk.Sdk.Push.Events.PushEventMetadata!
+Asterisk.Sdk.Push.Events.PushEvent
+virtual Asterisk.Sdk.Push.Events.PushEvent.Metadata.get -> Asterisk.Sdk.Push.Events.PushEventMetadata!
+virtual Asterisk.Sdk.Push.Events.PushEvent.Metadata.init -> void
+Asterisk.Sdk.Push.Events.PushEventMetadata
+Asterisk.Sdk.Push.Events.PushEventMetadata.CorrelationId.get -> string?
+Asterisk.Sdk.Push.Events.PushEventMetadata.CorrelationId.init -> void
+Asterisk.Sdk.Push.Events.PushEventMetadata.OccurredAt.get -> System.DateTimeOffset
+Asterisk.Sdk.Push.Events.PushEventMetadata.OccurredAt.init -> void
+Asterisk.Sdk.Push.Events.PushEventMetadata.PushEventMetadata(string! TenantId, string? UserId, System.DateTimeOffset OccurredAt, string? CorrelationId) -> void
+Asterisk.Sdk.Push.Events.PushEventMetadata.TenantId.get -> string!
+Asterisk.Sdk.Push.Events.PushEventMetadata.TenantId.init -> void
+Asterisk.Sdk.Push.Events.PushEventMetadata.UserId.get -> string?
+Asterisk.Sdk.Push.Events.PushEventMetadata.UserId.init -> void
+Asterisk.Sdk.Push.Hosting.ServiceCollectionExtensions
+Asterisk.Sdk.Push.Subscriptions.ISubscriptionRegistry
+Asterisk.Sdk.Push.Subscriptions.ISubscriptionRegistry.ActiveCount.get -> int
+Asterisk.Sdk.Push.Subscriptions.ISubscriptionRegistry.CountByTenant(string! tenantId) -> int
+Asterisk.Sdk.Push.Subscriptions.ISubscriptionRegistry.Register(Asterisk.Sdk.Push.Delivery.SubscriberContext! subscriber) -> System.IDisposable!
+Asterisk.Sdk.Push.Subscriptions.InMemorySubscriptionRegistry
+Asterisk.Sdk.Push.Subscriptions.InMemorySubscriptionRegistry.ActiveCount.get -> int
+Asterisk.Sdk.Push.Subscriptions.InMemorySubscriptionRegistry.CountByTenant(string! tenantId) -> int
+Asterisk.Sdk.Push.Subscriptions.InMemorySubscriptionRegistry.InMemorySubscriptionRegistry() -> void
+Asterisk.Sdk.Push.Subscriptions.InMemorySubscriptionRegistry.InMemorySubscriptionRegistry(Asterisk.Sdk.Push.Diagnostics.PushMetrics! metrics) -> void
+Asterisk.Sdk.Push.Subscriptions.InMemorySubscriptionRegistry.Register(Asterisk.Sdk.Push.Delivery.SubscriberContext! subscriber) -> System.IDisposable!
+static Asterisk.Sdk.Push.Hosting.ServiceCollectionExtensions.AddAsteriskPush(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Push.Bus.PushEventBusOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

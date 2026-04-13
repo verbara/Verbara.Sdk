@@ -23,6 +23,13 @@ using Asterisk.Sdk.VoiceAi.Stt.Deepgram;
 using Asterisk.Sdk.VoiceAi.Tts.ElevenLabs;
 using Asterisk.Sdk.VoiceAi.Testing;
 using Asterisk.Sdk.VoiceAi.OpenAiRealtime;
+using Asterisk.Sdk.Push.Bus;
+using Asterisk.Sdk.Push.Delivery;
+using Asterisk.Sdk.Push.Diagnostics;
+using Asterisk.Sdk.Push.Events;
+using Asterisk.Sdk.Push.Hosting;
+using Asterisk.Sdk.Push.Subscriptions;
+using Microsoft.Extensions.DependencyInjection;
 
 Console.WriteLine("AOT Canary — all SDK types are trim-safe");
 
@@ -90,3 +97,48 @@ _ = typeof(FakeConversationHandler);
 _ = typeof(OpenAiRealtimeBridge);
 _ = typeof(OpenAiRealtimeOptions);
 _ = typeof(VadMode);
+
+// Asterisk.Sdk.Push — in-memory push event bus + subscription registry + delivery filter
+_ = typeof(IPushEventBus);
+_ = typeof(RxPushEventBus);
+_ = typeof(PushEventBusOptions);
+_ = typeof(BackpressureStrategy);
+_ = typeof(PushEvent);
+_ = typeof(PushEventMetadata);
+_ = typeof(SubscriberContext);
+_ = typeof(IEventDeliveryFilter);
+_ = typeof(DefaultDeliveryFilter);
+_ = typeof(ISubscriptionRegistry);
+_ = typeof(InMemorySubscriptionRegistry);
+_ = typeof(PushMetrics);
+
+// Exercise AddAsteriskPush + publish/subscribe path to force linker analysis of runtime code.
+var services = new ServiceCollection();
+services.AddLogging();
+services.AddAsteriskPush(o =>
+{
+    o.BufferCapacity = 64;
+    o.BackpressureStrategy = BackpressureStrategy.DropOldest;
+});
+using var sp = services.BuildServiceProvider();
+var bus = sp.GetRequiredService<IPushEventBus>();
+var filter = sp.GetRequiredService<IEventDeliveryFilter>();
+var registry = sp.GetRequiredService<ISubscriptionRegistry>();
+
+var subscriber = new SubscriberContext(
+    TenantId: "tenant-1",
+    UserId: "user-1",
+    Roles: new HashSet<string> { "agent" },
+    Permissions: new HashSet<string> { "conversation:read" });
+using var _registration = registry.Register(subscriber);
+
+using var sub = bus.OfType<Asterisk.Sdk.AotCanary.CanaryPushEvent>().Subscribe(static evt =>
+    Console.WriteLine($"received: {evt.EventType} tenant={evt.Metadata.TenantId}"));
+
+var sample = new Asterisk.Sdk.AotCanary.CanaryPushEvent
+{
+    Metadata = new PushEventMetadata("tenant-1", "user-1", DateTimeOffset.UtcNow, CorrelationId: null),
+};
+_ = filter.IsDeliverableToSubscriber(sample, subscriber);
+await bus.PublishAsync(sample);
+

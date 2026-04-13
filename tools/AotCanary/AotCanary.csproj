@@ -26,5 +26,6 @@
     <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi.Tts\Asterisk.Sdk.VoiceAi.Tts.csproj" />
     <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi.Testing\Asterisk.Sdk.VoiceAi.Testing.csproj" />
     <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi.OpenAiRealtime\Asterisk.Sdk.VoiceAi.OpenAiRealtime.csproj" />
+    <ProjectReference Include="..\..\src\Asterisk.Sdk.Push\Asterisk.Sdk.Push.csproj" />
   </ItemGroup>
 </Project>
