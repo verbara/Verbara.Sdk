@@ -7,6 +7,7 @@ global using Asterisk.Sdk.Push.Diagnostics;
 global using Asterisk.Sdk.Push.Events;
 global using Asterisk.Sdk.Push.Hosting;
 global using Asterisk.Sdk.Push.Subscriptions;
+global using Asterisk.Sdk.Push.Topics;
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.Logging;
 global using Microsoft.Extensions.Logging.Abstractions;

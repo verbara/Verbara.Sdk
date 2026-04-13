@@ -17,7 +17,8 @@ internal static class TestEventFactory
     public static TestPushEvent Create(
         string payload = "p",
         string tenantId = "tenant-1",
-        string? userId = null) =>
+        string? userId = null,
+        string? topicPath = null) =>
         new()
         {
             Payload = payload,
@@ -25,7 +26,8 @@ internal static class TestEventFactory
                 TenantId: tenantId,
                 UserId: userId,
                 OccurredAt: DateTimeOffset.UtcNow,
-                CorrelationId: null),
+                CorrelationId: null,
+                TopicPath: topicPath),
         };
 }
 
