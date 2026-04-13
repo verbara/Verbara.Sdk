@@ -69,6 +69,8 @@ public static class ServiceCollectionExtensions
         // Live
         services.TryAddSingleton<AsteriskServer>();
         services.TryAddSingleton<IAsteriskServer>(sp => sp.GetRequiredService<AsteriskServer>());
+        services.AddHealthChecks()
+            .AddCheck<Asterisk.Sdk.Live.Diagnostics.LiveHealthCheck>("live");
 
         // Hosted services for automatic lifecycle management
         services.AddSingleton<IHostedService, AmiConnectionHostedService>();
@@ -173,6 +175,7 @@ public static class ServiceCollectionExtensions
     {
         AddSessionsCore(services, configure);
         services.AddSingleton<IHostedService, SessionManagerHostedService>();
+        services.AddSingleton<IHostedService, SessionReconciliationService>();
         return services;
     }
 
@@ -194,6 +197,8 @@ public static class ServiceCollectionExtensions
         Action<SessionOptions>? configure)
     {
         services.TryAddSingleton<ICallSessionManager, CallSessionManager>();
+        services.TryAddSingleton<IAgentSessionTracker, AgentSessionTracker>();
+        services.TryAddSingleton<IQueueSessionTracker, QueueSessionTracker>();
         services.TryAddSingleton<SessionStoreBase, InMemorySessionStore>();
 
         if (configure is not null)
@@ -201,6 +206,8 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IValidateOptions<SessionOptions>, SessionOptionsValidator>();
         services.AddOptions<SessionOptions>().ValidateOnStart();
+        services.AddHealthChecks()
+            .AddCheck<Asterisk.Sdk.Sessions.Diagnostics.SessionHealthCheck>("sessions");
         return services;
     }
 

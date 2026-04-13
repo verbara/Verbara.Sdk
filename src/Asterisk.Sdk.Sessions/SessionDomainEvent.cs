@@ -40,3 +40,8 @@ public sealed record CallRingNoAnswerEvent(
     string SessionId, string ServerId, DateTimeOffset Timestamp,
     string AgentId, string? QueueName)
     : SessionDomainEvent(SessionId, ServerId, Timestamp);
+
+public sealed record AgentSessionStateChanged(
+    string SessionId, string ServerId, DateTimeOffset Timestamp,
+    string AgentId, AgentSessionState PreviousState, AgentSessionState NewState)
+    : SessionDomainEvent(SessionId, ServerId, Timestamp);

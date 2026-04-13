@@ -14,6 +14,7 @@ public sealed class SessionOptions
     public TimeSpan CompletedRetention { get; set; } = TimeSpan.FromMinutes(10);
     public TimeSpan QueueMetricsWindow { get; set; } = TimeSpan.FromMinutes(30);
     public TimeSpan SlaThreshold { get; set; } = TimeSpan.FromSeconds(20);
+    public TimeSpan WrapUpDuration { get; set; } = TimeSpan.FromSeconds(30);
 
     [Required]
     public string[] InboundContextPatterns { get; set; } = ["from-trunk", "from-pstn", "from-external"];
