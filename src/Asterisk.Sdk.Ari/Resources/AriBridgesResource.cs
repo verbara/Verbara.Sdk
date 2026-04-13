@@ -39,7 +39,7 @@ public sealed class AriBridgesResource : IAriBridgesResource
     public async ValueTask<AriBridge> GetAsync(string bridgeId, CancellationToken cancellationToken = default)
     {
         var response = await _http.GetAsync($"bridges/{Uri.EscapeDataString(bridgeId)}", cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("bridge", bridgeId);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriBridge)!;
     }
@@ -47,7 +47,7 @@ public sealed class AriBridgesResource : IAriBridgesResource
     public async ValueTask DestroyAsync(string bridgeId, CancellationToken cancellationToken = default)
     {
         var response = await _http.DeleteAsync($"bridges/{Uri.EscapeDataString(bridgeId)}", cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("bridge", bridgeId);
     }
 
     public async ValueTask AddChannelAsync(string bridgeId, string channelId, CancellationToken cancellationToken = default)
@@ -55,7 +55,7 @@ public sealed class AriBridgesResource : IAriBridgesResource
         var response = await _http.PostAsync(
             $"bridges/{Uri.EscapeDataString(bridgeId)}/addChannel?channel={Uri.EscapeDataString(channelId)}",
             null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("bridge", bridgeId);
     }
 
     public async ValueTask RemoveChannelAsync(string bridgeId, string channelId, CancellationToken cancellationToken = default)
@@ -63,7 +63,7 @@ public sealed class AriBridgesResource : IAriBridgesResource
         var response = await _http.PostAsync(
             $"bridges/{Uri.EscapeDataString(bridgeId)}/removeChannel?channel={Uri.EscapeDataString(channelId)}",
             null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("bridge", bridgeId);
     }
 
     public async ValueTask<AriPlayback> PlayAsync(string bridgeId, string media, string? lang = null, int? offsetms = null, int? skipms = null, string? playbackId = null, string? format = null, CancellationToken cancellationToken = default)
@@ -77,7 +77,7 @@ public sealed class AriBridgesResource : IAriBridgesResource
 
         var response = await _http.PostAsync(
             $"bridges/{Uri.EscapeDataString(bridgeId)}/play?{query}", null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("bridge", bridgeId);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriPlayback)!;
     }
@@ -94,7 +94,7 @@ public sealed class AriBridgesResource : IAriBridgesResource
 
         var response = await _http.PostAsync(
             $"bridges/{Uri.EscapeDataString(bridgeId)}/record?{query}", null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("bridge", bridgeId);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriLiveRecording)!;
     }
@@ -106,7 +106,7 @@ public sealed class AriBridgesResource : IAriBridgesResource
         if (name is not null) query += $"name={Uri.EscapeDataString(name)}&";
         using var request = new HttpRequestMessage(HttpMethod.Post, $"bridges/{Uri.EscapeDataString(bridgeId)}?{query.TrimEnd('&')}");
         var response = await _http.SendAsync(request, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("bridge", bridgeId);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriBridge)!;
     }
@@ -116,14 +116,14 @@ public sealed class AriBridgesResource : IAriBridgesResource
         var url = $"bridges/{Uri.EscapeDataString(bridgeId)}/videoSource/{Uri.EscapeDataString(channelId)}";
         using var request = new HttpRequestMessage(HttpMethod.Post, url);
         var response = await _http.SendAsync(request, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("bridge", bridgeId);
     }
 
     public async ValueTask ClearVideoSourceAsync(string bridgeId, CancellationToken cancellationToken = default)
     {
         var url = $"bridges/{Uri.EscapeDataString(bridgeId)}/videoSource";
         var response = await _http.DeleteAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("bridge", bridgeId);
     }
 
     public async ValueTask StartMohAsync(string bridgeId, string? mohClass = null, CancellationToken cancellationToken = default)
@@ -131,13 +131,13 @@ public sealed class AriBridgesResource : IAriBridgesResource
         var url = $"bridges/{Uri.EscapeDataString(bridgeId)}/moh";
         if (mohClass is not null) url += $"?mohClass={Uri.EscapeDataString(mohClass)}";
         var response = await _http.PostAsync(url, null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("bridge", bridgeId);
     }
 
     public async ValueTask StopMohAsync(string bridgeId, CancellationToken cancellationToken = default)
     {
         var url = $"bridges/{Uri.EscapeDataString(bridgeId)}/moh";
         var response = await _http.DeleteAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("bridge", bridgeId);
     }
 }

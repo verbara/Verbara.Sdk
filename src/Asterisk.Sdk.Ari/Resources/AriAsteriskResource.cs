@@ -34,7 +34,7 @@ public sealed class AriAsteriskResource : IAriAsteriskResource
     {
         var url = $"asterisk/variable?variable={Uri.EscapeDataString(variable)}";
         var response = await _http.GetAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("variable", variable);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         var result = JsonSerializer.Deserialize(json, AriJsonContext.Default.AriVariable)!;
         return result.Value;
@@ -59,7 +59,7 @@ public sealed class AriAsteriskResource : IAriAsteriskResource
     {
         var url = $"asterisk/modules/{Uri.EscapeDataString(moduleName)}";
         var response = await _http.GetAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("module", moduleName);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriModule)!;
     }
@@ -68,14 +68,14 @@ public sealed class AriAsteriskResource : IAriAsteriskResource
     {
         var url = $"asterisk/modules/{Uri.EscapeDataString(moduleName)}";
         var response = await _http.PostAsync(url, null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("module", moduleName);
     }
 
     public async ValueTask UnloadModuleAsync(string moduleName, CancellationToken cancellationToken = default)
     {
         var url = $"asterisk/modules/{Uri.EscapeDataString(moduleName)}";
         var response = await _http.DeleteAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("module", moduleName);
     }
 
     public async ValueTask ReloadModuleAsync(string moduleName, CancellationToken cancellationToken = default)
@@ -83,7 +83,7 @@ public sealed class AriAsteriskResource : IAriAsteriskResource
         var url = $"asterisk/modules/{Uri.EscapeDataString(moduleName)}";
         using var request = new HttpRequestMessage(HttpMethod.Put, url);
         var response = await _http.SendAsync(request, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("module", moduleName);
     }
 
     public async ValueTask<AriLogChannel[]> ListLoggingAsync(CancellationToken cancellationToken = default)
@@ -98,28 +98,28 @@ public sealed class AriAsteriskResource : IAriAsteriskResource
     {
         var url = $"asterisk/logging/{Uri.EscapeDataString(logChannelName)}?configuration={Uri.EscapeDataString(configuration)}";
         var response = await _http.PostAsync(url, null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("logChannel", logChannelName);
     }
 
     public async ValueTask DeleteLogChannelAsync(string logChannelName, CancellationToken cancellationToken = default)
     {
         var url = $"asterisk/logging/{Uri.EscapeDataString(logChannelName)}";
         var response = await _http.DeleteAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("logChannel", logChannelName);
     }
 
     public async ValueTask RotateLogChannelAsync(string logChannelName, CancellationToken cancellationToken = default)
     {
         var url = $"asterisk/logging/{Uri.EscapeDataString(logChannelName)}/rotate";
         var response = await _http.PostAsync(url, null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("logChannel", logChannelName);
     }
 
     public async ValueTask<AriConfigTuple[]> GetConfigAsync(string configClass, string objectType, string id, CancellationToken cancellationToken = default)
     {
         var url = $"asterisk/config/dynamic/{Uri.EscapeDataString(configClass)}/{Uri.EscapeDataString(objectType)}/{Uri.EscapeDataString(id)}";
         var response = await _http.GetAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("config", id);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriConfigTupleArray) ?? [];
     }
@@ -129,13 +129,13 @@ public sealed class AriAsteriskResource : IAriAsteriskResource
         var url = $"asterisk/config/dynamic/{Uri.EscapeDataString(configClass)}/{Uri.EscapeDataString(objectType)}/{Uri.EscapeDataString(id)}";
         using var request = new HttpRequestMessage(HttpMethod.Put, url);
         var response = await _http.SendAsync(request, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("config", id);
     }
 
     public async ValueTask DeleteConfigAsync(string configClass, string objectType, string id, CancellationToken cancellationToken = default)
     {
         var url = $"asterisk/config/dynamic/{Uri.EscapeDataString(configClass)}/{Uri.EscapeDataString(objectType)}/{Uri.EscapeDataString(id)}";
         var response = await _http.DeleteAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("config", id);
     }
 }

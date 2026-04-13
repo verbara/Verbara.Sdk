@@ -17,7 +17,7 @@ public sealed class AriRecordingsResource : IAriRecordingsResource
     public async ValueTask<AriLiveRecording> GetLiveAsync(string recordingName, CancellationToken cancellationToken = default)
     {
         var response = await _http.GetAsync($"recordings/live/{Uri.EscapeDataString(recordingName)}", cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("recording", recordingName);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriLiveRecording)!;
     }
@@ -26,14 +26,14 @@ public sealed class AriRecordingsResource : IAriRecordingsResource
     {
         var response = await _http.PostAsync(
             $"recordings/live/{Uri.EscapeDataString(recordingName)}/stop", null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("recording", recordingName);
     }
 
     public async ValueTask DeleteStoredAsync(string recordingName, CancellationToken cancellationToken = default)
     {
         var response = await _http.DeleteAsync(
             $"recordings/stored/{Uri.EscapeDataString(recordingName)}", cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("recording", recordingName);
     }
 
     public async ValueTask<AriStoredRecording[]> ListStoredAsync(CancellationToken cancellationToken = default)
@@ -47,7 +47,7 @@ public sealed class AriRecordingsResource : IAriRecordingsResource
     public async ValueTask<AriStoredRecording> GetStoredAsync(string recordingName, CancellationToken cancellationToken = default)
     {
         var response = await _http.GetAsync($"recordings/stored/{Uri.EscapeDataString(recordingName)}", cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("recording", recordingName);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriStoredRecording)!;
     }
@@ -56,7 +56,7 @@ public sealed class AriRecordingsResource : IAriRecordingsResource
     {
         var url = $"recordings/stored/{Uri.EscapeDataString(recordingName)}/copy?destinationRecordingName={Uri.EscapeDataString(destinationRecordingName)}";
         var response = await _http.PostAsync(url, null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("recording", recordingName);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriStoredRecording)!;
     }
@@ -65,35 +65,35 @@ public sealed class AriRecordingsResource : IAriRecordingsResource
     {
         var response = await _http.DeleteAsync(
             $"recordings/live/{Uri.EscapeDataString(recordingName)}", cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("recording", recordingName);
     }
 
     public async ValueTask PauseAsync(string recordingName, CancellationToken cancellationToken = default)
     {
         var response = await _http.PostAsync(
             $"recordings/live/{Uri.EscapeDataString(recordingName)}/pause", null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("recording", recordingName);
     }
 
     public async ValueTask UnpauseAsync(string recordingName, CancellationToken cancellationToken = default)
     {
         var response = await _http.DeleteAsync(
             $"recordings/live/{Uri.EscapeDataString(recordingName)}/pause", cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("recording", recordingName);
     }
 
     public async ValueTask MuteAsync(string recordingName, CancellationToken cancellationToken = default)
     {
         var response = await _http.PostAsync(
             $"recordings/live/{Uri.EscapeDataString(recordingName)}/mute", null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("recording", recordingName);
     }
 
     public async ValueTask UnmuteAsync(string recordingName, CancellationToken cancellationToken = default)
     {
         var response = await _http.DeleteAsync(
             $"recordings/live/{Uri.EscapeDataString(recordingName)}/mute", cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("recording", recordingName);
     }
 
     public async ValueTask<Stream> GetStoredFileAsync(string recordingName, CancellationToken cancellationToken = default)
@@ -101,7 +101,7 @@ public sealed class AriRecordingsResource : IAriRecordingsResource
         var response = await _http.GetAsync(
             $"recordings/stored/{Uri.EscapeDataString(recordingName)}/file",
             HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("recording", recordingName);
         return await response.Content.ReadAsStreamAsync(cancellationToken);
     }
 }

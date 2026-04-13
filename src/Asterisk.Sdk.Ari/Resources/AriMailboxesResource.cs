@@ -26,7 +26,7 @@ public sealed class AriMailboxesResource : IAriMailboxesResource
     {
         var url = $"mailboxes/{Uri.EscapeDataString(mailboxName)}";
         var response = await _http.GetAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("mailbox", mailboxName);
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriMailbox)!;
     }
@@ -35,13 +35,13 @@ public sealed class AriMailboxesResource : IAriMailboxesResource
     {
         var url = $"mailboxes/{Uri.EscapeDataString(mailboxName)}?oldMessages={oldMessages}&newMessages={newMessages}";
         var response = await _http.PutAsync(url, null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("mailbox", mailboxName);
     }
 
     public async ValueTask DeleteAsync(string mailboxName, CancellationToken cancellationToken = default)
     {
         var url = $"mailboxes/{Uri.EscapeDataString(mailboxName)}";
         var response = await _http.DeleteAsync(url, cancellationToken);
-        await response.EnsureAriSuccessAsync();
+        await response.EnsureAriSuccessAsync("mailbox", mailboxName);
     }
 }
