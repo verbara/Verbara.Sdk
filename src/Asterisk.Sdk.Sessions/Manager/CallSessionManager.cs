@@ -27,6 +27,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
     private readonly SessionOptions _options;
     private readonly SessionStoreBase _store;
     private readonly ILogger<CallSessionManager> _logger;
+    private CancellationToken _shutdownToken;
 
     public CallSessionManager(
         IOptions<SessionOptions> options,
@@ -39,6 +40,9 @@ public sealed partial class CallSessionManager : ICallSessionManager
         _correlator = new SessionCorrelator(_options);
     }
 
+    /// <summary>Sets the cancellation token used for persistence operations during shutdown.</summary>
+    internal void SetShutdownToken(CancellationToken token) => _shutdownToken = token;
+
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to persist session {SessionId}")]
     private partial void LogPersistError(Exception ex, string sessionId);
 
@@ -46,7 +50,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
     {
         try
         {
-            await _store.SaveAsync(session, CancellationToken.None);
+            await _store.SaveAsync(session, _shutdownToken);
         }
         catch (Exception ex)
         {
@@ -359,6 +363,10 @@ public sealed partial class CallSessionManager : ICallSessionManager
     private void OnSessionCompleted(CallSession session)
     {
         _completedOrder.Enqueue(session.SessionId);
+
+        // Record tracing span
+        using var activity = SessionActivitySource.StartSessionCompleted(
+            session.SessionId, session.Direction, session.State, session.Duration);
 
         // Record metrics
         SessionMetrics.DurationMs.Record(session.Duration.TotalMilliseconds);

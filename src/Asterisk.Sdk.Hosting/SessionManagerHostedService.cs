@@ -11,7 +11,10 @@ internal sealed class SessionManagerHostedService(
     public Task StartAsync(CancellationToken cancellationToken)
     {
         if (sessionManager is CallSessionManager csm)
+        {
+            csm.SetShutdownToken(cancellationToken);
             csm.AttachToServer(server, "default");
+        }
         return Task.CompletedTask;
     }
 
