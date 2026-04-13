@@ -1,4 +1,5 @@
 using Asterisk.Sdk.Push.Events;
+using Asterisk.Sdk.Push.Topics;
 
 namespace Asterisk.Sdk.Push.Delivery;
 
@@ -20,6 +21,16 @@ public sealed class DefaultDeliveryFilter : IEventDeliveryFilter
         // Tenant isolation
         if (!string.Equals(pushEvent.Metadata.TenantId, subscriber.TenantId, StringComparison.Ordinal))
             return false;
+
+        // Optional topic pattern filtering (additive — only restricts, never expands delivery).
+        // Both the subscriber pattern and the event topic must be present for filtering to apply.
+        if (subscriber.RequestedTopicPattern is not null && pushEvent.Metadata.TopicPath is not null)
+        {
+            var pattern = TopicPattern.Parse(subscriber.RequestedTopicPattern);
+            var topic = TopicName.Parse(pushEvent.Metadata.TopicPath);
+            if (!pattern.Matches(topic, subscriber.UserId))
+                return false;
+        }
 
         // Broadcast events: deliver to every subscriber in the tenant.
         if (pushEvent.Metadata.UserId is null)

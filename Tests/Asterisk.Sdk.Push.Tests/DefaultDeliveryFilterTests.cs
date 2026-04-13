@@ -41,4 +41,60 @@ public class DefaultDeliveryFilterTests
         var evt = TestEventFactory.Create(tenantId: "tenant-1", userId: "alice");
         _filter.IsDeliverableToSubscriber(evt, Sub(tenant: "tenant-1", user: null)).Should().BeFalse();
     }
+
+    // --- Topic pattern filtering ---
+
+    private static SubscriberContext SubWithTopic(
+        string tenant = "tenant-1",
+        string? user = "alice",
+        string? topicPattern = null) =>
+        new(tenant, user, new HashSet<string>(), new HashSet<string>(), topicPattern);
+
+    [Fact]
+    public void IsDeliverableToSubscriber_ShouldReturnTrue_WhenTopicMatchesPattern()
+    {
+        var evt = TestEventFactory.Create(tenantId: "tenant-1", userId: null, topicPath: "queue.42.updated");
+        var sub = SubWithTopic(tenant: "tenant-1", user: "alice", topicPattern: "queue.*.updated");
+        _filter.IsDeliverableToSubscriber(evt, sub).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsDeliverableToSubscriber_ShouldReturnFalse_WhenTopicDoesNotMatchPattern()
+    {
+        var evt = TestEventFactory.Create(tenantId: "tenant-1", userId: null, topicPath: "queue.42.updated");
+        var sub = SubWithTopic(tenant: "tenant-1", user: "alice", topicPattern: "agent.**");
+        _filter.IsDeliverableToSubscriber(evt, sub).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsDeliverableToSubscriber_ShouldReturnTrue_WhenSubscriberHasNoTopicPattern()
+    {
+        var evt = TestEventFactory.Create(tenantId: "tenant-1", userId: null, topicPath: "queue.42.updated");
+        var sub = SubWithTopic(tenant: "tenant-1", user: "alice", topicPattern: null);
+        _filter.IsDeliverableToSubscriber(evt, sub).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsDeliverableToSubscriber_ShouldReturnTrue_WhenEventHasNoTopicPath()
+    {
+        var evt = TestEventFactory.Create(tenantId: "tenant-1", userId: null, topicPath: null);
+        var sub = SubWithTopic(tenant: "tenant-1", user: "alice", topicPattern: "agent.**");
+        _filter.IsDeliverableToSubscriber(evt, sub).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsDeliverableToSubscriber_ShouldReturnFalse_WhenTopicMatchesButTenantMismatch()
+    {
+        var evt = TestEventFactory.Create(tenantId: "tenant-A", userId: null, topicPath: "queue.42.updated");
+        var sub = SubWithTopic(tenant: "tenant-B", user: "alice", topicPattern: "queue.*.updated");
+        _filter.IsDeliverableToSubscriber(evt, sub).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsDeliverableToSubscriber_ShouldResolveSelf_WhenPatternContainsSelfPlaceholder()
+    {
+        var evt = TestEventFactory.Create(tenantId: "tenant-1", userId: null, topicPath: "agent.agent-123.state.changed");
+        var sub = SubWithTopic(tenant: "tenant-1", user: "agent-123", topicPattern: "agent.{self}.**");
+        _filter.IsDeliverableToSubscriber(evt, sub).Should().BeTrue();
+    }
 }
