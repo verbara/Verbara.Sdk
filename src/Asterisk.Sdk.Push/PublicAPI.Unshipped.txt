@@ -25,3 +25,16 @@ Asterisk.Sdk.Push.Topics.TopicRegistry.TopicRegistry() -> void
 Asterisk.Sdk.Push.Topics.TopicRegistry.Register<TEvent>(string! topicTemplate) -> void
 Asterisk.Sdk.Push.Topics.TopicRegistry.TryGetTemplate(System.Type! eventType, out string? topicTemplate) -> bool
 Asterisk.Sdk.Push.Topics.TopicRegistry.ResolveTopicName(System.Type! eventType, params object![]! args) -> Asterisk.Sdk.Push.Topics.TopicName?
+Asterisk.Sdk.Push.Authz.AuthorizationResult
+Asterisk.Sdk.Push.Authz.AuthorizationResult.AuthorizationResult(bool Allowed, string? Reason = null) -> void
+Asterisk.Sdk.Push.Authz.AuthorizationResult.Allowed.get -> bool
+Asterisk.Sdk.Push.Authz.AuthorizationResult.Reason.get -> string?
+static Asterisk.Sdk.Push.Authz.AuthorizationResult.Allow() -> Asterisk.Sdk.Push.Authz.AuthorizationResult
+static Asterisk.Sdk.Push.Authz.AuthorizationResult.Deny(string! reason) -> Asterisk.Sdk.Push.Authz.AuthorizationResult
+Asterisk.Sdk.Push.Authz.ISubscriptionAuthorizer
+Asterisk.Sdk.Push.Authz.ISubscriptionAuthorizer.CanSubscribe(Asterisk.Sdk.Push.Delivery.SubscriberContext! subscriber, Asterisk.Sdk.Push.Topics.TopicPattern requestedPattern) -> Asterisk.Sdk.Push.Authz.AuthorizationResult
+Asterisk.Sdk.Push.Authz.AllowAllSubscriptionAuthorizer
+Asterisk.Sdk.Push.Authz.AllowAllSubscriptionAuthorizer.AllowAllSubscriptionAuthorizer() -> void
+Asterisk.Sdk.Push.Authz.AllowAllSubscriptionAuthorizer.CanSubscribe(Asterisk.Sdk.Push.Delivery.SubscriberContext! subscriber, Asterisk.Sdk.Push.Topics.TopicPattern requestedPattern) -> Asterisk.Sdk.Push.Authz.AuthorizationResult
+Asterisk.Sdk.Push.Authz.ITopicPermissionMap
+Asterisk.Sdk.Push.Authz.ITopicPermissionMap.GetGrantedPatterns(string! permissionName) -> System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Push.Topics.TopicPattern>!
