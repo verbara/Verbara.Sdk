@@ -1,6 +1,7 @@
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
+using DotNet.Testcontainers.Images;
 using DotNet.Testcontainers.Networks;
 
 namespace Asterisk.Sdk.TestInfrastructure.Containers;
@@ -19,13 +20,8 @@ public sealed class AsteriskContainer : IAsyncDisposable
     public int AgiPort => _container.GetMappedPublicPort(4573);
     public string ContainerName => _container.Name;
 
-    public AsteriskContainer(INetwork network)
+    public AsteriskContainer(INetwork network, IImage image)
     {
-        var image = new ImageFromDockerfileBuilder()
-            .WithDockerfile("Dockerfile.asterisk")
-            .WithDockerfileDirectory(DockerPaths.DockerDir)
-            .Build();
-
         _container = new ContainerBuilder()
             .WithImage(image)
             .WithPortBinding(5038, true)
@@ -39,6 +35,17 @@ public sealed class AsteriskContainer : IAsyncDisposable
                     .UntilPortIsAvailable(5038)
                     .UntilPortIsAvailable(8088))
             .Build();
+    }
+
+    public static async Task<IImage> CreateImageAsync(CancellationToken ct = default)
+    {
+        var image = new ImageFromDockerfileBuilder()
+            .WithDockerfile("Dockerfile.asterisk")
+            .WithDockerfileDirectory(DockerPaths.DockerDir)
+            .Build();
+
+        await image.CreateAsync(ct).ConfigureAwait(false);
+        return image;
     }
 
     public Task StartAsync(CancellationToken ct = default) => _container.StartAsync(ct);
