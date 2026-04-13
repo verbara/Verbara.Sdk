@@ -16,3 +16,12 @@ Asterisk.Sdk.Push.Topics.TopicPattern.ResolveSelf(string! selfId) -> Asterisk.Sd
 static Asterisk.Sdk.Push.Topics.TopicPattern.Parse(string! pattern) -> Asterisk.Sdk.Push.Topics.TopicPattern
 static Asterisk.Sdk.Push.Topics.TopicPattern.operator ==(Asterisk.Sdk.Push.Topics.TopicPattern left, Asterisk.Sdk.Push.Topics.TopicPattern right) -> bool
 static Asterisk.Sdk.Push.Topics.TopicPattern.operator !=(Asterisk.Sdk.Push.Topics.TopicPattern left, Asterisk.Sdk.Push.Topics.TopicPattern right) -> bool
+Asterisk.Sdk.Push.Topics.ITopicRegistry
+Asterisk.Sdk.Push.Topics.ITopicRegistry.Register<TEvent>(string! topicTemplate) -> void
+Asterisk.Sdk.Push.Topics.ITopicRegistry.TryGetTemplate(System.Type! eventType, out string? topicTemplate) -> bool
+Asterisk.Sdk.Push.Topics.ITopicRegistry.ResolveTopicName(System.Type! eventType, params object![]! args) -> Asterisk.Sdk.Push.Topics.TopicName?
+Asterisk.Sdk.Push.Topics.TopicRegistry
+Asterisk.Sdk.Push.Topics.TopicRegistry.TopicRegistry() -> void
+Asterisk.Sdk.Push.Topics.TopicRegistry.Register<TEvent>(string! topicTemplate) -> void
+Asterisk.Sdk.Push.Topics.TopicRegistry.TryGetTemplate(System.Type! eventType, out string? topicTemplate) -> bool
+Asterisk.Sdk.Push.Topics.TopicRegistry.ResolveTopicName(System.Type! eventType, params object![]! args) -> Asterisk.Sdk.Push.Topics.TopicName?
