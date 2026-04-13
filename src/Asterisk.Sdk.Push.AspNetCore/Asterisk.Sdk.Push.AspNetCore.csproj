@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Asterisk.Sdk.Push.AspNetCore - SSE push delivery endpoints for ASP.NET Core. Maps IPushEventBus events to Server-Sent Events with topic filtering and JWT authorization.</Description>
+    <PackageTags>asterisk;push;sse;aspnetcore;realtime;sdk</PackageTags>
+    <!-- New package — no baseline published yet; skip binary compatibility check -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Asterisk.Sdk.Push.AspNetCore.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Asterisk.Sdk.Push\Asterisk.Sdk.Push.csproj" />
+  </ItemGroup>
+</Project>
