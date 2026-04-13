@@ -3,40 +3,9 @@ networks:
     name: sdk-test-net
 
 services:
-  # ── Asterisk (file-based config, no DB) ── used by most functional tests
-  asterisk:
-    image: docker-asterisk:latest
-    container_name: asterisk-sdk-test
-    networks:
-      - sdk-test
-    ports:
-      - "15038:5038"
-      - "15088:8088"
-    volumes:
-      - ./test-config/manager.conf:/etc/asterisk/manager.conf:ro
-      - ./test-config/extensions.conf:/etc/asterisk/extensions.conf:ro
-      - ./test-config/modules.conf:/etc/asterisk/modules.conf:ro
-      - ./test-config/pjsip.conf:/etc/asterisk/pjsip.conf:ro
-      - ./test-config/queues.conf:/etc/asterisk/queues.conf:ro
-      - ./test-config/voicemail.conf:/etc/asterisk/voicemail.conf:ro
-      - ./test-config/res_parking.conf:/etc/asterisk/res_parking.conf:ro
-      - ./test-config/confbridge.conf:/etc/asterisk/confbridge.conf:ro
-      - ./test-config/cdr.conf:/etc/asterisk/cdr.conf:ro
-      - ./test-config/cel.conf:/etc/asterisk/cel.conf:ro
-      - ./test-config/cdr_manager.conf:/etc/asterisk/cdr_manager.conf:ro
-      - ./test-config/cel_manager.conf:/etc/asterisk/cel_manager.conf:ro
-      - ./test-config/http.conf:/etc/asterisk/http.conf:ro
-      - ./test-config/ari.conf:/etc/asterisk/ari.conf:ro
-    healthcheck:
-      test: ["CMD", "asterisk", "-rx", "core show uptime"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 10s
-
-  # ── PostgreSQL for Realtime tests ──
+  # ── PostgreSQL for Realtime ──
   postgres:
-    image: postgres:18-alpine
+    image: postgres:17-alpine
     container_name: asterisk-sdk-test-db
     networks:
       - sdk-test
@@ -55,25 +24,48 @@ services:
       retries: 10
       start_period: 5s
 
-  # ── Asterisk Realtime (PJSIP/Queues via PostgreSQL) ── used by RealtimeDb tests
-  asterisk-realtime:
-    image: docker-asterisk:latest
-    container_name: asterisk-sdk-test-realtime
+  # ── Asterisk (unified image, realtime mode via PostgreSQL) ──
+  asterisk:
+    build:
+      context: .
+      dockerfile: Dockerfile.asterisk
+    container_name: asterisk-sdk-test
     networks:
       - sdk-test
     depends_on:
       postgres:
         condition: service_healthy
     ports:
-      - "15039:5038"
+      - "15038:5038"
+      - "15088:8088"
+      - "14573:4573"
     volumes:
-      - ./functional/asterisk-realtime-config:/etc/asterisk:ro
+      - ./functional/asterisk-config:/etc/asterisk:ro
     healthcheck:
       test: ["CMD", "asterisk", "-rx", "core show uptime"]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 15s
+
+  # ── PSTN Emulator (unified image, file-based mode) ──
+  pstn-emulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.asterisk
+    container_name: asterisk-sdk-test-pstn
+    networks:
+      - sdk-test
+    ports:
+      - "15039:5038"
+    volumes:
+      - ./functional/pstn-emulator-config:/etc/asterisk:ro
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show uptime"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   # ── Toxiproxy for network partition tests ──
   toxiproxy:

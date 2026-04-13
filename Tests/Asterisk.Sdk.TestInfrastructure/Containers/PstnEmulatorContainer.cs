@@ -1,11 +1,16 @@
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
+using DotNet.Testcontainers.Images;
 using DotNet.Testcontainers.Networks;
 
 namespace Asterisk.Sdk.TestInfrastructure.Containers;
 
-/// <summary>Wraps a PSTN emulator container (Asterisk image with pstn-emulator-config). Must share a network with the Asterisk container.</summary>
+/// <summary>
+/// Wraps a PSTN emulator container using the unified Asterisk image with file-based
+/// pstn-emulator-config. Must share a network with the main Asterisk container.
+/// Does NOT require Postgres — runs in file mode.
+/// </summary>
 public sealed class PstnEmulatorContainer : IAsyncDisposable
 {
     private readonly IContainer _container;
@@ -14,13 +19,8 @@ public sealed class PstnEmulatorContainer : IAsyncDisposable
     public int AmiPort => _container.GetMappedPublicPort(5038);
     public string ContainerName => _container.Name;
 
-    public PstnEmulatorContainer(INetwork network)
+    public PstnEmulatorContainer(INetwork network, IImage image)
     {
-        var image = new ImageFromDockerfileBuilder()
-            .WithDockerfile("Dockerfile.asterisk-file")
-            .WithDockerfileDirectory(DockerPaths.DockerDir)
-            .Build();
-
         _container = new ContainerBuilder()
             .WithImage(image)
             .WithPortBinding(5038, true)

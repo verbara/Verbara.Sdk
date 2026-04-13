@@ -5,24 +5,23 @@ using DotNet.Testcontainers.Networks;
 namespace Asterisk.Sdk.TestInfrastructure.Stacks;
 
 /// <summary>
-/// Full functional fixture: shared network, Asterisk + PSTN emulator + Toxiproxy + SIPp.
-/// Asterisk, PstnEmulator, and Toxiproxy start in parallel; SIPp starts after Asterisk is ready.
+/// Full functional fixture: Postgres (realtime DB) + Asterisk (realtime) + PSTN emulator (file) + Toxiproxy + SIPp.
+/// Postgres starts first, then Asterisk + PstnEmulator + Toxiproxy in parallel, then SIPp.
 /// </summary>
 public sealed class FunctionalFixture : IAsyncLifetime
 {
     private readonly INetwork _network;
 
-    public AsteriskContainer Asterisk { get; }
-    public PstnEmulatorContainer PstnEmulator { get; }
+    public PostgresContainer Postgres { get; }
+    public AsteriskContainer Asterisk { get; private set; } = null!;
+    public PstnEmulatorContainer PstnEmulator { get; private set; } = null!;
     public ToxiproxyContainer Toxiproxy { get; }
     public SippContainer Sipp { get; }
 
     public FunctionalFixture()
     {
         _network = new NetworkBuilder().Build();
-
-        Asterisk = new AsteriskContainer(_network);
-        PstnEmulator = new PstnEmulatorContainer(_network);
+        Postgres = new PostgresContainer(_network);
         Toxiproxy = new ToxiproxyContainer(_network);
         Sipp = new SippContainer(_network);
     }
@@ -31,7 +30,14 @@ public sealed class FunctionalFixture : IAsyncLifetime
     {
         await _network.CreateAsync().ConfigureAwait(false);
 
-        // Start Asterisk, PstnEmulator, and Toxiproxy in parallel
+        var image = await AsteriskContainer.CreateImageAsync().ConfigureAwait(false);
+        Asterisk = new AsteriskContainer(_network, image);
+        PstnEmulator = new PstnEmulatorContainer(_network, image);
+
+        // Postgres must be ready before Asterisk realtime can connect
+        await Postgres.StartAsync().ConfigureAwait(false);
+
+        // Asterisk, PstnEmulator, and Toxiproxy start in parallel
         await Task.WhenAll(
             Asterisk.StartAsync(),
             PstnEmulator.StartAsync(),
@@ -48,6 +54,7 @@ public sealed class FunctionalFixture : IAsyncLifetime
             Toxiproxy.DisposeAsync().AsTask(),
             PstnEmulator.DisposeAsync().AsTask(),
             Asterisk.DisposeAsync().AsTask()).ConfigureAwait(false);
+        await Postgres.DisposeAsync().ConfigureAwait(false);
         await _network.DisposeAsync().ConfigureAwait(false);
     }
 }
