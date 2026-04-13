@@ -2,6 +2,63 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.0] - 2026-04-13
+
+### Added
+
+- **NEW PACKAGE — `Asterisk.Sdk.Push.AspNetCore` (MIT):** SSE endpoint extraction from downstream consumers. `AddAsteriskPushAspNetCore()` DI registration and `IEndpointRouteBuilder.MapPushEndpoints(prefix = "/api/v1/push")` extension wire up Server-Sent Events delivery on top of `IPushEventBus`. Closes the v1.7+ deferred extraction.
+- **Push:** Hierarchical topic routing primitives in the `Asterisk.Sdk.Push.Topics` namespace.
+  - `TopicName` value object (segmented topic identifiers).
+  - `TopicPattern` with single-segment (`*`) and multi-segment (`**`) wildcards plus `{self}` placeholder resolution against the current subscriber.
+  - `ITopicRegistry` / `TopicRegistry` for mapping event types to topic templates.
+- **Push:** Subscription authorization in the new `Asterisk.Sdk.Push.Authz` namespace — `ISubscriptionAuthorizer`, `AuthorizationResult` (`Allow()` / `Deny(reason)`), `ITopicPermissionMap`, and `AllowAllSubscriptionAuthorizer` default.
+- **Push:** New `PushEventMetadata.TopicPath` and `SubscriberContext.RequestedTopicPattern` fields enable topic-aware routing without breaking the existing constructor signature (additional parameters default to `null`).
+- **Hosting:** `AddAsteriskPush()` now also registers `ITopicRegistry` (singleton) and `ISubscriptionAuthorizer` (singleton, defaults to `AllowAllSubscriptionAuthorizer`).
+
+### Changed
+
+- **Push:** `DefaultDeliveryFilter.IsDeliverableToSubscriber` now applies optional topic pattern matching when the subscriber declares `RequestedTopicPattern` and the event carries `TopicPath`. Backwards-compatible: subscribers/events without these fields behave as before.
+
+### Notes
+
+- 19 packages on nuget.org (was 18 in v1.7.0; the new package is `Asterisk.Sdk.Push.AspNetCore`).
+- 0 build warnings, 0 trim warnings, all unit tests pass.
+- `PublicAPI.Shipped.txt` finalized for `Asterisk.Sdk.Push`, `Asterisk.Sdk.Push.AspNetCore`, `Asterisk.Sdk.Hosting`, `Asterisk.Sdk.Sessions`, and `Asterisk.Sdk.Live` (the latter three promote leftover entries from v1.5.x and v1.7.0 that were never moved out of Unshipped at release time).
+
+---
+
+## [1.7.0] - 2026-04-13
+
+### Added
+
+- **Sessions:** `AgentSession` + `AgentSessionTracker` — per-agent state with rolling statistics (calls handled, talk/hold/wrap-up time, idle), driven by `ICallSessionManager.Events`. New `AgentSessionStateChanged` domain event.
+- **Sessions:** `QueueSession` + `QueueSessionTracker` — aggregate queue SLA using the previously-defined-but-unused `SessionOptions.SlaThreshold` (20s) and `.QueueMetricsWindow` (30m).
+- **Sessions:** `SessionReconciliationService` (`IHostedService` with `PeriodicTimer`) — drives the previously-orphaned `SessionReconciler.TryMarkOrphaned` / `.TryMarkTimedOut` on a `SessionOptions.ReconciliationInterval` (30s) cadence.
+- **Sessions:** `SessionOptions.WrapUpDuration` (default 30s).
+- **Observability:** `ActivitySource`s for `Asterisk.Sdk.Live`, `Asterisk.Sdk.Sessions`, and `Asterisk.Sdk.Push` (now 6/6 core packages).
+- **Observability:** `IHealthCheck` for Live, Sessions, and Push (now 6/6 core packages, auto-registered in `AddAsterisk()` / `AddSessionsCore()` / `AddAsteriskPush()`).
+- **Hosting:** `AsteriskTelemetry` static helper exposes `ActivitySourceNames[]` (6) and `MeterNames[]` (7) — discoverability without coupling to OpenTelemetry.
+
+### Fixed
+
+- **Sessions:** `CallSessionManager.PersistAsync` now uses the stored shutdown token instead of `CancellationToken.None`, enabling graceful shutdown.
+
+---
+
+## [1.6.0] - 2026-04-13
+
+### Added
+
+- **NEW PACKAGE — `Asterisk.Sdk.Push` (MIT):** Domain-layer push event bus with `IPushEventBus` (Rx-based default), `PushEvent` base record + `PushEventMetadata`, `IEventDeliveryFilter` / `DefaultDeliveryFilter`, `ISubscriptionRegistry` / `InMemorySubscriptionRegistry`, `PushMetrics`, and `BackpressureStrategy` (`DropOldest`/`DropNewest`/`Block`).
+
+### Fixed
+
+- **ARI:** Tightened exception scopes during event enrichment so a single bad event no longer kills the stream.
+- **Config:** `#include` directives now resolve relative to the current file's directory.
+- **AMI:** Restored `EventsDropped` counter regression coverage.
+
+---
+
 ## [1.5.3] - 2026-03-30
 
 ### Fixed

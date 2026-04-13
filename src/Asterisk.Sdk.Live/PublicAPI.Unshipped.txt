@@ -1,4 +1,1 @@
 #nullable enable
-Asterisk.Sdk.Live.Diagnostics.LiveHealthCheck
-Asterisk.Sdk.Live.Diagnostics.LiveHealthCheck.LiveHealthCheck(Asterisk.Sdk.Live.Server.AsteriskServer! server) -> void
-Asterisk.Sdk.Live.Diagnostics.LiveHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!

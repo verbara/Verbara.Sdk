@@ -1,6 +1,1 @@
 #nullable enable
-Asterisk.Sdk.Sessions.Diagnostics.SessionActivitySource
-Asterisk.Sdk.Sessions.Diagnostics.SessionHealthCheck
-Asterisk.Sdk.Sessions.Diagnostics.SessionHealthCheck.SessionHealthCheck(Asterisk.Sdk.Sessions.Manager.ICallSessionManager! manager) -> void
-Asterisk.Sdk.Sessions.Diagnostics.SessionHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
-static readonly Asterisk.Sdk.Sessions.Diagnostics.SessionActivitySource.Source -> System.Diagnostics.ActivitySource!
