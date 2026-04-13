@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Asterisk.Sdk.Config;
 
 /// <summary>
@@ -6,23 +8,57 @@ namespace Asterisk.Sdk.Config;
 ///   - Sections: [section-name]
 ///   - Variables: key = value
 ///   - Comments: ; comment and // comment
-///   - Directives: #include, #exec
+///   - Directives: #include, #tryinclude, #exec
 ///   - Template inheritance: [section](template)
+///   - Inline expansion of #include / #tryinclude with cycle detection
 /// </summary>
 public sealed class ConfigFileReader
 {
-    /// <summary>Parse an Asterisk .conf file from disk.</summary>
+    /// <summary>
+    /// Parse an Asterisk .conf file from disk, expanding any <c>#include</c> /
+    /// <c>#tryinclude</c> directives inline. Relative include paths are resolved
+    /// against the directory of the file containing the directive. Cycles in the
+    /// include graph are detected and reported as <see cref="ConfigParseException"/>.
+    /// </summary>
     public static ConfigFile Parse(string filePath)
     {
-        using var reader = new StreamReader(filePath);
-        return Parse(reader, filePath);
+        var canonical = Path.GetFullPath(filePath);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { canonical };
+        var file = new ConfigFile { FileName = canonical };
+        ParseFileInto(canonical, file, visited);
+        return file;
     }
 
-    /// <summary>Parse from a TextReader.</summary>
+    /// <summary>
+    /// Parse from a <see cref="TextReader"/>. <c>#include</c> / <c>#tryinclude</c>
+    /// directives are recorded on <see cref="ConfigFile.Directives"/> but are NOT
+    /// expanded — there is no anchor directory from which to resolve relative
+    /// paths. Use the file-path overload when include expansion is required.
+    /// </summary>
     public static ConfigFile Parse(TextReader reader, string? fileName = null)
     {
         var file = new ConfigFile { FileName = fileName ?? "unknown" };
-        ConfigCategory? currentCategory = null;
+        ParseReaderInto(reader, file, parentFilePath: null, visited: null);
+        return file;
+    }
+
+    private static void ParseFileInto(string canonicalPath, ConfigFile file, HashSet<string> visited)
+    {
+        // Read with explicit UTF-8 (AOT-safe, no encoding sniffing).
+        using var stream = new FileStream(canonicalPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        ParseReaderInto(reader, file, canonicalPath, visited);
+    }
+
+    private static void ParseReaderInto(
+        TextReader reader,
+        ConfigFile file,
+        string? parentFilePath,
+        HashSet<string>? visited)
+    {
+        ConfigCategory? currentCategory = file.Categories.Count > 0
+            ? file.Categories[^1]
+            : null;
         var lineNumber = 0;
 
         string? line;
@@ -40,13 +76,22 @@ public sealed class ConfigFileReader
             if (commentIdx > 0)
                 line = line[..commentIdx].TrimEnd();
 
-            // Directives: #include, #exec
+            // Directives: #include, #tryinclude, #exec
             if (line[0] == '#')
             {
                 var directive = ParseDirective(line, lineNumber);
                 if (directive is not null)
                 {
                     file.Directives.Add(directive);
+
+                    if (directive is IncludeDirective inc && visited is not null && parentFilePath is not null)
+                    {
+                        ExpandInclude(inc, file, parentFilePath, visited, lineNumber);
+                        // Inline expansion: subsequent bare variables in the parent
+                        // attach to whatever the now-last category is (matches
+                        // Asterisk's textual #include semantics).
+                        currentCategory = file.Categories.Count > 0 ? file.Categories[^1] : null;
+                    }
                 }
 
                 continue;
@@ -71,8 +116,40 @@ public sealed class ConfigFileReader
                 }
             }
         }
+    }
 
-        return file;
+    private static void ExpandInclude(
+        IncludeDirective directive,
+        ConfigFile file,
+        string parentFilePath,
+        HashSet<string> visited,
+        int lineNumber)
+    {
+        var parentDir = Path.GetDirectoryName(parentFilePath) ?? string.Empty;
+        var resolved = Path.IsPathRooted(directive.Path)
+            ? directive.Path
+            : Path.Combine(parentDir, directive.Path);
+        var canonical = Path.GetFullPath(resolved);
+
+        if (!File.Exists(canonical))
+        {
+            if (directive.IsTry)
+                return; // swallow per Asterisk semantics
+
+            throw new ConfigParseException(
+                $"Include file not found: {canonical} (referenced from {parentFilePath} line {lineNumber})");
+        }
+
+        if (visited.Contains(canonical))
+        {
+            throw new ConfigParseException(
+                $"Include cycle detected: {canonical} (referenced from {parentFilePath} line {lineNumber})");
+        }
+
+        // Branch the visited set so siblings (DAG) don't poison each other,
+        // but the current chain does carry the parent.
+        var nextVisited = new HashSet<string>(visited, StringComparer.OrdinalIgnoreCase) { canonical };
+        ParseFileInto(canonical, file, nextVisited);
     }
 
     private static ConfigCategory ParseSection(string line, int lineNumber)
@@ -129,9 +206,16 @@ public sealed class ConfigFileReader
 
     private static ConfigDirective? ParseDirective(string line, int lineNumber)
     {
+        // Order matters: #tryinclude must be matched before #include because of the prefix.
+        if (line.StartsWith("#tryinclude", StringComparison.OrdinalIgnoreCase))
+        {
+            var path = ExtractIncludePath(line[11..]);
+            return new IncludeDirective { Path = path, IsTry = true, LineNumber = lineNumber };
+        }
+
         if (line.StartsWith("#include", StringComparison.OrdinalIgnoreCase))
         {
-            var path = line[8..].Trim().Trim('"');
+            var path = ExtractIncludePath(line[8..]);
             return new IncludeDirective { Path = path, LineNumber = lineNumber };
         }
 
@@ -142,6 +226,24 @@ public sealed class ConfigFileReader
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Extract the include path from the operand of an <c>#include</c> /
+    /// <c>#tryinclude</c> directive. Supports both <c>"path"</c> and
+    /// <c>&lt;path&gt;</c> syntaxes; falls back to a bare token.
+    /// </summary>
+    private static string ExtractIncludePath(string operand)
+    {
+        var trimmed = operand.Trim();
+        if (trimmed.Length >= 2)
+        {
+            if (trimmed[0] == '"' && trimmed[^1] == '"')
+                return trimmed[1..^1];
+            if (trimmed[0] == '<' && trimmed[^1] == '>')
+                return trimmed[1..^1];
+        }
+        return trimmed.Trim('"');
     }
 
     private static int FindUnquotedSemicolon(ReadOnlySpan<char> line)
@@ -198,10 +300,13 @@ public abstract class ConfigDirective
     public int LineNumber { get; init; }
 }
 
-/// <summary>#include directive.</summary>
+/// <summary>#include or #tryinclude directive.</summary>
 public sealed class IncludeDirective : ConfigDirective
 {
     public string Path { get; init; } = string.Empty;
+
+    /// <summary>True when this was a <c>#tryinclude</c> (missing target is non-fatal).</summary>
+    public bool IsTry { get; init; }
 }
 
 /// <summary>#exec directive.</summary>
