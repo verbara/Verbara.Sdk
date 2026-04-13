@@ -12,6 +12,7 @@ Asterisk.Sdk.Push.Topics.TopicPattern
 Asterisk.Sdk.Push.Topics.TopicPattern.Equals(Asterisk.Sdk.Push.Topics.TopicPattern other) -> bool
 Asterisk.Sdk.Push.Topics.TopicPattern.Matches(Asterisk.Sdk.Push.Topics.TopicName topic, string? selfUserId = null) -> bool
 Asterisk.Sdk.Push.Topics.TopicPattern.Resolve(string? selfUserId) -> Asterisk.Sdk.Push.Topics.TopicName?
+Asterisk.Sdk.Push.Topics.TopicPattern.ResolveSelf(string! selfId) -> Asterisk.Sdk.Push.Topics.TopicPattern
 static Asterisk.Sdk.Push.Topics.TopicPattern.Parse(string! pattern) -> Asterisk.Sdk.Push.Topics.TopicPattern
 static Asterisk.Sdk.Push.Topics.TopicPattern.operator ==(Asterisk.Sdk.Push.Topics.TopicPattern left, Asterisk.Sdk.Push.Topics.TopicPattern right) -> bool
 static Asterisk.Sdk.Push.Topics.TopicPattern.operator !=(Asterisk.Sdk.Push.Topics.TopicPattern left, Asterisk.Sdk.Push.Topics.TopicPattern right) -> bool

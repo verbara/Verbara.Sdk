@@ -23,8 +23,8 @@ public sealed class TopicPatternTests
     [Fact]
     public void Parse_ShouldSucceed_WhenMultiLevelWildcard()
     {
-        var pattern = TopicPattern.Parse("queue.#");
-        pattern.ToString().Should().Be("queue.#");
+        var pattern = TopicPattern.Parse("queue.**");
+        pattern.ToString().Should().Be("queue.**");
     }
 
     [Fact]
@@ -44,8 +44,8 @@ public sealed class TopicPatternTests
     [Fact]
     public void Parse_ShouldSucceed_WhenGlobalWildcard()
     {
-        var pattern = TopicPattern.Parse("#");
-        pattern.ToString().Should().Be("#");
+        var pattern = TopicPattern.Parse("**");
+        pattern.ToString().Should().Be("**");
     }
 
     // ── Parse: invalid patterns ────────────────────────────────────────────
@@ -72,10 +72,10 @@ public sealed class TopicPatternTests
     }
 
     [Fact]
-    public void Parse_ShouldThrowArgumentException_WhenHashNotAlone()
+    public void Parse_ShouldThrowArgumentException_WhenDoubleStarNotAlone()
     {
-        var act = () => TopicPattern.Parse("queue.#.extra");
-        act.Should().Throw<ArgumentException>().WithMessage("*#*");
+        var act = () => TopicPattern.Parse("queue.**.extra");
+        act.Should().Throw<ArgumentException>().WithMessage("*'**'*");
     }
 
     [Fact]
@@ -129,36 +129,44 @@ public sealed class TopicPatternTests
         pattern.Matches(topic).Should().BeTrue();
     }
 
-    // ── Matches: # multi-level wildcard ───────────────────────────────────
+    // ── Matches: ** multi-level wildcard ──────────────────────────────────
 
     [Fact]
-    public void Matches_ShouldReturnTrue_WhenHashMatchesMultipleSegments()
+    public void Matches_ShouldReturnTrue_WhenDoubleStarMatchesMultipleSegments()
     {
-        var pattern = TopicPattern.Parse("queue.#");
+        var pattern = TopicPattern.Parse("queue.**");
         var topic = TopicName.Parse("queue.42.conversation.updated");
         pattern.Matches(topic).Should().BeTrue();
     }
 
     [Fact]
-    public void Matches_ShouldReturnTrue_WhenHashMatchesSingleSegment()
+    public void Matches_ShouldReturnTrue_WhenDoubleStarMatchesSingleSegment()
     {
-        var pattern = TopicPattern.Parse("queue.#");
+        var pattern = TopicPattern.Parse("queue.**");
         var topic = TopicName.Parse("queue.42");
         pattern.Matches(topic).Should().BeTrue();
     }
 
     [Fact]
-    public void Matches_ShouldReturnTrue_WhenStandaloneHashMatchesAnything()
+    public void Matches_ShouldReturnTrue_WhenDoubleStarMatchesZeroRemainingSegments()
     {
-        var pattern = TopicPattern.Parse("#");
+        var pattern = TopicPattern.Parse("queue.**");
+        var topic = TopicName.Parse("queue");
+        pattern.Matches(topic).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Matches_ShouldReturnTrue_WhenStandaloneDoubleStarMatchesAnything()
+    {
+        var pattern = TopicPattern.Parse("**");
         var topic = TopicName.Parse("any.deep.topic.path");
         pattern.Matches(topic).Should().BeTrue();
     }
 
     [Fact]
-    public void Matches_ShouldReturnFalse_WhenHashPrefixDoesNotMatch()
+    public void Matches_ShouldReturnFalse_WhenDoubleStarPrefixDoesNotMatch()
     {
-        var pattern = TopicPattern.Parse("agent.#");
+        var pattern = TopicPattern.Parse("agent.**");
         var topic = TopicName.Parse("queue.42.conversation.updated");
         pattern.Matches(topic).Should().BeFalse();
     }
@@ -223,6 +231,41 @@ public sealed class TopicPatternTests
         result.Should().BeNull();
     }
 
+    // ── ResolveSelf ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void ResolveSelf_ShouldReplaceSelfPlaceholder_WhenCalled()
+    {
+        var pattern = TopicPattern.Parse("agent.{self}.state.changed");
+        var resolved = pattern.ResolveSelf("user-99");
+        resolved.ToString().Should().Be("agent.user-99.state.changed");
+    }
+
+    [Fact]
+    public void ResolveSelf_ShouldPreserveWildcards_WhenPatternContainsThem()
+    {
+        var pattern = TopicPattern.Parse("agent.{self}.**");
+        var resolved = pattern.ResolveSelf("user-42");
+        resolved.ToString().Should().Be("agent.user-42.**");
+    }
+
+    [Fact]
+    public void ResolveSelf_ShouldReturnEquivalentPattern_WhenNoSelfPlaceholder()
+    {
+        var pattern = TopicPattern.Parse("queue.*.updated");
+        var resolved = pattern.ResolveSelf("user-99");
+        resolved.ToString().Should().Be("queue.*.updated");
+    }
+
+    [Fact]
+    public void ResolveSelf_ShouldMatchCorrectly_AfterResolution()
+    {
+        var pattern = TopicPattern.Parse("agent.{self}.**");
+        var resolved = pattern.ResolveSelf("user-99");
+        var topic = TopicName.Parse("agent.user-99.state.changed");
+        resolved.Matches(topic).Should().BeTrue();
+    }
+
     // ── Equality ──────────────────────────────────────────────────────────
 
     [Fact]
@@ -239,7 +282,7 @@ public sealed class TopicPatternTests
     public void Equals_ShouldBeFalse_WhenDifferentPattern()
     {
         var a = TopicPattern.Parse("queue.*.updated");
-        var b = TopicPattern.Parse("queue.#");
+        var b = TopicPattern.Parse("queue.**");
         a.Should().NotBe(b);
         (a != b).Should().BeTrue();
     }
