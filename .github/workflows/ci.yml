@@ -41,5 +41,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Run functional + integration tests
-        run: dotnet test Asterisk.Sdk.slnx --filter "Category=Functional|Category=Integration|Category=Realtime" --logger "console;verbosity=detailed"
+        # MaxCpuCount=1 serializes test projects so FunctionalTests and IntegrationTests
+        # do not start their Docker stacks concurrently (CI runner has limited resources).
+        run: dotnet test Asterisk.Sdk.slnx --filter "Category=Functional|Category=Integration|Category=Realtime" --logger "console;verbosity=detailed" -- RunConfiguration.MaxCpuCount=1
         timeout-minutes: 30
