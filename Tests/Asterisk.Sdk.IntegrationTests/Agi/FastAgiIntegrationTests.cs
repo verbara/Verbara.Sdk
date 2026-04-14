@@ -25,7 +25,7 @@ public class FastAgiIntegrationTests : IAsyncLifetime
         _amiConnection = AsteriskFixture.CreateAmiConnection(_fixture);
         await _amiConnection.ConnectAsync();
 
-        _agiServer = new FastAgiServer(_fixture.Asterisk.AgiPort, _strategy, NullLogger<FastAgiServer>.Instance);
+        _agiServer = new FastAgiServer(4573, _strategy, NullLogger<FastAgiServer>.Instance);
         await _agiServer.StartAsync();
     }
 
