@@ -4,10 +4,16 @@ USER root
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libopus0 \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && cd /tmp \
+    && curl -fsSL https://downloads.digium.com/pub/telephony/codec_opus/asterisk-22.0/x86-64/codec_opus-22.0_1.3.0-x86_64.tar.gz -o codec_opus.tar.gz \
+    && tar xzf codec_opus.tar.gz \
+    && cp codec_opus-22.0_1.3.0-x86_64/codec_opus.so /usr/lib/asterisk/modules/ \
+    && cp codec_opus-22.0_1.3.0-x86_64/format_ogg_opus.so /usr/lib/asterisk/modules/ \
+    && rm -rf codec_opus.tar.gz codec_opus-22.0_1.3.0-x86_64
 # Note: sound packs (EN/ES core+extra) are omitted — SDK tests exercise AMI/AGI/ARI
 # protocol only and do not require audio files. Removing them cuts image build time
-# from ~15 min to ~30 sec in CI (avoids 10 x asterisk.org/digium.com downloads).
+# significantly in CI (avoids 9 x asterisk.org downloads).
 
 COPY entrypoint-asterisk.sh /entrypoint-asterisk.sh
 RUN chmod 755 /entrypoint-asterisk.sh
