@@ -19,7 +19,7 @@ public sealed class SippContainer : IAsyncDisposable
             .WithNetwork(network)
             .WithBindMount(DockerPaths.SippScenariosDir, "/sipp-scenarios", AccessMode.ReadOnly)
             .WithEntrypoint("sleep", "infinity")
-            .WithWaitStrategy(Wait.ForUnixContainer())
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilCommandIsCompleted("true"))
             .Build();
     }
 
