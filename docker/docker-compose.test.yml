@@ -38,7 +38,6 @@ services:
     ports:
       - "15038:5038"
       - "15088:8088"
-      - "14573:4573"
     volumes:
       - ./functional/asterisk-config:/etc/asterisk:ro
     healthcheck:
