@@ -25,6 +25,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
             .WithImage(image)
             .WithPortBinding(5038, true)
             .WithPortBinding(8088, true)
+            // Linux Docker: route host.docker.internal → host gateway so Asterisk can reach the FastAGI test server.
             .WithExtraHost("host.docker.internal", "host-gateway")
             .WithBindMount(DockerPaths.AsteriskConfig, "/etc/asterisk", AccessMode.ReadOnly)
             .WithNetwork(network)
