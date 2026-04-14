@@ -36,15 +36,33 @@ public sealed class AsteriskContainer : IAsyncDisposable
             .Build();
     }
 
+    // Cache the image build so parallel fixture initializations (e.g. FunctionalCollection +
+    // RealtimeCollection in the same test assembly) share one build instead of competing.
+    private static IImage? _cachedImage;
+    private static readonly SemaphoreSlim _buildLock = new(1, 1);
+
     public static async Task<IImage> CreateImageAsync(CancellationToken ct = default)
     {
-        var image = new ImageFromDockerfileBuilder()
-            .WithDockerfile("Dockerfile.asterisk")
-            .WithDockerfileDirectory(DockerPaths.DockerDir)
-            .Build();
+        if (_cachedImage is not null) return _cachedImage;
 
-        await image.CreateAsync(ct).ConfigureAwait(false);
-        return image;
+        await _buildLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_cachedImage is not null) return _cachedImage;
+
+            var image = new ImageFromDockerfileBuilder()
+                .WithDockerfile("Dockerfile.asterisk")
+                .WithDockerfileDirectory(DockerPaths.DockerDir)
+                .Build();
+
+            await image.CreateAsync(ct).ConfigureAwait(false);
+            _cachedImage = image;
+            return image;
+        }
+        finally
+        {
+            _buildLock.Release();
+        }
     }
 
     public Task StartAsync(CancellationToken ct = default) => _container.StartAsync(ct);
