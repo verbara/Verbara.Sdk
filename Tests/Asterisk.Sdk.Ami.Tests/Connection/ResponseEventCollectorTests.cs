@@ -69,17 +69,18 @@ public class ResponseEventCollectorTests
         using var cts = new CancellationTokenSource();
         var events = new List<ManagerEvent>();
 
+        var firstEventRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var readTask = Task.Run(async () =>
         {
             await foreach (var evt in collector.ReadAllAsync(cts.Token))
             {
                 events.Add(evt);
+                firstEventRead.TrySetResult();
             }
         });
 
-        // Let the reader consume the first event
-        await Task.Delay(100);
-        // Cancel to abort the read
+        // Wait until the first event is consumed before cancelling (avoids timing-based flakiness)
+        await firstEventRead.Task;
         await cts.CancelAsync();
 
         var act = async () => await readTask;
