@@ -40,6 +40,14 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      - name: Pre-pull Docker images and build Asterisk test image
+        # Populate the Docker layer cache before tests run so container startups are fast.
+        run: |
+          docker pull postgres:17-alpine &
+          docker pull ghcr.io/shopify/toxiproxy:2.9.0 &
+          docker pull ctaloi/sipp &
+          wait
+          docker build -f docker/Dockerfile.asterisk docker/ -t asterisk-sdk-test-cache
       - name: Run functional + integration tests
         # MaxCpuCount=1 serializes test projects so FunctionalTests and IntegrationTests
         # do not start their Docker stacks concurrently (CI runner has limited resources).
