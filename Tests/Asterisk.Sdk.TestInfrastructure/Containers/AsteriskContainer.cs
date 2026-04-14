@@ -17,7 +17,6 @@ public sealed class AsteriskContainer : IAsyncDisposable
     public string Host => _container.Hostname;
     public int AmiPort => _container.GetMappedPublicPort(5038);
     public int AriPort => _container.GetMappedPublicPort(8088);
-    public int AgiPort => _container.GetMappedPublicPort(4573);
     public string ContainerName => _container.Name;
 
     public AsteriskContainer(INetwork network, IImage image)
@@ -26,7 +25,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
             .WithImage(image)
             .WithPortBinding(5038, true)
             .WithPortBinding(8088, true)
-            .WithPortBinding(4573, true)
+            .WithExtraHost("host.docker.internal", "host-gateway")
             .WithBindMount(DockerPaths.AsteriskConfig, "/etc/asterisk", AccessMode.ReadOnly)
             .WithNetwork(network)
             .WithNetworkAliases("asterisk")
