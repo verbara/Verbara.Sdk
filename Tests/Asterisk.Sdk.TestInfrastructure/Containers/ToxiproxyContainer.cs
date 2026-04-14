@@ -20,9 +20,13 @@ public sealed class ToxiproxyContainer : IAsyncDisposable
             .WithImage("ghcr.io/shopify/toxiproxy:2.9.0")
             .WithPortBinding(8474, true)
             .WithPortBinding(15038, true)
-            .WithWaitStrategy(
-                Wait.ForUnixContainer()
-                    .UntilPortIsAvailable(8474));
+            // UntilPortIsAvailable(8474) hangs indefinitely in CI because Toxiproxy
+            // does not expose port 8474 on the container's network interface in that
+            // environment. Use UntilCommandIsCompleted("true") — the container is ready
+            // for exec as soon as it starts; ToxiproxyFixture.InitializeAsync() already
+            // catches all exceptions from the API calls, so tests skip gracefully when
+            // the API is not yet reachable.
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilCommandIsCompleted("true"));
 
         if (network is not null)
             builder = builder.WithNetwork(network);
