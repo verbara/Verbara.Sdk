@@ -53,6 +53,13 @@ public sealed class AmiGaugeReconnectTests : FunctionalTestBase
         await connection.ConnectAsync();
         connection.State.Should().Be(AmiConnectionState.Connected);
 
+        // Baseline: capture gauge registration count AFTER initial connect but BEFORE
+        // any reconnects. Previous tests in the same run may have registered gauges on
+        // the shared static AmiMetrics.Meter, so we cannot assert an absolute count of 1.
+        var baseline = SnapshotObservableGauges(TimeSpan.FromMilliseconds(100));
+        var baselineActionsCount = baseline.TryGetValue(PendingActionsGauge, out var ba) ? ba.Count : 1;
+        var baselineEventsCount  = baseline.TryGetValue(PendingEventsGauge,  out var be) ? be.Count : 1;
+
         // Act: 3 reconnect cycles. Each cycle = restart container + wait for Reconnected event.
         const int reconnectCycles = 3;
         for (var cycle = 1; cycle <= reconnectCycles; cycle++)
@@ -65,6 +72,10 @@ public sealed class AmiGaugeReconnectTests : FunctionalTestBase
             {
                 await DockerControl.RestartContainerAsync();
                 await DockerControl.WaitForHealthyAsync();
+
+                // Guard: reconnect may have completed before we start waiting
+                if (connection.State == AmiConnectionState.Connected)
+                    reconnected.TrySetResult();
 
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
                 cts.Token.Register(() => reconnected.TrySetCanceled());
@@ -84,9 +95,8 @@ public sealed class AmiGaugeReconnectTests : FunctionalTestBase
                 $"PingAction must succeed after reconnect cycle {cycle}");
         }
 
-        // Assert: take a single ObservableInstrument snapshot and verify
-        //   (a) exactly one observation per gauge (no duplicate registrations),
-        //   (b) values are non-negative numbers (callbacks read live state).
+        // Assert: snapshot must have the SAME gauge count as baseline — reconnects must
+        // NOT add new registrations (that was the original bug fixed by _gaugesRegistered).
         var snapshot = SnapshotObservableGauges(TimeSpan.FromMilliseconds(500));
 
         snapshot.Should().ContainKey(PendingActionsGauge,
@@ -94,15 +104,15 @@ public sealed class AmiGaugeReconnectTests : FunctionalTestBase
         snapshot.Should().ContainKey(PendingEventsGauge,
             "event_pump.pending gauge must continue emitting after reconnects");
 
-        snapshot[PendingActionsGauge].Should().HaveCount(1,
-            "duplicate observations indicate the gauge was re-registered on reconnect (the original bug)");
-        snapshot[PendingEventsGauge].Should().HaveCount(1,
-            "duplicate observations indicate the gauge was re-registered on reconnect (the original bug)");
+        snapshot[PendingActionsGauge].Should().HaveCount(baselineActionsCount,
+            "reconnects must not add new gauge registrations (the original bug was re-registration on each reconnect)");
+        snapshot[PendingEventsGauge].Should().HaveCount(baselineEventsCount,
+            "reconnects must not add new gauge registrations (the original bug was re-registration on each reconnect)");
 
-        snapshot[PendingActionsGauge][0].Should().BeGreaterThanOrEqualTo(0)
-            .And.NotBe(double.NaN);
-        snapshot[PendingEventsGauge][0].Should().BeGreaterThanOrEqualTo(0)
-            .And.NotBe(double.NaN);
+        snapshot[PendingActionsGauge].Should().AllSatisfy(v =>
+            v.Should().BeGreaterThanOrEqualTo(0).And.NotBe(double.NaN));
+        snapshot[PendingEventsGauge].Should().AllSatisfy(v =>
+            v.Should().BeGreaterThanOrEqualTo(0).And.NotBe(double.NaN));
     }
 
     /// <summary>
