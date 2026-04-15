@@ -1,3 +1,4 @@
+using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using Asterisk.Sdk.TestInfrastructure.Containers;
 using Asterisk.Sdk.TestInfrastructure.Stacks;
 
@@ -17,6 +18,19 @@ public sealed class FunctionalTestFixture : Xunit.IAsyncLifetime
     public ToxiproxyContainer Toxiproxy => _inner.Toxiproxy;
     public SippContainer Sipp => _inner.Sipp;
 
-    public Task InitializeAsync() => _inner.InitializeAsync();
-    public Task DisposeAsync() => _inner.DisposeAsync();
+    public async Task InitializeAsync()
+    {
+        await _inner.InitializeAsync().ConfigureAwait(false);
+        // Expose the actual Testcontainers container name so DockerControl.Kill/Start/
+        // WaitForHealthy operations target the right container instead of the legacy
+        // hardcoded "asterisk-sdk-test" name used by docker-compose mode.
+        DockerControl.DefaultContainerName = _inner.Asterisk.ContainerName.TrimStart('/');
+    }
+
+    public async Task DisposeAsync()
+    {
+        // Reset to default so DockerControl does not leak state into other collections.
+        DockerControl.DefaultContainerName = "asterisk-sdk-test";
+        await _inner.DisposeAsync().ConfigureAwait(false);
+    }
 }

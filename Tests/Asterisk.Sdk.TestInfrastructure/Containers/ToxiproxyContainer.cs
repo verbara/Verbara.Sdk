@@ -21,10 +21,13 @@ public sealed class ToxiproxyContainer : IAsyncDisposable
             .WithPortBinding(8474, true)
             .WithPortBinding(15038, true)
             // ghcr.io/shopify/toxiproxy:2.9.0 is a distroless Go image — no /bin/sh.
-            // UntilCommandIsCompleted("true") wraps in /bin/sh -c true which fails forever.
-            // The binary is /toxiproxy; --version exits 0 as soon as the container starts,
-            // giving us a reliable readiness signal without requiring a shell.
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilCommandIsCompleted("/toxiproxy", "--version"));
+            // UntilCommandIsCompleted("/toxiproxy", "--version") only confirms the binary
+            // exists but exits immediately without starting the server, causing a race where
+            // ToxiproxyFixture.InitializeAsync() calls the REST API before it is ready.
+            // UntilHttpRequestIsSucceeded polls GET /proxies on port 8474 from the host side
+            // (no shell needed), returning only once the HTTP server is accepting requests.
+            .WithWaitStrategy(Wait.ForUnixContainer()
+                .UntilHttpRequestIsSucceeded(req => req.ForPort(8474).ForPath("/proxies")));
 
         if (network is not null)
             builder = builder.WithNetwork(network);
