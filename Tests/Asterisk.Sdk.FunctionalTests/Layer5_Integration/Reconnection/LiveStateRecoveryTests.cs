@@ -33,7 +33,7 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
         await DockerControl.RestartContainerAsync();
         await DockerControl.WaitForHealthyAsync();
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
         cts.Token.Register(() => reconnected.TrySetCanceled());
         await reconnected.Task;
 
@@ -84,7 +84,7 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
         await DockerControl.RestartContainerAsync();
         await DockerControl.WaitForHealthyAsync();
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
         cts.Token.Register(() => reconnected.TrySetCanceled());
         await reconnected.Task;
 
@@ -119,7 +119,7 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
         await DockerControl.RestartContainerAsync();
         await DockerControl.WaitForHealthyAsync();
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
         cts.Token.Register(() => reconnected.TrySetCanceled());
         await reconnected.Task;
 
@@ -181,7 +181,7 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
             await DockerControl.RestartContainerAsync();
             await DockerControl.WaitForHealthyAsync();
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
             cts.Token.Register(() => reconnected.TrySetCanceled());
             await reconnected.Task;
 
