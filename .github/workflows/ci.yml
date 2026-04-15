@@ -18,7 +18,7 @@ jobs:
       - name: Build
         run: dotnet build Asterisk.Sdk.slnx -c Release
       - name: Run unit tests
-        run: dotnet test Asterisk.Sdk.slnx --no-build -c Release --filter "Category!=Functional&Category!=Integration&Category!=Realtime" --logger "console;verbosity=normal"
+        run: dotnet test Asterisk.Sdk.slnx --no-build -c Release --filter "Category!=Functional&Category!=Integration&Category!=Realtime&Category!=Spike" --logger "console;verbosity=normal"
 
   aot-check:
     name: AOT Trim Check
