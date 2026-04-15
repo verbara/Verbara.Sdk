@@ -27,9 +27,12 @@ public sealed class PstnEmulatorContainer : IAsyncDisposable
             .WithBindMount(DockerPaths.PstnEmulatorConfig, "/etc/asterisk", AccessMode.ReadOnly)
             .WithNetwork(network)
             .WithNetworkAliases("pstn-emulator")
+            // UntilPortIsAvailable(5038) relies on /proc/net/tcp which is not populated
+            // in GitHub Actions CI. Use the same Asterisk CLI readiness check as
+            // AsteriskContainer — works reliably across all environments.
             .WithWaitStrategy(
                 Wait.ForUnixContainer()
-                    .UntilPortIsAvailable(5038))
+                    .UntilCommandIsCompleted("asterisk", "-rx", "core show uptime"))
             .Build();
     }
 
