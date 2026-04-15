@@ -291,7 +291,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         using var subscription = connection.Subscribe(
             new BridgeEventObserver(onEnter: enterEvents.Add));
 
-        // Originate three channels into the same ConfBridge
+        // Originate three channels into the same ConfBridge — stagger slightly for CI
         for (var i = 1; i <= 3; i++)
         {
             await connection.SendActionAsync(new OriginateAction
@@ -302,10 +302,17 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
                 IsAsync = true,
                 ActionId = $"bridge-three-ch{i}"
             });
+            await Task.Delay(TimeSpan.FromMilliseconds(800));
         }
 
-        // Allow all three to enter — extra time for CI runners
-        await Task.Delay(TimeSpan.FromSeconds(10));
+        // Poll BridgeManager until all 3 channels are tracked (up to 30 s for CI runners)
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (server.Bridges.ActiveBridges.Any(b => b.NumChannels >= 3))
+                break;
+            await Task.Delay(TimeSpan.FromMilliseconds(500));
+        }
 
         // Filter enter events for this bridge
         var bridgeIds = enterEvents
@@ -317,8 +324,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         bridgeIds.Should().NotBeEmpty("at least one bridge must have been created");
 
         // Verify BridgeManager tracks the channels — NumChannels is an independent
-        // counter (Channels.Count) that increments per BridgeEnterEvent UniqueId,
-        // making it more reliable than BridgeNumChannels in the raw event payload.
+        // counter (Channels.Count) that increments per BridgeEnterEvent UniqueId.
         var activeBridges = server.Bridges.ActiveBridges.ToList();
         var largestBridge = activeBridges.MaxBy(b => b.NumChannels);
         largestBridge.Should().NotBeNull();
