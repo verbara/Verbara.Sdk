@@ -26,23 +26,42 @@ public static class DockerControl
     public static async Task WaitForHealthyAsync(string? name = null, TimeSpan? timeout = null)
     {
         var containerName = name ?? DefaultContainerName;
-        // Increase to 60s — Asterisk in Testcontainers takes longer than the previous
-        // 30s default, especially in GitHub Actions CI after a container restart/kill.
+        // 60s — Asterisk in Testcontainers takes longer than the previous 30s default,
+        // especially in GitHub Actions CI after a container restart/kill.
         timeout ??= TimeSpan.FromSeconds(60);
         var deadline = DateTime.UtcNow + timeout.Value;
+
+        // Read mapped host/port from env vars so the TCP probe targets the correct endpoint.
+        var amiHost = Environment.GetEnvironmentVariable("ASTERISK_HOST") ?? "localhost";
+        var amiPort = int.TryParse(
+            Environment.GetEnvironmentVariable("ASTERISK_AMI_PORT"),
+            System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var p) ? p : 5038;
 
         while (DateTime.UtcNow < deadline)
         {
             try
             {
-                // Use docker exec with ArgumentList so "core show uptime" is passed
-                // as a single argument to asterisk -rx (required by Asterisk CLI).
-                // This mirrors the Testcontainers wait strategy on AsteriskContainer and
-                // works in distroless-adjacent environments with no /bin/sh.
+                // Step 1: verify Asterisk CLI is responsive (core process running).
+                // Uses ArgumentList so "core show uptime" is passed as a single argument
+                // to asterisk -rx — required by the Asterisk CLI argument parser.
                 var result = await ExecInContainerAsync(containerName, "asterisk", "-rx", "core show uptime")
                     .ConfigureAwait(false);
-                if (!string.IsNullOrWhiteSpace(result) && !result.Contains("Unable to connect"))
-                    return;
+                if (string.IsNullOrWhiteSpace(result) || result.Contains("Unable to connect"))
+                {
+                    await Task.Delay(1000).ConfigureAwait(false);
+                    continue;
+                }
+
+                // Step 2: verify the AMI TCP port is accepting connections.
+                // docker exec confirms the Asterisk process is up, but the AMI module
+                // (manager.so) may not have started listening yet — a TCP probe here
+                // prevents the next test from getting Connection refused on ConnectAsync.
+                using var probe = new System.Net.Sockets.TcpClient();
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(2));
+                await probe.ConnectAsync(amiHost, amiPort, cts.Token).ConfigureAwait(false);
+                return;
             }
             catch (Exception) { /* container not yet ready — retry */ }
             await Task.Delay(1000).ConfigureAwait(false);
