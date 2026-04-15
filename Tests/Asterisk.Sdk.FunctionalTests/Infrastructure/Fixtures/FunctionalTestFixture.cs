@@ -21,15 +21,18 @@ public sealed class FunctionalTestFixture : Xunit.IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _inner.InitializeAsync().ConfigureAwait(false);
-        // Expose the actual Testcontainers container name so DockerControl.Kill/Start/
-        // WaitForHealthy operations target the right container instead of the legacy
-        // hardcoded "asterisk-sdk-test" name used by docker-compose mode.
+        // Expose the AsteriskContainer so DockerControl.Kill/Start/Restart use the
+        // Testcontainers-native lifecycle API instead of the docker CLI. This avoids
+        // the docker-CLI-managed restart failing silently in CI.
+        DockerControl.Container = _inner.Asterisk;
+        // Also set the name for WaitForHealthyAsync TCP-probe path (docker-compose compat).
         DockerControl.DefaultContainerName = _inner.Asterisk.ContainerName.TrimStart('/');
     }
 
     public async Task DisposeAsync()
     {
-        // Reset to default so DockerControl does not leak state into other collections.
+        // Reset to defaults so DockerControl does not leak state into other collections.
+        DockerControl.Container = null;
         DockerControl.DefaultContainerName = "asterisk-sdk-test";
         await _inner.DisposeAsync().ConfigureAwait(false);
     }
