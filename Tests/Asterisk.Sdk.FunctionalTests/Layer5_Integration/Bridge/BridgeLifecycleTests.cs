@@ -284,6 +284,14 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         });
         await connection.ConnectAsync();
 
+        // Clear any channels from prior bridge tests so Asterisk is not resource-constrained
+        try
+        {
+            await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
+        }
+        catch { /* best effort */ }
+        await Task.Delay(TimeSpan.FromSeconds(3));
+
         var server = new AsteriskServer(connection, LoggerFactory.CreateLogger<AsteriskServer>());
         await server.StartAsync();
 
@@ -291,45 +299,58 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         using var subscription = connection.Subscribe(
             new BridgeEventObserver(onEnter: enterEvents.Add));
 
-        // Originate three channels into the same ConfBridge — stagger slightly for CI
-        for (var i = 1; i <= 3; i++)
+        try
         {
-            await connection.SendActionAsync(new OriginateAction
+            // Originate three channels into the same ConfBridge — stagger for CI
+            for (var i = 1; i <= 3; i++)
             {
-                Channel = "Local/600@test-functional/n",
-                Application = "ConfBridge",
-                Data = "test-bridge-05",
-                IsAsync = true,
-                ActionId = $"bridge-three-ch{i}"
-            });
-            await Task.Delay(TimeSpan.FromMilliseconds(800));
-        }
+                await connection.SendActionAsync(new OriginateAction
+                {
+                    Channel = "Local/600@test-functional/n",
+                    Application = "ConfBridge",
+                    Data = "test-bridge-05",
+                    IsAsync = true,
+                    ActionId = $"bridge-three-ch{i}"
+                });
+                await Task.Delay(TimeSpan.FromMilliseconds(800));
+            }
 
-        // Poll BridgeManager until all 3 channels are tracked (up to 30 s for CI runners)
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
-        while (DateTimeOffset.UtcNow < deadline)
+            // Poll BridgeManager until all 3 channels are tracked (up to 15 s)
+            var deadline = DateTimeOffset.UtcNow.AddSeconds(15);
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                if (server.Bridges.ActiveBridges.Any(b => b.NumChannels >= 3))
+                    break;
+                await Task.Delay(TimeSpan.FromMilliseconds(500));
+            }
+
+            // Filter enter events for this bridge
+            var bridgeIds = enterEvents
+                .Select(e => e.BridgeUniqueid)
+                .Where(id => id is not null)
+                .Distinct()
+                .ToList();
+
+            bridgeIds.Should().NotBeEmpty("at least one bridge must have been created");
+
+            // Verify BridgeManager tracks the channels — NumChannels is Channels.Count,
+            // an independent counter that increments per BridgeEnterEvent UniqueId.
+            var activeBridges = server.Bridges.ActiveBridges.ToList();
+            var largestBridge = activeBridges.MaxBy(b => b.NumChannels);
+            largestBridge.Should().NotBeNull();
+            largestBridge!.NumChannels.Should().BeGreaterThanOrEqualTo(3,
+                "BridgeManager must track all 3 channels in the bridge");
+        }
+        finally
         {
-            if (server.Bridges.ActiveBridges.Any(b => b.NumChannels >= 3))
-                break;
-            await Task.Delay(TimeSpan.FromMilliseconds(500));
+            // Hang up all channels immediately so subsequent tests start clean
+            try
+            {
+                await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
+            }
+            catch { /* best effort */ }
+            await Task.Delay(TimeSpan.FromSeconds(1));
         }
-
-        // Filter enter events for this bridge
-        var bridgeIds = enterEvents
-            .Select(e => e.BridgeUniqueid)
-            .Where(id => id is not null)
-            .Distinct()
-            .ToList();
-
-        bridgeIds.Should().NotBeEmpty("at least one bridge must have been created");
-
-        // Verify BridgeManager tracks the channels — NumChannels is an independent
-        // counter (Channels.Count) that increments per BridgeEnterEvent UniqueId.
-        var activeBridges = server.Bridges.ActiveBridges.ToList();
-        var largestBridge = activeBridges.MaxBy(b => b.NumChannels);
-        largestBridge.Should().NotBeNull();
-        largestBridge!.NumChannels.Should().BeGreaterThanOrEqualTo(3,
-            "BridgeManager must track all 3 channels in the bridge");
     }
 
     /// <summary>
