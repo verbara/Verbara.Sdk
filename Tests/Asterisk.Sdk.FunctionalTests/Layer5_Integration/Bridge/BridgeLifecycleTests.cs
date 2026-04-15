@@ -44,7 +44,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         // Originate two channels into the same ConfBridge
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/600@test-functional/n",
             Application = "ConfBridge",
             Data = "test-bridge-01",
             IsAsync = true,
@@ -53,7 +53,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/600@test-functional/n",
             Application = "ConfBridge",
             Data = "test-bridge-01",
             IsAsync = true,
@@ -104,7 +104,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         // Originate two channels into the same ConfBridge
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/600@test-functional/n",
             Application = "ConfBridge",
             Data = "test-bridge-02",
             IsAsync = true,
@@ -113,7 +113,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/600@test-functional/n",
             Application = "ConfBridge",
             Data = "test-bridge-02",
             IsAsync = true,
@@ -169,7 +169,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         // Originate two channels into a ConfBridge
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/600@test-functional/n",
             Application = "ConfBridge",
             Data = "test-bridge-03",
             IsAsync = true,
@@ -178,7 +178,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/600@test-functional/n",
             Application = "ConfBridge",
             Data = "test-bridge-03",
             IsAsync = true,
@@ -221,7 +221,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         // First ConfBridge pair
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/600@test-functional/n",
             Application = "ConfBridge",
             Data = "test-bridge-04a",
             IsAsync = true,
@@ -229,7 +229,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         });
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/600@test-functional/n",
             Application = "ConfBridge",
             Data = "test-bridge-04a",
             IsAsync = true,
@@ -239,7 +239,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         // Second ConfBridge pair (different conference name)
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/600@test-functional/n",
             Application = "ConfBridge",
             Data = "test-bridge-04b",
             IsAsync = true,
@@ -247,7 +247,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         });
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/600@test-functional/n",
             Application = "ConfBridge",
             Data = "test-bridge-04b",
             IsAsync = true,
@@ -290,7 +290,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         {
             await connection.SendActionAsync(new OriginateAction
             {
-                Channel = "Local/600@test-functional",
+                Channel = "Local/600@test-functional/n",
                 Application = "ConfBridge",
                 Data = "test-bridge-05",
                 IsAsync = true,
@@ -354,7 +354,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         // Originate two channels into ConfBridge, then hang them up
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/600@test-functional/n",
             Application = "ConfBridge",
             Data = "test-bridge-06",
             IsAsync = true,
@@ -362,7 +362,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         });
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/600@test-functional",
+            Channel = "Local/600@test-functional/n",
             Application = "ConfBridge",
             Data = "test-bridge-06",
             IsAsync = true,
