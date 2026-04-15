@@ -8,7 +8,7 @@ using Xunit.Abstractions;
 namespace Asterisk.Sdk.Redis.Spike.Benchmarks;
 
 [Collection("Redis")]
-[Trait("Category", "Integration")]
+[Trait("Category", "Spike")]
 public class RedisLatencyBenchmark : IAsyncLifetime
 {
     private readonly RedisFixture _fixture;
