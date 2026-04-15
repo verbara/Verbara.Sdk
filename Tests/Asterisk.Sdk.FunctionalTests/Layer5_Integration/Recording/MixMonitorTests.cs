@@ -3,7 +3,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Recording;
 using System.Collections.Concurrent;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Events;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -23,7 +22,7 @@ public sealed class MixMonitorTests : FunctionalTestBase
     /// <summary>
     /// Starting MixMonitor on an active channel should fire MixMonitorStartEvent.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task MixMonitor_ShouldFireStartEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -60,7 +59,7 @@ public sealed class MixMonitorTests : FunctionalTestBase
         if (channelResult != channelTcs.Task)
             return; // Graceful skip — channel did not appear in time
 
-        var channelName = channelTcs.Task.Result.Channel!;
+        var channelName = (await channelTcs.Task).Channel!;
 
         // Start MixMonitor on the channel
         await connection.SendActionAsync(new MixMonitorAction
@@ -79,7 +78,7 @@ public sealed class MixMonitorTests : FunctionalTestBase
     /// <summary>
     /// Stopping MixMonitor on an active channel should fire MixMonitorStopEvent.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task StopMixMonitor_ShouldFireStopEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -115,7 +114,7 @@ public sealed class MixMonitorTests : FunctionalTestBase
         if (channelResult != channelTcs.Task)
             return;
 
-        var channelName = channelTcs.Task.Result.Channel!;
+        var channelName = (await channelTcs.Task).Channel!;
 
         // Start MixMonitor
         await connection.SendActionAsync(new MixMonitorAction
@@ -142,7 +141,7 @@ public sealed class MixMonitorTests : FunctionalTestBase
     /// <summary>
     /// Muting a MixMonitor recording should fire MixMonitorMuteEvent.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task MixMonitorMute_ShouldFireMuteEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -178,7 +177,7 @@ public sealed class MixMonitorTests : FunctionalTestBase
         if (channelResult != channelTcs.Task)
             return;
 
-        var channelName = channelTcs.Task.Result.Channel!;
+        var channelName = (await channelTcs.Task).Channel!;
 
         // Start MixMonitor first
         await connection.SendActionAsync(new MixMonitorAction
@@ -208,7 +207,7 @@ public sealed class MixMonitorTests : FunctionalTestBase
     /// Dialplan-driven MixMonitor on ext 900 should fire both Start and Stop events
     /// as the dialplan executes MixMonitor then StopMixMonitor.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task DialplanMixMonitor_ShouldFireStartAndStopEvents()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -248,7 +247,7 @@ public sealed class MixMonitorTests : FunctionalTestBase
     /// MixMonitor Start and Stop events from ext 900 should reference the same Channel,
     /// ensuring consistent event correlation.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task MixMonitor_StartAndStop_ShouldHaveMatchingChannel()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

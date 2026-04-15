@@ -3,7 +3,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.HealthChecks;
 using Asterisk.Sdk.Ami.Diagnostics;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Enums;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using Asterisk.Sdk.Hosting;
@@ -17,7 +16,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 [Trait("Category", "Functional")]
 public sealed class HealthCheckEdgeCaseTests : FunctionalTestBase
 {
-    [AsteriskContainerFact]
+    [Fact]
     public async Task AmiHealthCheck_ShouldTransitionStates_DuringReconnect()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -80,7 +79,7 @@ public sealed class HealthCheckEdgeCaseTests : FunctionalTestBase
         recoveredResult.Status.Should().Be(HealthStatus.Healthy, "health check must be Healthy after reconnect");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task HealthCheck_ShouldNotHang_UnderHighLoad()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -127,7 +126,7 @@ public sealed class HealthCheckEdgeCaseTests : FunctionalTestBase
             r.Response.Should().Be("Success", "all pings must succeed under load"));
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task HealthCheck_ShouldReflectActualState_AfterReconnect()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -195,7 +194,7 @@ public sealed class HealthCheckEdgeCaseTests : FunctionalTestBase
             "health check status must be consistent with connection state");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task AllHealthChecks_ShouldBeRegistrable_ViaHostBuilder()
     {
         var host = Host.CreateDefaultBuilder()

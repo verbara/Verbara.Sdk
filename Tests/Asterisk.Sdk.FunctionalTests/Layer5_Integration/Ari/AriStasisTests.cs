@@ -2,7 +2,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Ari;
 
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ari.Events;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -23,7 +22,7 @@ public sealed class AriStasisTests : FunctionalTestBase
     /// Originating a channel to an extension routed to Stasis(test-app) should
     /// produce a StasisStartEvent with a non-empty channel ID.
     /// </summary>
-    [AriContainerFact]
+    [Fact]
     public async Task StasisStart_ShouldFireWhenChannelEntersStasis()
     {
         await using var ariClient = AriClientFactory.Create(LoggerFactory);
@@ -67,7 +66,7 @@ public sealed class AriStasisTests : FunctionalTestBase
     /// Hanging up a channel in Stasis should produce a StasisEndEvent
     /// with the same channel ID as the original StasisStartEvent.
     /// </summary>
-    [AriContainerFact]
+    [Fact]
     public async Task StasisEnd_ShouldFireWhenChannelLeavesStasis()
     {
         await using var ariClient = AriClientFactory.Create(LoggerFactory);
@@ -119,7 +118,7 @@ public sealed class AriStasisTests : FunctionalTestBase
     /// <summary>
     /// Answering a channel in Stasis via ARI should complete without error.
     /// </summary>
-    [AriContainerFact]
+    [Fact]
     public async Task AriChannels_ShouldAnswerChannel()
     {
         await using var ariClient = AriClientFactory.Create(LoggerFactory);
@@ -166,7 +165,7 @@ public sealed class AriStasisTests : FunctionalTestBase
     /// Hanging up a channel via ARI Channels.HangupAsync should trigger a
     /// StasisEndEvent with the correct channel ID.
     /// </summary>
-    [AriContainerFact]
+    [Fact]
     public async Task AriChannels_ShouldHangupChannel()
     {
         await using var ariClient = AriClientFactory.Create(LoggerFactory);
@@ -218,7 +217,7 @@ public sealed class AriStasisTests : FunctionalTestBase
     /// Creating a bridge via ARI REST, listing bridges to confirm it exists,
     /// then destroying it should complete without error.
     /// </summary>
-    [AriContainerFact]
+    [Fact]
     public async Task AriBridges_ShouldCreateAndDestroyBridge()
     {
         await using var ariClient = AriClientFactory.Create(LoggerFactory);
@@ -242,7 +241,7 @@ public sealed class AriStasisTests : FunctionalTestBase
     /// Adding a Stasis channel to a bridge should result in the bridge's
     /// Channels collection containing the channel ID.
     /// </summary>
-    [AriContainerFact]
+    [Fact]
     public async Task AriBridges_ShouldAddChannelToBridge()
     {
         await using var ariClient = AriClientFactory.Create(LoggerFactory);

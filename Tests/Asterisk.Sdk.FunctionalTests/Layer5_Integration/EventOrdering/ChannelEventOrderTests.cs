@@ -2,7 +2,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.EventOrdering;
 
 using System.Collections.Concurrent;
 using Asterisk.Sdk.Ami.Actions;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using Asterisk.Sdk.Live.Channels;
@@ -18,7 +17,7 @@ public sealed class ChannelEventOrderTests : FunctionalTestBase
     /// Originate + immediate hangup in rapid succession.
     /// The ChannelManager must not retain phantom channels after both legs have hung up.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task RapidOriginateAndHangup_ShouldNotCreatePhantomChannels()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -94,7 +93,7 @@ public sealed class ChannelEventOrderTests : FunctionalTestBase
     /// All channels must be tracked while active and removed after hangup.
     /// Both indices must stay consistent throughout.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ConcurrentChannelEvents_ShouldMaintainConsistentState()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -164,7 +163,7 @@ public sealed class ChannelEventOrderTests : FunctionalTestBase
     /// After a rename, GetByName(newName) and GetByUniqueId must return the same object;
     /// the old name must be removed from the name index.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ChannelRename_ShouldUpdateSecondaryIndex()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

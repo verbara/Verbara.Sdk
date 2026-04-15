@@ -3,7 +3,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Reconnection;
 using Asterisk.Sdk;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Enums;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using Asterisk.Sdk.Live.Server;
@@ -14,7 +13,7 @@ using Microsoft.Extensions.Logging;
 [Trait("Category", "Functional")]
 public sealed class LiveStateRecoveryTests : FunctionalTestBase
 {
-    [AsteriskContainerFact]
+    [Fact]
     public async Task AsteriskServer_ShouldReloadState_AfterReconnect()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -47,7 +46,7 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
         reloadLogs.Should().NotBeEmpty("server should log state reload on reconnect");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ChannelManager_ShouldClearOnReconnect()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -99,7 +98,7 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
             "channels should be cleared after container restart with no active calls");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task EventSubscription_ShouldResume_AfterReconnect()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -130,7 +129,7 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
             "connection should be functional after reconnect for event subscription to work");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task PendingActions_ShouldNotHang_AfterDisconnect()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -162,7 +161,7 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task MultipleReconnects_ShouldAllSucceed()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

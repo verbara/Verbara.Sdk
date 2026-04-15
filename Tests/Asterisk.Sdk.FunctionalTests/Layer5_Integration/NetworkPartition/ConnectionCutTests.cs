@@ -2,7 +2,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.NetworkPartition;
 
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Enums;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -13,7 +12,7 @@ public sealed class ConnectionCutTests : FunctionalTestBase
 {
     private const string ProxyName = ToxiproxyFixture.AmiProxyName;
 
-    [ToxiproxyFact]
+    [Fact]
     public async Task TcpReset_ShouldTriggerReconnect()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -40,8 +39,7 @@ public sealed class ConnectionCutTests : FunctionalTestBase
             using var disconnectCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             while (connection.State == AmiConnectionState.Connected && !disconnectCts.IsCancellationRequested)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(250), disconnectCts.Token)
-                    .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                try { await Task.Delay(TimeSpan.FromMilliseconds(250), disconnectCts.Token); } catch (OperationCanceledException) { break; }
             }
 
             // TCP RST detection depends on active reads in the pipeline.
@@ -84,7 +82,7 @@ public sealed class ConnectionCutTests : FunctionalTestBase
         }
     }
 
-    [ToxiproxyFact]
+    [Fact]
     public async Task SilentDrop_ShouldDetectViaHeartbeat()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -109,8 +107,7 @@ public sealed class ConnectionCutTests : FunctionalTestBase
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             while (connection.State == AmiConnectionState.Connected && !cts.IsCancellationRequested)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(250), cts.Token)
-                    .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                try { await Task.Delay(TimeSpan.FromMilliseconds(250), cts.Token); } catch (OperationCanceledException) { break; }
             }
 
             connection.State.Should().NotBe(AmiConnectionState.Connected,
@@ -122,7 +119,7 @@ public sealed class ConnectionCutTests : FunctionalTestBase
         }
     }
 
-    [ToxiproxyFact]
+    [Fact]
     public async Task RestoreAfterPartition_ShouldReconnectCleanly()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -151,8 +148,7 @@ public sealed class ConnectionCutTests : FunctionalTestBase
             using var disconnectCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             while (connection.State == AmiConnectionState.Connected && !disconnectCts.IsCancellationRequested)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(250), disconnectCts.Token)
-                    .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                try { await Task.Delay(TimeSpan.FromMilliseconds(250), disconnectCts.Token); } catch (OperationCanceledException) { break; }
             }
 
             connection.State.Should().NotBe(AmiConnectionState.Connected);

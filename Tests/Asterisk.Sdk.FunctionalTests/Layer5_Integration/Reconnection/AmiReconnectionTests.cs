@@ -2,7 +2,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Reconnection;
 
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Enums;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -11,7 +10,7 @@ using FluentAssertions;
 [Trait("Category", "Functional")]
 public sealed class AmiReconnectionTests : FunctionalTestBase
 {
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Connection_ShouldReconnect_WhenAsteriskRestarted()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -40,7 +39,7 @@ public sealed class AmiReconnectionTests : FunctionalTestBase
         response.Response.Should().Be("Success");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Connection_ShouldTransitionToReconnecting_WhenAsteriskKilled()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -71,7 +70,7 @@ public sealed class AmiReconnectionTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task SendAction_ShouldTimeout_WhenAsteriskKilledDuringAction()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -98,7 +97,7 @@ public sealed class AmiReconnectionTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Connection_ShouldRespectMaxReconnectAttempts()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -132,7 +131,7 @@ public sealed class AmiReconnectionTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Connection_ShouldUseExponentialBackoff()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

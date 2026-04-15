@@ -2,7 +2,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Queues;
 
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Events;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using Asterisk.Sdk.Live.Server;
@@ -19,7 +18,7 @@ public sealed class QueueCallerTests : FunctionalTestBase
     {
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task CallerJoin_ShouldAddEntryViaRawFields()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -60,7 +59,7 @@ public sealed class QueueCallerTests : FunctionalTestBase
         queue!.Entries.Should().NotBeEmpty("queue should have at least one caller entry");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task CallerLeave_ShouldRecordWaitTimeMetric()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -114,7 +113,7 @@ public sealed class QueueCallerTests : FunctionalTestBase
         callsLeft.Should().BeGreaterThanOrEqualTo(1, "at least one call should have left the queue");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task CallerAbandon_ShouldFireEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -155,7 +154,7 @@ public sealed class QueueCallerTests : FunctionalTestBase
         abandonEvent.Should().NotBeNull();
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task QueueStatus_ShouldRebuildFullState()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -223,7 +222,7 @@ public sealed class QueueCallerTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task QueueSummary_ShouldReturnAccurateStats()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

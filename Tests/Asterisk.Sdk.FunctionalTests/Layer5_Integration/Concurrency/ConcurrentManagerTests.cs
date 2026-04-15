@@ -3,7 +3,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Concurrency;
 using System.Collections.Concurrent;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Enums;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using Asterisk.Sdk.Live.Channels;
@@ -16,7 +15,7 @@ using Microsoft.Extensions.Logging;
 [Trait("Category", "Functional")]
 public sealed class ConcurrentManagerTests : FunctionalTestBase
 {
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ConcurrentChannelCreation_ShouldMaintainConsistentState()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -69,7 +68,7 @@ public sealed class ConcurrentManagerTests : FunctionalTestBase
             "ChannelCount and ActiveChannels enumeration must agree");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ConcurrentChannelLookup_ShouldBeThreadSafe()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -149,7 +148,7 @@ public sealed class ConcurrentManagerTests : FunctionalTestBase
         readExceptions.Should().BeEmpty("concurrent reads during writes must not throw");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task SecondaryIndexConsistency_ShouldBeMaintained()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -206,7 +205,7 @@ public sealed class ConcurrentManagerTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ConcurrentQueueMemberUpdates_ShouldNotCorrupt()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -263,7 +262,7 @@ public sealed class ConcurrentManagerTests : FunctionalTestBase
             "concurrent queue reads and updates must not throw");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ConcurrentAgiSessions_ShouldAllComplete()
     {
         // Test concurrent AMI origination to Local channels as a proxy for concurrent

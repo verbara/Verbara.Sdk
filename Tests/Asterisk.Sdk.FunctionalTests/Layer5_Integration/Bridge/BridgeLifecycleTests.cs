@@ -3,7 +3,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Bridge;
 using System.Collections.Concurrent;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Events;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using Asterisk.Sdk.Live.Server;
@@ -26,7 +25,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
     /// Two channels entering the same ConfBridge should produce a BridgeCreateEvent
     /// and two BridgeEnterEvents sharing the same BridgeUniqueid.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Bridge_ShouldFireCreateAndEnterEvents()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -81,7 +80,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
     /// Hanging up a channel in a bridge should fire BridgeLeaveEvent.
     /// When all channels leave, BridgeDestroyEvent should fire.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Bridge_ShouldFireLeaveAndDestroyOnHangup()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -154,7 +153,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
     /// <summary>
     /// BridgeManager on AsteriskServer should track active bridges when channels enter a ConfBridge.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task BridgeManager_ShouldTrackActiveBridges()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -204,7 +203,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
     /// <summary>
     /// Two independent ConfBridges should produce separate bridges with distinct BridgeUniqueids.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task MultipleBridges_ShouldBeIndependent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -269,7 +268,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
     /// <summary>
     /// A ConfBridge with three channels should track all three in enter events.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task BridgeWithThreeChannels_ShouldTrackAll()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -331,7 +330,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
     /// All bridge events (Create, Enter, Leave, Destroy) for the same bridge must share
     /// the same BridgeUniqueid, ensuring consistent correlation.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task BridgeEvents_ShouldHaveCorrectBridgeId()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

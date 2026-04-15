@@ -1,7 +1,6 @@
 namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Queues;
 
 using Asterisk.Sdk.Ami.Actions;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using Asterisk.Sdk.Live.Queues;
@@ -17,7 +16,7 @@ public sealed class QueueMemberTests : FunctionalTestBase
     private const string TestQueue2 = "test-queue-2";
     private const string TestInterface = "Local/100@test-functional";
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task AddMember_ShouldUpdateQueueAndReverseIndex()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -59,7 +58,7 @@ public sealed class QueueMemberTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task RemoveMember_ShouldCleanupReverseIndex()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -119,7 +118,7 @@ public sealed class QueueMemberTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task PauseMember_ShouldUpdateStateAndFireEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -184,7 +183,7 @@ public sealed class QueueMemberTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task DeviceStateChange_ShouldPropagateToAllQueues()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -246,7 +245,7 @@ public sealed class QueueMemberTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task MemberInMultipleQueues_ShouldTrackCorrectly()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

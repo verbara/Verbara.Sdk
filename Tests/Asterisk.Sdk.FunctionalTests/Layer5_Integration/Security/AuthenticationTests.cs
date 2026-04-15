@@ -1,7 +1,6 @@
 namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Security;
 
 using Asterisk.Sdk.Ami;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -13,7 +12,7 @@ public sealed class AuthenticationTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 1: Wrong password throws AmiAuthenticationException, no hang
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Connect_ShouldFail_WithWrongPassword()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -31,7 +30,7 @@ public sealed class AuthenticationTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 2: Wrong username throws AmiAuthenticationException, no hang
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Connect_ShouldFail_WithWrongUsername()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -49,7 +48,7 @@ public sealed class AuthenticationTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 3: Empty credentials throws AmiAuthenticationException
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Connect_ShouldFail_WithEmptyCredentials()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -89,7 +88,7 @@ public sealed class AuthenticationTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 5: Log entries must not contain the configured password
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Logs_ShouldNotContainPassword()
     {
         const string sensitivePassword = "super-secret-password-xyz987";

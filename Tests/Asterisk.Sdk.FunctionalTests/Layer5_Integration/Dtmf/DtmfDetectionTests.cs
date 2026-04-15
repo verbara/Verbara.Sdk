@@ -3,7 +3,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Dtmf;
 using System.Collections.Concurrent;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Events;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -24,7 +23,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
     /// Plays a single DTMF digit on an answered channel and verifies that
     /// both DtmfBeginEvent and DtmfEndEvent fire.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task PlayDtmf_ShouldGenerateBeginAndEndEvents()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -86,7 +85,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
     /// <summary>
     /// Plays all 16 DTMF digits (0-9, *, #, A-D) and verifies each is recognized.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task PlayDtmf_AllDigits_ShouldBeRecognized()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -156,7 +155,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
     /// <summary>
     /// Plays DTMF with Receive=true and verifies the Direction field is "Received".
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task PlayDtmf_DirectionReceived_ShouldSetCorrectDirection()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -212,7 +211,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
     /// <summary>
     /// Plays DTMF with Receive=false (sent direction) and verifies Direction is "Sent".
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task PlayDtmf_DirectionSent_ShouldSetCorrectDirection()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -269,7 +268,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
     /// Originates to ext 150 which runs SendDTMF(123456789*#).
     /// Verifies that sequential DtmfEndEvents fire in the correct digit order.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task SendDtmf_MultipleDigits_ShouldFireSequentialEvents()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -337,7 +336,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
     /// Originates to ext 155 which runs Read() (waits for a digit).
     /// Sends DTMF "7" via PlayDtmf. Read() consumes the digit, and a DtmfEvent fires.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task DtmfConsumedByRead_ShouldFireDtmfEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

@@ -5,7 +5,6 @@ using System.Net.Sockets;
 using Asterisk.Sdk.Agi.Mapping;
 using Asterisk.Sdk.Agi.Server;
 using Asterisk.Sdk.Enums;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using Asterisk.Sdk.Hosting;
@@ -21,7 +20,7 @@ public sealed class GracefulShutdownTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 1: IHost stops and AMI connection becomes Disconnected
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task HostShutdown_ShouldCloseAmiConnection()
     {
         using var host = Host.CreateDefaultBuilder()
@@ -51,7 +50,7 @@ public sealed class GracefulShutdownTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 2: AGI server stops accepting after host shutdown
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task HostShutdown_ShouldStopAgiServer()
     {
         // Pick a free ephemeral port
@@ -92,7 +91,7 @@ public sealed class GracefulShutdownTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 3: AudioSocket server stops listening after host shutdown
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task HostShutdown_ShouldStopAudioSocketServer()
     {
         // AudioSocketServer is registered only when ARI + ConfigureAudioServer is provided.
@@ -131,7 +130,7 @@ public sealed class GracefulShutdownTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 4: Shutdown completes within 5 seconds
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task HostShutdown_ShouldCompleteWithinTimeout()
     {
         using var host = Host.CreateDefaultBuilder()
@@ -160,7 +159,7 @@ public sealed class GracefulShutdownTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 5: Pending actions are cancelled on shutdown
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task HostShutdown_ShouldCancelActiveOperations()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -195,7 +194,7 @@ public sealed class GracefulShutdownTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 6: No TCP socket leak after dispose
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task HostShutdown_ShouldNotLeakTcpSockets()
     {
         var connections = new List<IAmiConnection>();
@@ -228,7 +227,7 @@ public sealed class GracefulShutdownTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 7: Double-dispose must not throw
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task DisposingConnection_ShouldBeIdempotent()
     {
         var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -248,7 +247,7 @@ public sealed class GracefulShutdownTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 8: Shutdown during reconnect must not hang
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ShutdownDuringReconnect_ShouldNotHang()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

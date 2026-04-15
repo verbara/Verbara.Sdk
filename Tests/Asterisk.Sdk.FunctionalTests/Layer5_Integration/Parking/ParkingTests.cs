@@ -3,7 +3,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Parking;
 using System.Collections.Concurrent;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Events;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -24,7 +23,7 @@ public sealed class ParkingTests : FunctionalTestBase
     /// Originate a call to ext 100 (Answer+Wait), then redirect it to ext 750 (Park).
     /// ParkedCallEvent must fire with a parking space in the 751-770 range.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Park_ShouldFireParkedCallEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -99,7 +98,7 @@ public sealed class ParkingTests : FunctionalTestBase
     /// Park a call, then originate a second call to the parked slot.
     /// UnParkedCallEvent must fire.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Unpark_ShouldFireUnParkedCallEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -185,7 +184,7 @@ public sealed class ParkingTests : FunctionalTestBase
     /// ParkedCallTimeOutEvent must fire after the parking timer expires.
     /// Note: this test has a longer wait to allow the parking timer to fire.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ParkTimeout_ShouldFireTimeOutEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -256,7 +255,7 @@ public sealed class ParkingTests : FunctionalTestBase
     /// Park a call, then hang up the parked channel directly via HangupAction.
     /// ParkedCallGiveUpEvent must fire.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ParkGiveUp_ShouldFireGiveUpEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

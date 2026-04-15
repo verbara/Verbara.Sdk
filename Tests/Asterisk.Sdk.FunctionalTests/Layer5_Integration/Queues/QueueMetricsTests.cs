@@ -1,7 +1,6 @@
 namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Queues;
 
 using Asterisk.Sdk.Ami.Actions;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using Asterisk.Sdk.Live.Server;
@@ -24,7 +23,7 @@ public sealed class QueueMetricsTests : FunctionalTestBase
     {
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task CallerJoinLeave_ShouldIncrementCounters()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -80,7 +79,7 @@ public sealed class QueueMetricsTests : FunctionalTestBase
             .BeGreaterThanOrEqualTo(1, "at least one call should have left the queue");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task WaitTime_ShouldRecordHistogram()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -138,7 +137,7 @@ public sealed class QueueMetricsTests : FunctionalTestBase
             .BeGreaterThan(0, "wait time histogram should record a positive value after caller waited in queue");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task QueueGauges_ShouldReflectCurrentState()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

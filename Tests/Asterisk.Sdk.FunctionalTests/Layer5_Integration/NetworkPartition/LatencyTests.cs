@@ -2,7 +2,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.NetworkPartition;
 
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Enums;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -13,7 +12,7 @@ public sealed class LatencyTests : FunctionalTestBase
 {
     private const string ProxyName = ToxiproxyFixture.AmiProxyName;
 
-    [ToxiproxyFact]
+    [Fact]
     public async Task HighLatency_ShouldTriggerHeartbeatTimeout()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -37,7 +36,7 @@ public sealed class LatencyTests : FunctionalTestBase
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             while (connection.State == AmiConnectionState.Connected && !cts.IsCancellationRequested)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(250), cts.Token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                try { await Task.Delay(TimeSpan.FromMilliseconds(250), cts.Token); } catch (OperationCanceledException) { break; }
             }
 
             connection.State.Should().NotBe(AmiConnectionState.Connected,
@@ -49,7 +48,7 @@ public sealed class LatencyTests : FunctionalTestBase
         }
     }
 
-    [ToxiproxyFact]
+    [Fact]
     public async Task ModerateLatency_ShouldNotDisconnect()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -80,7 +79,7 @@ public sealed class LatencyTests : FunctionalTestBase
         }
     }
 
-    [ToxiproxyFact]
+    [Fact]
     public async Task LatencySpike_ShouldRecoverAfterRestore()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -109,8 +108,7 @@ public sealed class LatencyTests : FunctionalTestBase
             using var disconnectCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             while (connection.State == AmiConnectionState.Connected && !disconnectCts.IsCancellationRequested)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(250), disconnectCts.Token)
-                    .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                try { await Task.Delay(TimeSpan.FromMilliseconds(250), disconnectCts.Token); } catch (OperationCanceledException) { break; }
             }
 
             connection.State.Should().NotBe(AmiConnectionState.Connected);

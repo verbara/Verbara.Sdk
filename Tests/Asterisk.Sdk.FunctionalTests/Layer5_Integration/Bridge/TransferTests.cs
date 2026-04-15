@@ -3,7 +3,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Bridge;
 using System.Collections.Concurrent;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Events;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using Asterisk.Sdk.Live.Server;
@@ -34,7 +33,7 @@ public sealed class TransferTests : FunctionalTestBase
     /// RedirectAction should move a live channel to a new extension.
     /// After redirect, the channel should execute the target extension's dialplan.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task BlindTransfer_ShouldRedirectChannel()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -100,7 +99,7 @@ public sealed class TransferTests : FunctionalTestBase
     /// Redirecting a bridged channel should fire a BlindTransferEvent
     /// when the channel was part of a ConfBridge.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task BlindTransfer_ShouldFireBlindTransferEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -178,7 +177,7 @@ public sealed class TransferTests : FunctionalTestBase
     /// After a RedirectAction, AsteriskServer's ChannelManager should reflect
     /// the channel's new extension context.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task BlindTransfer_ShouldUpdateChannelManager()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -242,7 +241,7 @@ public sealed class TransferTests : FunctionalTestBase
     /// Redirecting a channel to a non-existent extension (999) should result
     /// in the channel hanging up since no dialplan exists.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task BlindTransfer_ToNonExistentExtension_ShouldFail()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -313,7 +312,7 @@ public sealed class TransferTests : FunctionalTestBase
     /// When two channels are bridged via ConfBridge, redirecting one should
     /// transfer only that party while the other remains in the bridge.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task BlindTransfer_DuringBridge_ShouldTransferOneParty()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -401,7 +400,7 @@ public sealed class TransferTests : FunctionalTestBase
     /// Even if the transfer cannot complete (missing features), the action
     /// itself must not cause protocol errors.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task AttendedTransfer_ShouldInitiateConsultation()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -472,7 +471,7 @@ public sealed class TransferTests : FunctionalTestBase
     /// This test verifies the event plumbing; the transfer may not actually complete
     /// in a basic ConfBridge setup without DTMF feature codes.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task AttendedTransfer_ShouldFireEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -553,7 +552,7 @@ public sealed class TransferTests : FunctionalTestBase
     /// should reflect the new bridge membership. This test documents the expected
     /// behavior even if the full transfer cannot be triggered in automation.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task AttendedTransfer_ShouldBridgeCallerToTarget()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -612,7 +611,7 @@ public sealed class TransferTests : FunctionalTestBase
     /// before completion), the original bridge should remain intact.
     /// Tests resilience of the bridge tracking under cancellation.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task AttendedTransfer_Cancel_ShouldPreserveBridge()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -688,7 +687,7 @@ public sealed class TransferTests : FunctionalTestBase
     /// Transfer-related events must arrive in chronological order relative to their
     /// Timestamp field. This tests the event ordering guarantee.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task AttendedTransfer_Events_ShouldBeChronological()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

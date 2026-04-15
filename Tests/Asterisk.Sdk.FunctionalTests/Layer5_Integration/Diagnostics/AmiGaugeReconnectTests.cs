@@ -4,7 +4,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Enums;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -37,7 +36,7 @@ public sealed class AmiGaugeReconnectTests : FunctionalTestBase
     private const string PendingActionsGauge = "ami.pending_actions";
     private const string PendingEventsGauge = "ami.event_pump.pending";
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task AmiObservableGauges_ShouldEmitLiveValues_AfterMultipleReconnects()
     {
         // Arrange

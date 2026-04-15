@@ -2,7 +2,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Backpressure;
 
 using System.Collections.Concurrent;
 using Asterisk.Sdk.Ami.Actions;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -15,7 +14,7 @@ public sealed class PipelineBackpressureTests : FunctionalTestBase
     /// Verifies that a slow consumer does not cause unbounded memory growth.
     /// The pipeline must absorb backpressure and drop events rather than OOM.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task SlowConsumer_ShouldTriggerBackpressure()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -86,7 +85,7 @@ public sealed class PipelineBackpressureTests : FunctionalTestBase
     /// Verifies that originating 50 concurrent calls with rapid event generation
     /// does not exhaust the memory pool managed by the pipeline.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task HighEventRate_ShouldNotExhaustMemoryPool()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

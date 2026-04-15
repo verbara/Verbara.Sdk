@@ -4,7 +4,6 @@ using System.Collections.Concurrent;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Events;
 using Asterisk.Sdk.Ami.Responses;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -29,7 +28,7 @@ public sealed class VoicemailTests : FunctionalTestBase
     /// Local channels produce no audio so the VoiceMail app may timeout quickly
     /// without leaving a message; the test verifies the event flow gracefully.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task VoiceMail_ShouldFireMessageWaitingEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -99,7 +98,7 @@ public sealed class VoicemailTests : FunctionalTestBase
     /// After originating to ext 950 (VoiceMail), use the Command action
     /// "voicemail show users" to verify that mailbox 9001 is configured.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task VoiceMail_ShouldShowMailboxInUserList()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -142,7 +141,7 @@ public sealed class VoicemailTests : FunctionalTestBase
     /// MailboxCountAction for 9001@default should return a successful response
     /// with mailbox count fields, verifying the AMI mailbox query API works.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task MailboxCount_ShouldReturnMailboxState()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

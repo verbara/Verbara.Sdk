@@ -4,7 +4,6 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Events;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -21,7 +20,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
     {
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task AnsweredCall_ShouldProduceCompleteCelTimeline()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -69,7 +68,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
         eventNames.Should().Contain("CHAN_END", "CEL must include channel end event");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task CelLinkedId_ShouldCorrelateRelatedEvents()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -126,7 +125,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task CelTimestamps_ShouldBeMonotonicallyIncreasing()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -183,7 +182,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task QueueCall_ShouldProduceCelEvents()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
