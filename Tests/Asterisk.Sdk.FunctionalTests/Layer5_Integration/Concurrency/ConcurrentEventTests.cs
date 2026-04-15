@@ -2,7 +2,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Concurrency;
 
 using System.Collections.Concurrent;
 using Asterisk.Sdk.Ami.Actions;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -11,7 +10,7 @@ using FluentAssertions;
 [Trait("Category", "Functional")]
 public sealed class ConcurrentEventTests : FunctionalTestBase
 {
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ConcurrentSubscribeUnsubscribe_ShouldNotThrow()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -39,7 +38,7 @@ public sealed class ConcurrentEventTests : FunctionalTestBase
         response.Response.Should().Be("Success");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task MultipleObservers_ShouldAllReceiveEvents()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -96,7 +95,7 @@ public sealed class ConcurrentEventTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task HighVolumeEvents_ShouldNotLoseEvents()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -144,7 +143,7 @@ public sealed class ConcurrentEventTests : FunctionalTestBase
             "each originate should generate multiple events");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ConcurrentEventProcessing_ShouldMaintainOrder()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -191,7 +190,7 @@ public sealed class ConcurrentEventTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ObserverExceptionInOneSubscriber_ShouldNotAffectOthers()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

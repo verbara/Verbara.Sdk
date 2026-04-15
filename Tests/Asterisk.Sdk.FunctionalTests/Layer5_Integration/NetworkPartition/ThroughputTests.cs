@@ -2,7 +2,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.NetworkPartition;
 
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Enums;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -13,7 +12,7 @@ public sealed class ThroughputTests : FunctionalTestBase
 {
     private const string ProxyName = ToxiproxyFixture.AmiProxyName;
 
-    [ToxiproxyFact]
+    [Fact]
     public async Task BandwidthThrottle_ShouldTimeoutCleanly()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -72,7 +71,7 @@ public sealed class ThroughputTests : FunctionalTestBase
         }
     }
 
-    [ToxiproxyFact]
+    [Fact]
     public async Task SlicedPackets_ShouldParseCorrectly()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -108,7 +107,7 @@ public sealed class ThroughputTests : FunctionalTestBase
         }
     }
 
-    [ToxiproxyFact]
+    [Fact]
     public async Task LimitData_ShouldHandlePartialMessage()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -146,8 +145,7 @@ public sealed class ThroughputTests : FunctionalTestBase
             using var stateCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             while (connection.State == AmiConnectionState.Connected && !stateCts.IsCancellationRequested)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(250), stateCts.Token)
-                    .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                try { await Task.Delay(TimeSpan.FromMilliseconds(250), stateCts.Token); } catch (OperationCanceledException) { break; }
             }
 
             // Remove the one-shot toxic (may already be gone) so reconnection can work
@@ -170,7 +168,7 @@ public sealed class ThroughputTests : FunctionalTestBase
         }
     }
 
-    [ToxiproxyFact]
+    [Fact]
     public async Task ActionDuringPartition_ShouldTimeoutCleanly()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

@@ -2,7 +2,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Concurrency;
 
 using System.Collections.Concurrent;
 using Asterisk.Sdk.Ami.Actions;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -11,7 +10,7 @@ using FluentAssertions;
 [Trait("Category", "Functional")]
 public sealed class ConcurrentActionTests : FunctionalTestBase
 {
-    [AsteriskContainerFact]
+    [Fact]
     public async Task FiftyConcurrentPingActions_ShouldAllReceiveCorrectResponses()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -41,7 +40,7 @@ public sealed class ConcurrentActionTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ConcurrentOriginateActions_ShouldAllSucceed()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -79,7 +78,7 @@ public sealed class ConcurrentActionTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ConcurrentSendAndSubscribe_ShouldNotDeadlock()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -115,7 +114,7 @@ public sealed class ConcurrentActionTests : FunctionalTestBase
         await Task.WhenAll(sendTasks.Append(subscribeTask));
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task RapidFireActions_ShouldNotCorruptState()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -144,7 +143,7 @@ public sealed class ConcurrentActionTests : FunctionalTestBase
         actionIds.Should().OnlyHaveUniqueItems("response ActionIds must not be duplicated");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ConcurrentActionsWithTimeout_ShouldCleanupProperly()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

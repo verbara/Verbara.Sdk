@@ -1,7 +1,6 @@
 namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Security;
 
 using Asterisk.Sdk.Ami.Actions;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -13,7 +12,7 @@ public sealed class ProtocolInjectionTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 1: Newline injection in action value must not corrupt the protocol
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ActionWithNewlineInValue_ShouldNotCorruptProtocol()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -61,7 +60,7 @@ public sealed class ProtocolInjectionTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 2: Special characters (unicode, quotes, backslashes) must serialize correctly
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ActionWithSpecialCharacters_ShouldSerializeCorrectly()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -98,7 +97,7 @@ public sealed class ProtocolInjectionTests : FunctionalTestBase
     // -----------------------------------------------------------------------
     // Test 3: A 64 KB command value must not crash the connection
     // -----------------------------------------------------------------------
-    [AsteriskContainerFact]
+    [Fact]
     public async Task LargeActionPayload_ShouldNotCrash()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

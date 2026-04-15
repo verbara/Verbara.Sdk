@@ -2,7 +2,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Metrics;
 
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Events;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -22,7 +21,7 @@ public sealed class AmiMetricsTests : FunctionalTestBase
     /// <summary>
     /// Sending PingActions should increment the ami.actions.sent counter by at least the number sent.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ActionsSent_ShouldIncrementOnSendAction()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -48,7 +47,7 @@ public sealed class AmiMetricsTests : FunctionalTestBase
     /// <summary>
     /// Originating a call should cause Asterisk to emit events, incrementing ami.events.received.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task EventsReceived_ShouldIncrementOnIncomingEvents()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -81,7 +80,7 @@ public sealed class AmiMetricsTests : FunctionalTestBase
     /// <summary>
     /// When an observer is subscribed, dispatched events should increment ami.events.dispatched.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task EventsDispatched_ShouldIncrementWhenObserverSubscribed()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -117,7 +116,7 @@ public sealed class AmiMetricsTests : FunctionalTestBase
     /// <summary>
     /// Sending a PingAction should record a roundtrip measurement in the ami.action.roundtrip histogram.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ActionRoundtrip_ShouldRecordHistogram()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

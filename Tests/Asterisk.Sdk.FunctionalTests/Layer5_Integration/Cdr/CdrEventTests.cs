@@ -4,7 +4,6 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Events;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -21,7 +20,7 @@ public sealed class CdrEventTests : FunctionalTestBase
     {
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task AnsweredCall_ShouldProduceCdrEvent_WithCorrectFields()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -72,7 +71,7 @@ public sealed class CdrEventTests : FunctionalTestBase
         startDate.Should().BeAfter(DateTimeOffset.UtcNow.AddMinutes(-5), "call must have started recently");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task UnansweredCall_ShouldProduceCdr_WithFailedDisposition()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -121,7 +120,7 @@ public sealed class CdrEventTests : FunctionalTestBase
         billable.Should().Be(0, "unanswered call should have 0 billable seconds");
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task CdrTimestamps_ShouldBeChronologicalStrings()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -182,7 +181,7 @@ public sealed class CdrEventTests : FunctionalTestBase
         }
     }
 
-    [AsteriskContainerFact]
+    [Fact]
     public async Task CdrDisposition_ShouldMatchCallOutcome()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

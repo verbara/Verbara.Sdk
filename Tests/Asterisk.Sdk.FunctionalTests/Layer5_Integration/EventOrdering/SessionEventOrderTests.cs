@@ -2,7 +2,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.EventOrdering;
 
 using System.Collections.Concurrent;
 using Asterisk.Sdk.Ami.Actions;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using Asterisk.Sdk.Live.Server;
@@ -35,7 +34,7 @@ public sealed class SessionEventOrderTests : FunctionalTestBase
     /// A call that hangs up in under 1 second must still produce a completed session
     /// (CallStartedEvent + CallEndedEvent).
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task QuickHangup_ShouldStillCreateSession()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -110,7 +109,7 @@ public sealed class SessionEventOrderTests : FunctionalTestBase
     /// 5 concurrent calls: each session must be correlated to its own channels
     /// via LinkedId — no cross-contamination between sessions.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task ConcurrentSessions_ShouldCorrelateByLinkedId()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -189,7 +188,7 @@ public sealed class SessionEventOrderTests : FunctionalTestBase
     /// For a single call lifecycle, session domain events must fire in causal order:
     /// CallStartedEvent before CallEndedEvent.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task SessionEvents_ShouldFireInCausalOrder()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

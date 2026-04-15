@@ -3,7 +3,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.Ivr;
 using System.Collections.Concurrent;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Events;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -24,7 +23,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
     /// <summary>
     /// Originates a call to ext 160 and verifies the channel reaches WaitExten.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task IvrCall_ShouldReachWaitExten()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -75,7 +74,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
     /// Presses digit "1" during WaitExten and verifies navigation to ext 165.
     /// Dialplan: exten => 1,1,Goto(test-functional,165,1)
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task IvrOption1_ShouldNavigateToExtension165()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -136,7 +135,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
     /// Presses digit "2" during WaitExten and verifies navigation to ext 166.
     /// Dialplan: exten => 2,1,Goto(test-functional,166,1)
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task IvrOption2_ShouldNavigateToExtension166()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -195,7 +194,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
     /// Does not send any DTMF during WaitExten(5). The "t" handler fires a Hangup.
     /// Verifies that the channel hangs up after the timeout.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task IvrTimeout_ShouldHangup()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -245,7 +244,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
     /// Presses an invalid digit "9" during WaitExten. The "i" handler
     /// sends back to ext 160 (menu retry).
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task IvrInvalidDigit_ShouldReturnToMenu()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -319,7 +318,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
     /// Collects all NewExtenEvent events during a full IVR call flow (option 1)
     /// and verifies the dialplan progression includes Background, WaitExten, and target extension.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task NewExtenEvent_ShouldTrackDialplanFlow()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

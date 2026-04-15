@@ -3,7 +3,6 @@ namespace Asterisk.Sdk.FunctionalTests.Layer5_Integration.ConfBridge;
 using System.Collections.Concurrent;
 using Asterisk.Sdk.Ami.Actions;
 using Asterisk.Sdk.Ami.Events;
-using Asterisk.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -23,7 +22,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
     /// <summary>
     /// Muting a channel in a ConfBridge should fire a ConfbridgeMuteEvent.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Mute_ShouldFireMuteEvent()
     {
         var confName = $"test-mute-{Guid.NewGuid():N}";
@@ -72,7 +71,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
     /// <summary>
     /// Unmuting a previously muted channel should fire a ConfbridgeUnmuteEvent.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Unmute_ShouldFireUnmuteEvent()
     {
         var confName = $"test-unmute-{Guid.NewGuid():N}";
@@ -130,7 +129,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
     /// <summary>
     /// Kicking a channel from a ConfBridge should fire a ConfbridgeLeaveEvent.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Kick_ShouldRemoveChannelAndFireLeaveEvent()
     {
         var confName = $"test-kick-{Guid.NewGuid():N}";
@@ -180,7 +179,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
     /// <summary>
     /// Locking a ConfBridge should prevent new channels from joining.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Lock_ShouldPreventNewJoins()
     {
         var confName = $"test-lock-{Guid.NewGuid():N}";
@@ -242,7 +241,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
     /// <summary>
     /// Unlocking a previously locked ConfBridge should allow new channels to join.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Unlock_ShouldAllowNewJoins()
     {
         var confName = $"test-unlock-{Guid.NewGuid():N}";
@@ -308,7 +307,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
     /// <summary>
     /// Starting a recording on a ConfBridge should fire a ConfbridgeRecordEvent.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task StartRecord_ShouldFireRecordEvent()
     {
         var confName = $"test-record-{Guid.NewGuid():N}";
@@ -354,7 +353,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
     /// <summary>
     /// Stopping a recording on a ConfBridge should fire a ConfbridgeStopRecordEvent.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task StopRecord_ShouldFireStopRecordEvent()
     {
         var confName = $"test-stoprec-{Guid.NewGuid():N}";
@@ -410,7 +409,7 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
     /// A ConfBridge should fire ConfbridgeStartEvent when the first participant joins
     /// and ConfbridgeEndEvent when the last participant leaves.
     /// </summary>
-    [AsteriskContainerFact]
+    [Fact]
     public async Task Conference_ShouldFireStartOnFirstJoinAndEndOnLastLeave()
     {
         var confName = $"test-lifecycle-{Guid.NewGuid():N}";
