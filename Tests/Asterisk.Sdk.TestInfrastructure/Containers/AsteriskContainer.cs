@@ -32,7 +32,12 @@ public sealed class AsteriskContainer : IAsyncDisposable
             .WithNetworkAliases("asterisk")
             .WithWaitStrategy(
                 Wait.ForUnixContainer()
-                    .UntilCommandIsCompleted("asterisk", "-rx", "core show uptime"))
+                    // Step 1: Asterisk core process is running.
+                    .UntilCommandIsCompleted("asterisk", "-rx", "core show uptime")
+                    // Step 2: AMI TCP port is accepting connections from the host.
+                    // This ensures the manager.so module is fully loaded before StartAsync returns,
+                    // including after a StopAsync/StartAsync restart cycle in reconnection tests.
+                    .UntilPortIsAvailable(5038))
             .Build();
     }
 

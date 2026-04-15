@@ -23,13 +23,23 @@ public static class DockerControl
         return RunDockerAsync($"kill {name ?? DefaultContainerName}");
     }
 
-    public static Task StartContainerAsync(string? name = null)
+    public static async Task StartContainerAsync(string? name = null)
     {
-        // Testcontainers StartAsync re-applies the wait strategy after restart, ensuring
-        // Asterisk CLI is responsive before returning. docker start via CLI has no wait.
         if (Container is not null && name is null)
-            return Container.StartAsync();
-        return RunDockerAsync($"start {name ?? DefaultContainerName}");
+        {
+            // Testcontainers StartAsync re-applies the full wait strategy after restart
+            // (CLI check + port check via UntilPortIsAvailable), ensuring Asterisk AND
+            // the AMI module are both ready before returning.
+            await Container.StartAsync().ConfigureAwait(false);
+            // Refresh env vars — mapped host ports may be reassigned after a stop/start cycle.
+            Environment.SetEnvironmentVariable("ASTERISK_HOST", Container.Host);
+            Environment.SetEnvironmentVariable("ASTERISK_AMI_PORT",
+                Container.AmiPort.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Environment.SetEnvironmentVariable("ASTERISK_ARI_PORT",
+                Container.AriPort.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            return;
+        }
+        await RunDockerAsync($"start {name ?? DefaultContainerName}").ConfigureAwait(false);
     }
 
     public static async Task RestartContainerAsync(string? name = null)
@@ -37,7 +47,7 @@ public static class DockerControl
         if (Container is not null && name is null)
         {
             await Container.StopAsync().ConfigureAwait(false);
-            await Container.StartAsync().ConfigureAwait(false);
+            await StartContainerAsync().ConfigureAwait(false); // reuse env-var refresh logic
             return;
         }
         await RunDockerAsync($"restart {name ?? DefaultContainerName}").ConfigureAwait(false);
@@ -51,9 +61,15 @@ public static class DockerControl
 
     public static async Task WaitForHealthyAsync(string? name = null, TimeSpan? timeout = null)
     {
+        // When Container is set, StartContainerAsync already invoked Container.StartAsync()
+        // which re-applied the full Testcontainers wait strategy (CLI + UntilPortIsAvailable).
+        // Both checks passed before StartAsync returned, so there is nothing more to poll.
+        if (Container is not null && name is null)
+            return;
+
+        // Docker-compose / CLI mode: poll manually.
         var containerName = name ?? DefaultContainerName;
-        // 60s — Asterisk in Testcontainers takes longer than the previous 30s default,
-        // especially in GitHub Actions CI after a container restart/kill.
+        // 60s — Asterisk may take time to fully start, especially after a restart in CI.
         timeout ??= TimeSpan.FromSeconds(60);
         var deadline = DateTime.UtcNow + timeout.Value;
 
