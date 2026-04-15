@@ -8,7 +8,7 @@ using Xunit;
 namespace Asterisk.Sdk.Redis.Spike.Tests;
 
 [Collection("Redis")]
-[Trait("Category", "Integration")]
+[Trait("Category", "Spike")]
 public sealed class RedisSessionStoreTests : IAsyncLifetime
 {
     private readonly RedisFixture _fixture;
