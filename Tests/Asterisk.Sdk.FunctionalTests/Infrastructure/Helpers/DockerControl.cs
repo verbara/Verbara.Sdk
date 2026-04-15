@@ -1,21 +1,47 @@
 namespace Asterisk.Sdk.FunctionalTests.Infrastructure.Helpers;
 
 using System.Diagnostics;
+using Asterisk.Sdk.TestInfrastructure.Containers;
 
 public static class DockerControl
 {
-    // Set by FunctionalFixture.InitializeAsync() to the Testcontainers container name.
+    // Set by FunctionalTestFixture.InitializeAsync() to enable Testcontainers-native
+    // lifecycle management. Null = fall back to docker CLI (docker-compose mode).
+    public static AsteriskContainer? Container { get; set; }
+
+    // Set by FunctionalTestFixture.InitializeAsync() to the Testcontainers container name.
     // Falls back to "asterisk-sdk-test" for backwards-compat with docker-compose mode.
     public static string DefaultContainerName { get; set; } = "asterisk-sdk-test";
 
     public static Task KillContainerAsync(string? name = null)
-        => RunDockerAsync($"kill {name ?? DefaultContainerName}");
+    {
+        // Prefer Testcontainers StopAsync: sends SIGTERM + SIGKILL, container remains
+        // restartable. docker kill via CLI sometimes leaves containers non-restartable
+        // in CI because the daemon-managed lifecycle differs from the SDK's state machine.
+        if (Container is not null && name is null)
+            return Container.StopAsync();
+        return RunDockerAsync($"kill {name ?? DefaultContainerName}");
+    }
 
     public static Task StartContainerAsync(string? name = null)
-        => RunDockerAsync($"start {name ?? DefaultContainerName}");
+    {
+        // Testcontainers StartAsync re-applies the wait strategy after restart, ensuring
+        // Asterisk CLI is responsive before returning. docker start via CLI has no wait.
+        if (Container is not null && name is null)
+            return Container.StartAsync();
+        return RunDockerAsync($"start {name ?? DefaultContainerName}");
+    }
 
-    public static Task RestartContainerAsync(string? name = null)
-        => RunDockerAsync($"restart {name ?? DefaultContainerName}");
+    public static async Task RestartContainerAsync(string? name = null)
+    {
+        if (Container is not null && name is null)
+        {
+            await Container.StopAsync().ConfigureAwait(false);
+            await Container.StartAsync().ConfigureAwait(false);
+            return;
+        }
+        await RunDockerAsync($"restart {name ?? DefaultContainerName}").ConfigureAwait(false);
+    }
 
     public static Task PauseContainerAsync(string? name = null)
         => RunDockerAsync($"pause {name ?? DefaultContainerName}");

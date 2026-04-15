@@ -67,6 +67,9 @@ public sealed class AsteriskContainer : IAsyncDisposable
 
     public Task StartAsync(CancellationToken ct = default) => _container.StartAsync(ct);
 
+    /// <summary>Stops the container (graceful SIGTERM + SIGKILL). Preserves the container so it can be restarted.</summary>
+    public Task StopAsync(CancellationToken ct = default) => _container.StopAsync(ct);
+
     public Task<ExecResult> ExecAsync(IList<string> command, CancellationToken ct = default)
         => _container.ExecAsync(command, ct);
 
