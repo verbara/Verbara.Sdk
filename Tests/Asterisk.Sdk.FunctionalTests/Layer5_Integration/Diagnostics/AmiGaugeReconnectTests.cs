@@ -63,7 +63,7 @@ public sealed class AmiGaugeReconnectTests : FunctionalTestBase
                 await DockerControl.RestartContainerAsync();
                 await DockerControl.WaitForHealthyAsync();
 
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
                 cts.Token.Register(() => reconnected.TrySetCanceled());
                 await reconnected.Task;
             }

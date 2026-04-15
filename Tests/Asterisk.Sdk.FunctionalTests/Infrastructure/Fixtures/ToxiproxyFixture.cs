@@ -8,13 +8,15 @@ public sealed class ToxiproxyFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        try
-        {
-            await ToxiproxyControl.ResetAsync();
-            await ToxiproxyControl.CreateProxyAsync(
-                AmiProxyName, "0.0.0.0:15038", "asterisk:5038");
-        }
-        catch { /* Toxiproxy not running — tests skip via attribute */ }
+        await ToxiproxyControl.ResetAsync();
+
+        // Use host.docker.internal:{AmiPort} so Toxiproxy reaches Asterisk via the
+        // host-mapped port. Docker's embedded DNS for the 'asterisk' alias is
+        // unreliable from distroless Go containers; routing through the Docker host
+        // gateway is always stable and survives Asterisk container restarts.
+        var amiPort = AmiConnectionFactory.Port;
+        await ToxiproxyControl.CreateProxyAsync(
+            AmiProxyName, "0.0.0.0:15038", $"host.docker.internal:{amiPort}");
     }
 
     public async Task DisposeAsync()

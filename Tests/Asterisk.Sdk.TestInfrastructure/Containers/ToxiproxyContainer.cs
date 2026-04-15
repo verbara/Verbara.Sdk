@@ -20,6 +20,11 @@ public sealed class ToxiproxyContainer : IAsyncDisposable
             .WithImage("ghcr.io/shopify/toxiproxy:2.9.0")
             .WithPortBinding(8474, true)
             .WithPortBinding(15038, true)
+            // Allow Toxiproxy to reach Asterisk AMI via the host-mapped port using the
+            // Docker-standard host.docker.internal DNS name (resolves to the Docker host
+            // gateway). This avoids relying on Docker's embedded DNS for the 'asterisk'
+            // alias, which can fail from distroless Go images after container restarts.
+            .WithExtraHost("host.docker.internal", "host-gateway")
             // ghcr.io/shopify/toxiproxy:2.9.0 is a distroless Go image — no /bin/sh.
             // UntilCommandIsCompleted("/toxiproxy", "--version") only confirms the binary
             // exists but exits immediately without starting the server, causing a race where
