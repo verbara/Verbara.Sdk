@@ -19,8 +19,11 @@ public sealed class HealthCheckEdgeCaseTests : FunctionalTestBase
     [Fact]
     public async Task AmiHealthCheck_ShouldTransitionStates_DuringReconnect()
     {
+        // Connect through Toxiproxy: its port is stable across Asterisk restarts.
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
         {
+            opts.Hostname = ToxiproxyControl.ProxyListenHost;
+            opts.Port = ToxiproxyControl.ProxyAmiPort;
             opts.AutoReconnect = true;
             opts.ReconnectInitialDelay = TimeSpan.FromSeconds(1);
         });
@@ -129,8 +132,11 @@ public sealed class HealthCheckEdgeCaseTests : FunctionalTestBase
     [Fact]
     public async Task HealthCheck_ShouldReflectActualState_AfterReconnect()
     {
+        // Connect through Toxiproxy: its port is stable across Asterisk restarts.
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
         {
+            opts.Hostname = ToxiproxyControl.ProxyListenHost;
+            opts.Port = ToxiproxyControl.ProxyAmiPort;
             opts.AutoReconnect = true;
             opts.ReconnectInitialDelay = TimeSpan.FromSeconds(1);
         });

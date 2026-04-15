@@ -40,8 +40,11 @@ public sealed class AmiGaugeReconnectTests : FunctionalTestBase
     public async Task AmiObservableGauges_ShouldEmitLiveValues_AfterMultipleReconnects()
     {
         // Arrange
+        // Connect through Toxiproxy: its port is stable across Asterisk restarts.
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
         {
+            opts.Hostname = ToxiproxyControl.ProxyListenHost;
+            opts.Port = ToxiproxyControl.ProxyAmiPort;
             opts.AutoReconnect = true;
             opts.ReconnectInitialDelay = TimeSpan.FromSeconds(1);
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(10);

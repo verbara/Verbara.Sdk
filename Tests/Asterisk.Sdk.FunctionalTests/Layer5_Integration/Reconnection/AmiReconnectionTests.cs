@@ -13,8 +13,12 @@ public sealed class AmiReconnectionTests : FunctionalTestBase
     [Fact]
     public async Task Connection_ShouldReconnect_WhenAsteriskRestarted()
     {
+        // Connect through Toxiproxy: its port is stable across Asterisk restarts and
+        // its upstream (asterisk:5038 Docker DNS) resolves to the new container IP.
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
         {
+            opts.Hostname = ToxiproxyControl.ProxyListenHost;
+            opts.Port = ToxiproxyControl.ProxyAmiPort;
             opts.AutoReconnect = true;
             opts.ReconnectInitialDelay = TimeSpan.FromSeconds(1);
         });
