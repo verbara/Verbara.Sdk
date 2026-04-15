@@ -45,10 +45,27 @@ public sealed class FunctionalFixture : IAsyncLifetime
 
         // SIPp needs Asterisk ready before it can dial
         await Sipp.StartAsync().ConfigureAwait(false);
+
+        // Expose container ports via env vars so AmiConnectionFactory / AriClientFactory /
+        // ToxiproxyControl resolve to the actual container host:port at runtime.
+        Environment.SetEnvironmentVariable("ASTERISK_HOST", Asterisk.Host);
+        Environment.SetEnvironmentVariable("ASTERISK_AMI_PORT", Asterisk.AmiPort.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Environment.SetEnvironmentVariable("ASTERISK_ARI_PORT", Asterisk.AriPort.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Environment.SetEnvironmentVariable("TOXIPROXY_API_URL", $"http://{Toxiproxy.Host}:{Toxiproxy.ApiPort}");
+        Environment.SetEnvironmentVariable("TOXIPROXY_HOST", Toxiproxy.Host);
+        Environment.SetEnvironmentVariable("TOXIPROXY_PROXY_PORT", Toxiproxy.ProxyPort.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     public async Task DisposeAsync()
     {
+        // Clear env vars so they don't leak into other test collections.
+        Environment.SetEnvironmentVariable("ASTERISK_HOST", null);
+        Environment.SetEnvironmentVariable("ASTERISK_AMI_PORT", null);
+        Environment.SetEnvironmentVariable("ASTERISK_ARI_PORT", null);
+        Environment.SetEnvironmentVariable("TOXIPROXY_API_URL", null);
+        Environment.SetEnvironmentVariable("TOXIPROXY_HOST", null);
+        Environment.SetEnvironmentVariable("TOXIPROXY_PROXY_PORT", null);
+
         await Sipp.DisposeAsync().ConfigureAwait(false);
         await Task.WhenAll(
             Toxiproxy.DisposeAsync().AsTask(),
