@@ -111,24 +111,37 @@ public sealed class AmiConnection : IAmiConnection
         _state = AmiConnectionState.Connecting;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        _socket = _socketFactory.Create();
-        await _socket.ConnectAsync(_options.Hostname, _options.Port, _options.UseSsl, cancellationToken);
-
-        _reader = new AmiProtocolReader(_socket.Input);
-        _writer = new AmiProtocolWriter(_socket.Output);
-
-        // Read protocol identifier
-        var identMsg = await _reader.ReadMessageAsync(cancellationToken);
-        if (identMsg is null || !identMsg.IsProtocolIdentifier)
+        // Apply ConnectionTimeout to socket connect + banner read so the reconnect loop
+        // never hangs indefinitely on a slow or unresponsive Asterisk instance.
+        var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts.Token);
+        try
         {
-            throw new AmiProtocolException("Expected Asterisk protocol identifier");
+            connectCts.CancelAfter(_options.ConnectionTimeout);
+            var connectToken = connectCts.Token;
+
+            _socket = _socketFactory.Create();
+            await _socket.ConnectAsync(_options.Hostname, _options.Port, _options.UseSsl, connectToken);
+
+            _reader = new AmiProtocolReader(_socket.Input);
+            _writer = new AmiProtocolWriter(_socket.Output);
+
+            // Read protocol identifier
+            var identMsg = await _reader.ReadMessageAsync(connectToken);
+            if (identMsg is null || !identMsg.IsProtocolIdentifier)
+            {
+                throw new AmiProtocolException("Expected Asterisk protocol identifier");
+            }
+
+            // MD5 challenge-response login
+            await LoginAsync(connectToken);
+
+            // Detect Asterisk version
+            await DetectVersionAsync(connectToken);
         }
-
-        // MD5 challenge-response login
-        await LoginAsync(cancellationToken);
-
-        // Detect Asterisk version
-        await DetectVersionAsync(cancellationToken);
+        finally
+        {
+            connectCts.Dispose();
+        }
 
         _state = AmiConnectionState.Connected;
 

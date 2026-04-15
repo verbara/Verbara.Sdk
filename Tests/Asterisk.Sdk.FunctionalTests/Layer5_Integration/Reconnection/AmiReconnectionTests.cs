@@ -28,6 +28,10 @@ public sealed class AmiReconnectionTests : FunctionalTestBase
         await DockerControl.RestartContainerAsync();
         await DockerControl.WaitForHealthyAsync();
 
+        // Guard: reconnect may have completed before we start waiting
+        if (connection.State == AmiConnectionState.Connected)
+            reconnected.TrySetResult();
+
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
         cts.Token.Register(() => reconnected.TrySetCanceled());
         await reconnected.Task;

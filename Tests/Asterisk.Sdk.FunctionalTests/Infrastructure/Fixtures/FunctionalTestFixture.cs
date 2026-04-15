@@ -32,7 +32,7 @@ public sealed class FunctionalTestFixture : Xunit.IAsyncLifetime
         await ToxiproxyControl.CreateProxyAsync(
             ToxiproxyFixture.AmiProxyName,
             "0.0.0.0:15038",
-            $"host.docker.internal:{AmiConnectionFactory.Port}").ConfigureAwait(false);
+            "asterisk:5038").ConfigureAwait(false);
 
         // Expose the AsteriskContainer so DockerControl.Kill/Start/Restart use the
         // Testcontainers-native lifecycle API instead of the docker CLI. This avoids
