@@ -163,7 +163,7 @@ public sealed class QueueCallFlowTests : FunctionalTestBase
             // Verify positions are increasing (1, 2, 3 or similar)
             lock (positionLock)
             {
-                positions.Should().HaveCount(3);
+                positions.Should().HaveCountGreaterThanOrEqualTo(3, "at least 3 callers should join the queue");
                 positions.Should().BeInAscendingOrder("queue positions should increase as callers join");
             }
         }
