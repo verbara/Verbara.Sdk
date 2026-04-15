@@ -107,6 +107,14 @@ public sealed class QueueCallFlowTests : FunctionalTestBase
         });
         await connection.ConnectAsync();
 
+        // Clear any channels left by prior tests in this Asterisk instance
+        try
+        {
+            await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
+        }
+        catch { /* best effort */ }
+        await Task.Delay(TimeSpan.FromSeconds(2));
+
         var server = new AsteriskServer(connection, LoggerFactory.CreateLogger<AsteriskServer>());
         await server.StartAsync();
 
