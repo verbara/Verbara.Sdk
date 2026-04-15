@@ -16,8 +16,11 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
     [Fact]
     public async Task AsteriskServer_ShouldReloadState_AfterReconnect()
     {
+        // Connect through Toxiproxy: its port is stable across Asterisk restarts.
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
         {
+            opts.Hostname = ToxiproxyControl.ProxyListenHost;
+            opts.Port = ToxiproxyControl.ProxyAmiPort;
             opts.AutoReconnect = true;
             opts.ReconnectInitialDelay = TimeSpan.FromSeconds(1);
         });
@@ -53,8 +56,11 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
     [Fact]
     public async Task ChannelManager_ShouldClearOnReconnect()
     {
+        // Connect through Toxiproxy: its port is stable across Asterisk restarts.
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
         {
+            opts.Hostname = ToxiproxyControl.ProxyListenHost;
+            opts.Port = ToxiproxyControl.ProxyAmiPort;
             opts.AutoReconnect = true;
             opts.ReconnectInitialDelay = TimeSpan.FromSeconds(1);
         });
@@ -109,8 +115,11 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
     [Fact]
     public async Task EventSubscription_ShouldResume_AfterReconnect()
     {
+        // Connect through Toxiproxy: its port is stable across Asterisk restarts.
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
         {
+            opts.Hostname = ToxiproxyControl.ProxyListenHost;
+            opts.Port = ToxiproxyControl.ProxyAmiPort;
             opts.AutoReconnect = true;
             opts.ReconnectInitialDelay = TimeSpan.FromSeconds(1);
         });
@@ -176,8 +185,11 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
     [Fact]
     public async Task MultipleReconnects_ShouldAllSucceed()
     {
+        // Connect through Toxiproxy: its port is stable across Asterisk restarts.
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
         {
+            opts.Hostname = ToxiproxyControl.ProxyListenHost;
+            opts.Port = ToxiproxyControl.ProxyAmiPort;
             opts.AutoReconnect = true;
             opts.ReconnectInitialDelay = TimeSpan.FromSeconds(1);
         });
