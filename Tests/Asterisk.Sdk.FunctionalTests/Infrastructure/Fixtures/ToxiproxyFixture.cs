@@ -6,17 +6,13 @@ public sealed class ToxiproxyFixture : IAsyncLifetime
 {
     public const string AmiProxyName = "ami-proxy";
 
-    public async Task InitializeAsync()
+    public Task InitializeAsync()
     {
-        await ToxiproxyControl.ResetAsync();
-
-        // Use host.docker.internal:{AmiPort} so Toxiproxy reaches Asterisk via the
-        // host-mapped port. Docker's embedded DNS for the 'asterisk' alias is
-        // unreliable from distroless Go containers; routing through the Docker host
-        // gateway is always stable and survives Asterisk container restarts.
-        var amiPort = AmiConnectionFactory.Port;
-        await ToxiproxyControl.CreateProxyAsync(
-            AmiProxyName, "0.0.0.0:15038", $"host.docker.internal:{amiPort}");
+        // No-op: the Toxiproxy proxy is created by FunctionalTestFixture.InitializeAsync()
+        // immediately after the inner FunctionalFixture has started all containers and set
+        // the TOXIPROXY_API_URL / ASTERISK_AMI_PORT env vars.  Doing proxy setup there
+        // (rather than here) avoids xunit collection-fixture ordering surprises.
+        return Task.CompletedTask;
     }
 
     public async Task DisposeAsync()

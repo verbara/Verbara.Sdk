@@ -21,6 +21,19 @@ public sealed class FunctionalTestFixture : Xunit.IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _inner.InitializeAsync().ConfigureAwait(false);
+
+        // At this point _inner has started all containers AND set env vars (ASTERISK_*,
+        // TOXIPROXY_*), so ToxiproxyControl.ApiUrl and AmiConnectionFactory.Port read
+        // the real container ports.  Configure the Toxiproxy proxy here rather than in
+        // ToxiproxyFixture.InitializeAsync() to guarantee correct ordering: collection
+        // fixture init order is not always reliable, and doing it here (inside the inner
+        // fixture initializer) removes any ordering dependency.
+        await ToxiproxyControl.ResetAsync().ConfigureAwait(false);
+        await ToxiproxyControl.CreateProxyAsync(
+            ToxiproxyFixture.AmiProxyName,
+            "0.0.0.0:15038",
+            $"host.docker.internal:{AmiConnectionFactory.Port}").ConfigureAwait(false);
+
         // Expose the AsteriskContainer so DockerControl.Kill/Start/Restart use the
         // Testcontainers-native lifecycle API instead of the docker CLI. This avoids
         // the docker-CLI-managed restart failing silently in CI.
