@@ -28,7 +28,7 @@ public class AmiHealthCheckIntegrationTests : IAsyncLifetime
         if (_connection is not null) await _connection.DisposeAsync();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task AmiHealthCheck_ShouldReturnHealthy_WhenConnected()
     {
         var healthCheck = new AmiHealthCheck(_connection!);
@@ -37,7 +37,7 @@ public class AmiHealthCheckIntegrationTests : IAsyncLifetime
         result.Status.Should().Be(HealthStatus.Healthy);
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task AmiHealthCheck_ShouldReturnUnhealthy_WhenDisconnected()
     {
         await _connection!.DisconnectAsync();

@@ -45,7 +45,7 @@ public class AmiHeartbeatIntegrationTests : IAsyncLifetime
         if (_connection is not null) await _connection.DisposeAsync();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task Heartbeat_ShouldKeepConnectionAlive()
     {
         // Wait longer than 2x heartbeat interval to ensure at least one heartbeat fires
@@ -59,7 +59,7 @@ public class AmiHeartbeatIntegrationTests : IAsyncLifetime
         response.Response.Should().Be("Success");
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task SendEventGeneratingAction_ShouldRespectTimeout()
     {
         // QueueStatusAction should complete quickly (even with no queues configured)

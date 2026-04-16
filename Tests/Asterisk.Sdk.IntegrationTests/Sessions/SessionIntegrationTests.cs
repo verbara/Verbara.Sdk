@@ -51,7 +51,7 @@ public sealed class SessionIntegrationTests : IAsyncLifetime
             await _connection.DisposeAsync();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task Session_ShouldBeCreated_WhenCallOriginated()
     {
         // Arrange — subscribe to domain events to detect session creation and completion
@@ -94,7 +94,7 @@ public sealed class SessionIntegrationTests : IAsyncLifetime
             "session should reach a terminal state after hangup");
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task Sessions_ShouldBeIndependent_WhenTwoCallsOriginated()
     {
         // Arrange
@@ -144,7 +144,7 @@ public sealed class SessionIntegrationTests : IAsyncLifetime
             "each call should get its own session");
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task SessionMetrics_ShouldReflectSessionCounts()
     {
         // Arrange — capture baseline metric values using a MeterListener
