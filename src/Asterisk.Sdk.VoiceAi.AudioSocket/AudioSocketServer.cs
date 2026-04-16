@@ -1,7 +1,10 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
+using Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics;
 using Asterisk.Sdk.VoiceAi.AudioSocket.Internal;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -19,6 +22,7 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private readonly ConcurrentDictionary<Guid, AudioSocketSession> _sessions = new();
+    private readonly Meter _instanceMeter;
 
     /// <summary>Raised when a new AudioSocket session has been established and the UUID frame received.</summary>
     public event Func<AudioSocketSession, ValueTask>? OnSessionStarted;
@@ -34,6 +38,7 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     {
         _options = options;
         _logger = logger;
+        _instanceMeter = new Meter("Asterisk.Sdk.VoiceAi.AudioSocket", "1.0.0");
     }
 
     /// <inheritdoc/>
@@ -44,6 +49,11 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
         _listener = new TcpListener(endpoint);
         _listener.Start(_options.MaxConcurrentSessions);
         AudioSocketLog.ServerListening(_logger, _options.ListenAddress, _options.Port);
+        _instanceMeter.CreateObservableGauge<long>(
+            "audiosocket.sessions.active",
+            () => ActiveSessionCount,
+            unit: "{sessions}",
+            description: "Active AudioSocket sessions");
         _ = Task.Run(() => AcceptLoopAsync(_cts.Token), cancellationToken);
         return Task.CompletedTask;
     }
@@ -119,8 +129,18 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
                 return;
             }
 
+            var sessionStart = Stopwatch.GetTimestamp();
+            AudioSocketMetrics.ConnectionsAccepted.Add(1);
+            using var activity = AudioSocketActivitySource.StartSession(channelId);
+
             var session = new AudioSocketSession(channelId, client, reader, _options.DefaultFormat, _logger);
-            session.OnHangup += () => _sessions.TryRemove(channelId, out _);
+            session.OnHangup += () =>
+            {
+                _sessions.TryRemove(channelId, out _);
+                AudioSocketMetrics.ConnectionsClosed.Add(1);
+                AudioSocketMetrics.SessionDurationMs.Record(
+                    Stopwatch.GetElapsedTime(sessionStart).TotalMilliseconds);
+            };
 
             if (_sessions.Count >= _options.MaxConcurrentSessions || !_sessions.TryAdd(channelId, session))
             {
@@ -150,6 +170,7 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     {
         await StopAsync(CancellationToken.None).ConfigureAwait(false);
         _cts?.Dispose();
+        _instanceMeter.Dispose();
         _listener = null;
     }
 }
