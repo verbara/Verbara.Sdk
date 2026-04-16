@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics;
 using Asterisk.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling;
 using Asterisk.Sdk.VoiceAi.Pipeline;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,6 +43,8 @@ public static class RealtimeServiceCollectionExtensions
 
         services.TryAddSingleton<ISessionHandler>(
             sp => sp.GetRequiredService<OpenAiRealtimeBridge>());
+
+        services.AddHealthChecks().AddCheck<RealtimeHealthCheck>("openai-realtime");
 
         services.TryAddSingleton<VoiceAiSessionBroker>();
         services.AddHostedService<VoiceAiSessionBroker>(
