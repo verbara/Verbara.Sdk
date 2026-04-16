@@ -83,6 +83,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             finally { wsWriteLock.Release(); }
             RealtimeMetrics.MessagesSent.Add(1);
 
+            var sessionFailed = false;
             try
             {
                 await Task.WhenAll(
@@ -93,6 +94,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* expected */ }
             catch (Exception ex)
             {
+                sessionFailed = true;
                 RealtimeMetrics.SessionsFailed.Add(1);
                 sessionActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 RealtimeLog.SessionError(_logger, channelId, ex.Message);
@@ -110,7 +112,8 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 catch { /* ignore close errors */ }
                 finally { wsWriteLock.Release(); }
 
-                RealtimeMetrics.SessionsCompleted.Add(1);
+                if (!sessionFailed)
+                    RealtimeMetrics.SessionsCompleted.Add(1);
                 RealtimeMetrics.SessionDurationMs.Record(
                     Stopwatch.GetElapsedTime(sessionStart).TotalMilliseconds);
                 RealtimeLog.SessionEnded(_logger, channelId);
