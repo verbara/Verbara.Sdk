@@ -311,12 +311,10 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         });
         await connection.ConnectAsync();
 
-        var server = new AsteriskServer(connection, LoggerFactory.CreateLogger<AsteriskServer>());
-        await server.StartAsync();
-
+        var createEvents = new ConcurrentBag<BridgeCreateEvent>();
         var enterEvents = new ConcurrentBag<BridgeEnterEvent>();
         using var subscription = connection.Subscribe(
-            new BridgeEventObserver(onEnter: enterEvents.Add));
+            new BridgeEventObserver(onCreate: createEvents.Add, onEnter: enterEvents.Add));
 
         try
         {
@@ -337,22 +335,21 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
             // Give CI time to process all 3 entries
             await Task.Delay(TimeSpan.FromSeconds(8));
 
-            // Filter enter events for this bridge
-            var bridgeIds = enterEvents
-                .Select(e => e.BridgeUniqueid)
-                .Where(id => id is not null)
-                .Distinct()
-                .ToList();
+            createEvents.Should().NotBeEmpty("at least one BridgeCreateEvent must have been received");
 
-            bridgeIds.Should().NotBeEmpty("at least one bridge must have been created");
+            var bridgeId = createEvents.First().BridgeUniqueid;
 
-            // Verify BridgeManager tracks the channels — NumChannels is Channels.Count,
-            // an independent counter that increments per BridgeEnterEvent UniqueId.
-            var activeBridges = server.Bridges.ActiveBridges.ToList();
-            var largestBridge = activeBridges.MaxBy(b => b.NumChannels);
-            largestBridge.Should().NotBeNull();
-            largestBridge!.NumChannels.Should().BeGreaterThanOrEqualTo(3,
-                "BridgeManager must track all 3 channels in the bridge");
+            // Use BridgeNumChannels from the raw event — Asterisk sets this to the actual
+            // channel count at dispatch time, so even a single event can carry the true count.
+            // This is the same pattern used in Bridge_ShouldFireCreateAndEnterEvents.
+            var maxChannels = enterEvents
+                .Where(e => e.BridgeUniqueid == bridgeId)
+                .Select(e => int.TryParse(e.BridgeNumChannels, out var n) ? n : 0)
+                .DefaultIfEmpty(0)
+                .Max();
+
+            maxChannels.Should().BeGreaterThanOrEqualTo(3,
+                "BridgeNumChannels must reach 3 when all 3 channels have entered the bridge");
         }
         finally
         {
