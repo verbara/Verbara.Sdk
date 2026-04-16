@@ -311,10 +311,9 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         });
         await connection.ConnectAsync();
 
-        var createEvents = new ConcurrentBag<BridgeCreateEvent>();
         var enterEvents = new ConcurrentBag<BridgeEnterEvent>();
         using var subscription = connection.Subscribe(
-            new BridgeEventObserver(onCreate: createEvents.Add, onEnter: enterEvents.Add));
+            new BridgeEventObserver(onEnter: enterEvents.Add));
 
         try
         {
@@ -335,15 +334,13 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
             // Give CI time to process all 3 entries
             await Task.Delay(TimeSpan.FromSeconds(8));
 
-            createEvents.Should().NotBeEmpty("at least one BridgeCreateEvent must have been received");
-
-            var bridgeId = createEvents.First().BridgeUniqueid;
-
-            // Use BridgeNumChannels from the raw event — Asterisk sets this to the actual
-            // channel count at dispatch time, so even a single event can carry the true count.
-            // This is the same pattern used in Bridge_ShouldFireCreateAndEnterEvents.
+            // Asterisk may optimize a 2-participant ConfBridge into a native bridge and
+            // then re-create a softmix bridge when the 3rd channel enters (different UUID).
+            // Filtering by the first BridgeCreateEvent UUID misses channels that land on the
+            // new bridge. Instead, take the maximum BridgeNumChannels across ALL enter events:
+            // the event fired when the 3rd channel joined will carry the true count regardless
+            // of which bridge UUID was active at that moment.
             var maxChannels = enterEvents
-                .Where(e => e.BridgeUniqueid == bridgeId)
                 .Select(e => int.TryParse(e.BridgeNumChannels, out var n) ? n : 0)
                 .DefaultIfEmpty(0)
                 .Max();
