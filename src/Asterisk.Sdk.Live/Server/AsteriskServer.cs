@@ -90,26 +90,26 @@ public sealed class AsteriskServer : IAsteriskServer
         _subscription = _connection.Subscribe(new EventObserver(this));
         _connection.Reconnected += OnReconnected;
 
-        // Register observable gauges for live state
-        _instanceMeter.CreateObservableGauge("live.channels.active",
+        // Register observable gauges for live state (all typed as long for consistent metric reporting)
+        _instanceMeter.CreateObservableGauge<long>("live.channels.active",
             () => Channels.ChannelCount, description: "Active channels");
-        _instanceMeter.CreateObservableGauge("live.queues.count",
+        _instanceMeter.CreateObservableGauge<long>("live.queues.count",
             () => Queues.QueueCount, description: "Configured queues");
-        _instanceMeter.CreateObservableGauge("live.agents.total",
+        _instanceMeter.CreateObservableGauge<long>("live.agents.total",
             () => Agents.AgentCount, description: "Total tracked agents");
-        _instanceMeter.CreateObservableGauge("live.agents.available",
+        _instanceMeter.CreateObservableGauge<long>("live.agents.available",
             () => Agents.Agents.Count(a => a.State == AgentState.Available),
             description: "Agents in Available state");
-        _instanceMeter.CreateObservableGauge("live.agents.on_call",
+        _instanceMeter.CreateObservableGauge<long>("live.agents.on_call",
             () => Agents.Agents.Count(a => a.State == AgentState.OnCall),
             description: "Agents currently on a call");
-        _instanceMeter.CreateObservableGauge("live.agents.paused",
+        _instanceMeter.CreateObservableGauge<long>("live.agents.paused",
             () => Agents.Agents.Count(a => a.State == AgentState.Paused),
             description: "Agents in Paused state");
-        _instanceMeter.CreateObservableGauge("live.agents.total_hold_secs",
+        _instanceMeter.CreateObservableGauge<long>("live.agents.total_hold_secs",
             () => Agents.Agents.Sum(a => a.TotalHoldTimeSecs),
             unit: "s", description: "Aggregate hold time across all agents since login");
-        _instanceMeter.CreateObservableGauge("live.agents.total_talk_secs",
+        _instanceMeter.CreateObservableGauge<long>("live.agents.total_talk_secs",
             () => Agents.Agents.Sum(a => a.TotalTalkTimeSecs),
             unit: "s", description: "Aggregate talk time across all agents since login");
 
