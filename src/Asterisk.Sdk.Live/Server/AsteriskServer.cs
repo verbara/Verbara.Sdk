@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using Asterisk.Sdk;
 using Asterisk.Sdk.Enums;
 using Asterisk.Sdk.Ami.Actions;
@@ -42,6 +43,7 @@ public sealed class AsteriskServer : IAsteriskServer
     private readonly ILogger<AsteriskServer> _logger;
     private IDisposable? _subscription;
     private IAriClient? _ariClient;
+    private readonly Meter _instanceMeter;
 
     public ChannelManager Channels { get; }
     public QueueManager Queues { get; }
@@ -70,6 +72,7 @@ public sealed class AsteriskServer : IAsteriskServer
         Agents = new AgentManager(logger);
         MeetMe = new MeetMeManager(logger);
         Bridges = new BridgeManager(logger);
+        _instanceMeter = new Meter("Asterisk.Sdk.Live", "1.0.0");
     }
 
     /// <summary>
@@ -88,25 +91,25 @@ public sealed class AsteriskServer : IAsteriskServer
         _connection.Reconnected += OnReconnected;
 
         // Register observable gauges for live state
-        LiveMetrics.Meter.CreateObservableGauge("live.channels.active",
+        _instanceMeter.CreateObservableGauge("live.channels.active",
             () => Channels.ChannelCount, description: "Active channels");
-        LiveMetrics.Meter.CreateObservableGauge("live.queues.count",
+        _instanceMeter.CreateObservableGauge("live.queues.count",
             () => Queues.QueueCount, description: "Configured queues");
-        LiveMetrics.Meter.CreateObservableGauge("live.agents.total",
+        _instanceMeter.CreateObservableGauge("live.agents.total",
             () => Agents.AgentCount, description: "Total tracked agents");
-        LiveMetrics.Meter.CreateObservableGauge("live.agents.available",
+        _instanceMeter.CreateObservableGauge("live.agents.available",
             () => Agents.Agents.Count(a => a.State == AgentState.Available),
             description: "Agents in Available state");
-        LiveMetrics.Meter.CreateObservableGauge("live.agents.on_call",
+        _instanceMeter.CreateObservableGauge("live.agents.on_call",
             () => Agents.Agents.Count(a => a.State == AgentState.OnCall),
             description: "Agents currently on a call");
-        LiveMetrics.Meter.CreateObservableGauge("live.agents.paused",
+        _instanceMeter.CreateObservableGauge("live.agents.paused",
             () => Agents.Agents.Count(a => a.State == AgentState.Paused),
             description: "Agents in Paused state");
-        LiveMetrics.Meter.CreateObservableGauge("live.agents.total_hold_secs",
+        _instanceMeter.CreateObservableGauge("live.agents.total_hold_secs",
             () => Agents.Agents.Sum(a => a.TotalHoldTimeSecs),
             unit: "s", description: "Aggregate hold time across all agents since login");
-        LiveMetrics.Meter.CreateObservableGauge("live.agents.total_talk_secs",
+        _instanceMeter.CreateObservableGauge("live.agents.total_talk_secs",
             () => Agents.Agents.Sum(a => a.TotalTalkTimeSecs),
             unit: "s", description: "Aggregate talk time across all agents since login");
 
@@ -262,6 +265,7 @@ public sealed class AsteriskServer : IAsteriskServer
         _subscription?.Dispose();
         if (_ariClient is not null)
             await _ariClient.DisposeAsync();
+        _instanceMeter.Dispose();
     }
 
     /// <summary>Internal observer that dispatches typed AMI events to the appropriate manager.</summary>

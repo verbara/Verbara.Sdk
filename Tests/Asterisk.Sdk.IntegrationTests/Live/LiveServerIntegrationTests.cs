@@ -43,7 +43,7 @@ public class LiveServerIntegrationTests : IAsyncLifetime
         _server.Agents.Should().NotBeNull();
     }
 
-    [Fact(Skip = "LiveMetrics.Meter is static; CreateObservableGauge on second StartAsync call returns old instrument pointing to disposed server — gauge callback never fires (-1)")]
+    [Fact]
     public void AsteriskServer_ShouldExposeMetrics()
     {
         // Verify LiveMetrics registers observable instruments after server start
