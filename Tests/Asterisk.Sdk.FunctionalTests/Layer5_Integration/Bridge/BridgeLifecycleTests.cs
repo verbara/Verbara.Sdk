@@ -311,9 +311,17 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         });
         await connection.ConnectAsync();
 
-        var enterEvents = new ConcurrentBag<BridgeEnterEvent>();
-        using var subscription = connection.Subscribe(
-            new BridgeEventObserver(onEnter: enterEvents.Add));
+        // ConfbridgeJoinEvent carries the stable Conference name regardless of any internal
+        // bridge UUID transitions (e.g. native→softmix switch when 3rd participant joins).
+        var joinCount = 0;
+        var threeJoinedTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = connection.Subscribe(new ConfbridgeJoinObserver(e =>
+        {
+            if (!string.Equals(e.Conference, "test-bridge-05", StringComparison.OrdinalIgnoreCase))
+                return;
+            if (Interlocked.Increment(ref joinCount) >= 3)
+                threeJoinedTcs.TrySetResult(true);
+        }));
 
         try
         {
@@ -331,22 +339,12 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
                 await Task.Delay(TimeSpan.FromMilliseconds(800));
             }
 
-            // Give CI time to process all 3 entries
-            await Task.Delay(TimeSpan.FromSeconds(8));
-
-            // Asterisk may optimize a 2-participant ConfBridge into a native bridge and
-            // then re-create a softmix bridge when the 3rd channel enters (different UUID).
-            // Filtering by the first BridgeCreateEvent UUID misses channels that land on the
-            // new bridge. Instead, take the maximum BridgeNumChannels across ALL enter events:
-            // the event fired when the 3rd channel joined will carry the true count regardless
-            // of which bridge UUID was active at that moment.
-            var maxChannels = enterEvents
-                .Select(e => int.TryParse(e.BridgeNumChannels, out var n) ? n : 0)
-                .DefaultIfEmpty(0)
-                .Max();
-
-            maxChannels.Should().BeGreaterThanOrEqualTo(3,
-                "BridgeNumChannels must reach 3 when all 3 channels have entered the bridge");
+            // Wait (event-driven) for all 3 channels to join — up to 15 s.
+            // Using ConfbridgeJoinEvent instead of BridgeNumChannels avoids flakiness caused
+            // by native↔softmix bridge technology switches that change BridgeUniqueid.
+            var result = await Task.WhenAny(threeJoinedTcs.Task, Task.Delay(TimeSpan.FromSeconds(15)));
+            result.Should().Be(threeJoinedTcs.Task,
+                "3 ConfbridgeJoin events must fire for conference 'test-bridge-05' when 3 channels originate into it");
         }
         finally
         {
@@ -467,6 +465,18 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
                 case BridgeLeaveEvent e: onLeave?.Invoke(e); break;
                 case BridgeDestroyEvent e: onDestroy?.Invoke(e); break;
             }
+        }
+
+        public void OnError(Exception error) { }
+        public void OnCompleted() { }
+    }
+
+    private sealed class ConfbridgeJoinObserver(Action<ConfbridgeJoinEvent> onJoin) : IObserver<ManagerEvent>
+    {
+        public void OnNext(ManagerEvent value)
+        {
+            if (value is ConfbridgeJoinEvent e)
+                onJoin(e);
         }
 
         public void OnError(Exception error) { }
