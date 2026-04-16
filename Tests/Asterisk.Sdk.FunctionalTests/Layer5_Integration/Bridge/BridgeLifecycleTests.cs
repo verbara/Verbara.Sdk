@@ -60,26 +60,35 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
             ActionId = "bridge-create-enter-ch2"
         });
 
-        // Allow time for bridge creation and channel entry
-        await Task.Delay(TimeSpan.FromSeconds(5));
+        try
+        {
+            // Allow time for bridge creation and channel entry
+            await Task.Delay(TimeSpan.FromSeconds(5));
 
-        createEvents.Should().NotBeEmpty("ConfBridge must fire at least one BridgeCreateEvent");
-        enterEvents.Should().NotBeEmpty("ConfBridge must fire at least one BridgeEnterEvent");
+            createEvents.Should().NotBeEmpty("ConfBridge must fire at least one BridgeCreateEvent");
+            enterEvents.Should().NotBeEmpty("ConfBridge must fire at least one BridgeEnterEvent");
 
-        // All enter events for the bridge should share the same BridgeUniqueid as the create event
-        var bridgeId = createEvents.First().BridgeUniqueid;
-        bridgeId.Should().NotBeNullOrEmpty("BridgeCreateEvent must carry a BridgeUniqueid");
+            // All enter events for the bridge should share the same BridgeUniqueid as the create event
+            var bridgeId = createEvents.First().BridgeUniqueid;
+            bridgeId.Should().NotBeNullOrEmpty("BridgeCreateEvent must carry a BridgeUniqueid");
 
-        // BridgeNumChannels reflects the actual bridge state at event dispatch time.
-        // Use it instead of counting raw events, which Asterisk may emit fewer of
-        // when channels enter the bridge in rapid succession.
-        var maxChannels = enterEvents
-            .Where(e => e.BridgeUniqueid == bridgeId)
-            .Select(e => int.TryParse(e.BridgeNumChannels, out var n) ? n : 0)
-            .DefaultIfEmpty(0)
-            .Max();
-        maxChannels.Should().BeGreaterThanOrEqualTo(2,
-            "BridgeNumChannels must reach 2 when both channels have entered the bridge");
+            // BridgeNumChannels reflects the actual bridge state at event dispatch time.
+            // Use it instead of counting raw events, which Asterisk may emit fewer of
+            // when channels enter the bridge in rapid succession.
+            var maxChannels = enterEvents
+                .Where(e => e.BridgeUniqueid == bridgeId)
+                .Select(e => int.TryParse(e.BridgeNumChannels, out var n) ? n : 0)
+                .DefaultIfEmpty(0)
+                .Max();
+            maxChannels.Should().BeGreaterThanOrEqualTo(2,
+                "BridgeNumChannels must reach 2 when both channels have entered the bridge");
+        }
+        finally
+        {
+            try { await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" }); }
+            catch { /* best effort */ }
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
     }
 
     /// <summary>
@@ -172,38 +181,47 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         var server = new AsteriskServer(connection, LoggerFactory.CreateLogger<AsteriskServer>());
         await server.StartAsync();
 
-        // Originate two channels into a ConfBridge
-        await connection.SendActionAsync(new OriginateAction
+        try
         {
-            Channel = "Local/600@test-functional/n",
-            Application = "ConfBridge",
-            Data = "test-bridge-03",
-            IsAsync = true,
-            ActionId = "bridge-manager-track-ch1"
-        });
+            // Originate two channels into a ConfBridge
+            await connection.SendActionAsync(new OriginateAction
+            {
+                Channel = "Local/600@test-functional/n",
+                Application = "ConfBridge",
+                Data = "test-bridge-03",
+                IsAsync = true,
+                ActionId = "bridge-manager-track-ch1"
+            });
 
-        await connection.SendActionAsync(new OriginateAction
+            await connection.SendActionAsync(new OriginateAction
+            {
+                Channel = "Local/600@test-functional/n",
+                Application = "ConfBridge",
+                Data = "test-bridge-03",
+                IsAsync = true,
+                ActionId = "bridge-manager-track-ch2"
+            });
+
+            // Wait for bridge lifecycle events to propagate
+            await Task.Delay(TimeSpan.FromSeconds(5));
+
+            server.Bridges.BridgeCount.Should().BeGreaterThan(0,
+                "BridgeManager must track at least one bridge after ConfBridge origination");
+
+            var activeBridges = server.Bridges.ActiveBridges.ToList();
+            activeBridges.Should().NotBeEmpty("there should be at least one active bridge");
+
+            // Each active bridge should have channels
+            var bridgeWithChannels = activeBridges.FirstOrDefault(b => b.NumChannels > 0);
+            bridgeWithChannels.Should().NotBeNull(
+                "at least one active bridge should contain channels");
+        }
+        finally
         {
-            Channel = "Local/600@test-functional/n",
-            Application = "ConfBridge",
-            Data = "test-bridge-03",
-            IsAsync = true,
-            ActionId = "bridge-manager-track-ch2"
-        });
-
-        // Wait for bridge lifecycle events to propagate
-        await Task.Delay(TimeSpan.FromSeconds(5));
-
-        server.Bridges.BridgeCount.Should().BeGreaterThan(0,
-            "BridgeManager must track at least one bridge after ConfBridge origination");
-
-        var activeBridges = server.Bridges.ActiveBridges.ToList();
-        activeBridges.Should().NotBeEmpty("there should be at least one active bridge");
-
-        // Each active bridge should have channels
-        var bridgeWithChannels = activeBridges.FirstOrDefault(b => b.NumChannels > 0);
-        bridgeWithChannels.Should().NotBeNull(
-            "at least one active bridge should contain channels");
+            try { await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" }); }
+            catch { /* best effort */ }
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
     }
 
     /// <summary>
@@ -224,51 +242,60 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         using var subscription = connection.Subscribe(
             new BridgeEventObserver(onCreate: createEvents.Add));
 
-        // First ConfBridge pair
-        await connection.SendActionAsync(new OriginateAction
+        try
         {
-            Channel = "Local/600@test-functional/n",
-            Application = "ConfBridge",
-            Data = "test-bridge-04a",
-            IsAsync = true,
-            ActionId = "bridge-multi-a-ch1"
-        });
-        await connection.SendActionAsync(new OriginateAction
+            // First ConfBridge pair
+            await connection.SendActionAsync(new OriginateAction
+            {
+                Channel = "Local/600@test-functional/n",
+                Application = "ConfBridge",
+                Data = "test-bridge-04a",
+                IsAsync = true,
+                ActionId = "bridge-multi-a-ch1"
+            });
+            await connection.SendActionAsync(new OriginateAction
+            {
+                Channel = "Local/600@test-functional/n",
+                Application = "ConfBridge",
+                Data = "test-bridge-04a",
+                IsAsync = true,
+                ActionId = "bridge-multi-a-ch2"
+            });
+
+            // Second ConfBridge pair (different conference name)
+            await connection.SendActionAsync(new OriginateAction
+            {
+                Channel = "Local/600@test-functional/n",
+                Application = "ConfBridge",
+                Data = "test-bridge-04b",
+                IsAsync = true,
+                ActionId = "bridge-multi-b-ch1"
+            });
+            await connection.SendActionAsync(new OriginateAction
+            {
+                Channel = "Local/600@test-functional/n",
+                Application = "ConfBridge",
+                Data = "test-bridge-04b",
+                IsAsync = true,
+                ActionId = "bridge-multi-b-ch2"
+            });
+
+            // Allow bridges to form
+            await Task.Delay(TimeSpan.FromSeconds(5));
+
+            createEvents.Count.Should().BeGreaterThanOrEqualTo(2,
+                "two separate ConfBridges must produce at least 2 BridgeCreateEvents");
+
+            var uniqueIds = createEvents.Select(e => e.BridgeUniqueid).Distinct().ToList();
+            uniqueIds.Count.Should().BeGreaterThanOrEqualTo(2,
+                "each ConfBridge must have a distinct BridgeUniqueid");
+        }
+        finally
         {
-            Channel = "Local/600@test-functional/n",
-            Application = "ConfBridge",
-            Data = "test-bridge-04a",
-            IsAsync = true,
-            ActionId = "bridge-multi-a-ch2"
-        });
-
-        // Second ConfBridge pair (different conference name)
-        await connection.SendActionAsync(new OriginateAction
-        {
-            Channel = "Local/600@test-functional/n",
-            Application = "ConfBridge",
-            Data = "test-bridge-04b",
-            IsAsync = true,
-            ActionId = "bridge-multi-b-ch1"
-        });
-        await connection.SendActionAsync(new OriginateAction
-        {
-            Channel = "Local/600@test-functional/n",
-            Application = "ConfBridge",
-            Data = "test-bridge-04b",
-            IsAsync = true,
-            ActionId = "bridge-multi-b-ch2"
-        });
-
-        // Allow bridges to form
-        await Task.Delay(TimeSpan.FromSeconds(5));
-
-        createEvents.Count.Should().BeGreaterThanOrEqualTo(2,
-            "two separate ConfBridges must produce at least 2 BridgeCreateEvents");
-
-        var uniqueIds = createEvents.Select(e => e.BridgeUniqueid).Distinct().ToList();
-        uniqueIds.Count.Should().BeGreaterThanOrEqualTo(2,
-            "each ConfBridge must have a distinct BridgeUniqueid");
+            try { await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" }); }
+            catch { /* best effort */ }
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
     }
 
     /// <summary>
@@ -283,14 +310,6 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
             opts.AutoReconnect = false;
         });
         await connection.ConnectAsync();
-
-        // Clear any channels from prior bridge tests so Asterisk is not resource-constrained
-        try
-        {
-            await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
-        }
-        catch { /* best effort */ }
-        await Task.Delay(TimeSpan.FromSeconds(3));
 
         var server = new AsteriskServer(connection, LoggerFactory.CreateLogger<AsteriskServer>());
         await server.StartAsync();
@@ -315,14 +334,8 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
                 await Task.Delay(TimeSpan.FromMilliseconds(800));
             }
 
-            // Poll BridgeManager until all 3 channels are tracked (up to 15 s)
-            var deadline = DateTimeOffset.UtcNow.AddSeconds(15);
-            while (DateTimeOffset.UtcNow < deadline)
-            {
-                if (server.Bridges.ActiveBridges.Any(b => b.NumChannels >= 3))
-                    break;
-                await Task.Delay(TimeSpan.FromMilliseconds(500));
-            }
+            // Give CI time to process all 3 entries
+            await Task.Delay(TimeSpan.FromSeconds(8));
 
             // Filter enter events for this bridge
             var bridgeIds = enterEvents
@@ -343,11 +356,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         }
         finally
         {
-            // Hang up all channels immediately so subsequent tests start clean
-            try
-            {
-                await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
-            }
+            try { await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" }); }
             catch { /* best effort */ }
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
