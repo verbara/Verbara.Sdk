@@ -1,4 +1,5 @@
 using Asterisk.Sdk.VoiceAi.Tts.Azure;
+using Asterisk.Sdk.VoiceAi.Tts.Diagnostics;
 using Asterisk.Sdk.VoiceAi.Tts.ElevenLabs;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -20,6 +21,7 @@ public static class TtsServiceCollectionExtensions
             services.Configure(configure);
 
         services.TryAddSingleton<SpeechSynthesizer, ElevenLabsSpeechSynthesizer>();
+        services.AddHealthChecks().AddCheck<TtsHealthCheck>("tts");
         return services;
     }
 
@@ -36,6 +38,7 @@ public static class TtsServiceCollectionExtensions
 
         services.AddHttpClient<AzureTtsSpeechSynthesizer>();
         services.TryAddSingleton<SpeechSynthesizer>(sp => sp.GetRequiredService<AzureTtsSpeechSynthesizer>());
+        services.AddHealthChecks().AddCheck<TtsHealthCheck>("tts");
         return services;
     }
 }
