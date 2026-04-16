@@ -31,7 +31,7 @@ public class AriClientIntegrationTests : IAsyncLifetime
         _client!.IsConnected.Should().BeTrue();
     }
 
-    [Fact(Skip = "AriChannel.Creationtime (DateTimeOffset?) fails to deserialize Asterisk's +0000 timezone format — fix: change to string? or add JsonConverter")]
+    [Fact]
     public async Task CreateChannel_ShouldReturnChannel()
     {
         var channel = await _client!.Channels.CreateAsync("Local/100@default", AsteriskFixture.AriApp);
@@ -53,7 +53,7 @@ public class AriClientIntegrationTests : IAsyncLifetime
         try { await _client.Bridges.DestroyAsync(bridge.Id); } catch { /* best effort */ }
     }
 
-    [Fact(Skip = "AriChannel.Creationtime (DateTimeOffset?) fails to deserialize Asterisk's +0000 timezone format — fix: change to string? or add JsonConverter")]
+    [Fact]
     public async Task Subscribe_ShouldReceiveEvents()
     {
         var eventReceived = new TaskCompletionSource<AriEvent>();
@@ -82,7 +82,7 @@ public class AriClientIntegrationTests : IAsyncLifetime
         _client = null;
     }
 
-    [Fact(Skip = "AriChannel.Creationtime (DateTimeOffset?) fails to deserialize Asterisk's +0000 timezone format — fix: change to string? or add JsonConverter")]
+    [Fact]
     public async Task CreateBridgeAndAddChannel_ShouldWork()
     {
         var bridge = await _client!.Bridges.CreateAsync("mixing", "test-bridge-add");

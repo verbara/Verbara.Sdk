@@ -69,7 +69,7 @@ Asterisk.Sdk.AriChannel.ChannelVars.get -> System.Collections.Generic.Dictionary
 Asterisk.Sdk.AriChannel.ChannelVars.set -> void
 Asterisk.Sdk.AriChannel.Connected.get -> Asterisk.Sdk.AriCallerId?
 Asterisk.Sdk.AriChannel.Connected.set -> void
-Asterisk.Sdk.AriChannel.Creationtime.get -> System.DateTimeOffset?
+Asterisk.Sdk.AriChannel.Creationtime.get -> string?
 Asterisk.Sdk.AriChannel.Creationtime.set -> void
 Asterisk.Sdk.AriChannel.Dialplan.get -> Asterisk.Sdk.AriDialplanCep?
 Asterisk.Sdk.AriChannel.Dialplan.set -> void
@@ -159,7 +159,7 @@ Asterisk.Sdk.AriEvent.Application.set -> void
 Asterisk.Sdk.AriEvent.AriEvent() -> void
 Asterisk.Sdk.AriEvent.RawJson.get -> string?
 Asterisk.Sdk.AriEvent.RawJson.set -> void
-Asterisk.Sdk.AriEvent.Timestamp.get -> System.DateTimeOffset?
+Asterisk.Sdk.AriEvent.Timestamp.get -> string?
 Asterisk.Sdk.AriEvent.Timestamp.set -> void
 Asterisk.Sdk.AriEvent.Type.get -> string?
 Asterisk.Sdk.AriEvent.Type.set -> void

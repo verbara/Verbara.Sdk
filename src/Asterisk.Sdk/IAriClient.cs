@@ -66,7 +66,7 @@ public class AriEvent
 {
     public string? Type { get; set; }
     public string? Application { get; set; }
-    public DateTimeOffset? Timestamp { get; set; }
+    public string? Timestamp { get; set; }
     public string? RawJson { get; set; }
 }
 
@@ -403,7 +403,7 @@ public sealed class AriChannel
     public string? Accountcode { get; set; }
     public AriDialplanCep? Dialplan { get; set; }
     public string? Language { get; set; }
-    public DateTimeOffset? Creationtime { get; set; }
+    public string? Creationtime { get; set; }
     public string? Protocol { get; set; }
     public Dictionary<string, string>? ChannelVars { get; set; }
 }

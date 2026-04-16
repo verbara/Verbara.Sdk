@@ -347,7 +347,7 @@ public sealed class AriClient : IAriClient
             {
                 Type = type,
                 Application = root.TryGetProperty("application", out var a) ? a.GetString() : null,
-                Timestamp = root.TryGetProperty("timestamp", out var ts) && DateTimeOffset.TryParse(ts.GetString(), out var dto) ? dto : null,
+                Timestamp = root.TryGetProperty("timestamp", out var ts) ? ts.GetString() : null,
             };
 
             evt.RawJson = json;
