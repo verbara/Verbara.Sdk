@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Asterisk.Sdk.VoiceAi.Diagnostics;
 using Asterisk.Sdk.VoiceAi.Pipeline;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -28,6 +29,8 @@ public static class VoiceAiServiceCollectionExtensions
         services.TryAddSingleton<ISessionHandler>(sp => sp.GetRequiredService<VoiceAiPipeline>());
         services.TryAddSingleton<VoiceAiSessionBroker>();
         services.AddHostedService<VoiceAiSessionBroker>(sp => sp.GetRequiredService<VoiceAiSessionBroker>());
+
+        services.AddHealthChecks().AddCheck<VoiceAiHealthCheck>("voiceai");
 
         if (configure is not null)
             services.Configure(configure);

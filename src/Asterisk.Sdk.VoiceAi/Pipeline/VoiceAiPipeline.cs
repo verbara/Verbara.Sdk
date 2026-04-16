@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reactive.Subjects;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -5,6 +6,7 @@ using System.Threading.Channels;
 using Asterisk.Sdk.Audio;
 using Asterisk.Sdk.Audio.Processing;
 using Asterisk.Sdk.VoiceAi.AudioSocket;
+using Asterisk.Sdk.VoiceAi.Diagnostics;
 using Asterisk.Sdk.VoiceAi.Events;
 using Asterisk.Sdk.VoiceAi.Internal;
 using Microsoft.Extensions.DependencyInjection;
@@ -59,6 +61,10 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
         using var scope = _scopeFactory.CreateScope();
         var handler = scope.ServiceProvider.GetRequiredService<IConversationHandler>();
 
+        VoiceAiMetrics.SessionsStarted.Add(1);
+        var sessionStart = Stopwatch.GetTimestamp();
+        using var sessionActivity = VoiceAiActivitySource.StartSession(session.ChannelId, handler.GetType().Name);
+
         VoiceAiLog.PipelineStarted(_logger, session.ChannelId);
         _state = PipelineState.Listening;
 
@@ -71,6 +77,7 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             });
 
         var history = new List<ConversationTurn>();
+        var failed = false;
 
         try
         {
@@ -79,8 +86,20 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                 PipelineLoop(session, utteranceChannel.Reader, handler, history, ct)
             ).ConfigureAwait(false);
         }
+        catch
+        {
+            failed = true;
+            VoiceAiMetrics.SessionsFailed.Add(1);
+            sessionActivity?.SetStatus(ActivityStatusCode.Error);
+            throw;
+        }
         finally
         {
+            var duration = Stopwatch.GetElapsedTime(sessionStart).TotalMilliseconds;
+            VoiceAiMetrics.SessionDurationMs.Record(duration);
+            if (!failed)
+                VoiceAiMetrics.SessionsCompleted.Add(1);
+
             VoiceAiLog.PipelineStopped(_logger, session.ChannelId);
             _state = PipelineState.Idle;
         }
@@ -208,6 +227,10 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
         {
             _state = PipelineState.Recognizing;
 
+            SpeechRecognitionMetrics.TranscriptionsStarted.Add(1);
+            var sttStart = Stopwatch.GetTimestamp();
+            using var sttActivity = VoiceAiActivitySource.StartRecognition(_stt.GetType().Name);
+
             string? transcript = null;
             try
             {
@@ -219,6 +242,7 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                     if (result.IsFinal)
                         transcript = result.Transcript;
                 }
+                SpeechRecognitionMetrics.TranscriptionsCompleted.Add(1);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -226,10 +250,17 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             }
             catch (Exception ex)
             {
+                SpeechRecognitionMetrics.TranscriptionsFailed.Add(1);
+                sttActivity?.SetStatus(ActivityStatusCode.Error);
                 VoiceAiLog.PipelineError(_logger, PipelineErrorSource.Stt, channelId, ex.Message);
                 Publish(new PipelineErrorEvent(DateTimeOffset.UtcNow, ex.Message, ex, PipelineErrorSource.Stt));
                 _state = PipelineState.Listening;
                 continue;
+            }
+            finally
+            {
+                SpeechRecognitionMetrics.TranscriptionLatencyMs.Record(
+                    Stopwatch.GetElapsedTime(sttStart).TotalMilliseconds);
             }
 
             if (transcript is null)
@@ -271,6 +302,11 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             var synthStart = DateTimeOffset.UtcNow;
             Publish(new SynthesisStartedEvent(synthStart));
 
+            SpeechSynthesisMetrics.SynthesesStarted.Add(1);
+            SpeechSynthesisMetrics.SynthesisCharacters.Add(response.Length);
+            var ttsStart = Stopwatch.GetTimestamp();
+            using var ttsActivity = VoiceAiActivitySource.StartSynthesis(_tts.GetType().Name, response.Length);
+
             _ttsCts = new CancellationTokenSource();
             try
             {
@@ -280,6 +316,7 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                 {
                     await session.WriteAudioAsync(audioChunk, linked.Token).ConfigureAwait(false);
                 }
+                SpeechSynthesisMetrics.SynthesesCompleted.Add(1);
                 Publish(new SynthesisEndedEvent(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow - synthStart));
                 history.Add(new ConversationTurn(transcript, response, DateTimeOffset.UtcNow));
             }
@@ -290,15 +327,20 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             catch (OperationCanceledException)
             {
                 // Barge-in — _ttsCts was cancelled
+                SpeechSynthesisMetrics.SynthesesCompleted.Add(1);
                 Publish(new SynthesisEndedEvent(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow - synthStart));
             }
             catch (Exception ex)
             {
+                SpeechSynthesisMetrics.SynthesesFailed.Add(1);
+                ttsActivity?.SetStatus(ActivityStatusCode.Error);
                 VoiceAiLog.PipelineError(_logger, PipelineErrorSource.Tts, channelId, ex.Message);
                 Publish(new PipelineErrorEvent(DateTimeOffset.UtcNow, ex.Message, ex, PipelineErrorSource.Tts));
             }
             finally
             {
+                SpeechSynthesisMetrics.SynthesisLatencyMs.Record(
+                    Stopwatch.GetElapsedTime(ttsStart).TotalMilliseconds);
                 var ttsCts = _ttsCts;
                 _ttsCts = null;
                 ttsCts?.Dispose();
