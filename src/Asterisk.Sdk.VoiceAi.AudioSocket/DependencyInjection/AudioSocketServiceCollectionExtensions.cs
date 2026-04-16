@@ -1,3 +1,4 @@
+using Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -21,6 +22,8 @@ public static class AudioSocketServiceCollectionExtensions
         services.TryAddSingleton(options);
         services.TryAddSingleton<AudioSocketServer>();
         services.AddHostedService<AudioSocketServer>(sp => sp.GetRequiredService<AudioSocketServer>());
+        services.AddHealthChecks()
+            .AddCheck<AudioSocketHealthCheck>("audiosocket");
         return services;
     }
 }
