@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Asterisk.Sdk.Audio;
+using Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics;
 using Asterisk.Sdk.VoiceAi.AudioSocket.Internal;
 using Microsoft.Extensions.Logging;
 
@@ -89,6 +90,8 @@ public sealed class AudioSocketSession : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed == 1, this);
         AudioSocketFrameCodec.WriteFrame(_writer, frameType, pcmData.Span);
         await _writer.FlushAsync(ct).ConfigureAwait(false);
+        AudioSocketMetrics.FramesSent.Add(1);
+        AudioSocketMetrics.BytesSent.Add(pcmData.Length);
     }
 
     /// <summary>Send a silence indication frame.</summary>
@@ -133,6 +136,8 @@ public sealed class AudioSocketSession : IAsyncDisposable
                         case AudioSocketFrameType.AudioSlin48:
                         case AudioSocketFrameType.AudioSlin96:
                         case AudioSocketFrameType.AudioSlin192:
+                            AudioSocketMetrics.FramesReceived.Add(1);
+                            AudioSocketMetrics.BytesReceived.Add(frame.Payload.Length);
                             var copy = frame.Payload.ToArray();
                             await _audioChannel.Writer.WriteAsync(copy, ct).ConfigureAwait(false);
                             break;
