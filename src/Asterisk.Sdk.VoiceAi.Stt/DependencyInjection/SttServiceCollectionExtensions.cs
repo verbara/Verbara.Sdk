@@ -1,4 +1,5 @@
 using Asterisk.Sdk.VoiceAi.Stt.Deepgram;
+using Asterisk.Sdk.VoiceAi.Stt.Diagnostics;
 using Asterisk.Sdk.VoiceAi.Stt.Google;
 using Asterisk.Sdk.VoiceAi.Stt.Whisper;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +22,7 @@ public static class SttServiceCollectionExtensions
             services.Configure(configure);
 
         services.TryAddSingleton<SpeechRecognizer, DeepgramSpeechRecognizer>();
+        services.AddHealthChecks().AddCheck<SttHealthCheck>("stt");
         return services;
     }
 
@@ -37,6 +39,7 @@ public static class SttServiceCollectionExtensions
 
         services.AddHttpClient<WhisperSpeechRecognizer>();
         services.TryAddSingleton<SpeechRecognizer>(sp => sp.GetRequiredService<WhisperSpeechRecognizer>());
+        services.AddHealthChecks().AddCheck<SttHealthCheck>("stt");
         return services;
     }
 
@@ -53,6 +56,7 @@ public static class SttServiceCollectionExtensions
 
         services.AddHttpClient<AzureWhisperSpeechRecognizer>();
         services.TryAddSingleton<SpeechRecognizer>(sp => sp.GetRequiredService<AzureWhisperSpeechRecognizer>());
+        services.AddHealthChecks().AddCheck<SttHealthCheck>("stt");
         return services;
     }
 
@@ -69,6 +73,7 @@ public static class SttServiceCollectionExtensions
 
         services.AddHttpClient<GoogleSpeechRecognizer>();
         services.TryAddSingleton<SpeechRecognizer>(sp => sp.GetRequiredService<GoogleSpeechRecognizer>());
+        services.AddHealthChecks().AddCheck<SttHealthCheck>("stt");
         return services;
     }
 }
