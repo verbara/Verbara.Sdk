@@ -14,7 +14,10 @@ public static class AsteriskTelemetry
         "Asterisk.Sdk.Agi",
         "Asterisk.Sdk.Live",
         "Asterisk.Sdk.Sessions",
-        "Asterisk.Sdk.Push"
+        "Asterisk.Sdk.Push",
+        "Asterisk.Sdk.VoiceAi",
+        "Asterisk.Sdk.VoiceAi.AudioSocket",
+        "Asterisk.Sdk.VoiceAi.OpenAiRealtime"
     ];
 
     /// <summary>All Meter names registered by Asterisk SDK packages.</summary>
@@ -26,6 +29,11 @@ public static class AsteriskTelemetry
         "Asterisk.Sdk.Agi",
         "Asterisk.Sdk.Live",
         "Asterisk.Sdk.Sessions",
-        "Asterisk.Sdk.Push"
+        "Asterisk.Sdk.Push",
+        "Asterisk.Sdk.VoiceAi",
+        "Asterisk.Sdk.VoiceAi.Stt",
+        "Asterisk.Sdk.VoiceAi.Tts",
+        "Asterisk.Sdk.VoiceAi.AudioSocket",
+        "Asterisk.Sdk.VoiceAi.OpenAiRealtime"
     ];
 }
