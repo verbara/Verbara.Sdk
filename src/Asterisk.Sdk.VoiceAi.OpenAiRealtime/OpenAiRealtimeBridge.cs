@@ -1,10 +1,12 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Reactive.Subjects;
 using System.Text;
 using System.Text.Json;
 using Asterisk.Sdk.Audio.Resampling;
 using Asterisk.Sdk.VoiceAi.AudioSocket;
+using Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics;
 using Asterisk.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling;
 using Asterisk.Sdk.VoiceAi.OpenAiRealtime.Internal;
 using Microsoft.Extensions.Logging;
@@ -50,6 +52,10 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     public async ValueTask HandleSessionAsync(AudioSocketSession session, CancellationToken ct = default)
     {
         var channelId = session.ChannelId;
+        RealtimeMetrics.SessionsStarted.Add(1);
+        var sessionStart = Stopwatch.GetTimestamp();
+        using var sessionActivity = RealtimeActivitySource.StartSession(channelId, _options.Model);
+
         RealtimeLog.SessionStarted(_logger, channelId);
 
         // ── Per-session state (stack-lifetime) ──────────────────────────────
@@ -75,6 +81,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             await wsWriteLock.WaitAsync(ct).ConfigureAwait(false);
             try { await ws.SendAsync(sessionUpdateBytes, WebSocketMessageType.Text, true, ct).ConfigureAwait(false); }
             finally { wsWriteLock.Release(); }
+            RealtimeMetrics.MessagesSent.Add(1);
 
             try
             {
@@ -86,6 +93,8 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* expected */ }
             catch (Exception ex)
             {
+                RealtimeMetrics.SessionsFailed.Add(1);
+                sessionActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 RealtimeLog.SessionError(_logger, channelId, ex.Message);
                 throw;
             }
@@ -101,6 +110,9 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 catch { /* ignore close errors */ }
                 finally { wsWriteLock.Release(); }
 
+                RealtimeMetrics.SessionsCompleted.Add(1);
+                RealtimeMetrics.SessionDurationMs.Record(
+                    Stopwatch.GetElapsedTime(sessionStart).TotalMilliseconds);
                 RealtimeLog.SessionEnded(_logger, channelId);
             }
         }
@@ -148,6 +160,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             await wsWriteLock.WaitAsync(ct).ConfigureAwait(false);
             try { await ws.SendAsync(bytes, WebSocketMessageType.Text, true, ct).ConfigureAwait(false); }
             finally { wsWriteLock.Release(); }
+            RealtimeMetrics.MessagesSent.Add(1);
         }
     }
 
@@ -188,6 +201,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             } while (!result.EndOfMessage);
 
             if (messageBuffer.WrittenCount == 0) continue;
+            RealtimeMetrics.MessagesReceived.Add(1);
             var json = Encoding.UTF8.GetString(messageBuffer.WrittenSpan);
 
             // Two-pass decode: first read type, then deserialize to specific DTO
@@ -301,6 +315,8 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         var fnEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.FunctionCallArgumentsDoneEvent);
         if (fnEvt is null) return;
 
+        RealtimeMetrics.FunctionCallsTotal.Add(1);
+
         if (!_registry.TryGetHandler(fnEvt.Name, out var handler))
         {
             RealtimeLog.UnknownFunction(_logger, channelId, fnEvt.Name);
@@ -340,6 +356,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             await ws.SendAsync(responseCreateBytes, WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
         }
         finally { wsWriteLock.Release(); }
+        RealtimeMetrics.MessagesSent.Add(2);
 
         Publish(new RealtimeFunctionCalledEvent(
             channelId, DateTimeOffset.UtcNow, fnEvt.Name, fnEvt.Arguments, resultJson));

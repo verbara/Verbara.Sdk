@@ -1,1 +1,15 @@
 #nullable enable
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeActivitySource
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeHealthCheck
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeHealthCheck.RealtimeHealthCheck(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions!>! options) -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeActivitySource.Source -> System.Diagnostics.ActivitySource!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.FunctionCallsTotal -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.MessagesReceived -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.MessagesSent -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionDurationMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsCompleted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsFailed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsStarted -> System.Diagnostics.Metrics.Counter<long>!
