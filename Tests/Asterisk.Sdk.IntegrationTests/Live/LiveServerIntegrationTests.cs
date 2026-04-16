@@ -34,7 +34,7 @@ public class LiveServerIntegrationTests : IAsyncLifetime
         if (_connection is not null) await _connection.DisposeAsync();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public void AsteriskServer_ShouldStartAndLoadState()
     {
         // Server should be running with managers initialized
@@ -43,7 +43,7 @@ public class LiveServerIntegrationTests : IAsyncLifetime
         _server.Agents.Should().NotBeNull();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public void AsteriskServer_ShouldExposeMetrics()
     {
         // Verify LiveMetrics registers observable instruments after server start

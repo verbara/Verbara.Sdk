@@ -30,7 +30,7 @@ public class AriHealthCheckIntegrationTests : IAsyncLifetime
         if (_client is not null) await _client.DisposeAsync();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task AriHealthCheck_ShouldReturnHealthy_WhenConnected()
     {
         var healthCheck = new AriHealthCheck(_client!);

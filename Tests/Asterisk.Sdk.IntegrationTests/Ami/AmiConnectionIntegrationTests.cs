@@ -27,40 +27,40 @@ public class AmiConnectionIntegrationTests : IAsyncLifetime
         if (_connection is not null) await _connection.DisposeAsync();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public void Connect_ShouldSetStateToConnected()
     {
         _connection!.State.Should().Be(AmiConnectionState.Connected);
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public void Connect_ShouldDetectAsteriskVersion()
     {
         _connection!.AsteriskVersion.Should().NotBeNullOrEmpty();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task SendPingAction_ShouldReturnSuccess()
     {
         var response = await _connection!.SendActionAsync(new PingAction());
         response.Response.Should().Be("Success");
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task SendCoreStatusAction_ShouldReturnCoreStatus()
     {
         var response = await _connection!.SendActionAsync(new CoreStatusAction());
         response.Response.Should().Be("Success");
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task SendCoreSettingsAction_ShouldReturnSettings()
     {
         var response = await _connection!.SendActionAsync(new CoreSettingsAction());
         response.Response.Should().Be("Success");
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task Subscribe_ShouldReceiveEvents()
     {
         var receivedEvent = new TaskCompletionSource<ManagerEvent>();
@@ -81,7 +81,7 @@ public class AmiConnectionIntegrationTests : IAsyncLifetime
         evt.Should().NotBeNull();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task Disconnect_ShouldSetStateToDisconnected()
     {
         await _connection!.DisconnectAsync();
@@ -89,7 +89,7 @@ public class AmiConnectionIntegrationTests : IAsyncLifetime
         _connection = null; // Prevent DisposeAsync from double-disconnecting
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task SendMultipleActions_ShouldCorrelateResponses()
     {
         var task1 = _connection!.SendActionAsync(new PingAction());
@@ -100,7 +100,7 @@ public class AmiConnectionIntegrationTests : IAsyncLifetime
         responses.Should().AllSatisfy(r => r.Response.Should().Be("Success"));
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task SendQueueStatusAction_ShouldReturnEvents()
     {
         var events = new List<ManagerEvent>();
@@ -113,7 +113,7 @@ public class AmiConnectionIntegrationTests : IAsyncLifetime
         events.Should().NotBeNull();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task SendCommandAction_ShouldReturnOutput()
     {
         var response = await _connection!.SendActionAsync(new CommandAction { Command = "core show version" });

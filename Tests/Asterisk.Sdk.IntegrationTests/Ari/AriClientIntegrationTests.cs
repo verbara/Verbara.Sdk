@@ -25,13 +25,13 @@ public class AriClientIntegrationTests : IAsyncLifetime
         if (_client is not null) await _client.DisposeAsync();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public void Connect_ShouldSetIsConnectedToTrue()
     {
         _client!.IsConnected.Should().BeTrue();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task CreateChannel_ShouldReturnChannel()
     {
         var channel = await _client!.Channels.CreateAsync("Local/100@default", AsteriskFixture.AriApp);
@@ -42,7 +42,7 @@ public class AriClientIntegrationTests : IAsyncLifetime
         try { await _client.Channels.HangupAsync(channel.Id); } catch { /* best effort */ }
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task CreateBridge_ShouldReturnBridge()
     {
         var bridge = await _client!.Bridges.CreateAsync("mixing", "test-bridge");
@@ -53,7 +53,7 @@ public class AriClientIntegrationTests : IAsyncLifetime
         try { await _client.Bridges.DestroyAsync(bridge.Id); } catch { /* best effort */ }
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task Subscribe_ShouldReceiveEvents()
     {
         var eventReceived = new TaskCompletionSource<AriEvent>();
@@ -74,7 +74,7 @@ public class AriClientIntegrationTests : IAsyncLifetime
         }
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task Disconnect_ShouldSetIsConnectedToFalse()
     {
         await _client!.DisconnectAsync();
@@ -82,7 +82,7 @@ public class AriClientIntegrationTests : IAsyncLifetime
         _client = null;
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task CreateBridgeAndAddChannel_ShouldWork()
     {
         var bridge = await _client!.Bridges.CreateAsync("mixing", "test-bridge-add");

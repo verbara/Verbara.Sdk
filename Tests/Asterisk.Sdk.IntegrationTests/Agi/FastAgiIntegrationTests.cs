@@ -35,7 +35,7 @@ public class FastAgiIntegrationTests : IAsyncLifetime
         if (_amiConnection is not null) await _amiConnection.DisposeAsync();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task AgiServer_ShouldAcceptConnection_WhenAsteriskCallsAgi()
     {
         var scriptExecuted = new TaskCompletionSource<bool>();
@@ -61,7 +61,7 @@ public class FastAgiIntegrationTests : IAsyncLifetime
         result.Should().BeTrue();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task AgiScript_ShouldExecuteGetVariable()
     {
         var variableValue = new TaskCompletionSource<string>();
@@ -87,13 +87,13 @@ public class FastAgiIntegrationTests : IAsyncLifetime
         result.Should().NotBeNull();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public void AgiServer_ShouldBeRunning_AfterStart()
     {
         _agiServer!.IsRunning.Should().BeTrue();
     }
 
-    [AsteriskAvailableFact]
+    [Fact]
     public async Task AgiServer_ShouldStop_Cleanly()
     {
         await _agiServer!.StopAsync();
