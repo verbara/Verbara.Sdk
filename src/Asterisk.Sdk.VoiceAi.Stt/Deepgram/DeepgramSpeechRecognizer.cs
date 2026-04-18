@@ -15,6 +15,9 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
     private readonly DeepgramOptions _options;
     private readonly int? _fakeServerPort;
 
+    /// <inheritdoc />
+    public override string ProviderName => "Deepgram";
+
     /// <summary>Initializes a new instance for production use.</summary>
     public DeepgramSpeechRecognizer(IOptions<DeepgramOptions> options)
         => _options = options.Value;

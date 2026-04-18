@@ -14,6 +14,9 @@ public sealed class GoogleSpeechRecognizer : SpeechRecognizer
     private readonly GoogleSpeechOptions _options;
     private readonly HttpClient _http;
 
+    /// <inheritdoc />
+    public override string ProviderName => "Google";
+
     /// <summary>Initializes a new instance for production use with DI-managed HttpClient.</summary>
     public GoogleSpeechRecognizer(IOptions<GoogleSpeechOptions> options, HttpClient http)
     {

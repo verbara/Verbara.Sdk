@@ -229,7 +229,7 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
 
             SpeechRecognitionMetrics.TranscriptionsStarted.Add(1);
             var sttStart = Stopwatch.GetTimestamp();
-            using var sttActivity = VoiceAiActivitySource.StartRecognition(_stt.GetType().Name);
+            using var sttActivity = VoiceAiActivitySource.StartRecognition(_stt.ProviderName);
 
             string? transcript = null;
             try
@@ -305,7 +305,7 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             SpeechSynthesisMetrics.SynthesesStarted.Add(1);
             SpeechSynthesisMetrics.SynthesisCharacters.Add(response.Length);
             var ttsStart = Stopwatch.GetTimestamp();
-            using var ttsActivity = VoiceAiActivitySource.StartSynthesis(_tts.GetType().Name, response.Length);
+            using var ttsActivity = VoiceAiActivitySource.StartSynthesis(_tts.ProviderName, response.Length);
 
             _ttsCts = new CancellationTokenSource();
             try

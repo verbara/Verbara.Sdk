@@ -8,6 +8,12 @@ namespace Asterisk.Sdk.VoiceAi;
 /// </summary>
 public abstract class SpeechSynthesizer : IAsyncDisposable
 {
+    /// <summary>
+    /// Stable, allocation-free identifier for this TTS provider (e.g. <c>"Azure"</c>, <c>"ElevenLabs"</c>).
+    /// Used as an activity/metric tag in the pipeline hot path; override to avoid <c>GetType().Name</c> reflection.
+    /// </summary>
+    public virtual string ProviderName => GetType().Name;
+
     /// <summary>Synthesizes text into a stream of audio frames.</summary>
     public abstract IAsyncEnumerable<ReadOnlyMemory<byte>> SynthesizeAsync(
         string text,

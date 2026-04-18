@@ -9,6 +9,9 @@ namespace Asterisk.Sdk.VoiceAi.Testing;
 /// </summary>
 public sealed class FakeSpeechRecognizer : SpeechRecognizer
 {
+    /// <inheritdoc />
+    public override string ProviderName => "Fake";
+
     private readonly List<(string Transcript, float Confidence)> _transcripts = [];
     private Exception? _error;
     private int _errorAfterCount;

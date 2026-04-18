@@ -9,6 +9,9 @@ namespace Asterisk.Sdk.VoiceAi.Testing;
 /// </summary>
 public sealed class FakeSpeechSynthesizer : SpeechSynthesizer
 {
+    /// <inheritdoc />
+    public override string ProviderName => "Fake";
+
     private TimeSpan _silenceDuration;
     private ReadOnlyMemory<byte>? _audioData;
     private Exception? _error;
