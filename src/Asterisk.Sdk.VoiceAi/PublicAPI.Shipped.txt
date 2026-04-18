@@ -19,6 +19,13 @@ Asterisk.Sdk.VoiceAi.ConversationTurn.Timestamp.init -> void
 Asterisk.Sdk.VoiceAi.ConversationTurn.UserTranscript.get -> string!
 Asterisk.Sdk.VoiceAi.ConversationTurn.UserTranscript.init -> void
 Asterisk.Sdk.VoiceAi.DependencyInjection.VoiceAiServiceCollectionExtensions
+Asterisk.Sdk.VoiceAi.Diagnostics.SpeechRecognitionMetrics
+Asterisk.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics
+Asterisk.Sdk.VoiceAi.Diagnostics.VoiceAiActivitySource
+Asterisk.Sdk.VoiceAi.Diagnostics.VoiceAiHealthCheck
+Asterisk.Sdk.VoiceAi.Diagnostics.VoiceAiHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Asterisk.Sdk.VoiceAi.Diagnostics.VoiceAiHealthCheck.VoiceAiHealthCheck(Asterisk.Sdk.VoiceAi.ISessionHandler! handler) -> void
+Asterisk.Sdk.VoiceAi.Diagnostics.VoiceAiMetrics
 Asterisk.Sdk.VoiceAi.Events.BargInDetectedEvent
 Asterisk.Sdk.VoiceAi.Events.BargInDetectedEvent.BargInDetectedEvent(System.DateTimeOffset Timestamp) -> void
 Asterisk.Sdk.VoiceAi.Events.PipelineErrorEvent
@@ -106,5 +113,24 @@ Asterisk.Sdk.VoiceAi.SpeechRecognizer.SpeechRecognizer() -> void
 Asterisk.Sdk.VoiceAi.SpeechSynthesizer
 Asterisk.Sdk.VoiceAi.SpeechSynthesizer.SpeechSynthesizer() -> void
 static Asterisk.Sdk.VoiceAi.DependencyInjection.VoiceAiServiceCollectionExtensions.AddVoiceAiPipeline<THandler>(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.SpeechRecognitionMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.SpeechRecognitionMetrics.TranscriptionLatencyMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.SpeechRecognitionMetrics.TranscriptionsCompleted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.SpeechRecognitionMetrics.TranscriptionsFailed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.SpeechRecognitionMetrics.TranscriptionsStarted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesesCompleted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesesFailed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesesStarted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesisCharacters -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesisLatencyMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.VoiceAiActivitySource.Source -> System.Diagnostics.ActivitySource!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.VoiceAiMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.VoiceAiMetrics.SessionDurationMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.VoiceAiMetrics.SessionsCompleted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.VoiceAiMetrics.SessionsFailed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.Diagnostics.VoiceAiMetrics.SessionsStarted -> System.Diagnostics.Metrics.Counter<long>!
 virtual Asterisk.Sdk.VoiceAi.SpeechRecognizer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+virtual Asterisk.Sdk.VoiceAi.SpeechRecognizer.ProviderName.get -> string!
 virtual Asterisk.Sdk.VoiceAi.SpeechSynthesizer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+virtual Asterisk.Sdk.VoiceAi.SpeechSynthesizer.ProviderName.get -> string!

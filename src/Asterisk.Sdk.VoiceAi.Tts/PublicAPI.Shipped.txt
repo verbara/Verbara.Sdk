@@ -15,6 +15,9 @@ Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOutputFormat
 Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsSpeechSynthesizer
 Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsSpeechSynthesizer.AzureTtsSpeechSynthesizer(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions!>! options, System.Net.Http.HttpClient! http) -> void
 Asterisk.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions
+Asterisk.Sdk.VoiceAi.Tts.Diagnostics.TtsHealthCheck
+Asterisk.Sdk.VoiceAi.Tts.Diagnostics.TtsHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Asterisk.Sdk.VoiceAi.Tts.Diagnostics.TtsHealthCheck.TtsHealthCheck(Asterisk.Sdk.VoiceAi.SpeechSynthesizer? synthesizer) -> void
 Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions
 Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.ApiKey.get -> string!
 Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.ApiKey.set -> void
@@ -33,7 +36,9 @@ const Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOutputFormat.Raw16Khz16BitMonoPcm =
 const Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOutputFormat.Raw24Khz16BitMonoPcm = "raw-24khz-16bit-mono-pcm" -> string!
 const Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOutputFormat.Raw48Khz16BitMonoPcm = "raw-48khz-16bit-mono-pcm" -> string!
 const Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOutputFormat.Raw8Khz16BitMonoPcm = "raw-8khz-16bit-mono-pcm" -> string!
+override Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsSpeechSynthesizer.ProviderName.get -> string!
 override Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsSpeechSynthesizer.SynthesizeAsync(string! text, Asterisk.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+override Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsSpeechSynthesizer.ProviderName.get -> string!
 override Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsSpeechSynthesizer.SynthesizeAsync(string! text, Asterisk.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
 static Asterisk.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions.AddAzureTtsSpeechSynthesizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static Asterisk.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions.AddElevenLabsSpeechSynthesizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

@@ -14,6 +14,9 @@ Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.Punctuate.set -> void
 Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramSpeechRecognizer
 Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramSpeechRecognizer.DeepgramSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions!>! options) -> void
 Asterisk.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions
+Asterisk.Sdk.VoiceAi.Stt.Diagnostics.SttHealthCheck
+Asterisk.Sdk.VoiceAi.Stt.Diagnostics.SttHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Asterisk.Sdk.VoiceAi.Stt.Diagnostics.SttHealthCheck.SttHealthCheck(Asterisk.Sdk.VoiceAi.SpeechRecognizer? recognizer) -> void
 Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions
 Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.ApiKey.get -> string!
 Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.ApiKey.set -> void
@@ -48,9 +51,13 @@ Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.Model.set -> void
 Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.WhisperOptions() -> void
 Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperSpeechRecognizer
 Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperSpeechRecognizer.WhisperSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperOptions!>! options, System.Net.Http.HttpClient! http) -> void
+override Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramSpeechRecognizer.ProviderName.get -> string!
 override Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
+override Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechRecognizer.ProviderName.get -> string!
 override Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
+override Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperSpeechRecognizer.ProviderName.get -> string!
 override Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
+override Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperSpeechRecognizer.ProviderName.get -> string!
 override Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
 static Asterisk.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddAzureWhisperSpeechRecognizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static Asterisk.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddDeepgramSpeechRecognizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

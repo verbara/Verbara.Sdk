@@ -23,5 +23,7 @@ Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.WithAudio(System.ReadOnlyMemo
 Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.WithDelay(System.TimeSpan delay) -> Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer!
 Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.WithError(System.Exception! exception, int afterCount = 0) -> Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer!
 Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.WithSilence(System.TimeSpan duration) -> Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer!
+override Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.ProviderName.get -> string!
 override Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
+override Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.ProviderName.get -> string!
 override Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.SynthesizeAsync(string! text, Asterisk.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
