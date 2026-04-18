@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.0] - 2026-04-17
+
+### Added
+
+- **VoiceAi:** `SpeechRecognizer.ProviderName` and `SpeechSynthesizer.ProviderName` virtual properties — stable, allocation-free identifiers for the underlying STT/TTS provider. Default implementation returns `GetType().Name` (backwards-compatible for out-of-tree subclasses). Overridden with literals in built-in providers: `"Deepgram"`, `"Google"`, `"Whisper"`, `"AzureWhisper"`, `"Azure"`, `"ElevenLabs"`, `"Fake"` (STT + TTS).
+
+### Changed
+
+- **VoiceAi:** `VoiceAiPipeline` hot path now reads `_stt.ProviderName` / `_tts.ProviderName` instead of calling `GetType().Name` on every utterance — removes per-utterance reflection from STT recognition and TTS synthesis activity tags.
+- **PublicAPI:** Promoted `PublicAPI.Unshipped.txt` → `PublicAPI.Shipped.txt` for the six VoiceAi packages (`VoiceAi`, `VoiceAi.Stt`, `VoiceAi.Tts`, `VoiceAi.Testing`, `VoiceAi.OpenAiRealtime`, `VoiceAi.AudioSocket`). Consolidates the v1.9.0 telemetry stack (Metrics + HealthCheck + ActivitySource) along with the new `ProviderName` virtual property.
+
+### Fixed
+
+- **Tests:** `AsteriskTelemetryTests.ActivitySourceNames_ShouldContainAllPackages` / `MeterNames_ShouldContainAllPackages` — updated stale counts (6→9 and 7→12) to reflect the VoiceAi telemetry registrations added in v1.9.0.
+
+### Notes
+
+- Fully source- and binary-compatible with v1.9.0. Additive public API only.
+- 19 packages on nuget.org. 0 build warnings, 0 trim warnings.
+
+---
+
+## [1.9.0] - 2026-04-17
+
+### Added
+
+- **VoiceAi telemetry — full stack in 5 packages:**
+  - `VoiceAiMetrics`, `SpeechRecognitionMetrics`, `SpeechSynthesisMetrics`, `AudioSocketMetrics`, `OpenAiRealtimeMetrics` — counters, histograms, gauges per package (sessions started/completed/failed, transcription/synthesis latency, synthesis characters, session duration, bytes/frames).
+  - `VoiceAiActivitySource`, `AudioSocketActivitySource`, `OpenAiRealtimeActivitySource` — distributed tracing for pipeline/session/recognition/synthesis spans.
+  - Health checks: `VoiceAiHealthCheck`, `SttHealthCheck`, `TtsHealthCheck`, `AudioSocketHealthCheck`, `OpenAiRealtimeHealthCheck`.
+- **Hosting:** `AsteriskTelemetry.ActivitySourceNames` count 6→9 and `MeterNames` count 7→12 to include VoiceAi/AudioSocket/OpenAiRealtime.
+
+### Fixed
+
+- **VoiceAi OpenAiRealtime:** Guard `SessionsCompleted` counter on failure path so the metric is not double-counted when a session throws.
+- **VoiceAi AudioSocket:** Wire frame/byte counters inside `AudioSocketSession` for per-session I/O telemetry.
+- **Ari:** `AriChannel.Creationtime` changed to `string?` (tolerant reader — some Asterisk versions omit the field).
+- **Live:** `LiveMetrics` now uses a per-instance `Meter` with an explicit `<long>` gauge type so multiple hosts in the same process don't collide.
+- **Packaging:** `CompatibilitySuppressions.xml` added in `Sdk` and `Ari` to accept accepted ABI shifts against the 1.5.3 baseline.
+
+### Notes
+
+- 19 packages on nuget.org. 0 build warnings, 0 trim warnings.
+- Three Asterisk PBX integration tests explicitly skipped pending docker infra: Session `Local/s`, Session `Local/101`, LiveMetrics per-instance meter.
+
+---
+
 ## [1.8.0] - 2026-04-13
 
 ### Added

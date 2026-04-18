@@ -45,6 +45,34 @@ pipeline.Events.Subscribe(evt => Console.WriteLine(evt));
 - Observable `Events` stream (`SpeechStartedEvent`, `TranscriptReceivedEvent`, `BargInDetectedEvent`, etc.)
 - Native AOT compatible
 
+## Custom STT / TTS Providers
+
+When writing your own `SpeechRecognizer` or `SpeechSynthesizer` subclass, override `ProviderName` with a stable literal to avoid the per-utterance `GetType().Name` allocation on the pipeline hot path (used as a tag on STT/TTS activities):
+
+```csharp
+public sealed class MyCustomRecognizer : SpeechRecognizer
+{
+    public override string ProviderName => "MyCustom";
+
+    public override IAsyncEnumerable<SpeechRecognitionResult> StreamAsync(
+        IAsyncEnumerable<ReadOnlyMemory<byte>> audioFrames,
+        AudioFormat format,
+        CancellationToken ct = default)
+    {
+        // ...
+    }
+}
+```
+
+If you don't override `ProviderName` the default falls back to `GetType().Name` — functional, but incurs one reflection call per utterance.
+
+## Observability
+
+- **Metrics:** `VoiceAiMetrics` (sessions started/completed/failed, session duration), `SpeechRecognitionMetrics` (transcriptions started/completed/failed, latency), `SpeechSynthesisMetrics` (syntheses started/completed/failed, latency, characters).
+- **Tracing:** `VoiceAiActivitySource` — session / recognition / synthesis spans.
+- **Health:** `VoiceAiHealthCheck`, `SttHealthCheck`, `TtsHealthCheck` auto-registered by `AddVoiceAiPipeline<THandler>()`.
+- Discover names via `AsteriskTelemetry.ActivitySourceNames` / `MeterNames` from `Asterisk.Sdk.Hosting`.
+
 ## Documentation
 
 See the [main README](../../README.md) for full documentation.
