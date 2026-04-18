@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Asterisk.Sdk.Sessions.Postgres - Postgres-backed SessionStoreBase for multi-instance deployments. Ships PostgresSessionStore + fluent UsePostgres(...) registration for Asterisk.Sdk.Sessions. AOT-safe (source-generated JSON only, Dapper parameterized SQL).</Description>
+    <PackageTags>asterisk;sessions;postgres;postgresql;state-store;sdk</PackageTags>
+    <!-- New package - no baseline published yet; skip binary compatibility check -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.Postgres.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Asterisk.Sdk.Sessions\Asterisk.Sdk.Sessions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Migrations\*.sql" Pack="true" PackagePath="contentFiles\any\any\Migrations\" />
+    <None Include="Migrations\*.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
