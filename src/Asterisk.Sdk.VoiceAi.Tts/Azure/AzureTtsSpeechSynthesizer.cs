@@ -16,6 +16,9 @@ public sealed class AzureTtsSpeechSynthesizer : SpeechSynthesizer
     private readonly HttpClient _http;
     private readonly int _chunkSize;
 
+    /// <inheritdoc />
+    public override string ProviderName => "Azure";
+
     /// <summary>Initializes a new instance for production use.</summary>
     public AzureTtsSpeechSynthesizer(IOptions<AzureTtsOptions> options, HttpClient http)
     {

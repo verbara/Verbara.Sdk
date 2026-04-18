@@ -2,3 +2,5 @@
 Asterisk.Sdk.VoiceAi.Tts.Diagnostics.TtsHealthCheck
 Asterisk.Sdk.VoiceAi.Tts.Diagnostics.TtsHealthCheck.TtsHealthCheck(Asterisk.Sdk.VoiceAi.SpeechSynthesizer? synthesizer) -> void
 Asterisk.Sdk.VoiceAi.Tts.Diagnostics.TtsHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+override Asterisk.Sdk.VoiceAi.Tts.Azure.AzureTtsSpeechSynthesizer.ProviderName.get -> string!
+override Asterisk.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsSpeechSynthesizer.ProviderName.get -> string!

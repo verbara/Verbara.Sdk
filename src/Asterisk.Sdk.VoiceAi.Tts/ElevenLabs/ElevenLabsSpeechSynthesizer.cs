@@ -18,6 +18,9 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
     private readonly ElevenLabsOptions _options;
     private readonly int? _fakeServerPort;
 
+    /// <inheritdoc />
+    public override string ProviderName => "ElevenLabs";
+
     /// <summary>Initializes a new instance for production use.</summary>
     public ElevenLabsSpeechSynthesizer(IOptions<ElevenLabsOptions> options)
         => _options = options.Value;

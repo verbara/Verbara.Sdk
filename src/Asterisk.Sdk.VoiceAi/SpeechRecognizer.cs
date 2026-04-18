@@ -8,6 +8,12 @@ namespace Asterisk.Sdk.VoiceAi;
 /// </summary>
 public abstract class SpeechRecognizer : IAsyncDisposable
 {
+    /// <summary>
+    /// Stable, allocation-free identifier for this STT provider (e.g. <c>"Deepgram"</c>, <c>"Whisper"</c>).
+    /// Used as an activity/metric tag in the pipeline hot path; override to avoid <c>GetType().Name</c> reflection.
+    /// </summary>
+    public virtual string ProviderName => GetType().Name;
+
     /// <summary>Streams audio frames to the STT engine and yields recognition results.</summary>
     public abstract IAsyncEnumerable<SpeechRecognitionResult> StreamAsync(
         IAsyncEnumerable<ReadOnlyMemory<byte>> audioFrames,

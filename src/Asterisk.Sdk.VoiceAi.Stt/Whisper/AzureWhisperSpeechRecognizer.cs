@@ -14,6 +14,9 @@ public sealed class AzureWhisperSpeechRecognizer : SpeechRecognizer
     private readonly AzureWhisperOptions _options;
     private readonly HttpClient _http;
 
+    /// <inheritdoc />
+    public override string ProviderName => "AzureWhisper";
+
     /// <summary>Initializes a new instance for production use with DI-managed HttpClient.</summary>
     public AzureWhisperSpeechRecognizer(IOptions<AzureWhisperOptions> options, HttpClient http)
     {

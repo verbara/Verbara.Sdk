@@ -1,1 +1,3 @@
 #nullable enable
+override Asterisk.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.ProviderName.get -> string!
+override Asterisk.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.ProviderName.get -> string!
