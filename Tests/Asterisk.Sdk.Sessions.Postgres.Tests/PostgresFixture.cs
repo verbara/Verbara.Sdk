@@ -36,9 +36,12 @@ public sealed class PostgresFixture : IAsyncLifetime
             .WithEnvironment("POSTGRES_USER", DbUser)
             .WithEnvironment("POSTGRES_PASSWORD", DbPassword)
             .WithEnvironment("POSTGRES_DB", DbName)
+            // -d $DbName: wait until the target database is reachable (not just the cluster).
+            // pg_isready without -d can return success while POSTGRES_DB init scripts are
+            // still running, which resets the first real connection on CI runners.
             .WithWaitStrategy(
                 Wait.ForUnixContainer()
-                    .UntilCommandIsCompleted("pg_isready", "-U", DbUser))
+                    .UntilCommandIsCompleted("pg_isready", "-U", DbUser, "-d", DbName))
             .Build();
 
         await _container.StartAsync();
@@ -48,8 +51,30 @@ public sealed class PostgresFixture : IAsyncLifetime
         var migrationPath = Path.Combine(AppContext.BaseDirectory, "Migrations", "001_create_sessions_table.sql");
         var migrationSql = await File.ReadAllTextAsync(migrationPath);
 
-        await using var conn = await _dataSource.OpenConnectionAsync();
+        // Retry the first real connection — CI runners sometimes reset the TCP stream
+        // within ~100 ms of pg_isready reporting success.
+        await using var conn = await OpenWithRetryAsync(_dataSource, attempts: 10, delay: TimeSpan.FromMilliseconds(500));
         await conn.ExecuteAsync(migrationSql);
+    }
+
+    private static async Task<NpgsqlConnection> OpenWithRetryAsync(NpgsqlDataSource dataSource, int attempts, TimeSpan delay)
+    {
+        for (var i = 0; i < attempts; i++)
+        {
+            try
+            {
+                return await dataSource.OpenConnectionAsync();
+            }
+            catch (NpgsqlException) when (i < attempts - 1)
+            {
+                await Task.Delay(delay);
+            }
+            catch (System.Net.Sockets.SocketException) when (i < attempts - 1)
+            {
+                await Task.Delay(delay);
+            }
+        }
+        throw new InvalidOperationException("Could not open Postgres connection after retries.");
     }
 
     public async Task DisposeAsync()
