@@ -20,8 +20,13 @@ public sealed class RedisSessionStore : SessionStoreBase
     private readonly IConnectionMultiplexer _redis;
     private readonly RedisSessionStoreOptions _options;
 
-    /// <summary>Create a new store from a multiplexer and options value.</summary>
-    public RedisSessionStore(IConnectionMultiplexer redis, RedisSessionStoreOptions options)
+    /// <summary>
+    /// Create a new store from a multiplexer and options value.
+    /// Internal to avoid DI ambiguity if a consumer registers <see cref="RedisSessionStoreOptions"/>
+    /// as a singleton directly. Use the <see cref="IOptions{TOptions}"/> ctor from DI; tests reach
+    /// this via <c>InternalsVisibleTo</c>.
+    /// </summary>
+    internal RedisSessionStore(IConnectionMultiplexer redis, RedisSessionStoreOptions options)
     {
         ArgumentNullException.ThrowIfNull(redis);
         ArgumentNullException.ThrowIfNull(options);
@@ -63,6 +68,7 @@ public sealed class RedisSessionStore : SessionStoreBase
     /// <inheritdoc />
     public override async ValueTask SaveAsync(CallSession session, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(session);
 
         var snapshot = CallSessionSnapshot.FromSession(session);
@@ -91,11 +97,12 @@ public sealed class RedisSessionStore : SessionStoreBase
         }
 
         batch.Execute();
-        await Task.WhenAll(tasks).ConfigureAwait(false);
+        await Task.WhenAll(tasks).WaitAsync(ct).ConfigureAwait(false);
 
         // Trim stale completed entries
         if (IsTerminal(snapshot.State))
         {
+            ct.ThrowIfCancellationRequested();
             var cutoff = DateTimeOffset.UtcNow.Add(-_options.CompletedRetention).ToUnixTimeMilliseconds();
             var stale = await db.SortedSetRangeByScoreAsync(
                 CompletedSetKey(), double.NegativeInfinity, cutoff).ConfigureAwait(false);
@@ -110,6 +117,7 @@ public sealed class RedisSessionStore : SessionStoreBase
     /// <inheritdoc />
     public override async ValueTask<CallSession?> GetAsync(string sessionId, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var db = GetDatabase();
         var value = await db.StringGetAsync(SessionKey(sessionId)).ConfigureAwait(false);
         var snapshot = Deserialize(value);
@@ -119,6 +127,7 @@ public sealed class RedisSessionStore : SessionStoreBase
     /// <inheritdoc />
     public override async ValueTask<CallSession?> GetByLinkedIdAsync(string linkedId, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var db = GetDatabase();
         var sessionId = await db.StringGetAsync(LinkedIndexKey(linkedId)).ConfigureAwait(false);
         if (sessionId.IsNullOrEmpty) return null;
@@ -128,17 +137,20 @@ public sealed class RedisSessionStore : SessionStoreBase
     /// <inheritdoc />
     public override async ValueTask<IEnumerable<CallSession>> GetActiveAsync(CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var db = GetDatabase();
         var sessions = new List<CallSession>();
 
         // Cursor-based scan to avoid blocking on large sets
         var memberIds = new List<RedisValue>();
-        await foreach (var entry in db.SetScanAsync(ActiveSetKey(), pageSize: 500).ConfigureAwait(false))
+        await foreach (var entry in db.SetScanAsync(ActiveSetKey(), pageSize: 500).WithCancellation(ct).ConfigureAwait(false))
         {
             memberIds.Add(entry);
         }
 
         if (memberIds.Count == 0) return sessions;
+
+        ct.ThrowIfCancellationRequested();
 
         // Pipeline GET for all active session IDs
         var batch = db.CreateBatch();
@@ -149,7 +161,7 @@ public sealed class RedisSessionStore : SessionStoreBase
         }
 
         batch.Execute();
-        await Task.WhenAll(getTasks).ConfigureAwait(false);
+        await Task.WhenAll(getTasks).WaitAsync(ct).ConfigureAwait(false);
 
         foreach (var task in getTasks)
         {
@@ -164,11 +176,14 @@ public sealed class RedisSessionStore : SessionStoreBase
     /// <inheritdoc />
     public override async ValueTask DeleteAsync(string sessionId, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var db = GetDatabase();
 
         // Read session first to get linkedId
         var value = await db.StringGetAsync(SessionKey(sessionId)).ConfigureAwait(false);
         var snapshot = Deserialize(value);
+
+        ct.ThrowIfCancellationRequested();
 
         var batch = db.CreateBatch();
         var tasks = new List<Task>
@@ -184,12 +199,13 @@ public sealed class RedisSessionStore : SessionStoreBase
         }
 
         batch.Execute();
-        await Task.WhenAll(tasks).ConfigureAwait(false);
+        await Task.WhenAll(tasks).WaitAsync(ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public override async ValueTask SaveBatchAsync(IReadOnlyList<CallSession> sessions, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(sessions);
         if (sessions.Count == 0) return;
 
@@ -224,11 +240,12 @@ public sealed class RedisSessionStore : SessionStoreBase
         }
 
         batch.Execute();
-        await Task.WhenAll(tasks).ConfigureAwait(false);
+        await Task.WhenAll(tasks).WaitAsync(ct).ConfigureAwait(false);
 
         // Trim stale completed entries
         if (hasTerminal)
         {
+            ct.ThrowIfCancellationRequested();
             var cutoff = DateTimeOffset.UtcNow.Add(-_options.CompletedRetention).ToUnixTimeMilliseconds();
             var stale = await db.SortedSetRangeByScoreAsync(
                 CompletedSetKey(), double.NegativeInfinity, cutoff).ConfigureAwait(false);

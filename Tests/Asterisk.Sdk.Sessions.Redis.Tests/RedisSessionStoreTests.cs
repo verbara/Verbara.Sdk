@@ -227,6 +227,19 @@ public sealed class RedisSessionStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SaveAsync_ShouldThrowOperationCanceled_WhenTokenAlreadyCancelled()
+    {
+        var store = CreateStore();
+        var session = CreateSession("cancel-1");
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var act = async () => await store.SaveAsync(session, cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
     public async Task EnumSerialization_ShouldRoundtrip_WhenSessionCarriesHangupCauseAndRoles()
     {
         var store = CreateStore();

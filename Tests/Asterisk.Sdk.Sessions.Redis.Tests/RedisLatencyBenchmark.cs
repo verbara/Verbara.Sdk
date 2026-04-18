@@ -14,6 +14,7 @@ namespace Asterisk.Sdk.Sessions.Redis.Tests;
 /// </summary>
 [Collection("Redis")]
 [Trait("Category", "Integration")]
+[Trait("Category", "Benchmark")]
 public class RedisLatencyBenchmark : IAsyncLifetime
 {
     private readonly RedisFixture _fixture;
