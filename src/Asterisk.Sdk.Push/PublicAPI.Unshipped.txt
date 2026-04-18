@@ -1,1 +1,5 @@
 #nullable enable
+*REMOVED*Asterisk.Sdk.Push.Events.PushEventMetadata.PushEventMetadata(string! TenantId, string? UserId, System.DateTimeOffset OccurredAt, string? CorrelationId, string? TopicPath = null) -> void
+Asterisk.Sdk.Push.Events.PushEventMetadata.PushEventMetadata(string! TenantId, string? UserId, System.DateTimeOffset OccurredAt, string? CorrelationId, string? TopicPath = null, string? TraceContext = null) -> void
+Asterisk.Sdk.Push.Events.PushEventMetadata.TraceContext.get -> string?
+Asterisk.Sdk.Push.Events.PushEventMetadata.TraceContext.init -> void
