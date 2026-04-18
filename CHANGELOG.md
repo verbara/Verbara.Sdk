@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.1] - 2026-04-18
+
+### Added
+
+- **Push:** `PushEventMetadata.TraceContext` — optional `string?` parameter carrying a W3C traceparent (`00-{trace-id}-{span-id}-{flags}`) for cross-boundary distributed tracing. When present, transports crossing process/network boundaries (SSE endpoints in `Asterisk.Sdk.Push.AspNetCore`, backplane relays in `Asterisk.Sdk.Pro.Push`) inject it into the wire envelope so downstream subscribers can continue the publisher's trace. Null default; older consumers safely ignore the unknown field. Establishes the pattern for future cross-boundary propagation (AMI/ARI, tracked in a separate spec).
+
+### Notes
+
+- Fully source- and binary-compatible with v1.10.0. Additive optional parameter on a positional record — existing call sites with 5 args continue to compile and bind unchanged.
+- 19 packages on nuget.org. 0 build warnings, 0 trim warnings.
+
+---
+
 ## [1.10.0] - 2026-04-17
 
 ### Added
