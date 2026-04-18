@@ -1,7 +1,9 @@
 # Analisis de Benchmark — Asterisk.Sdk
 
-> AMD Ryzen 9 9900X (12C/24T), .NET 10.0.3, BenchmarkDotNet v0.14.0
-> Fecha: 2026-03-06
+> AMD Ryzen 9 9900X (12C/24T), .NET 10.0.x, BenchmarkDotNet v0.14.0
+> Baseline: 2026-03-06 (SDK v1.0.0-preview). Delta v1.10: 2026-04-18.
+>
+> **Status:** Section 1 (core hot paths) retains v1.0 numbers — those code paths are unchanged and the delta on the same hardware is within noise. Section 1b documents the v1.10 VoiceAi `ProviderName` perf fix specifically. A full re-run of sections 1 and 2 on v1.10 is tracked in the docs-overhaul sprint plan.
 
 ---
 
@@ -24,6 +26,37 @@ Convertimos latencias a operaciones/segundo para entender capacidad real:
 | Channel lookup (Name) | 7.0 ns | **142.9 M lookups/s** | Secondary index O(1) |
 | Action correlation (1000) | 62 us | **16.1 M correlations/s** | ConcurrentDict + TCS lifecycle |
 | Event pump (1000 events) | 69 us | **14.5 M events/s** | Channel<T> enqueue + consume |
+
+---
+
+## 1b. VoiceAi Hot Path — Delta v1.10.0 (2026-04-18)
+
+En v1.10.0 se introdujo la propiedad virtual `SpeechRecognizer.ProviderName` / `SpeechSynthesizer.ProviderName` con defaults que colapsan a literales en los 8 providers built-in (Deepgram, Google, Whisper, AzureWhisper, Azure TTS, ElevenLabs, Fake×2). El pipeline `VoiceAiPipeline` tagea cada recognition/synthesis activity con este nombre — antes usaba `GetType().Name` (virtual dispatch + reflection).
+
+Resultado (misma máquina, ShortRunJob, 3 iter + 3 warmup):
+
+| Método | Mean | Alloc | Ratio vs baseline |
+|--------|------|-------|-------------------|
+| `Stt_ProviderName` (v1.10 override) | **0.012 ns** | 0 B | baseline |
+| `Stt_GetTypeName` (pre-v1.10) | 1.11 ns | 0 B | **92.4x más lento** |
+| `Tts_ProviderName` (v1.10 override) | **0.193 ns** | 0 B | baseline |
+| `Tts_GetTypeName` (pre-v1.10) | 1.29 ns | 0 B | **6.7x más lento** |
+
+BenchmarkDotNet emite `ZeroMeasurement` warning para los `ProviderName` — indistinguible de método vacío. El JIT inlinea el literal const y el overhead desaparece.
+
+En el contexto del pipeline: cada utterance dispara 2 accesos (STT + TTS). A 10K utterances/hora por instancia el ahorro bruto es pequeño (~25ms/hora), pero el verdadero beneficio es eliminar el sitio de reflection, mantener el hot path "zero-cost" y dar a custom providers una vía explícita para sobrescribir el nombre:
+
+```csharp
+public sealed class MyRecognizer : SpeechRecognizer
+{
+    public override string ProviderName => "MyRecognizer";
+    // ...
+}
+```
+
+Sin override, el default `=> GetType().Name` preserva el comportamiento pre-v1.10 — fully backwards-compatible.
+
+Benchmark code: `Tests/Asterisk.Sdk.Benchmarks/VoiceAiBenchmarks.cs`. Reproduce con `dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/ -- --filter "*VoiceAi*"`.
 
 ---
 
