@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.2] - 2026-04-18
+
+### Fixed
+
+- **Push:** `RxPushEventBus.PublishAsync` now captures the ambient W3C traceparent from `Activity.Current` into `PushEventMetadata.TraceContext` when the publisher has not already set it. Previously the `ExecutionContext` flow was broken at the bus's internal `Channel` boundary (the dispatch loop runs under a `Task.Run` started at construction time), causing downstream transports — SSE endpoints and `Asterisk.Sdk.Pro.Push` backplanes — to see a null trace context and start receiver spans as new trace roots. The capture is guarded (`TraceContext: null` only) so publishers remain free to override the trace context explicitly.
+
+### Notes
+
+- Source- and binary-compatible with v1.10.1. Transparent behaviour change that only activates when an `Activity` is live at publish time.
+
+---
+
 ## [1.10.1] - 2026-04-18
 
 ### Added
