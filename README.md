@@ -67,6 +67,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 | Getting started for operators | [docs/README-technical.md](docs/README-technical.md) |
 | Commercial overview / positioning | [docs/README-commercial.md](docs/README-commercial.md) |
 | High-load tuning (10K / 100K agents) | [docs/guides/high-load-tuning.md](docs/guides/high-load-tuning.md) |
+| Session store backends (InMemory / Redis / Postgres) | [docs/guides/session-store-backends.md](docs/guides/session-store-backends.md) |
 | Troubleshooting (connection, auth, events, tracing) | [docs/guides/troubleshooting.md](docs/guides/troubleshooting.md) |
 | Asterisk 18/20/22/23 version compatibility | [docs/guides/asterisk-version-compatibility.md](docs/guides/asterisk-version-compatibility.md) |
 | Asterisk Realtime (ODBC) setup | [docs/guides/manual-asterisk-realtime-setup.md](docs/guides/manual-asterisk-realtime-setup.md) |
@@ -399,6 +400,22 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 | **Asterisk.Sdk.Sessions** | Session Engine: call session correlation, state machines, and domain events |
 | **Asterisk.Sdk.Config** | Asterisk `.conf` and `extensions.conf` file parsers |
 | **Asterisk.Sdk.Hosting** | DI extensions (`AddAsterisk`) and meta-package referencing all core packages |
+
+### Session Store Backends
+
+| Package | Description |
+|---------|-------------|
+| **Asterisk.Sdk.Sessions.Redis** | `RedisSessionStore` + `UseRedis(...)` fluent builder (StackExchange.Redis, pipelined I/O, TTL-driven retention, AOT-safe) |
+| **Asterisk.Sdk.Sessions.Postgres** | `PostgresSessionStore` + `UsePostgres(...)` fluent builder (Npgsql + Dapper + JSONB, UPSERT on `ON CONFLICT`, migration SQL shipped in the nupkg) |
+
+### Observability & Integrations
+
+| Package | Description |
+|---------|-------------|
+| **Asterisk.Sdk.OpenTelemetry** | Batteries-included OpenTelemetry wiring: one call enrolls every ActivitySource + Meter, ships Console/OTLP/Prometheus exporter helpers |
+| **Asterisk.Sdk.Push** | Real-time push primitives: topic hierarchy, subscription management, authorization, in-memory event fan-out |
+| **Asterisk.Sdk.Push.AspNetCore** | SSE streaming endpoint for the Push bus (ASP.NET Core) |
+| **Asterisk.Sdk.Push.Webhooks** | Outbound HTTP webhooks: HMAC-SHA256 signing, exponential retry/backoff, topic-pattern matching |
 
 ### Voice AI
 

@@ -8,8 +8,10 @@
     <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.FunctionalTests" />
     <InternalsVisibleTo Include="Asterisk.Sdk.Hosting" />
     <InternalsVisibleTo Include="Asterisk.Sdk.Hosting.Tests" />
-    <InternalsVisibleTo Include="Asterisk.Sdk.Redis.Spike" />
-    <InternalsVisibleTo Include="Asterisk.Sdk.Redis.Spike.Aot" />
+    <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.Redis" />
+    <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.Redis.Tests" />
+    <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.Postgres" />
+    <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.Postgres.Tests" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Asterisk.Sdk\Asterisk.Sdk.csproj" />
@@ -18,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />

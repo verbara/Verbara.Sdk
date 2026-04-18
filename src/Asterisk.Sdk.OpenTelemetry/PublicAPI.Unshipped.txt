@@ -1,0 +1,15 @@
+#nullable enable
+Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder
+Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder.AddActivitySource(string! name) -> Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder!
+Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder.AddMeter(string! name) -> Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder!
+Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder.AsteriskOpenTelemetryBuilder() -> void
+Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder.ConfigureMetrics(System.Action<OpenTelemetry.Metrics.MeterProviderBuilder!>! configure) -> Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder!
+Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder.ConfigureTracing(System.Action<OpenTelemetry.Trace.TracerProviderBuilder!>! configure) -> Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder!
+Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder.ServiceName.get -> string!
+Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder.ServiceName.set -> void
+Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder.WithAllSources() -> Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder!
+Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder.WithConsoleExporter() -> Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder!
+Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder.WithOtlpExporter(System.Action<OpenTelemetry.Exporter.OtlpExporterOptions!>? configure = null) -> Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder!
+Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder.WithPrometheusExporter() -> Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder!
+Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryExtensions
+static Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryExtensions.AddAsteriskOpenTelemetry(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.OpenTelemetry.AsteriskOpenTelemetryBuilder!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

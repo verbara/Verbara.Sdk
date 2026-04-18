@@ -1,1 +1,3 @@
 #nullable enable
+static Asterisk.Sdk.Hosting.ServiceCollectionExtensions.AddAsteriskSessionsBuilder(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Sessions.Manager.SessionOptions!>? configure = null) -> Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder!
+static Asterisk.Sdk.Hosting.ServiceCollectionExtensions.AddAsteriskSessionsMultiServerBuilder(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Sessions.Manager.SessionOptions!>? configure = null) -> Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder!

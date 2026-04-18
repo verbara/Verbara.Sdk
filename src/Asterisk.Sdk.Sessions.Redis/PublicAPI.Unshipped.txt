@@ -1,0 +1,23 @@
+#nullable enable
+Asterisk.Sdk.Sessions.Redis.RedisSessionStore
+Asterisk.Sdk.Sessions.Redis.RedisSessionStore.RedisSessionStore(StackExchange.Redis.IConnectionMultiplexer! redis, Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions!>! options) -> void
+Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions
+Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions.RedisSessionStoreOptions() -> void
+Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions.ConfigurationString.get -> string?
+Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions.ConfigurationString.set -> void
+Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions.KeyPrefix.get -> string!
+Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions.KeyPrefix.set -> void
+Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions.CompletedRetention.get -> System.TimeSpan
+Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions.CompletedRetention.set -> void
+Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions.DatabaseIndex.get -> int
+Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions.DatabaseIndex.set -> void
+Asterisk.Sdk.Sessions.Redis.RedisSessionsBuilderExtensions
+override Asterisk.Sdk.Sessions.Redis.RedisSessionStore.SaveAsync(Asterisk.Sdk.Sessions.CallSession! session, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+override Asterisk.Sdk.Sessions.Redis.RedisSessionStore.GetAsync(string! sessionId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Sessions.CallSession?>
+override Asterisk.Sdk.Sessions.Redis.RedisSessionStore.GetByLinkedIdAsync(string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Sessions.CallSession?>
+override Asterisk.Sdk.Sessions.Redis.RedisSessionStore.GetActiveAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IEnumerable<Asterisk.Sdk.Sessions.CallSession!>!>
+override Asterisk.Sdk.Sessions.Redis.RedisSessionStore.DeleteAsync(string! sessionId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+override Asterisk.Sdk.Sessions.Redis.RedisSessionStore.SaveBatchAsync(System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Sessions.CallSession!>! sessions, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+static Asterisk.Sdk.Sessions.Redis.RedisSessionsBuilderExtensions.UseRedis(this Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder! builder, System.Action<Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions!>? configure = null) -> Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder!
+static Asterisk.Sdk.Sessions.Redis.RedisSessionsBuilderExtensions.UseRedis(this Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder! builder, StackExchange.Redis.IConnectionMultiplexer! redis, System.Action<Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions!>? configure = null) -> Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder!
+static Asterisk.Sdk.Sessions.Redis.RedisSessionsBuilderExtensions.UseRedis(this Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder! builder, string! configurationString, System.Action<Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions!>? configure = null) -> Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder!
