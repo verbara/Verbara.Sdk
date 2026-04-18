@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Asterisk.Sdk.Sessions.Redis - Redis-backed SessionStoreBase for horizontal scale-out. Ships RedisSessionStore + fluent UseRedis(...) registration for Asterisk.Sdk.Sessions. AOT-safe (source-generated JSON only).</Description>
+    <PackageTags>asterisk;sessions;redis;cluster;state-store;sdk</PackageTags>
+    <!-- New package - no baseline published yet; skip binary compatibility check -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.Redis.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Asterisk.Sdk.Sessions\Asterisk.Sdk.Sessions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>

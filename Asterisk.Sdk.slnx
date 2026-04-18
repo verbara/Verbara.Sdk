@@ -34,6 +34,7 @@
     <Project Path="src/Asterisk.Sdk/Asterisk.Sdk.csproj" />
     <Project Path="src/Asterisk.Sdk.Hosting/Asterisk.Sdk.Hosting.csproj" />
     <Project Path="src/Asterisk.Sdk.Sessions/Asterisk.Sdk.Sessions.csproj" />
+    <Project Path="src/Asterisk.Sdk.Sessions.Redis/Asterisk.Sdk.Sessions.Redis.csproj" />
     <Project Path="src/Asterisk.Sdk.Push/Asterisk.Sdk.Push.csproj" />
     <Project Path="src/Asterisk.Sdk.Push.AspNetCore/Asterisk.Sdk.Push.AspNetCore.csproj" />
   </Folder>
@@ -57,7 +58,7 @@
     <Project Path="Tests/Asterisk.Sdk.VoiceAi.OpenAiRealtime.Tests/Asterisk.Sdk.VoiceAi.OpenAiRealtime.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Sessions.FunctionalTests/Asterisk.Sdk.Sessions.FunctionalTests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Sessions.Tests/Asterisk.Sdk.Sessions.Tests.csproj" />
-    <Project Path="Tests/Asterisk.Sdk.Redis.Spike/Asterisk.Sdk.Redis.Spike.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.Sessions.Redis.Tests/Asterisk.Sdk.Sessions.Redis.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Redis.Spike.Aot/Asterisk.Sdk.Redis.Spike.Aot.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Hosting.Tests/Asterisk.Sdk.Hosting.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Push.Tests/Asterisk.Sdk.Push.Tests.csproj" />

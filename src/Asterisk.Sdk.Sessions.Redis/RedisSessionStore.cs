@@ -1,12 +1,17 @@
 using System.Text.Json;
-using Asterisk.Sdk.Redis.Spike.Serialization;
-using Asterisk.Sdk.Sessions;
 using Asterisk.Sdk.Sessions.Extensions;
+using Asterisk.Sdk.Sessions.Serialization;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 
-namespace Asterisk.Sdk.Redis.Spike.Store;
+namespace Asterisk.Sdk.Sessions.Redis;
 
+/// <summary>
+/// Redis-backed <see cref="SessionStoreBase"/>. Persists active sessions as JSON strings
+/// keyed by <c>{prefix}session:{sessionId}</c>, maintains a secondary index by LinkedID,
+/// and tracks the active/completed set for fast enumeration. All JSON is emitted via
+/// <see cref="SessionJsonContext"/> (source-generated) so the store is AOT-safe.
+/// </summary>
 public sealed class RedisSessionStore : SessionStoreBase
 {
     private static readonly CallSessionState[] TerminalStates =
@@ -15,14 +20,18 @@ public sealed class RedisSessionStore : SessionStoreBase
     private readonly IConnectionMultiplexer _redis;
     private readonly RedisSessionStoreOptions _options;
 
+    /// <summary>Create a new store from a multiplexer and options value.</summary>
     public RedisSessionStore(IConnectionMultiplexer redis, RedisSessionStoreOptions options)
     {
+        ArgumentNullException.ThrowIfNull(redis);
+        ArgumentNullException.ThrowIfNull(options);
         _redis = redis;
         _options = options;
     }
 
+    /// <summary>Create a new store from a multiplexer and bound <see cref="IOptions{TOptions}"/>.</summary>
     public RedisSessionStore(IConnectionMultiplexer redis, IOptions<RedisSessionStoreOptions> options)
-        : this(redis, options.Value)
+        : this(redis, (options ?? throw new ArgumentNullException(nameof(options))).Value)
     {
     }
 
@@ -51,8 +60,11 @@ public sealed class RedisSessionStore : SessionStoreBase
             ? null
             : JsonSerializer.Deserialize(value.ToString(), SessionJsonContext.Default.CallSessionSnapshot);
 
+    /// <inheritdoc />
     public override async ValueTask SaveAsync(CallSession session, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(session);
+
         var snapshot = CallSessionSnapshot.FromSession(session);
         var json = Serialize(snapshot);
         var db = GetDatabase();
@@ -95,6 +107,7 @@ public sealed class RedisSessionStore : SessionStoreBase
         }
     }
 
+    /// <inheritdoc />
     public override async ValueTask<CallSession?> GetAsync(string sessionId, CancellationToken ct)
     {
         var db = GetDatabase();
@@ -103,6 +116,7 @@ public sealed class RedisSessionStore : SessionStoreBase
         return snapshot?.ToSession();
     }
 
+    /// <inheritdoc />
     public override async ValueTask<CallSession?> GetByLinkedIdAsync(string linkedId, CancellationToken ct)
     {
         var db = GetDatabase();
@@ -111,6 +125,7 @@ public sealed class RedisSessionStore : SessionStoreBase
         return await GetAsync(sessionId.ToString(), ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public override async ValueTask<IEnumerable<CallSession>> GetActiveAsync(CancellationToken ct)
     {
         var db = GetDatabase();
@@ -146,6 +161,7 @@ public sealed class RedisSessionStore : SessionStoreBase
         return sessions;
     }
 
+    /// <inheritdoc />
     public override async ValueTask DeleteAsync(string sessionId, CancellationToken ct)
     {
         var db = GetDatabase();
@@ -171,8 +187,10 @@ public sealed class RedisSessionStore : SessionStoreBase
         await Task.WhenAll(tasks).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public override async ValueTask SaveBatchAsync(IReadOnlyList<CallSession> sessions, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(sessions);
         if (sessions.Count == 0) return;
 
         var db = GetDatabase();

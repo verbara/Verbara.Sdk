@@ -1,11 +1,10 @@
 using System.Text.Json;
 using Asterisk.Sdk.Enums;
-using Asterisk.Sdk.Redis.Spike.Serialization;
-using Asterisk.Sdk.Sessions;
+using Asterisk.Sdk.Sessions.Serialization;
 using FluentAssertions;
 using Xunit;
 
-namespace Asterisk.Sdk.Redis.Spike.Tests;
+namespace Asterisk.Sdk.Sessions.Tests;
 
 public class SnapshotSerializationTests
 {
@@ -44,7 +43,7 @@ public class SnapshotSerializationTests
         session.SetMetadata("campaign", "spring-sale");
         session.SetMetadata("priority", "high");
 
-        // Advance state: Created → Dialing → Ringing → Connected → OnHold
+        // Advance state: Created -> Dialing -> Ringing -> Connected -> OnHold
         session.Transition(CallSessionState.Dialing);
         session.Transition(CallSessionState.Ringing);
         session.Transition(CallSessionState.Connected);
@@ -55,7 +54,7 @@ public class SnapshotSerializationTests
     }
 
     [Fact]
-    public void FromSession_ShouldCaptureAllFields()
+    public void FromSession_ShouldCaptureAllFields_WhenSessionHasFullState()
     {
         var session = CreateTestSession();
         var snapshot = CallSessionSnapshot.FromSession(session);
@@ -101,7 +100,7 @@ public class SnapshotSerializationTests
     }
 
     [Fact]
-    public void JsonRoundtrip_ShouldPreserveAllFields()
+    public void JsonRoundtrip_ShouldPreserveAllFields_WhenSerializedAndDeserialized()
     {
         var session = CreateTestSession();
         var original = CallSessionSnapshot.FromSession(session);
@@ -135,7 +134,7 @@ public class SnapshotSerializationTests
     }
 
     [Fact]
-    public void ToSession_ShouldReconstructFromSnapshot()
+    public void ToSession_ShouldReconstructFromSnapshot_WhenSnapshotIsComplete()
     {
         var session = CreateTestSession();
         var snapshot = CallSessionSnapshot.FromSession(session);
@@ -154,11 +153,11 @@ public class SnapshotSerializationTests
     }
 
     [Fact]
-    public void FullRoundtrip_Session_Snapshot_Json_Snapshot_Session()
+    public void FullRoundtrip_ShouldPreserveAllFields_WhenSessionToSnapshotToJsonToSnapshotToSession()
     {
         var original = CreateTestSession();
 
-        // Session → Snapshot → JSON → Snapshot → Session
+        // Session -> Snapshot -> JSON -> Snapshot -> Session
         var snapshot1 = CallSessionSnapshot.FromSession(original);
         var json = JsonSerializer.Serialize(snapshot1, SessionJsonContext.Default.CallSessionSnapshot);
         var snapshot2 = JsonSerializer.Deserialize(json, SessionJsonContext.Default.CallSessionSnapshot)!;
@@ -181,7 +180,7 @@ public class SnapshotSerializationTests
     }
 
     [Fact]
-    public void AllEnums_ShouldSerializeAsStrings()
+    public void AllEnums_ShouldSerializeAsStrings_WhenSnapshotIsSerialized()
     {
         var session = new CallSession("sess-enum", "linked-enum", "server-1", CallDirection.Outbound)
         {
@@ -198,7 +197,6 @@ public class SnapshotSerializationTests
 
         // camelCase naming policy applies to property names, but UseStringEnumConverter
         // serializes enum values as their member names
-        // UseStringEnumConverter serializes enum values as their C# member names
         json.Should().Contain("OnHold");
         json.Should().Contain("Outbound");
         json.Should().Contain("NormalClearing");
@@ -209,7 +207,7 @@ public class SnapshotSerializationTests
     }
 
     [Fact]
-    public async Task PrivateHoldState_ShouldSurviveRoundtrip()
+    public async Task PrivateHoldState_ShouldSurviveRoundtrip_WhenSessionHasAccumulatedHold()
     {
         var session = new CallSession("sess-hold", "linked-hold", "server-1", CallDirection.Inbound)
         {

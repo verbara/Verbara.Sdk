@@ -1,14 +1,12 @@
 using Asterisk.Sdk.Enums;
-using Asterisk.Sdk.Redis.Spike.Fixtures;
-using Asterisk.Sdk.Redis.Spike.Store;
 using Asterisk.Sdk.Sessions;
 using FluentAssertions;
 using Xunit;
 
-namespace Asterisk.Sdk.Redis.Spike.Tests;
+namespace Asterisk.Sdk.Sessions.Redis.Tests;
 
 [Collection("Redis")]
-[Trait("Category", "Spike")]
+[Trait("Category", "Integration")]
 public sealed class RedisSessionStoreTests : IAsyncLifetime
 {
     private readonly RedisFixture _fixture;
@@ -38,9 +36,8 @@ public sealed class RedisSessionStoreTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SaveAndGet_ShouldRoundtrip()
+    public async Task SaveAndGet_ShouldRoundtrip_WhenSessionHasFullState()
     {
-        // Arrange
         var store = CreateStore();
         var session = CreateSession("round-1");
         session.QueueName = "support";
@@ -60,16 +57,13 @@ public sealed class RedisSessionStoreTests : IAsyncLifetime
         session.AddEvent(new CallSessionEvent(
             DateTimeOffset.UtcNow, CallSessionEventType.Created, "SIP/100-0001", null, "test event"));
 
-        // Advance: Created -> Dialing -> Ringing -> Connected
         session.Transition(CallSessionState.Dialing);
         session.Transition(CallSessionState.Ringing);
         session.Transition(CallSessionState.Connected);
 
-        // Act
         await store.SaveAsync(session, CancellationToken.None);
         var loaded = await store.GetAsync("round-1", CancellationToken.None);
 
-        // Assert
         loaded.Should().NotBeNull();
         loaded!.SessionId.Should().Be("round-1");
         loaded.LinkedId.Should().Be("linked-round-1");
@@ -88,25 +82,21 @@ public sealed class RedisSessionStoreTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SaveAndGetByLinkedId_ShouldResolve()
+    public async Task SaveAndGetByLinkedId_ShouldResolve_WhenLinkedIndexIsPresent()
     {
-        // Arrange
         var store = CreateStore();
         var session = CreateSession("link-1");
 
-        // Act
         await store.SaveAsync(session, CancellationToken.None);
         var loaded = await store.GetByLinkedIdAsync("linked-link-1", CancellationToken.None);
 
-        // Assert
         loaded.Should().NotBeNull();
         loaded!.SessionId.Should().Be("link-1");
     }
 
     [Fact]
-    public async Task GetActive_ShouldReturnOnlyActiveSessions()
+    public async Task GetActive_ShouldReturnOnlyActiveSessions_WhenCompletedExistsToo()
     {
-        // Arrange
         var store = CreateStore();
 
         var active1 = CreateSession("active-1");
@@ -123,26 +113,21 @@ public sealed class RedisSessionStoreTests : IAsyncLifetime
         await store.SaveAsync(active2, CancellationToken.None);
         await store.SaveAsync(completed, CancellationToken.None);
 
-        // Act
         var active = (await store.GetActiveAsync(CancellationToken.None)).ToList();
 
-        // Assert
         active.Should().HaveCount(2);
         active.Select(s => s.SessionId).Should().BeEquivalentTo(["active-1", "active-2"]);
     }
 
     [Fact]
-    public async Task Delete_ShouldRemoveSessionAndIndices()
+    public async Task Delete_ShouldRemoveSessionAndIndices_WhenSessionExists()
     {
-        // Arrange
         var store = CreateStore();
         var session = CreateSession("del-1");
         await store.SaveAsync(session, CancellationToken.None);
 
-        // Act
         await store.DeleteAsync("del-1", CancellationToken.None);
 
-        // Assert
         var byId = await store.GetAsync("del-1", CancellationToken.None);
         byId.Should().BeNull();
 
@@ -154,18 +139,15 @@ public sealed class RedisSessionStoreTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SaveBatch_ShouldPipelineAll()
+    public async Task SaveBatch_ShouldPipelineAll_When100SessionsSaved()
     {
-        // Arrange
         var store = CreateStore();
         var sessions = Enumerable.Range(0, 100)
             .Select(i => CreateSession($"batch-{i:D4}"))
             .ToList();
 
-        // Act
         await store.SaveBatchAsync(sessions, CancellationToken.None);
 
-        // Assert
         var active = (await store.GetActiveAsync(CancellationToken.None)).ToList();
         active.Should().HaveCount(100);
 
@@ -175,9 +157,8 @@ public sealed class RedisSessionStoreTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task CompletedSession_ShouldExpire()
+    public async Task CompletedSession_ShouldExpire_WhenRetentionElapses()
     {
-        // Arrange
         var options = new RedisSessionStoreOptions
         {
             KeyPrefix = "test:",
@@ -188,48 +169,40 @@ public sealed class RedisSessionStoreTests : IAsyncLifetime
         var session = CreateSession("expire-1");
         session.Transition(CallSessionState.Failed);
 
-        // Act
         await store.SaveAsync(session, CancellationToken.None);
 
         var immediate = await store.GetAsync("expire-1", CancellationToken.None);
         immediate.Should().NotBeNull();
 
-        // Wait for Redis TTL to expire
         await Task.Delay(TimeSpan.FromSeconds(6));
 
         var expired = await store.GetAsync("expire-1", CancellationToken.None);
 
-        // Assert
         expired.Should().BeNull();
     }
 
     [Fact]
-    public async Task SnapshotPreservesPrivateState()
+    public async Task SnapshotPreservesPrivateState_ShouldRoundtripHoldTime_WhenSessionHeld()
     {
-        // Arrange
         var store = CreateStore();
         var session = CreateSession("hold-1");
         session.Transition(CallSessionState.Dialing);
         session.Transition(CallSessionState.Connected);
 
-        // Start and end a hold cycle
         session.StartHold();
-        await Task.Delay(50); // accumulate some hold time
+        await Task.Delay(50);
         session.EndHold();
 
-        // Act
         await store.SaveAsync(session, CancellationToken.None);
         var loaded = await store.GetAsync("hold-1", CancellationToken.None);
 
-        // Assert
         loaded.Should().NotBeNull();
         loaded!.HoldTime.Should().BeGreaterThan(TimeSpan.Zero);
     }
 
     [Fact]
-    public async Task ConcurrentSaves_ShouldNotCorrupt()
+    public async Task ConcurrentSaves_ShouldNotCorrupt_When50WritersRaceOnSameId()
     {
-        // Arrange
         var store = CreateStore();
         var tasks = new Task[50];
 
@@ -244,10 +217,8 @@ public sealed class RedisSessionStoreTests : IAsyncLifetime
             });
         }
 
-        // Act
         await Task.WhenAll(tasks);
 
-        // Assert
         var loaded = await store.GetAsync("concurrent-1", CancellationToken.None);
         loaded.Should().NotBeNull();
         loaded!.SessionId.Should().Be("concurrent-1");
@@ -256,9 +227,8 @@ public sealed class RedisSessionStoreTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task EnumSerialization_ShouldRoundtrip()
+    public async Task EnumSerialization_ShouldRoundtrip_WhenSessionCarriesHangupCauseAndRoles()
     {
-        // Arrange
         var store = CreateStore();
         var session = CreateSession("enum-1");
         session.HangupCause = HangupCause.NormalClearing;
@@ -274,11 +244,9 @@ public sealed class RedisSessionStoreTests : IAsyncLifetime
             HangupCause = HangupCause.UserBusy,
         });
 
-        // Act
         await store.SaveAsync(session, CancellationToken.None);
         var loaded = await store.GetAsync("enum-1", CancellationToken.None);
 
-        // Assert
         loaded.Should().NotBeNull();
         loaded!.State.Should().Be(CallSessionState.Ringing);
         loaded.HangupCause.Should().Be(HangupCause.NormalClearing);
