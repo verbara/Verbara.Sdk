@@ -36,6 +36,7 @@
     <Project Path="src/Asterisk.Sdk.Sessions/Asterisk.Sdk.Sessions.csproj" />
     <Project Path="src/Asterisk.Sdk.Sessions.Redis/Asterisk.Sdk.Sessions.Redis.csproj" />
     <Project Path="src/Asterisk.Sdk.Sessions.Postgres/Asterisk.Sdk.Sessions.Postgres.csproj" />
+    <Project Path="src/Asterisk.Sdk.OpenTelemetry/Asterisk.Sdk.OpenTelemetry.csproj" />
     <Project Path="src/Asterisk.Sdk.Push/Asterisk.Sdk.Push.csproj" />
     <Project Path="src/Asterisk.Sdk.Push.AspNetCore/Asterisk.Sdk.Push.AspNetCore.csproj" />
   </Folder>
@@ -64,5 +65,6 @@
     <Project Path="Tests/Asterisk.Sdk.Hosting.Tests/Asterisk.Sdk.Hosting.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Push.Tests/Asterisk.Sdk.Push.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Push.AspNetCore.Tests/Asterisk.Sdk.Push.AspNetCore.Tests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.OpenTelemetry.Tests/Asterisk.Sdk.OpenTelemetry.Tests.csproj" />
   </Folder>
 </Solution>
