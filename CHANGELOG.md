@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] — Infra & surface
+
+These changes target onboarding, trust signals, and contributor ergonomics. No package contents change — no version bump.
+
+### Added
+
+- **README surface:** CI + AOT Trim workflow badges, NuGet download badge, Native AOT badge at the top of the README; `## Documentation` navigable table of contents linking guides, benchmarks, technical/commercial READMEs, CHANGELOG, CONTRIBUTING, SECURITY.
+- **README Quick Start:** 10-line "First contact" preamble showing a minimal `AddAsterisk` snippet and a pointer to `Examples/BasicAmiExample/` for a Docker-backed working demo.
+- **`.github/dependabot.yml`:** daily NuGet updates (grouped: Microsoft.Extensions, test stack, analyzers) + weekly github-actions updates.
+- **`.github/workflows/codeql.yml`:** CodeQL C# analysis on push + PR + weekly Sunday cron with `security-extended,security-and-quality` query suites. Results surfaced in the Security tab.
+- **`tools/install-hooks.sh`:** one-time installer for a local `pre-commit` hook that runs `claudelint` when `CLAUDE.md` or `.claude/` files are staged. Non-blocking when `claudelint` is not installed. Documented in `CONTRIBUTING.md` as a standard setup step.
+
+### Notes
+
+- A CI gate that runs `claudelint` on every PR was considered and deferred — `CLAUDE.md` and `.claude/` are gitignored (per-contributor, not team-shared), so a CI runner has nothing to lint. If the team later opts to share `CLAUDE.md` in the repo, a `.github/workflows/claudelint.yml` job can be added trivially.
+- These changes are docs/infra only — no version bump, no nuget.org publish. They ship with the next release.
+
+---
+
 ## [1.10.2] - 2026-04-18
 
 ### Fixed

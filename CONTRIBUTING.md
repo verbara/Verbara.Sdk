@@ -17,6 +17,11 @@ git clone https://github.com/Harol-Reina/Asterisk.Sdk.git
 cd Asterisk.Sdk
 dotnet build Asterisk.Sdk.slnx
 dotnet test Asterisk.Sdk.slnx
+
+# One-time: install the pre-commit hook that lints CLAUDE.md + .claude/
+# on every commit using claudelint. Install claudelint first:
+#   npm install -g claude-code-lint
+./tools/install-hooks.sh
 ```
 
 ### Project Structure
