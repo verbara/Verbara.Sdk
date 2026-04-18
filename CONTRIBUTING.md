@@ -23,7 +23,7 @@ dotnet test Asterisk.Sdk.slnx
 
 ```
 src/                    # SDK packages (9 core + 7 VoiceAi + 1 SourceGenerators)
-Examples/               # 14 example applications + PbxAdmin demo
+Examples/               # 16 example applications + PbxAdmin demo
 Tests/                  # Unit, functional, integration, E2E tests
 docker/                 # Docker Compose stacks for development and testing
 docs/                   # Architecture, guides, plans, analysis
