@@ -28,6 +28,12 @@ updates:
       # pin to 17.x until the xunit v3 migration is scheduled.
       - dependency-name: "Microsoft.NET.Test.Sdk"
         update-types: ["version-update:semver-major"]
+      # Testcontainers 4.4+ deprecated `new ContainerBuilder()` (now requires
+      # an image in the ctor) and removed `.UntilPortIsAvailable(port)` — migrating
+      # the 5 custom containers under Tests/Asterisk.Sdk.TestInfrastructure/Containers/
+      # is a dedicated sprint. Pin to 4.3.x until scheduled.
+      - dependency-name: "Testcontainers"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
     groups:
       # Group all Microsoft.Extensions.* bumps into a single PR.
       microsoft-extensions:
