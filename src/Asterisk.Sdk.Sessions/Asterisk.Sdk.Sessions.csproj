@@ -11,6 +11,7 @@
     <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.Redis" />
     <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.Redis.Tests" />
     <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.Postgres" />
+    <InternalsVisibleTo Include="Asterisk.Sdk.Sessions.Postgres.Tests" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Asterisk.Sdk\Asterisk.Sdk.csproj" />

@@ -1,0 +1,21 @@
+#nullable enable
+Asterisk.Sdk.Sessions.Postgres.PostgresSessionStore
+Asterisk.Sdk.Sessions.Postgres.PostgresSessionStore.PostgresSessionStore(Npgsql.NpgsqlDataSource! dataSource, Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.Sessions.Postgres.PostgresSessionStoreOptions!>! options) -> void
+Asterisk.Sdk.Sessions.Postgres.PostgresSessionStoreOptions
+Asterisk.Sdk.Sessions.Postgres.PostgresSessionStoreOptions.PostgresSessionStoreOptions() -> void
+Asterisk.Sdk.Sessions.Postgres.PostgresSessionStoreOptions.ConnectionString.get -> string?
+Asterisk.Sdk.Sessions.Postgres.PostgresSessionStoreOptions.ConnectionString.set -> void
+Asterisk.Sdk.Sessions.Postgres.PostgresSessionStoreOptions.TableName.get -> string!
+Asterisk.Sdk.Sessions.Postgres.PostgresSessionStoreOptions.TableName.set -> void
+Asterisk.Sdk.Sessions.Postgres.PostgresSessionStoreOptions.SchemaName.get -> string!
+Asterisk.Sdk.Sessions.Postgres.PostgresSessionStoreOptions.SchemaName.set -> void
+Asterisk.Sdk.Sessions.Postgres.PostgresSessionsBuilderExtensions
+override Asterisk.Sdk.Sessions.Postgres.PostgresSessionStore.SaveAsync(Asterisk.Sdk.Sessions.CallSession! session, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+override Asterisk.Sdk.Sessions.Postgres.PostgresSessionStore.GetAsync(string! sessionId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Sessions.CallSession?>
+override Asterisk.Sdk.Sessions.Postgres.PostgresSessionStore.GetByLinkedIdAsync(string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Sessions.CallSession?>
+override Asterisk.Sdk.Sessions.Postgres.PostgresSessionStore.GetActiveAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IEnumerable<Asterisk.Sdk.Sessions.CallSession!>!>
+override Asterisk.Sdk.Sessions.Postgres.PostgresSessionStore.DeleteAsync(string! sessionId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+override Asterisk.Sdk.Sessions.Postgres.PostgresSessionStore.SaveBatchAsync(System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Sessions.CallSession!>! sessions, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+static Asterisk.Sdk.Sessions.Postgres.PostgresSessionsBuilderExtensions.UsePostgres(this Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder! builder, System.Action<Asterisk.Sdk.Sessions.Postgres.PostgresSessionStoreOptions!>? configure = null) -> Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder!
+static Asterisk.Sdk.Sessions.Postgres.PostgresSessionsBuilderExtensions.UsePostgres(this Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder! builder, Npgsql.NpgsqlDataSource! dataSource, System.Action<Asterisk.Sdk.Sessions.Postgres.PostgresSessionStoreOptions!>? configure = null) -> Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder!
+static Asterisk.Sdk.Sessions.Postgres.PostgresSessionsBuilderExtensions.UsePostgres(this Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder! builder, string! connectionString, System.Action<Asterisk.Sdk.Sessions.Postgres.PostgresSessionStoreOptions!>? configure = null) -> Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder!
