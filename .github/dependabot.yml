@@ -12,6 +12,22 @@ updates:
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
+    ignore:
+      # FluentAssertions 8.x switched to a commercial license — incompatible
+      # with the SDK's MIT licensing. Pin to 7.x until a license strategy is decided.
+      - dependency-name: "FluentAssertions"
+        update-types: ["version-update:semver-major"]
+      # xunit.runner.visualstudio 3.x requires xunit v3; we're on xunit 2.9.x.
+      # Revisit when migrating the test stack to xunit v3.
+      - dependency-name: "xunit.runner.visualstudio"
+        update-types: ["version-update:semver-major"]
+      # coverlet.collector 10.x is a breaking jump from 6.x; review before adopting.
+      - dependency-name: "coverlet.collector"
+        update-types: ["version-update:semver-major"]
+      # Microsoft.NET.Test.Sdk major bumps typically track xunit major bumps;
+      # pin to 17.x until the xunit v3 migration is scheduled.
+      - dependency-name: "Microsoft.NET.Test.Sdk"
+        update-types: ["version-update:semver-major"]
     groups:
       # Group all Microsoft.Extensions.* bumps into a single PR.
       microsoft-extensions:
