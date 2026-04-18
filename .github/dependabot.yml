@@ -1,0 +1,46 @@
+version: 2
+updates:
+  # .NET / NuGet dependencies (tracked via Directory.Packages.props)
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "nuget"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      # Group all Microsoft.Extensions.* bumps into a single PR.
+      microsoft-extensions:
+        patterns:
+          - "Microsoft.Extensions.*"
+          - "Microsoft.CodeAnalysis.*"
+      # Group all xunit/test-stack bumps together.
+      test-stack:
+        patterns:
+          - "xunit*"
+          - "FluentAssertions"
+          - "NSubstitute*"
+          - "coverlet.*"
+          - "Microsoft.NET.Test.Sdk"
+      # Group analyzer bumps.
+      analyzers:
+        patterns:
+          - "Meziantou.*"
+          - "IDisposableAnalyzers"
+          - "Microsoft.VisualStudio.Threading.Analyzers"
+
+  # GitHub Actions used by workflows under .github/workflows/
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"

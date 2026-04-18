@@ -2,9 +2,13 @@
 
 > The modern .NET SDK for Asterisk PBX. AMI, AGI, ARI, Live API, Sessions, Voice AI — all in one package. Native AOT. Zero reflection. MIT licensed.
 
+[![CI](https://img.shields.io/github/actions/workflow/status/Harol-Reina/Asterisk.Sdk/ci.yml?branch=main&label=CI)](https://github.com/Harol-Reina/Asterisk.Sdk/actions/workflows/ci.yml)
+[![AOT Trim](https://img.shields.io/github/actions/workflow/status/Harol-Reina/Asterisk.Sdk/aot-trim-check.yml?branch=main&label=AOT%20Trim)](https://github.com/Harol-Reina/Asterisk.Sdk/actions/workflows/aot-trim-check.yml)
 [![NuGet](https://img.shields.io/nuget/v/Asterisk.Sdk?label=NuGet&color=blue)](https://www.nuget.org/packages/Asterisk.Sdk)
+[![Downloads](https://img.shields.io/nuget/dt/Asterisk.Sdk?label=Downloads&color=blue)](https://www.nuget.org/packages/Asterisk.Sdk)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![Trim-safe](https://img.shields.io/badge/Native%20AOT-ready-brightgreen)](docs/analysis/benchmark-analysis.md)
 
 ---
 
@@ -53,6 +57,23 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 ## Status
 
 **v1.10.2** — 19 NuGet packages, 0 build warnings, 0 trim warnings. Full VoiceAi telemetry stack (Metrics + HealthCheck + ActivitySource) across 5 packages. Push event bus now carries W3C traceparent across process/network boundaries (`PushEventMetadata.TraceContext`, ambient capture in `RxPushEventBus`). API coverage: 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%). Compatible with Asterisk 18, 20, 22, and 23.
+
+---
+
+## Documentation
+
+| Topic | Link |
+|-------|------|
+| Getting started for operators | [docs/README-technical.md](docs/README-technical.md) |
+| Commercial overview / positioning | [docs/README-commercial.md](docs/README-commercial.md) |
+| High-load tuning (10K / 100K agents) | [docs/guides/high-load-tuning.md](docs/guides/high-load-tuning.md) |
+| Troubleshooting (connection, auth, events, tracing) | [docs/guides/troubleshooting.md](docs/guides/troubleshooting.md) |
+| Asterisk 18/20/22/23 version compatibility | [docs/guides/asterisk-version-compatibility.md](docs/guides/asterisk-version-compatibility.md) |
+| Asterisk Realtime (ODBC) setup | [docs/guides/manual-asterisk-realtime-setup.md](docs/guides/manual-asterisk-realtime-setup.md) |
+| Benchmarks (AMD Ryzen 9 9900X, .NET 10) | [docs/analysis/benchmark-analysis.md](docs/analysis/benchmark-analysis.md) |
+| Release notes | [CHANGELOG.md](CHANGELOG.md) |
+| Contributing (dev setup, conventions, hooks) | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Security policy | [SECURITY.md](SECURITY.md) |
 
 ---
 
@@ -119,7 +140,7 @@ The `Asterisk.Sdk.Hosting` meta-package includes all core sub-packages and DI ex
 
 ## Quick Start
 
-### AMI: Hosted Service with Automatic Lifecycle
+**First contact in 10 lines.** Create a new console app, install `Asterisk.Sdk.Hosting`, and drop the snippet below into `Program.cs` — on start it connects to your Asterisk over AMI, exposes a `/health` endpoint, and auto-disconnects on shutdown.
 
 ```csharp
 using Asterisk.Sdk.Hosting;
@@ -138,6 +159,10 @@ await host.RunAsync();
 // AMI connects on start, disconnects on shutdown via IHostedService.
 // Health check available at /health for K8s probes.
 ```
+
+Need a full runnable example (including `appsettings.json` config and event subscriptions)? Jump to **[Examples/BasicAmiExample/](Examples/BasicAmiExample/)** — it's the fastest path to a "working demo on your machine" with Docker-backed Asterisk 23.
+
+### AMI: Bind from `appsettings.json`
 
 Or bind from `appsettings.json`:
 
