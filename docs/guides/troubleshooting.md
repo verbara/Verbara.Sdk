@@ -180,3 +180,67 @@ For AMI protocol-level debugging (very verbose):
   }
 }
 ```
+
+---
+
+## ActivitySource Diagnostics (v1.9.0+)
+
+**When to use:** correlating AMI auth failures with the specific action that triggered the reconnect, measuring per-utterance VoiceAi latency, tracing a session across AGI → Live → Sessions, or diagnosing event-pump lag under load without writing extra logging.
+
+**Registered sources** (9 total):
+
+| ActivitySource | Representative spans |
+|----------------|----------------------|
+| `Asterisk.Sdk.Ami` | connect / login / send-action / receive-event |
+| `Asterisk.Sdk.Ari` | request / websocket-event |
+| `Asterisk.Sdk.Agi` | session / command |
+| `Asterisk.Sdk.Live` | manager-load / entity-update |
+| `Asterisk.Sdk.Sessions` | session-start / state-transition / reconcile |
+| `Asterisk.Sdk.Push` | publish / deliver / authorize |
+| `Asterisk.Sdk.VoiceAi` | pipeline-session / stt-recognition / tts-synthesis |
+| `Asterisk.Sdk.VoiceAi.AudioSocket` | inbound-connection / frame-roundtrip |
+| `Asterisk.Sdk.VoiceAi.OpenAiRealtime` | realtime-session / turn |
+
+Discover them at runtime without hard-coding names:
+
+```csharp
+using Asterisk.Sdk.Hosting;
+
+builder.Services
+    .AddOpenTelemetry()
+    .WithTracing(t => t.AddSource([.. AsteriskTelemetry.ActivitySourceNames])
+                       .AddOtlpExporter());  // or AddConsoleExporter()
+```
+
+**Quick capture without OpenTelemetry:**
+```sh
+dotnet-trace collect --process-id <pid> \
+    --providers "System.Diagnostics.Metrics,Asterisk.Sdk.Ami,Asterisk.Sdk.VoiceAi"
+```
+Open the resulting `.nettrace` in PerfView or Chromium `about:tracing`.
+
+**Common issue:** activities report zero spans. Cause: the `ActivitySource` has no listener — add the source to your OpenTelemetry `AddSource(...)` call or set `ActivityListener.ShouldListenTo`.
+
+---
+
+## Session Reconciliation Backpressure (v1.7.0+)
+
+**Symptoms:**
+- After an AMI reconnect, a large spike in `asterisk.sdk.sessions.state_changed` counter over 5-30 seconds.
+- Transient climb of `asterisk.sdk.ami.events.dropped` during the same window.
+- `SessionReconciliationService` background task logs a large batch of `Reconciling orphaned session ...` entries.
+
+**Cause:** `SessionReconciliationService` runs every `SessionOptions.ReconciliationInterval` (default 30s). After a reconnect it has to re-scan all active sessions to detect orphans / timeouts; if the previous connection was lost with many sessions in flight, the scan enqueues a burst of state-change events.
+
+**Solutions:**
+1. **Increase EventPumpCapacity** to absorb the burst (see [high-load-tuning.md](high-load-tuning.md)):
+   ```json
+   { "AmiConnection": { "EventPumpCapacity": 50000 } }
+   ```
+2. **Stagger reconciliation** if the burst is disruptive — lengthen the interval and accept slightly slower orphan detection:
+   ```json
+   { "Sessions": { "ReconciliationInterval": "00:01:00" } }
+   ```
+3. **Opt out entirely** in non-critical deployments by not registering `SessionReconciliationService` (skip `AddSessions(reconcile: true)` and call the reconciler manually on demand).
+
+**Observability:** watch the `Asterisk.Sdk.Sessions` activity source — `reconcile` spans carry a `sessions.scanned` tag so you can correlate burst size with reconnect events.

@@ -53,9 +53,9 @@ The SDK is ported from asterisk-java, the most mature Asterisk library in any la
 
 **Source generators replace runtime code generation** -- Four Roslyn source generators produce serialization and deserialization code at compile time for AMI actions, events, responses, and the event registry. This eliminates the reflection that typically prevents .NET libraries from working with AOT, while also improving runtime performance.
 
-**17 composable NuGet packages** -- The SDK is modular by design. Install only the packages your application needs. The core alone is under 200 KB. Voice AI packages are completely separate from the AMI/AGI/ARI stack. Every package declares its dependencies explicitly, so your deployment includes only what you use.
+**19 composable NuGet packages** -- The SDK is modular by design. Install only the packages your application needs. The core alone is under 200 KB. Voice AI packages are completely separate from the AMI/AGI/ARI stack. Every package declares its dependencies explicitly, so your deployment includes only what you use.
 
-**2,070 automated tests and 13 example applications** -- Every protocol parser, every event mapping, every state machine transition is covered by 1,430 unit tests and 640 functional tests. The repository includes 13 runnable example applications demonstrating common integration patterns. A full PBX administration panel built with Blazor Server is available as a separate project.
+**2,784 automated tests and 14 example applications** -- Every protocol parser, every event mapping, every state machine transition is covered by 2,597 unit tests plus 154 functional tests and 33 integration tests that run against a real Asterisk 23 instance in CI. The repository includes 14 runnable example applications demonstrating common integration patterns. A full PBX administration panel built with Blazor Server is available as a separate project.
 
 
 ## Enterprise Extension

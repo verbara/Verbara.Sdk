@@ -200,12 +200,21 @@ public class MyConversationHandler : IConversationHandler
 | Package | Description |
 |---------|-------------|
 | `Asterisk.Sdk.Audio` | Polyphase FIR resampler, VAD, PCM16 processing |
-| `Asterisk.Sdk.VoiceAi` | Pipeline orchestration, `ISessionHandler`, `IConversationHandler` |
+| `Asterisk.Sdk.VoiceAi` | Pipeline orchestration, `ISessionHandler`, `IConversationHandler`, `SpeechRecognizer`/`SpeechSynthesizer` base types with `ProviderName` (v1.10.0+) |
 | `Asterisk.Sdk.VoiceAi.AudioSocket` | AudioSocket server/client with Pipelines streaming |
 | `Asterisk.Sdk.VoiceAi.Stt` | STT providers: Deepgram, Whisper, Azure Whisper, Google Speech |
 | `Asterisk.Sdk.VoiceAi.Tts` | TTS providers: ElevenLabs, Azure TTS |
 | `Asterisk.Sdk.VoiceAi.OpenAiRealtime` | OpenAI Realtime API bridge (GPT-4o voice-to-voice) |
 | `Asterisk.Sdk.VoiceAi.Testing` | Fakes for unit testing Voice AI pipelines |
+
+> All Voice AI packages expose a `Meter`, `ActivitySource` and `IHealthCheck` via the v1.9.0 telemetry stack — discoverable at runtime through `AsteriskTelemetry.ActivitySourceNames` and `AsteriskTelemetry.MeterNames` (see `Asterisk.Sdk.Hosting`).
+
+### Push (2 packages)
+
+| Package | Description |
+|---------|-------------|
+| `Asterisk.Sdk.Push` | Domain-layer push event bus: `IPushEventBus`, hierarchical topic routing (`TopicPattern` with `*` / `**` / `{self}`), `ISubscriptionAuthorizer` |
+| `Asterisk.Sdk.Push.AspNetCore` | Server-Sent Events delivery endpoints on top of `IPushEventBus`: `MapPushEndpoints(prefix)` |
 
 ### Source Generators (1 analyzer)
 
@@ -220,26 +229,35 @@ public class MyConversationHandler : IConversationHandler
 ### Dependency Graph
 
 ```
-Asterisk.Sdk (core)
+Asterisk.Sdk (core: interfaces, attributes, enums, base types)
      |
-    Ami (+Ami.SourceGenerators as analyzer)
+     +--- Ami (+ Ami.SourceGenerators as analyzer)
+     |     |
+     |     +--- Agi  (-> Sdk + Ami)
+     |     +--- Live (-> Sdk + Ami)
+     |              |
+     |              +--- Sessions   (-> Sdk + Ami + Live)
+     |              +--- Activities (-> Sdk + Ami + Agi + Live)
      |
-   Agi (-> Sdk + Ami)
-  Live (-> Sdk + Ami)
+     +--- Ari    (-> Sdk only)
+     +--- Config (-> Sdk only)
      |
-Sessions   (-> Sdk + Ami + Live)
-Activities (-> Sdk + Ami + Agi + Live)
-   Ari     (-> Sdk only)
-Config     (-> Sdk only)
-Hosting    (-> all core packages)
+     +--- Push              (-> Sdk)
+     |     |
+     |     +--- Push.AspNetCore (-> Push + ASP.NET Core)
+     |
+     +--- Audio             (standalone, zero external deps)
+            |
+            +--- VoiceAi.AudioSocket  (-> Audio)
+                    |
+                    +--- VoiceAi                (-> AudioSocket)
+                            |
+                            +--- VoiceAi.Stt              (-> VoiceAi)
+                            +--- VoiceAi.Tts              (-> VoiceAi)
+                            +--- VoiceAi.OpenAiRealtime   (-> VoiceAi + Audio + AudioSocket)
+                            +--- VoiceAi.Testing          (-> VoiceAi)
 
-Audio                    (standalone, zero external deps)
-VoiceAi                  (-> Audio)
-VoiceAi.AudioSocket      (-> VoiceAi + Audio)
-VoiceAi.Stt              (-> VoiceAi)
-VoiceAi.Tts              (-> VoiceAi)
-VoiceAi.OpenAiRealtime   (-> VoiceAi + Audio + AudioSocket)
-VoiceAi.Testing          (-> VoiceAi)
+Hosting   (-> all core + Push; registers `AsteriskTelemetry` and all HealthChecks)
 ```
 
 ### Design Decisions
