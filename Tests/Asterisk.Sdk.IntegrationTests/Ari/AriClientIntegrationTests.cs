@@ -1,5 +1,6 @@
 using Asterisk.Sdk;
 using Asterisk.Sdk.Ari.Client;
+using Asterisk.Sdk.Ari.Events;
 using Asterisk.Sdk.IntegrationTests.Infrastructure;
 using FluentAssertions;
 
@@ -86,10 +87,23 @@ public class AriClientIntegrationTests : IAsyncLifetime
     public async Task CreateBridgeAndAddChannel_ShouldWork()
     {
         var bridge = await _client!.Bridges.CreateAsync("mixing", "test-bridge-add");
+
+        // Subscribe BEFORE creating the channel so we don't miss StasisStart.
+        var stasisStarted = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = _client.Subscribe(new StasisStartObserver(stasisStarted));
+
         var channel = await _client.Channels.CreateAsync("Local/100@default", AsteriskFixture.AriApp);
 
         try
         {
+            // Wait for Asterisk to actually attach the channel to the Stasis app
+            // before adding it to the bridge. Channels.CreateAsync returns as soon
+            // as Asterisk accepts the request — the channel enters Stasis slightly
+            // later, and AddChannelAsync racing ahead produces a 422
+            // "Channel not in Stasis application" error.
+            var startedChannelId = await stasisStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            startedChannelId.Should().Be(channel.Id);
+
             await _client.Bridges.AddChannelAsync(bridge.Id, channel.Id);
 
             var updatedBridge = await _client.Bridges.GetAsync(bridge.Id);
@@ -105,6 +119,17 @@ public class AriClientIntegrationTests : IAsyncLifetime
     private sealed class TestObserver(TaskCompletionSource<AriEvent> tcs) : IObserver<AriEvent>
     {
         public void OnNext(AriEvent value) => tcs.TrySetResult(value);
+        public void OnError(Exception error) => tcs.TrySetException(error);
+        public void OnCompleted() { }
+    }
+
+    private sealed class StasisStartObserver(TaskCompletionSource<string> tcs) : IObserver<AriEvent>
+    {
+        public void OnNext(AriEvent value)
+        {
+            if (value is StasisStartEvent start && start.Channel?.Id is { } id)
+                tcs.TrySetResult(id);
+        }
         public void OnError(Exception error) => tcs.TrySetException(error);
         public void OnCompleted() { }
     }
