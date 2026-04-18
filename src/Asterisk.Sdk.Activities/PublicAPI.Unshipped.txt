@@ -1,1 +1,56 @@
 #nullable enable
+abstract Asterisk.Sdk.Activities.Activities.AmiActivityBase.ExecuteAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Activities.Activities.AmiActivityBase
+Asterisk.Sdk.Activities.Activities.AmiActivityBase.AmiActivityBase(Asterisk.Sdk.IAmiConnection! ami) -> void
+Asterisk.Sdk.Activities.Activities.AmiActivityBase.Ami.get -> Asterisk.Sdk.IAmiConnection!
+Asterisk.Sdk.Activities.Activities.AmiActivityBase.CancelAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Activities.Activities.AmiActivityBase.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Activities.Activities.AmiActivityBase.SetStatus(Asterisk.Sdk.Activities.Activities.ActivityStatus status) -> void
+Asterisk.Sdk.Activities.Activities.AmiActivityBase.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Activities.Activities.AmiActivityBase.StatusChanges.get -> System.IObservable<Asterisk.Sdk.Activities.Activities.ActivityStatus>!
+Asterisk.Sdk.Activities.Activities.AmiActivityBase.Status.get -> Asterisk.Sdk.Activities.Activities.ActivityStatus
+Asterisk.Sdk.Activities.Activities.AttendedTransferActivity
+Asterisk.Sdk.Activities.Activities.AttendedTransferActivity.AttendedTransferActivity(Asterisk.Sdk.IAmiConnection! ami) -> void
+Asterisk.Sdk.Activities.Activities.AttendedTransferActivity.Channel.get -> string!
+Asterisk.Sdk.Activities.Activities.AttendedTransferActivity.Channel.init -> void
+Asterisk.Sdk.Activities.Activities.AttendedTransferActivity.Destination.get -> Asterisk.Sdk.Activities.Models.DialPlanExtension!
+Asterisk.Sdk.Activities.Activities.AttendedTransferActivity.Destination.init -> void
+Asterisk.Sdk.Activities.Activities.AttendedTransferActivity.Priority.get -> int
+Asterisk.Sdk.Activities.Activities.AttendedTransferActivity.Priority.init -> void
+Asterisk.Sdk.Activities.Activities.BargeActivity
+Asterisk.Sdk.Activities.Activities.BargeActivity.BargeActivity(Asterisk.Sdk.IAgiChannel! channel) -> void
+Asterisk.Sdk.Activities.Activities.BargeActivity.Options.get -> string?
+Asterisk.Sdk.Activities.Activities.BargeActivity.Options.init -> void
+Asterisk.Sdk.Activities.Activities.BargeActivity.TargetChannel.get -> string!
+Asterisk.Sdk.Activities.Activities.BargeActivity.TargetChannel.init -> void
+Asterisk.Sdk.Activities.Activities.ChanSpyActivity
+Asterisk.Sdk.Activities.Activities.ChanSpyActivity.ChanSpyActivity(Asterisk.Sdk.IAgiChannel! channel) -> void
+Asterisk.Sdk.Activities.Activities.ChanSpyActivity.Mode.get -> Asterisk.Sdk.Activities.Activities.ChanSpyMode
+Asterisk.Sdk.Activities.Activities.ChanSpyActivity.Mode.init -> void
+Asterisk.Sdk.Activities.Activities.ChanSpyActivity.Options.get -> string?
+Asterisk.Sdk.Activities.Activities.ChanSpyActivity.Options.init -> void
+Asterisk.Sdk.Activities.Activities.ChanSpyActivity.TargetChannel.get -> string?
+Asterisk.Sdk.Activities.Activities.ChanSpyActivity.TargetChannel.init -> void
+Asterisk.Sdk.Activities.Activities.ChanSpyMode
+Asterisk.Sdk.Activities.Activities.ChanSpyMode.Both = 0 -> Asterisk.Sdk.Activities.Activities.ChanSpyMode
+Asterisk.Sdk.Activities.Activities.ChanSpyMode.Coach = 3 -> Asterisk.Sdk.Activities.Activities.ChanSpyMode
+Asterisk.Sdk.Activities.Activities.ChanSpyMode.SpyOnly = 1 -> Asterisk.Sdk.Activities.Activities.ChanSpyMode
+Asterisk.Sdk.Activities.Activities.ChanSpyMode.WhisperOnly = 2 -> Asterisk.Sdk.Activities.Activities.ChanSpyMode
+Asterisk.Sdk.Activities.Activities.SnoopActivity
+Asterisk.Sdk.Activities.Activities.SnoopActivity.App.get -> string!
+Asterisk.Sdk.Activities.Activities.SnoopActivity.App.init -> void
+Asterisk.Sdk.Activities.Activities.SnoopActivity.SnoopActivity(Asterisk.Sdk.IAriClient! ariClient) -> void
+Asterisk.Sdk.Activities.Activities.SnoopActivity.SnoopChannel.get -> Asterisk.Sdk.AriChannel?
+Asterisk.Sdk.Activities.Activities.SnoopActivity.SnoopId.get -> string?
+Asterisk.Sdk.Activities.Activities.SnoopActivity.SnoopId.init -> void
+Asterisk.Sdk.Activities.Activities.SnoopActivity.Spy.get -> Asterisk.Sdk.Activities.Activities.SnoopDirection
+Asterisk.Sdk.Activities.Activities.SnoopActivity.Spy.init -> void
+Asterisk.Sdk.Activities.Activities.SnoopActivity.TargetChannelId.get -> string!
+Asterisk.Sdk.Activities.Activities.SnoopActivity.TargetChannelId.init -> void
+Asterisk.Sdk.Activities.Activities.SnoopActivity.Whisper.get -> Asterisk.Sdk.Activities.Activities.SnoopDirection
+Asterisk.Sdk.Activities.Activities.SnoopActivity.Whisper.init -> void
+Asterisk.Sdk.Activities.Activities.SnoopDirection
+Asterisk.Sdk.Activities.Activities.SnoopDirection.Both = 3 -> Asterisk.Sdk.Activities.Activities.SnoopDirection
+Asterisk.Sdk.Activities.Activities.SnoopDirection.In = 1 -> Asterisk.Sdk.Activities.Activities.SnoopDirection
+Asterisk.Sdk.Activities.Activities.SnoopDirection.None = 0 -> Asterisk.Sdk.Activities.Activities.SnoopDirection
+Asterisk.Sdk.Activities.Activities.SnoopDirection.Out = 2 -> Asterisk.Sdk.Activities.Activities.SnoopDirection

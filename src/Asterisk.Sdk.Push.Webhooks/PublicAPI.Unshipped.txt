@@ -1,0 +1,46 @@
+#nullable enable
+Asterisk.Sdk.Push.Webhooks.HmacSha256Signer
+Asterisk.Sdk.Push.Webhooks.HmacSha256Signer.HmacSha256Signer() -> void
+Asterisk.Sdk.Push.Webhooks.HmacSha256Signer.Sign(System.ReadOnlySpan<byte> payload, string! secret) -> string!
+Asterisk.Sdk.Push.Webhooks.InMemoryWebhookSubscriptionStore
+Asterisk.Sdk.Push.Webhooks.InMemoryWebhookSubscriptionStore.AddAsync(Asterisk.Sdk.Push.Webhooks.WebhookSubscription! subscription, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Push.Webhooks.InMemoryWebhookSubscriptionStore.GetAllAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Push.Webhooks.WebhookSubscription!>!>
+Asterisk.Sdk.Push.Webhooks.InMemoryWebhookSubscriptionStore.InMemoryWebhookSubscriptionStore() -> void
+Asterisk.Sdk.Push.Webhooks.InMemoryWebhookSubscriptionStore.RemoveAsync(string! id, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Push.Webhooks.IWebhookPayloadSerializer
+Asterisk.Sdk.Push.Webhooks.IWebhookPayloadSerializer.Serialize(Asterisk.Sdk.Push.Events.PushEvent! evt) -> byte[]!
+Asterisk.Sdk.Push.Webhooks.IWebhookSigner
+Asterisk.Sdk.Push.Webhooks.IWebhookSigner.Sign(System.ReadOnlySpan<byte> payload, string! secret) -> string!
+Asterisk.Sdk.Push.Webhooks.IWebhookSubscriptionStore
+Asterisk.Sdk.Push.Webhooks.IWebhookSubscriptionStore.AddAsync(Asterisk.Sdk.Push.Webhooks.WebhookSubscription! subscription, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Push.Webhooks.IWebhookSubscriptionStore.GetAllAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Push.Webhooks.WebhookSubscription!>!>
+Asterisk.Sdk.Push.Webhooks.IWebhookSubscriptionStore.RemoveAsync(string! id, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Push.Webhooks.WebhookDeliveryOptions
+Asterisk.Sdk.Push.Webhooks.WebhookDeliveryOptions.InitialDelay.get -> System.TimeSpan
+Asterisk.Sdk.Push.Webhooks.WebhookDeliveryOptions.InitialDelay.set -> void
+Asterisk.Sdk.Push.Webhooks.WebhookDeliveryOptions.MaxDelay.get -> System.TimeSpan
+Asterisk.Sdk.Push.Webhooks.WebhookDeliveryOptions.MaxDelay.set -> void
+Asterisk.Sdk.Push.Webhooks.WebhookDeliveryOptions.MaxRetries.get -> int
+Asterisk.Sdk.Push.Webhooks.WebhookDeliveryOptions.MaxRetries.set -> void
+Asterisk.Sdk.Push.Webhooks.WebhookDeliveryOptions.TimeoutPerAttempt.get -> System.TimeSpan
+Asterisk.Sdk.Push.Webhooks.WebhookDeliveryOptions.TimeoutPerAttempt.set -> void
+Asterisk.Sdk.Push.Webhooks.WebhookDeliveryOptions.UserAgent.get -> string!
+Asterisk.Sdk.Push.Webhooks.WebhookDeliveryOptions.UserAgent.set -> void
+Asterisk.Sdk.Push.Webhooks.WebhookDeliveryOptions.WebhookDeliveryOptions() -> void
+Asterisk.Sdk.Push.Webhooks.WebhookDeliveryService
+Asterisk.Sdk.Push.Webhooks.WebhookDeliveryService.WebhookDeliveryService(Asterisk.Sdk.Push.Bus.IPushEventBus! bus, Asterisk.Sdk.Push.Webhooks.IWebhookSubscriptionStore! store, Asterisk.Sdk.Push.Webhooks.IWebhookSigner! signer, System.Net.Http.IHttpClientFactory! httpFactory, Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.Push.Webhooks.WebhookDeliveryOptions!>! options, Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> void
+Asterisk.Sdk.Push.Webhooks.WebhookServiceCollectionExtensions
+Asterisk.Sdk.Push.Webhooks.WebhookSubscription
+Asterisk.Sdk.Push.Webhooks.WebhookSubscription.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+Asterisk.Sdk.Push.Webhooks.WebhookSubscription.Headers.init -> void
+Asterisk.Sdk.Push.Webhooks.WebhookSubscription.Id.get -> string!
+Asterisk.Sdk.Push.Webhooks.WebhookSubscription.Id.init -> void
+Asterisk.Sdk.Push.Webhooks.WebhookSubscription.MaxRetries.get -> int?
+Asterisk.Sdk.Push.Webhooks.WebhookSubscription.MaxRetries.init -> void
+Asterisk.Sdk.Push.Webhooks.WebhookSubscription.Secret.get -> string?
+Asterisk.Sdk.Push.Webhooks.WebhookSubscription.Secret.init -> void
+Asterisk.Sdk.Push.Webhooks.WebhookSubscription.TargetUrl.get -> System.Uri!
+Asterisk.Sdk.Push.Webhooks.WebhookSubscription.TargetUrl.init -> void
+Asterisk.Sdk.Push.Webhooks.WebhookSubscription.TopicPattern.get -> Asterisk.Sdk.Push.Topics.TopicPattern
+Asterisk.Sdk.Push.Webhooks.WebhookSubscription.TopicPattern.init -> void
+static Asterisk.Sdk.Push.Webhooks.WebhookServiceCollectionExtensions.AddAsteriskPushWebhooks(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Push.Webhooks.WebhookDeliveryOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

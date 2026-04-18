@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Asterisk.Sdk.OpenTelemetry - batteries-included OpenTelemetry wiring for Asterisk.Sdk. One-line AddAsteriskOpenTelemetry(...) enrolls every ActivitySource and Meter from AsteriskTelemetry and provides convenience helpers for Console, OTLP, and Prometheus exporters.</Description>
+    <PackageTags>asterisk;opentelemetry;otel;prometheus;otlp;observability;sdk</PackageTags>
+    <!-- New package - no baseline published yet; skip binary compatibility check -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Asterisk.Sdk.OpenTelemetry.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Asterisk.Sdk.Hosting\Asterisk.Sdk.Hosting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenTelemetry" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Exporter.Console" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>

@@ -2,22 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] — Infra & surface
-
-These changes target onboarding, trust signals, and contributor ergonomics. No package contents change — no version bump.
+## [Unreleased] — 1.11.0 — Pluggable backends, contact-center activities, OpenTelemetry, webhooks, infra
 
 ### Added
 
-- **README surface:** CI + AOT Trim workflow badges, NuGet download badge, Native AOT badge at the top of the README; `## Documentation` navigable table of contents linking guides, benchmarks, technical/commercial READMEs, CHANGELOG, CONTRIBUTING, SECURITY.
-- **README Quick Start:** 10-line "First contact" preamble showing a minimal `AddAsterisk` snippet and a pointer to `Examples/BasicAmiExample/` for a Docker-backed working demo.
+- **`Asterisk.Sdk.OpenTelemetry`** (new MIT package): batteries-included OpenTelemetry wiring. `services.AddAsteriskOpenTelemetry(b => b.WithAllSources().WithPrometheusExporter().WithOtlpExporter(...))` enrolls every `AsteriskTelemetry.ActivitySourceNames` + `MeterNames` and attaches Console / OTLP / Prometheus exporters. `ConfigureTracing` / `ConfigureMetrics` escape hatches give direct access to the underlying `TracerProviderBuilder` / `MeterProviderBuilder` for samplers, views, and custom processors. Uses OpenTelemetry 1.15.2 (avoids 1.10.x vulnerability).
+- **`Asterisk.Sdk.Push.Webhooks`** (new MIT package): outbound HTTP webhook delivery consuming the Push bus. `services.AddAsteriskPush().AddAsteriskPushWebhooks(opts => ...)` registers `IWebhookSubscriptionStore` (in-memory default), `IWebhookSigner` (HMAC-SHA256 default), `IWebhookPayloadSerializer` (UTF-8 JSON envelope, AOT-safe), and a `WebhookDeliveryService` `BackgroundService`. Per-delivery HMAC-SHA256 signature in `X-Signature` header, exponential retry capped at `MaxDelay`, trace-context propagation via `traceparent`, per-subscription `MaxRetries`/`Headers` overrides, dead-letter metrics. Meter `Asterisk.Sdk.Push.Webhooks` (enrolled in `AsteriskTelemetry.MeterNames`): counters `deliveries.succeeded`, `deliveries.failed`, `deliveries.retried`, `deliveries.dead_letter`.
+- **Contact-center activities** (in `Asterisk.Sdk.Activities`): four new supervisor/transfer primitives.
+  - `AttendedTransferActivity` — wraps AMI `Atxfer` via a new `AmiActivityBase` (takes `IAmiConnection` instead of `IAgiChannel`); required when the supervisor operates outside a live AGI context.
+  - `ChanSpyActivity` — AGI `ChanSpy` application with `ChanSpyMode` enum (`Both`, `SpyOnly`, `WhisperOnly`, `Coach`) plus free-form `Options` string for the full flag set.
+  - `BargeActivity` — AGI `ChanSpy` with the `B` (barge) flag; supervisor joins as audible third party.
+  - `SnoopActivity` — ARI snoop channel creation via `IAriClient.Channels.SnoopAsync`; exposes the resulting snoop channel via `SnoopChannel` property.
+- **`Asterisk.Sdk.Sessions.Redis`** (new MIT package): `RedisSessionStore : SessionStoreBase` promoted from the prior spike. Fluent `UseRedis(...)` extension with three overloads — `Action<RedisSessionStoreOptions>`, pre-built `IConnectionMultiplexer`, and raw connection string. Data layout: one JSON snapshot per session, secondary linked-id index, active set (cursor-scanned), completed sorted-set with TTL-driven eviction. Pipelined I/O via `CreateBatch()` + `Task.WhenAll(...).WaitAsync(ct)`. Cancellation honored at entry and around all batch awaits. AOT-safe (source-gen `SessionJsonContext`). Integration tests use Testcontainers (`redis:7-alpine`, no env-var dependency).
+- **`Asterisk.Sdk.Sessions.Postgres`** (new MIT package): `PostgresSessionStore : SessionStoreBase` using Npgsql 10 + Dapper + JSONB. Fluent `UsePostgres(...)` extension with the same three overloads as Redis. UPSERT via `INSERT ... ON CONFLICT (session_id) DO UPDATE`. `SaveBatchAsync` in a transaction with rollback. Partial index `ix_asterisk_sessions_active` backs `GetActiveAsync`. Identifier validation (`TableName`, `SchemaName`) at resolve time against `^[A-Za-z_][A-Za-z0-9_]*$` via `AddOptions<T>().Validate`. Migration SQL (`001_create_sessions_table.sql`) ships in the `.nupkg` at `contentFiles/any/any/Migrations/`.
+- **`Asterisk.Sdk.Sessions.ISessionStore`** interface: additive companion to `SessionStoreBase` — enables NSubstitute mocking in tests and supports factory-based DI registration. `SessionStoreBase` now declares `: ISessionStore`; zero breaking changes for existing consumers.
+- **`Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder`** fluent-builder interface: entry point for backend-specific registration (`UseInMemory`, `UseRedis`, `UsePostgres`). Exposed by two new overloads in `Asterisk.Sdk.Hosting`: `AddAsteriskSessionsBuilder(...)` and `AddAsteriskSessionsMultiServerBuilder(...)`. The existing `AddAsteriskSessions` / `AddAsteriskSessionsMultiServer` methods still return `IServiceCollection` — consumers opt into the builder at their own pace.
+- **`docs/guides/session-store-backends.md`**: decision guide, registration patterns, data layout, identifier-safety notes, benchmark reference.
+- **README:** CI + AOT Trim workflow badges, NuGet download badge, Native AOT badge; `## Documentation` table of contents linking guides/benchmarks/technical+commercial READMEs/CHANGELOG/CONTRIBUTING/SECURITY; **Session Store Backends** subsection in the Packages table.
+- **README Quick Start:** 10-line "First contact" preamble showing a minimal `AddAsterisk` snippet and a pointer to `Examples/BasicAmiExample/`.
 - **`.github/dependabot.yml`:** daily NuGet updates (grouped: Microsoft.Extensions, test stack, analyzers) + weekly github-actions updates.
-- **`.github/workflows/codeql.yml`:** CodeQL C# analysis on push + PR + weekly Sunday cron with `security-extended,security-and-quality` query suites. Results surfaced in the Security tab.
-- **`tools/install-hooks.sh`:** one-time installer for a local `pre-commit` hook that runs `claudelint` when `CLAUDE.md` or `.claude/` files are staged. Non-blocking when `claudelint` is not installed. Documented in `CONTRIBUTING.md` as a standard setup step.
+- **`.github/workflows/codeql.yml`:** CodeQL C# analysis on push + PR + weekly Sunday cron with `security-extended,security-and-quality` query suites.
+- **`tools/install-hooks.sh`:** one-time installer for a local `pre-commit` hook that runs `claudelint` when `CLAUDE.md` or `.claude/` files are staged.
+
+### Changed
+
+- **`Asterisk.Sdk.Sessions`:** `CallSessionSnapshot` + `SessionJsonContext` hoisted from the Redis spike into `src/Asterisk.Sdk.Sessions/Serialization/` as `internal` — shared round-trip between Redis and Postgres backends. `InternalsVisibleTo` grants added for `Asterisk.Sdk.Sessions.Redis`, `Asterisk.Sdk.Sessions.Postgres`, and the matching test projects.
+
+### Removed
+
+- **`Tests/Asterisk.Sdk.Redis.Spike`**: retired after migration to production package `Asterisk.Sdk.Sessions.Redis`. Spike tests moved to `Tests/Asterisk.Sdk.Sessions.Redis.Tests/` (integration-tagged) and `Tests/Asterisk.Sdk.Sessions.Tests/SnapshotSerializationTests.cs` (unit). Latency smoke-test preserved with `[Trait("Category", "Benchmark")]` so CI integration filters can exclude it.
+- **`Tests/Asterisk.Sdk.Redis.Spike.Aot`**: orphaned AOT smoke-check for the retired spike. Production `Asterisk.Sdk.Sessions.Redis` + `Asterisk.Sdk.Sessions.Postgres` are covered by the repo-wide AOT Trim workflow (`<IsAotCompatible>true</IsAotCompatible>` inherited from `Directory.Build.props`).
 
 ### Notes
 
-- A CI gate that runs `claudelint` on every PR was considered and deferred — `CLAUDE.md` and `.claude/` are gitignored (per-contributor, not team-shared), so a CI runner has nothing to lint. If the team later opts to share `CLAUDE.md` in the repo, a `.github/workflows/claudelint.yml` job can be added trivially.
-- These changes are docs/infra only — no version bump, no nuget.org publish. They ship with the next release.
+- No breaking changes. All shipped API surfaces from v1.10.2 remain intact; new features are additive. `AddAsteriskSessions` continues to return `IServiceCollection`; consumers wanting fluent-builder access call `AddAsteriskSessionsBuilder` instead.
+- Dapper's runtime IL emit is AOT-safe in .NET 10 under current toolchain; verified by the AOT Trim workflow.
 
 ---
 
