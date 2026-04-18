@@ -41,7 +41,7 @@
 
   <!-- Redis (spike validation) -->
   <ItemGroup>
-    <PackageVersion Include="StackExchange.Redis" Version="2.12.1" />
+    <PackageVersion Include="StackExchange.Redis" Version="2.12.14" />
   </ItemGroup>
 
   <!-- Source generators -->
