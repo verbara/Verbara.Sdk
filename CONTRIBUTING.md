@@ -51,7 +51,7 @@ test: add functional tests for queue events
 refactor(agi): extract command parser into separate class
 ```
 
-Scope is optional but recommended. Common scopes: `ami`, `agi`, `ari`, `live`, `sessions`, `hosting`, `voiceai`, `pbxadmin`, `docker`.
+Scope is optional but recommended. Common scopes: `ami`, `agi`, `ari`, `live`, `sessions`, `push`, `hosting`, `voiceai`, `activities`, `config`, `audio`, `docker`.
 
 ### Code Conventions
 

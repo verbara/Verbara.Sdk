@@ -56,6 +56,47 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ---
 
+## Performance
+
+Benchmarked on AMD Ryzen 9 9900X (12C/24T), .NET 10, BenchmarkDotNet v0.14.0:
+
+| Operation | Throughput / Latency |
+|-----------|----------------------|
+| AMI event parse + dispatch | **1.72M events/sec** |
+| ARI JSON event parse | **289 ns** |
+| `ChannelManager.GetById` (secondary index) | **6.3 ns** |
+| Observer dispatch (copy-on-write array) | **~15 ns / observer** |
+
+Full methodology, machine-readable results, and cross-language comparison (asterisk-java, asterisk-ami-client, pyst2) in [docs/analysis/benchmark-analysis.md](docs/analysis/benchmark-analysis.md). Raw BenchmarkDotNet reports are under `BenchmarkDotNet.Artifacts/results/`. The v1.0 baseline remains valid for core code paths; the v1.10 re-run is tracked in the upcoming sprint.
+
+---
+
+## Observability
+
+Every package ships a `Meter`, `ActivitySource`, and `IHealthCheck`. Registered names are exposed as runtime-discoverable lists so consumers don't hard-code strings:
+
+```csharp
+using Asterisk.Sdk.Hosting;
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
+
+builder.Services
+    .AddOpenTelemetry()
+    .WithTracing(t => t.AddSource([.. AsteriskTelemetry.ActivitySourceNames])
+                       .AddOtlpExporter())
+    .WithMetrics(m => m.AddMeter([.. AsteriskTelemetry.MeterNames])
+                       .AddOtlpExporter());
+```
+
+- **9 `ActivitySource`s** — AMI, ARI, AGI, Live, Sessions, Push, VoiceAi, VoiceAi.AudioSocket, VoiceAi.OpenAiRealtime
+- **12 `Meter`s** — all of the above plus Ari.Audio, VoiceAi.Stt, VoiceAi.Tts
+- **11 `IHealthCheck`s** auto-registered — 6 core + 5 VoiceAi
+
+See the [high-load tuning guide](docs/guides/high-load-tuning.md) for metric definitions and sizing recommendations at 10K / 100K agent scale.
+
+---
+
 ## Installation
 
 ```bash
