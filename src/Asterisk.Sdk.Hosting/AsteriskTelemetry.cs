@@ -30,6 +30,7 @@ public static class AsteriskTelemetry
         "Asterisk.Sdk.Live",
         "Asterisk.Sdk.Sessions",
         "Asterisk.Sdk.Push",
+        "Asterisk.Sdk.Push.Webhooks",
         "Asterisk.Sdk.VoiceAi",
         "Asterisk.Sdk.VoiceAi.Stt",
         "Asterisk.Sdk.VoiceAi.Tts",
