@@ -1,14 +1,19 @@
 using System.Diagnostics;
-using Asterisk.Sdk.Redis.Spike.Fixtures;
-using Asterisk.Sdk.Redis.Spike.Store;
+using Asterisk.Sdk.Enums;
 using Asterisk.Sdk.Sessions;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Asterisk.Sdk.Redis.Spike.Benchmarks;
+namespace Asterisk.Sdk.Sessions.Redis.Tests;
 
+/// <summary>
+/// Spot-benchmark of <see cref="RedisSessionStore"/> latency and batch throughput against a
+/// real Redis instance managed by <see cref="RedisFixture"/>. Prints percentiles via
+/// <see cref="ITestOutputHelper"/>. Not a BenchmarkDotNet run - intended as a smoke test for
+/// performance regressions, not a formal benchmark.
+/// </summary>
 [Collection("Redis")]
-[Trait("Category", "Spike")]
+[Trait("Category", "Integration")]
 public class RedisLatencyBenchmark : IAsyncLifetime
 {
     private readonly RedisFixture _fixture;
@@ -31,7 +36,6 @@ public class RedisLatencyBenchmark : IAsyncLifetime
         const int iterations = 1000;
         const int warmup = 10;
 
-        // Warmup
         for (var i = 0; i < warmup; i++)
         {
             var session = CreateRealisticSession($"warmup-save-{i}");
@@ -60,14 +64,12 @@ public class RedisLatencyBenchmark : IAsyncLifetime
         const int iterations = 1000;
         const int warmup = 10;
 
-        // Pre-populate 1000 sessions
         for (var i = 0; i < iterations; i++)
         {
             var session = CreateRealisticSession($"bench-get-{i}");
             await _store.SaveAsync(session, CancellationToken.None);
         }
 
-        // Warmup
         for (var i = 0; i < warmup; i++)
         {
             await _store.GetAsync($"bench-get-{i}", CancellationToken.None);
@@ -95,7 +97,6 @@ public class RedisLatencyBenchmark : IAsyncLifetime
         const int batchSize = 500;
         const int warmup = 10;
 
-        // Warmup with small batches
         for (var w = 0; w < warmup; w++)
         {
             var warmupBatch = Enumerable.Range(0, 10)

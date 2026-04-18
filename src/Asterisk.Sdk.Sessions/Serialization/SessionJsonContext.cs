@@ -1,8 +1,7 @@
 using System.Text.Json.Serialization;
 using Asterisk.Sdk.Enums;
-using Asterisk.Sdk.Sessions;
 
-namespace Asterisk.Sdk.Redis.Spike.Serialization;
+namespace Asterisk.Sdk.Sessions.Serialization;
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,

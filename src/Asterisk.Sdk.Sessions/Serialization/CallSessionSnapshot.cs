@@ -1,9 +1,13 @@
 using Asterisk.Sdk.Enums;
-using Asterisk.Sdk.Sessions;
 
-namespace Asterisk.Sdk.Redis.Spike.Serialization;
+namespace Asterisk.Sdk.Sessions.Serialization;
 
-public sealed class CallSessionSnapshot
+/// <summary>
+/// Wire-format DTO that captures the full state of a <see cref="CallSession"/> for
+/// persistence in external stores (Redis, PostgreSQL, …). Shared between all
+/// <c>Asterisk.Sdk.Sessions.*</c> backend packages so they round-trip identically.
+/// </summary>
+internal sealed class CallSessionSnapshot
 {
     // Identity
     public required string SessionId { get; init; }
