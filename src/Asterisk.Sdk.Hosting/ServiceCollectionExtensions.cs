@@ -6,6 +6,7 @@ using Asterisk.Sdk.Ami.Transport;
 using Asterisk.Sdk.Ari.Audio;
 using Asterisk.Sdk.Ari.Client;
 using Asterisk.Sdk.Live.Server;
+using Asterisk.Sdk.Sessions;
 using Asterisk.Sdk.Sessions.Extensions;
 using Asterisk.Sdk.Sessions.Internal;
 using Asterisk.Sdk.Sessions.Manager;
@@ -180,6 +181,23 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Add session engine services and return an <see cref="ISessionsBuilder"/> so backend
+    /// packages (Redis, Postgres, ...) can register themselves fluently:
+    /// <c>services.AddAsteriskSessionsBuilder().UseRedis(...)</c>.
+    /// Behaves identically to <see cref="AddAsteriskSessions"/>: registers the InMemory
+    /// default store via <c>TryAddSingleton</c> and wires the auto-attach hosted services.
+    /// </summary>
+    public static ISessionsBuilder AddAsteriskSessionsBuilder(
+        this IServiceCollection services,
+        Action<SessionOptions>? configure = null)
+    {
+        AddSessionsCore(services, configure);
+        services.AddSingleton<IHostedService, SessionManagerHostedService>();
+        services.AddSingleton<IHostedService, SessionReconciliationService>();
+        return new SessionsBuilder(services);
+    }
+
+    /// <summary>
     /// Add session engine services for multi-server deployments using <see cref="AsteriskServerPool"/>.
     /// Does NOT register a hosted service — manual server attachment via
     /// <see cref="CallSessionManager.AttachToServer"/> / <see cref="CallSessionManager.DetachFromServer"/> is required.
@@ -192,6 +210,20 @@ public static class ServiceCollectionExtensions
         return AddSessionsCore(services, configure);
     }
 
+    /// <summary>
+    /// Add session engine services for multi-server deployments and return an
+    /// <see cref="ISessionsBuilder"/> so backend packages can register themselves
+    /// fluently. Behaves identically to <see cref="AddAsteriskSessionsMultiServer"/>
+    /// otherwise.
+    /// </summary>
+    public static ISessionsBuilder AddAsteriskSessionsMultiServerBuilder(
+        this IServiceCollection services,
+        Action<SessionOptions>? configure = null)
+    {
+        AddSessionsCore(services, configure);
+        return new SessionsBuilder(services);
+    }
+
     private static IServiceCollection AddSessionsCore(
         IServiceCollection services,
         Action<SessionOptions>? configure)
@@ -200,6 +232,10 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IAgentSessionTracker, AgentSessionTracker>();
         services.TryAddSingleton<IQueueSessionTracker, QueueSessionTracker>();
         services.TryAddSingleton<SessionStoreBase, InMemorySessionStore>();
+        // Resolve ISessionStore through SessionStoreBase so custom overrides registered
+        // by consumers (e.g. AddSingleton<SessionStoreBase, MyStore>()) continue to flow
+        // through to anyone depending on the interface. TryAdd keeps this idempotent.
+        services.TryAddSingleton<ISessionStore>(sp => sp.GetRequiredService<SessionStoreBase>());
 
         if (configure is not null)
             services.Configure(configure);

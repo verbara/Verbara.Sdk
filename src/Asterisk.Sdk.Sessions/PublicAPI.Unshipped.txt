@@ -1,1 +1,12 @@
 #nullable enable
+Asterisk.Sdk.Sessions.Extensions.AsteriskSessionsBuilderExtensions
+Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder
+Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder.Services.get -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Asterisk.Sdk.Sessions.ISessionStore
+Asterisk.Sdk.Sessions.ISessionStore.DeleteAsync(string! sessionId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Sessions.ISessionStore.GetActiveAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IEnumerable<Asterisk.Sdk.Sessions.CallSession!>!>
+Asterisk.Sdk.Sessions.ISessionStore.GetAsync(string! sessionId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Sessions.CallSession?>
+Asterisk.Sdk.Sessions.ISessionStore.GetByLinkedIdAsync(string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Asterisk.Sdk.Sessions.CallSession?>
+Asterisk.Sdk.Sessions.ISessionStore.SaveAsync(Asterisk.Sdk.Sessions.CallSession! session, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Sessions.ISessionStore.SaveBatchAsync(System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Sessions.CallSession!>! sessions, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+static Asterisk.Sdk.Sessions.Extensions.AsteriskSessionsBuilderExtensions.UseInMemory(this Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder! builder) -> Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder!
