@@ -1,5 +1,10 @@
 #nullable enable
 Asterisk.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection.RealtimeServiceCollectionExtensions
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeActivitySource
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeHealthCheck
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeHealthCheck.RealtimeHealthCheck(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions!>! options) -> void
+Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics
 Asterisk.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling.IRealtimeFunctionHandler
 Asterisk.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling.IRealtimeFunctionHandler.Description.get -> string!
 Asterisk.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling.IRealtimeFunctionHandler.ExecuteAsync(string! argumentsJson, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
@@ -64,3 +69,12 @@ Asterisk.Sdk.VoiceAi.OpenAiRealtime.VadMode.Disabled = 1 -> Asterisk.Sdk.VoiceAi
 Asterisk.Sdk.VoiceAi.OpenAiRealtime.VadMode.ServerSide = 0 -> Asterisk.Sdk.VoiceAi.OpenAiRealtime.VadMode
 static Asterisk.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection.RealtimeServiceCollectionExtensions.AddFunction<THandler>(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static Asterisk.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection.RealtimeServiceCollectionExtensions.AddOpenAiRealtimeBridge(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeActivitySource.Source -> System.Diagnostics.ActivitySource!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.FunctionCallsTotal -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.MessagesReceived -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.MessagesSent -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionDurationMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsCompleted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsFailed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsStarted -> System.Diagnostics.Metrics.Counter<long>!

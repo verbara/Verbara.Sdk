@@ -63,6 +63,20 @@ Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession.WriteAudioAsync(System.ReadO
 Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession.WriteAudioAsync(System.ReadOnlyMemory<byte> pcmData, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketSession.WriteSilenceAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Asterisk.Sdk.VoiceAi.AudioSocket.DependencyInjection.AudioSocketServiceCollectionExtensions
+Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketActivitySource
+Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketHealthCheck
+Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketHealthCheck.AudioSocketHealthCheck(Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketServer! server) -> void
+Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics
 static Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameTypeExtensions.GetSampleRate(this Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType type) -> int
 static Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameTypeExtensions.IsAudio(this Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType type) -> bool
 static Asterisk.Sdk.VoiceAi.AudioSocket.DependencyInjection.AudioSocketServiceCollectionExtensions.AddAudioSocketServer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.AudioSocket.AudioSocketOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static readonly Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketActivitySource.Source -> System.Diagnostics.ActivitySource!
+static readonly Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.BytesReceived -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.BytesSent -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.ConnectionsAccepted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.ConnectionsClosed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.FramesReceived -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.FramesSent -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Asterisk.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.SessionDurationMs -> System.Diagnostics.Metrics.Histogram<double>!

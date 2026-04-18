@@ -1,8 +1,1 @@
 #nullable enable
-Asterisk.Sdk.VoiceAi.Stt.Diagnostics.SttHealthCheck
-Asterisk.Sdk.VoiceAi.Stt.Diagnostics.SttHealthCheck.SttHealthCheck(Asterisk.Sdk.VoiceAi.SpeechRecognizer? recognizer) -> void
-Asterisk.Sdk.VoiceAi.Stt.Diagnostics.SttHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
-override Asterisk.Sdk.VoiceAi.Stt.Deepgram.DeepgramSpeechRecognizer.ProviderName.get -> string!
-override Asterisk.Sdk.VoiceAi.Stt.Google.GoogleSpeechRecognizer.ProviderName.get -> string!
-override Asterisk.Sdk.VoiceAi.Stt.Whisper.AzureWhisperSpeechRecognizer.ProviderName.get -> string!
-override Asterisk.Sdk.VoiceAi.Stt.Whisper.WhisperSpeechRecognizer.ProviderName.get -> string!
