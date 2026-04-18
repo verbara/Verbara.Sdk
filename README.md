@@ -408,6 +408,15 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 | **Asterisk.Sdk.Sessions.Redis** | `RedisSessionStore` + `UseRedis(...)` fluent builder (StackExchange.Redis, pipelined I/O, TTL-driven retention, AOT-safe) |
 | **Asterisk.Sdk.Sessions.Postgres** | `PostgresSessionStore` + `UsePostgres(...)` fluent builder (Npgsql + Dapper + JSONB, UPSERT on `ON CONFLICT`, migration SQL shipped in the nupkg) |
 
+### Observability & Integrations
+
+| Package | Description |
+|---------|-------------|
+| **Asterisk.Sdk.OpenTelemetry** | Batteries-included OpenTelemetry wiring: one call enrolls every ActivitySource + Meter, ships Console/OTLP/Prometheus exporter helpers |
+| **Asterisk.Sdk.Push** | Real-time push primitives: topic hierarchy, subscription management, authorization, in-memory event fan-out |
+| **Asterisk.Sdk.Push.AspNetCore** | SSE streaming endpoint for the Push bus (ASP.NET Core) |
+| **Asterisk.Sdk.Push.Webhooks** | Outbound HTTP webhooks: HMAC-SHA256 signing, exponential retry/backoff, topic-pattern matching |
+
 ### Voice AI
 
 | Package | Description |

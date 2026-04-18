@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Asterisk.Sdk.Push.Webhooks - outbound HTTP webhook delivery for Asterisk.Sdk.Push. Consumes events from the Push bus, matches against WebhookSubscription topic patterns, POSTs with HMAC-SHA256 signature and exponential retry/backoff. AOT-safe.</Description>
+    <PackageTags>asterisk;push;webhooks;hmac;retry;sdk</PackageTags>
+    <!-- New package — no baseline published yet; skip binary compatibility check -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Asterisk.Sdk.Push.Webhooks.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Asterisk.Sdk.Push\Asterisk.Sdk.Push.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>
