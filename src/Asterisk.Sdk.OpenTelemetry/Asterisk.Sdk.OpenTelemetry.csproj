@@ -4,6 +4,10 @@
     <PackageTags>asterisk;opentelemetry;otel;prometheus;otlp;observability;sdk</PackageTags>
     <!-- New package - no baseline published yet; skip binary compatibility check -->
     <EnablePackageValidation>false</EnablePackageValidation>
+    <!-- NU5104: OpenTelemetry.Exporter.Prometheus.AspNetCore is published as beta by the
+         OpenTelemetry .NET project (the Prometheus exporter is experimental upstream).
+         This package remains stable overall; suppress only the prerelease-dependency check. -->
+    <NoWarn>$(NoWarn);NU5104</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
