@@ -59,7 +59,6 @@
     <Project Path="Tests/Asterisk.Sdk.Sessions.FunctionalTests/Asterisk.Sdk.Sessions.FunctionalTests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Sessions.Tests/Asterisk.Sdk.Sessions.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Sessions.Redis.Tests/Asterisk.Sdk.Sessions.Redis.Tests.csproj" />
-    <Project Path="Tests/Asterisk.Sdk.Redis.Spike.Aot/Asterisk.Sdk.Redis.Spike.Aot.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Hosting.Tests/Asterisk.Sdk.Hosting.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Push.Tests/Asterisk.Sdk.Push.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Push.AspNetCore.Tests/Asterisk.Sdk.Push.AspNetCore.Tests.csproj" />

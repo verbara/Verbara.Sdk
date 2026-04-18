@@ -1,6 +1,5 @@
 #nullable enable
 Asterisk.Sdk.Sessions.Redis.RedisSessionStore
-Asterisk.Sdk.Sessions.Redis.RedisSessionStore.RedisSessionStore(StackExchange.Redis.IConnectionMultiplexer! redis, Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions! options) -> void
 Asterisk.Sdk.Sessions.Redis.RedisSessionStore.RedisSessionStore(StackExchange.Redis.IConnectionMultiplexer! redis, Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions!>! options) -> void
 Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions
 Asterisk.Sdk.Sessions.Redis.RedisSessionStoreOptions.RedisSessionStoreOptions() -> void
