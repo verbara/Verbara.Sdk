@@ -94,7 +94,7 @@
     <PackageVersion Include="FluentAssertions" Version="7.2.2" />
     <PackageVersion Include="bunit" Version="2.0.66" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
-    <PackageVersion Include="Testcontainers" Version="4.3.0" />
+    <PackageVersion Include="Testcontainers" Version="4.11.0" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.51.0" />
   </ItemGroup>
 

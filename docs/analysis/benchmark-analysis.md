@@ -91,7 +91,7 @@ Benchmark code: `Tests/Asterisk.Sdk.Benchmarks/VoiceAiBenchmarks.cs`. Reproduce 
 
 ## 1c. Pluggable Session Backends — v1.11.0 (2026-04-18)
 
-En v1.11.0 se añadieron dos backends de `ISessionStore` para despliegues multi-instance: `Asterisk.Sdk.Sessions.Redis` (StackExchange.Redis, pipelined batches, TTL-driven retention) y `Asterisk.Sdk.Sessions.Postgres` (Npgsql + Dapper + JSONB, UPSERT on conflict, partial index para activas). Los benchmarks de latencia corren contra contenedores Docker locales (`redis:7-alpine` / `postgres:16-alpine`) vía Testcontainers, no contra infra remota — los números son "mejor caso" de CPU + loopback y sirven como baseline de regresión, no como sizing de producción.
+En v1.11.0 se añadieron dos backends de `ISessionStore` para despliegues multi-instance: `Asterisk.Sdk.Sessions.Redis` (StackExchange.Redis, pipelined batches, TTL-driven retention) y `Asterisk.Sdk.Sessions.Postgres` (Npgsql + Dapper + JSONB, UPSERT on conflict, partial index para activas). Los benchmarks de latencia corren contra contenedores Docker locales (`redis:7-alpine` / `postgres:18-alpine`) vía Testcontainers, no contra infra remota — los números son "mejor caso" de CPU + loopback y sirven como baseline de regresión, no como sizing de producción.
 
 **Máquina:** AMD Ryzen 9 9900X · .NET 10.0.5 · Debian trixie · Docker 29.4 · 1000 iteraciones por punto · 10 warmup.
 

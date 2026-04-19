@@ -7,9 +7,9 @@ using Xunit;
 namespace Asterisk.Sdk.Sessions.Postgres.Tests;
 
 /// <summary>
-/// Testcontainers-backed Postgres fixture. Spins up <c>postgres:16-alpine</c> in a disposable
+/// Testcontainers-backed Postgres fixture. Spins up <c>postgres:18-alpine</c> in a disposable
 /// container, runs the package migration, and exposes an <see cref="NpgsqlDataSource"/>
-/// ready for tests. Uses <c>pg_isready</c> as the wait strategy (bundled in postgres:16-alpine)
+/// ready for tests. Uses <c>pg_isready</c> as the wait strategy (bundled in postgres:18-alpine)
 /// to avoid the <c>UntilPortIsAvailable</c> hang seen on GitHub Actions /proc/net/tcp.
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
@@ -30,8 +30,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _container = new ContainerBuilder()
-            .WithImage("postgres:16-alpine")
+        _container = new ContainerBuilder("postgres:18-alpine")
             .WithPortBinding(5432, true)
             .WithEnvironment("POSTGRES_USER", DbUser)
             .WithEnvironment("POSTGRES_PASSWORD", DbPassword)

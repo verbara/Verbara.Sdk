@@ -5,7 +5,7 @@ networks:
 services:
   # ── PostgreSQL for Realtime ──
   postgres:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     container_name: asterisk-sdk-test-db
     networks:
       - sdk-test
@@ -68,7 +68,7 @@ services:
 
   # ── Toxiproxy for network partition tests ──
   toxiproxy:
-    image: ghcr.io/shopify/toxiproxy:2.9.0
+    image: ghcr.io/shopify/toxiproxy:2.12.0
     container_name: asterisk-sdk-test-toxiproxy
     networks:
       - sdk-test

@@ -3,7 +3,7 @@
 //
 // Prereq: a running Postgres with a database for the demo. Quick start:
 //     docker run --rm -p 5432:5432 -e POSTGRES_PASSWORD=postgres \
-//         -e POSTGRES_DB=asterisk_sessions_demo postgres:16-alpine
+//         -e POSTGRES_DB=asterisk_sessions_demo postgres:18-alpine
 //
 // The migration SQL ships inside the Asterisk.Sdk.Sessions.Postgres NuGet at
 //     contentFiles/any/any/Migrations/001_create_sessions_table.sql

@@ -14,8 +14,7 @@ public sealed class SippContainer : IAsyncDisposable
 
     public SippContainer(INetwork network)
     {
-        _container = new ContainerBuilder()
-            .WithImage("ctaloi/sipp")
+        _container = new ContainerBuilder("ctaloi/sipp")
             .WithNetwork(network)
             .WithBindMount(DockerPaths.SippScenariosDir, "/sipp-scenarios", AccessMode.ReadOnly)
             .WithEntrypoint("sleep", "infinity")
