@@ -21,8 +21,7 @@ public sealed class PstnEmulatorContainer : IAsyncDisposable
 
     public PstnEmulatorContainer(INetwork network, IImage image)
     {
-        _container = new ContainerBuilder()
-            .WithImage(image)
+        _container = new ContainerBuilder(image)
             .WithPortBinding(5038, true)
             .WithBindMount(DockerPaths.PstnEmulatorConfig, "/etc/asterisk", AccessMode.ReadOnly)
             .WithNetwork(network)
