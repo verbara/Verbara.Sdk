@@ -31,7 +31,7 @@ The SDK exposes a discovery helper at [`src/Asterisk.Sdk.Hosting/AsteriskTelemet
 **9 ActivitySources** (traces):
 `Asterisk.Sdk.Ami`, `Asterisk.Sdk.Ari`, `Asterisk.Sdk.Agi`, `Asterisk.Sdk.Live`, `Asterisk.Sdk.Sessions`, `Asterisk.Sdk.Push`, `Asterisk.Sdk.VoiceAi`, `Asterisk.Sdk.VoiceAi.AudioSocket`, `Asterisk.Sdk.VoiceAi.OpenAiRealtime`.
 
-**13 Meters** (metrics): the 9 above plus `Asterisk.Sdk.Ari.Audio`, `Asterisk.Sdk.Push.Webhooks`, `Asterisk.Sdk.VoiceAi.Stt`, `Asterisk.Sdk.VoiceAi.Tts`.
+**14 Meters** (metrics): the 9 above plus `Asterisk.Sdk.Ari.Audio`, `Asterisk.Sdk.Push.Webhooks`, `Asterisk.Sdk.Push.Nats`, `Asterisk.Sdk.VoiceAi.Stt`, `Asterisk.Sdk.VoiceAi.Tts`.
 
 Each source produces spans keyed by different phases of a call: AMI events, ARI REST operations, dialplan execution, session lifecycle, push dispatch, STT/TTS turns, realtime streaming. Their tags today are ad-hoc. This draft proposes a unified set.
 

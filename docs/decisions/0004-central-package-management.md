@@ -6,7 +6,7 @@
 
 ## Context
 
-The SDK ships **23 NuGet packages** across `src/` and hosts 19 test projects plus 16 examples. Without central version management:
+The SDK ships **24 NuGet packages** across `src/` and hosts 30 test projects plus 19 examples. Without central version management:
 
 - Each csproj would pin its own `System.Text.Json` / `Microsoft.Extensions.*` versions.
 - Diamond-dependency conflicts would surface at publish time, not at commit time.
