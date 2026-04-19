@@ -54,19 +54,25 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
 
         var channel = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
 
+        // Linked CTS: when the receive loop detects the server is gone (abort / close),
+        // cancel the session so the send side unblocks if it is still inside
+        // SendAsync / CloseOutputAsync on the half-dead socket.
+        using var sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
         // Fire-and-forget: send the synthesis request, then half-close.
-        var sendTask = SendRequestAsync(ws, text, outputFormat, ct);
+        var sendTask = SendRequestAsync(ws, text, outputFormat, sessionCts.Token);
 
         // Receive loop writes binary audio frames to channel, stops on `done` control msg.
         var receiveTask = Task.Run(async () =>
         {
             try
             {
-                await ReceiveFramesAsync(ws, channel.Writer, ct).ConfigureAwait(false);
+                await ReceiveFramesAsync(ws, channel.Writer, sessionCts.Token).ConfigureAwait(false);
             }
             finally
             {
                 channel.Writer.TryComplete();
+                await sessionCts.CancelAsync().ConfigureAwait(false);
             }
         }, ct);
 
@@ -104,9 +110,20 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
             WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
 
         // Half-close so the server knows no more input is coming.
-        if (ws.State == WebSocketState.Open)
-            await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
-                .ConfigureAwait(false);
+        // Guarded timeout: CloseOutputAsync can hang if the server aborted the
+        // connection at the socket level before the client's FIN is processed.
+        if (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
+        {
+            using var closeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            closeCts.CancelAfter(TimeSpan.FromSeconds(2));
+            try
+            {
+                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", closeCts.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { /* server is gone, give up */ }
+            catch (WebSocketException) { /* peer already closed abruptly */ }
+        }
     }
 
     private static async Task ReceiveFramesAsync(
