@@ -40,8 +40,7 @@ public class SessionsBackendsBenchmark
     public async Task SetupAsync()
     {
         // --- Redis container ---
-        _redisContainer = new ContainerBuilder()
-            .WithImage("redis:7-alpine")
+        _redisContainer = new ContainerBuilder("redis:7-alpine")
             .WithPortBinding(6379, true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilCommandIsCompleted("redis-cli", "ping"))
             .Build();
@@ -56,8 +55,7 @@ public class SessionsBackendsBenchmark
         _redisStore = new RedisSessionStore(_redisConn, redisOptions);
 
         // --- Postgres container ---
-        _postgresContainer = new ContainerBuilder()
-            .WithImage("postgres:16-alpine")
+        _postgresContainer = new ContainerBuilder("postgres:18-alpine")
             .WithPortBinding(5432, true)
             .WithEnvironment("POSTGRES_USER", "postgres")
             .WithEnvironment("POSTGRES_PASSWORD", "postgres")

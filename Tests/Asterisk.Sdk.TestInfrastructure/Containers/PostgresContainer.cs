@@ -23,8 +23,7 @@ public sealed class PostgresContainer : IAsyncDisposable
 
     public PostgresContainer(INetwork? network = null)
     {
-        var builder = new ContainerBuilder()
-            .WithImage("postgres:17-alpine")
+        var builder = new ContainerBuilder("postgres:18-alpine")
             .WithPortBinding(5432, true)
             .WithEnvironment("POSTGRES_USER", DbUser)
             .WithEnvironment("POSTGRES_PASSWORD", DbPassword)
@@ -32,7 +31,7 @@ public sealed class PostgresContainer : IAsyncDisposable
             .WithBindMount(DockerPaths.FunctionalSqlDir, "/docker-entrypoint-initdb.d", AccessMode.ReadOnly)
             // UntilPortIsAvailable(5432) polls /proc/net/tcp which is never populated in
             // GitHub Actions CI, causing a 30-minute hang. pg_isready is bundled in
-            // postgres:17-alpine and performs a real connection readiness check without
+            // postgres:18-alpine and performs a real connection readiness check without
             // relying on /proc/net/tcp visibility.
             .WithWaitStrategy(
                 Wait.ForUnixContainer()
