@@ -80,5 +80,6 @@
     <Project Path="Tests/Asterisk.Sdk.OpenTelemetry.Tests/Asterisk.Sdk.OpenTelemetry.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Push.Webhooks.Tests/Asterisk.Sdk.Push.Webhooks.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Push.Nats.Tests/Asterisk.Sdk.Push.Nats.Tests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.Push.Nats.IntegrationTests/Asterisk.Sdk.Push.Nats.IntegrationTests.csproj" />
   </Folder>
 </Solution>
