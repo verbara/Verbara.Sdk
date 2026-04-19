@@ -167,13 +167,11 @@ Each metric emitted by the SDK should pick at most 3-4 low-cardinality dimension
 
 ## §6 Alignment work
 
-Turning this draft into reality requires three follow-up items. None is blocking for v1.12.0.
+Turning this draft into reality required three follow-up items.
 
-1. **Audit every `Activity.SetTag` and `Meter.Create*` call-site in `src/`**. Today the spans set tags like `ChannelId` (PascalCase property shadow), `provider.name`, `audio.codec` — a mix of conventions. Align each call to the snake-case proposal above. Scope: ~40 call-sites across 9 ActivitySources.
-2. **Add `AsteriskSemanticConventions` static class** in `Asterisk.Sdk.Hosting` that exposes each attribute name as a const string (`public const string ChannelId = "asterisk.channel.id";` etc.). This is the same pattern OTel itself uses. Gives consumers IntelliSense completion and prevents typos.
-3. **Submit the draft upstream** as a comment on OTel spec issue #2517 once field-validated on at least one production deployment. If the community accepts it, move the attributes into OTel's own namespaces; if rejected, keep in the `asterisk.*` / domain-specific namespaces as shipped.
-
-Estimated effort: item 1 is 2-3 days (mostly mechanical), item 2 is 1 hour, item 3 is forum time not dev time. Put on the v1.13 or v1.14 roadmap.
+1. ✅ **Audit every `Activity.SetTag` and `Meter.Create*` call-site in `src/`** — done in v1.12.x. Tag literals across `Asterisk.Sdk.Live`, `Asterisk.Sdk.Sessions`, `Asterisk.Sdk.VoiceAi`, `Asterisk.Sdk.VoiceAi.AudioSocket`, `Asterisk.Sdk.VoiceAi.OpenAiRealtime` were renamed to match the snake-case proposal (e.g. `voiceai.channel_id` → `asterisk.channel.id`, `originate.context` → `dialplan.context`, `session.duration_ms` → `call.duration_ms`). Module-specific tags that don't map to SIP/VoIP semantic conventions (AMI protocol concepts, ARI HTTP standard names, AGI script lifecycle, Push event-type) were intentionally left as-is — they convey orthogonal information.
+2. ✅ **Add `AsteriskSemanticConventions` static class** — done in v1.12.x. The class lives in `src/Asterisk.Sdk/AsteriskSemanticConventions.cs` (core package, reachable from every shipping project via the implicit transitive dependency on `Asterisk.Sdk`). 49 const strings across 10 nested static classes. `Tests/Asterisk.Sdk.Hosting.Tests/AsteriskSemanticConventionsTests.cs` pins each value to the wire-level string in this draft, so a refactor that renames either side breaks the test.
+3. **Submit the draft upstream** as a comment on OTel spec issue #2517 once field-validated on at least one production deployment. If the community accepts it, move the attributes into OTel's own namespaces; if rejected, keep in the `asterisk.*` / domain-specific namespaces as shipped. Pending — community submission, not a code task.
 
 ---
 
