@@ -60,6 +60,47 @@ Benchmark code: `Tests/Asterisk.Sdk.Benchmarks/VoiceAiBenchmarks.cs`. Reproduce 
 
 ---
 
+## 1c. Pluggable Session Backends — v1.11.0 (2026-04-18)
+
+En v1.11.0 se añadieron dos backends de `ISessionStore` para despliegues multi-instance: `Asterisk.Sdk.Sessions.Redis` (StackExchange.Redis, pipelined batches, TTL-driven retention) y `Asterisk.Sdk.Sessions.Postgres` (Npgsql + Dapper + JSONB, UPSERT on conflict, partial index para activas). Los benchmarks de latencia corren contra contenedores Docker locales (`redis:7-alpine` / `postgres:16-alpine`) vía Testcontainers, no contra infra remota — los números son "mejor caso" de CPU + loopback y sirven como baseline de regresión, no como sizing de producción.
+
+**Máquina:** AMD Ryzen 9 9900X · .NET 10.0.5 · Debian trixie · Docker 29.4 · 1000 iteraciones por punto · 10 warmup.
+
+| Operación | Redis (p50 / p95 / p99) | Postgres (p50 / p95 / p99) | Notas |
+|-----------|-------------------------|----------------------------|-------|
+| `SaveAsync` | **79 µs / 188 µs / 274 µs** | 1.97 ms / 2.14 ms / 2.79 ms | Redis ~25× más rápido en writes (pipelined batch + STRING SET vs Postgres UPSERT con JSONB parse + índices) |
+| `GetAsync` | 64 µs / 118 µs / 174 µs | **51 µs / 129 µs / 203 µs** | Postgres p50 ligeramente mejor que Redis en reads — el connection pool de Npgsql mantiene conexiones TLS-less + prepared statement cached |
+| `SaveBatchAsync` (500 sessions) | **7.1 ms p50** → 65,738 sessions/sec | 51.7 ms p50 → 9,491 sessions/sec | Redis: `CreateBatch()` pipeline 500 comandos en un round-trip. Postgres: transacción + 500 UPSERTs secuenciales (Dapper no tiene COPY) |
+
+**Throughput escenarios (1 instancia SDK, 1 backend local):**
+
+- **Redis** soporta ~12.6K saves/sec (single) o ~65K sessions/sec batched — suficiente para 100K sesiones activas rotando cada ~10-30 s (típico contact-center).
+- **Postgres** soporta ~500 saves/sec (single) o ~9.5K sessions/sec batched — suficiente para 50K sesiones activas rotando cada ~60-90 s. Para durabilidad / auditoría, el trade-off de latencia es aceptable.
+
+**Cuándo elegir cuál** (ver `docs/guides/session-store-backends.md` para la decisión completa):
+
+- Latencia-crítico / pure-cache multi-instance → **Redis**.
+- Durabilidad + auditoría + ya operas Postgres → **Postgres**.
+- Single-process sin HA → **InMemory** (default, <0.1 µs).
+
+**Notas sobre la metodología:**
+
+- Los números son `Fact + Stopwatch` (no BDN). BDN con Testcontainers falló en 9/10 métodos en el intento formal — cada benchmark process arranca su propio Docker container y cleanup no es determinista bajo el protocolo de iteration/warmup. Los `Fact` tests se ejecutan dentro del mismo proceso con containers pre-calentados, obteniendo muestras estables.
+- Redis mide contra `loopback:6379` (sin TLS). En producción con Redis Cluster + TLS restar ~100-500 µs por RTT.
+- Postgres mide con `SSL Mode=Disable` en loopback. En producción con TLS + réplica síncrona restar ~2-5 ms por write.
+
+**Benchmark code:**
+- Redis: `Tests/Asterisk.Sdk.Sessions.Redis.Tests/RedisLatencyBenchmark.cs`
+- Postgres: `Tests/Asterisk.Sdk.Sessions.Postgres.Tests/PostgresLatencyBenchmark.cs`
+
+Reproduce con:
+```sh
+dotnet test Tests/Asterisk.Sdk.Sessions.Redis.Tests/ -c Release --filter "Category=Benchmark" --logger "console;verbosity=detailed"
+dotnet test Tests/Asterisk.Sdk.Sessions.Postgres.Tests/ -c Release --filter "Category=Benchmark" --logger "console;verbosity=detailed"
+```
+
+---
+
 ## 2. Comparacion con Referencias de la Industria
 
 ### 2.1 AMI Protocol Reader vs asterisk-java
