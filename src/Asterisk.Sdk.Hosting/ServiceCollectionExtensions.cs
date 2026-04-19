@@ -5,6 +5,7 @@ using Asterisk.Sdk.Ami.Connection;
 using Asterisk.Sdk.Ami.Transport;
 using Asterisk.Sdk.Ari.Audio;
 using Asterisk.Sdk.Ari.Client;
+using Asterisk.Sdk.Ari.Outbound;
 using Asterisk.Sdk.Live.Server;
 using Asterisk.Sdk.Sessions;
 using Asterisk.Sdk.Sessions.Extensions;
@@ -258,6 +259,29 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IAmiConnectionFactory, AmiConnectionFactory>();
         services.TryAddSingleton<IAriClientFactory, Asterisk.Sdk.Ari.Client.AriClientFactory>();
         services.TryAddSingleton<AsteriskServerPool>();
+        return services;
+    }
+
+    /// <summary>
+    /// Register an ARI Outbound WebSocket listener. Asterisk 22.5+ with
+    /// <c>application=outbound</c> in <c>ari.conf</c> will dial this listener
+    /// instead of the consumer dialing Asterisk. A singleton
+    /// <see cref="IAriOutboundListener"/> is registered along with a hosted
+    /// service that starts/stops it with the application lifecycle.
+    /// </summary>
+    public static IServiceCollection AddAriOutboundListener(
+        this IServiceCollection services,
+        Action<AriOutboundListenerOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+
+        services.AddOptions<AriOutboundListenerOptions>()
+            .Configure(configure)
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<AriOutboundListenerOptions>, AriOutboundListenerOptionsValidator>();
+
+        services.TryAddSingleton<IAriOutboundListener, AriOutboundListener>();
+        services.AddSingleton<IHostedService, AriOutboundListenerHostedService>();
         return services;
     }
 }
