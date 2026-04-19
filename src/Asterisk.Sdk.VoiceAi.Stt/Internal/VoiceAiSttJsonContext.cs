@@ -63,6 +63,24 @@ internal sealed class GoogleSpeechAlternative
     [JsonPropertyName("confidence")] public float Confidence { get; set; }
 }
 
+// --- Cartesia STT DTOs ---
+internal sealed class CartesiaSttInitMessage
+{
+    [JsonPropertyName("type")] public string Type { get; set; } = "start";
+    [JsonPropertyName("model")] public string Model { get; set; } = string.Empty;
+    [JsonPropertyName("language")] public string Language { get; set; } = string.Empty;
+    [JsonPropertyName("encoding")] public string Encoding { get; set; } = "pcm_s16le";
+    [JsonPropertyName("sample_rate")] public int SampleRate { get; set; }
+}
+
+internal sealed class CartesiaSttTranscriptMessage
+{
+    [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
+    [JsonPropertyName("text")] public string Text { get; set; } = string.Empty;
+    [JsonPropertyName("is_final")] public bool IsFinal { get; set; }
+    [JsonPropertyName("confidence")] public float? Confidence { get; set; }
+}
+
 [JsonSerializable(typeof(DeepgramResultMessage))]
 [JsonSerializable(typeof(WhisperTranscriptionResponse))]
 [JsonSerializable(typeof(GoogleSpeechRequest))]
@@ -71,4 +89,6 @@ internal sealed class GoogleSpeechAlternative
 [JsonSerializable(typeof(GoogleSpeechResponse))]
 [JsonSerializable(typeof(GoogleSpeechResult))]
 [JsonSerializable(typeof(GoogleSpeechAlternative))]
+[JsonSerializable(typeof(CartesiaSttInitMessage))]
+[JsonSerializable(typeof(CartesiaSttTranscriptMessage))]
 internal partial class VoiceAiSttJsonContext : JsonSerializerContext;

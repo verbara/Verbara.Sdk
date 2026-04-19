@@ -1,1 +1,25 @@
 #nullable enable
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.ApiKey.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.ApiKey.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.ApiVersion.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.ApiVersion.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.BaseUri.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.BaseUri.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.CartesiaOptions() -> void
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.ConnectTimeoutSeconds.get -> int
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.ConnectTimeoutSeconds.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.KeepAliveSeconds.get -> int
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.KeepAliveSeconds.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.Language.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.Language.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.Model.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.Model.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptionsValidator
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptionsValidator.CartesiaOptionsValidator() -> void
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptionsValidator.Validate(string? name, Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaSpeechRecognizer
+Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaSpeechRecognizer.CartesiaSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions!>! options) -> void
+override Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaSpeechRecognizer.ProviderName.get -> string!
+override Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
+static Asterisk.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddCartesiaSpeechRecognizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
