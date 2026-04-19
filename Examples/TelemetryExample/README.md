@@ -53,7 +53,7 @@ The `[.. Collection]` spread syntax is important: `AddSource` / `AddMeter` each 
 
 ## Why the discovery pattern matters
 
-Hard-coding the 9 `ActivitySource` names and 12 `Meter` names locks you to a specific SDK version. When v1.11, v1.12, … add new packages, you would need to update the consumer. Reading from `AsteriskTelemetry.*Names` keeps the consumer forward-compatible — the SDK is the single source of truth for what telemetry it publishes.
+Hard-coding the 9 `ActivitySource` names and 14 `Meter` names locks you to a specific SDK version. When future releases add new packages, you would need to update the consumer. Reading from `AsteriskTelemetry.*Names` keeps the consumer forward-compatible — the SDK is the single source of truth for what telemetry it publishes.
 
 ## See also
 

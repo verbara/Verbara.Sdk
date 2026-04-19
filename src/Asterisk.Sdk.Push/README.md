@@ -113,7 +113,7 @@ This package is **Native AOT compatible**. The shipping build verifies zero trim
 
 ## Relation with Asterisk.Sdk.Pro.Push
 
-This package provides **in-memory primitives** suitable for single-node hosts. For distributed multi-node fan-out (Redis / Postgres LISTEN/NOTIFY backplanes, cluster-wide subscription routing), see **`Asterisk.Sdk.Pro.Push`** (coming v1.7). Pro builds on top of this package's abstractions — the contract is forward-compatible.
+This package provides **in-memory primitives** suitable for single-node hosts. For NATS-backed multi-node fan-out in the MIT surface, see **`Asterisk.Sdk.Push.Nats`** (available since v1.12). For cluster-wide subscription routing over durable backplanes (Redis / Postgres LISTEN/NOTIFY), advanced authorization, and enterprise observability, see **`Asterisk.Sdk.Pro.Push`** — both build on top of this package's abstractions, so the contract is forward-compatible.
 
 ## Links
 

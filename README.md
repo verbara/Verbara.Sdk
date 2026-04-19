@@ -46,7 +46,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 - **Live API** — Real-time in-memory tracking of channels, queues, agents, and conference rooms from AMI events. Secondary indices for O(1) lookups by name. Observable gauges and event counters via `System.Diagnostics.Metrics`.
 - **Activities** — High-level telephony operations (Dial, Hold, Transfer, Park, Bridge, Conference) modeled as async state machines with `IObservable<ActivityStatus>` tracking. Real cancellation support, re-entrance guards, and channel variable capture (`DIALSTATUS`, `QUEUESTATUS`).
 - **Session Engine** — Correlate AMI events into unified call sessions using LinkedId grouping. State-machine lifecycle (Ringing, Answered, OnHold, Transferred, Completed), domain events (`SessionStarted`, `SessionEnded`, `SessionStateChanged`), automatic orphan detection via `SessionReconciler`, and pluggable extension points (`ISessionEnricher`, `ISessionPolicy`, `ISessionEventHandler`).
-- **Voice AI** — Full stack for AI-powered telephony: PCM audio processing (resampler, VAD, gain), AudioSocket transport, STT/TTS abstraction layer with pluggable providers (Deepgram, ElevenLabs, Azure, Google, Whisper), barge-in pipeline with turn-taking, and a direct OpenAI Realtime API bridge.
+- **Voice AI** — Full stack for AI-powered telephony: PCM audio processing (resampler, VAD, gain), AudioSocket and `chan_websocket` transports with the Asterisk 22/23 JSON control protocol, STT/TTS abstraction layer with pluggable providers (Deepgram, Google, Whisper, Azure Whisper, Cartesia, AssemblyAI, Speechmatics for STT; Azure, ElevenLabs, Cartesia, Speechmatics for TTS), barge-in pipeline with turn-taking, and a direct OpenAI Realtime API bridge.
 - **Config Parser** — Read and parse Asterisk `.conf` files and `extensions.conf` dialplans. Quote-aware comment stripping.
 - **Hosting** — `IHostedService` for AMI and Live API lifecycle. `IHealthCheck` for AMI connection state. AOT-safe `IConfiguration` binding.
 - **Native AOT** — Zero reflection at runtime. Four source generators replace runtime code generation. 0 trim warnings.
@@ -56,7 +56,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ## Status
 
-**v1.10.2** — 19 NuGet packages, 0 build warnings, 0 trim warnings. Full VoiceAi telemetry stack (Metrics + HealthCheck + ActivitySource) across 5 packages. Push event bus now carries W3C traceparent across process/network boundaries (`PushEventMetadata.TraceContext`, ambient capture in `RxPushEventBus`). API coverage: 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%). Compatible with Asterisk 18, 20, 22, and 23.
+**v1.12.0** — 24 NuGet packages, 0 build warnings, 0 trim warnings. Asterisk 23 modernization + voice-agent readiness: `chan_websocket` JSON control protocol on `WebSocketAudioSession` (MEDIA_START/BUFFERING/MARK/XON/XOFF/DTMF), ARI Outbound WebSocket listener (Asterisk 22.5+ `application=outbound`), three new VoiceAI providers (Cartesia STT+TTS, AssemblyAI STT, Speechmatics STT+TTS), and the new `Asterisk.Sdk.Push.Nats` bridge for multi-node fan-out. Full VoiceAi telemetry stack across 5 packages. Push event bus carries W3C traceparent (`PushEventMetadata.TraceContext`). API coverage: 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%). First CI-driven release via `.github/workflows/publish.yml`. Compatible with Asterisk 18, 20, 22, and 23.
 
 ---
 
@@ -115,7 +115,7 @@ builder.Services
 ```
 
 - **9 `ActivitySource`s** — AMI, ARI, AGI, Live, Sessions, Push, VoiceAi, VoiceAi.AudioSocket, VoiceAi.OpenAiRealtime
-- **12 `Meter`s** — all of the above plus Ari.Audio, VoiceAi.Stt, VoiceAi.Tts
+- **14 `Meter`s** — all of the above plus Ari.Audio, VoiceAi.Stt, VoiceAi.Tts, Push.Webhooks, Push.Nats
 - **11 `IHealthCheck`s** auto-registered — 6 core + 5 VoiceAi
 
 See the [high-load tuning guide](docs/guides/high-load-tuning.md) for metric definitions and sizing recommendations at 10K / 100K agent scale.
@@ -419,6 +419,7 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 | **Asterisk.Sdk.Push** | Real-time push primitives: topic hierarchy, subscription management, authorization, in-memory event fan-out |
 | **Asterisk.Sdk.Push.AspNetCore** | SSE streaming endpoint for the Push bus (ASP.NET Core) |
 | **Asterisk.Sdk.Push.Webhooks** | Outbound HTTP webhooks: HMAC-SHA256 signing, exponential retry/backoff, topic-pattern matching |
+| **Asterisk.Sdk.Push.Nats** | NATS bridge for `RxPushEventBus`: mirrors topic hierarchy to subject tree for multi-node deployments |
 
 ### Voice AI
 
@@ -426,9 +427,9 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 |---------|-------------|
 | **Asterisk.Sdk.Audio** | Polyphase FIR resampler, VAD, PCM16 processing — zero dependencies |
 | **Asterisk.Sdk.VoiceAi** | Pipeline orchestration (`VoiceAiPipeline`), `ISessionHandler`, `IConversationHandler` |
-| **Asterisk.Sdk.VoiceAi.AudioSocket** | AudioSocket server/client with `System.IO.Pipelines` bidirectional streaming |
-| **Asterisk.Sdk.VoiceAi.Stt** | STT providers: Deepgram (WebSocket), Whisper, Azure Whisper, Google Speech |
-| **Asterisk.Sdk.VoiceAi.Tts** | TTS providers: ElevenLabs (WebSocket), Azure TTS |
+| **Asterisk.Sdk.VoiceAi.AudioSocket** | AudioSocket + `chan_websocket` (JSON control protocol) servers with `System.IO.Pipelines` bidirectional streaming |
+| **Asterisk.Sdk.VoiceAi.Stt** | STT providers: Deepgram, Whisper, Azure Whisper, Google Speech, Cartesia (Ink-Whisper), AssemblyAI (Universal), Speechmatics |
+| **Asterisk.Sdk.VoiceAi.Tts** | TTS providers: ElevenLabs, Azure, Cartesia (Sonic-3, 40-90ms TTFA), Speechmatics |
 | **Asterisk.Sdk.VoiceAi.OpenAiRealtime** | OpenAI Realtime API bridge (GPT-4o): dual-loop WebSocket, function calling, observability events |
 | **Asterisk.Sdk.VoiceAi.Testing** | Fake STT/TTS/handler implementations for unit testing pipelines |
 
