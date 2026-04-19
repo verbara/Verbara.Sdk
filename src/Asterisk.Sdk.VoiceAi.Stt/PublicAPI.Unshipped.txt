@@ -23,3 +23,25 @@ Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaSpeechRecognizer.CartesiaSpeechRecogni
 override Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaSpeechRecognizer.ProviderName.get -> string!
 override Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
 static Asterisk.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddCartesiaSpeechRecognizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.ApiKey.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.ApiKey.set -> void
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.AssemblyAiOptions() -> void
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.BaseUri.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.BaseUri.set -> void
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.ConnectTimeoutSeconds.get -> int
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.ConnectTimeoutSeconds.set -> void
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.EndOfTurnConfidenceThreshold.get -> int
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.EndOfTurnConfidenceThreshold.set -> void
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.FormatTurns.get -> int
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.FormatTurns.set -> void
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.SampleRate.get -> int
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.SampleRate.set -> void
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptionsValidator
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptionsValidator.AssemblyAiOptionsValidator() -> void
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptionsValidator.Validate(string? name, Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiSpeechRecognizer
+Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiSpeechRecognizer.AssemblyAiSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions!>! options) -> void
+override Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiSpeechRecognizer.ProviderName.get -> string!
+override Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
+static Asterisk.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddAssemblyAi(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

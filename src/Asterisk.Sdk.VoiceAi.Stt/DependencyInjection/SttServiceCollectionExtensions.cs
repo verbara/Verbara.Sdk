@@ -1,3 +1,4 @@
+using Asterisk.Sdk.VoiceAi.Stt.AssemblyAi;
 using Asterisk.Sdk.VoiceAi.Stt.Cartesia;
 using Asterisk.Sdk.VoiceAi.Stt.Deepgram;
 using Asterisk.Sdk.VoiceAi.Stt.Diagnostics;
@@ -94,6 +95,25 @@ public static class SttServiceCollectionExtensions
 
         services.AddSingleton<IValidateOptions<CartesiaOptions>, CartesiaOptionsValidator>();
         services.TryAddSingleton<SpeechRecognizer, CartesiaSpeechRecognizer>();
+        services.AddHealthChecks().AddCheck<SttHealthCheck>("stt");
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the AssemblyAI Universal Streaming WebSocket STT provider as the
+    /// <see cref="SpeechRecognizer"/> singleton.
+    /// </summary>
+    public static IServiceCollection AddAssemblyAi(
+        this IServiceCollection services,
+        Action<AssemblyAiOptions>? configure = null)
+    {
+        if (configure is not null)
+            services.Configure(configure);
+        else
+            services.AddOptions<AssemblyAiOptions>();
+
+        services.AddSingleton<IValidateOptions<AssemblyAiOptions>, AssemblyAiOptionsValidator>();
+        services.TryAddSingleton<SpeechRecognizer, AssemblyAiSpeechRecognizer>();
         services.AddHealthChecks().AddCheck<SttHealthCheck>("stt");
         return services;
     }

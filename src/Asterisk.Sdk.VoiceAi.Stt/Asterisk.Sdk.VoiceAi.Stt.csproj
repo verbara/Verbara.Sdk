@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>STT providers for Asterisk.Sdk.VoiceAi — Deepgram (WebSocket streaming), OpenAI Whisper, Azure Whisper, Google Speech (REST batch). Zero third-party dependencies.</Description>
-    <PackageTags>$(PackageTags);voiceai;stt;deepgram;whisper;google;speech-to-text</PackageTags>
+    <Description>STT providers for Asterisk.Sdk.VoiceAi — Deepgram, Cartesia, AssemblyAI (WebSocket streaming), OpenAI Whisper, Azure Whisper, Google Speech (REST batch). Zero third-party dependencies.</Description>
+    <PackageTags>$(PackageTags);voiceai;stt;deepgram;cartesia;assemblyai;whisper;google;speech-to-text</PackageTags>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Asterisk.Sdk.VoiceAi.Stt.Tests" />
