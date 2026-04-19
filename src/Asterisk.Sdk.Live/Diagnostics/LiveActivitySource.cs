@@ -40,9 +40,9 @@ public static class LiveActivitySource
         var activity = Source.StartActivity($"live originate {channel}", ActivityKind.Client);
         if (activity is not null)
         {
-            activity.SetTag("originate.channel", channel);
-            activity.SetTag("originate.context", context);
-            activity.SetTag("originate.extension", extension);
+            activity.SetTag("asterisk.channel.name", channel);
+            activity.SetTag("dialplan.context", context);
+            activity.SetTag("dialplan.extension", extension);
         }
 
         return activity;

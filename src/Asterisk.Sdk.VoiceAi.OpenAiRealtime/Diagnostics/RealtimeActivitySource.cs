@@ -4,7 +4,9 @@ namespace Asterisk.Sdk.VoiceAi.OpenAiRealtime.Diagnostics;
 
 /// <summary>
 /// OpenTelemetry-compatible ActivitySource for distributed tracing of OpenAI Realtime sessions.
-/// Produces spans for session lifecycle and function call dispatch.
+/// Produces spans for session lifecycle and function call dispatch. Tag names match the
+/// draft in <c>docs/research/2026-04-19-otel-sip-semantic-conventions.md</c> and the
+/// consumer-facing <c>Asterisk.Sdk.AsteriskSemanticConventions</c> catalog.
 /// <para>
 /// To enable tracing, register the source name with your OpenTelemetry tracer:
 /// <c>builder.AddSource("Asterisk.Sdk.VoiceAi.OpenAiRealtime")</c>
@@ -19,8 +21,10 @@ public static class RealtimeActivitySource
         var activity = Source.StartActivity("openai_realtime.session", ActivityKind.Client);
         if (activity is not null)
         {
-            activity.SetTag("openai_realtime.channel_id", channelId.ToString());
-            activity.SetTag("openai_realtime.model", model);
+            activity.SetTag("asterisk.channel.id", channelId.ToString());
+            activity.SetTag("voiceai.provider", "OpenAI");
+            activity.SetTag("voiceai.operation", "realtime");
+            activity.SetTag("voiceai.model", model);
         }
 
         return activity;
