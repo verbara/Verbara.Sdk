@@ -303,3 +303,25 @@ These actions exist in Asterisk but target hardware/legacy protocols with minima
 - Build must remain 0 warnings after each sprint
 - All existing tests must continue passing
 - Pack and publish to nuget.org after each sprint
+
+---
+
+## Epilogue (2026-04-19)
+
+Closed as part of the 2026-04-19 product alignment audit — see [docs/research/2026-04-19-product-alignment-audit.md](../../research/2026-04-19-product-alignment-audit.md) §3.
+
+**Final coverage shipped at v1.11.0:**
+
+| Capa | Target | Actual | Delta |
+|------|--------|--------|-------|
+| AMI Actions | 152/152 (100%) | 148/152 (97%) | -4 |
+| ARI Endpoints | 98/98 (100%) | 94/98 (96%) | -4 |
+| ARI Events | 46/46 (100%) | 46/46 (100%) | 0 |
+| ARI Models | 27/27 (100%) | 27/27 (100%) | 0 |
+| AGI Commands | 47/47 (100%) | 54/47 (115%) | +7 |
+
+Verified at audit by `find src/Asterisk.Sdk.Ami/Actions -name "*.cs" -not -name "*Base*" -not -name "*Registry*" | wc -l` → 148, and `grep -hE 'public.*Async\(' src/Asterisk.Sdk.Ari/Resources/*.cs | wc -l` → 94. Numbers match the README.md v1.10.2 claim of `148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%)`.
+
+**On the 8 residual endpoints:** they correspond to features this plan explicitly marked lower-priority — legacy channel technologies (DAHDI TDM hardware, PRI E1/T1 hardware, IAX peering) plus Sorcery admin cache-management, whose users are dwindling on Asterisk 22/23 deployments. Sprints A and B shipped in full; Sprint C shipped AudioSocket as its main deliverable and explicitly scoped out the legacy channel-tech actions. The 97%/96% number is a steady-state product decision, not an abandoned sprint.
+
+**Status:** closed, no-reopen. Any future additions to these residual categories should open a new plan, not resume this one.
