@@ -1,0 +1,48 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Pack and push to nuget.org
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore Asterisk.Sdk.slnx
+
+      - name: Build Release
+        run: dotnet build Asterisk.Sdk.slnx -c Release --no-restore
+
+      - name: Pack
+        run: dotnet pack Asterisk.Sdk.slnx -c Release --no-build -o ./artifacts
+
+      - name: List artifacts
+        run: ls -la ./artifacts/*.nupkg ./artifacts/*.snupkg 2>/dev/null || true
+
+      - name: Push to nuget.org
+        run: >
+          dotnet nuget push "./artifacts/*.nupkg"
+          --source https://api.nuget.org/v3/index.json
+          --api-key ${{ secrets.NUGET_API_KEY }}
+          --skip-duplicate
