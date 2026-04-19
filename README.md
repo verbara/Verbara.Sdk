@@ -80,16 +80,19 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ## Performance
 
-Benchmarked on AMD Ryzen 9 9900X (12C/24T), .NET 10, BenchmarkDotNet v0.14.0:
+Benchmarked on AMD Ryzen 9 9900X (12C/24T), .NET 10.0.5, BenchmarkDotNet v0.14.0 (v1.11.0 full re-run, 2026-04-18):
 
 | Operation | Throughput / Latency |
 |-----------|----------------------|
-| AMI event parse + dispatch | **1.72M events/sec** |
-| ARI JSON event parse | **289 ns** |
-| `ChannelManager.GetById` (secondary index) | **6.3 ns** |
-| Observer dispatch (copy-on-write array) | **~15 ns / observer** |
+| AMI event parse + dispatch | **1.53M events/sec** (653 ns) |
+| ARI JSON deserialize `Channel` | **3.54M ops/sec** (283 ns) |
+| ARI parse `StasisStart` event | **595K events/sec** (1.68 µs) — *2.7× faster than v1.0* |
+| `ChannelManager.GetById` (secondary index) | **163.9M lookups/sec** (6.1 ns) |
+| Observer dispatch (copy-on-write array) | **~0.21 ns / observer** (zero-alloc) |
+| Session store Redis `SaveAsync` | **~12.6K saves/sec** (p50 79 µs) / batch 65,738 sess/sec |
+| Session store Postgres `SaveAsync` | **~500 saves/sec** (p50 1.97 ms) / batch 9,491 sess/sec |
 
-Full methodology, machine-readable results, and cross-language comparison (asterisk-java, asterisk-ami-client, pyst2) in [docs/analysis/benchmark-analysis.md](docs/analysis/benchmark-analysis.md). Raw BenchmarkDotNet reports are under `BenchmarkDotNet.Artifacts/results/`. The v1.0 baseline remains valid for core code paths; the v1.10 re-run is tracked in the upcoming sprint.
+Full methodology, machine-readable results, and cross-language comparison (asterisk-java, asterisk-ami-client, pyst2) in [docs/analysis/benchmark-analysis.md](docs/analysis/benchmark-analysis.md). Raw BenchmarkDotNet reports are under `BenchmarkDotNet.Artifacts/results/`. Reproduce: `dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/`.
 
 ---
 

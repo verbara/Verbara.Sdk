@@ -18,6 +18,7 @@ Micro-benchmarks for the SDK's hot paths, driven by [BenchmarkDotNet](https://be
 | `AriParseEventBenchmark` | ARI WebSocket event parse |
 | `AudioSocketBenchmark` | AudioSocket frame framing/unframing |
 | `VoiceAiBenchmarks` | STT/TTS `ProviderName` virtual vs `GetType().Name` fallback (v1.10.0+) |
+| `SessionsBackendsBenchmark` | `ISessionStore` (Redis + Postgres) via Testcontainers — **known flaky under BDN's iteration isolation**, use `PostgresLatencyBenchmark` / `RedisLatencyBenchmark` xunit `Fact`s instead for stable numbers |
 
 ## Running
 
