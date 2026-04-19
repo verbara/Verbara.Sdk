@@ -5,6 +5,8 @@ namespace Asterisk.Sdk.VoiceAi.Diagnostics;
 /// <summary>
 /// OpenTelemetry-compatible ActivitySource for distributed tracing of Voice AI operations.
 /// Produces spans for pipeline sessions, STT transcriptions, and TTS syntheses.
+/// Tag names match the draft in <c>docs/research/2026-04-19-otel-sip-semantic-conventions.md</c>
+/// and the consumer-facing <c>Asterisk.Sdk.AsteriskSemanticConventions</c> catalog.
 /// <para>
 /// To enable tracing, register the source name with your OpenTelemetry tracer:
 /// <c>builder.AddSource("Asterisk.Sdk.VoiceAi")</c>
@@ -19,7 +21,7 @@ public static class VoiceAiActivitySource
         var activity = Source.StartActivity("voiceai.session", ActivityKind.Server);
         if (activity is not null)
         {
-            activity.SetTag("voiceai.channel_id", channelId.ToString());
+            activity.SetTag("asterisk.channel.id", channelId.ToString());
             activity.SetTag("voiceai.handler", handlerType);
         }
         return activity;
@@ -28,7 +30,11 @@ public static class VoiceAiActivitySource
     internal static Activity? StartRecognition(string providerType)
     {
         var activity = Source.StartActivity("voiceai.stt.transcription", ActivityKind.Client);
-        activity?.SetTag("stt.provider", providerType);
+        if (activity is not null)
+        {
+            activity.SetTag("voiceai.provider", providerType);
+            activity.SetTag("voiceai.operation", "stt");
+        }
         return activity;
     }
 
@@ -37,7 +43,8 @@ public static class VoiceAiActivitySource
         var activity = Source.StartActivity("voiceai.tts.synthesis", ActivityKind.Client);
         if (activity is not null)
         {
-            activity.SetTag("tts.provider", providerType);
+            activity.SetTag("voiceai.provider", providerType);
+            activity.SetTag("voiceai.operation", "tts");
             activity.SetTag("tts.characters", characterCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
         return activity;

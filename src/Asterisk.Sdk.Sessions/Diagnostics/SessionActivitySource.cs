@@ -21,9 +21,9 @@ public static class SessionActivitySource
         if (activity is not null)
         {
             activity.SetTag("session.id", sessionId);
-            activity.SetTag("session.direction", direction.ToString().ToLowerInvariant());
-            activity.SetTag("session.state", finalState.ToString().ToLowerInvariant());
-            activity.SetTag("session.duration_ms", duration.TotalMilliseconds);
+            activity.SetTag("call.direction", direction.ToString().ToLowerInvariant());
+            activity.SetTag("call.state", finalState.ToString().ToLowerInvariant());
+            activity.SetTag("call.duration_ms", duration.TotalMilliseconds);
 
             if (finalState is CallSessionState.Failed or CallSessionState.TimedOut)
                 activity.SetStatus(ActivityStatusCode.Error, finalState.ToString());

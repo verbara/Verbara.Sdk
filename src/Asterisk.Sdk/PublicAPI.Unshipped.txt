@@ -1,1 +1,61 @@
 #nullable enable
+Asterisk.Sdk.AsteriskSemanticConventions
+Asterisk.Sdk.AsteriskSemanticConventions.Agent
+Asterisk.Sdk.AsteriskSemanticConventions.Bridge
+Asterisk.Sdk.AsteriskSemanticConventions.Calls
+Asterisk.Sdk.AsteriskSemanticConventions.Channel
+Asterisk.Sdk.AsteriskSemanticConventions.Dialplan
+Asterisk.Sdk.AsteriskSemanticConventions.Media
+Asterisk.Sdk.AsteriskSemanticConventions.Queues
+Asterisk.Sdk.AsteriskSemanticConventions.Resource
+Asterisk.Sdk.AsteriskSemanticConventions.Sip
+Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi
+const Asterisk.Sdk.AsteriskSemanticConventions.Agent.Id = "asterisk.agent.id" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Agent.State = "asterisk.agent.state" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Bridge.ChannelCount = "asterisk.bridge.channel_count" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Bridge.Id = "asterisk.bridge.id" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Bridge.Name = "asterisk.bridge.name" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Bridge.Type = "asterisk.bridge.type" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Calls.Direction = "call.direction" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Calls.DurationMs = "call.duration_ms" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Calls.Id = "call.id" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Calls.State = "call.state" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Channel.Driver = "asterisk.channel.driver" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Channel.Id = "asterisk.channel.id" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Channel.Name = "asterisk.channel.name" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Channel.State = "asterisk.channel.state" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Dialplan.Application = "dialplan.application" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Dialplan.Context = "dialplan.context" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Dialplan.Extension = "dialplan.extension" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Dialplan.Priority = "dialplan.priority" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Media.BitrateBps = "media.bitrate_bps" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Media.Codec = "media.codec" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Media.Direction = "media.direction" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Media.FramesLost = "media.frames_lost" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Media.FramesReceived = "media.frames_received" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Media.SampleRate = "media.sample_rate" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Queues.Name = "asterisk.queue.name" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Queues.Strategy = "asterisk.queue.strategy" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Queues.WaitMs = "asterisk.queue.wait_ms" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Resource.SdkVersion = "asterisk.sdk.version" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Resource.ServerHostname = "asterisk.server.hostname" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Resource.ServerName = "asterisk.server.name" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Resource.ServerVersion = "asterisk.server.version" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Sip.CallId = "sip.call_id" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Sip.FromUri = "sip.from_uri" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Sip.Method = "sip.method" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Sip.ResponseCode = "sip.response_code" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Sip.ResponsePhrase = "sip.response_phrase" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Sip.ToUri = "sip.to_uri" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Sip.Transport = "sip.transport" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Sip.UserAgent = "sip.user_agent" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.AudioDurationMs = "voiceai.audio.duration_ms" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.Interrupted = "voiceai.interrupted" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.Language = "voiceai.language" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.LatencyTtfbMs = "voiceai.latency.ttfb_ms" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.LatencyTtftMs = "voiceai.latency.ttft_ms" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.Model = "voiceai.model" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.Operation = "voiceai.operation" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.Provider = "voiceai.provider" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.TokensInput = "voiceai.tokens.input" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.TokensOutput = "voiceai.tokens.output" -> string!

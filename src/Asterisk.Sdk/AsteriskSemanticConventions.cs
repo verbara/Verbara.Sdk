@@ -1,4 +1,4 @@
-namespace Asterisk.Sdk.Hosting;
+namespace Asterisk.Sdk;
 
 /// <summary>
 /// Standardized OpenTelemetry attribute names for Asterisk / SIP telephony.
