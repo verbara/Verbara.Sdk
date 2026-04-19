@@ -63,3 +63,12 @@ The decision, stated in one or two sentences.
 - [ADR-0013](0013-isessionhandler-abstraction.md) — `ISessionHandler` is the single VoiceAi dispatch seam; turn-based pipeline and OpenAI Realtime bridge are swappable at DI time.
 - [ADR-0014](0014-raw-http-websocket-voiceai-providers.md) — VoiceAi providers ship as hand-rolled `HttpClient` / `ClientWebSocket` code; no vendor SDKs (AOT-incompatible).
 - [ADR-0015](0015-ami-string-interning-pool.md) — AMI protocol reader uses a 2048-bucket FNV-1a string pool pre-computed with 941 keys + 35 values; zero-alloc on the hot path.
+- [ADR-0016](0016-voiceai-provider-name-override.md) — VoiceAi providers override `ProviderName` with a `const string` instead of relying on `GetType().Name`; ~92× speedup on the telemetry hot path.
+- [ADR-0017](0017-audiosocket-codec-negotiation.md) — AudioSocket sessions negotiate codec (slin16 / ulaw / alaw / gsm) per-connection from the first inbound frame; no hard-coded or configuration-driven codec.
+- [ADR-0018](0018-sessions-reconciliation-soft-ttl.md) — Session lifetime is managed by an in-app `SessionReconciliationService` sweep loop (heartbeat-based), not by native backend TTL features.
+- [ADR-0019](0019-push-bus-trace-context-capture.md) — `RxPushEventBus.PublishAsync` captures the ambient W3C traceparent at publish time so distributed tracing survives the Channel hop.
+- [ADR-0020](0020-webhook-delivery-no-durable-dlq.md) — Webhook delivery is bounded-retry with a `deliveries.dead_letter` counter; no durable dead-letter queue in the MIT package (durability is Pro SDK territory).
+- [ADR-0021](0021-ami-heartbeat-strategy.md) — AMI heartbeat is enabled by default at 30 s interval / 10 s timeout; application-level ping separates "idle" from "half-open connection".
+- [ADR-0022](0022-activity-cancellation-semantics.md) — `IActivity.CancelAsync()` is a first-class method alongside `CancellationToken`; consumers observe terminal outcomes through `Status`, not exceptions.
+- [ADR-0023](0023-publicapi-tracker-adoption.md) — Every shipping package carries `PublicAPI.Shipped.txt` / `PublicAPI.Unshipped.txt`; breaking API changes cannot merge silently.
+- [ADR-0024](0024-bannedsymbols-as-aot-policy.md) — `BannedSymbols.txt` + `Microsoft.CodeAnalysis.BannedApiAnalyzers` enforce the AOT policy at build time (no reflection, no `DateTime.Now`).
