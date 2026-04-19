@@ -1,9 +1,11 @@
+using Asterisk.Sdk.VoiceAi.Stt.Cartesia;
 using Asterisk.Sdk.VoiceAi.Stt.Deepgram;
 using Asterisk.Sdk.VoiceAi.Stt.Diagnostics;
 using Asterisk.Sdk.VoiceAi.Stt.Google;
 using Asterisk.Sdk.VoiceAi.Stt.Whisper;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace Asterisk.Sdk.VoiceAi.Stt.DependencyInjection;
 
@@ -73,6 +75,25 @@ public static class SttServiceCollectionExtensions
 
         services.AddHttpClient<GoogleSpeechRecognizer>();
         services.TryAddSingleton<SpeechRecognizer>(sp => sp.GetRequiredService<GoogleSpeechRecognizer>());
+        services.AddHealthChecks().AddCheck<SttHealthCheck>("stt");
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the Cartesia Ink-Whisper WebSocket streaming STT provider as the
+    /// <see cref="SpeechRecognizer"/> singleton.
+    /// </summary>
+    public static IServiceCollection AddCartesiaSpeechRecognizer(
+        this IServiceCollection services,
+        Action<CartesiaOptions>? configure = null)
+    {
+        if (configure is not null)
+            services.Configure(configure);
+        else
+            services.AddOptions<CartesiaOptions>();
+
+        services.AddSingleton<IValidateOptions<CartesiaOptions>, CartesiaOptionsValidator>();
+        services.TryAddSingleton<SpeechRecognizer, CartesiaSpeechRecognizer>();
         services.AddHealthChecks().AddCheck<SttHealthCheck>("stt");
         return services;
     }
