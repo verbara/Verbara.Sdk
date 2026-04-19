@@ -68,19 +68,26 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
 
         var channel = Channel.CreateUnbounded<SpeechRecognitionResult>();
 
-        // Fire-and-forget: stream audio frames to the server.
-        var sendTask = SendLoopAsync(ws, audioFrames, ct);
+        // Linked CTS: when the receive loop detects the server is gone (abort / close),
+        // we cancel the send loop so it does not hang inside SendAsync or CloseOutputAsync
+        // on the half-dead socket.
+        using var sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        // Receive loop writes transcripts to channel, then completes the writer.
+        // Fire-and-forget: stream audio frames to the server.
+        var sendTask = SendLoopAsync(ws, audioFrames, sessionCts.Token);
+
+        // Receive loop writes transcripts to channel, then completes the writer and
+        // cancels the session so the send loop unblocks.
         var receiveTask = Task.Run(async () =>
         {
             try
             {
-                await ReceiveLoopAsync(ws, channel.Writer, ct).ConfigureAwait(false);
+                await ReceiveLoopAsync(ws, channel.Writer, sessionCts.Token).ConfigureAwait(false);
             }
             finally
             {
                 channel.Writer.TryComplete();
+                await sessionCts.CancelAsync().ConfigureAwait(false);
             }
         }, ct);
 
@@ -106,9 +113,20 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
             }
 
             // Signal end-of-audio (half-close) so the server flushes any pending transcript.
-            if (ws.State == WebSocketState.Open)
-                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
-                    .ConfigureAwait(false);
+            // Guarded by a short timeout because CloseOutputAsync can hang if the server
+            // aborted the connection at the socket level and the client hasn't seen the
+            // FIN yet.
+            if (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
+            {
+                using var closeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                closeCts.CancelAfter(TimeSpan.FromSeconds(2));
+                try
+                {
+                    await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", closeCts.Token)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) { /* server is gone, give up */ }
+            }
         }
         catch (OperationCanceledException) { }
         catch (WebSocketException) { }
