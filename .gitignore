@@ -55,8 +55,6 @@ publish/
 ## partner info lives in docs/superpowers/ (never pushed).
 docs/plans/
 docs/superpowers/
-docs/architecture/
-docs/proposals/
 .superpowers/
 
 ## Claude Code
