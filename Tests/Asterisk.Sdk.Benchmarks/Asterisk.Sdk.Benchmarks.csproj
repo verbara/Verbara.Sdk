@@ -12,12 +12,19 @@
     <ProjectReference Include="..\..\src\Asterisk.Sdk.Agi\Asterisk.Sdk.Agi.csproj" />
     <ProjectReference Include="..\..\src\Asterisk.Sdk.Ari\Asterisk.Sdk.Ari.csproj" />
     <ProjectReference Include="..\..\src\Asterisk.Sdk.Live\Asterisk.Sdk.Live.csproj" />
+    <ProjectReference Include="..\..\src\Asterisk.Sdk.Sessions\Asterisk.Sdk.Sessions.csproj" />
+    <ProjectReference Include="..\..\src\Asterisk.Sdk.Sessions.Redis\Asterisk.Sdk.Sessions.Redis.csproj" />
+    <ProjectReference Include="..\..\src\Asterisk.Sdk.Sessions.Postgres\Asterisk.Sdk.Sessions.Postgres.csproj" />
     <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi\Asterisk.Sdk.VoiceAi.csproj" />
     <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi.Testing\Asterisk.Sdk.VoiceAi.Testing.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="Testcontainers" />
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Dapper" />
   </ItemGroup>
 
 </Project>
