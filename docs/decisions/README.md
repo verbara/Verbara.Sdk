@@ -55,3 +55,8 @@ The decision, stated in one or two sentences.
 - [ADR-0005](0005-testcontainers-for-integration.md) — Docker-backed Testcontainers is the integration-test substrate; no in-process PBX mocks for functional tests.
 - [ADR-0006](0006-pluggable-session-stores.md) — Session storage is an `ISessionStore` interface with InMemory/Redis/Postgres implementations; multi-instance is opt-in, not a framework requirement.
 - [ADR-0007](0007-topic-hierarchy-push-bus.md) — Real-time push uses a hierarchical topic tree (`TopicName` + `TopicPattern`, `**` + `{self}` wildcards) with HMAC-signed webhook delivery.
+- [ADR-0008](0008-ami-exponential-backoff.md) — AMI reconnection uses deterministic exponential backoff (no jitter, no Polly) for determinism + zero dependencies.
+- [ADR-0009](0009-three-tier-test-strategy.md) — Three-tier test pyramid: Unit (no Docker) + Integration (Testcontainers) + Functional (live Asterisk, Layer2/Layer5).
+- [ADR-0010](0010-ari-asymmetric-transport.md) — `AriClient` mirrors Asterisk's native split: one `ClientWebSocket` for events, one `HttpClient` for REST commands.
+- [ADR-0011](0011-push-bus-in-memory-non-durable.md) — Push bus is in-memory fire-and-forget with bounded `Channel<T>`; durability/federation lives in Pro.
+- [ADR-0012](0012-live-aggregate-root-orthogonal.md) — `Asterisk.Sdk.Live` is a separate package owning domain state; AMI + ARI are data sources, not owners.
