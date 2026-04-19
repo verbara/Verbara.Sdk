@@ -54,3 +54,49 @@ static Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.Deserialize(
 static Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.Deserialize(System.ReadOnlySpan<byte> utf8Json) -> Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessage?
 static Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.Serialize(Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessage! message) -> string!
 static Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessage! message) -> byte[]!
+Asterisk.Sdk.Ari.Outbound.AriOutboundConnection
+Asterisk.Sdk.Ari.Outbound.AriOutboundConnection.ApplicationName.get -> string!
+Asterisk.Sdk.Ari.Outbound.AriOutboundConnection.ConnectedAt.get -> System.DateTimeOffset
+Asterisk.Sdk.Ari.Outbound.AriOutboundConnection.DisconnectAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Outbound.AriOutboundConnection.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Outbound.AriOutboundConnection.Events.get -> System.IObservable<Asterisk.Sdk.AriEvent!>!
+Asterisk.Sdk.Ari.Outbound.AriOutboundConnection.IsConnected.get -> bool
+Asterisk.Sdk.Ari.Outbound.AriOutboundConnection.RemoteEndpoint.get -> string!
+Asterisk.Sdk.Ari.Outbound.AriOutboundListener
+Asterisk.Sdk.Ari.Outbound.AriOutboundListener.ActiveConnectionCount.get -> int
+Asterisk.Sdk.Ari.Outbound.AriOutboundListener.ActiveConnections.get -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Ari.Outbound.AriOutboundConnection!>!
+Asterisk.Sdk.Ari.Outbound.AriOutboundListener.AriOutboundListener(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions!>! options, Microsoft.Extensions.Logging.ILogger<Asterisk.Sdk.Ari.Outbound.AriOutboundListener!>! logger) -> void
+Asterisk.Sdk.Ari.Outbound.AriOutboundListener.BoundPort.get -> int
+Asterisk.Sdk.Ari.Outbound.AriOutboundListener.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Outbound.AriOutboundListener.GetByApplication(string! applicationName) -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Ari.Outbound.AriOutboundConnection!>!
+Asterisk.Sdk.Ari.Outbound.AriOutboundListener.IsRunning.get -> bool
+Asterisk.Sdk.Ari.Outbound.AriOutboundListener.OnConnectionAccepted.get -> System.IObservable<Asterisk.Sdk.Ari.Outbound.AriOutboundConnection!>!
+Asterisk.Sdk.Ari.Outbound.AriOutboundListener.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Outbound.AriOutboundListener.StopAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.AllowedApplications.get -> System.Collections.Generic.HashSet<string!>!
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.AllowedApplications.set -> void
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.AriOutboundListenerOptions() -> void
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.ConnectionIdleTimeout.get -> System.TimeSpan
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.ConnectionIdleTimeout.set -> void
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.ExpectedPassword.get -> string?
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.ExpectedPassword.set -> void
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.ExpectedUsername.get -> string?
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.ExpectedUsername.set -> void
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.ListenAddress.get -> string!
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.ListenAddress.set -> void
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.Path.get -> string!
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.Path.set -> void
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.Port.get -> int
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions.Port.set -> void
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptionsValidator
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptionsValidator.AriOutboundListenerOptionsValidator() -> void
+Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptionsValidator.Validate(string? name, Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Asterisk.Sdk.Ari.Outbound.IAriOutboundListener
+Asterisk.Sdk.Ari.Outbound.IAriOutboundListener.ActiveConnectionCount.get -> int
+Asterisk.Sdk.Ari.Outbound.IAriOutboundListener.ActiveConnections.get -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Ari.Outbound.AriOutboundConnection!>!
+Asterisk.Sdk.Ari.Outbound.IAriOutboundListener.GetByApplication(string! applicationName) -> System.Collections.Generic.IEnumerable<Asterisk.Sdk.Ari.Outbound.AriOutboundConnection!>!
+Asterisk.Sdk.Ari.Outbound.IAriOutboundListener.IsRunning.get -> bool
+Asterisk.Sdk.Ari.Outbound.IAriOutboundListener.OnConnectionAccepted.get -> System.IObservable<Asterisk.Sdk.Ari.Outbound.AriOutboundConnection!>!
+Asterisk.Sdk.Ari.Outbound.IAriOutboundListener.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Outbound.IAriOutboundListener.StopAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask

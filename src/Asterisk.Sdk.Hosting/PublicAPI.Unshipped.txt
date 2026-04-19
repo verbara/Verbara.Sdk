@@ -1,3 +1,8 @@
 #nullable enable
+Asterisk.Sdk.Hosting.AriOutboundListenerHostedService
+Asterisk.Sdk.Hosting.AriOutboundListenerHostedService.AriOutboundListenerHostedService(Asterisk.Sdk.Ari.Outbound.IAriOutboundListener! listener) -> void
+Asterisk.Sdk.Hosting.AriOutboundListenerHostedService.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Asterisk.Sdk.Hosting.AriOutboundListenerHostedService.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+static Asterisk.Sdk.Hosting.ServiceCollectionExtensions.AddAriOutboundListener(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Ari.Outbound.AriOutboundListenerOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static Asterisk.Sdk.Hosting.ServiceCollectionExtensions.AddAsteriskSessionsBuilder(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Sessions.Manager.SessionOptions!>? configure = null) -> Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder!
 static Asterisk.Sdk.Hosting.ServiceCollectionExtensions.AddAsteriskSessionsMultiServerBuilder(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Sessions.Manager.SessionOptions!>? configure = null) -> Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder!
