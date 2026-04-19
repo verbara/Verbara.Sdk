@@ -15,6 +15,10 @@
     <Project Path="Examples/VoiceAiCustomProviderExample/VoiceAiCustomProviderExample.csproj" />
     <Project Path="Examples/OpenAiRealtimeExample/OpenAiRealtimeExample.csproj" />
     <Project Path="Examples/TelemetryExample/TelemetryExample.csproj" />
+    <Project Path="Examples/SessionsRedisExample/SessionsRedisExample.csproj" />
+    <Project Path="Examples/SessionsPostgresExample/SessionsPostgresExample.csproj" />
+    <Project Path="Examples/ContactCenterSupervisionExample/ContactCenterSupervisionExample.csproj" />
+    <Project Path="Examples/WebhookSubscriberExample/WebhookSubscriberExample.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Asterisk.Sdk.Agi/Asterisk.Sdk.Agi.csproj" />
