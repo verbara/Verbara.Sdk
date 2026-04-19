@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] — 1.11.0 — Pluggable backends, contact-center activities, OpenTelemetry, webhooks, infra
+## [1.11.0] - 2026-04-18
 
 ### Added
 
