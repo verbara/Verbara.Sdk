@@ -1,19 +1,27 @@
+// Architectural note: this session implements IChanWebSocketSession (sub-interface of IAudioStream)
+// instead of folding chan_websocket-specific methods into IAudioStream, because the AudioSocket
+// TCP protocol doesn't share the text-frame control channel. Consumers cast the IAudioStream
+// returned by IAudioServer.GetStream when they know they're talking to chan_websocket.
 using System.Buffers;
 using System.Net.WebSockets;
 using System.Reactive.Subjects;
+using System.Text.Json;
 using System.Threading.Channels;
 
 namespace Asterisk.Sdk.Ari.Audio;
 
 /// <summary>
-/// A single WebSocket audio connection. Receives binary frames via ManagedWebSocket.
+/// A single WebSocket audio connection. Receives binary frames via ManagedWebSocket
+/// (audio payload) and text frames parsed as <see cref="ChanWebSocketControlMessage"/>.
 /// </summary>
-internal sealed class WebSocketAudioSession : IAudioStream
+internal sealed class WebSocketAudioSession : IChanWebSocketSession
 {
     private readonly WebSocket _webSocket;
     private readonly BehaviorSubject<AudioStreamState> _state = new(AudioStreamState.Connected);
+    private readonly Subject<ChanWebSocketControlMessage> _controlSubject = new();
     private readonly Channel<ReadOnlyMemory<byte>> _audioInChannel;
     private readonly CancellationTokenSource _cts = new();
+    private readonly SemaphoreSlim _sendLock = new(1, 1);
     private Task? _readPumpTask;
     private volatile bool _disposed;
 
@@ -22,6 +30,7 @@ internal sealed class WebSocketAudioSession : IAudioStream
     public int SampleRate { get; }
     public bool IsConnected => !_disposed && _webSocket.State == WebSocketState.Open;
     public IObservable<AudioStreamState> StateChanges => _state;
+    public IObservable<ChanWebSocketControlMessage> ControlMessages => _controlSubject;
 
     internal WebSocketAudioSession(WebSocket webSocket, string channelId, string format)
     {
@@ -45,7 +54,6 @@ internal sealed class WebSocketAudioSession : IAudioStream
 
     private async Task ReadPumpAsync(CancellationToken ct)
     {
-        var buffer = new byte[4096];
         var bufferWriter = new ArrayBufferWriter<byte>(8192);
 
         try
@@ -66,14 +74,29 @@ internal sealed class WebSocketAudioSession : IAudioStream
                 if (result.MessageType == WebSocketMessageType.Close)
                     break;
 
-                if (result.MessageType == WebSocketMessageType.Binary && bufferWriter.WrittenCount > 0)
+                if (bufferWriter.WrittenCount == 0)
+                    continue;
+
+                switch (result.MessageType)
                 {
-                    _audioInChannel.Writer.TryWrite(bufferWriter.WrittenMemory.ToArray());
+                    case WebSocketMessageType.Binary:
+                        _audioInChannel.Writer.TryWrite(bufferWriter.WrittenMemory.ToArray());
+                        break;
+
+                    case WebSocketMessageType.Text:
+                        TryDispatchControlMessage(bufferWriter.WrittenSpan);
+                        break;
                 }
             }
         }
-        catch (OperationCanceledException) { }
-        catch (WebSocketException) { }
+        catch (OperationCanceledException)
+        {
+            // Pump cancelled — normal shutdown path.
+        }
+        catch (WebSocketException)
+        {
+            // Peer closed or transport error — state transitions to Disconnected in finally.
+        }
         finally
         {
             _audioInChannel.Writer.TryComplete();
@@ -81,19 +104,77 @@ internal sealed class WebSocketAudioSession : IAudioStream
         }
     }
 
+    private void TryDispatchControlMessage(ReadOnlySpan<byte> utf8Json)
+    {
+        ChanWebSocketControlMessage? message;
+        try
+        {
+            message = ChanWebSocketControlMessageSerializer.Deserialize(utf8Json);
+        }
+        catch (JsonException)
+        {
+            // Malformed or unknown-discriminator JSON: drop silently (logged at server level in future).
+            return;
+        }
+
+        if (message is not null)
+            _controlSubject.OnNext(message);
+    }
+
     public async ValueTask<ReadOnlyMemory<byte>> ReadFrameAsync(CancellationToken cancellationToken = default)
     {
-        if (await _audioInChannel.Reader.WaitToReadAsync(cancellationToken))
+        if (await _audioInChannel.Reader.WaitToReadAsync(cancellationToken)
+            && _audioInChannel.Reader.TryRead(out var frame))
         {
-            if (_audioInChannel.Reader.TryRead(out var frame))
-                return frame;
+            return frame;
         }
         return ReadOnlyMemory<byte>.Empty;
     }
 
     public async ValueTask WriteFrameAsync(ReadOnlyMemory<byte> audioData, CancellationToken cancellationToken = default)
     {
-        await _webSocket.SendAsync(audioData, WebSocketMessageType.Binary, endOfMessage: true, cancellationToken);
+        await _sendLock.WaitAsync(cancellationToken);
+        try
+        {
+            await _webSocket.SendAsync(audioData, WebSocketMessageType.Binary, endOfMessage: true, cancellationToken);
+        }
+        finally
+        {
+            _sendLock.Release();
+        }
+    }
+
+    public ValueTask SendMarkAsync(string mark, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(mark);
+        return SendControlMessageAsync(new ChanWebSocketMarkMedia(mark), cancellationToken);
+    }
+
+    public ValueTask SendXonAsync(CancellationToken cancellationToken = default)
+        => SendControlMessageAsync(new ChanWebSocketMediaXon(), cancellationToken);
+
+    public ValueTask SendXoffAsync(CancellationToken cancellationToken = default)
+        => SendControlMessageAsync(new ChanWebSocketMediaXoff(), cancellationToken);
+
+    public ValueTask SendSetMediaDirectionAsync(
+        ChanWebSocketMediaDirection direction,
+        CancellationToken cancellationToken = default)
+        => SendControlMessageAsync(new ChanWebSocketSetMediaDirection(direction), cancellationToken);
+
+    private async ValueTask SendControlMessageAsync(
+        ChanWebSocketControlMessage message,
+        CancellationToken cancellationToken)
+    {
+        var utf8 = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(message);
+        await _sendLock.WaitAsync(cancellationToken);
+        try
+        {
+            await _webSocket.SendAsync(utf8, WebSocketMessageType.Text, endOfMessage: true, cancellationToken);
+        }
+        finally
+        {
+            _sendLock.Release();
+        }
     }
 
     private static int FormatToSampleRate(string format) => format.ToLowerInvariant() switch
@@ -131,7 +212,10 @@ internal sealed class WebSocketAudioSession : IAudioStream
         _state.OnNext(AudioStreamState.Disconnected);
         _state.OnCompleted();
         _state.Dispose();
+        _controlSubject.OnCompleted();
+        _controlSubject.Dispose();
         _webSocket.Dispose();
+        _sendLock.Dispose();
         _cts.Dispose();
     }
 }

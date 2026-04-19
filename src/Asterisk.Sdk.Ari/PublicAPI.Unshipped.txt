@@ -1,1 +1,56 @@
 #nullable enable
+Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessage
+Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer
+Asterisk.Sdk.Ari.Audio.ChanWebSocketDtmf
+Asterisk.Sdk.Ari.Audio.ChanWebSocketDtmf.ChanWebSocketDtmf(string! Digit, int DurationMs) -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketDtmf.Digit.get -> string!
+Asterisk.Sdk.Ari.Audio.ChanWebSocketDtmf.Digit.init -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketDtmf.DurationMs.get -> int
+Asterisk.Sdk.Ari.Audio.ChanWebSocketDtmf.DurationMs.init -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketHangup
+Asterisk.Sdk.Ari.Audio.ChanWebSocketHangup.Cause.get -> string?
+Asterisk.Sdk.Ari.Audio.ChanWebSocketHangup.Cause.init -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketHangup.ChanWebSocketHangup(string? Cause) -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketJsonContext
+Asterisk.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketJsonContext() -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketJsonContext(System.Text.Json.JsonSerializerOptions! options) -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMarkMedia
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMarkMedia.ChanWebSocketMarkMedia(string! Mark) -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMarkMedia.Mark.get -> string!
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMarkMedia.Mark.init -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaBuffering
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.Bytes.get -> int
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.Bytes.init -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.ChanWebSocketMediaBuffering(int Bytes) -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaDirection
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaDirection.Both = 2 -> Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaDirection
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaDirection.In = 0 -> Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaDirection
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaDirection.Out = 1 -> Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaDirection
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.ChanWebSocketMediaMarkProcessed(string! Mark) -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.Mark.get -> string!
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.Mark.init -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaStart
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaStart.Channels.get -> int
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaStart.Channels.init -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaStart.ChanWebSocketMediaStart(string! Format, int Rate, int Channels) -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaStart.Format.get -> string!
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaStart.Format.init -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaStart.Rate.get -> int
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaStart.Rate.init -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaXoff
+Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaXon
+Asterisk.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection
+Asterisk.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.ChanWebSocketSetMediaDirection(Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaDirection Direction) -> void
+Asterisk.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.Direction.get -> Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaDirection
+Asterisk.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.Direction.init -> void
+Asterisk.Sdk.Ari.Audio.IChanWebSocketSession
+Asterisk.Sdk.Ari.Audio.IChanWebSocketSession.ControlMessages.get -> System.IObservable<Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessage!>!
+Asterisk.Sdk.Ari.Audio.IChanWebSocketSession.SendMarkAsync(string! mark, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Audio.IChanWebSocketSession.SendSetMediaDirectionAsync(Asterisk.Sdk.Ari.Audio.ChanWebSocketMediaDirection direction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Audio.IChanWebSocketSession.SendXoffAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Ari.Audio.IChanWebSocketSession.SendXonAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+static Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.Deserialize(string! json) -> Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessage?
+static Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.Deserialize(System.ReadOnlySpan<byte> utf8Json) -> Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessage?
+static Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.Serialize(Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessage! message) -> string!
+static Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(Asterisk.Sdk.Ari.Audio.ChanWebSocketControlMessage! message) -> byte[]!
