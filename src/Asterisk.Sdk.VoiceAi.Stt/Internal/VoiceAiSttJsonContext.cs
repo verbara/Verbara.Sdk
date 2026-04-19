@@ -81,6 +81,15 @@ internal sealed class CartesiaSttTranscriptMessage
     [JsonPropertyName("confidence")] public float? Confidence { get; set; }
 }
 
+// --- AssemblyAI Universal Streaming v3 DTOs ---
+internal sealed class AssemblyAiTurnMessage
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = string.Empty;
+    [JsonPropertyName("transcript")] public string Transcript { get; init; } = string.Empty;
+    [JsonPropertyName("end_of_turn")] public bool EndOfTurn { get; init; }
+    [JsonPropertyName("turn_is_formatted")] public bool TurnIsFormatted { get; init; }
+}
+
 [JsonSerializable(typeof(DeepgramResultMessage))]
 [JsonSerializable(typeof(WhisperTranscriptionResponse))]
 [JsonSerializable(typeof(GoogleSpeechRequest))]
@@ -91,4 +100,5 @@ internal sealed class CartesiaSttTranscriptMessage
 [JsonSerializable(typeof(GoogleSpeechAlternative))]
 [JsonSerializable(typeof(CartesiaSttInitMessage))]
 [JsonSerializable(typeof(CartesiaSttTranscriptMessage))]
+[JsonSerializable(typeof(AssemblyAiTurnMessage))]
 internal partial class VoiceAiSttJsonContext : JsonSerializerContext;
