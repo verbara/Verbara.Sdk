@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.11.1] - 2026-04-19
+
+### Performance
+
+- **AMI event parser** — Fast-path length check on `Output` header accumulation in `AmiProtocolReader`. Restores ~35 ns of the v1.0 → v1.11 regression in `ParseSingleEvent`; `key.Length == 6` short-circuit lets 99%+ of non-`Output` keys skip the `Equals("Output", OrdinalIgnoreCase)` compare. Throughput 1.53M → 1.62M events/sec single-thread (AMD Ryzen 9 9900X, .NET 10.0.6). 633 AMI unit tests unchanged. ([41fff67](https://github.com/Harol-Reina/Asterisk.Sdk/commit/41fff67))
+
+### Documentation
+
+- **ADR-0013** — `ISessionHandler` as the VoiceAi dispatch seam. Captures why turn-based (`VoiceAiPipeline`) and streaming (`OpenAiRealtimeBridge`) both implement a single-method interface and why consumers swap by DI registration alone.
+- **ADR-0014** — Raw HTTP / `ClientWebSocket` for VoiceAi providers. Captures why every STT + TTS provider is hand-rolled against the vendor's public API instead of depending on official vendor SDKs (AOT incompatibility).
+- **ADR-0015** — AMI string interning pool (FNV-1a, 2048 buckets). Captures why the 344-LOC pool in `AmiStringPool` is load-bearing at 100K+ events/s workloads and why alternatives (`ConcurrentDictionary`, `FrozenDictionary`, `string.Intern`) are inadequate for UTF-8-span lookup.
+- **Product alignment audit** — [docs/research/2026-04-19-product-alignment-audit.md](docs/research/2026-04-19-product-alignment-audit.md) reconciles the 12 accepted ADRs, 4 archived plans, and 6 archived specs against the v1.11.0 product state. Confirms `api-completeness-plan.md` is legitimately closed: 148/152 AMI (97%) + 94/98 ARI (96%) reflect an intentional scope decision, not abandoned work. Documents 12 further load-bearing decisions as ADR candidates for future releases.
+
+### Notes
+
+- No API changes. No breaking changes. 0-warning build preserved across all 23 NuGet packages.
+- 12 ADRs → 15 ADRs in `docs/decisions/`.
+
 ## [1.11.0] - 2026-04-18
 
 ### Added
