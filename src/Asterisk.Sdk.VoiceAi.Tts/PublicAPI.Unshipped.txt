@@ -27,3 +27,26 @@ Asterisk.Sdk.VoiceAi.Tts.Cartesia.CartesiaSpeechSynthesizer.CartesiaSpeechSynthe
 override Asterisk.Sdk.VoiceAi.Tts.Cartesia.CartesiaSpeechSynthesizer.ProviderName.get -> string!
 override Asterisk.Sdk.VoiceAi.Tts.Cartesia.CartesiaSpeechSynthesizer.SynthesizeAsync(string! text, Asterisk.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
 static Asterisk.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions.AddCartesiaSpeechSynthesizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.ApiKey.get -> string!
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.ApiKey.set -> void
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.BaseUri.get -> string!
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.BaseUri.set -> void
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.ConnectTimeoutSeconds.get -> int
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.ConnectTimeoutSeconds.set -> void
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.Language.get -> string!
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.Language.set -> void
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.SampleRate.get -> int
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.SampleRate.set -> void
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.SpeechmaticsOptions() -> void
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.Voice.get -> string!
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.Voice.set -> void
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptionsValidator
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptionsValidator.SpeechmaticsOptionsValidator() -> void
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptionsValidator.Validate(string? name, Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsSpeechSynthesizer
+Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsSpeechSynthesizer.SpeechmaticsSpeechSynthesizer(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions!>! options) -> void
+override Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsSpeechSynthesizer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+override Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsSpeechSynthesizer.ProviderName.get -> string!
+override Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsSpeechSynthesizer.SynthesizeAsync(string! text, Asterisk.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+static Asterisk.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions.AddSpeechmaticsTts(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

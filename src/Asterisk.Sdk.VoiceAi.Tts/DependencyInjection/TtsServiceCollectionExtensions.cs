@@ -2,6 +2,7 @@ using Asterisk.Sdk.VoiceAi.Tts.Azure;
 using Asterisk.Sdk.VoiceAi.Tts.Cartesia;
 using Asterisk.Sdk.VoiceAi.Tts.Diagnostics;
 using Asterisk.Sdk.VoiceAi.Tts.ElevenLabs;
+using Asterisk.Sdk.VoiceAi.Tts.Speechmatics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -59,6 +60,25 @@ public static class TtsServiceCollectionExtensions
 
         services.AddSingleton<IValidateOptions<CartesiaOptions>, CartesiaOptionsValidator>();
         services.TryAddSingleton<SpeechSynthesizer, CartesiaSpeechSynthesizer>();
+        services.AddHealthChecks().AddCheck<TtsHealthCheck>("tts");
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the Speechmatics REST TTS provider as the
+    /// <see cref="SpeechSynthesizer"/> singleton.
+    /// </summary>
+    public static IServiceCollection AddSpeechmaticsTts(
+        this IServiceCollection services,
+        Action<SpeechmaticsOptions>? configure = null)
+    {
+        if (configure is not null)
+            services.Configure(configure);
+        else
+            services.AddOptions<SpeechmaticsOptions>();
+
+        services.AddSingleton<IValidateOptions<SpeechmaticsOptions>, SpeechmaticsOptionsValidator>();
+        services.TryAddSingleton<SpeechSynthesizer, SpeechmaticsSpeechSynthesizer>();
         services.AddHealthChecks().AddCheck<TtsHealthCheck>("tts");
         return services;
     }

@@ -45,3 +45,29 @@ Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiSpeechRecognizer.AssemblyAiSpeechR
 override Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiSpeechRecognizer.ProviderName.get -> string!
 override Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
 static Asterisk.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddAssemblyAi(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.ApiKey.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.ApiKey.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.BaseUri.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.BaseUri.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.ConnectTimeoutSeconds.get -> int
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.ConnectTimeoutSeconds.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.EnablePartials.get -> bool
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.EnablePartials.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.Language.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.Language.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.MaxDelaySeconds.get -> int
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.MaxDelaySeconds.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.OperatingPoint.get -> string!
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.OperatingPoint.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.SampleRate.get -> int
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.SampleRate.set -> void
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.SpeechmaticsOptions() -> void
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptionsValidator
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptionsValidator.SpeechmaticsOptionsValidator() -> void
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptionsValidator.Validate(string? name, Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsSpeechRecognizer
+Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsSpeechRecognizer.SpeechmaticsSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions!>! options) -> void
+override Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsSpeechRecognizer.ProviderName.get -> string!
+override Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Asterisk.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.VoiceAi.SpeechRecognitionResult>!
+static Asterisk.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddSpeechmaticsStt(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

@@ -3,6 +3,7 @@ using Asterisk.Sdk.VoiceAi.Stt.Cartesia;
 using Asterisk.Sdk.VoiceAi.Stt.Deepgram;
 using Asterisk.Sdk.VoiceAi.Stt.Diagnostics;
 using Asterisk.Sdk.VoiceAi.Stt.Google;
+using Asterisk.Sdk.VoiceAi.Stt.Speechmatics;
 using Asterisk.Sdk.VoiceAi.Stt.Whisper;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -114,6 +115,25 @@ public static class SttServiceCollectionExtensions
 
         services.AddSingleton<IValidateOptions<AssemblyAiOptions>, AssemblyAiOptionsValidator>();
         services.TryAddSingleton<SpeechRecognizer, AssemblyAiSpeechRecognizer>();
+        services.AddHealthChecks().AddCheck<SttHealthCheck>("stt");
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the Speechmatics Realtime WebSocket STT provider as the
+    /// <see cref="SpeechRecognizer"/> singleton.
+    /// </summary>
+    public static IServiceCollection AddSpeechmaticsStt(
+        this IServiceCollection services,
+        Action<SpeechmaticsOptions>? configure = null)
+    {
+        if (configure is not null)
+            services.Configure(configure);
+        else
+            services.AddOptions<SpeechmaticsOptions>();
+
+        services.AddSingleton<IValidateOptions<SpeechmaticsOptions>, SpeechmaticsOptionsValidator>();
+        services.TryAddSingleton<SpeechRecognizer, SpeechmaticsSpeechRecognizer>();
         services.AddHealthChecks().AddCheck<SttHealthCheck>("stt");
         return services;
     }
