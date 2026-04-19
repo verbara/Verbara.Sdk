@@ -8,7 +8,7 @@
 [![Downloads](https://img.shields.io/nuget/dt/Asterisk.Sdk?label=Downloads&color=blue)](https://www.nuget.org/packages/Asterisk.Sdk)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Trim-safe](https://img.shields.io/badge/Native%20AOT-ready-brightgreen)](docs/analysis/benchmark-analysis.md)
+[![Trim-safe](https://img.shields.io/badge/Native%20AOT-ready-brightgreen)](docs/research/benchmark-analysis.md)
 
 ---
 
@@ -71,7 +71,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 | Troubleshooting (connection, auth, events, tracing) | [docs/guides/troubleshooting.md](docs/guides/troubleshooting.md) |
 | Asterisk 18/20/22/23 version compatibility | [docs/guides/asterisk-version-compatibility.md](docs/guides/asterisk-version-compatibility.md) |
 | Asterisk Realtime (ODBC) setup | [docs/guides/manual-asterisk-realtime-setup.md](docs/guides/manual-asterisk-realtime-setup.md) |
-| Benchmarks (AMD Ryzen 9 9900X, .NET 10) | [docs/analysis/benchmark-analysis.md](docs/analysis/benchmark-analysis.md) |
+| Benchmarks (AMD Ryzen 9 9900X, .NET 10) | [docs/research/benchmark-analysis.md](docs/research/benchmark-analysis.md) |
 | Release notes | [CHANGELOG.md](CHANGELOG.md) |
 | Contributing (dev setup, conventions, hooks) | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Security policy | [SECURITY.md](SECURITY.md) |
@@ -92,7 +92,7 @@ Benchmarked on AMD Ryzen 9 9900X (12C/24T), .NET 10.0.5, BenchmarkDotNet v0.14.0
 | Session store Redis `SaveAsync` | **~12.6K saves/sec** (p50 79 µs) / batch 65,738 sess/sec |
 | Session store Postgres `SaveAsync` | **~500 saves/sec** (p50 1.97 ms) / batch 9,491 sess/sec |
 
-Full methodology, machine-readable results, and cross-language comparison (asterisk-java, asterisk-ami-client, pyst2) in [docs/analysis/benchmark-analysis.md](docs/analysis/benchmark-analysis.md). Raw BenchmarkDotNet reports are under `BenchmarkDotNet.Artifacts/results/`. Reproduce: `dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/`.
+Full methodology, machine-readable results, and cross-language comparison (asterisk-java, asterisk-ami-client, pyst2) in [docs/research/benchmark-analysis.md](docs/research/benchmark-analysis.md). Raw BenchmarkDotNet reports are under `BenchmarkDotNet.Artifacts/results/`. Reproduce: `dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/`.
 
 ---
 
