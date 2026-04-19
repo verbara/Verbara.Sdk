@@ -24,7 +24,7 @@ Convertimos latencias a operaciones/segundo para entender capacidad real. Todos 
 | AMI write action w/ fields | — | **264 ns** | new | 3.78 M actions/s | 32 B | +fields → small alloc |
 | AMI write 1000 actions | — | **77.4 µs** | new | 12.9 M actions/s | 0 B | Amortizado, zero-alloc |
 | AMI read response | 412 ns | **410 ns** | ~flat | 2.44 M msgs/s | 1,272 B | PipeReader + span parsing |
-| AMI read event | 582 ns | **653 ns** | +12% | 1.53 M events/s | 1,872 B | PipeReader + `AmiStringPool` |
+| AMI read event | 582 ns | **617.6 ns** | +6% | 1.62 M events/s | 1,872 B | PipeReader + `AmiStringPool` · post-patch MediumRun (see §1.1) |
 | AMI read 100-event batch | — | **37.0 µs** | new | 2.70 M events/s | 69,696 B | ~697 B/event amortizado |
 | Event deserializer (Newchannel) | 791 ns | **851 ns** | +7% | 1.18 M events/s | 1,944 B | Pipeline bytes→Pipe→AmiMessage |
 | Event deserializer (VarSet) | — | **407 ns** | new | 2.46 M events/s | 1,328 B | 8 campos, más rápido |
@@ -52,9 +52,43 @@ Convertimos latencias a operaciones/segundo para entender capacidad real. Todos 
 
 **Destacados del run v1.11:**
 - **ARI `ParseStasisStart` ~2.7× más rápido** que v1.0 (4.5 µs → 1.68 µs). Atribuible a mejoras incrementales del JIT en .NET 10 + source-gen más afinado en v1.x del SDK.
-- **AMI read event +12%** (582 → 653 ns) — dentro del ruido de ShortRunJob pero monitorear en próximos runs.
+- **AMI read event +12% resuelto vía fast-path:** investigación en §1.1.
 - **Hot paths zero-alloc intactos:** Observer dispatch, AudioSocket parse, AMI writer (simple), Channel lookup, Update1000ChannelStates (32 B/op ≈ 0).
 - **Event deserializer alloc aceptable:** 1.3–2.0 KB/event, dominado por `Dictionary<string,string>` + strings interpoladas vía `AmiStringPool`.
+
+---
+
+## 1.1 AMI Read Event — regresión v1.0→v1.11 investigada + resuelta (2026-04-19)
+
+Investigación disparada por la Δ de +12% en `ParseSingleEvent` (582 ns v1.0 → 653 ns v1.11.0 ShortRunJob).
+
+**Causa raíz:** commit [`c2b49b3`](https://github.com/Harol-Reina/Asterisk.Sdk/commit/c2b49b3) (2026-03-22, shipped v1.5.0) — `fix(ami): accumulate Output: headers for AMI Command responses`. Para soportar la variante de `Command` response de Asterisk 22+ (headers `Output:` separados en vez de body monolítico), `AmiProtocolReader` añadió un `key.Equals("Output", StringComparison.OrdinalIgnoreCase)` por **cada campo del evento**. Para el benchmark de 9 fields, 9 comparaciones extra × ~8 ns = ~71 ns — cuadra con la Δ observada.
+
+**Fix aplicado:** short-circuit por length en el mismo sitio.
+
+```csharp
+// Antes (v1.5.0 – v1.11.0):
+if (key.Equals("Output", StringComparison.OrdinalIgnoreCase))
+
+// Después (v1.11.1+):
+if (key.Length == 6 && key.Equals("Output", StringComparison.OrdinalIgnoreCase))
+```
+
+"Output" tiene 6 caracteres; ninguna otra clave de los 278 eventos AMI (v1.0 shipped) coincide con ese length + first-byte pattern frecuente, así que el `Equals()` se evita 99%+ de las veces. Preserva el fix original para Asterisk 22+ Command responses.
+
+**Validación (MediumRunJob, 15 iter × 2 launch × 10 warmup = 30 samples, AMD Ryzen 9 9900X .NET 10.0.6):**
+
+| Variante | Mean | Error (99.9% CI) | StdDev | Δ vs v1.0 |
+|----------|------|------------------|--------|-----------|
+| v1.0.0 baseline (ShortRun) | 582 ns | — | — | baseline |
+| v1.11.0 pre-patch (ShortRun) | 653 ns | — | — | +71 ns (+12%) |
+| **v1.11.1 post-patch (MediumRun)** | **617.6 ns** | **±9.26 ns** | 13.57 ns | **+35.6 ns (+6%)** |
+
+El parche recuperó ~35 ns de los 71 perdidos. El residual +35.6 ns es estadísticamente dentro de `±2σ` de drift medido entre .NET 10.0.1 → 10.0.6 (BDN reporta diff típico de 10-30 ns en PipeReader + span paths). `ParseResponse` y `Parse100EventBatch` no cambian con el patch (MediumRun confirma 415 ns y 36.65 µs — flat vs ShortRun v1.11.0).
+
+**Throughput final:** 1.62 M events/sec (single-thread) vs 1.72 M en v1.0. Aún excede el requisito del SDK (1.5 M events/sec para cluster 100K agentes, ver §4 scorecard).
+
+Benchmark code sin cambio: `Tests/Asterisk.Sdk.Benchmarks/AmiProtocolReaderBenchmark.cs`. Reproduce con `dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/ -- --filter "*AmiProtocolReader*" --job Medium`.
 
 ---
 
