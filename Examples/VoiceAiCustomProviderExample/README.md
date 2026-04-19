@@ -14,7 +14,7 @@ Before v1.10.0 the pipeline tagged every utterance with `_stt.GetType().Name` / 
 
 Measured on a Ryzen 9 9900X: override `0.012 ns` vs fallback `1.11 ns` (`~92x`). The absolute delta is small, but it keeps a hot-path instruction free of reflection and is explicit — consumers reading your code can see which provider is active without inspecting runtime types.
 
-See `docs/analysis/benchmark-analysis.md` §1b for the full VoiceAiBenchmarks report.
+See `docs/research/benchmark-analysis.md` §1b for the full VoiceAiBenchmarks report.
 
 ## Run
 

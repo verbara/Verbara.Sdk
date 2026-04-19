@@ -46,13 +46,17 @@ Thumbs.db
 ## Publish
 publish/
 
-## Internal docs (local only)
+## Internal docs (local only — public repo, keep sensitive planning private)
+## Option K layout: docs/specs/, docs/decisions/, docs/research/ are PUBLIC
+## (tracked). docs/plans/ defaults to local until each plan is reviewed for
+## cross-repo/commercial leakage; explicitly tracked plans can live in
+## docs/plans/active|completed|archived/ after review — use `git add -f`.
+## Anything referencing private-repo paths, commercial roadmap, pricing or
+## partner info lives in docs/superpowers/ (never pushed).
 docs/plans/
-docs/new/
+docs/superpowers/
 docs/architecture/
 docs/proposals/
-docs/specs/
-docs/superpowers/
 .superpowers/
 
 ## Claude Code

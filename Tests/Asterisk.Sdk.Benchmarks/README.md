@@ -46,7 +46,7 @@ dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/ -- \
 
 Every run writes artifacts under `BenchmarkDotNet.Artifacts/results/`:
 
-- `*.md` — Markdown table (commit to `docs/analysis/` when you rerun the official suite)
+- `*.md` — Markdown table (commit to `docs/research/` when you rerun the official suite)
 - `*.csv` — CSV for scripting / charting
 - `*.html` — interactive HTML report
 - `*.log` — verbose log (attach for regressions)
@@ -55,7 +55,7 @@ The column `Ratio` compares each case against the benchmark marked `[Benchmark(B
 
 ## Official baseline
 
-The canonical numbers published in [docs/analysis/benchmark-analysis.md](../../docs/analysis/benchmark-analysis.md) were captured on:
+The canonical numbers published in [docs/research/benchmark-analysis.md](../../docs/research/benchmark-analysis.md) were captured on:
 
 | Dimension | Value |
 |-----------|-------|
@@ -72,7 +72,7 @@ Re-runs on different hardware will scale roughly linearly for ALU-heavy paths an
 
 1. Run the full suite: `dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/`
 2. Pick the `*.md` reports you want to cite from `BenchmarkDotNet.Artifacts/results/`.
-3. Edit `docs/analysis/benchmark-analysis.md` — preserve the narrative, paste fresh tables, note the date/commit SHA.
+3. Edit `docs/research/benchmark-analysis.md` — preserve the narrative, paste fresh tables, note the date/commit SHA.
 4. Commit both the regenerated markdown report(s) and the updated analysis under `docs(bench):`.
 
-The raw `BenchmarkDotNet.Artifacts/` directory is in `.gitignore` — only the curated markdown in `docs/analysis/` is versioned.
+The raw `BenchmarkDotNet.Artifacts/` directory is in `.gitignore` — only the curated markdown in `docs/research/` is versioned.
