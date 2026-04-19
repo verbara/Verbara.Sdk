@@ -16,6 +16,9 @@
     <Project Path="Examples/VoiceAiCartesiaExample/VoiceAiCartesiaExample.csproj" />
     <Project Path="Examples/VoiceAiAssemblyAiExample/VoiceAiAssemblyAiExample.csproj" />
     <Project Path="Examples/VoiceAiSpeechmaticsExample/VoiceAiSpeechmaticsExample.csproj" />
+    <Project Path="Examples/WebSocketMediaExample/WebSocketMediaExample.csproj" />
+    <Project Path="Examples/AriOutboundExample/AriOutboundExample.csproj" />
+    <Project Path="Examples/NatsBridgeExample/NatsBridgeExample.csproj" />
     <Project Path="Examples/OpenAiRealtimeExample/OpenAiRealtimeExample.csproj" />
     <Project Path="Examples/TelemetryExample/TelemetryExample.csproj" />
     <Project Path="Examples/SessionsRedisExample/SessionsRedisExample.csproj" />
