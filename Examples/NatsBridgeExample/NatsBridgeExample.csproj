@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Asterisk.Sdk.Push\Asterisk.Sdk.Push.csproj" />
+    <ProjectReference Include="..\..\src\Asterisk.Sdk.Push.Nats\Asterisk.Sdk.Push.Nats.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+    <PackageReference Include="NATS.Client.Core" />
+  </ItemGroup>
+
+</Project>
