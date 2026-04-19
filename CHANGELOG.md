@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.12.0] - 2026-04-19
+
+**Asterisk 23 modernization + voice-agent readiness.** No breaking changes. Package count grows 23 → 24 (one new — `Asterisk.Sdk.Push.Nats`). Three new VoiceAI providers ship as subfolders inside the existing `VoiceAi.Stt` / `VoiceAi.Tts` packages (Deepgram/Azure convention, not new top-level packages).
+
+### Added
+
+- **`Asterisk.Sdk.Push.Nats`** (new MIT package): NATS bridge for `RxPushEventBus`. Subscribes to the local Push bus and republishes every event to a NATS subject derived from the topic hierarchy. Unlocks multi-node deployments (one NATS cluster, N SDK instances, fan-out via subject-tree filtering). `NATS.Client.Core 2.5.10` — AOT-clean, zero reflection. `NatsSubjectTranslator` handles `/` and `.` separators, sanitizes wildcards and control chars. Meter `Asterisk.Sdk.Push.Nats` (`events.published`, `events.failed`). Publish-only in v1.12; subscribe-side planned for v1.12.x.
+- **ARI outbound WebSocket listener**: new `IAriOutboundListener` + `AriOutboundListener` under `src/Asterisk.Sdk.Ari/Outbound/`. The SDK acts as the WS server that Asterisk 22.5+ `application=outbound` dials into. Validates upgrade path, Basic-Auth credentials, and app allowlist. Exposes each accepted connection as an `AriOutboundConnection` with an `IObservable<AriEvent>`. Mirrors the RFC-6455 handshake pattern from `WebSocketAudioServer`. `AriOutboundListenerHostedService` in `Asterisk.Sdk.Hosting` for lifecycle management. DI: `services.AddAriOutboundListener(opts => ...)`.
+- **`chan_websocket` JSON control protocol on `WebSocketAudioSession`**: Asterisk 22.8 / 23.2+ sends JSON control messages over TEXT frames (MEDIA_START, MEDIA_BUFFERING, MARK_MEDIA, SET_MEDIA_DIRECTION, XON/XOFF, DTMF, HANGUP). Session now exposes `IObservable<ChanWebSocketControlMessage>` via a new `IChanWebSocketSession : IAudioStream` sub-interface, plus send-side methods `SendMarkAsync`, `SendXonAsync`, `SendXoffAsync`, `SendSetMediaDirectionAsync`. Polymorphic JSON via source-gen `ChanWebSocketJsonContext`. Binary audio path unchanged. Writes serialized through a `SemaphoreSlim` so audio and control frames coexist safely on one WebSocket.
+- **VoiceAI — Cartesia** (STT + TTS): `src/Asterisk.Sdk.VoiceAi.Stt/Cartesia/` (Ink-Whisper over WebSocket, streaming transcripts) and `src/Asterisk.Sdk.VoiceAi.Tts/Cartesia/` (Sonic-3 at 40-90ms TTFA — the lowest in market as of 2026). Raw WS per ADR-0014. `AddCartesiaStt` + `AddCartesiaTts` DI extensions.
+- **VoiceAI — AssemblyAI** (STT): `src/Asterisk.Sdk.VoiceAi.Stt/AssemblyAi/`. Universal Streaming v3 protocol — fills the vacuum left by the discontinued official .NET SDK (April 2025). Parses `Turn` messages, ignores `Begin` / `Termination` lifecycle events. `AddAssemblyAi` DI extension.
+- **VoiceAI — Speechmatics** (STT + TTS): `src/Asterisk.Sdk.VoiceAi.Stt/Speechmatics/` (Realtime v2 WebSocket — sub-150ms, 55+ languages) and `src/Asterisk.Sdk.VoiceAi.Tts/Speechmatics/` (REST synthesis — ~27× cheaper than ElevenLabs). Opens the enterprise price-sensitive segment. `AddSpeechmaticsStt` + `AddSpeechmaticsTts` DI extensions.
+- **`.github/workflows/publish.yml`**: automated nuget.org release on `v*` tag push. Builds Release, packs all shipping projects, runs `dotnet nuget push ... --skip-duplicate` with `NUGET_API_KEY` secret. Concurrency-guarded per tag. Closes the manual-publish exposure risk documented in v1.11.1. `CLAUDE.md`'s claim about CI-driven releases is now accurate.
+- **`Asterisk.Sdk.Push.Nats`** meter enrolled in `AsteriskTelemetry.MeterNames` (14 meters total; `MeterNames_ShouldContainAllPackages` assertion updated accordingly).
+
+### Documentation
+
+- **9 retrospective ADRs — 0016 through 0024** — backfills the load-bearing decisions identified in the v1.11.1 product alignment audit §4. ADR-0016 VoiceAi `ProviderName` virtual override (92× speedup); ADR-0017 AudioSocket codec negotiation; ADR-0018 Sessions soft-TTL reconciliation (not native Redis/Postgres TTL); ADR-0019 Push bus `TraceContext` ambient capture at publish time; ADR-0020 Webhook delivery retry-only without durable DLQ; ADR-0021 AMI heartbeat strategy (30 s / 10 s, on by default); ADR-0022 Activity `CancelAsync()` as first-class alongside `CancellationToken`; ADR-0023 PublicAPI tracker adoption across all 24 packages; ADR-0024 `BannedSymbols.txt` as build-time AOT policy. Catalog grows 15 → 24.
+- **`docs/research/2026-04-19-v1.12.0-product-opportunities.md`** — three-angle investigation (internal codebase + deferred work + external market) that reframed v1.12 from housekeeping to strategic release. Convergence on `chan_websocket` across all three angles was the strongest signal.
+- **`docs/plans/active/2026-04-19-v1.12.0-scope.md`** — four-tier execution plan with acceptance criteria.
+- **`docs/research/2026-04-19-otel-sip-semantic-conventions.md`** — draft OpenTelemetry semantic conventions for SIP / Asterisk telephony. Proposes attribute names (`sip.call_id`, `sip.response_code`, `asterisk.channel.id`, `call.direction`, `call.state`, `voiceai.provider`, etc.) grounded in the 9 ActivitySources + 14 Meters the SDK already ships. Addresses the unresolved `open-telemetry/opentelemetry-specification#2517`. Code-side alignment (emit the proposed attribute names) is deferred to v1.13 after field validation.
+
+### Scope clarifications (from v1.11.1 planning)
+
+Two items originally scoped for v1.12.0 were found to be **already shipped pre-v1.12** during Week 1 kickoff and removed from scope:
+
+- ARI exception context mapping (`AriNotFoundException` / `AriConflictException` with resource name + id) — shipped in v1.6.0 Sprint 1 (task B1). `AriHttpExtensions.EnsureAriSuccessAsync(resource, id)` + `AriResourceErrorContextTests` already present.
+- New AMI events for Asterisk 22/23 (`ChannelTalkingStartEvent`, `ChannelTalkingStopEvent`, `BridgeVideoSourceUpdateEvent`, `ApplicationRegisteredEvent`, `ApplicationUnregisteredEvent`, `QueueMemberEvent.Logintime`) — all shipped in earlier cycles (`PublicAPI.Shipped.txt` lines 1843-2006).
+
+### Notes
+
+- 0 build warnings, 0 trim warnings across all 24 NuGet packages. Native AOT clean.
+- Unit tests 2,637 → 2,703 (+66: +20 chan_websocket, +19 ARI outbound, +6 Cartesia, +4 AssemblyAi, +7 Speechmatics, +10 NATS). Two Cartesia-provider abort-path tests `[Fact(Skip=)]` due to HttpListener fake-server hang — tracked for v1.12.1; production path against real Cartesia endpoint not observed to hang.
+- 15 ADRs → 24 ADRs.
+- First release that will flow through `.github/workflows/publish.yml` rather than manual `dotnet nuget push`.
+
 ## [1.11.1] - 2026-04-19
 
 ### Performance
