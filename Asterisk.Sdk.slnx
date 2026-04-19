@@ -44,6 +44,7 @@
     <Project Path="src/Asterisk.Sdk.Push/Asterisk.Sdk.Push.csproj" />
     <Project Path="src/Asterisk.Sdk.Push.AspNetCore/Asterisk.Sdk.Push.AspNetCore.csproj" />
     <Project Path="src/Asterisk.Sdk.Push.Webhooks/Asterisk.Sdk.Push.Webhooks.csproj" />
+    <Project Path="src/Asterisk.Sdk.Push.Nats/Asterisk.Sdk.Push.Nats.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/Asterisk.Sdk.Agi.Tests/Asterisk.Sdk.Agi.Tests.csproj" />
@@ -72,5 +73,6 @@
     <Project Path="Tests/Asterisk.Sdk.Push.AspNetCore.Tests/Asterisk.Sdk.Push.AspNetCore.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.OpenTelemetry.Tests/Asterisk.Sdk.OpenTelemetry.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Push.Webhooks.Tests/Asterisk.Sdk.Push.Webhooks.Tests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.Push.Nats.Tests/Asterisk.Sdk.Push.Nats.Tests.csproj" />
   </Folder>
 </Solution>
