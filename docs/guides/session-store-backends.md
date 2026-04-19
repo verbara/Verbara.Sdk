@@ -165,7 +165,7 @@ The serialization DTO `CallSessionSnapshot` is `internal` to `Asterisk.Sdk.Sessi
 
 ## Benchmarks
 
-See [`docs/analysis/benchmark-analysis.md`](../analysis/benchmark-analysis.md) for the full methodology. Quick reference on AMD Ryzen 9 9900X, Postgres 16 local, Redis 7 local:
+See [`docs/research/benchmark-analysis.md`](../research/benchmark-analysis.md) for the full methodology. Quick reference on AMD Ryzen 9 9900X, Postgres 18 local, Redis 7 local:
 
 | Operation | InMemory | Redis | Postgres |
 |-----------|----------|-------|----------|
