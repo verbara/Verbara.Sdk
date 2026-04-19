@@ -90,6 +90,46 @@ internal sealed class AssemblyAiTurnMessage
     [JsonPropertyName("turn_is_formatted")] public bool TurnIsFormatted { get; init; }
 }
 
+// --- Speechmatics Realtime DTOs ---
+internal sealed class SpeechmaticsStartRecognitionMessage
+{
+    [JsonPropertyName("message")] public string Message { get; set; } = "StartRecognition";
+    [JsonPropertyName("audio_format")] public SpeechmaticsAudioFormat AudioFormat { get; set; } = new();
+    [JsonPropertyName("transcription_config")] public SpeechmaticsTranscriptionConfig TranscriptionConfig { get; set; } = new();
+}
+
+internal sealed class SpeechmaticsAudioFormat
+{
+    [JsonPropertyName("type")] public string Type { get; set; } = "raw";
+    [JsonPropertyName("encoding")] public string Encoding { get; set; } = "pcm_s16le";
+    [JsonPropertyName("sample_rate")] public int SampleRate { get; set; }
+}
+
+internal sealed class SpeechmaticsTranscriptionConfig
+{
+    [JsonPropertyName("language")] public string Language { get; set; } = string.Empty;
+    [JsonPropertyName("operating_point")] public string OperatingPoint { get; set; } = "enhanced";
+    [JsonPropertyName("enable_partials")] public bool EnablePartials { get; set; }
+    [JsonPropertyName("max_delay")] public double MaxDelay { get; set; }
+}
+
+internal sealed class SpeechmaticsTranscriptMessage
+{
+    [JsonPropertyName("message")] public string Message { get; set; } = string.Empty;
+    [JsonPropertyName("results")] public SpeechmaticsResult[]? Results { get; set; }
+}
+
+internal sealed class SpeechmaticsResult
+{
+    [JsonPropertyName("alternatives")] public SpeechmaticsAlternative[]? Alternatives { get; set; }
+}
+
+internal sealed class SpeechmaticsAlternative
+{
+    [JsonPropertyName("content")] public string Content { get; set; } = string.Empty;
+    [JsonPropertyName("confidence")] public float Confidence { get; set; }
+}
+
 [JsonSerializable(typeof(DeepgramResultMessage))]
 [JsonSerializable(typeof(WhisperTranscriptionResponse))]
 [JsonSerializable(typeof(GoogleSpeechRequest))]
@@ -101,4 +141,10 @@ internal sealed class AssemblyAiTurnMessage
 [JsonSerializable(typeof(CartesiaSttInitMessage))]
 [JsonSerializable(typeof(CartesiaSttTranscriptMessage))]
 [JsonSerializable(typeof(AssemblyAiTurnMessage))]
+[JsonSerializable(typeof(SpeechmaticsStartRecognitionMessage))]
+[JsonSerializable(typeof(SpeechmaticsAudioFormat))]
+[JsonSerializable(typeof(SpeechmaticsTranscriptionConfig))]
+[JsonSerializable(typeof(SpeechmaticsTranscriptMessage))]
+[JsonSerializable(typeof(SpeechmaticsResult))]
+[JsonSerializable(typeof(SpeechmaticsAlternative))]
 internal partial class VoiceAiSttJsonContext : JsonSerializerContext;

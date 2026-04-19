@@ -44,10 +44,20 @@ internal sealed class CartesiaTtsControlMessage
     [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
 }
 
+// --- Speechmatics TTS DTOs ---
+internal sealed class SpeechmaticsTtsRequest
+{
+    [JsonPropertyName("text")] public string Text { get; set; } = string.Empty;
+    [JsonPropertyName("voice")] public string Voice { get; set; } = string.Empty;
+    [JsonPropertyName("language")] public string Language { get; set; } = string.Empty;
+    [JsonPropertyName("sample_rate")] public int SampleRate { get; set; }
+}
+
 [JsonSerializable(typeof(ElevenLabsTextChunk))]
 [JsonSerializable(typeof(ElevenLabsVoiceSettings))]
 [JsonSerializable(typeof(CartesiaTtsRequest))]
 [JsonSerializable(typeof(CartesiaTtsVoice))]
 [JsonSerializable(typeof(CartesiaTtsOutputFormat))]
 [JsonSerializable(typeof(CartesiaTtsControlMessage))]
+[JsonSerializable(typeof(SpeechmaticsTtsRequest))]
 internal partial class VoiceAiTtsJsonContext : JsonSerializerContext;
