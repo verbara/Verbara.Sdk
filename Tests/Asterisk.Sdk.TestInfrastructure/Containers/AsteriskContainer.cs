@@ -21,8 +21,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
 
     public AsteriskContainer(INetwork network, IImage image)
     {
-        _container = new ContainerBuilder()
-            .WithImage(image)
+        _container = new ContainerBuilder(image)
             .WithPortBinding(5038, true)
             .WithPortBinding(8088, true)
             // Linux Docker: route host.docker.internal → host gateway so Asterisk can reach the FastAGI test server.
@@ -34,10 +33,10 @@ public sealed class AsteriskContainer : IAsyncDisposable
                 Wait.ForUnixContainer()
                     // Step 1: Asterisk core process is running.
                     .UntilCommandIsCompleted("asterisk", "-rx", "core show uptime")
-                    // Step 2: AMI TCP port is accepting connections from the host.
+                    // Step 2: AMI TCP port is accepting connections from inside the container.
                     // This ensures the manager.so module is fully loaded before StartAsync returns,
                     // including after a StopAsync/StartAsync restart cycle in reconnection tests.
-                    .UntilPortIsAvailable(5038))
+                    .UntilInternalTcpPortIsAvailable(5038))
             .Build();
     }
 
