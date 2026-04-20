@@ -4,11 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-Accumulating on `main` since `v1.12.0` tag. Will roll into v1.13.0 (public API addition via `AsteriskSemanticConventions` warrants minor bump).
+## [1.13.0] - 2026-04-20
+
+**Telemetry + multi-node Push.** No breaking changes. Public API grows with `AsteriskSemanticConventions` catalog (OpenTelemetry attribute names for SIP/Asterisk), `AsteriskSemanticConventions.Events` (span-event names), `RemotePushEvent` envelope, and new `Asterisk.Sdk.Push.Nats` subscribe-side options. Package count stable at 24 on nuget.org.
 
 ### Added
 
-- **`Asterisk.Sdk.AsteriskSemanticConventions`** — new public static catalog (51 const strings across 11 nested classes) standardizing OpenTelemetry attribute names for SIP/Asterisk telephony. Consumers reference by name (`AsteriskSemanticConventions.Channel.Id`, `AsteriskSemanticConventions.VoiceAi.Provider`, etc.) so dashboard/query code remains stable across SDK versions. Pinned by 14 unit tests. Backed by the draft in `docs/research/2026-04-19-otel-sip-semantic-conventions.md`. ([c62f8ce](https://github.com/Harol-Reina/Asterisk.Sdk/commit/c62f8ce), [066cb3c](https://github.com/Harol-Reina/Asterisk.Sdk/commit/066cb3c))
+- **`Asterisk.Sdk.AsteriskSemanticConventions`** — new public static catalog (54 const strings across 11 nested classes) standardizing OpenTelemetry attribute names for SIP/Asterisk telephony. Consumers reference by name (`AsteriskSemanticConventions.Channel.Id`, `AsteriskSemanticConventions.VoiceAi.Provider`, etc.) so dashboard/query code remains stable across SDK versions. Pinned by 14 unit tests. Backed by the draft in `docs/research/2026-04-19-otel-sip-semantic-conventions.md`. ([c62f8ce](https://github.com/Harol-Reina/Asterisk.Sdk/commit/c62f8ce), [066cb3c](https://github.com/Harol-Reina/Asterisk.Sdk/commit/066cb3c))
 - **`AsteriskSemanticConventions.Events`** nested class — span event names for transient, event-shaped telemetry (use with `Activity.AddEvent`, not `SetTag`). Five entries: `asterisk.channel.hangup`, `asterisk.dtmf.received`, `asterisk.media.started`, `asterisk.media.buffering`, `asterisk.media.mark_processed`. `WebSocketAudioSession` now emits these events on `Activity.Current` when the matching chan_websocket control message arrives. No-op when no span is active. XON/XOFF flow-control signals intentionally NOT instrumented (too noisy for span events). ([df0fe93](https://github.com/Harol-Reina/Asterisk.Sdk/commit/df0fe93), [2a7af1a](https://github.com/Harol-Reina/Asterisk.Sdk/commit/2a7af1a))
 - **`Asterisk.Sdk.Push.Nats` subscribe side (bidirectional bridge)** — closes T2 of the v1.13 roadmap. New `NatsBridgeOptions.NodeId` (optional, enables loop prevention) and nested `Subscribe` options (`SubjectFilters`, `QueueGroup`, `SkipSelfOriginated`) turn the bridge bidirectional. Incoming NATS messages materialize as `Asterisk.Sdk.Push.Events.RemotePushEvent` (new public envelope) and are republished to the local `RxPushEventBus` so SSE / Webhook / dashboard subscribers on receiving nodes see the events without change to their filtering code. Loop prevention via optional `"source":"nodeId"` field in the JSON envelope + a .NET-type guard that never republishes a `RemotePushEvent`. New metrics: `EventsReceived`, `EventsSkipped`, `EventsDecodeFailed`. Extension point `INatsPayloadDeserializer` lets consumers round-trip to their concrete `PushEvent` subclasses if desired; default ships envelope-only. Queue-group semantics are opt-in; default pub/sub matches the local bus fan-out contract. JetStream / durable replay remain out of MIT (ADR-0011 boundary). Backed by [ADR-0025](docs/decisions/0025-push-nats-subscribe-and-loop-prevention.md). ([059e46d](https://github.com/Harol-Reina/Asterisk.Sdk/commit/059e46d) through [c98229f](https://github.com/Harol-Reina/Asterisk.Sdk/commit/c98229f))
 - **Six new example apps** under `Examples/` (16 → 22): `VoiceAiCartesiaExample`, `VoiceAiAssemblyAiExample`, `VoiceAiSpeechmaticsExample`, `WebSocketMediaExample` (chan_websocket control protocol), `AriOutboundExample`, `NatsBridgeExample`. All v1.12 features now have runnable showcases. ([991078e](https://github.com/Harol-Reina/Asterisk.Sdk/commit/991078e), [60fcdbb](https://github.com/Harol-Reina/Asterisk.Sdk/commit/60fcdbb))
@@ -24,7 +26,8 @@ Accumulating on `main` since `v1.12.0` tag. Will roll into v1.13.0 (public API a
 
 - **Zero deferred tests anywhere in repo.** The 2 `[Fact(Skip=…)]` Cartesia abort tests are un-skipped and passing against the new `WebSocketTestServer`. 2 new abort tests added for AssemblyAi STT + Speechmatics STT. ([b02bf18](https://github.com/Harol-Reina/Asterisk.Sdk/commit/b02bf18))
 - **3 regression fixes** in `LiveActivitySourceTests` and `SessionActivitySourceTests` — assertions updated to match the new conventions-aligned tag names. ([ed7c2cd](https://github.com/Harol-Reina/Asterisk.Sdk/commit/ed7c2cd))
-- Unit tests 2,703 → 2,720, Skipped 2 → 0. Total across all categories: **2,937 pass / 0 fail / 0 Skip**.
+- **AudioSocketSession flake hardening** — replaced fixed `Task.Delay(100-200)` waits with `TaskCompletionSource` signals on `AudioStreamState` transitions. Avg test duration 210 ms → 28 ms. ([b384bde](https://github.com/Harol-Reina/Asterisk.Sdk/commit/b384bde))
+- Unit tests **2,703 → 2,729** (+26: deferred cleanup +4, T1.1 pilot +4, T1.1 expansion +3, Tier 2 +2, pin-test extensions). Integration tests 59 → 65 (+6: 4 Push.Nats baseline + 2 bidirectional). Total across all categories: **2,948 pass / 0 fail / 0 Skip**.
 
 ### CI
 
@@ -32,9 +35,17 @@ Accumulating on `main` since `v1.12.0` tag. Will roll into v1.13.0 (public API a
 
 ### Documentation
 
+- **ADR-0025** — `push.nats` subscribe + loop prevention rationale. Captures the `source`-header design, `RemotePushEvent`-as-envelope decision, queue-group default (pub/sub), and rejection of JetStream durable consumers (ADR-0011 boundary). ([64f0719](https://github.com/Harol-Reina/Asterisk.Sdk/commit/64f0719))
+- **Benchmark re-baseline** — `docs/research/benchmark-analysis.md` §1a confirms hot-path parser/dispatcher numbers are stable vs v1.11.1 after the v1.13 changes. AMI `ParseSingleEvent` 619 ns vs 618 ns baseline; ARI `ParseStasisStart` within noise floor. Const folding validated by exclusion. ([fb078d5](https://github.com/Harol-Reina/Asterisk.Sdk/commit/fb078d5))
 - **CONTRIBUTING** — new Release Process section + safe `NUGET_API_KEY` rotation flow (`pbpaste | gh secret set …` pattern) to prevent chat-exposure during future key rotations. Lesson learned from the v1.12.0 403 publish incident. ([25dc7e7](https://github.com/Harol-Reina/Asterisk.Sdk/commit/25dc7e7))
-- `docs/plans/active/2026-04-20-v1.13.0-roadmap.md` and `2026-04-20-deferred-tests-cleanup.md` — v1.13 planning + completed cleanup retrospective.
+- `docs/plans/active/2026-04-20-v1.13.0-roadmap.md`, `2026-04-20-deferred-tests-cleanup.md`, and `2026-04-20-v1.13-tier2-push-nats-subscribe.md` — v1.13 planning + completed cleanup + Tier 2 execution retrospectives.
 - `docs/research/2026-04-19-otel-sip-semantic-conventions.md` — §6 items 1-2 marked shipped. ([2ebacfe](https://github.com/Harol-Reina/Asterisk.Sdk/commit/2ebacfe))
+
+### Notes
+
+- 0 build warnings, 0 trim warnings across all 24 NuGet packages. Native AOT clean.
+- 15 ADRs (post-v1.12.0) → 25 ADRs (post-v1.13.0). Only ADR-0025 added in v1.13.
+- 30 commits on `main` since `v1.12.0` tag, all CI-verified on ubuntu-latest runners.
 
 ## [1.12.0] - 2026-04-19
 
