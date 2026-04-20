@@ -115,6 +115,13 @@ public sealed class AsteriskSemanticConventionsTests
     }
 
     [Fact]
+    public void Events_NamesShouldMatchDraft()
+    {
+        AsteriskSemanticConventions.Events.ChannelHangup.Should().Be("asterisk.channel.hangup");
+        AsteriskSemanticConventions.Events.DtmfReceived.Should().Be("asterisk.dtmf.received");
+    }
+
+    [Fact]
     public void AllNames_ShouldBeSnakeCase_WithKnownPrefixes()
     {
         var prefixes = new[] { "asterisk.", "call.", "dialplan.", "sip.", "media.", "voiceai." };
@@ -154,5 +161,6 @@ public sealed class AsteriskSemanticConventionsTests
         AsteriskSemanticConventions.VoiceAi.LatencyTtftMs, AsteriskSemanticConventions.VoiceAi.LatencyTtfbMs,
         AsteriskSemanticConventions.VoiceAi.TokensInput, AsteriskSemanticConventions.VoiceAi.TokensOutput,
         AsteriskSemanticConventions.VoiceAi.AudioDurationMs, AsteriskSemanticConventions.VoiceAi.Interrupted,
+        AsteriskSemanticConventions.Events.ChannelHangup, AsteriskSemanticConventions.Events.DtmfReceived,
     ];
 }

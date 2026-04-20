@@ -1,5 +1,8 @@
+using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Reactive.Linq;
+using System.Text;
+using Asterisk.Sdk;
 using Asterisk.Sdk.Ari.Audio;
 using FluentAssertions;
 
@@ -185,6 +188,101 @@ public class WebSocketAudioSessionTests
         var sut = CreateSession(ws);
 
         sut.IsConnected.Should().BeFalse();
+    }
+
+    // -- AddEvent emission on control messages ---------------------------------
+
+    [Fact]
+    public async Task DtmfControlMessage_ShouldEmitDtmfReceivedEvent_WhenActivityCurrent()
+    {
+        using var ws = new FakeWebSocket();
+        ws.EnqueueReceive(Encoding.UTF8.GetBytes("""{"kind":"dtmf","digit":"5","duration_ms":120}"""),
+            WebSocketMessageType.Text);
+        ws.EnqueueClose();
+
+        using var source = new ActivitySource("test.source");
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name == "test.source",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        using var activity = source.StartActivity("chanws-session");
+        activity.Should().NotBeNull();
+
+        var sut = CreateSession(ws, channelId: "PJSIP/alice-00042");
+        var messageReceived = new TaskCompletionSource<ChanWebSocketControlMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = sut.ControlMessages.Subscribe(m => messageReceived.TrySetResult(m));
+        sut.Start();
+
+        await messageReceived.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var events = activity!.Events.ToList();
+        events.Should().ContainSingle(e => e.Name == AsteriskSemanticConventions.Events.DtmfReceived);
+        var dtmfEvent = events.Single(e => e.Name == AsteriskSemanticConventions.Events.DtmfReceived);
+        dtmfEvent.Tags.Should().Contain(t => t.Key == AsteriskSemanticConventions.Channel.Id && (string)t.Value! == "PJSIP/alice-00042");
+        dtmfEvent.Tags.Should().Contain(t => t.Key == "asterisk.dtmf.digit" && (string)t.Value! == "5");
+        dtmfEvent.Tags.Should().Contain(t => t.Key == "asterisk.dtmf.duration_ms" && (int)t.Value! == 120);
+
+        await sut.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task HangupControlMessage_ShouldEmitChannelHangupEvent_WhenActivityCurrent()
+    {
+        using var ws = new FakeWebSocket();
+        ws.EnqueueReceive(Encoding.UTF8.GetBytes("""{"kind":"hangup","cause":"Normal Clearing"}"""),
+            WebSocketMessageType.Text);
+        ws.EnqueueClose();
+
+        using var source = new ActivitySource("test.source");
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name == "test.source",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        using var activity = source.StartActivity("chanws-session");
+        activity.Should().NotBeNull();
+
+        var sut = CreateSession(ws, channelId: "PJSIP/bob-00099");
+        var messageReceived = new TaskCompletionSource<ChanWebSocketControlMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = sut.ControlMessages.Subscribe(m => messageReceived.TrySetResult(m));
+        sut.Start();
+
+        await messageReceived.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var events = activity!.Events.ToList();
+        events.Should().ContainSingle(e => e.Name == AsteriskSemanticConventions.Events.ChannelHangup);
+        var hangupEvent = events.Single(e => e.Name == AsteriskSemanticConventions.Events.ChannelHangup);
+        hangupEvent.Tags.Should().Contain(t => t.Key == AsteriskSemanticConventions.Channel.Id && (string)t.Value! == "PJSIP/bob-00099");
+        hangupEvent.Tags.Should().Contain(t => t.Key == "cause" && (string)t.Value! == "Normal Clearing");
+
+        await sut.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ControlMessage_ShouldNotThrow_WhenNoActivityCurrent()
+    {
+        using var ws = new FakeWebSocket();
+        ws.EnqueueReceive(Encoding.UTF8.GetBytes("""{"kind":"dtmf","digit":"9","duration_ms":50}"""),
+            WebSocketMessageType.Text);
+        ws.EnqueueClose();
+
+        // No Activity on the context; AddEvent emission must be a no-op.
+        Activity.Current.Should().BeNull();
+
+        var sut = CreateSession(ws);
+        var messageReceived = new TaskCompletionSource<ChanWebSocketControlMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = sut.ControlMessages.Subscribe(m => messageReceived.TrySetResult(m));
+        sut.Start();
+
+        var act = async () => await messageReceived.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await act.Should().NotThrowAsync();
+
+        await sut.DisposeAsync();
     }
 
     // -- FakeWebSocket ----------------------------------------------------------

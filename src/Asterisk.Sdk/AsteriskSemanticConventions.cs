@@ -198,4 +198,20 @@ public static class AsteriskSemanticConventions
         /// <summary>Whether the turn was cut short by barge-in.</summary>
         public const string Interrupted = "voiceai.interrupted";
     }
+
+    /// <summary>
+    /// Span event names for transient, event-shaped telemetry emitted via
+    /// <see cref="System.Diagnostics.Activity.AddEvent"/>. Events describe
+    /// things that happened during a span — use them instead of <c>SetTag</c>
+    /// when the data is discrete-in-time (DTMF arrival, hangup, mark processed)
+    /// rather than describing the span as a whole.
+    /// </summary>
+    public static class Events
+    {
+        /// <summary>Channel hung up mid-span. Tag payload: <see cref="Channel.Id"/> optionally, and a <c>cause</c> string when available.</summary>
+        public const string ChannelHangup = "asterisk.channel.hangup";
+
+        /// <summary>DTMF digit received. Tag payload: <c>asterisk.dtmf.digit</c> and <c>asterisk.dtmf.duration_ms</c>.</summary>
+        public const string DtmfReceived = "asterisk.dtmf.received";
+    }
 }
