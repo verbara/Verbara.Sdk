@@ -1,12 +1,14 @@
 # ADR-0028: Cadence commitment — v1.x preview series, v2.0 stable Q4 2026
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-04-20 — executed as part of SDK v1.15.0 roadmap R1-F)
 - **Date:** 2026-04-20
 - **Deciders:** Harold Reina
 - **Related:**
   - PSD v2: `Asterisk.Platform/docs/specs/2026-04-19-product-strategy-v2.md` §5.1, §9
   - ADR-0026 (product identity)
   - ADR-0023 (PublicApi tracker adoption)
+  - ADR-0027 (stewardship pledge) — cadence commitment is the operational companion to the stewardship pledge
+  - ADR-0029 (resilience primitives MIT) — first concrete Commercial→MIT movement under this cadence
 
 ## Context
 
