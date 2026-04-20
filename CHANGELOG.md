@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-04-20
+
+**Pre-v2 Foundation.** No breaking changes. New MIT package `Asterisk.Sdk.Cluster.Primitives` (26th on nuget.org) ships domain-agnostic cluster abstractions that Pro.Cluster and future consumers can build on. `AsteriskSemanticConventions` catalog grows with `Tenant`/`Event`/`Node` nested classes (6 new const strings). `Asterisk.Sdk.Push.Webhooks` gains per-URL circuit breaker. ADR-0028 "Cadence commitment (v1 preview → v2 stable)" moves to `Accepted`. Operations starter kit (3 Grafana dashboards + Jaeger query catalog) lands in `docs/operations/`. Dual Asterisk support matrix (22 LTS + 23 Standard) added. AOT validation workflow expands to multi-RID matrix.
+
+### Added
+
+- **`Asterisk.Sdk.Cluster.Primitives`** — new MIT package with domain-agnostic cluster abstractions: `ClusterEvent` (abstract record canónico), `NodeInfo`, `NodeState`, `IClusterTransport` (pub/sub), `IDistributedLock`, `IMembershipProvider`. Ships 3 in-memory reference implementations for tests. 20 unit tests. Addresses PSD v2 §9 Mes 3 foundation item. Pro.Cluster consumes this in Pro v1.10.0-pro (R1-B bundled, not included in this release).
+- **`AsteriskSemanticConventions.Tenant`** — new nested class with `Id` constant (`"tenant.id"`). Aligns tenant-context tag name across SDK + Pro telemetry.
+- **`AsteriskSemanticConventions.Event`** — new nested class with `Type`, `Id`, `Count` constants. Standardizes event-attribution tag names for Push/EventStore/Analytics consumers.
+- **`AsteriskSemanticConventions.Node`** — new nested class with `OriginId`, `ReceiverId` constants. Standardizes cluster node-identification tag names.
+- **`Asterisk.Sdk.Push.Webhooks` per-URL circuit breaker** — `WebhookDeliveryService` now keys a `CircuitBreakerState` dictionary by `TargetUrl.AbsoluteUri`. Defaults: 5 failures → 30s open. New counters `CircuitOpened{url}` / `CircuitSkipped{url}` on meter `Asterisk.Sdk.Push.Webhooks`. `TimeProvider` injection for deterministic tests. 5 new unit tests.
+- **`docs/operations/` starter kit** — 3 Grafana dashboards (JSON-validated): `grafana-overall.json`, `grafana-webhooks.json`, `grafana-resilience.json`. `jaeger-queries.md` with 9 query patterns for distributed tracing. `README.md` with import instructions.
+- **`docs/guides/asterisk-version-matrix.md`** — dual Asterisk support guide (22 LTS + 23 Standard lifecycle, break-change risk areas, migration notes).
+- **`docker/docker-compose.test-23.yml`** + parameterized `docker/Dockerfile.asterisk` (`ASTERISK_VERSION`, `CODEC_OPUS_VERSION` build args) — run Functional + Integration test matrix against Asterisk 22 and 23 in parallel.
+- **`.github/workflows/aot-validate.yml`** (renamed from `aot-trim-check.yml`) — multi-RID AOT validation matrix (`linux-x64`, `win-x64`, `osx-arm64`). `verify-aot.sh` accepts RID arg + host-match smoke run. `AotCanary` app extended to cover `Webhooks` / `Resilience` / `Cluster.Primitives`.
+
+### Changed
+
+- **ADR-0028 "Cadence commitment (v1 preview → v2 stable)"** — status `Proposed` → `Accepted`. v2.0.0 target Q4 2026 formalizado. Cadencia minor releases cada 2-4 semanas durante v1.x; v2 preview → stable window documented.
+- **`MeterNames_ShouldContainAllPackages` pin test** — expected count 14 → 15 (corrects v1.14 drift where Resilience meter shipped without test update).
+
+### Documentation
+
+- **Post-ADR-0029 roadmap** — `docs/plans/active/2026-04-20-post-adr-0029-roadmap.md` (sanitized SDK scope, full cross-repo mirror lives in private Pro repo). Covers R1/R1.5/R2/R3/R4 ~8-10 semanas plan.
+- **ADR-0026..0034 batch** — PSD v2 foundation (Event Model v2 prerequisites, CloudEvents preview, IEventLog split, ISessionInterceptor, ClusterEvent contract, cadence commitment, AOT multi-RID policy). 10 ADRs total this release.
+- **`docs/plans/archived/2026-04-21-v1.14-candidates-absorbed.md`** — historical record of v1.14 candidates absorbed into post-ADR-0029 plan.
+
+### Notes
+
+- 0 build warnings, 0 trim warnings across all 26 NuGet packages. Native AOT clean (multi-RID matrix).
+- 25 ADRs (post-v1.14.0) → 34 ADRs (post-v1.15.0). ADR-0026..0034 batch covers PSD v2 foundation; ADR-0028 advances to `Accepted`; ADR-0029 remains `Accepted` (v1.14 shipped).
+- 13 commits on `main` since `v1.14.0` tag, all CI-verified.
+- Pro v1.10.0-pro coordinates adoption (consume `Cluster.Primitives` + adopt `SemanticConventions.Tenant/Event/Node` in 23 call-sites across 7 Pro packages).
+
 ## [1.14.0] - 2026-04-20
 
 **Resilience primitives added to SDK (MIT).** No breaking changes. New `Asterisk.Sdk.Resilience` package (25th on nuget.org) ships composable `CircuitBreakerState`, `ResiliencePolicy`, `ResiliencePolicyBuilder`, `CircuitBreakerOpenException`, `ResilienceMetrics`, `BackoffSchedule`, and `AddAsteriskResilience` DI extension. Migrated from `Asterisk.Sdk.Pro.Resilience` v1.8.1-pro per [ADR-0029](docs/decisions/0029-resilience-primitives-mit.md) (stewardship pledge — generic primitives belong in MIT). Internal hot paths (AMI/ARI reconnect, Webhook delivery) now share a single backoff primitive instead of three duplicated open-coded loops.
