@@ -59,12 +59,7 @@ public class CartesiaSpeechSynthesizerTests : IAsyncDisposable
         frames.Should().HaveCount(2);
     }
 
-    // Deferred: v1.12.1 first attempt added linked CTS + CloseOutputAsync
-    // timeout guards, but the hang persists. Root cause appears to be in the
-    // HttpListener fake-server dispose path after ws.Abort(), not in the
-    // client code. A fake-server rewrite to TcpListener + manual HTTP upgrade
-    // (matching the WebSocketAudioServer pattern) will resolve this.
-    [Fact(Skip = "Hang in HttpListener fake-server dispose path; tracked for rewrite")]
+    [Fact]
     public async Task SynthesizeAsync_ShouldComplete_WhenServerAborts()
     {
         _server.AbortAfterSend = true;

@@ -1,6 +1,6 @@
-using System.Net;
 using System.Net.WebSockets;
 using System.Text;
+using Asterisk.Sdk.TestInfrastructure.WebSocket;
 
 namespace Asterisk.Sdk.VoiceAi.Stt.Tests.Speechmatics;
 
@@ -10,15 +10,12 @@ namespace Asterisk.Sdk.VoiceAi.Stt.Tests.Speechmatics;
 /// <remarks>
 /// Sends <c>RecognitionStarted</c> right after receiving the client's
 /// <c>StartRecognition</c> message, then emits caller-supplied transcript messages.
-/// Receives binary audio frames until the client closes. Does NOT implement
-/// <c>AbortAfterSend</c> — the <c>HttpListener</c> + <c>ws.Abort()</c> path is known
-/// to hang in test plumbing (see Cartesia skipped test).
+/// Uses the shared <see cref="WebSocketTestServer"/> (TcpListener + manual upgrade) so the
+/// <see cref="AbortAfterSend"/> path disposes cleanly.
 /// </remarks>
 internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
 {
-    private readonly HttpListener _listener = null!;
-    private readonly CancellationTokenSource _cts = new();
-    private Task? _acceptLoop;
+    private readonly WebSocketTestServer _server;
     private int _receivedFrameCount;
 
     /// <summary>Messages the server emits after <c>RecognitionStarted</c>.</summary>
@@ -33,73 +30,34 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
     /// <summary>Count of binary WebSocket frames received from the client.</summary>
     public int ReceivedFrameCount => _receivedFrameCount;
 
-    public int Port { get; }
+    /// <summary>If true, abort the WebSocket abnormally after sending RecognitionStarted + transcripts.</summary>
+    public bool AbortAfterSend { get; set; }
+
+    public int Port => _server.Port;
 
     public SpeechmaticsFakeServer()
     {
-        // Retry port allocation to avoid conflicts with parallel tests.
-        for (int attempt = 0; attempt < 10; attempt++)
-        {
-            var tcp = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-            tcp.Start();
-            var port = ((IPEndPoint)tcp.LocalEndpoint).Port;
-            tcp.Stop();
-
-            var listener = new HttpListener();
-            listener.Prefixes.Add($"http://localhost:{port}/");
-            try
-            {
-                listener.Start();
-                _listener = listener;
-                Port = port;
-                break;
-            }
-            catch (HttpListenerException) when (attempt < 9)
-            {
-                listener.Close();
-            }
-        }
-
-        if (_listener is null)
-            throw new InvalidOperationException("Failed to allocate a port for the fake Speechmatics STT server.");
+        _server = new WebSocketTestServer(HandleSessionAsync);
 
         // Default: one partial + one final transcript.
         ResultMessages.Add(BuildPartialTranscriptJson("hola", 0.85f));
         ResultMessages.Add(BuildFinalTranscriptJson("hola mundo", 0.99f));
     }
 
-    public void Start() => _acceptLoop = Task.Run(AcceptLoopAsync);
+    public void Start() => _server.Start();
 
-    private async Task AcceptLoopAsync()
+    private async Task HandleSessionAsync(WebSocketTestSession session)
     {
-        try
-        {
-            while (!_cts.Token.IsCancellationRequested)
-            {
-                var ctx = await _listener.GetContextAsync().WaitAsync(_cts.Token).ConfigureAwait(false);
-                if (ctx.Request.IsWebSocketRequest)
-                    _ = Task.Run(() => HandleWebSocketAsync(ctx), _cts.Token);
-                else
-                    ctx.Response.Close();
-            }
-        }
-        catch (OperationCanceledException) { }
-        catch (HttpListenerException) { }
-    }
+        ReceivedRequestUri = session.RequestUri;
 
-    private async Task HandleWebSocketAsync(HttpListenerContext ctx)
-    {
-        // Capture full URI (with query string) for URL-assertion tests.
-        ReceivedRequestUri = ctx.Request.RawUrl;
-
-        var wsCtx = await ctx.AcceptWebSocketAsync(null).ConfigureAwait(false);
-        var ws = wsCtx.WebSocket;
+        var ws = session.WebSocket;
+        var ct = session.ServerCancellationToken;
         var buf = new byte[65536];
 
         // Wait for the StartRecognition text frame from the client.
         try
         {
-            var first = await ws.ReceiveAsync(buf.AsMemory(), _cts.Token).ConfigureAwait(false);
+            var first = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
             if (first.MessageType == WebSocketMessageType.Text)
                 ReceivedStartRecognitionJson = Encoding.UTF8.GetString(buf, 0, first.Count);
         }
@@ -109,8 +67,7 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
         var started = Encoding.UTF8.GetBytes(BuildRecognitionStartedJson());
         try
         {
-            await ws.SendAsync(started.AsMemory(), WebSocketMessageType.Text, true, _cts.Token)
-                .ConfigureAwait(false);
+            await ws.SendAsync(started.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
         }
         catch { return; }
 
@@ -122,28 +79,35 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
             var bytes = Encoding.UTF8.GetBytes(msg);
             try
             {
-                await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, _cts.Token)
-                    .ConfigureAwait(false);
+                await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
             }
             catch { return; }
+        }
+
+        if (AbortAfterSend)
+        {
+            ws.Abort();
+            return;
         }
 
         // Receive binary audio frames until the client closes.
         while (ws.State == WebSocketState.Open)
         {
+            ValueWebSocketReceiveResult result;
             try
             {
-                var result = await ws.ReceiveAsync(buf.AsMemory(), _cts.Token).ConfigureAwait(false);
-                if (result.MessageType == WebSocketMessageType.Binary)
-                {
-                    Interlocked.Increment(ref _receivedFrameCount);
-                }
-                else if (result.MessageType == WebSocketMessageType.Close)
-                {
-                    break;
-                }
+                result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
             }
             catch { break; }
+
+            if (result.MessageType == WebSocketMessageType.Binary)
+            {
+                Interlocked.Increment(ref _receivedFrameCount);
+            }
+            else if (result.MessageType == WebSocketMessageType.Close)
+            {
+                break;
+            }
         }
 
         if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
@@ -172,10 +136,6 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
-        _cts.Cancel();
-        _listener.Stop();
-        if (_acceptLoop is not null)
-            try { await _acceptLoop.ConfigureAwait(false); } catch { }
-        _cts.Dispose();
+        await _server.DisposeAsync().ConfigureAwait(false);
     }
 }

@@ -1,17 +1,22 @@
-using System.Net;
 using System.Net.WebSockets;
 using System.Text;
+using Asterisk.Sdk.TestInfrastructure.WebSocket;
 
 namespace Asterisk.Sdk.VoiceAi.Tts.Tests.Cartesia;
 
-/// <summary>In-process WebSocket server that speaks the Cartesia TTS wire protocol.</summary>
+/// <summary>
+/// In-process WebSocket server that speaks the Cartesia TTS wire protocol.
+/// </summary>
+/// <remarks>
+/// Built on the shared <see cref="WebSocketTestServer"/> (TcpListener + manual upgrade) so that
+/// <c>AbortAfterSend</c> disposes cleanly — the previous <c>HttpListener</c>-based version hung
+/// indefinitely on Linux after <c>ws.Abort()</c>.
+/// </remarks>
 internal sealed class CartesiaFakeServer : IAsyncDisposable
 {
-    private readonly HttpListener _listener = null!;
-    private readonly CancellationTokenSource _cts = new();
-    private Task? _acceptLoop;
+    private readonly WebSocketTestServer _server;
 
-    public int Port { get; }
+    public int Port => _server.Port;
     public List<string> ReceivedJsonMessages { get; } = [];
     public List<byte[]> AudioFramesToSend { get; } = [];
 
@@ -23,58 +28,18 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
 
     public CartesiaFakeServer()
     {
-        for (int attempt = 0; attempt < 10; attempt++)
-        {
-            var tcp = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-            tcp.Start();
-            var port = ((IPEndPoint)tcp.LocalEndpoint).Port;
-            tcp.Stop();
-
-            var listener = new HttpListener();
-            listener.Prefixes.Add($"http://localhost:{port}/");
-            try
-            {
-                listener.Start();
-                _listener = listener;
-                Port = port;
-                break;
-            }
-            catch (HttpListenerException) when (attempt < 9)
-            {
-                listener.Close();
-            }
-        }
-
-        if (_listener is null)
-            throw new InvalidOperationException("Failed to allocate a port for the fake Cartesia TTS server.");
+        _server = new WebSocketTestServer(HandleSessionAsync);
 
         AudioFramesToSend.Add(new byte[320]);
         AudioFramesToSend.Add(new byte[320]);
     }
 
-    public void Start() => _acceptLoop = Task.Run(AcceptLoopAsync);
+    public void Start() => _server.Start();
 
-    private async Task AcceptLoopAsync()
+    private async Task HandleSessionAsync(WebSocketTestSession session)
     {
-        try
-        {
-            while (!_cts.Token.IsCancellationRequested)
-            {
-                var ctx = await _listener.GetContextAsync().WaitAsync(_cts.Token).ConfigureAwait(false);
-                if (ctx.Request.IsWebSocketRequest)
-                    _ = Task.Run(() => HandleWebSocketAsync(ctx), _cts.Token);
-                else
-                    ctx.Response.Close();
-            }
-        }
-        catch (OperationCanceledException) { }
-        catch (HttpListenerException) { }
-    }
-
-    private async Task HandleWebSocketAsync(HttpListenerContext ctx)
-    {
-        var wsCtx = await ctx.AcceptWebSocketAsync(null).ConfigureAwait(false);
-        var ws = wsCtx.WebSocket;
+        var ws = session.WebSocket;
+        var ct = session.ServerCancellationToken;
         var buf = new byte[65536];
 
         // Receive client request (JSON) in background.
@@ -82,27 +47,28 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
         {
             while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
             {
+                ValueWebSocketReceiveResult result;
                 try
                 {
-                    var result = await ws.ReceiveAsync(buf.AsMemory(), _cts.Token).ConfigureAwait(false);
-                    if (result.MessageType == WebSocketMessageType.Text)
-                        ReceivedJsonMessages.Add(Encoding.UTF8.GetString(buf, 0, result.Count));
-                    else if (result.MessageType == WebSocketMessageType.Close)
-                        break;
+                    result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
                 }
                 catch { break; }
+
+                if (result.MessageType == WebSocketMessageType.Text)
+                    ReceivedJsonMessages.Add(Encoding.UTF8.GetString(buf, 0, result.Count));
+                else if (result.MessageType == WebSocketMessageType.Close)
+                    break;
             }
-        });
+        }, ct);
 
         // Small delay so the client has time to send the synthesis request.
-        await Task.Delay(30).ConfigureAwait(false);
+        await Task.Delay(30, ct).ConfigureAwait(false);
 
         var frames = AudioFramesToSend.ToList();
         foreach (var frame in frames)
         {
             if (ws.State is not (WebSocketState.Open or WebSocketState.CloseReceived)) break;
-            await ws.SendAsync(frame.AsMemory(), WebSocketMessageType.Binary, true, _cts.Token)
-                .ConfigureAwait(false);
+            await ws.SendAsync(frame.AsMemory(), WebSocketMessageType.Binary, true, ct).ConfigureAwait(false);
         }
 
         if (AbortAfterSend)
@@ -117,7 +83,7 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
             var done = Encoding.UTF8.GetBytes("""{"type":"done"}""");
             try
             {
-                await ws.SendAsync(done.AsMemory(), WebSocketMessageType.Text, true, _cts.Token)
+                await ws.SendAsync(done.AsMemory(), WebSocketMessageType.Text, true, ct)
                     .ConfigureAwait(false);
             }
             catch { }
@@ -140,10 +106,6 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
-        _cts.Cancel();
-        _listener.Stop();
-        if (_acceptLoop is not null)
-            try { await _acceptLoop.ConfigureAwait(false); } catch { }
-        _cts.Dispose();
+        await _server.DisposeAsync().ConfigureAwait(false);
     }
 }
