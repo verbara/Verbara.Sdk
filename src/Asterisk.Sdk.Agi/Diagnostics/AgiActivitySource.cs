@@ -2,6 +2,11 @@ using System.Diagnostics;
 
 namespace Asterisk.Sdk.Agi.Diagnostics;
 
+// Tag names follow AsteriskSemanticConventions (asterisk.channel.name for
+// the AGI-owning channel) so AGI spans correlate with AMI/ARI/Sessions
+// traces. agi.* tags remain for AGI-protocol-specific data (script,
+// result) that has no cross-package equivalent.
+
 /// <summary>
 /// OpenTelemetry-compatible ActivitySource for distributed tracing of AGI operations.
 /// Produces spans for AGI script execution lifecycle.
@@ -20,7 +25,7 @@ public static class AgiActivitySource
         if (activity is not null)
         {
             activity.SetTag("agi.script", scriptName);
-            activity.SetTag("agi.channel", channel);
+            activity.SetTag("asterisk.channel.name", channel);
         }
 
         return activity;
