@@ -52,10 +52,12 @@
     <Project Path="src/Asterisk.Sdk.Push.Webhooks/Asterisk.Sdk.Push.Webhooks.csproj" />
     <Project Path="src/Asterisk.Sdk.Push.Nats/Asterisk.Sdk.Push.Nats.csproj" />
     <Project Path="src/Asterisk.Sdk.Resilience/Asterisk.Sdk.Resilience.csproj" />
+    <Project Path="src/Asterisk.Sdk.Cluster.Primitives/Asterisk.Sdk.Cluster.Primitives.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/Asterisk.Sdk.Agi.Tests/Asterisk.Sdk.Agi.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Resilience.Tests/Asterisk.Sdk.Resilience.Tests.csproj" />
+    <Project Path="Tests/Asterisk.Sdk.Cluster.Primitives.Tests/Asterisk.Sdk.Cluster.Primitives.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Ami.Tests/Asterisk.Sdk.Ami.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Ari.Tests/Asterisk.Sdk.Ari.Tests.csproj" />
     <Project Path="Tests/Asterisk.Sdk.Audio.Tests/Asterisk.Sdk.Audio.Tests.csproj" />

@@ -1,0 +1,66 @@
+#nullable enable
+Asterisk.Sdk.Cluster.Primitives.ClusterEvent
+Asterisk.Sdk.Cluster.Primitives.ClusterEvent.ClusterEvent(string! SourceInstanceId, System.DateTimeOffset Timestamp) -> void
+Asterisk.Sdk.Cluster.Primitives.ClusterEvent.SourceInstanceId.get -> string!
+Asterisk.Sdk.Cluster.Primitives.ClusterEvent.SourceInstanceId.init -> void
+Asterisk.Sdk.Cluster.Primitives.ClusterEvent.Timestamp.get -> System.DateTimeOffset
+Asterisk.Sdk.Cluster.Primitives.ClusterEvent.Timestamp.init -> void
+Asterisk.Sdk.Cluster.Primitives.ClusterEvent.TraceContext.get -> string?
+Asterisk.Sdk.Cluster.Primitives.ClusterEvent.TraceContext.init -> void
+Asterisk.Sdk.Cluster.Primitives.IClusterTransport
+Asterisk.Sdk.Cluster.Primitives.IClusterTransport.PublishAsync(Asterisk.Sdk.Cluster.Primitives.ClusterEvent! clusterEvent, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Cluster.Primitives.IClusterTransport.SubscribeAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.Cluster.Primitives.ClusterEvent!>!
+Asterisk.Sdk.Cluster.Primitives.IDistributedLock
+Asterisk.Sdk.Cluster.Primitives.IDistributedLock.ReleaseAsync(string! resource, string! owner, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Cluster.Primitives.IDistributedLock.TryAcquireAsync(string! resource, string! owner, System.TimeSpan expiry, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<bool>
+Asterisk.Sdk.Cluster.Primitives.IMembershipProvider
+Asterisk.Sdk.Cluster.Primitives.IMembershipProvider.GetLiveInstancesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<string!>!>
+Asterisk.Sdk.Cluster.Primitives.IMembershipProvider.GetNodesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Cluster.Primitives.NodeInfo!>!>
+Asterisk.Sdk.Cluster.Primitives.IMembershipProvider.HeartbeatAsync(string! instanceId, System.TimeSpan ttl, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Cluster.Primitives.IMembershipProvider.RegisterNodeAsync(Asterisk.Sdk.Cluster.Primitives.NodeInfo! node, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Cluster.Primitives.IMembershipProvider.UnregisterNodeAsync(string! nodeId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Cluster.Primitives.IMembershipProvider.UpdateNodeStateAsync(string! nodeId, Asterisk.Sdk.Cluster.Primitives.NodeState state, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryClusterTransport
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryClusterTransport.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryClusterTransport.InMemoryClusterTransport() -> void
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryClusterTransport.PublishAsync(Asterisk.Sdk.Cluster.Primitives.ClusterEvent! clusterEvent, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryClusterTransport.SubscribeAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.Cluster.Primitives.ClusterEvent!>!
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryDistributedLock
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryDistributedLock.InMemoryDistributedLock() -> void
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryDistributedLock.InMemoryDistributedLock(System.TimeProvider! timeProvider) -> void
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryDistributedLock.ReleaseAsync(string! resource, string! owner, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryDistributedLock.TryAcquireAsync(string! resource, string! owner, System.TimeSpan expiry, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<bool>
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryMembershipProvider
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryMembershipProvider.GetLiveInstancesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<string!>!>
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryMembershipProvider.GetNodesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Asterisk.Sdk.Cluster.Primitives.NodeInfo!>!>
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryMembershipProvider.HeartbeatAsync(string! instanceId, System.TimeSpan ttl, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryMembershipProvider.InMemoryMembershipProvider() -> void
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryMembershipProvider.InMemoryMembershipProvider(System.TimeProvider! timeProvider) -> void
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryMembershipProvider.RegisterNodeAsync(Asterisk.Sdk.Cluster.Primitives.NodeInfo! node, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryMembershipProvider.UnregisterNodeAsync(string! nodeId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Cluster.Primitives.InMemory.InMemoryMembershipProvider.UpdateNodeStateAsync(string! nodeId, Asterisk.Sdk.Cluster.Primitives.NodeState state, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Cluster.Primitives.NodeInfo
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.Generation.get -> long
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.Generation.init -> void
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.MaxCapacity.get -> int
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.MaxCapacity.init -> void
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.NodeId.get -> string!
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.NodeId.init -> void
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.NodeInfo(string! NodeId, Asterisk.Sdk.Cluster.Primitives.NodeState State) -> void
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.OwnerInstanceId.get -> string?
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.OwnerInstanceId.init -> void
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.PriorityTier.get -> int
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.PriorityTier.init -> void
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.State.get -> Asterisk.Sdk.Cluster.Primitives.NodeState
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.State.init -> void
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.Tags.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.Tags.init -> void
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.Weight.get -> double
+Asterisk.Sdk.Cluster.Primitives.NodeInfo.Weight.init -> void
+Asterisk.Sdk.Cluster.Primitives.NodeState
+Asterisk.Sdk.Cluster.Primitives.NodeState.Draining = 4 -> Asterisk.Sdk.Cluster.Primitives.NodeState
+Asterisk.Sdk.Cluster.Primitives.NodeState.Healthy = 2 -> Asterisk.Sdk.Cluster.Primitives.NodeState
+Asterisk.Sdk.Cluster.Primitives.NodeState.Joining = 1 -> Asterisk.Sdk.Cluster.Primitives.NodeState
+Asterisk.Sdk.Cluster.Primitives.NodeState.Left = 5 -> Asterisk.Sdk.Cluster.Primitives.NodeState
+Asterisk.Sdk.Cluster.Primitives.NodeState.Unhealthy = 3 -> Asterisk.Sdk.Cluster.Primitives.NodeState
+Asterisk.Sdk.Cluster.Primitives.NodeState.Unknown = 0 -> Asterisk.Sdk.Cluster.Primitives.NodeState
