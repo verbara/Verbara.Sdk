@@ -3,10 +3,12 @@
 // TCP protocol doesn't share the text-frame control channel. Consumers cast the IAudioStream
 // returned by IAudioServer.GetStream when they know they're talking to chan_websocket.
 using System.Buffers;
+using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Reactive.Subjects;
 using System.Text.Json;
 using System.Threading.Channels;
+using Asterisk.Sdk;
 
 namespace Asterisk.Sdk.Ari.Audio;
 
@@ -118,7 +120,43 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         }
 
         if (message is not null)
+        {
+            EmitActivityEvent(message);
             _controlSubject.OnNext(message);
+        }
+    }
+
+    // Mirrors event-shaped control messages onto Activity.Current as span events
+    // (not span tags) so consumer traces capture DTMF arrivals and hangups without
+    // overwriting span attributes. No-op if no span is active on the current
+    // execution context, matching OTel event semantics.
+    private void EmitActivityEvent(ChanWebSocketControlMessage message)
+    {
+        var activity = Activity.Current;
+        if (activity is null) return;
+
+        switch (message)
+        {
+            case ChanWebSocketDtmf dtmf:
+                activity.AddEvent(new ActivityEvent(
+                    AsteriskSemanticConventions.Events.DtmfReceived,
+                    tags: new ActivityTagsCollection
+                    {
+                        [AsteriskSemanticConventions.Channel.Id] = ChannelId,
+                        ["asterisk.dtmf.digit"] = dtmf.Digit,
+                        ["asterisk.dtmf.duration_ms"] = dtmf.DurationMs,
+                    }));
+                break;
+            case ChanWebSocketHangup hangup:
+                activity.AddEvent(new ActivityEvent(
+                    AsteriskSemanticConventions.Events.ChannelHangup,
+                    tags: new ActivityTagsCollection
+                    {
+                        [AsteriskSemanticConventions.Channel.Id] = ChannelId,
+                        ["cause"] = hangup.Cause,
+                    }));
+                break;
+        }
     }
 
     public async ValueTask<ReadOnlyMemory<byte>> ReadFrameAsync(CancellationToken cancellationToken = default)
