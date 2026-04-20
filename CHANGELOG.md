@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+Accumulating on `main` since `v1.12.0` tag. Will roll into v1.13.0 (public API addition via `AsteriskSemanticConventions` warrants minor bump).
+
+### Added
+
+- **`Asterisk.Sdk.AsteriskSemanticConventions`** — new public static catalog (49 const strings across 10 nested classes) standardizing OpenTelemetry attribute names for SIP/Asterisk telephony. Consumers reference by name (`AsteriskSemanticConventions.Channel.Id`, `AsteriskSemanticConventions.VoiceAi.Provider`, etc.) so dashboard/query code remains stable across SDK versions. Pinned by 13 unit tests. Backed by the draft in `docs/research/2026-04-19-otel-sip-semantic-conventions.md`. ([c62f8ce](https://github.com/Harol-Reina/Asterisk.Sdk/commit/c62f8ce), [066cb3c](https://github.com/Harol-Reina/Asterisk.Sdk/commit/066cb3c))
+- **Six new example apps** under `Examples/` (16 → 22): `VoiceAiCartesiaExample`, `VoiceAiAssemblyAiExample`, `VoiceAiSpeechmaticsExample`, `WebSocketMediaExample` (chan_websocket control protocol), `AriOutboundExample`, `NatsBridgeExample`. All v1.12 features now have runnable showcases. ([991078e](https://github.com/Harol-Reina/Asterisk.Sdk/commit/991078e), [60fcdbb](https://github.com/Harol-Reina/Asterisk.Sdk/commit/60fcdbb))
+- **4 `Asterisk.Sdk.Push.Nats` Testcontainers integration tests** against real `nats:2.10-alpine` covering subject prefix, payload bytes, multi-event delivery, and custom prefix behavior. `[Trait("Category", "Integration")]`. ([7a6f6fa](https://github.com/Harol-Reina/Asterisk.Sdk/commit/7a6f6fa))
+- **Shared `WebSocketTestServer`** in `Tests/Asterisk.Sdk.TestInfrastructure/WebSocket/` — TcpListener + manual HTTP/1.1 upgrade + `WebSocket.CreateFromStream(IsServer=true)`. Unblocks `ws.Abort()` test paths that previously hung on Linux under `HttpListener`. 2 new abort tests added (AssemblyAi STT, Speechmatics STT) closing the silent coverage gap. ([b02bf18](https://github.com/Harol-Reina/Asterisk.Sdk/commit/b02bf18))
+
+### Changed
+
+- **Activity.SetTag call-sites aligned to `AsteriskSemanticConventions`.** Five `Diagnostics/*ActivitySource.cs` files (VoiceAi, VoiceAi.AudioSocket, VoiceAi.OpenAiRealtime, Live, Sessions) now emit the conventions-matching attribute names: `voiceai.channel_id` → `asterisk.channel.id`, `originate.context/extension` → `dialplan.context/extension`, `session.direction/state/duration_ms` → `call.direction/state/duration_ms`. A T1.2 cross-package sweep added `agi.channel` → `asterisk.channel.name` to the list. Zero behavior change; consumer dashboards asserting on the old names will need to update. ([066cb3c](https://github.com/Harol-Reina/Asterisk.Sdk/commit/066cb3c), [4125c9e](https://github.com/Harol-Reina/Asterisk.Sdk/commit/4125c9e))
+- **Cartesia STT/TTS hardening**: linked `CancellationTokenSource` between send/receive loops + 2-second `CloseOutputAsync` timeout. Production path is robust against half-dead WebSocket sockets. ([c0890ac](https://github.com/Harol-Reina/Asterisk.Sdk/commit/c0890ac))
+
+### Tests
+
+- **Zero deferred tests anywhere in repo.** The 2 `[Fact(Skip=…)]` Cartesia abort tests are un-skipped and passing against the new `WebSocketTestServer`. 2 new abort tests added for AssemblyAi STT + Speechmatics STT. ([b02bf18](https://github.com/Harol-Reina/Asterisk.Sdk/commit/b02bf18))
+- **3 regression fixes** in `LiveActivitySourceTests` and `SessionActivitySourceTests` — assertions updated to match the new conventions-aligned tag names. ([ed7c2cd](https://github.com/Harol-Reina/Asterisk.Sdk/commit/ed7c2cd))
+- Unit tests 2,703 → 2,720, Skipped 2 → 0. Total across all categories: **2,937 pass / 0 fail / 0 Skip**.
+
+### CI
+
+- **New `pack-check` job** running `dotnet pack -p:TreatWarningsAsErrors=true` on every push/PR. Surfaces PackageValidation baseline drift, PublicAPI drift, missing release notes/icons, license-expression issues at PR time. 24/24 packages pack clean at HEAD. ([7174559](https://github.com/Harol-Reina/Asterisk.Sdk/commit/7174559))
+
+### Documentation
+
+- **CONTRIBUTING** — new Release Process section + safe `NUGET_API_KEY` rotation flow (`pbpaste | gh secret set …` pattern) to prevent chat-exposure during future key rotations. Lesson learned from the v1.12.0 403 publish incident. ([25dc7e7](https://github.com/Harol-Reina/Asterisk.Sdk/commit/25dc7e7))
+- `docs/plans/active/2026-04-20-v1.13.0-roadmap.md` and `2026-04-20-deferred-tests-cleanup.md` — v1.13 planning + completed cleanup retrospective.
+- `docs/research/2026-04-19-otel-sip-semantic-conventions.md` — §6 items 1-2 marked shipped. ([2ebacfe](https://github.com/Harol-Reina/Asterisk.Sdk/commit/2ebacfe))
+
 ## [1.12.0] - 2026-04-19
 
 **Asterisk 23 modernization + voice-agent readiness.** No breaking changes. Package count grows 23 → 24 (one new — `Asterisk.Sdk.Push.Nats`). Three new VoiceAI providers ship as subfolders inside the existing `VoiceAi.Stt` / `VoiceAi.Tts` packages (Deepgram/Azure convention, not new top-level packages).
