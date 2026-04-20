@@ -36,6 +36,7 @@ public static class NatsServiceCollectionExtensions
         services.AddSingleton<IValidateOptions<NatsBridgeOptions>, NatsBridgeOptionsCustomValidator>();
 
         services.TryAddSingleton<INatsPayloadSerializer, DefaultNatsPayloadSerializer>();
+        services.TryAddSingleton<INatsPayloadDeserializer, DefaultNatsPayloadDeserializer>();
         services.TryAddSingleton<NatsMetrics>();
 
         services.AddSingleton<NatsBridge>();
