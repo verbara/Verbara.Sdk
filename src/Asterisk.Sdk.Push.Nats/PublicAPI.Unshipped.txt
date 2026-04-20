@@ -9,12 +9,16 @@ Asterisk.Sdk.Push.Nats.NatsBridgeOptions
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions.ConnectTimeoutSeconds.get -> int
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions.ConnectTimeoutSeconds.set -> void
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions.NatsBridgeOptions() -> void
+Asterisk.Sdk.Push.Nats.NatsBridgeOptions.NodeId.get -> string?
+Asterisk.Sdk.Push.Nats.NatsBridgeOptions.NodeId.set -> void
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions.Password.get -> string?
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions.Password.set -> void
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions.PublishOnly.get -> bool
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions.PublishOnly.set -> void
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions.SubjectPrefix.get -> string!
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions.SubjectPrefix.set -> void
+Asterisk.Sdk.Push.Nats.NatsBridgeOptions.Subscribe.get -> Asterisk.Sdk.Push.Nats.NatsSubscribeOptions?
+Asterisk.Sdk.Push.Nats.NatsBridgeOptions.Subscribe.set -> void
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions.Token.get -> string?
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions.Token.set -> void
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions.Url.get -> string!
@@ -25,5 +29,13 @@ Asterisk.Sdk.Push.Nats.NatsBridgeOptionsValidator
 Asterisk.Sdk.Push.Nats.NatsBridgeOptionsValidator.NatsBridgeOptionsValidator() -> void
 Asterisk.Sdk.Push.Nats.NatsServiceCollectionExtensions
 Asterisk.Sdk.Push.Nats.NatsSubjectTranslator
+Asterisk.Sdk.Push.Nats.NatsSubscribeOptions
+Asterisk.Sdk.Push.Nats.NatsSubscribeOptions.NatsSubscribeOptions() -> void
+Asterisk.Sdk.Push.Nats.NatsSubscribeOptions.QueueGroup.get -> string?
+Asterisk.Sdk.Push.Nats.NatsSubscribeOptions.QueueGroup.set -> void
+Asterisk.Sdk.Push.Nats.NatsSubscribeOptions.SkipSelfOriginated.get -> bool
+Asterisk.Sdk.Push.Nats.NatsSubscribeOptions.SkipSelfOriginated.set -> void
+Asterisk.Sdk.Push.Nats.NatsSubscribeOptions.SubjectFilters.get -> string![]!
+Asterisk.Sdk.Push.Nats.NatsSubscribeOptions.SubjectFilters.set -> void
 static Asterisk.Sdk.Push.Nats.NatsServiceCollectionExtensions.AddPushNats(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Push.Nats.NatsBridgeOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static Asterisk.Sdk.Push.Nats.NatsSubjectTranslator.ToNatsSubject(string! topicPath, string! subjectPrefix) -> string!
