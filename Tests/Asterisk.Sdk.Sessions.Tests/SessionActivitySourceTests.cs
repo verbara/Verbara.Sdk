@@ -33,9 +33,9 @@ public sealed class SessionActivitySourceTests : IDisposable
         activity!.OperationName.Should().Contain("abc123");
         activity.Kind.Should().Be(ActivityKind.Internal);
         activity.GetTagItem("session.id").Should().Be("abc123");
-        activity.GetTagItem("session.direction").Should().Be("inbound");
-        activity.GetTagItem("session.state").Should().Be("completed");
-        activity.GetTagItem("session.duration_ms").Should().Be(42000.0);
+        activity.GetTagItem("call.direction").Should().Be("inbound");
+        activity.GetTagItem("call.state").Should().Be("completed");
+        activity.GetTagItem("call.duration_ms").Should().Be(42000.0);
         activity.Status.Should().Be(ActivityStatusCode.Ok);
     }
 
@@ -48,7 +48,7 @@ public sealed class SessionActivitySourceTests : IDisposable
         activity.Should().NotBeNull();
         activity!.Status.Should().Be(ActivityStatusCode.Error);
         activity.StatusDescription.Should().Be("Failed");
-        activity.GetTagItem("session.direction").Should().Be("outbound");
+        activity.GetTagItem("call.direction").Should().Be("outbound");
     }
 
     [Fact]
