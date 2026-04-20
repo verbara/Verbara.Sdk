@@ -37,9 +37,28 @@ public sealed class NatsBridgeOptions
     public int ConnectTimeoutSeconds { get; set; } = 10;
 
     /// <summary>
+    /// Optional stable identifier for this process/node. When set, the serializer writes
+    /// it into the envelope's <c>source</c> field so subscribers on other nodes can see
+    /// where a message originated and — if they share the same prefix — drop messages
+    /// they published themselves (<see cref="NatsSubscribeOptions.SkipSelfOriginated"/>).
+    /// Backwards-compatible: when <see langword="null"/> the field is omitted entirely.
+    /// </summary>
+    public string? NodeId { get; set; }
+
+    /// <summary>
     /// When <see langword="true"/>, the bridge only publishes local events to NATS and does
-    /// not subscribe to remote events. Default: <see langword="true"/>. Remote subscription
-    /// is a planned future feature tracked in the v1.12.0 roadmap.
+    /// not subscribe to remote events. Retained for backwards compatibility: the
+    /// authoritative control is now <see cref="Subscribe"/> — the bridge consumes from
+    /// NATS iff <see cref="Subscribe"/> is non-<see langword="null"/>. This flag stays
+    /// as a documentation signal for consumers upgrading from v1.12.
     /// </summary>
     public bool PublishOnly { get; set; } = true;
+
+    /// <summary>
+    /// Opt-in subscribe-side configuration. Default <see langword="null"/> keeps the
+    /// bridge in the publish-only mode introduced in v1.12. When set, the bridge
+    /// consumes the configured NATS subject filters and reinjects every decoded event
+    /// into the local Push bus as an <see cref="Events.RemotePushEvent"/>.
+    /// </summary>
+    public NatsSubscribeOptions? Subscribe { get; set; }
 }
