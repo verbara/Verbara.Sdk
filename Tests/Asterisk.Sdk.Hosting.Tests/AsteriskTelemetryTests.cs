@@ -23,7 +23,7 @@ public sealed class AsteriskTelemetryTests
     [Fact]
     public void MeterNames_ShouldContainAllPackages()
     {
-        AsteriskTelemetry.MeterNames.Should().HaveCount(14);
+        AsteriskTelemetry.MeterNames.Should().HaveCount(15);
         AsteriskTelemetry.MeterNames.Should().Contain("Asterisk.Sdk.Ami");
         AsteriskTelemetry.MeterNames.Should().Contain("Asterisk.Sdk.Ari");
         AsteriskTelemetry.MeterNames.Should().Contain("Asterisk.Sdk.Ari.Audio");
@@ -33,6 +33,7 @@ public sealed class AsteriskTelemetryTests
         AsteriskTelemetry.MeterNames.Should().Contain("Asterisk.Sdk.Push");
         AsteriskTelemetry.MeterNames.Should().Contain("Asterisk.Sdk.Push.Webhooks");
         AsteriskTelemetry.MeterNames.Should().Contain("Asterisk.Sdk.Push.Nats");
+        AsteriskTelemetry.MeterNames.Should().Contain("Asterisk.Sdk.Resilience");
         AsteriskTelemetry.MeterNames.Should().Contain("Asterisk.Sdk.VoiceAi");
         AsteriskTelemetry.MeterNames.Should().Contain("Asterisk.Sdk.VoiceAi.Stt");
         AsteriskTelemetry.MeterNames.Should().Contain("Asterisk.Sdk.VoiceAi.Tts");
