@@ -31,6 +31,24 @@ jobs:
       - name: Verify AOT trim safety
         run: bash tools/verify-aot.sh
 
+  pack-check:
+    name: Pack Warnings Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build Release
+        run: dotnet build Asterisk.Sdk.slnx -c Release
+      - name: Pack with warnings as errors
+        # Surfaces PackageValidation baseline drift, PublicAPI drift, missing
+        # icons/release-notes, and license-expression issues at PR time so
+        # publish.yml never hits them in the release path.
+        run: dotnet pack Asterisk.Sdk.slnx -c Release --no-build -p:TreatWarningsAsErrors=true -o ./artifacts
+      - name: List produced packages
+        run: ls -la ./artifacts/*.nupkg 2>/dev/null || true
+
   functional-tests:
     name: Functional Tests (Testcontainers)
     runs-on: ubuntu-latest
