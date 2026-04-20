@@ -62,3 +62,6 @@ const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.TokensOutput = "voiceai.t
 Asterisk.Sdk.AsteriskSemanticConventions.Events
 const Asterisk.Sdk.AsteriskSemanticConventions.Events.ChannelHangup = "asterisk.channel.hangup" -> string!
 const Asterisk.Sdk.AsteriskSemanticConventions.Events.DtmfReceived = "asterisk.dtmf.received" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Events.MediaBuffering = "asterisk.media.buffering" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Events.MediaMarkProcessed = "asterisk.media.mark_processed" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Events.MediaStarted = "asterisk.media.started" -> string!

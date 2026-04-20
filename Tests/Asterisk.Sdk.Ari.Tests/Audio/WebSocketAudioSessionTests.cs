@@ -264,6 +264,107 @@ public class WebSocketAudioSessionTests
     }
 
     [Fact]
+    public async Task MediaStartControlMessage_ShouldEmitMediaStartedEvent_WhenActivityCurrent()
+    {
+        using var ws = new FakeWebSocket();
+        ws.EnqueueReceive(Encoding.UTF8.GetBytes("""{"kind":"media_start","format":"slin16","rate":16000,"channels":1}"""),
+            WebSocketMessageType.Text);
+        ws.EnqueueClose();
+
+        using var source = new ActivitySource("test.source");
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name == "test.source",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        using var activity = source.StartActivity("chanws-session");
+        activity.Should().NotBeNull();
+
+        var sut = CreateSession(ws, channelId: "PJSIP/start-001");
+        var received = new TaskCompletionSource<ChanWebSocketControlMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = sut.ControlMessages.Subscribe(m => received.TrySetResult(m));
+        sut.Start();
+
+        await received.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var evt = activity!.Events.Single(e => e.Name == AsteriskSemanticConventions.Events.MediaStarted);
+        evt.Tags.Should().Contain(t => t.Key == AsteriskSemanticConventions.Channel.Id && (string)t.Value! == "PJSIP/start-001");
+        evt.Tags.Should().Contain(t => t.Key == AsteriskSemanticConventions.Media.Codec && (string)t.Value! == "slin16");
+        evt.Tags.Should().Contain(t => t.Key == AsteriskSemanticConventions.Media.SampleRate && (int)t.Value! == 16000);
+        evt.Tags.Should().Contain(t => t.Key == "media.channels" && (int)t.Value! == 1);
+
+        await sut.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task MediaBufferingControlMessage_ShouldEmitMediaBufferingEvent_WhenActivityCurrent()
+    {
+        using var ws = new FakeWebSocket();
+        ws.EnqueueReceive(Encoding.UTF8.GetBytes("""{"kind":"media_buffering","bytes":4096}"""),
+            WebSocketMessageType.Text);
+        ws.EnqueueClose();
+
+        using var source = new ActivitySource("test.source");
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name == "test.source",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        using var activity = source.StartActivity("chanws-session");
+        activity.Should().NotBeNull();
+
+        var sut = CreateSession(ws, channelId: "PJSIP/buf-007");
+        var received = new TaskCompletionSource<ChanWebSocketControlMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = sut.ControlMessages.Subscribe(m => received.TrySetResult(m));
+        sut.Start();
+
+        await received.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var evt = activity!.Events.Single(e => e.Name == AsteriskSemanticConventions.Events.MediaBuffering);
+        evt.Tags.Should().Contain(t => t.Key == AsteriskSemanticConventions.Channel.Id && (string)t.Value! == "PJSIP/buf-007");
+        evt.Tags.Should().Contain(t => t.Key == "asterisk.media.buffer_bytes" && (int)t.Value! == 4096);
+
+        await sut.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task MediaMarkProcessedControlMessage_ShouldEmitMarkProcessedEvent_WhenActivityCurrent()
+    {
+        using var ws = new FakeWebSocket();
+        ws.EnqueueReceive(Encoding.UTF8.GetBytes("""{"kind":"media_mark_processed","mark":"tts-chunk-42"}"""),
+            WebSocketMessageType.Text);
+        ws.EnqueueClose();
+
+        using var source = new ActivitySource("test.source");
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name == "test.source",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        using var activity = source.StartActivity("chanws-session");
+        activity.Should().NotBeNull();
+
+        var sut = CreateSession(ws, channelId: "PJSIP/mark-77");
+        var received = new TaskCompletionSource<ChanWebSocketControlMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = sut.ControlMessages.Subscribe(m => received.TrySetResult(m));
+        sut.Start();
+
+        await received.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var evt = activity!.Events.Single(e => e.Name == AsteriskSemanticConventions.Events.MediaMarkProcessed);
+        evt.Tags.Should().Contain(t => t.Key == AsteriskSemanticConventions.Channel.Id && (string)t.Value! == "PJSIP/mark-77");
+        evt.Tags.Should().Contain(t => t.Key == "asterisk.media.mark" && (string)t.Value! == "tts-chunk-42");
+
+        await sut.DisposeAsync();
+    }
+
+    [Fact]
     public async Task ControlMessage_ShouldNotThrow_WhenNoActivityCurrent()
     {
         using var ws = new FakeWebSocket();
