@@ -1,0 +1,43 @@
+#nullable enable
+Asterisk.Sdk.Resilience.BackoffSchedule
+Asterisk.Sdk.Resilience.CircuitBreakerOpenException
+Asterisk.Sdk.Resilience.CircuitBreakerOpenException.CircuitBreakerOpenException(string! key) -> void
+Asterisk.Sdk.Resilience.CircuitBreakerOpenException.CircuitBreakerOpenException(string! key, string! message) -> void
+Asterisk.Sdk.Resilience.CircuitBreakerOpenException.Key.get -> string!
+Asterisk.Sdk.Resilience.CircuitBreakerState
+Asterisk.Sdk.Resilience.CircuitBreakerState.CircuitBreakerState(string! key) -> void
+Asterisk.Sdk.Resilience.CircuitBreakerState.ConsecutiveFailures.get -> int
+Asterisk.Sdk.Resilience.CircuitBreakerState.IsOpen.get -> bool
+Asterisk.Sdk.Resilience.CircuitBreakerState.Key.get -> string!
+Asterisk.Sdk.Resilience.CircuitBreakerState.OpenedAt.get -> System.DateTimeOffset?
+Asterisk.Sdk.Resilience.CircuitBreakerState.RecordFailure(int threshold, System.TimeProvider! time) -> void
+Asterisk.Sdk.Resilience.CircuitBreakerState.RecordSuccess() -> void
+Asterisk.Sdk.Resilience.CircuitBreakerState.ShouldAllow(System.TimeSpan openDuration, System.TimeProvider! time) -> bool
+Asterisk.Sdk.Resilience.DependencyInjection.ResilienceServiceCollectionExtensions
+Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics
+Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitStateValue
+Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitStateValue.Closed = 0 -> Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitStateValue
+Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitStateValue.HalfOpen = 1 -> Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitStateValue
+Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitStateValue.Open = 2 -> Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitStateValue
+Asterisk.Sdk.Resilience.ResiliencePolicy
+Asterisk.Sdk.Resilience.ResiliencePolicy.ExecuteAsync<T>(string! key, System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<T>>! action, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<T>
+Asterisk.Sdk.Resilience.ResiliencePolicyBuilder
+Asterisk.Sdk.Resilience.ResiliencePolicyBuilder.Build() -> Asterisk.Sdk.Resilience.ResiliencePolicy!
+Asterisk.Sdk.Resilience.ResiliencePolicyBuilder.ResiliencePolicyBuilder() -> void
+Asterisk.Sdk.Resilience.ResiliencePolicyBuilder.WithCircuitBreaker(int threshold, System.TimeSpan openDuration) -> Asterisk.Sdk.Resilience.ResiliencePolicyBuilder!
+Asterisk.Sdk.Resilience.ResiliencePolicyBuilder.WithRetry(int maxAttempts, System.TimeSpan baseDelay) -> Asterisk.Sdk.Resilience.ResiliencePolicyBuilder!
+Asterisk.Sdk.Resilience.ResiliencePolicyBuilder.WithTimeout(System.TimeSpan timeout) -> Asterisk.Sdk.Resilience.ResiliencePolicyBuilder!
+Asterisk.Sdk.Resilience.ResiliencePolicyBuilder.WithTimeProvider(System.TimeProvider! timeProvider) -> Asterisk.Sdk.Resilience.ResiliencePolicyBuilder!
+const Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.MeterName = "Asterisk.Sdk.Resilience" -> string!
+const Asterisk.Sdk.Resilience.ResiliencePolicyBuilder.MaxRetryAttemptsCap = 10 -> int
+static readonly Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitOpened -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitClosed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitStateGauge -> System.Diagnostics.Metrics.ObservableGauge<int>!
+static readonly Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.RetryAttempts -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.TimeoutFired -> System.Diagnostics.Metrics.Counter<long>!
+static Asterisk.Sdk.Resilience.DependencyInjection.ResilienceServiceCollectionExtensions.AddAsteriskResilience(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Asterisk.Sdk.Resilience.ResiliencePolicyBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.SetCircuitState(string! key, Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitStateValue value) -> void
+static Asterisk.Sdk.Resilience.BackoffSchedule.Compute(int attempt, System.TimeSpan baseDelay, double multiplier, System.TimeSpan maxDelay) -> System.TimeSpan
+static Asterisk.Sdk.Resilience.BackoffSchedule.ComputeWithJitter(int attempt, System.TimeSpan baseDelay, double multiplier, System.TimeSpan maxDelay, double jitterFraction, System.Random! jitter) -> System.TimeSpan
+static Asterisk.Sdk.Resilience.ResiliencePolicy.NoOp.get -> Asterisk.Sdk.Resilience.ResiliencePolicy!
