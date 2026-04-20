@@ -119,6 +119,6 @@ All type shapes, method signatures, AOT compatibility, test contracts preserved 
 
 - PSD §3.2 primitive table + §6.2 borderline cases: `Asterisk.Platform/docs/specs/2026-04-19-product-strategy-v2.md`
 - Pro ADR-0006 (sunset rationale): `Asterisk.Sdk.Pro/docs/decisions/0006-pro-resilience-sunset.md`
-- Execution plan with per-decision log: `docs/plans/active/2026-04-20-adr-0029-resilience-migration.md`
+- Execution plan with per-decision log: `docs/plans/completed/2026-04-20-adr-0029-resilience-migration.md`
 - Polly GitHub: github.com/App-vNext/Polly
 - Pro 1.8.0-pro source (reference, deleted in v1.9.0-pro): was `src/Asterisk.Sdk.Pro.Resilience/`
