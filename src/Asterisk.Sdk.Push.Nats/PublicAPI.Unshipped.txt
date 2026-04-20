@@ -15,6 +15,7 @@ Asterisk.Sdk.Push.Nats.NatsSubscriberMessage.Payload.init -> void
 Asterisk.Sdk.Push.Nats.NatsSubscriberMessage.Subject.get -> string!
 Asterisk.Sdk.Push.Nats.NatsSubscriberMessage.Subject.init -> void
 Asterisk.Sdk.Push.Nats.NatsBridge
+Asterisk.Sdk.Push.Nats.NatsBridge.NatsBridge(Asterisk.Sdk.Push.Bus.IPushEventBus! bus, Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.Push.Nats.NatsBridgeOptions!>! options, Asterisk.Sdk.Push.Nats.INatsPayloadSerializer! serializer, Asterisk.Sdk.Push.Nats.INatsPayloadDeserializer! deserializer, Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> void
 Asterisk.Sdk.Push.Nats.NatsBridge.NatsBridge(Asterisk.Sdk.Push.Bus.IPushEventBus! bus, Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.Push.Nats.NatsBridgeOptions!>! options, Asterisk.Sdk.Push.Nats.INatsPayloadSerializer! serializer, Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> void
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions.ConnectTimeoutSeconds.get -> int
