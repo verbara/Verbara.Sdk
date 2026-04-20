@@ -83,6 +83,16 @@ public class AssemblyAiSpeechRecognizerTests : IAsyncDisposable
         results.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task StreamAsync_ShouldComplete_WhenServerAborts()
+    {
+        _server.AbortAfterSend = true;
+        var recognizer = BuildRecognizer();
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await act.Should().NotThrowAsync();
+    }
+
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()
     {
         yield return new byte[320];

@@ -65,15 +65,7 @@ public class CartesiaSpeechRecognizerTests : IAsyncDisposable
         results.Should().ContainSingle(r => r.IsFinal && Math.Abs(r.Confidence - 0.88f) < 0.001f);
     }
 
-    // Deferred: v1.12.1 first attempt added a linked CTS between send + receive
-    // loops and guarded CloseOutputAsync with a 2 s timeout, but the test still
-    // hangs indefinitely — root cause is deeper in the HttpListener fake-server
-    // plumbing (likely in AcceptWebSocketAsync dispose after ws.Abort() on
-    // Linux). Production path against real Cartesia endpoint not observed to
-    // hang. A proper fake-server rewrite (TcpListener-based, mirroring the
-    // pattern used by WebSocketAudioServer) will resolve this — tracked
-    // separately.
-    [Fact(Skip = "Hang in HttpListener fake-server dispose path; tracked for rewrite")]
+    [Fact]
     public async Task StreamAsync_ShouldComplete_WhenServerAborts()
     {
         _server.AbortAfterSend = true;

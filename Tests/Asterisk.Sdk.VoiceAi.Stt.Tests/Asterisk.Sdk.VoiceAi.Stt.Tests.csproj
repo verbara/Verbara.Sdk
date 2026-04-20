@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi.Stt\Asterisk.Sdk.VoiceAi.Stt.csproj" />
+    <ProjectReference Include="..\Asterisk.Sdk.TestInfrastructure\Asterisk.Sdk.TestInfrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
