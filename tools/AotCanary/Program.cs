@@ -29,6 +29,10 @@ using Asterisk.Sdk.Push.Diagnostics;
 using Asterisk.Sdk.Push.Events;
 using Asterisk.Sdk.Push.Hosting;
 using Asterisk.Sdk.Push.Subscriptions;
+using Asterisk.Sdk.Push.Webhooks;
+using Asterisk.Sdk.Resilience;
+using Asterisk.Sdk.Cluster.Primitives;
+using Asterisk.Sdk.Cluster.Primitives.InMemory;
 using Microsoft.Extensions.DependencyInjection;
 
 Console.WriteLine("AOT Canary — all SDK types are trim-safe");
@@ -111,6 +115,30 @@ _ = typeof(DefaultDeliveryFilter);
 _ = typeof(ISubscriptionRegistry);
 _ = typeof(InMemorySubscriptionRegistry);
 _ = typeof(PushMetrics);
+
+// Asterisk.Sdk.Push.Webhooks — outbound webhook delivery with HMAC + circuit breaker
+_ = typeof(WebhookSubscription);
+_ = typeof(WebhookDeliveryOptions);
+_ = typeof(WebhookDeliveryService);
+_ = typeof(HmacSha256Signer);
+
+// Asterisk.Sdk.Resilience — composable circuit breaker + retry + timeout primitives
+_ = typeof(CircuitBreakerState);
+_ = typeof(ResiliencePolicy);
+_ = typeof(ResiliencePolicyBuilder);
+_ = typeof(BackoffSchedule);
+_ = typeof(CircuitBreakerOpenException);
+
+// Asterisk.Sdk.Cluster.Primitives — cluster transport / membership / lock abstractions
+_ = typeof(ClusterEvent);
+_ = typeof(NodeInfo);
+_ = typeof(NodeState);
+_ = typeof(IClusterTransport);
+_ = typeof(IDistributedLock);
+_ = typeof(IMembershipProvider);
+_ = typeof(InMemoryClusterTransport);
+_ = typeof(InMemoryDistributedLock);
+_ = typeof(InMemoryMembershipProvider);
 
 // Exercise AddAsteriskPush + publish/subscribe path to force linker analysis of runtime code.
 var services = new ServiceCollection();
