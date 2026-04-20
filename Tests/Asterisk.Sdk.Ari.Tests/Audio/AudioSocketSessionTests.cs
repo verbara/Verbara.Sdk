@@ -64,13 +64,18 @@ public class AudioSocketSessionTests
         hangupFrame.CopyTo(allData, uuidFrame.Length);
 
         var states = new List<AudioStreamState>();
+        var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var memStream = new MemoryStream(allData);
         var session = new AudioSocketSession(memStream, "ulaw");
-        using var sub = session.StateChanges.Subscribe(s => states.Add(s));
+        using var sub = session.StateChanges.Subscribe(s =>
+        {
+            states.Add(s);
+            if (s == AudioStreamState.Disconnected)
+                disconnected.TrySetResult();
+        });
         session.Start();
 
-        // Wait for processing
-        await Task.Delay(200);
+        await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
         states.Should().Contain(AudioStreamState.Connected);
         states.Should().Contain(AudioStreamState.Disconnected);
@@ -88,12 +93,18 @@ public class AudioSocketSessionTests
         errorFrame.CopyTo(allData, uuidFrame.Length);
 
         var states = new List<AudioStreamState>();
+        var errored = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var memStream = new MemoryStream(allData);
         var session = new AudioSocketSession(memStream, "slin16");
-        using var sub = session.StateChanges.Subscribe(s => states.Add(s));
+        using var sub = session.StateChanges.Subscribe(s =>
+        {
+            states.Add(s);
+            if (s == AudioStreamState.Error)
+                errored.TrySetResult();
+        });
         session.Start();
 
-        await Task.Delay(200);
+        await errored.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
         states.Should().Contain(AudioStreamState.Error);
     }
@@ -104,9 +115,15 @@ public class AudioSocketSessionTests
         var uuidFrame = BuildFrame(AudioFrameType.Uuid, Guid.NewGuid().ToByteArray());
         await using var memStream = new MemoryStream(uuidFrame);
         var session = new AudioSocketSession(memStream, "slin16");
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = session.StateChanges.Subscribe(s =>
+        {
+            if (s == AudioStreamState.Connected)
+                connected.TrySetResult();
+        });
         session.Start();
 
-        await Task.Delay(100);
+        await connected.Task.WaitAsync(TimeSpan.FromSeconds(2));
         await session.DisposeAsync();
 
         session.IsConnected.Should().BeFalse();
