@@ -1,8 +1,10 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Reactive.Linq;
 using Asterisk.Sdk.Push.Bus;
 using Asterisk.Sdk.Push.Events;
 using Asterisk.Sdk.Push.Topics;
+using Asterisk.Sdk.Resilience;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -24,6 +26,8 @@ public sealed partial class WebhookDeliveryService : BackgroundService
     private readonly WebhookDeliveryOptions _options;
     private readonly WebhookMetrics _metrics;
     private readonly ILogger<WebhookDeliveryService> _logger;
+    private readonly TimeProvider _timeProvider;
+    private readonly ConcurrentDictionary<string, CircuitBreakerState> _circuits = new(StringComparer.Ordinal);
 
     internal WebhookDeliveryService(
         IPushEventBus bus,
@@ -33,7 +37,8 @@ public sealed partial class WebhookDeliveryService : BackgroundService
         IHttpClientFactory httpFactory,
         IOptions<WebhookDeliveryOptions> options,
         WebhookMetrics metrics,
-        ILogger<WebhookDeliveryService> logger)
+        ILogger<WebhookDeliveryService> logger,
+        TimeProvider? timeProvider = null)
     {
         _bus = bus;
         _store = store;
@@ -43,6 +48,7 @@ public sealed partial class WebhookDeliveryService : BackgroundService
         _options = options.Value;
         _metrics = metrics;
         _logger = logger;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <summary>Constructor used by DI.</summary>
@@ -61,7 +67,8 @@ public sealed partial class WebhookDeliveryService : BackgroundService
             httpFactory,
             options,
             new WebhookMetrics(),
-            loggerFactory.CreateLogger<WebhookDeliveryService>())
+            loggerFactory.CreateLogger<WebhookDeliveryService>(),
+            timeProvider: null)
     {
     }
 
@@ -123,6 +130,20 @@ public sealed partial class WebhookDeliveryService : BackgroundService
         var body = _serializer.Serialize(evt);
         var maxRetries = sub.MaxRetries ?? _options.MaxRetries;
 
+        var circuitEnabled = _options.CircuitBreakerFailureThreshold > 0;
+        CircuitBreakerState? circuit = null;
+        if (circuitEnabled)
+        {
+            var circuitKey = sub.TargetUrl.AbsoluteUri;
+            circuit = _circuits.GetOrAdd(circuitKey, static key => new CircuitBreakerState(key));
+            if (!circuit.ShouldAllow(_options.CircuitBreakerOpenDuration, _timeProvider))
+            {
+                _metrics.CircuitSkipped.Add(1);
+                LogCircuitSkipped(_logger, sub.Id, circuitKey);
+                return;
+            }
+        }
+
         for (var attempt = 0; attempt <= maxRetries; attempt++)
         {
             if (ct.IsCancellationRequested)
@@ -156,11 +177,13 @@ public sealed partial class WebhookDeliveryService : BackgroundService
                 if (response.IsSuccessStatusCode)
                 {
                     _metrics.DeliveriesSucceeded.Add(1);
+                    circuit?.RecordSuccess();
                     return;
                 }
 
                 _metrics.DeliveriesFailed.Add(1);
                 LogNon2xxResponse(_logger, sub.Id, (int)response.StatusCode, attempt + 1);
+                RecordCircuitFailure(circuit, sub);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -170,6 +193,7 @@ public sealed partial class WebhookDeliveryService : BackgroundService
             {
                 _metrics.DeliveriesFailed.Add(1);
                 LogAttemptThrew(_logger, ex, sub.Id, attempt + 1);
+                RecordCircuitFailure(circuit, sub);
             }
 
             if (attempt == maxRetries)
@@ -212,4 +236,24 @@ public sealed partial class WebhookDeliveryService : BackgroundService
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Webhook delivery {SubscriptionId} exhausted {Retries} retries for event {EventType}")]
     private static partial void LogRetriesExhausted(ILogger logger, string subscriptionId, int retries, string eventType);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Webhook delivery {SubscriptionId} short-circuited (circuit open for {TargetUrl})")]
+    private static partial void LogCircuitSkipped(ILogger logger, string subscriptionId, string targetUrl);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Webhook circuit opened for {TargetUrl} after {Threshold} consecutive failures")]
+    private static partial void LogCircuitOpened(ILogger logger, string targetUrl, int threshold);
+
+    private void RecordCircuitFailure(CircuitBreakerState? circuit, WebhookSubscription sub)
+    {
+        if (circuit is null)
+            return;
+
+        var wasOpen = circuit.IsOpen;
+        circuit.RecordFailure(_options.CircuitBreakerFailureThreshold, _timeProvider);
+        if (!wasOpen && circuit.IsOpen)
+        {
+            _metrics.CircuitOpened.Add(1);
+            LogCircuitOpened(_logger, sub.TargetUrl.AbsoluteUri, _options.CircuitBreakerFailureThreshold);
+        }
+    }
 }
