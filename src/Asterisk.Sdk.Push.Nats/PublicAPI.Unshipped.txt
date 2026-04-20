@@ -1,8 +1,19 @@
 #nullable enable
+Asterisk.Sdk.Push.Nats.INatsPayloadDeserializer
+Asterisk.Sdk.Push.Nats.INatsPayloadDeserializer.Deserialize(string! subject, System.ReadOnlySpan<byte> payload) -> Asterisk.Sdk.Push.Events.RemotePushEvent?
 Asterisk.Sdk.Push.Nats.INatsPayloadSerializer
 Asterisk.Sdk.Push.Nats.INatsPayloadSerializer.Serialize(Asterisk.Sdk.Push.Events.PushEvent! evt) -> byte[]!
 Asterisk.Sdk.Push.Nats.INatsPublisher
 Asterisk.Sdk.Push.Nats.INatsPublisher.PublishAsync(string! subject, byte[]! payload, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Asterisk.Sdk.Push.Nats.INatsSubscriber
+Asterisk.Sdk.Push.Nats.INatsSubscriber.SubscribeAsync(string! subject, string? queueGroup, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Asterisk.Sdk.Push.Nats.NatsSubscriberMessage>!
+Asterisk.Sdk.Push.Nats.NatsSubscriberMessage
+Asterisk.Sdk.Push.Nats.NatsSubscriberMessage.NatsSubscriberMessage() -> void
+Asterisk.Sdk.Push.Nats.NatsSubscriberMessage.NatsSubscriberMessage(string! Subject, byte[]! Payload) -> void
+Asterisk.Sdk.Push.Nats.NatsSubscriberMessage.Payload.get -> byte[]!
+Asterisk.Sdk.Push.Nats.NatsSubscriberMessage.Payload.init -> void
+Asterisk.Sdk.Push.Nats.NatsSubscriberMessage.Subject.get -> string!
+Asterisk.Sdk.Push.Nats.NatsSubscriberMessage.Subject.init -> void
 Asterisk.Sdk.Push.Nats.NatsBridge
 Asterisk.Sdk.Push.Nats.NatsBridge.NatsBridge(Asterisk.Sdk.Push.Bus.IPushEventBus! bus, Microsoft.Extensions.Options.IOptions<Asterisk.Sdk.Push.Nats.NatsBridgeOptions!>! options, Asterisk.Sdk.Push.Nats.INatsPayloadSerializer! serializer, Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> void
 Asterisk.Sdk.Push.Nats.NatsBridgeOptions
