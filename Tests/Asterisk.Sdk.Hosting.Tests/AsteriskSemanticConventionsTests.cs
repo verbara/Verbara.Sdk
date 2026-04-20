@@ -119,6 +119,9 @@ public sealed class AsteriskSemanticConventionsTests
     {
         AsteriskSemanticConventions.Events.ChannelHangup.Should().Be("asterisk.channel.hangup");
         AsteriskSemanticConventions.Events.DtmfReceived.Should().Be("asterisk.dtmf.received");
+        AsteriskSemanticConventions.Events.MediaStarted.Should().Be("asterisk.media.started");
+        AsteriskSemanticConventions.Events.MediaBuffering.Should().Be("asterisk.media.buffering");
+        AsteriskSemanticConventions.Events.MediaMarkProcessed.Should().Be("asterisk.media.mark_processed");
     }
 
     [Fact]
@@ -162,5 +165,7 @@ public sealed class AsteriskSemanticConventionsTests
         AsteriskSemanticConventions.VoiceAi.TokensInput, AsteriskSemanticConventions.VoiceAi.TokensOutput,
         AsteriskSemanticConventions.VoiceAi.AudioDurationMs, AsteriskSemanticConventions.VoiceAi.Interrupted,
         AsteriskSemanticConventions.Events.ChannelHangup, AsteriskSemanticConventions.Events.DtmfReceived,
+        AsteriskSemanticConventions.Events.MediaStarted, AsteriskSemanticConventions.Events.MediaBuffering,
+        AsteriskSemanticConventions.Events.MediaMarkProcessed,
     ];
 }

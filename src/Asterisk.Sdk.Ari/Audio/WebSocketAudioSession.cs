@@ -156,6 +156,35 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
                         ["cause"] = hangup.Cause,
                     }));
                 break;
+            case ChanWebSocketMediaStart mediaStart:
+                activity.AddEvent(new ActivityEvent(
+                    AsteriskSemanticConventions.Events.MediaStarted,
+                    tags: new ActivityTagsCollection
+                    {
+                        [AsteriskSemanticConventions.Channel.Id] = ChannelId,
+                        [AsteriskSemanticConventions.Media.Codec] = mediaStart.Format,
+                        [AsteriskSemanticConventions.Media.SampleRate] = mediaStart.Rate,
+                        ["media.channels"] = mediaStart.Channels,
+                    }));
+                break;
+            case ChanWebSocketMediaBuffering buffering:
+                activity.AddEvent(new ActivityEvent(
+                    AsteriskSemanticConventions.Events.MediaBuffering,
+                    tags: new ActivityTagsCollection
+                    {
+                        [AsteriskSemanticConventions.Channel.Id] = ChannelId,
+                        ["asterisk.media.buffer_bytes"] = buffering.Bytes,
+                    }));
+                break;
+            case ChanWebSocketMediaMarkProcessed markProcessed:
+                activity.AddEvent(new ActivityEvent(
+                    AsteriskSemanticConventions.Events.MediaMarkProcessed,
+                    tags: new ActivityTagsCollection
+                    {
+                        [AsteriskSemanticConventions.Channel.Id] = ChannelId,
+                        ["asterisk.media.mark"] = markProcessed.Mark,
+                    }));
+                break;
         }
     }
 

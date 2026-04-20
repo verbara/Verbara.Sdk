@@ -213,5 +213,14 @@ public static class AsteriskSemanticConventions
 
         /// <summary>DTMF digit received. Tag payload: <c>asterisk.dtmf.digit</c> and <c>asterisk.dtmf.duration_ms</c>.</summary>
         public const string DtmfReceived = "asterisk.dtmf.received";
+
+        /// <summary>Media flow began on the channel. Tag payload: <see cref="Media.Codec"/>, <see cref="Media.SampleRate"/>, <c>media.channels</c>.</summary>
+        public const string MediaStarted = "asterisk.media.started";
+
+        /// <summary>Buffer-pressure signal from Asterisk. Tag payload: <c>asterisk.media.buffer_bytes</c>.</summary>
+        public const string MediaBuffering = "asterisk.media.buffering";
+
+        /// <summary>A previously-sent mark was processed by Asterisk's playback pipeline. Tag payload: <c>asterisk.media.mark</c>.</summary>
+        public const string MediaMarkProcessed = "asterisk.media.mark_processed";
     }
 }
