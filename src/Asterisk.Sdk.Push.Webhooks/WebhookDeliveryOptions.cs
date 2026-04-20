@@ -20,4 +20,17 @@ public sealed class WebhookDeliveryOptions
 
     /// <summary>Value of the <c>User-Agent</c> header sent with every delivery.</summary>
     public string UserAgent { get; set; } = "Asterisk.Sdk.Push.Webhooks/1.0";
+
+    /// <summary>
+    /// Consecutive per-URL delivery failures required to open the circuit. A subsequent
+    /// delivery to the same URL is short-circuited (skipped) while the circuit is open.
+    /// Set to 0 to disable the circuit breaker. Default 5.
+    /// </summary>
+    public int CircuitBreakerFailureThreshold { get; set; } = 5;
+
+    /// <summary>
+    /// Duration the circuit stays open before auto-transitioning to half-open (i.e. the
+    /// next attempt is allowed to probe recovery). Default 30 s.
+    /// </summary>
+    public TimeSpan CircuitBreakerOpenDuration { get; set; } = TimeSpan.FromSeconds(30);
 }
