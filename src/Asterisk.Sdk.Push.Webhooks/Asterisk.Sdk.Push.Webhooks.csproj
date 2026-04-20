@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Asterisk.Sdk.Push\Asterisk.Sdk.Push.csproj" />
+    <ProjectReference Include="..\Asterisk.Sdk.Resilience\Asterisk.Sdk.Resilience.csproj" />
   </ItemGroup>
 
   <ItemGroup>

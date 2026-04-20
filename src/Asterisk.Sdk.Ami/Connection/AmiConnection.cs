@@ -545,12 +545,15 @@ public sealed class AmiConnection : IAmiConnection
     private async Task ReconnectLoopAsync()
     {
         var attempt = 0;
-        var delay = _options.ReconnectInitialDelay;
-        var maxDelay = _options.ReconnectMaxDelay;
 
         while (_state == AmiConnectionState.Reconnecting)
         {
             attempt++;
+            var delay = Asterisk.Sdk.Resilience.BackoffSchedule.Compute(
+                attempt,
+                _options.ReconnectInitialDelay,
+                _options.ReconnectMultiplier,
+                _options.ReconnectMaxDelay);
             var delayMs = (int)Math.Min(delay.TotalMilliseconds, int.MaxValue);
 
             AmiMetrics.ReconnectionAttempts.Add(1);
@@ -577,9 +580,6 @@ public sealed class AmiConnection : IAmiConnection
                 // so the while loop continues.
                 _state = AmiConnectionState.Reconnecting;
             }
-
-            delay = TimeSpan.FromMilliseconds(
-                Math.Min(delay.TotalMilliseconds * _options.ReconnectMultiplier, maxDelay.TotalMilliseconds));
         }
     }
 

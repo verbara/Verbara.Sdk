@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Asterisk.Sdk\Asterisk.Sdk.csproj" />
+    <ProjectReference Include="..\Asterisk.Sdk.Resilience\Asterisk.Sdk.Resilience.csproj" />
     <ProjectReference Include="..\Asterisk.Sdk.Ami.SourceGenerators\Asterisk.Sdk.Ami.SourceGenerators.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
