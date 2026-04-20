@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-04-20
+
+**Resilience primitives added to SDK (MIT).** No breaking changes. New `Asterisk.Sdk.Resilience` package (25th on nuget.org) ships composable `CircuitBreakerState`, `ResiliencePolicy`, `ResiliencePolicyBuilder`, `CircuitBreakerOpenException`, `ResilienceMetrics`, `BackoffSchedule`, and `AddAsteriskResilience` DI extension. Migrated from `Asterisk.Sdk.Pro.Resilience` v1.8.1-pro per [ADR-0029](docs/decisions/0029-resilience-primitives-mit.md) (stewardship pledge — generic primitives belong in MIT). Internal hot paths (AMI/ARI reconnect, Webhook delivery) now share a single backoff primitive instead of three duplicated open-coded loops.
+
+### Added
+
+- **`Asterisk.Sdk.Resilience`** — new MIT package with composable resilience primitives. AOT-safe, zero reflection, `TimeProvider`-based for testability. 38 migrated unit tests + 12 new `BackoffSchedule` tests (50 total). Meter `Asterisk.Sdk.Resilience` enrolled automatically by `AddAsteriskOpenTelemetry().WithAllSources()` via `AsteriskTelemetry.MeterNames` catalog.
+- **`BackoffSchedule.Compute(attempt, baseDelay, multiplier, maxDelay)`** — stateless helper for reconnect loops and iterative retry schedules that don't fit the bounded `ResiliencePolicy.ExecuteAsync` model. Preserves configurable multiplier + max delay cap (critical for reconnect loops with specific timing requirements).
+- **`BackoffSchedule.ComputeWithJitter`** — same with deterministic ±jitter via caller-provided `Random` source.
+
+### Changed
+
+- **`AmiConnection.ReconnectLoopAsync`** — internal refactor. Delegates backoff calculation to `BackoffSchedule.Compute` (preserves `ReconnectInitialDelay` + `ReconnectMultiplier` + `ReconnectMaxDelay` semantics exactly). Zero observable behavior change; 633/633 AMI tests green.
+- **`AriClient.ReconnectLoopAsync`** — same refactor. 423/423 ARI tests green.
+- **`WebhookDeliveryService.DeliverAsync`** — same refactor. 13/13 Webhook tests green.
+
+### Migration
+
+Consumers of `Asterisk.Sdk.Pro.Resilience` v1.8.x-pro migrate by renaming `using` + swapping `<PackageReference>`. See [ADR-0029 Migration guide](docs/decisions/0029-resilience-primitives-mit.md#migration-guide). Meter name changes from `Asterisk.Sdk.Pro.Resilience` to `Asterisk.Sdk.Resilience` (dashboards need one-time update; no dual-emit window).
+
 ## [1.13.0] - 2026-04-20
 
 **Telemetry + multi-node Push.** No breaking changes. Public API grows with `AsteriskSemanticConventions` catalog (OpenTelemetry attribute names for SIP/Asterisk), `AsteriskSemanticConventions.Events` (span-event names), `RemotePushEvent` envelope, and new `Asterisk.Sdk.Push.Nats` subscribe-side options. Package count stable at 24 on nuget.org.

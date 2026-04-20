@@ -1,6 +1,6 @@
 # ADR-0029: Resilience primitives move from Pro to SDK (MIT)
 
-- **Status:** Proposed
+- **Status:** Accepted (executed 2026-04-20 in SDK v1.14.0 + Pro v1.9.0-pro)
 - **Date:** 2026-04-20
 - **Deciders:** Harold Reina
 - **Related:**
@@ -43,34 +43,38 @@ Movimiento es aditivo (no breaking) via type-forward.
 - `Asterisk.Sdk.Resilience.CircuitBreakerOpenException`
 - `Asterisk.Sdk.Resilience.Diagnostics.ResilienceMetrics` (meter `Asterisk.Sdk.Resilience`)
 
-**Pro.Resilience v2.0.0-pro retains:**
-- Engine-specific policy builders (EventStore retry 3/100ms/timeout5s, Analytics 2/200ms/timeout2s, AgentAssist per-provider, CallAnalytics per-analyzer, Dialer circuit).
-- Type-forwards para backward compat: `[assembly: TypeForwardedTo(typeof(Asterisk.Sdk.Resilience.ResiliencePolicy))]`.
-- Tenant-aware budgets + SLA-backed hedging (commercial-only features).
+**Pro v1.9.0-pro changes (executed):**
+- Package `Asterisk.Sdk.Pro.Resilience` **deleted entirely** — no type-forward viable (namespace change breaks FQN resolution).
+- Engine-specific policy builders (EventStore retry 3/100ms/timeout5s, Analytics 2/200ms/timeout2s, AgentAssist per-provider, CallAnalytics per-analyzer, Dialer circuit) preserved in-place — 5 consumers migrated `using` statements only.
+- Tenant-aware budgets + SLA-backed hedging remain deferred as potential Pro-only features for future commercial differentiation.
 
-**SDK adoption en Mes 2:**
-- `AmiConnection.cs` backoff loop → wrapped en `ResiliencePolicy`.
-- `AriLoggingHandler.cs` → retry primitive adoption.
-- `WebhookDeliveryService.cs` → circuit breaker + retry primitive.
+**SDK v1.14.0 adoption (executed — hybrid approach):**
+- `AmiConnection.ReconnectLoopAsync` → uses `BackoffSchedule.Compute` helper (zero behavior change; preserves configurable multiplier + max cap).
+- `AriClient.ReconnectLoopAsync` → same helper adoption.
+- `WebhookDeliveryService.DeliverAsync` → same helper adoption.
+- Full `ResiliencePolicy.ExecuteAsync` wrap + per-URL circuit breaker deferred — requires explicit feature design (what counts as "failure" for webhooks). AMI/ARI reconnect is abstraction mismatch with bounded retry policy; helper is the correct shared primitive.
+- New public type added to Resilience package: `BackoffSchedule` (static helper for stateless backoff delay calculation in continuous state loops).
 
-**Migration path para consumers:**
-- v2.0.0 preview: ambos packages coexisten. Pro.Resilience redirects via type-forward.
-- v2.1.x: Pro.Resilience marked `[Obsolete]`.
-- v3.0.0: Pro.Resilience removed (only type-forwards remain en assembly de Pro para backcompat runtime).
+**Migration mechanism (revised from original ADR):**
+- ~~TypeForwardedTo not viable~~: FQN must match for forwarding; namespace change breaks this.
+- Clean break with migration guide. External consumers rename `using` + swap `<PackageReference>` (documented below).
+- NuGet `Asterisk.Sdk.Pro.Resilience` v1.8.1-pro marked deprecated on nuget.org after v1.9.0-pro publishes.
 
 ## Consequences
 
 **Positivas:**
 - Elimina anti-pattern "primitives trapped in commercial".
-- MIT users ganan primitive sin comprar Pro.
-- Reduces Pro surface: Pro se concentra en SLA + tenant-aware features (su verdadero valor comercial).
-- Stewardship pledge (ADR-0027) se honra: ejemplo concreto de Commercial→MIT movement.
+- MIT users ganan primitives (CircuitBreakerState, ResiliencePolicy, BackoffSchedule) sin comprar Pro.
+- SDK elimina retry-backoff duplicado en 3 hot paths (AMI, ARI, Webhook) — maintenance win.
+- Pro surface reduced 25→24 packages; se concentra en SLA + tenant-aware + engine-specific policies.
+- Stewardship pledge (ADR-0027) se honra: primer ejemplo concreto de Commercial→MIT movement.
 - Alinea con Polly/Resilience4j convention (industry-standard).
 
 **Negativas:**
-- `Asterisk.Sdk.Pro.Resilience` v1.8.1-pro consumers tienen que migrate en v2.0 — mitigado por type-forwards.
-- Meter name implícito cambia: `Asterisk.Sdk.Pro.Resilience` → `Asterisk.Sdk.Resilience`. Dashboards consumers necesitan ajuste. Mitigación: **re-emit ambos meter names durante v2.0-v2.1** (dual emit window).
-- Pro.Resilience pierde identidad marketing (features advertised en 1.8.0-pro release notes como commercial).
+- `Asterisk.Sdk.Pro.Resilience` v1.8.1-pro consumers deben migrar (rename `using` + swap package ref). Mitigado por documentación + scope (4 meses de vida, sin adopción externa conocida).
+- Meter name cambia: `Asterisk.Sdk.Pro.Resilience` → `Asterisk.Sdk.Resilience`. Dashboards deben actualizar (documentado en migration guide).
+- Pro.Resilience pierde identidad marketing (features advertised en 1.8.0-pro release notes).
+- Dual-emit window NO implementado por scope mínimo — dashboards migran en una acción.
 
 ## Alternatives considered
 
@@ -79,9 +83,42 @@ Movimiento es aditivo (no breaking) via type-forward.
 - **Open-source Pro.Resilience as-is sin rename:** rechazado — package name `Asterisk.Sdk.Pro.Resilience` vendido como "commercial" confunde consumers.
 - **Crear `Asterisk.Sdk.Resilience.Abstractions` MIT + keep impl Pro:** rechazado — split inútil; el primitive es simple, split duplica surface.
 
+## Migration guide (for external consumers of Asterisk.Sdk.Pro.Resilience v1.8.x-pro)
+
+```diff
+  // csproj
+- <PackageReference Include="Asterisk.Sdk.Pro.Resilience" Version="1.8.*" />
++ <PackageReference Include="Asterisk.Sdk.Resilience" Version="1.14.0" />
+```
+
+```diff
+  // source files
+- using Asterisk.Sdk.Pro.Resilience;
+- using Asterisk.Sdk.Pro.Resilience.Diagnostics;
+- using Asterisk.Sdk.Pro.Resilience.DependencyInjection;
++ using Asterisk.Sdk.Resilience;
++ using Asterisk.Sdk.Resilience.Diagnostics;
++ using Asterisk.Sdk.Resilience.DependencyInjection;
+```
+
+```diff
+  // DI registration
+- services.AddProResilience(b => b.WithRetry(3, TimeSpan.FromMilliseconds(100)));
++ services.AddAsteriskResilience(b => b.WithRetry(3, TimeSpan.FromMilliseconds(100)));
+```
+
+```diff
+  // Observability dashboards
+- meter:Asterisk.Sdk.Pro.Resilience
++ meter:Asterisk.Sdk.Resilience
+```
+
+All type shapes, method signatures, AOT compatibility, test contracts preserved verbatim. Only the namespace + DI method name + meter name changed.
+
 ## References
 
-- PSD §3.2 primitive table + §6.2 borderline cases
-- Open-core tier boundaries research (2026-04-19) — conversación fuente
+- PSD §3.2 primitive table + §6.2 borderline cases: `Asterisk.Platform/docs/specs/2026-04-19-product-strategy-v2.md`
+- Pro ADR-0006 (sunset rationale): `Asterisk.Sdk.Pro/docs/decisions/0006-pro-resilience-sunset.md`
+- Execution plan with per-decision log: `docs/plans/active/2026-04-20-adr-0029-resilience-migration.md`
 - Polly GitHub: github.com/App-vNext/Polly
-- Pro 1.8.0-pro source: src/Asterisk.Sdk.Pro.Resilience/
+- Pro 1.8.0-pro source (reference, deleted in v1.9.0-pro): was `src/Asterisk.Sdk.Pro.Resilience/`
