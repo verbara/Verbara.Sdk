@@ -68,9 +68,9 @@ public sealed class LiveActivitySourceTests : IDisposable
         activity.Should().NotBeNull();
         activity!.OperationName.Should().Be("live originate SIP/100");
         activity.Kind.Should().Be(ActivityKind.Client);
-        activity.GetTagItem("originate.channel").Should().Be("SIP/100");
-        activity.GetTagItem("originate.context").Should().Be("default");
-        activity.GetTagItem("originate.extension").Should().Be("200");
+        activity.GetTagItem("asterisk.channel.name").Should().Be("SIP/100");
+        activity.GetTagItem("dialplan.context").Should().Be("default");
+        activity.GetTagItem("dialplan.extension").Should().Be("200");
     }
 
     [Fact]
