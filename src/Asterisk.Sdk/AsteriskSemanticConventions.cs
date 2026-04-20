@@ -200,6 +200,46 @@ public static class AsteriskSemanticConventions
     }
 
     /// <summary>
+    /// Multi-tenant correlation attributes. Used by Pro packages (EventStore, Push,
+    /// CallAnalytics, Routing, Realtime) and by Platform consumers to scope spans
+    /// and metrics to a tenant context.
+    /// </summary>
+    public static class Tenant
+    {
+        /// <summary>Tenant identifier. Stable per-tenant string (UUID or slug).</summary>
+        public const string Id = "tenant.id";
+    }
+
+    /// <summary>
+    /// Attributes describing an individual event flowing through a bus, relay, or
+    /// event-store pipeline. Distinct from the <see cref="Events"/> class below which
+    /// lists span <em>event names</em> (OTel <c>AddEvent</c> discriminators).
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1716:Identifiers should not match keywords",
+        Justification = "Event is the established domain term for this attribute family (matches tag keys 'event.type', 'event.id'). Reserved keyword in VB.NET is not a constraint for this codebase.")]
+    public static class Event
+    {
+        /// <summary>Event type discriminator (e.g. <c>conversation.state.changed</c>).</summary>
+        public const string Type = "event.type";
+
+        /// <summary>Event UUID / identifier (domain id, distinct from W3C span id).</summary>
+        public const string Id = "event.id";
+
+        /// <summary>Event count — used on aggregate spans (batch projection, burst relay).</summary>
+        public const string Count = "event.count";
+    }
+
+    /// <summary>Cluster-node correlation attributes for cross-node spans.</summary>
+    public static class Node
+    {
+        /// <summary>Identifier of the node that originated the relayed event.</summary>
+        public const string OriginId = "origin.node.id";
+
+        /// <summary>Identifier of the node receiving the event.</summary>
+        public const string ReceiverId = "receiver.node.id";
+    }
+
+    /// <summary>
     /// Span event names for transient, event-shaped telemetry emitted via
     /// <see cref="System.Diagnostics.Activity.AddEvent"/>. Events describe
     /// things that happened during a span — use them instead of <c>SetTag</c>

@@ -59,9 +59,18 @@ const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.Operation = "voiceai.oper
 const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.Provider = "voiceai.provider" -> string!
 const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.TokensInput = "voiceai.tokens.input" -> string!
 const Asterisk.Sdk.AsteriskSemanticConventions.VoiceAi.TokensOutput = "voiceai.tokens.output" -> string!
+Asterisk.Sdk.AsteriskSemanticConventions.Event
 Asterisk.Sdk.AsteriskSemanticConventions.Events
+Asterisk.Sdk.AsteriskSemanticConventions.Node
+Asterisk.Sdk.AsteriskSemanticConventions.Tenant
+const Asterisk.Sdk.AsteriskSemanticConventions.Event.Count = "event.count" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Event.Id = "event.id" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Event.Type = "event.type" -> string!
 const Asterisk.Sdk.AsteriskSemanticConventions.Events.ChannelHangup = "asterisk.channel.hangup" -> string!
 const Asterisk.Sdk.AsteriskSemanticConventions.Events.DtmfReceived = "asterisk.dtmf.received" -> string!
 const Asterisk.Sdk.AsteriskSemanticConventions.Events.MediaBuffering = "asterisk.media.buffering" -> string!
 const Asterisk.Sdk.AsteriskSemanticConventions.Events.MediaMarkProcessed = "asterisk.media.mark_processed" -> string!
 const Asterisk.Sdk.AsteriskSemanticConventions.Events.MediaStarted = "asterisk.media.started" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Node.OriginId = "origin.node.id" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Node.ReceiverId = "receiver.node.id" -> string!
+const Asterisk.Sdk.AsteriskSemanticConventions.Tenant.Id = "tenant.id" -> string!
