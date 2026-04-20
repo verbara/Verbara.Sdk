@@ -198,8 +198,6 @@ public sealed class AriClient : IAriClient
         SetState(AriConnectionState.Reconnecting);
 
         var attempt = 0;
-        var delay = _options.ReconnectInitialDelay;
-        var maxDelay = _options.ReconnectMaxDelay;
 
         while (!ct.IsCancellationRequested)
         {
@@ -213,6 +211,11 @@ public sealed class AriClient : IAriClient
             }
 
             AriMetrics.Reconnections.Add(1);
+            var delay = global::Asterisk.Sdk.Resilience.BackoffSchedule.Compute(
+                attempt,
+                _options.ReconnectInitialDelay,
+                _options.ReconnectMultiplier,
+                _options.ReconnectMaxDelay);
             var delayMs = (long)delay.TotalMilliseconds;
             AriClientLog.Reconnecting(_logger, delayMs, attempt);
 
@@ -264,9 +267,7 @@ public sealed class AriClient : IAriClient
                 AriClientLog.WebSocketError(_logger, ex);
             }
 
-            // Exponential backoff: delay * multiplier, capped at maxDelay
-            delay = TimeSpan.FromMilliseconds(
-                Math.Min(delay.TotalMilliseconds * _options.ReconnectMultiplier, maxDelay.TotalMilliseconds));
+            // Next-iteration delay is computed from `attempt` via BackoffSchedule at top of loop.
         }
     }
 

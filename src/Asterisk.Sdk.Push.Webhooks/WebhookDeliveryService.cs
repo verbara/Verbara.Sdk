@@ -122,7 +122,6 @@ public sealed partial class WebhookDeliveryService : BackgroundService
     {
         var body = _serializer.Serialize(evt);
         var maxRetries = sub.MaxRetries ?? _options.MaxRetries;
-        var delay = _options.InitialDelay;
 
         for (var attempt = 0; attempt <= maxRetries; attempt++)
         {
@@ -177,6 +176,14 @@ public sealed partial class WebhookDeliveryService : BackgroundService
                 break;
 
             _metrics.DeliveriesRetried.Add(1);
+            // attempt is 0-based here, but BackoffSchedule is 1-based.
+            // Next delay: delay BEFORE attempt (attempt+2), using the "current" iteration's back-off.
+            // Attempt 0 just failed → now sleep delay for attempt 1 (= baseDelay). Hence attempt+1 is correct.
+            var delay = Asterisk.Sdk.Resilience.BackoffSchedule.Compute(
+                attempt + 1,
+                _options.InitialDelay,
+                multiplier: 2.0,
+                _options.MaxDelay);
             try
             {
                 await Task.Delay(delay, ct).ConfigureAwait(false);
@@ -185,9 +192,6 @@ public sealed partial class WebhookDeliveryService : BackgroundService
             {
                 return;
             }
-
-            var nextMs = Math.Min(delay.TotalMilliseconds * 2, _options.MaxDelay.TotalMilliseconds);
-            delay = TimeSpan.FromMilliseconds(nextMs);
         }
 
         _metrics.DeadLetter.Add(1);

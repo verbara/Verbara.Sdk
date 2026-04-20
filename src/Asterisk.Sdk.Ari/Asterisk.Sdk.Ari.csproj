@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Asterisk.Sdk\Asterisk.Sdk.csproj" />
+    <ProjectReference Include="..\Asterisk.Sdk.Resilience\Asterisk.Sdk.Resilience.csproj" />
   </ItemGroup>
 
   <ItemGroup>
