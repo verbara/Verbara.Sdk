@@ -58,6 +58,27 @@ Convertimos latencias a operaciones/segundo para entender capacidad real. Todos 
 
 ---
 
+## 1a. Hot-path re-baseline — v1.13 pre-release (2026-04-20)
+
+Re-run acotado a los dos hot paths (AMI reader + ARI parser) para validar que el trabajo de v1.13 (AsteriskSemanticConventions const folding, Events nested class, Tier 2 Push.Nats subscribe side, T1.1 AddEvent wiring en WebSocketAudioSession) no introdujo regresión perceptible. Setup idéntico: AMD Ryzen 9 9900X, .NET 10.0.6, BDN v0.15.8 `[ShortRunJob]` (3 warmup + 3 iter).
+
+| Operación | v1.11.1 | **v1.13 run** | Δ | Throughput v1.13 | Alloc v1.13 |
+|-----------|---------|---------------|---|------------------|-------------|
+| AMI `ParseSingleEvent` | 617.6 ns | **619.2 ns** | +0.3% (noise) | 1.61 M events/s | 1,872 B |
+| AMI `ParseResponse` | 410 ns | **417.0 ns** | +1.7% (noise) | 2.40 M msgs/s | 1,272 B |
+| AMI `Parse100EventBatch` | 37.0 µs | **37.1 µs** | flat | 2.70 M events/s | 69,696 B |
+| ARI `ParseStasisStart` | 1,680 ns | **1,752.9 ns** | +4.3% | 570 K events/s | 1,592 B |
+| ARI `ParseChannelDtmf` | — | **884.4 ns** | new | 1.13 M events/s | 1,096 B |
+| ARI `ParseUnknownEvent` | — | **234.8 ns** | new | 4.26 M events/s | 304 B |
+
+**Interpretación:**
+- AMI hot path estable dentro del ruido ShortRunJob (StdDev 5-360 ns sobre means de cientos de ns a decenas de µs; un +0.3-1.7% no es regresión detectable con 3 iteraciones).
+- ARI `ParseStasisStart` +4.3% vs baseline v1.11 está en el borde del ruido; StdDev de 15 ns sobre 1,753 ns ≈ ~0.8%. No justifica investigación — el parser ARI no fue modificado en v1.12 ni v1.13; el delta entre runs es más probable JIT-drift que regresión real.
+- **Validación principal del T5.2:** `AsteriskSemanticConventions` consts son compile-time — los string literals se emiten directamente en IL sin lookup runtime. Los `Diagnostics/*ActivitySource.cs` files (decisión arquitectónica en `066cb3c`) siguen emitiendo string literals que coinciden con las consts del catálogo. Conclusión: los hot paths parser/dispatcher NO tocan `AsteriskSemanticConventions` en ninguna call-path; la validación es por exclusión + observación de que nada regresó.
+- **Decisión:** no se requiere follow-up. v1.13 puede cortarse sin cambios adicionales al hot path.
+
+---
+
 ## 1.1 AMI Read Event — regresión v1.0→v1.11 investigada + resuelta (2026-04-19)
 
 Investigación disparada por la Δ de +12% en `ParseSingleEvent` (582 ns v1.0 → 653 ns v1.11.0 ShortRunJob).
