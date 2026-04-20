@@ -27,5 +27,8 @@
     <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi.Testing\Asterisk.Sdk.VoiceAi.Testing.csproj" />
     <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi.OpenAiRealtime\Asterisk.Sdk.VoiceAi.OpenAiRealtime.csproj" />
     <ProjectReference Include="..\..\src\Asterisk.Sdk.Push\Asterisk.Sdk.Push.csproj" />
+    <ProjectReference Include="..\..\src\Asterisk.Sdk.Push.Webhooks\Asterisk.Sdk.Push.Webhooks.csproj" />
+    <ProjectReference Include="..\..\src\Asterisk.Sdk.Resilience\Asterisk.Sdk.Resilience.csproj" />
+    <ProjectReference Include="..\..\src\Asterisk.Sdk.Cluster.Primitives\Asterisk.Sdk.Cluster.Primitives.csproj" />
   </ItemGroup>
 </Project>
