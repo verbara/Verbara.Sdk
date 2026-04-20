@@ -1,0 +1,82 @@
+# Parallel test stack targeting Asterisk 23 Standard.
+# Uses distinct network + container names + host ports so it can coexist
+# with docker-compose.test.yml (Asterisk 22 LTS). Run with:
+#
+#   docker compose -f docker/docker-compose.test-23.yml up --build --abort-on-container-exit
+#
+# All other test bits (Postgres schema, pstn-emulator config, toxiproxy) are
+# reused from the functional/ fixtures via bind mounts.
+
+networks:
+  sdk-test-23:
+    name: sdk-test-net-23
+
+services:
+  # ── PostgreSQL for Realtime ──
+  postgres:
+    image: postgres:18-alpine
+    container_name: asterisk-sdk-test-23-db
+    networks:
+      - sdk-test-23
+    environment:
+      POSTGRES_USER: asterisk
+      POSTGRES_PASSWORD: asterisk
+      POSTGRES_DB: asterisk
+    ports:
+      - "15433:5432"
+    volumes:
+      - ./functional/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asterisk"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+      start_period: 5s
+
+  # ── Asterisk 23 Standard (unified image, realtime mode via PostgreSQL) ──
+  asterisk:
+    build:
+      context: .
+      dockerfile: Dockerfile.asterisk
+      args:
+        ASTERISK_VERSION: "23"
+        CODEC_OPUS_VERSION: "23.0_1.3.0"
+    container_name: asterisk-sdk-test-23
+    networks:
+      - sdk-test-23
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "15040:5038"
+      - "15090:8088"
+    volumes:
+      - ./functional/asterisk-config:/etc/asterisk:ro
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show uptime"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  # ── PSTN Emulator (unified image, file-based mode) ──
+  pstn-emulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.asterisk
+      args:
+        ASTERISK_VERSION: "23"
+        CODEC_OPUS_VERSION: "23.0_1.3.0"
+    container_name: asterisk-sdk-test-23-pstn
+    networks:
+      - sdk-test-23
+    ports:
+      - "15041:5038"
+    volumes:
+      - ./functional/pstn-emulator-config:/etc/asterisk:ro
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show uptime"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s

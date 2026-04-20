@@ -1,16 +1,30 @@
-FROM andrius/asterisk:22
+# Build args allow the same Dockerfile to target multiple Asterisk versions.
+# Defaults match the current LTS target (22). Override via:
+#   docker build --build-arg ASTERISK_VERSION=23 --build-arg CODEC_OPUS_VERSION=23.0_1.3.0 ...
+ARG ASTERISK_VERSION=22
+ARG CODEC_OPUS_VERSION=22.0_1.3.0
+
+FROM andrius/asterisk:${ASTERISK_VERSION}
+
+# Re-declare the build args inside the FROM scope so they're visible to RUN steps.
+ARG ASTERISK_VERSION
+ARG CODEC_OPUS_VERSION
 
 USER root
 
+# codec_opus download is best-effort — if the matching Digium build doesn't exist
+# for the selected ASTERISK_VERSION, the image still functions (Opus is optional
+# and SDK tests exercise AMI/AGI/ARI protocol only, not audio payloads).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libopus0 \
     && rm -rf /var/lib/apt/lists/* \
     && cd /tmp \
-    && curl -fsSL https://downloads.digium.com/pub/telephony/codec_opus/asterisk-22.0/x86-64/codec_opus-22.0_1.3.0-x86_64.tar.gz -o codec_opus.tar.gz \
-    && tar xzf codec_opus.tar.gz \
-    && cp codec_opus-22.0_1.3.0-x86_64/codec_opus.so /usr/lib/asterisk/modules/ \
-    && cp codec_opus-22.0_1.3.0-x86_64/format_ogg_opus.so /usr/lib/asterisk/modules/ \
-    && rm -rf codec_opus.tar.gz codec_opus-22.0_1.3.0-x86_64
+    && (curl -fsSL "https://downloads.digium.com/pub/telephony/codec_opus/asterisk-${ASTERISK_VERSION}.0/x86-64/codec_opus-${CODEC_OPUS_VERSION}-x86_64.tar.gz" -o codec_opus.tar.gz \
+        && tar xzf codec_opus.tar.gz \
+        && cp "codec_opus-${CODEC_OPUS_VERSION}-x86_64/codec_opus.so" /usr/lib/asterisk/modules/ \
+        && cp "codec_opus-${CODEC_OPUS_VERSION}-x86_64/format_ogg_opus.so" /usr/lib/asterisk/modules/ \
+        && rm -rf codec_opus.tar.gz "codec_opus-${CODEC_OPUS_VERSION}-x86_64" \
+        || echo "WARNING: codec_opus build not available for Asterisk ${ASTERISK_VERSION}.0 — continuing without Opus.")
 # Note: sound packs (EN/ES core+extra) are omitted — SDK tests exercise AMI/AGI/ARI
 # protocol only and do not require audio files. Removing them cuts image build time
 # significantly in CI (avoids 9 x asterisk.org downloads).
