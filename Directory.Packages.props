@@ -46,7 +46,7 @@
 
   <!-- NATS (Asterisk.Sdk.Push.Nats bridge) -->
   <ItemGroup>
-    <PackageVersion Include="NATS.Client.Core" Version="2.5.10" />
+    <PackageVersion Include="NATS.Client.Core" Version="2.7.3" />
     <PackageVersion Include="NATS.Client.Hosting" Version="2.5.10" />
   </ItemGroup>
 
