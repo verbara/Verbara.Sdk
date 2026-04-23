@@ -67,7 +67,7 @@
 
   <!-- SourceLink — debuggable NuGet packages -->
   <ItemGroup>
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.202" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.203" />
   </ItemGroup>
 
   <!-- Analyzers — Layer 1: API Protection -->
