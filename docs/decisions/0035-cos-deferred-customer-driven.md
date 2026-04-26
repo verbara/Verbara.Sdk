@@ -1,8 +1,9 @@
-# ADR-0031: COS (Calling Permissions System) deferred — customer-driven trigger only
+# ADR-0035: COS (Calling Permissions System) deferred — customer-driven trigger only
 
 - **Status:** Accepted (deferral locked 2026-04-25; branch retained, not deleted)
 - **Date:** 2026-04-25
 - **Deciders:** Harold Reina
+- **Renumbered:** 0031 → 0035 on 2026-04-26 (administrative — original number collided with prior Proposed ADR-0031 "Domain vs Integration events" added 2026-04-20 in the Event Model v2 batch). **Decision content unchanged.**
 - **Related:**
   - R5 release train spec §344-356 "Branch `feat/calling-permissions` decision gate" (`Asterisk.Platform/docs/plans/active/2026-04-22-r5-production-readiness-release-train.md`)
   - Post-ship R5.1 triage D-FORCE-1 (`Asterisk.Platform/docs/plans/active/2026-04-25-r5.1-post-ship-triage.md`)
