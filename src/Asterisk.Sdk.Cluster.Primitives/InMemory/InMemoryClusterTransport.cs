@@ -19,6 +19,14 @@ public sealed class InMemoryClusterTransport : IClusterTransport
     private readonly List<Channel<ClusterEvent>> _subscribers = [];
     private readonly Lock _subscribersLock = new();
 
+    internal int SubscriberCount
+    {
+        get
+        {
+            lock (_subscribersLock) { return _subscribers.Count; }
+        }
+    }
+
     /// <inheritdoc />
     public async ValueTask PublishAsync(ClusterEvent clusterEvent, CancellationToken cancellationToken = default)
     {

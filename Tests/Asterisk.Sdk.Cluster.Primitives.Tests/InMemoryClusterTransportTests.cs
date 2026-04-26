@@ -10,6 +10,19 @@ public sealed class InMemoryClusterTransportTests
     private sealed record TestEvent(string SourceInstanceId, DateTimeOffset Timestamp, string Tag)
         : ClusterEvent(SourceInstanceId, Timestamp);
 
+    private static async Task WaitForSubscribersAsync(
+        InMemoryClusterTransport transport, int expected, CancellationToken ct)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        while (transport.SubscriberCount < expected)
+        {
+            if (DateTime.UtcNow > deadline)
+                throw new TimeoutException(
+                    $"Expected {expected} subscriber(s); saw {transport.SubscriberCount}");
+            await Task.Delay(10, ct).ConfigureAwait(false);
+        }
+    }
+
     [Fact]
     public async Task PublishAsync_ShouldDeliverToSingleSubscriber()
     {
@@ -26,7 +39,7 @@ public sealed class InMemoryClusterTransportTests
             }
         });
 
-        await Task.Delay(50, cts.Token); // allow subscribe to register
+        await WaitForSubscribersAsync(transport, 1, cts.Token);
 
         var sent = new TestEvent("instance-A", DateTimeOffset.UtcNow, "ping");
         await transport.PublishAsync(sent, cts.Token);
@@ -65,7 +78,7 @@ public sealed class InMemoryClusterTransportTests
             }
         });
 
-        await Task.Delay(50, cts.Token);
+        await WaitForSubscribersAsync(transport, 2, cts.Token);
 
         await transport.PublishAsync(new TestEvent("i", DateTimeOffset.UtcNow, "fan"), cts.Token);
 
@@ -93,7 +106,7 @@ public sealed class InMemoryClusterTransportTests
             }
         });
 
-        await Task.Delay(50, cts.Token);
+        await WaitForSubscribersAsync(transport, 1, cts.Token);
 
         var sent = new TestEvent("i", DateTimeOffset.UtcNow, "trace")
         {
@@ -122,7 +135,7 @@ public sealed class InMemoryClusterTransportTests
             catch (OperationCanceledException) { }
         });
 
-        await Task.Delay(50);
+        await WaitForSubscribersAsync(transport, 1, CancellationToken.None);
         cts.Cancel();
         await task.WaitAsync(TimeSpan.FromSeconds(2));
 
@@ -141,7 +154,7 @@ public sealed class InMemoryClusterTransportTests
             await foreach (var _ in transport.SubscribeAsync(cts.Token).ConfigureAwait(false)) { }
         });
 
-        await Task.Delay(50, cts.Token);
+        await WaitForSubscribersAsync(transport, 1, cts.Token);
         await transport.DisposeAsync();
 
         await task.WaitAsync(TimeSpan.FromSeconds(2));
