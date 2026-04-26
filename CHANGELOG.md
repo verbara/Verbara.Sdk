@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-04-26
+
+**Housekeeping patch.** Zero public API surface delta (`PublicAPI.Shipped.txt` unchanged across all 26 packages). Zero functional changes in shipped binaries — the only production-code touch is an `internal` accessor used exclusively by the test assembly via `InternalsVisibleTo`. Ships accumulated dependency maintenance, a CI test-stability fix, and post-v1.15.0 ADR/spec documentation.
+
+### Fixed
+
+- **`Asterisk.Sdk.Cluster.Primitives.Tests.InMemoryClusterTransportTests`** — eliminated CI flakiness on 5 tests that used `Task.Delay(50)` to "wait for the subscriber's `await foreach` to register the channel". Replaced with deterministic polling on a new `internal int SubscriberCount` accessor (visible only via existing `InternalsVisibleTo` to the test assembly). 20/20 stability runs verified locally; CI verde on `f5a1bd9` and `e2f5e82`.
+
+### Changed
+
+- **`Microsoft.Extensions.*` 10.0.6 → 10.0.7** — patch bump on 11 packages (`Logging`, `Logging.Abstractions`, `Logging.Console`, `DependencyInjection`, `DependencyInjection.Abstractions`, `Hosting`, `Hosting.Abstractions`, `Configuration`, `Configuration.Abstractions`, `Diagnostics.HealthChecks`, `Http`, `Options`). Transitively visible to consumers of `Asterisk.Sdk.Hosting`, `Sessions`, `OpenTelemetry`, etc.
+- **`OpenTelemetry` 1.15.2 → 1.15.3** — patch bump on 4 packages (`OpenTelemetry`, `Extensions.Hosting`, `Exporter.Console`, `Exporter.OpenTelemetryProtocol`). Visible to consumers of `Asterisk.Sdk.OpenTelemetry`.
+- **`NATS.Client.Core` / `NATS.Client.Hosting` 2.5.10 → 2.7.3** — minor bump on the upstream client used by `Asterisk.Sdk.Push.Nats`. **Forward-compat verified** end-to-end: 6/6 NATS integration tests (Testcontainers + real `nats:latest`) pass; none of the 2.6.x/2.7.x breaking changes affect our usage (no JetStream APIs, ASCII-only subjects, internal timeouts wrapped in our own `CancellationTokenSource.CreateLinkedTokenSource` so the `OperationCanceledException` → `NatsTimeoutException` rename is irrelevant; OTel tag rename `network.protocol.version` → `network.transport` not referenced in our docs/dashboards).
+- **`Microsoft.SourceLink.GitHub` 10.0.202 → 10.0.203** — patch bump (build-time, not user-facing).
+- **`Meziantou.Analyzer` 3.0.50 → 3.0.52** — patch bump (build-time analyzer).
+- **`dotnet-reportgenerator-globaltool` 5.5.5 → 5.5.6** — patch bump (CI tool, not shipped).
+
+### Documentation
+
+- **ADR-0035 "COS (Calling Permissions System) deferred — customer-driven trigger only"** (Accepted 2026-04-25) — locks the deferral of the `feat/calling-permissions` branch until a customer-driven trigger is met. Originally numbered ADR-0031; **renumbered to 0035 on 2026-04-26** to fix an accidental collision with the prior Proposed ADR-0031 "Domain vs Integration events" (part of the v1.15.0 Event Model v2 batch). Decision content unchanged.
+- **R1.5 "VoiceAi Refresh" design spec + execution plan** — `docs/specs/2026-04-25-r1.5-voiceai-refresh-design.md` + `docs/plans/active/2026-04-25-r1.5-voiceai-refresh.md`. Pending Phase 0 AOT spike (Whisper.net AOT compatibility probe) before implementation. Targets v1.15.2 (re-targeted from v1.15.1 after this housekeeping cut).
+
+### Notes
+
+- 0 build warnings, 0 trim warnings across all 26 NuGet packages. Native AOT clean.
+- 35 ADRs in repo (0001–0035 — no missing numbers; 0031 collision resolved by renumbering COS to 0035, original 0031 "Domain vs Integration events" remains Proposed).
+- Test totals unchanged: ~2,799 unit tests / 154 functional / 65 integration. `Asterisk.Sdk.Cluster.Primitives.Tests` stays at 20 tests (the new helper is not a test).
+- 13 commits on `main` since `v1.15.0` tag, all CI-verified before tag cut.
+
 ## [1.15.0] - 2026-04-20
 
 **Pre-v2 Foundation.** No breaking changes. New MIT package `Asterisk.Sdk.Cluster.Primitives` (26th on nuget.org) ships domain-agnostic cluster abstractions that Pro.Cluster and future consumers can build on. `AsteriskSemanticConventions` catalog grows with `Tenant`/`Event`/`Node` nested classes (6 new const strings). `Asterisk.Sdk.Push.Webhooks` gains per-URL circuit breaker. ADR-0028 "Cadence commitment (v1 preview → v2 stable)" moves to `Accepted`. Operations starter kit (3 Grafana dashboards + Jaeger query catalog) lands in `docs/operations/`. Dual Asterisk support matrix (22 LTS + 23 Standard) added. AOT validation workflow expands to multi-RID matrix.
