@@ -56,7 +56,16 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ## Status
 
-**v1.12.0** — 24 NuGet packages, 0 build warnings, 0 trim warnings. Asterisk 23 modernization + voice-agent readiness: `chan_websocket` JSON control protocol on `WebSocketAudioSession` (MEDIA_START/BUFFERING/MARK/XON/XOFF/DTMF), ARI Outbound WebSocket listener (Asterisk 22.5+ `application=outbound`), three new VoiceAI providers (Cartesia STT+TTS, AssemblyAI STT, Speechmatics STT+TTS), and the new `Asterisk.Sdk.Push.Nats` bridge for multi-node fan-out. Full VoiceAi telemetry stack across 5 packages. Push event bus carries W3C traceparent (`PushEventMetadata.TraceContext`). API coverage: 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%). First CI-driven release via `.github/workflows/publish.yml`. Compatible with Asterisk 18, 20, 22, and 23.
+**v1.15.1** — 26 NuGet packages, 0 build warnings, 0 trim warnings, ~2,799 unit tests + 154 functional + 65 integration (Testcontainers). Latest releases:
+
+- **v1.15.1** (2026-04-26) — Housekeeping patch. Dependency maintenance (NATS 2.7.3, OpenTelemetry 1.15.3, Microsoft.Extensions 10.0.7) plus test stability + ADR catalog cleanup. Zero `PublicAPI.Shipped.txt` delta, zero functional change. Forward-compat verified end-to-end for the NATS minor bump.
+- **v1.15.0** "Pre-v2 Foundation" (2026-04-20) — New MIT package `Asterisk.Sdk.Cluster.Primitives` (`IClusterTransport`, `IDistributedLock`, `IMembershipProvider` + in-memory references). `AsteriskSemanticConventions` catalog grows with `Tenant`/`Event`/`Node` nested classes (60 const strings across 14 nested classes total). Per-URL circuit breaker on `Asterisk.Sdk.Push.Webhooks`. ADR-0028 "Cadence commitment" → Accepted. Operations starter kit (3 Grafana dashboards + Jaeger query catalog) under `docs/operations/`. AOT validation expanded to multi-RID matrix (linux-x64 / win-x64 / osx-arm64). Dual Asterisk 22 LTS + 23 Standard test matrix.
+- **v1.14.0** (2026-04-20) — New MIT package `Asterisk.Sdk.Resilience` — composable circuit breaker + retry + timeout primitives shared by AMI/ARI/Webhook reconnect loops.
+- **v1.13.0** (2026-04-20) — Telemetry layer + multi-node Push bus. `Asterisk.Sdk.Push.Nats` bidirectional bridge with W3C trace context propagation. `WebSocketTestServer` shared infrastructure. Pack-warnings CI gate.
+
+API coverage (cumulative): 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%), 27/27 ARI models (100%), 278 AMI events covering Asterisk 18-23. Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` JSON control protocol both supported. Compatible with **Asterisk 18, 20, 22 LTS, and 23 Standard** — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for lifecycle and break-change risk areas.
+
+Architecture decisions: **35 ADRs** in [`docs/decisions/`](docs/decisions/) covering AOT-first design, source-generator-over-reflection policy, three-tier test strategy, push-bus design, cadence commitment, and resilience/cluster primitive split between MIT and Pro.
 
 ---
 
@@ -115,8 +124,9 @@ builder.Services
 ```
 
 - **9 `ActivitySource`s** — AMI, ARI, AGI, Live, Sessions, Push, VoiceAi, VoiceAi.AudioSocket, VoiceAi.OpenAiRealtime
-- **14 `Meter`s** — all of the above plus Ari.Audio, VoiceAi.Stt, VoiceAi.Tts, Push.Webhooks, Push.Nats
+- **15 `Meter`s** — all of the above plus Ari.Audio, VoiceAi.Stt, VoiceAi.Tts, Push.Webhooks, Push.Nats, Resilience
 - **11 `IHealthCheck`s** auto-registered — 6 core + 5 VoiceAi
+- **`AsteriskSemanticConventions`** — public static catalog of 60 const strings across 14 nested classes (Resource, Channel, Bridge, Calls, Dialplan, Sip, Media, Queues, Agent, VoiceAi, Events, Tenant, Event, Node) — pinned by 14+ unit tests so dashboard queries stay stable across SDK versions
 
 See the [high-load tuning guide](docs/guides/high-load-tuning.md) for metric definitions and sizing recommendations at 10K / 100K agent scale.
 

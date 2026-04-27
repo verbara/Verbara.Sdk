@@ -1,6 +1,6 @@
 # Operations — Observability starter kit
 
-Prefabricated Grafana dashboards and Jaeger query examples for the SDK's OpenTelemetry catalog (12 meters + 9 `ActivitySource`s). These are **starter templates**, not production-tuned dashboards — copy into your Grafana instance and adapt thresholds / labels / queries to your deployment.
+Prefabricated Grafana dashboards and Jaeger query examples for the SDK's OpenTelemetry catalog (15 meters + 9 `ActivitySource`s — see `AsteriskTelemetry.MeterNames` / `.ActivitySourceNames` in `Asterisk.Sdk` for the canonical list). These are **starter templates**, not production-tuned dashboards — copy into your Grafana instance and adapt thresholds / labels / queries to your deployment.
 
 ## Contents
 
@@ -17,7 +17,7 @@ Consumers must have enrolled the SDK's telemetry catalog:
 
 ```csharp
 builder.Services.AddAsteriskOpenTelemetry()
-    .WithAllSources()          // enrols 9 ActivitySources + 12 meters
+    .WithAllSources()          // enrols 9 ActivitySources + 15 meters
     .WithOtlpExporter();
 ```
 
