@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.15.2] - 2026-04-27
+
+**Documentation refresh + CI portability fix.** Zero public API surface delta (`PublicAPI.Shipped.txt` unchanged). Zero functional changes. Ships a doc-audit sprint that addresses the highest-impact P0+P1 findings on nuget.org / repo-landing pages, plus drops a machine-specific path from `nuget.config` so GitHub Actions runners can restore the project portably.
+
+### Changed (documentation — root README + ops docs)
+
+- **Root [`README.md`](README.md)** — "Status" paragraph rewritten end-to-end. The previous version still described **v1.12.0 / 24 packages** despite v1.13/v1.14/v1.15 having shipped since. Now describes v1.15.1 cumulative state (26 pkgs, 4-release rollup highlighting `Asterisk.Sdk.Resilience`, `Asterisk.Sdk.Cluster.Primitives`, per-URL circuit breaker on `Push.Webhooks`, `AsteriskSemanticConventions` catalog, multi-RID AOT matrix, dual Asterisk 22 LTS / 23 Standard support, 35 ADRs).
+- **Root README Observability section** — Meter count corrected `14` → `15` (the `Asterisk.Sdk.Resilience` meter shipped in v1.14.0 but the doc still claimed the v1.13 count). Added explicit reference to the `AsteriskSemanticConventions` const-string catalog so consumers know it exists.
+- **[`docs/operations/README.md`](docs/operations/README.md)** — Same meter-count correction (`12` → `15`) in two places. Added pointer to `AsteriskTelemetry.MeterNames` as the canonical source-of-truth list.
+
+### Changed (per-package READMEs visible on nuget.org)
+
+Five package READMEs were either 2-line stubs or inadequate-but-better. Each now follows the same template used by the well-documented packages (`Asterisk.Sdk.Resilience` v1.14, `Asterisk.Sdk.Cluster.Primitives` v1.15) — title + 1-line tagline, "What it does" with public surface, install instructions, working quickstart code, ADR cross-references where relevant, and a license note.
+
+- **[`src/Asterisk.Sdk/README.md`](src/Asterisk.Sdk/README.md)** — was 10 lines. Now ~60 lines covering the actual public surface consumers reach for: `AsteriskSemanticConventions` catalog (60 const strings / 14 nested classes), `AsteriskTelemetry` runtime-discoverable lists (9 ActivitySources / 15 Meters), source-generator attribute markers, OTel one-liner registration snippet.
+- **[`src/Asterisk.Sdk.Hosting/README.md`](src/Asterisk.Sdk.Hosting/README.md)** — was 20 lines. Now ~90 lines positioning the package as the recommended SDK entry point with `AddAsterisk` variants (`IConfiguration` and inline `Action<AsteriskOptions>`), `appsettings.json` binding example, multi-server pool pointer, health-endpoint wiring, hosted-lifecycle and AOT notes.
+- **[`src/Asterisk.Sdk.VoiceAi.Stt/README.md`](src/Asterisk.Sdk.VoiceAi.Stt/README.md)** — was 2 lines and listed only 4 of 7 providers. Now ~65 lines with full provider table (Deepgram, Whisper local, Azure Whisper, Google Speech, Cartesia Ink-Whisper, AssemblyAI Universal-2, Speechmatics) including mode + latency notes, per-provider DI registration snippets, example pointers, and an ADR-0014 cross-reference for the no-vendor-SDK design rationale.
+- **[`src/Asterisk.Sdk.VoiceAi.Tts/README.md`](src/Asterisk.Sdk.VoiceAi.Tts/README.md)** — was 2 lines and listed only 2 of 4 providers (missing Cartesia and Speechmatics). Now ~70 lines with full provider table (ElevenLabs, Cartesia Sonic-3, Speechmatics, Azure) including TTFA targets and a "choosing a provider" decision guide.
+- **[`src/Asterisk.Sdk.VoiceAi.Testing/README.md`](src/Asterisk.Sdk.VoiceAi.Testing/README.md)** — was 2 lines. Now ~65 lines with the three fakes table (`FakeSpeechRecognizer`, `FakeSpeechSynthesizer`, `FakeConversationHandler`), quickstart code for stubbing recognizers + synthesizers in unit tests, and a "why use it" section (no API keys in CI, deterministic timing, failure injection).
+
+### Fixed (build portability)
+
+- **[`nuget.config`](nuget.config)** — drop the machine-specific local feed entry. The previous commit (`4393dfc`) added `<add key="local" value="/media/Data/Source/IPcom/local-nuget-feed/" />` to mirror the Pro/Platform pattern, but the MIT SDK is the **producer** of that cross-repo local feed (Pro and Platform are the consumers). The hard-coded absolute path broke `aot-check` on GitHub runners with `NU1301: The local source ... doesn't exist`. Comment expanded to document why no local source belongs in this repo's `nuget.config`.
+
+### Documentation
+
+- **R1.5 "VoiceAi Refresh" plan + spec** — re-targeted from v1.15.2 → **v1.15.3** to make room for this docs-only patch. R1.5 itself is unchanged; it remains the next non-trivial release with Phase 0 AOT spike for Whisper.net pending.
+
+### Notes
+
+- 0 build warnings, 0 trim warnings across all 26 NuGet packages. Native AOT clean.
+- 35 ADRs in repo (0001–0035, no holes). Resolved 0031 collision in v1.15.1 stays resolved.
+- Test totals unchanged: ~2,799 unit tests / 154 functional / 65 integration. Same numbers as v1.15.1.
+- 4 commits on `main` since `v1.15.1` tag (`41ca790`): `4393dfc` nuget.config, `205125b` docs D1+D2, `42e4081` nuget.config fix, plus the `1.15.2` bump itself.
+- README content is embedded into each `.nupkg` at pack time, so the new READMEs become visible on nuget.org as soon as `publish.yml` succeeds.
+
 ## [1.15.1] - 2026-04-26
 
 **Housekeeping patch.** Zero public API surface delta (`PublicAPI.Shipped.txt` unchanged across all 26 packages). Zero functional changes in shipped binaries — the only production-code touch is an `internal` accessor used exclusively by the test assembly via `InternalsVisibleTo`. Ships accumulated dependency maintenance, a CI test-stability fix, and post-v1.15.0 ADR/spec documentation.
