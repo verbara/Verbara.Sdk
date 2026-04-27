@@ -75,12 +75,32 @@ public class DeepgramSpeechRecognizerTests : IAsyncDisposable
     [Fact]
     public async Task StreamAsync_ShouldAbort_WhenCancelled()
     {
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        using var cts = new CancellationTokenSource();
         var recognizer = BuildRecognizer();
+
+        // Cancel only after the fake server has confirmed receipt of at least
+        // one frame, guaranteeing the streaming loop is mid-flight. The prior
+        // wall-clock-timer approach (CancelAfter(100ms)) was flaky on slow
+        // GitHub Actions runners where setup + first-frame send sometimes
+        // exceeded the timeout window — see issue #32.
+        var cancelTrigger = Task.Run(async () =>
+        {
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while (_server.ReceivedFrameCount == 0)
+            {
+                if (DateTime.UtcNow > deadline)
+                    throw new TimeoutException(
+                        "Fake Deepgram server did not receive any frame within 5s; recognizer never started streaming.");
+                await Task.Delay(10).ConfigureAwait(false);
+            }
+            cts.Cancel();
+        });
+
         var act = async () =>
             await recognizer.StreamAsync(EndlessFrames(), AudioFormat.Slin16Mono8kHz, cts.Token)
                 .ToListAsync(cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
+        await cancelTrigger; // surface any helper-side timeout
     }
 
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()
