@@ -1,17 +1,34 @@
 # Asterisk.Sdk.VoiceAi.Tts
 
-Text-to-speech providers for [Asterisk.Sdk.VoiceAi](https://www.nuget.org/packages/Asterisk.Sdk.VoiceAi) turn-based pipelines. **4 providers**, each implementing `ISpeechSynthesizer` from `Asterisk.Sdk.VoiceAi`. Native AOT, zero reflection, hand-rolled HTTP/WebSocket clients (no vendor SDK dependencies). MIT licensed.
+Text-to-speech providers for [Asterisk.Sdk.VoiceAi](https://www.nuget.org/packages/Asterisk.Sdk.VoiceAi) turn-based pipelines. **6 providers**, each implementing `ISpeechSynthesizer` from `Asterisk.Sdk.VoiceAi`. Native AOT, zero reflection, hand-rolled HTTP/WebSocket clients (no vendor SDK dependencies). MIT licensed.
 
 ## Providers
 
 | Provider | Mode | TTFA target | Notes |
 |----------|------|------------|-------|
-| **ElevenLabs** | Streaming WebSocket | ~150 ms (Flash 2.5) | Production default. Premium quality. Multi-language. |
+| **ElevenLabs** | Streaming WebSocket | ~150 ms (Flash 2.5) | Production default. Premium quality. Multi-language. Flash 2.5 default since v1.15.3. |
 | **Cartesia (Sonic-3)** | Streaming WebSocket | **40-90 ms** | Lowest TTFA in the catalog. Production-grade quality. |
 | **Speechmatics** | Streaming WebSocket | ~200 ms | Enterprise-grade with multi-locale. |
 | **Azure** | REST batch | ~500 ms | Microsoft Cognitive Services TTS. Mature, broad locale support. Batch mode (no streaming). |
+| **Deepgram Aura 2** | Streaming WebSocket | ~150-200 ms | New in v1.15.3. Aura 2 voices via `wss://api.deepgram.com/v1/speak`. Token-by-token input streaming. |
+| **LMNT** | Streaming WebSocket (HTTP fallback) | **sub-200 ms** | New in v1.15.3. Sub-200 ms TTFA target for conversational AI agents. |
 
-TTFA = Time-To-First-Audio. Streaming providers begin returning PCM bytes mid-synthesis; batch providers return the full clip in one response. All providers report metrics via the `Asterisk.Sdk.VoiceAi.Tts` `Meter` (latency histogram, request counters, byte throughput tagged by provider name). Health checks (`TtsHealthCheck`) auto-registered when the synthesizer is added through DI.
+TTFA = Time-To-First-Audio. Streaming providers begin returning PCM bytes mid-synthesis; batch providers return the full clip in one response. All providers report metrics via the `Asterisk.Sdk.VoiceAi.Tts` `Meter` (latency histogram, TTFA histogram, request counters, byte throughput tagged by provider name). Health checks (`TtsHealthCheck`) auto-registered when the synthesizer is added through DI.
+
+## Observability — metric catalog
+
+All metrics are emitted on Meter name `Asterisk.Sdk.VoiceAi.Tts`.
+
+| Metric | Type | Unit | Description |
+|--------|------|------|-------------|
+| `tts.syntheses.started` | Counter | syntheses | Synthesis attempts started |
+| `tts.syntheses.completed` | Counter | syntheses | Syntheses completed successfully |
+| `tts.syntheses.failed` | Counter | syntheses | Syntheses failed with error |
+| `tts.synthesis.characters` | Counter | {characters} | Total characters synthesized |
+| `tts.synthesis.latency_ms` | Histogram | ms | Total synthesis latency (start → last frame). Buckets: 5/10/25/50/100/250/500/1000/2500/5000 ms |
+| `tts.synthesis.ttfa_ms` | Histogram | ms | **Time-to-first-audio**: elapsed from synthesis start until first audio frame yielded to caller. Tags: `voiceai.provider`. Buckets: 5/10/25/50/100/250/500/1000/2500/5000 ms |
+
+The `tts.synthesis.ttfa_ms` histogram is the key metric for evaluating provider responsiveness in interactive voice agents. Compare across providers using the `voiceai.provider` tag.
 
 ## Install
 

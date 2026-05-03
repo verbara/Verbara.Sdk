@@ -311,9 +311,18 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             try
             {
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _ttsCts.Token);
+                var ttfaRecorded = false;
                 await foreach (var audioChunk in _tts.SynthesizeAsync(
                     response, _options.OutputFormat, linked.Token).ConfigureAwait(false))
                 {
+                    if (!ttfaRecorded)
+                    {
+                        SpeechSynthesisMetrics.SynthesisTtfaMs.Record(
+                            Stopwatch.GetElapsedTime(ttsStart).TotalMilliseconds,
+                            new KeyValuePair<string, object?>("voiceai.provider", _tts.ProviderName));
+                        // TODO(R1.5+): expose tts.model tag when SpeechSynthesizer exposes a Model property (non-breaking additive virtual property).
+                        ttfaRecorded = true;
+                    }
                     await session.WriteAudioAsync(audioChunk, linked.Token).ConfigureAwait(false);
                 }
                 SpeechSynthesisMetrics.SynthesesCompleted.Add(1);

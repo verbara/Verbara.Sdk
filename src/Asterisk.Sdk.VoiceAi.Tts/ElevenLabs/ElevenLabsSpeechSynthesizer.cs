@@ -38,7 +38,7 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
         AudioFormat outputFormat,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var uri = BuildUri(outputFormat);
+        var uri = BuildUri();
         using var ws = new ClientWebSocket();
 
         if (_fakeServerPort is null)
@@ -136,13 +136,37 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
         }
     }
 
-    private Uri BuildUri(AudioFormat format)
+    private Uri BuildUri()
     {
         if (_fakeServerPort.HasValue)
-            return new Uri($"ws://localhost:{_fakeServerPort}/v1/text-to-speech/test-voice/stream-input");
+        {
+            // Include query parameters even for the fake server so URL-parameter tests work.
+            var outputFmt = ToOutputFormatString(_options.OutputFormat);
+            var latency = (int)_options.LatencyOptimization;
+            return new Uri(
+                $"ws://localhost:{_fakeServerPort}/v1/text-to-speech/test-voice/stream-input" +
+                $"?model_id={Uri.EscapeDataString(_options.ModelId)}" +
+                $"&output_format={outputFmt}" +
+                $"&optimize_streaming_latency={latency}");
+        }
 
+        var outputFormat = ToOutputFormatString(_options.OutputFormat);
+        var latencyOpt = (int)_options.LatencyOptimization;
         return new Uri(
             $"wss://api.elevenlabs.io/v1/text-to-speech/{_options.VoiceId}/stream-input" +
-            $"?model_id={Uri.EscapeDataString(_options.ModelId)}&output_format=pcm_{format.SampleRate}");
+            $"?model_id={Uri.EscapeDataString(_options.ModelId)}" +
+            $"&output_format={outputFormat}" +
+            $"&optimize_streaming_latency={latencyOpt}");
     }
+
+    /// <summary>
+    /// Maps <see cref="ElevenLabsOutputFormat"/> to ElevenLabs' <c>output_format</c> parameter string.
+    /// </summary>
+    private static string ToOutputFormatString(ElevenLabsOutputFormat outputFormat)
+        => outputFormat switch
+        {
+            ElevenLabsOutputFormat.Pcm22050 => "pcm_22050",
+            ElevenLabsOutputFormat.Pcm24k   => "pcm_24000",
+            _                               => "pcm_16000"
+        };
 }
