@@ -16,6 +16,9 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
     public List<byte[]> AudioFramesToSend { get; } = [];
     public bool SendAlignmentMessages { get; set; }
 
+    /// <summary>Raw URL (path + query) of the most recent WebSocket upgrade request.</summary>
+    public string? LastRequestUrl { get; private set; }
+
     public ElevenLabsFakeServer()
     {
         // Retry port allocation to avoid conflicts with parallel tests.
@@ -70,6 +73,7 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
 
     private async Task HandleWebSocketAsync(HttpListenerContext ctx)
     {
+        LastRequestUrl = ctx.Request.RawUrl;
         var wsCtx = await ctx.AcceptWebSocketAsync(null).ConfigureAwait(false);
         var ws = wsCtx.WebSocket;
         var buf = new byte[65536];

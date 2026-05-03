@@ -1,7 +1,9 @@
 using Asterisk.Sdk.VoiceAi.Tts.Azure;
 using Asterisk.Sdk.VoiceAi.Tts.Cartesia;
+using Asterisk.Sdk.VoiceAi.Tts.Deepgram;
 using Asterisk.Sdk.VoiceAi.Tts.Diagnostics;
 using Asterisk.Sdk.VoiceAi.Tts.ElevenLabs;
+using Asterisk.Sdk.VoiceAi.Tts.Lmnt;
 using Asterisk.Sdk.VoiceAi.Tts.Speechmatics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -79,6 +81,48 @@ public static class TtsServiceCollectionExtensions
 
         services.AddSingleton<IValidateOptions<SpeechmaticsOptions>, SpeechmaticsOptionsValidator>();
         services.TryAddSingleton<SpeechSynthesizer, SpeechmaticsSpeechSynthesizer>();
+        services.AddHealthChecks().AddCheck<TtsHealthCheck>("tts");
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the Deepgram Aura 2 WebSocket streaming TTS provider as the
+    /// <see cref="SpeechSynthesizer"/> singleton.
+    /// </summary>
+    public static IServiceCollection AddDeepgramSpeechSynthesizer(
+        this IServiceCollection services,
+        Action<DeepgramTtsOptions>? configure = null)
+    {
+        if (configure is not null)
+            services.Configure(configure);
+        else
+            services.AddOptions<DeepgramTtsOptions>();
+
+        services.AddSingleton<IValidateOptions<DeepgramTtsOptions>, DeepgramTtsOptionsValidator>();
+        services.TryAddSingleton<SpeechSynthesizer, DeepgramSpeechSynthesizer>();
+        services.AddHealthChecks().AddCheck<TtsHealthCheck>("tts");
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the LMNT TTS provider as the <see cref="SpeechSynthesizer"/> singleton.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to WebSocket transport (<see cref="LmntTransport.WebSocket"/>) for sub-200 ms TTFA.
+    /// Set <see cref="LmntTtsOptions.Transport"/> to <see cref="LmntTransport.Http"/> in
+    /// <paramref name="configure"/> when outbound WebSocket connections are blocked.
+    /// </remarks>
+    public static IServiceCollection AddLmntSpeechSynthesizer(
+        this IServiceCollection services,
+        Action<LmntTtsOptions>? configure = null)
+    {
+        if (configure is not null)
+            services.Configure(configure);
+        else
+            services.AddOptions<LmntTtsOptions>();
+
+        services.AddSingleton<IValidateOptions<LmntTtsOptions>, LmntTtsOptionsValidator>();
+        services.TryAddSingleton<SpeechSynthesizer, LmntSpeechSynthesizer>();
         services.AddHealthChecks().AddCheck<TtsHealthCheck>("tts");
         return services;
     }

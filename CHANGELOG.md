@@ -4,6 +4,52 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.15.3] - 2026-05-03
+
+**R1.5 "VoiceAi Refresh" — three new TTS providers + TTFA metric + housekeeping.** Strictly additive minor patch — zero breaking changes, all existing test suites pass without modification. Ships ElevenLabs Flash 2.5 polish, Deepgram Aura 2 TTS WebSocket as a new provider, LMNT TTS as a new provider, and the `tts.synthesis.ttfa_ms` histogram so the latency claims of the new providers are verifiable in production. Also rolls in tooling housekeeping (coverlet 10, CI dependency-review, xunit migration tracking).
+
+### Added — VoiceAi providers
+
+- **`Asterisk.Sdk.VoiceAi.Tts.Deepgram`** — new TTS provider using Deepgram's WebSocket streaming endpoint (`wss://api.deepgram.com/v1/speak`). NOT the older REST `/v1/speak` (which had ~70% higher LLM→TTS latency per Deepgram's published benchmarks). Mirrors the Cartesia WebSocket pattern (`Channel<ReadOnlyMemory<byte>>` + dedicated receive loop, half-close socket post-request). 12-voice catalog: 8 Aura 2 EN voices (Thalia default, Andromeda, Zeus, Orpheus, Helios, Apollo, Luna, Arcas) + 1 Aura 2 ES (Sirio) + 3 legacy Aura 1 voices (Asteria, Orion, Stella) for migration paths. New types under `Asterisk.Sdk.VoiceAi.Tts.Deepgram` namespace: `DeepgramTtsOptions`, `DeepgramSpeechSynthesizer`, `DeepgramVoices`. Register via `services.AddDeepgramSpeechSynthesizer(opts => { opts.ApiKey = "…"; opts.Model = DeepgramVoices.Thalia; })`. Auto-registers `TtsHealthCheck`. Multilingual Aura 2 voices (NL/FR/DE/IT/JA) intentionally not in the catalog yet — voice ids unconfirmed in public Deepgram docs at impl time; tracked as a TODO in `DeepgramVoices.cs`.
+
+- **`Asterisk.Sdk.VoiceAi.Tts.Lmnt`** — new TTS provider for LMNT (sub-200 ms TTFA per third-party 2026 benchmarks). Supports both transports via `LmntTtsOptions.Transport` enum: `WebSocket` (default, low-latency, `wss://api.lmnt.com/v1/ai/speech/stream`) and `Http` (fallback for environments blocking outbound WS, `POST https://api.lmnt.com/v1/ai/speech/generate`). Auth via `X-API-Key` (header for HTTP; first-message JSON field for WS) + `lmnt-version: 1.0`. 4-voice catalog (`Leah` default, `Amy`, `Ansel`, `Elowen`). New types under `Asterisk.Sdk.VoiceAi.Tts.Lmnt` namespace: `LmntTtsOptions`, `LmntSpeechSynthesizer`, `LmntVoices`. Register via `services.AddLmntSpeechSynthesizer(opts => { opts.ApiKey = "…"; opts.Voice = LmntVoices.Leah; })`. Auto-registers `TtsHealthCheck`. A few contract details in the LMNT public docs were ambiguous; `TODO(R1.5)` comments in the source flag specific lines to verify against the live API at integration-test time.
+
+### Added — ElevenLabs Flash 2.5
+
+- **`ElevenLabsModels`** — public static class with const strings: `Flash25 = "eleven_flash_v2_5"`, `Turbo2 = "eleven_turbo_v2"`, `Multilingual2 = "eleven_multilingual_v2"`. Use these instead of magic strings in `ElevenLabsOptions.ModelId`.
+- **`ElevenLabsLatencyOptimization`** — public enum (`Off`/`Low`/`Mid`/`High`/`Max`, mapped to ElevenLabs' `optimize_streaming_latency` URL param 0-4 scale).
+- **`ElevenLabsOutputFormat`** — public enum (`Pcm16k` / `Pcm22050` / `Pcm24k`, mapped to provider's `output_format` URL param).
+- **`ElevenLabsOptions.LatencyOptimization` and `.OutputFormat`** — additive properties. The synthesizer surfaces these as query parameters on the WebSocket endpoint URL.
+
+### Added — Observability
+
+- **`SpeechSynthesisMetrics.SynthesisTtfaMs`** — new public `Histogram<double>` exposed on the existing `Asterisk.Sdk.VoiceAi.Tts` `Meter`. Records **Time-To-First-Audio**: elapsed milliseconds from synthesis start until the first audio chunk is yielded to the caller. Tagged with `voiceai.provider`. Recommended histogram buckets: 5/10/25/50/100/250/500/1000/2500/5000 ms. The existing `tts.synthesis.latency_ms` (total synthesis duration) is preserved unchanged.
+- **`VoiceAiPipeline`** records TTFA inline at the existing metric site — gated by a single boolean so only the first chunk emits the measurement; subsequent chunks pass through without extra cost. Behavior validated by 5 new pipeline tests covering: recording on first yield, no recording on empty enumerable, TTFA ≤ total latency, exactly-once on many chunks, no recording when synthesizer throws.
+
+### Added — CI / tooling
+
+- **`.github/workflows/dependency-review.yml`** — preventive scanning on every PR. Blocks merges that introduce a package with High/Critical CVE or a copyleft license incompatible with MIT (AGPL, GPL-2.0, GPL-3.0, SSPL). Complements the existing reactive Dependabot configuration.
+
+### Changed
+
+- **ElevenLabs default model** flips from `eleven_turbo_v2` → `eleven_flash_v2_5`. **Non-breaking default change**: callers who explicitly set `ElevenLabsOptions.ModelId` see no change; callers using the default see the new model. Flash 2.5 targets <150 ms TTFA per ElevenLabs' published latency guidance and is the correct choice for real-time telephony. Eleven v3 (GA 2026-03-14) is intentionally NOT a candidate for this SDK — v3 is the expressive flagship for non-realtime use; Flash 2.5 remains the streaming/telephony target.
+- **`coverlet.collector` 6.0.4 → 10.0.0** — drop-in replacement for code coverage collection. Skips 8.x (no value sitting there). Real fixes that benefit this SDK: IAsyncEnumerable branch math (#1836) used in ARI/Live/Sessions stream code, `LibraryImport`/`DllImport` instrumentation crashes (#1762), `Mediator.SourceGenerator` empty reports (#1718). `nuspec` deps empty + `coverlet.collector.targets` and `VSTestIntegration.md` shipped surface idéntico across versions verified at audit time. Validated locally on `Tests/Asterisk.Sdk.Ami.Tests` with a `VersionOverride` spike — zero delta in coverage metrics (line/branch counts byte-identical between 6.0.4 and 10.0.0 baseline). VSTest collector hook works on .NET 10 SDK + xunit 2.9 without `TestingPlatformDotnetTestSupport=false` guard.
+- **`.github/dependabot.yml`** — removed the obsolete `coverlet.collector` major-version ignore rule that mischaracterized 10.x as breaking. Only the MTP/VSTest split matters for the upgrade and the repo stays VSTest.
+
+### Documentation
+
+- **R1.5 spec + plan rewritten in place (v2)** — scope correction based on a deep state-of-the-art audit (May 2026): (a) **dropped** Whisper V3 local STT (quality unfit for telephony 8 kHz audio per third-party benchmarks — ~30-40% WER regression vs cloud STT options already in the SDK; Whisper.net AOT support unconfirmed in any release notes; deferred to a future on-prem privacy track); (b) **upgraded** Deepgram Aura 2 integration from REST to WebSocket; (c) **added** LMNT TTS as a new provider. Same total ~1 week of work, no Phase 0 AOT spike, lower risk, more product value. Original v1 spec retained in git history at commit `565a1bb`.
+- **`docs/research/2026-05-03-xunit-v3-v4-migration-readiness.md`** — watch list documenting the four readiness gates that must flip before re-evaluating the migration from xunit 2.9.x: FluentAssertions #2935 detection bug fix shipped in FA 7.x, xunit #3167 NSubstitute false-positive resolved, xunit.v3 v4.0 stable released with full Native AOT, and a canary migration in dotnet/runtime or dotnet/aspnetcore. The `dependabot.yml` ignore rules for `xunit.runner.visualstudio`, `Microsoft.NET.Test.Sdk`, and `FluentAssertions` remain tied to these gates.
+- **`src/Asterisk.Sdk.VoiceAi.Tts/README.md`** — provider table updated to 6 providers (added Deepgram, LMNT). New "Metric catalog" section documents `tts.synthesis.ttfa_ms` and `tts.synthesis.latency_ms` with recommended histogram buckets.
+
+### Notes
+
+- 0 build warnings, 0 trim warnings, 0 IL3050/IL3053 across all 26 NuGet packages. Native AOT clean.
+- Test totals: ~2,837 unit tests pass / 0 fail / 0 skip (was ~2,799 in v1.15.2). New tests: +9 ElevenLabs (Track 1.A), +12 Deepgram (Track 1.B), +12 LMNT (Track 1.C), +5 TTFA pipeline (Phase 2). 154/154 functional + 65/65 integration unchanged.
+- **Deferred**: per-provider streaming-not-buffering quality gate (one test per TTS provider asserting the synthesizer yields its first frame before the upstream finishes sending) was scoped into Phase 3 but deferred to a follow-up patch — the TTFA metric works correctly today; this gate would catch *future* provider regressions where a provider buffers the full clip before yielding. Tracked as a follow-up issue.
+- 26 packages pack clean with `TreatWarningsAsErrors=true`.
+- Whisper V3 local STT is **deferred**, not cancelled. The original v1 R1.5 plan included it; the v2 scope-correction moved it to a future "on-prem privacy mode" track where it will deliver actual value (air-gapped privacy-sensitive deploys), not as a marginal STT option for telephony where Deepgram cloud already wins on quality and latency.
+
 ## [1.15.2] - 2026-04-27
 
 **Documentation refresh + CI portability fix.** Zero public API surface delta (`PublicAPI.Shipped.txt` unchanged). Zero functional changes. Ships a doc-audit sprint that addresses the highest-impact P0+P1 findings on nuget.org / repo-landing pages, plus drops a machine-specific path from `nuget.config` so GitHub Actions runners can restore the project portably.

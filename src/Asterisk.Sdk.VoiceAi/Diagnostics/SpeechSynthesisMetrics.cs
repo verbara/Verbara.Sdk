@@ -23,4 +23,8 @@ public static class SpeechSynthesisMetrics
 
     public static readonly Histogram<double> SynthesisLatencyMs =
         Meter.CreateHistogram<double>("tts.synthesis.latency_ms", "ms", "Synthesis latency");
+
+    public static readonly Histogram<double> SynthesisTtfaMs =
+        Meter.CreateHistogram<double>("tts.synthesis.ttfa_ms", "ms",
+            "Time-to-first-audio: elapsed from synthesis start until first audio frame yielded to caller.");
 }
