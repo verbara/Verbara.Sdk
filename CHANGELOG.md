@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+Post-v1.15.3 (2026-05-03) accumulating commits — will roll into the next release cut.
+
+### Changed
+
+- **Brand transition: `Asterisk.Sdk` → `Verbara Sdk`** — see [ADR-0036](docs/decisions/0036-rebrand-to-verbara.md) and [`NOTICE`](NOTICE). Avoids trademark conflict with Sangoma's Asterisk PBX product. Repository and NuGet package names will migrate to `verbara-sdk` / `Verbara.Sdk.*` in a coordinated technical track. **Existing names continue to work during the transition period** — no code changes required from consumers in this commit (just doc + brand updates). License unchanged (MIT).
+- **`Meziantou.Analyzer` 3.0.58 → 3.0.60** (build-time analyzer, patch bump via Dependabot PR #39).
+- **`dotnet-reportgenerator-globaltool` 5.5.7 → 5.5.9** (CI tool, skip 5.5.8 via Dependabot PR #40). Not shipped — dev-time only.
+
+### Documentation
+
+- **Root `README.md`** — Status block refreshed v1.15.1 → v1.15.3 cumulative (added v1.15.3 + v1.15.2 release entries that were missing); Voice AI Features bullet now reflects the v1.15.3 expansion (6 TTS providers + `tts.synthesis.ttfa_ms` metric); License section expanded with the Verbara open-core stack table and trademark note.
+
 ## [1.15.3] - 2026-05-03
 
 **R1.5 "VoiceAi Refresh" — three new TTS providers + TTFA metric + housekeeping.** Strictly additive minor patch — zero breaking changes, all existing test suites pass without modification. Ships ElevenLabs Flash 2.5 polish, Deepgram Aura 2 TTS WebSocket as a new provider, LMNT TTS as a new provider, and the `tts.synthesis.ttfa_ms` histogram so the latency claims of the new providers are verifiable in production. Also rolls in tooling housekeeping (coverlet 10, CI dependency-review, xunit migration tracking).
