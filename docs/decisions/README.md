@@ -72,3 +72,6 @@ The decision, stated in one or two sentences.
 - [ADR-0022](0022-activity-cancellation-semantics.md) — `IActivity.CancelAsync()` is a first-class method alongside `CancellationToken`; consumers observe terminal outcomes through `Status`, not exceptions.
 - [ADR-0023](0023-publicapi-tracker-adoption.md) — Every shipping package carries `PublicAPI.Shipped.txt` / `PublicAPI.Unshipped.txt`; breaking API changes cannot merge silently.
 - [ADR-0024](0024-bannedsymbols-as-aot-policy.md) — `BannedSymbols.txt` + `Microsoft.CodeAnalysis.BannedApiAnalyzers` enforce the AOT policy at build time (no reflection, no `DateTime.Now`).
+- [ADR-0036](0036-rebrand-to-verbara.md) — Rebrand product family from `Asterisk.Sdk` to **Verbara Sdk** for trademark safety (Sangoma owns "Asterisk" trademark). License unchanged (MIT). (Accepted, 2026-05-03)
+
+> **Note:** ADRs 0025-0035 exist as files but are not yet listed in this catalog (maintenance gap, separate cleanup task).

@@ -1,0 +1,27 @@
+Verbara Sdk
+Copyright 2026-present Harol A. Reina H. and Verbara Contributors
+
+This product is part of the Verbara open-core ecosystem:
+
+  - Verbara Sdk           — MIT License (this repository, telephony primitives)
+  - Verbara Sdk Pro       — Commercial License (enterprise overlays)
+  - Verbara Platform      — Apache License 2.0 (full backend application)
+  - Verbara Web           — Apache License 2.0 (frontend UI)
+
+This SDK is the MIT-licensed base layer of the Verbara stack. It can be used
+standalone (no Pro license required) for any project integrating with
+Asterisk PBX. The Verbara branding refers to the umbrella product family;
+the Asterisk PBX itself is a separate open-source project trademarked by
+Sangoma Technologies / Digium and is not affiliated with Verbara.
+
+This product is ported from asterisk-java 3.42.0 (Apache 2.0):
+https://github.com/asterisk-java/asterisk-java
+
+This product includes software developed by various contributors and
+incorporates open-source components. See the respective `.csproj` files
+under `src/` for the full dependency list and their upstream licenses.
+
+For commercial licensing inquiries (Pro):  licensing@verbara.io
+For security disclosure:                    security@verbara.io
+For legal inquiries:                        legal@verbara.io
+General contact:                            hello@verbara.io
