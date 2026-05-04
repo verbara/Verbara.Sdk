@@ -60,5 +60,6 @@ docs/superpowers/
 ## Claude Code
 CLAUDE.md
 .claude/
+.project-memory/
 .worktrees/
 .claudelint-cache/
