@@ -1,6 +1,8 @@
-# Asterisk.Sdk
+# Verbara Sdk (formerly Asterisk.Sdk)
 
 > The modern .NET SDK for Asterisk PBX. AMI, AGI, ARI, Live API, Sessions, Voice AI — all in one package. Native AOT. Zero reflection. MIT licensed.
+>
+> **Rebrand notice (2026-05-03):** this project is rebranding to **Verbara** ([ADR-0036](docs/decisions/0036-rebrand-to-verbara.md)) to avoid trademark conflict with Sangoma's Asterisk PBX product. Repository and NuGet package names will migrate to `verbara-sdk` / `Verbara.Sdk.*` in a coordinated technical track. Existing names continue to work during the transition period.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Harol-Reina/Asterisk.Sdk/ci.yml?branch=main&label=CI)](https://github.com/Harol-Reina/Asterisk.Sdk/actions/workflows/ci.yml)
 [![AOT Trim](https://img.shields.io/github/actions/workflow/status/Harol-Reina/Asterisk.Sdk/aot-trim-check.yml?branch=main&label=AOT%20Trim)](https://github.com/Harol-Reina/Asterisk.Sdk/actions/workflows/aot-trim-check.yml)
@@ -496,4 +498,17 @@ composable NuGet packages for clustering, outbound campaigns, event sourcing, an
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the **[MIT License](LICENSE)**. See [`NOTICE`](NOTICE) for attributions.
+
+This is the open-source base SDK of the **Verbara** open-core contact-center stack:
+
+| Repository | License | Role |
+|---|---|---|
+| **Verbara Sdk** (this repository) | **MIT** | Telephony primitives (AMI / AGI / ARI / Live API / Sessions / Voice AI) — community attractor |
+| **Verbara Web** (currently `Asterisk.Platform.Web`) | Apache 2.0 | Frontend UI |
+| **Verbara Platform** (currently `Asterisk.Platform`) | Apache 2.0 | Backend application |
+| **Verbara Sdk Pro** (currently `Asterisk.Sdk.Pro`) | Commercial | Enterprise overlays (multi-tenant, analytics, cluster, licensing) |
+
+**Why MIT here:** the SDK is the community attractor of the Verbara stack — maximum permissive license to encourage adoption, evaluation, and contributions. Pro features (skill routing, predictive dialer, real-time analytics, cluster, multi-tenant) are commercial via a separate package family. See [ADR-0027 (stewardship pledge)](docs/decisions/0027-stewardship-pledge-mit-commercial.md) and [ADR-0036 (rebrand to Verbara)](docs/decisions/0036-rebrand-to-verbara.md).
+
+**Trademark note:** "Asterisk" is a registered trademark of **Sangoma Technologies / Digium** and refers to the Asterisk PBX product. This SDK *targets* Asterisk PBX as a runtime dependency; the SDK itself is rebranding to **Verbara** to avoid trademark conflict. References to "Asterisk" in API names, documentation, and code comments refer to the PBX product (Sangoma trademark) and remain accurate.
