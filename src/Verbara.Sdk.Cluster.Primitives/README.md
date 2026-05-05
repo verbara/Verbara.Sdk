@@ -1,6 +1,6 @@
-# Asterisk.Sdk.Cluster.Primitives
+# Verbara.Sdk.Cluster.Primitives
 
-MIT-licensed abstractions for distributed cluster transport, membership, and locking. Part of the `Asterisk.Sdk` open-core family.
+MIT-licensed abstractions for distributed cluster transport, membership, and locking. Part of the `Verbara.Sdk` open-core family.
 
 ## What it does
 
@@ -16,19 +16,19 @@ Reference in-memory implementations (`InMemoryClusterTransport`, `InMemoryDistri
 
 ## Why it exists
 
-Cluster primitives are infrastructure without domain logic: circuit breakers, retries, and membership protocols are already commoditized across JVM (Resilience4j, Hystrix), Go (failsafe-go, hashicorp/raft), and .NET (Polly, Orleans). Keeping them in the MIT base of the SDK — analogous to `Asterisk.Sdk.Resilience` — allows open-source consumers to build their own cluster implementations against a stable contract, and keeps commercial extensions focused on domain logic (e.g. Asterisk PBX-specific session recovery, AMI/ARI routing, skill-based assignment).
+Cluster primitives are infrastructure without domain logic: circuit breakers, retries, and membership protocols are already commoditized across JVM (Resilience4j, Hystrix), Go (failsafe-go, hashicorp/raft), and .NET (Polly, Orleans). Keeping them in the MIT base of the SDK — analogous to `Verbara.Sdk.Resilience` — allows open-source consumers to build their own cluster implementations against a stable contract, and keeps commercial extensions focused on domain logic (e.g. Asterisk PBX-specific session recovery, AMI/ARI routing, skill-based assignment).
 
 ## Install
 
 ```sh
-dotnet add package Asterisk.Sdk.Cluster.Primitives
+dotnet add package Verbara.Sdk.Cluster.Primitives
 ```
 
 ## Quick start
 
 ```csharp
-using Asterisk.Sdk.Cluster.Primitives;
-using Asterisk.Sdk.Cluster.Primitives.InMemory;
+using Verbara.Sdk.Cluster.Primitives;
+using Verbara.Sdk.Cluster.Primitives.InMemory;
 
 // Publish/subscribe
 await using var transport = new InMemoryClusterTransport();

@@ -30,6 +30,6 @@ Session data is written to `sessions.jsonl` in the working directory.
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.Sessions` — `SessionStoreBase`, `ICallSessionManager`, session events
-- `Asterisk.Sdk.Sessions.Extensions` — custom store extension point
-- `Asterisk.Sdk.Hosting` — `AddAsterisk()`, `AddAsteriskSessions()`
+- `Verbara.Sdk.Sessions` — `SessionStoreBase`, `ICallSessionManager`, session events
+- `Verbara.Sdk.Sessions.Extensions` — custom store extension point
+- `Verbara.Sdk.Hosting` — `AddAsterisk()`, `AddAsteriskSessions()`

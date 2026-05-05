@@ -134,7 +134,7 @@ Originate 2 calls via AMI, bridge them using `BridgeAction`, verify event sequen
 
 6. `BridgeEvents_ShouldHaveCorrectBridgeId` — verify all bridge events for same bridge share the same BridgeUniqueid.
 
-Note: Check if `BridgeAction` exists in SDK, or if bridging is done via `OriginateAction` with context/extension that uses `Bridge()` app. Also check for `AmiAction` for creating/managing bridges. Read `src/Asterisk.Sdk.Ami/Actions/` for bridge-related actions.
+Note: Check if `BridgeAction` exists in SDK, or if bridging is done via `OriginateAction` with context/extension that uses `Bridge()` app. Also check for `AmiAction` for creating/managing bridges. Read `src/Verbara.Sdk.Ami/Actions/` for bridge-related actions.
 
 ---
 
@@ -189,7 +189,7 @@ exten => 163,1,Answer()
 
 10. `AttendedTransfer_Events_ShouldBeChronological` — collect all events during transfer, verify ordering.
 
-Note: Check if `AtxferAction` exists in SDK. If not, attended transfer can be tested via `RedirectAction` with specific context or via DTMF feature codes (e.g., ##). Read `src/Asterisk.Sdk.Ami/Actions/` for transfer-related actions. Also check `features.conf` for transfer feature codes.
+Note: Check if `AtxferAction` exists in SDK. If not, attended transfer can be tested via `RedirectAction` with specific context or via DTMF feature codes (e.g., ##). Read `src/Verbara.Sdk.Ami/Actions/` for transfer-related actions. Also check `features.conf` for transfer feature codes.
 
 ---
 
@@ -229,7 +229,7 @@ exten => 750,1,Park(default)
 
 4. `ParkGiveUp_ShouldFireParkedCallGiveUpEvent` — park a call, caller hangs up while parked, verify ParkedCallGiveUpEvent.
 
-Note: Check if `ParkAction` exists in SDK. If not, parking can be done via `RedirectAction` to ext 700, or via dialplan `Park()` app. Read `src/Asterisk.Sdk.Ami/Actions/` for park-related actions.
+Note: Check if `ParkAction` exists in SDK. If not, parking can be done via `RedirectAction` to ext 700, or via dialplan `Park()` app. Read `src/Verbara.Sdk.Ami/Actions/` for park-related actions.
 
 ---
 

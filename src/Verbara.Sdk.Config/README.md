@@ -1,11 +1,11 @@
-# Asterisk.Sdk.Config
+# Verbara.Sdk.Config
 
 Parsers for Asterisk `.conf` configuration files — reads sections, variables, comments, includes, and template inheritance.
 
 ## Installation
 
 ```bash
-dotnet add package Asterisk.Sdk.Config
+dotnet add package Verbara.Sdk.Config
 ```
 
 ## Quick Start

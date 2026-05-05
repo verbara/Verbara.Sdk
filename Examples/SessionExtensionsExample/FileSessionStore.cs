@@ -1,4 +1,4 @@
-// Asterisk.Sdk - Custom SessionStoreBase implementation
+// Verbara.Sdk - Custom SessionStoreBase implementation
 // Demonstrates: persisting sessions as JSON lines to a file with an in-memory cache.
 
 using System.Text.Json;

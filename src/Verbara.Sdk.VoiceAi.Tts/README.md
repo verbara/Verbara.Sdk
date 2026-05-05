@@ -1,6 +1,6 @@
-# Asterisk.Sdk.VoiceAi.Tts
+# Verbara.Sdk.VoiceAi.Tts
 
-Text-to-speech providers for [Asterisk.Sdk.VoiceAi](https://www.nuget.org/packages/Asterisk.Sdk.VoiceAi) turn-based pipelines. **6 providers**, each implementing `ISpeechSynthesizer` from `Asterisk.Sdk.VoiceAi`. Native AOT, zero reflection, hand-rolled HTTP/WebSocket clients (no vendor SDK dependencies). MIT licensed.
+Text-to-speech providers for [Verbara.Sdk.VoiceAi](https://www.nuget.org/packages/Verbara.Sdk.VoiceAi) turn-based pipelines. **6 providers**, each implementing `ISpeechSynthesizer` from `Verbara.Sdk.VoiceAi`. Native AOT, zero reflection, hand-rolled HTTP/WebSocket clients (no vendor SDK dependencies). MIT licensed.
 
 ## Providers
 
@@ -13,11 +13,11 @@ Text-to-speech providers for [Asterisk.Sdk.VoiceAi](https://www.nuget.org/packag
 | **Deepgram Aura 2** | Streaming WebSocket | ~150-200 ms | New in v1.15.3. Aura 2 voices via `wss://api.deepgram.com/v1/speak`. Token-by-token input streaming. |
 | **LMNT** | Streaming WebSocket (HTTP fallback) | **sub-200 ms** | New in v1.15.3. Sub-200 ms TTFA target for conversational AI agents. |
 
-TTFA = Time-To-First-Audio. Streaming providers begin returning PCM bytes mid-synthesis; batch providers return the full clip in one response. All providers report metrics via the `Asterisk.Sdk.VoiceAi.Tts` `Meter` (latency histogram, TTFA histogram, request counters, byte throughput tagged by provider name). Health checks (`TtsHealthCheck`) auto-registered when the synthesizer is added through DI.
+TTFA = Time-To-First-Audio. Streaming providers begin returning PCM bytes mid-synthesis; batch providers return the full clip in one response. All providers report metrics via the `Verbara.Sdk.VoiceAi.Tts` `Meter` (latency histogram, TTFA histogram, request counters, byte throughput tagged by provider name). Health checks (`TtsHealthCheck`) auto-registered when the synthesizer is added through DI.
 
 ## Observability — metric catalog
 
-All metrics are emitted on Meter name `Asterisk.Sdk.VoiceAi.Tts`.
+All metrics are emitted on Meter name `Verbara.Sdk.VoiceAi.Tts`.
 
 | Metric | Type | Unit | Description |
 |--------|------|------|-------------|
@@ -33,19 +33,19 @@ The `tts.synthesis.ttfa_ms` histogram is the key metric for evaluating provider 
 ## Install
 
 ```sh
-dotnet add package Asterisk.Sdk.VoiceAi.Tts
+dotnet add package Verbara.Sdk.VoiceAi.Tts
 ```
 
-You almost always want `Asterisk.Sdk.VoiceAi` (the orchestration package) too:
+You almost always want `Verbara.Sdk.VoiceAi` (the orchestration package) too:
 
 ```sh
-dotnet add package Asterisk.Sdk.VoiceAi
+dotnet add package Verbara.Sdk.VoiceAi
 ```
 
 ## Quick start (ElevenLabs)
 
 ```csharp
-using Asterisk.Sdk.VoiceAi.Tts.DependencyInjection;
+using Verbara.Sdk.VoiceAi.Tts.DependencyInjection;
 
 services.AddElevenLabsSpeechSynthesizer(o =>
 {
@@ -59,7 +59,7 @@ The synthesizer is now resolvable as `ISpeechSynthesizer` and registered with th
 
 ## Per-provider DI extensions
 
-Each provider has its own `Add*SpeechSynthesizer` extension (in `Asterisk.Sdk.VoiceAi.Tts.DependencyInjection`):
+Each provider has its own `Add*SpeechSynthesizer` extension (in `Verbara.Sdk.VoiceAi.Tts.DependencyInjection`):
 
 ```csharp
 services.AddElevenLabsSpeechSynthesizer(o => { ... });
@@ -83,8 +83,8 @@ services.AddAzureTtsSpeechSynthesizer(o => { ... });
 
 ## Native AOT
 
-All HTTP/WebSocket clients hand-rolled with `HttpClient` / `ClientWebSocket`. JSON serialization via source-generated `JsonSerializerContext` (`VoiceAiTtsJsonContext`). 0 trim warnings. See [ADR-0014](https://github.com/Harol-Reina/Asterisk.Sdk/blob/main/docs/decisions/0014-raw-http-websocket-voiceai-providers.md) for the no-vendor-SDK rationale.
+All HTTP/WebSocket clients hand-rolled with `HttpClient` / `ClientWebSocket`. JSON serialization via source-generated `JsonSerializerContext` (`VoiceAiTtsJsonContext`). 0 trim warnings. See [ADR-0014](https://github.com/verbara/Verbara.Sdk/blob/main/docs/decisions/0014-raw-http-websocket-voiceai-providers.md) for the no-vendor-SDK rationale.
 
 ## License
 
-MIT. Part of the [Asterisk.Sdk](https://github.com/Harol-Reina/Asterisk.Sdk) project.
+MIT. Part of the [Verbara.Sdk](https://github.com/verbara/Verbara.Sdk) project.

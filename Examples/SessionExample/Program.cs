@@ -1,4 +1,4 @@
-// Asterisk.Sdk - Session Example
+// Verbara.Sdk - Session Example
 // Demonstrates: real-time session monitoring with domain events and periodic summaries.
 
 using Verbara.Sdk.Hosting;

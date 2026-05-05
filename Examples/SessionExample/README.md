@@ -29,5 +29,5 @@ dotnet run --project Examples/SessionExample/
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.Sessions` — `ICallSessionManager`, session domain events
-- `Asterisk.Sdk.Hosting` — `AddAsterisk()`, `AddAsteriskSessions()`
+- `Verbara.Sdk.Sessions` — `ICallSessionManager`, session domain events
+- `Verbara.Sdk.Hosting` — `AddAsterisk()`, `AddAsteriskSessions()`

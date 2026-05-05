@@ -1,4 +1,4 @@
-// Asterisk.Sdk - Live API Example
+// Verbara.Sdk - Live API Example
 // Demonstrates: real-time tracking of channels, queues, and agents via AMI events.
 
 using Verbara.Sdk;

@@ -1,6 +1,6 @@
-# Asterisk.Sdk.Sessions.Redis
+# Verbara.Sdk.Sessions.Redis
 
-Redis-backed `SessionStoreBase` implementation for `Asterisk.Sdk.Sessions`. Enables horizontal scale-out of call-session state across multiple SDK hosts by persisting sessions to a shared Redis instance.
+Redis-backed `SessionStoreBase` implementation for `Verbara.Sdk.Sessions`. Enables horizontal scale-out of call-session state across multiple SDK hosts by persisting sessions to a shared Redis instance.
 
 ## Usage
 

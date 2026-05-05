@@ -1,4 +1,4 @@
-# Asterisk.Sdk.Agi
+# Verbara.Sdk.Agi
 
 FastAGI and AsyncAGI server for .NET 10 with Native AOT support.
 

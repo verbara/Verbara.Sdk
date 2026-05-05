@@ -1,11 +1,11 @@
-# Asterisk.Sdk.VoiceAi.OpenAiRealtime
+# Verbara.Sdk.VoiceAi.OpenAiRealtime
 
-OpenAI Realtime API bridge for Asterisk.Sdk.VoiceAi — persistent WebSocket session with function calling, transcript events, and dual-loop audio streaming.
+OpenAI Realtime API bridge for Verbara.Sdk.VoiceAi — persistent WebSocket session with function calling, transcript events, and dual-loop audio streaming.
 
 ## Installation
 
 ```bash
-dotnet add package Asterisk.Sdk.VoiceAi.OpenAiRealtime
+dotnet add package Verbara.Sdk.VoiceAi.OpenAiRealtime
 ```
 
 ## Quick Start

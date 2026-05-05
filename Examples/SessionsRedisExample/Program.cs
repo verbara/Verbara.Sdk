@@ -1,4 +1,4 @@
-// Asterisk.Sdk - Sessions.Redis Example
+// Verbara.Sdk - Sessions.Redis Example
 // Demonstrates: pluggable session backend with Redis for multi-instance SDK deployments.
 //
 // Prereq: a running Redis (localhost:6379 by default). Quick start:

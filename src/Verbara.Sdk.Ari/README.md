@@ -1,4 +1,4 @@
-# Asterisk.Sdk.Ari
+# Verbara.Sdk.Ari
 
 Asterisk REST Interface (ARI) client for .NET 10 with Native AOT support.
 

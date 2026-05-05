@@ -1,11 +1,11 @@
-# Asterisk.Sdk.VoiceAi.AudioSocket
+# Verbara.Sdk.VoiceAi.AudioSocket
 
-AudioSocket transport for Asterisk.Sdk.VoiceAi — bridges Asterisk AudioSocket streams into the Voice AI pipeline.
+AudioSocket transport for Verbara.Sdk.VoiceAi — bridges Asterisk AudioSocket streams into the Voice AI pipeline.
 
 ## Installation
 
 ```bash
-dotnet add package Asterisk.Sdk.VoiceAi.AudioSocket
+dotnet add package Verbara.Sdk.VoiceAi.AudioSocket
 ```
 
 ## Quick Start

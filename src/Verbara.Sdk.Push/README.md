@@ -1,4 +1,4 @@
-# Asterisk.Sdk.Push
+# Verbara.Sdk.Push
 
 Real-time push primitives for .NET. AOT-safe, host-agnostic, MIT licensed.
 
@@ -7,24 +7,24 @@ Real-time push primitives for .NET. AOT-safe, host-agnostic, MIT licensed.
 - Typed, in-memory **event bus** (`IPushEventBus`) backed by a bounded `System.Threading.Channels.Channel<T>` with configurable backpressure.
 - **Delivery filter** (`IEventDeliveryFilter`) that enforces tenant isolation and optional per-user targeting before an event reaches a subscriber.
 - **Subscription registry** (`ISubscriptionRegistry`) for tracking active subscribers per tenant with automatic cleanup on disposal.
-- First-class **diagnostics** via `System.Diagnostics.Metrics` (meter name `Asterisk.Sdk.Push`).
+- First-class **diagnostics** via `System.Diagnostics.Metrics` (meter name `Verbara.Sdk.Push`).
 
 No ASP.NET Core dependency. No reflection. Trim-safe.
 
 ## Install
 
 ```
-dotnet add package Asterisk.Sdk.Push
+dotnet add package Verbara.Sdk.Push
 ```
 
 ## Quick start
 
 ```csharp
-using Asterisk.Sdk.Push.Bus;
-using Asterisk.Sdk.Push.Delivery;
-using Asterisk.Sdk.Push.Events;
-using Asterisk.Sdk.Push.Hosting;
-using Asterisk.Sdk.Push.Subscriptions;
+using Verbara.Sdk.Push.Bus;
+using Verbara.Sdk.Push.Delivery;
+using Verbara.Sdk.Push.Events;
+using Verbara.Sdk.Push.Hosting;
+using Verbara.Sdk.Push.Subscriptions;
 using Microsoft.Extensions.DependencyInjection;
 
 // 1) Define a concrete event
@@ -96,7 +96,7 @@ Dropped events increment `asterisk.push.events.dropped` with a `reason="buffer_f
 
 ## Observability
 
-The package exposes a `System.Diagnostics.Metrics.Meter` named **`Asterisk.Sdk.Push`** with the following instruments:
+The package exposes a `System.Diagnostics.Metrics.Meter` named **`Verbara.Sdk.Push`** with the following instruments:
 
 | Instrument | Kind | Description |
 |------------|------|-------------|
@@ -105,19 +105,19 @@ The package exposes a `System.Diagnostics.Metrics.Meter` named **`Asterisk.Sdk.P
 | `asterisk.push.events.dropped`   | Counter&lt;long&gt; | Events discarded (tag: `reason=buffer_full\|filter_rejected`). |
 | `asterisk.push.subscribers.active` | ObservableGauge&lt;int&gt; | Current active subscriptions (bound via `PushMetrics.BindActiveSubscribersGauge`). |
 
-Wire into OpenTelemetry with `meterProvider.AddMeter("Asterisk.Sdk.Push")`.
+Wire into OpenTelemetry with `meterProvider.AddMeter("Verbara.Sdk.Push")`.
 
 ## AOT
 
 This package is **Native AOT compatible**. The shipping build verifies zero trim warnings (`IL2026` / `IL2070` / `IL2075` / `IL3050` / ...) via the repo's `AotCanary` publish (`tools/verify-aot.sh`). No reflection, no `DataAnnotations` runtime validator, no dynamic code.
 
-## Relation with Asterisk.Sdk.Pro.Push
+## Relation with Verbara.Sdk.Pro.Push
 
-This package provides **in-memory primitives** suitable for single-node hosts. For NATS-backed multi-node fan-out in the MIT surface, see **`Asterisk.Sdk.Push.Nats`** (available since v1.12). For cluster-wide subscription routing over durable backplanes (Redis / Postgres LISTEN/NOTIFY), advanced authorization, and enterprise observability, see **`Asterisk.Sdk.Pro.Push`** — both build on top of this package's abstractions, so the contract is forward-compatible.
+This package provides **in-memory primitives** suitable for single-node hosts. For NATS-backed multi-node fan-out in the MIT surface, see **`Verbara.Sdk.Push.Nats`** (available since v1.12). For cluster-wide subscription routing over durable backplanes (Redis / Postgres LISTEN/NOTIFY), advanced authorization, and enterprise observability, see **`Verbara.Sdk.Pro.Push`** — both build on top of this package's abstractions, so the contract is forward-compatible.
 
 ## Links
 
-- Repository: [github.com/Harol-Reina/Asterisk.Sdk](https://github.com/Harol-Reina/Asterisk.Sdk)
+- Repository: [github.com/verbara/Verbara.Sdk](https://github.com/verbara/Verbara.Sdk)
 - Parent SDK README: [../../README.md](../../README.md)
 - Changelog: [../../CHANGELOG.md](../../CHANGELOG.md)
 

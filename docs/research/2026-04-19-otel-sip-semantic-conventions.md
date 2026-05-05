@@ -1,10 +1,10 @@
 # Proposal: OpenTelemetry semantic conventions for SIP / Asterisk telephony
 
-OpenTelemetry's semantic conventions catalog — the set of standard attribute names that make traces and metrics interoperable across instrumented systems — covers HTTP, database, messaging, RPC, FaaS, and many other domains, but **has no SIP / VoIP / telephony profile**. The gap has been tracked in `open-telemetry/opentelemetry-specification#2517` since 2022 without resolution. This document proposes a draft convention set tailored for Asterisk and SIP-adjacent systems, grounded in the 9 `ActivitySource`s and 13 `Meter`s that Asterisk.Sdk already ships in v1.11.1, and offered as a reference point for future upstream standardization.
+OpenTelemetry's semantic conventions catalog — the set of standard attribute names that make traces and metrics interoperable across instrumented systems — covers HTTP, database, messaging, RPC, FaaS, and many other domains, but **has no SIP / VoIP / telephony profile**. The gap has been tracked in `open-telemetry/opentelemetry-specification#2517` since 2022 without resolution. This document proposes a draft convention set tailored for Asterisk and SIP-adjacent systems, grounded in the 9 `ActivitySource`s and 13 `Meter`s that Verbara.Sdk already ships in v1.11.1, and offered as a reference point for future upstream standardization.
 
 - **Date:** 2026-04-19
 - **Status:** Draft — proposal, not yet adopted in code
-- **Related:** [../decisions/](../decisions/) (telemetry-related ADRs) · `src/Asterisk.Sdk.Hosting/AsteriskTelemetry.cs` (discovery surface) · [OTel spec issue #2517](https://github.com/open-telemetry/opentelemetry-specification/issues/2517)
+- **Related:** [../decisions/](../decisions/) (telemetry-related ADRs) · `src/Verbara.Sdk.Hosting/AsteriskTelemetry.cs` (discovery surface) · [OTel spec issue #2517](https://github.com/open-telemetry/opentelemetry-specification/issues/2517)
 
 ---
 
@@ -12,11 +12,11 @@ OpenTelemetry's semantic conventions catalog — the set of standard attribute n
 
 OpenTelemetry's value proposition depends on standardized attribute names. When an SDK emits `http.request.method = "POST"`, every OTel backend — Grafana Tempo, Jaeger, Honeycomb, Datadog, AWS X-Ray, Azure Monitor — knows how to index, query, and aggregate that field. When it emits a domain attribute without convention, each backend treats it as an opaque tag and cross-system correlation breaks.
 
-For telephony, no convention exists. Asterisk.Sdk today emits Activity tags like `asterisk.channel.id` and `call.direction` because the engineer writing the instrumentation picked a name that felt obvious — but a second consumer building a Grafana dashboard is guessing at the shape, a third consumer writing a correlation join is guessing at the type, and a fourth consumer integrating with a VoIP-analytics platform (CallMiner, Invoca, Observe.AI) is either translating or living without correlation.
+For telephony, no convention exists. Verbara.Sdk today emits Activity tags like `asterisk.channel.id` and `call.direction` because the engineer writing the instrumentation picked a name that felt obvious — but a second consumer building a Grafana dashboard is guessing at the shape, a third consumer writing a correlation join is guessing at the type, and a fourth consumer integrating with a VoIP-analytics platform (CallMiner, Invoca, Observe.AI) is either translating or living without correlation.
 
 This draft does three things:
 
-1. Proposes attribute names, types, and example values for the information Asterisk.Sdk is already producing.
+1. Proposes attribute names, types, and example values for the information Verbara.Sdk is already producing.
 2. Maps each attribute to the existing `ActivitySource` / `Meter` where it should be emitted.
 3. Sketches a spec-issue contribution plan so the convention can move upstream once validated by field use.
 
@@ -24,14 +24,14 @@ No code behavior change is implied by this draft. The companion work — alignin
 
 ---
 
-## §2 Asterisk.Sdk telemetry surface — today
+## §2 Verbara.Sdk telemetry surface — today
 
-The SDK exposes a discovery helper at [`src/Asterisk.Sdk.Hosting/AsteriskTelemetry.cs`](../../src/Asterisk.Sdk.Hosting/AsteriskTelemetry.cs):
+The SDK exposes a discovery helper at [`src/Verbara.Sdk.Hosting/AsteriskTelemetry.cs`](../../src/Verbara.Sdk.Hosting/AsteriskTelemetry.cs):
 
 **9 ActivitySources** (traces):
-`Asterisk.Sdk.Ami`, `Asterisk.Sdk.Ari`, `Asterisk.Sdk.Agi`, `Asterisk.Sdk.Live`, `Asterisk.Sdk.Sessions`, `Asterisk.Sdk.Push`, `Asterisk.Sdk.VoiceAi`, `Asterisk.Sdk.VoiceAi.AudioSocket`, `Asterisk.Sdk.VoiceAi.OpenAiRealtime`.
+`Verbara.Sdk.Ami`, `Verbara.Sdk.Ari`, `Verbara.Sdk.Agi`, `Verbara.Sdk.Live`, `Verbara.Sdk.Sessions`, `Verbara.Sdk.Push`, `Verbara.Sdk.VoiceAi`, `Verbara.Sdk.VoiceAi.AudioSocket`, `Verbara.Sdk.VoiceAi.OpenAiRealtime`.
 
-**14 Meters** (metrics): the 9 above plus `Asterisk.Sdk.Ari.Audio`, `Asterisk.Sdk.Push.Webhooks`, `Asterisk.Sdk.Push.Nats`, `Asterisk.Sdk.VoiceAi.Stt`, `Asterisk.Sdk.VoiceAi.Tts`.
+**14 Meters** (metrics): the 9 above plus `Verbara.Sdk.Ari.Audio`, `Verbara.Sdk.Push.Webhooks`, `Verbara.Sdk.Push.Nats`, `Verbara.Sdk.VoiceAi.Stt`, `Verbara.Sdk.VoiceAi.Tts`.
 
 Each source produces spans keyed by different phases of a call: AMI events, ARI REST operations, dialplan execution, session lifecycle, push dispatch, STT/TTS turns, realtime streaming. Their tags today are ad-hoc. This draft proposes a unified set.
 
@@ -46,7 +46,7 @@ Attributes that identify the Asterisk instance producing the telemetry. These ar
 | `asterisk.server.name` | string | `"asterisk-pbx-01"` | Matches the `AsteriskServer.Name` in the SDK's Live API. Cardinality is the deployment's node count. |
 | `asterisk.server.version` | string | `"22.5.0"` | Asterisk version reported by `GetInfoAsync`. Stable across a process lifetime. |
 | `asterisk.server.hostname` | string | `"pbx01.example.com"` | Kernel hostname. Redundant with `host.name` from OTel's HOST convention but kept for backends that read only the asterisk.* namespace. |
-| `asterisk.sdk.version` | string | `"1.12.0"` | The `Asterisk.Sdk` package version. Useful for correlating bug reports to SDK releases. |
+| `asterisk.sdk.version` | string | `"1.12.0"` | The `Verbara.Sdk` package version. Useful for correlating bug reports to SDK releases. |
 
 These four resource-level attributes answer "which box produced this trace?". They are cheap to join against and they belong on the resource rather than on every span.
 
@@ -58,7 +58,7 @@ Attributes that describe a specific operation. Cardinality must stay bounded (se
 
 ### §4.1 Channel
 
-Emitted on spans in `Asterisk.Sdk.Ari`, `Asterisk.Sdk.Live`, `Asterisk.Sdk.VoiceAi`, `Asterisk.Sdk.VoiceAi.AudioSocket` whenever a channel is the subject.
+Emitted on spans in `Verbara.Sdk.Ari`, `Verbara.Sdk.Live`, `Verbara.Sdk.VoiceAi`, `Verbara.Sdk.VoiceAi.AudioSocket` whenever a channel is the subject.
 
 | Attribute | Type | Example | Notes |
 |-----------|------|---------|-------|
@@ -110,7 +110,7 @@ Emit on spans where the SIP protocol is directly relevant (PJSIP register/invite
 
 ### §4.5 Media (RTP, codec, jitter)
 
-Emit on spans where the audio path is the subject. Typically in `Asterisk.Sdk.VoiceAi.AudioSocket` and `Asterisk.Sdk.VoiceAi` pipeline spans.
+Emit on spans where the audio path is the subject. Typically in `Verbara.Sdk.VoiceAi.AudioSocket` and `Verbara.Sdk.VoiceAi` pipeline spans.
 
 | Attribute | Type | Example | Notes |
 |-----------|------|---------|-------|
@@ -123,7 +123,7 @@ Emit on spans where the audio path is the subject. Typically in `Asterisk.Sdk.Vo
 
 ### §4.6 Queue / agent
 
-Emit on spans within `Asterisk.Sdk.Live.Queues` and `Asterisk.Sdk.Sessions.Queues`.
+Emit on spans within `Verbara.Sdk.Live.Queues` and `Verbara.Sdk.Sessions.Queues`.
 
 | Attribute | Type | Example | Notes |
 |-----------|------|---------|-------|
@@ -135,7 +135,7 @@ Emit on spans within `Asterisk.Sdk.Live.Queues` and `Asterisk.Sdk.Sessions.Queue
 
 ### §4.7 VoiceAI
 
-Emit on `Asterisk.Sdk.VoiceAi`, `.Stt`, `.Tts`, `.OpenAiRealtime` spans.
+Emit on `Verbara.Sdk.VoiceAi`, `.Stt`, `.Tts`, `.OpenAiRealtime` spans.
 
 | Attribute | Type | Example | Notes |
 |-----------|------|---------|-------|
@@ -169,8 +169,8 @@ Each metric emitted by the SDK should pick at most 3-4 low-cardinality dimension
 
 Turning this draft into reality required three follow-up items.
 
-1. ✅ **Audit every `Activity.SetTag` and `Meter.Create*` call-site in `src/`** — done in v1.12.x. Tag literals across `Asterisk.Sdk.Live`, `Asterisk.Sdk.Sessions`, `Asterisk.Sdk.VoiceAi`, `Asterisk.Sdk.VoiceAi.AudioSocket`, `Asterisk.Sdk.VoiceAi.OpenAiRealtime` were renamed to match the snake-case proposal (e.g. `voiceai.channel_id` → `asterisk.channel.id`, `originate.context` → `dialplan.context`, `session.duration_ms` → `call.duration_ms`). Module-specific tags that don't map to SIP/VoIP semantic conventions (AMI protocol concepts, ARI HTTP standard names, AGI script lifecycle, Push event-type) were intentionally left as-is — they convey orthogonal information.
-2. ✅ **Add `AsteriskSemanticConventions` static class** — done in v1.12.x. The class lives in `src/Asterisk.Sdk/AsteriskSemanticConventions.cs` (core package, reachable from every shipping project via the implicit transitive dependency on `Asterisk.Sdk`). 49 const strings across 10 nested static classes. `Tests/Asterisk.Sdk.Hosting.Tests/AsteriskSemanticConventionsTests.cs` pins each value to the wire-level string in this draft, so a refactor that renames either side breaks the test.
+1. ✅ **Audit every `Activity.SetTag` and `Meter.Create*` call-site in `src/`** — done in v1.12.x. Tag literals across `Verbara.Sdk.Live`, `Verbara.Sdk.Sessions`, `Verbara.Sdk.VoiceAi`, `Verbara.Sdk.VoiceAi.AudioSocket`, `Verbara.Sdk.VoiceAi.OpenAiRealtime` were renamed to match the snake-case proposal (e.g. `voiceai.channel_id` → `asterisk.channel.id`, `originate.context` → `dialplan.context`, `session.duration_ms` → `call.duration_ms`). Module-specific tags that don't map to SIP/VoIP semantic conventions (AMI protocol concepts, ARI HTTP standard names, AGI script lifecycle, Push event-type) were intentionally left as-is — they convey orthogonal information.
+2. ✅ **Add `AsteriskSemanticConventions` static class** — done in v1.12.x. The class lives in `src/Verbara.Sdk/AsteriskSemanticConventions.cs` (core package, reachable from every shipping project via the implicit transitive dependency on `Verbara.Sdk`). 49 const strings across 10 nested static classes. `Tests/Verbara.Sdk.Hosting.Tests/AsteriskSemanticConventionsTests.cs` pins each value to the wire-level string in this draft, so a refactor that renames either side breaks the test.
 3. **Submit the draft upstream** as a comment on OTel spec issue #2517 once field-validated on at least one production deployment. If the community accepts it, move the attributes into OTel's own namespaces; if rejected, keep in the `asterisk.*` / domain-specific namespaces as shipped. Pending — community submission, not a code task.
 
 ---
@@ -199,7 +199,7 @@ Specifically: a call that spans multiple SDK processes (e.g. AMI node → Push b
 
 These are honest gaps in the draft worth calling out:
 
-- **Multi-tenant attribution.** Asterisk.Sdk.Pro (private repo) supports tenant isolation. A convention like `tenant.id` would be cleanly on top of this proposal, but whether it belongs in a SIP/VoIP spec (vs in OTel's general multi-tenancy conventions, which also do not exist) is a bigger question. Deferred.
+- **Multi-tenant attribution.** Verbara.Sdk.Pro (private repo) supports tenant isolation. A convention like `tenant.id` would be cleanly on top of this proposal, but whether it belongs in a SIP/VoIP spec (vs in OTel's general multi-tenancy conventions, which also do not exist) is a bigger question. Deferred.
 - **Transfer and conference semantics.** When a call is attended-transferred, `call.id` changes mid-call (from the original LinkedID to a new one). The proposal does not prescribe how to represent this. A follow-up could add `call.previous_id` and `call.transfer.kind` (attended / blind / transfer-target) to handle the lineage.
 - **Encrypted signalling.** `sip.from_uri` and `sip.to_uri` are PII in many jurisdictions. The proposal does not prescribe redaction policy; SDK consumers should apply their own via SpanProcessor.
 - **Recording.** A `asterisk.recording.id` / `asterisk.recording.name` attribute set makes sense but is outside the v1.11 SDK's Live API scope. Propose separately once recordings are first-class citizens.
@@ -212,4 +212,4 @@ These are honest gaps in the draft worth calling out:
 - After field validation: add `AsteriskSemanticConventions` static class + tag audit (item 2 and 1 in §6).
 - After adoption in code: open a comment on [OTel spec issue #2517](https://github.com/open-telemetry/opentelemetry-specification/issues/2517) with this proposal as a concrete contribution.
 
-The goal is not to win the upstream spec race — the goal is to make Asterisk.Sdk's telemetry coherent, predictable, and useful on every OTel backend today, and to position the SDK as the reference implementation for SIP/VoIP semantic conventions when the wider community eventually standardizes them.
+The goal is not to win the upstream spec race — the goal is to make Verbara.Sdk's telemetry coherent, predictable, and useful on every OTel backend today, and to position the SDK as the reference implementation for SIP/VoIP semantic conventions when the wider community eventually standardizes them.

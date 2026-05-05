@@ -1,4 +1,4 @@
-# Asterisk.Sdk
+# Verbara.Sdk
 
 ## The Modern .NET SDK for Asterisk PBX
 
@@ -14,7 +14,7 @@ Meanwhile, cloud telephony platforms like Twilio and Vonage charge per minute an
 
 ## The Solution
 
-Asterisk.Sdk is the first complete .NET SDK for Asterisk. One NuGet install gives you all three Asterisk interfaces (AMI, AGI, ARI), plus a real-time Live API, a Session Engine for call correlation, and a full Voice AI stack with pluggable speech-to-text and text-to-speech providers. Everything is built for .NET 10 with Native AOT -- zero runtime reflection, zero trim warnings.
+Verbara.Sdk is the first complete .NET SDK for Asterisk. One NuGet install gives you all three Asterisk interfaces (AMI, AGI, ARI), plus a real-time Live API, a Session Engine for call correlation, and a full Voice AI stack with pluggable speech-to-text and text-to-speech providers. Everything is built for .NET 10 with Native AOT -- zero runtime reflection, zero trim warnings.
 
 The SDK is ported from asterisk-java, the most mature Asterisk library in any language, with over 2,470 commits across its 3.42.0 release history and 449 GitHub stars. But this is not a line-for-line translation. It is a complete redesign using System.IO.Pipelines for zero-copy TCP parsing, System.Threading.Channels for backpressure-aware event dispatch, System.Reactive for real-time state machines, and four custom source generators for full AOT compliance. The result is a library that inherits two decades of protocol knowledge while taking full advantage of modern .NET.
 
@@ -31,14 +31,14 @@ The SDK is ported from asterisk-java, the most mature Asterisk library in any la
 
 **Production Hardened** -- The SDK includes 1,430 unit tests and 640 functional tests, produces zero compiler warnings, and passes AOT trim analysis cleanly. It supports multi-server federation with automatic agent routing, connection auto-reconnect with state reload, health check endpoints, and observability through System.Diagnostics.Metrics. It has been designed and tested for high-load scenarios exceeding 100,000 concurrent agents.
 
-**Free Forever** -- Asterisk.Sdk is released under the MIT license. There are no per-minute fees, no seat licenses, no usage caps, and no feature gates. Use it in production, modify it, fork it, embed it in your product, distribute it to your customers. The full SDK is free for any purpose, commercial or otherwise.
+**Free Forever** -- Verbara.Sdk is released under the MIT license. There are no per-minute fees, no seat licenses, no usage caps, and no feature gates. Use it in production, modify it, fork it, embed it in your product, distribute it to your customers. The full SDK is free for any purpose, commercial or otherwise.
 
 
 ## Who Is This For
 
 **Companies with existing Asterisk deployments** that want to build custom .NET applications on top of their PBX infrastructure. If you already run Asterisk and your development team works in C#, this SDK bridges the gap without requiring a platform migration.
 
-**ISVs and SaaS providers** building telephony products who need full control over their voice stack without cloud vendor lock-in. Ship your product with Asterisk as the engine and Asterisk.Sdk as the control plane, on your customers' infrastructure or your own.
+**ISVs and SaaS providers** building telephony products who need full control over their voice stack without cloud vendor lock-in. Ship your product with Asterisk as the engine and Verbara.Sdk as the control plane, on your customers' infrastructure or your own.
 
 **Contact center developers** who need a programmable foundation for custom call flows, interactive voice response systems, queue management, and agent desktop tools. The Live API and Session Engine handle the complexity of real-time call state so your team can focus on business logic.
 
@@ -60,9 +60,9 @@ The SDK is ported from asterisk-java, the most mature Asterisk library in any la
 
 ## Enterprise Extension
 
-For teams building enterprise contact centers, Asterisk.Sdk.Pro extends the MIT SDK with commercial features: skill-based routing with proficiency scoring, predictive and progressive dialer campaigns, real-time analytics dashboards, event sourcing for audit trails, multi-tenant isolation, and AI-powered agent assist with live coaching and automatic summarization.
+For teams building enterprise contact centers, Verbara.Sdk.Pro extends the MIT SDK with commercial features: skill-based routing with proficiency scoring, predictive and progressive dialer campaigns, real-time analytics dashboards, event sourcing for audit trails, multi-tenant isolation, and AI-powered agent assist with live coaching and automatic summarization.
 
-Asterisk.Sdk.Pro is a separate commercial product that builds on top of the free SDK. The MIT SDK is complete on its own -- Pro adds features specific to large-scale contact center operations. For more information, see the Asterisk.Sdk.Pro repository.
+Verbara.Sdk.Pro is a separate commercial product that builds on top of the free SDK. The MIT SDK is complete on its own -- Pro adds features specific to large-scale contact center operations. For more information, see the Verbara.Sdk.Pro repository.
 
 
 ## Get Started
@@ -71,9 +71,9 @@ For technical documentation, architecture details, and integration guides, see t
 
 For the project overview, package list, and quick-start instructions, see the main README at the repository root.
 
-The SDK is available on NuGet at https://www.nuget.org/packages/Asterisk.Sdk and can be installed with standard .NET tooling.
+The SDK is available on NuGet at https://www.nuget.org/packages/Verbara.Sdk and can be installed with standard .NET tooling.
 
 
 ## License
 
-Asterisk.Sdk is licensed under the MIT License. It is free for commercial and non-commercial use, modification, and redistribution. See the LICENSE file in the repository root for the full license text.
+Verbara.Sdk is licensed under the MIT License. It is free for commercial and non-commercial use, modification, and redistribution. See the LICENSE file in the repository root for the full license text.

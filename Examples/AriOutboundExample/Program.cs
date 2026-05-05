@@ -1,4 +1,4 @@
-// Asterisk.Sdk — ARI Outbound WebSocket listener example.
+// Verbara.Sdk — ARI Outbound WebSocket listener example.
 //
 // Shows how to act as the WebSocket *server* that Asterisk 22.5+ dials
 // into (reverse of the classic inbound ARI pattern). The listener

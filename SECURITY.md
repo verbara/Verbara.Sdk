@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in Asterisk.Sdk, please report it responsibly.
+If you discover a security vulnerability in Verbara.Sdk, please report it responsibly.
 
 ### How to Report
 
@@ -25,8 +25,8 @@ Use GitHub's private vulnerability reporting:
 
 ### Scope
 
-This policy covers all packages in the Asterisk.Sdk family:
-- Asterisk.Sdk.* (MIT licensed, nuget.org)
+This policy covers all packages in the Verbara.Sdk family:
+- Verbara.Sdk.* (MIT licensed, nuget.org)
 - Security issues in dependencies should be reported to the respective maintainers
 
 ### Not in Scope

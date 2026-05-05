@@ -1,6 +1,6 @@
-# Asterisk.Sdk.Push.AspNetCore
+# Verbara.Sdk.Push.AspNetCore
 
-ASP.NET Core SSE delivery endpoints for Asterisk.Sdk.Push. First SDK package with an AspNetCore `FrameworkReference` dependency.
+ASP.NET Core SSE delivery endpoints for Verbara.Sdk.Push. First SDK package with an AspNetCore `FrameworkReference` dependency.
 
 ## Features
 

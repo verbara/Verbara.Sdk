@@ -1,4 +1,4 @@
-# Analisis de Benchmark — Asterisk.Sdk
+# Analisis de Benchmark — Verbara.Sdk
 
 > AMD Ryzen 9 9900X (12C/24T), .NET 10.0.5, BenchmarkDotNet v0.14.0 (ShortRunJob)
 > Baseline: 2026-03-06 (SDK v1.0.0-preview). Full re-run: **2026-04-18 (v1.11.0)**.
@@ -9,7 +9,7 @@
 
 ## 1. Throughput Calculado (v1.11.0 run — 2026-04-18)
 
-Convertimos latencias a operaciones/segundo para entender capacidad real. Todos los números provienen de `Tests/Asterisk.Sdk.Benchmarks/` con `[ShortRunJob]` (3 warmup + 3 iter). Reproducible con `dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/`.
+Convertimos latencias a operaciones/segundo para entender capacidad real. Todos los números provienen de `Tests/Verbara.Sdk.Benchmarks/` con `[ShortRunJob]` (3 warmup + 3 iter). Reproducible con `dotnet run -c Release --project Tests/Verbara.Sdk.Benchmarks/`.
 
 | Operación | Latencia v1.0 | **Latencia v1.11** | Δ | Throughput v1.11 | Alloc v1.11 | Contexto |
 |-----------|---------------|--------------------|---|------------------|-------------|----------|
@@ -83,7 +83,7 @@ Re-run acotado a los dos hot paths (AMI reader + ARI parser) para validar que el
 
 Investigación disparada por la Δ de +12% en `ParseSingleEvent` (582 ns v1.0 → 653 ns v1.11.0 ShortRunJob).
 
-**Causa raíz:** commit [`c2b49b3`](https://github.com/Harol-Reina/Asterisk.Sdk/commit/c2b49b3) (2026-03-22, shipped v1.5.0) — `fix(ami): accumulate Output: headers for AMI Command responses`. Para soportar la variante de `Command` response de Asterisk 22+ (headers `Output:` separados en vez de body monolítico), `AmiProtocolReader` añadió un `key.Equals("Output", StringComparison.OrdinalIgnoreCase)` por **cada campo del evento**. Para el benchmark de 9 fields, 9 comparaciones extra × ~8 ns = ~71 ns — cuadra con la Δ observada.
+**Causa raíz:** commit [`c2b49b3`](https://github.com/verbara/Verbara.Sdk/commit/c2b49b3) (2026-03-22, shipped v1.5.0) — `fix(ami): accumulate Output: headers for AMI Command responses`. Para soportar la variante de `Command` response de Asterisk 22+ (headers `Output:` separados en vez de body monolítico), `AmiProtocolReader` añadió un `key.Equals("Output", StringComparison.OrdinalIgnoreCase)` por **cada campo del evento**. Para el benchmark de 9 fields, 9 comparaciones extra × ~8 ns = ~71 ns — cuadra con la Δ observada.
 
 **Fix aplicado:** short-circuit por length en el mismo sitio.
 
@@ -109,7 +109,7 @@ El parche recuperó ~35 ns de los 71 perdidos. El residual +35.6 ns es estadíst
 
 **Throughput final:** 1.62 M events/sec (single-thread) vs 1.72 M en v1.0. Aún excede el requisito del SDK (1.5 M events/sec para cluster 100K agentes, ver §4 scorecard).
 
-Benchmark code sin cambio: `Tests/Asterisk.Sdk.Benchmarks/AmiProtocolReaderBenchmark.cs`. Reproduce con `dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/ -- --filter "*AmiProtocolReader*" --job Medium`.
+Benchmark code sin cambio: `Tests/Verbara.Sdk.Benchmarks/AmiProtocolReaderBenchmark.cs`. Reproduce con `dotnet run -c Release --project Tests/Verbara.Sdk.Benchmarks/ -- --filter "*AmiProtocolReader*" --job Medium`.
 
 ---
 
@@ -140,13 +140,13 @@ public sealed class MyRecognizer : SpeechRecognizer
 
 Sin override, el default `=> GetType().Name` preserva el comportamiento pre-v1.10 — fully backwards-compatible.
 
-Benchmark code: `Tests/Asterisk.Sdk.Benchmarks/VoiceAiBenchmarks.cs`. Reproduce con `dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/ -- --filter "*VoiceAi*"`.
+Benchmark code: `Tests/Verbara.Sdk.Benchmarks/VoiceAiBenchmarks.cs`. Reproduce con `dotnet run -c Release --project Tests/Verbara.Sdk.Benchmarks/ -- --filter "*VoiceAi*"`.
 
 ---
 
 ## 1c. Pluggable Session Backends — v1.11.0 (2026-04-18)
 
-En v1.11.0 se añadieron dos backends de `ISessionStore` para despliegues multi-instance: `Asterisk.Sdk.Sessions.Redis` (StackExchange.Redis, pipelined batches, TTL-driven retention) y `Asterisk.Sdk.Sessions.Postgres` (Npgsql + Dapper + JSONB, UPSERT on conflict, partial index para activas). Los benchmarks de latencia corren contra contenedores Docker locales (`redis:7-alpine` / `postgres:18-alpine`) vía Testcontainers, no contra infra remota — los números son "mejor caso" de CPU + loopback y sirven como baseline de regresión, no como sizing de producción.
+En v1.11.0 se añadieron dos backends de `ISessionStore` para despliegues multi-instance: `Verbara.Sdk.Sessions.Redis` (StackExchange.Redis, pipelined batches, TTL-driven retention) y `Verbara.Sdk.Sessions.Postgres` (Npgsql + Dapper + JSONB, UPSERT on conflict, partial index para activas). Los benchmarks de latencia corren contra contenedores Docker locales (`redis:7-alpine` / `postgres:18-alpine`) vía Testcontainers, no contra infra remota — los números son "mejor caso" de CPU + loopback y sirven como baseline de regresión, no como sizing de producción.
 
 **Máquina:** AMD Ryzen 9 9900X · .NET 10.0.5 · Debian trixie · Docker 29.4 · 1000 iteraciones por punto · 10 warmup.
 
@@ -174,13 +174,13 @@ En v1.11.0 se añadieron dos backends de `ISessionStore` para despliegues multi-
 - Postgres mide con `SSL Mode=Disable` en loopback. En producción con TLS + réplica síncrona restar ~2-5 ms por write.
 
 **Benchmark code:**
-- Redis: `Tests/Asterisk.Sdk.Sessions.Redis.Tests/RedisLatencyBenchmark.cs`
-- Postgres: `Tests/Asterisk.Sdk.Sessions.Postgres.Tests/PostgresLatencyBenchmark.cs`
+- Redis: `Tests/Verbara.Sdk.Sessions.Redis.Tests/RedisLatencyBenchmark.cs`
+- Postgres: `Tests/Verbara.Sdk.Sessions.Postgres.Tests/PostgresLatencyBenchmark.cs`
 
 Reproduce con:
 ```sh
-dotnet test Tests/Asterisk.Sdk.Sessions.Redis.Tests/ -c Release --filter "Category=Benchmark" --logger "console;verbosity=detailed"
-dotnet test Tests/Asterisk.Sdk.Sessions.Postgres.Tests/ -c Release --filter "Category=Benchmark" --logger "console;verbosity=detailed"
+dotnet test Tests/Verbara.Sdk.Sessions.Redis.Tests/ -c Release --filter "Category=Benchmark" --logger "console;verbosity=detailed"
+dotnet test Tests/Verbara.Sdk.Sessions.Postgres.Tests/ -c Release --filter "Category=Benchmark" --logger "console;verbosity=detailed"
 ```
 
 ---
@@ -189,7 +189,7 @@ dotnet test Tests/Asterisk.Sdk.Sessions.Postgres.Tests/ -c Release --filter "Cat
 
 ### 2.1 AMI Protocol Reader vs asterisk-java
 
-| Metrica | asterisk-java | Asterisk.Sdk | Factor |
+| Metrica | asterisk-java | Verbara.Sdk | Factor |
 |---------|---------------|-------------|--------|
 | Parsing model | `BufferedReader.readLine()` + regex | `System.IO.Pipelines` + `SequenceReader` | — |
 | Alloc per event | ~5-10 KB (String[], HashMap, regex) | **3.15 KB** (Dictionary + strings) | ~2-3x menos |
@@ -203,7 +203,7 @@ dotnet test Tests/Asterisk.Sdk.Sessions.Postgres.Tests/ -c Release --filter "Cat
 
 | Framework | Deserialize Channel | Modelo |
 |-----------|-------------------|--------|
-| Asterisk.Sdk (STJ source-gen) | **283 ns / 216 B** (v1.11) | AOT, zero-reflection |
+| Verbara.Sdk (STJ source-gen) | **283 ns / 216 B** (v1.11) | AOT, zero-reflection |
 | System.Text.Json (reflection) | ~400-600 ns / ~500 B | Runtime reflection |
 | Newtonsoft.Json | ~800-1200 ns / ~2 KB | Reflection + alloc heavy |
 | asterisk-java (Jackson) | ~1-2 us / ~1-3 KB | Reflection + annotation |
@@ -214,7 +214,7 @@ dotnet test Tests/Asterisk.Sdk.Sessions.Postgres.Tests/ -c Release --filter "Cat
 
 | Pattern | Latencia (100 obs) | Alloc | Modelo |
 |---------|-------------------|-------|--------|
-| Asterisk.Sdk (volatile array) | **20.7 ns / 0 B** (v1.11) | Zero-alloc | Copy-on-write snapshot |
+| Verbara.Sdk (volatile array) | **20.7 ns / 0 B** (v1.11) | Zero-alloc | Copy-on-write snapshot |
 | `event` delegate (C#) | ~30-50 ns / 0 B | Zero-alloc | Multicast delegate |
 | `List<T>` + `lock` | ~100-200 ns / 0 B | Lock contention | Traditional |
 | System.Reactive `Subject<T>` | ~200-500 ns / 40+ B | Per-notification alloc | Full Rx pipeline |
@@ -226,7 +226,7 @@ dotnet test Tests/Asterisk.Sdk.Sessions.Postgres.Tests/ -c Release --filter "Cat
 
 | Estructura | Latencia | Notas |
 |-----------|----------|-------|
-| Asterisk.Sdk `ConcurrentDictionary` | **6.1 ns** (v1.11) | O(1) amortizado, lock-free reads |
+| Verbara.Sdk `ConcurrentDictionary` | **6.1 ns** (v1.11) | O(1) amortizado, lock-free reads |
 | `Dictionary<K,V>` (no thread-safe) | ~3-5 ns | Mas rapido pero no concurrente |
 | `ImmutableDictionary` | ~50-80 ns | Arbol balanceado, O(log n) |
 | `ConcurrentBag` + LINQ FirstOrDefault | ~1-10 us | O(n) scan |

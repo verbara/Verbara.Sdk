@@ -1,14 +1,14 @@
-# Asterisk.Sdk.Push.Nats
+# Verbara.Sdk.Push.Nats
 
-NATS bridge for `Asterisk.Sdk.Push`. The bridge subscribes to the in-process Push bus and republishes every event to a NATS subject derived from the event's `TopicPath`. This unlocks multi-node deployments: one NATS cluster, N SDK instances, each fans out local events to the cluster for topic-based filtering by remote subscribers.
+NATS bridge for `Verbara.Sdk.Push`. The bridge subscribes to the in-process Push bus and republishes every event to a NATS subject derived from the event's `TopicPath`. This unlocks multi-node deployments: one NATS cluster, N SDK instances, each fans out local events to the cluster for topic-based filtering by remote subscribers.
 
 This is the .NET answer to the Go-based `ari-proxy` pattern: keep the SDK's local Rx bus as the source of truth, let NATS be the transport when you need horizontal scale.
 
 ## Usage
 
 ```csharp
-using Asterisk.Sdk.Push.Hosting;
-using Asterisk.Sdk.Push.Nats;
+using Verbara.Sdk.Push.Hosting;
+using Verbara.Sdk.Push.Nats;
 
 builder.Services.AddAsteriskPush()
                 .AddPushNats(opts =>
@@ -36,16 +36,16 @@ Both `.` and `/` are accepted as input separators so callers are not locked into
 
 ## Extension points
 
-- **Custom payload shape:** implement `INatsPayloadSerializer` and register as singleton before `AddPushNats`. The default serializer emits the same envelope as `Asterisk.Sdk.Push.Webhooks`, so downstream consumers can treat both transports interchangeably.
+- **Custom payload shape:** implement `INatsPayloadSerializer` and register as singleton before `AddPushNats`. The default serializer emits the same envelope as `Verbara.Sdk.Push.Webhooks`, so downstream consumers can treat both transports interchangeably.
 
 ## Observability
 
-Counters on the `Asterisk.Sdk.Push.Nats` meter:
+Counters on the `Verbara.Sdk.Push.Nats` meter:
 
 - `asterisk.push.nats.events.published`
 - `asterisk.push.nats.events.failed`
 
-Enroll via `Asterisk.Sdk.OpenTelemetry.WithAllSources()` once the meter name is added to `AsteriskTelemetry.MeterNames`.
+Enroll via `Verbara.Sdk.OpenTelemetry.WithAllSources()` once the meter name is added to `AsteriskTelemetry.MeterNames`.
 
 ## Roadmap
 

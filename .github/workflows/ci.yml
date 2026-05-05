@@ -16,9 +16,9 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Build
-        run: dotnet build Asterisk.Sdk.slnx -c Release
+        run: dotnet build Verbara.Sdk.slnx -c Release
       - name: Run unit tests
-        run: dotnet test Asterisk.Sdk.slnx --no-build -c Release --filter "Category!=Functional&Category!=Integration&Category!=Realtime&Category!=Spike" --logger "console;verbosity=normal"
+        run: dotnet test Verbara.Sdk.slnx --no-build -c Release --filter "Category!=Functional&Category!=Integration&Category!=Realtime&Category!=Spike" --logger "console;verbosity=normal"
 
   aot-check:
     name: AOT Trim Check
@@ -40,12 +40,12 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Build Release
-        run: dotnet build Asterisk.Sdk.slnx -c Release
+        run: dotnet build Verbara.Sdk.slnx -c Release
       - name: Pack with warnings as errors
         # Surfaces PackageValidation baseline drift, PublicAPI drift, missing
         # icons/release-notes, and license-expression issues at PR time so
         # publish.yml never hits them in the release path.
-        run: dotnet pack Asterisk.Sdk.slnx -c Release --no-build -p:TreatWarningsAsErrors=true -o ./artifacts
+        run: dotnet pack Verbara.Sdk.slnx -c Release --no-build -p:TreatWarningsAsErrors=true -o ./artifacts
       - name: List produced packages
         run: ls -la ./artifacts/*.nupkg 2>/dev/null || true
 
@@ -69,5 +69,5 @@ jobs:
       - name: Run functional + integration tests
         # MaxCpuCount=1 serializes test projects so FunctionalTests and IntegrationTests
         # do not start their Docker stacks concurrently (CI runner has limited resources).
-        run: dotnet test Asterisk.Sdk.slnx --filter "Category=Functional|Category=Integration|Category=Realtime" --logger "console;verbosity=detailed" -- RunConfiguration.MaxCpuCount=1
+        run: dotnet test Verbara.Sdk.slnx --filter "Category=Functional|Category=Integration|Category=Realtime" --logger "console;verbosity=detailed" -- RunConfiguration.MaxCpuCount=1
         timeout-minutes: 30

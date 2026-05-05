@@ -1,4 +1,4 @@
-// Asterisk.Sdk - Multi-Server Example
+// Verbara.Sdk - Multi-Server Example
 // Demonstrates: AddVerbaraMultiServer(), VerbaraServerPool with federated
 // agent routing, AddServer, GetServerForAgent, RemoveServer.
 

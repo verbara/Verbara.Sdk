@@ -1,4 +1,4 @@
-// Asterisk.Sdk - FastAGI Server Example
+// Verbara.Sdk - FastAGI Server Example
 // Demonstrates: start AGI server, register script handler, handle calls.
 
 using Verbara.Sdk;

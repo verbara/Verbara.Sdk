@@ -24,6 +24,6 @@ Any alternative approaches you've considered and why you prefer the proposed sol
 
 ## Context
 
-- **Package:** (e.g., Asterisk.Sdk.Ami, Asterisk.Sdk.Ari)
+- **Package:** (e.g., Verbara.Sdk.Ami, Verbara.Sdk.Ari)
 - **Asterisk version(s):** (if version-specific)
 - **Is this related to an existing issue?** (link if yes)

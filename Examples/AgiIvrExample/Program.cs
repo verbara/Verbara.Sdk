@@ -1,4 +1,4 @@
-// Asterisk.Sdk - AGI IVR Example
+// Verbara.Sdk - AGI IVR Example
 // Demonstrates: complex IVR script with Answer, GetData, conditional routing,
 // Dial/VoiceMail, and Hangup using SimpleMappingStrategy.
 

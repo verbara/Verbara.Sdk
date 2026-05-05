@@ -1,12 +1,12 @@
-# Asterisk.Sdk.Push.Webhooks
+# Verbara.Sdk.Push.Webhooks
 
-Outbound HTTP webhook delivery for `Asterisk.Sdk.Push`. Consumes events from the in-process Push bus, matches them against `WebhookSubscription` topic patterns, and POSTs to configured URLs with HMAC-SHA256 signing and exponential retry/backoff.
+Outbound HTTP webhook delivery for `Verbara.Sdk.Push`. Consumes events from the in-process Push bus, matches them against `WebhookSubscription` topic patterns, and POSTs to configured URLs with HMAC-SHA256 signing and exponential retry/backoff.
 
 ## Usage
 
 ```csharp
-using Asterisk.Sdk.Push.Topics;
-using Asterisk.Sdk.Push.Webhooks;
+using Verbara.Sdk.Push.Topics;
+using Verbara.Sdk.Push.Webhooks;
 
 builder.Services.AddAsteriskPush()
                 .AddAsteriskPushWebhooks(opts =>
@@ -35,7 +35,7 @@ await store.AddAsync(new WebhookSubscription
 | `Content-Type` | `application/json` |
 | `X-Signature` | `sha256=<hex>` (absent if subscription has no secret) |
 | `X-Event-Type` | `PushEvent.EventType` |
-| `User-Agent` | `WebhookDeliveryOptions.UserAgent` (default `Asterisk.Sdk.Push.Webhooks/1.0`) |
+| `User-Agent` | `WebhookDeliveryOptions.UserAgent` (default `Verbara.Sdk.Push.Webhooks/1.0`) |
 | `traceparent` | `PushEventMetadata.TraceContext` (absent if null) |
 
 Extra per-subscription headers are appended from `WebhookSubscription.Headers`.
@@ -48,11 +48,11 @@ Extra per-subscription headers are appended from `WebhookSubscription.Headers`.
 
 ## Observability
 
-Counters on `Asterisk.Sdk.Push.Webhooks` meter:
+Counters on `Verbara.Sdk.Push.Webhooks` meter:
 
 - `asterisk.push.webhooks.deliveries.succeeded`
 - `asterisk.push.webhooks.deliveries.failed`
 - `asterisk.push.webhooks.deliveries.retried`
 - `asterisk.push.webhooks.deliveries.dead_letter`
 
-Enroll via `Asterisk.Sdk.OpenTelemetry` — `WithAllSources()` includes this meter automatically once the meter name is added to `AsteriskTelemetry.MeterNames`.
+Enroll via `Verbara.Sdk.OpenTelemetry` — `WithAllSources()` includes this meter automatically once the meter name is added to `AsteriskTelemetry.MeterNames`.

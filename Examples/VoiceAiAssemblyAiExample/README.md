@@ -44,11 +44,11 @@ Point Asterisk's `AudioSocket()` dialplan at `127.0.0.1:9092`.
 
 ## Why AssemblyAI Here
 
-The **official AssemblyAI .NET SDK was discontinued in April 2025**. `Asterisk.Sdk.VoiceAi.Stt.AssemblyAi` fills that gap as an AOT-clean, hand-rolled wrapper over AssemblyAI's Universal Streaming protocol — zero reflection, no vendor-supplied binary dependency, no Kestrel/ASP.NET coupling.
+The **official AssemblyAI .NET SDK was discontinued in April 2025**. `Verbara.Sdk.VoiceAi.Stt.AssemblyAi` fills that gap as an AOT-clean, hand-rolled wrapper over AssemblyAI's Universal Streaming protocol — zero reflection, no vendor-supplied binary dependency, no Kestrel/ASP.NET coupling.
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.VoiceAi.AudioSocket` — AudioSocket server.
-- `Asterisk.Sdk.VoiceAi.Stt` — AssemblyAI recognizer.
-- `Asterisk.Sdk.VoiceAi.Tts` — Azure synthesizer.
-- `Asterisk.Sdk.VoiceAi` — `IConversationHandler`, `AddVoiceAiPipeline`.
+- `Verbara.Sdk.VoiceAi.AudioSocket` — AudioSocket server.
+- `Verbara.Sdk.VoiceAi.Stt` — AssemblyAI recognizer.
+- `Verbara.Sdk.VoiceAi.Tts` — Azure synthesizer.
+- `Verbara.Sdk.VoiceAi` — `IConversationHandler`, `AddVoiceAiPipeline`.

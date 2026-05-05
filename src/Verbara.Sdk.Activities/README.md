@@ -1,11 +1,11 @@
-# Asterisk.Sdk.Activities
+# Verbara.Sdk.Activities
 
 High-level call activity abstractions for Asterisk AGI — async state-machine-driven operations for common telephony workflows.
 
 ## Installation
 
 ```bash
-dotnet add package Asterisk.Sdk.Activities
+dotnet add package Verbara.Sdk.Activities
 ```
 
 ## Quick Start

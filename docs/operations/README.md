@@ -1,14 +1,14 @@
 # Operations — Observability starter kit
 
-Prefabricated Grafana dashboards and Jaeger query examples for the SDK's OpenTelemetry catalog (15 meters + 9 `ActivitySource`s — see `AsteriskTelemetry.MeterNames` / `.ActivitySourceNames` in `Asterisk.Sdk` for the canonical list). These are **starter templates**, not production-tuned dashboards — copy into your Grafana instance and adapt thresholds / labels / queries to your deployment.
+Prefabricated Grafana dashboards and Jaeger query examples for the SDK's OpenTelemetry catalog (15 meters + 9 `ActivitySource`s — see `AsteriskTelemetry.MeterNames` / `.ActivitySourceNames` in `Verbara.Sdk` for the canonical list). These are **starter templates**, not production-tuned dashboards — copy into your Grafana instance and adapt thresholds / labels / queries to your deployment.
 
 ## Contents
 
 | File | Purpose |
 |---|---|
 | [`dashboards/sdk-overall.json`](dashboards/sdk-overall.json) | Bird's-eye overview of the SDK runtime — AMI connection health, ARI WebSocket state, Push event rates, reconnect counters. |
-| [`dashboards/webhook-delivery.json`](dashboards/webhook-delivery.json) | `Asterisk.Sdk.Push.Webhooks` delivery pipeline — succeeded / failed / retried / dead-letter + per-URL circuit breaker (opened / skipped). |
-| [`dashboards/resilience.json`](dashboards/resilience.json) | `Asterisk.Sdk.Resilience` meter — retry attempts, circuit opened / closed, timeouts fired, circuit state gauge. |
+| [`dashboards/webhook-delivery.json`](dashboards/webhook-delivery.json) | `Verbara.Sdk.Push.Webhooks` delivery pipeline — succeeded / failed / retried / dead-letter + per-URL circuit breaker (opened / skipped). |
+| [`dashboards/resilience.json`](dashboards/resilience.json) | `Verbara.Sdk.Resilience` meter — retry attempts, circuit opened / closed, timeouts fired, circuit state gauge. |
 | [`jaeger-queries.md`](jaeger-queries.md) | Query patterns for every SDK `ActivitySource` with example tag filters using `AsteriskSemanticConventions`. |
 
 ## Prerequisites

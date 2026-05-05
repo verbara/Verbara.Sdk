@@ -35,5 +35,5 @@ exten => 200,1,AGI(agi://localhost:4573/activities-demo)
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.Activities` — `PlayMessageActivity`, `DialActivity`, `QueueActivity`, `HangupActivity`
-- `Asterisk.Sdk.Agi` — FastAGI server and `IAgiChannel`
+- `Verbara.Sdk.Activities` — `PlayMessageActivity`, `DialActivity`, `QueueActivity`, `HangupActivity`
+- `Verbara.Sdk.Agi` — FastAGI server and `IAgiChannel`

@@ -29,13 +29,13 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore
-        run: dotnet restore Asterisk.Sdk.slnx
+        run: dotnet restore Verbara.Sdk.slnx
 
       - name: Build Release
-        run: dotnet build Asterisk.Sdk.slnx -c Release --no-restore
+        run: dotnet build Verbara.Sdk.slnx -c Release --no-restore
 
       - name: Pack
-        run: dotnet pack Asterisk.Sdk.slnx -c Release --no-build -o ./artifacts
+        run: dotnet pack Verbara.Sdk.slnx -c Release --no-build -o ./artifacts
 
       - name: List artifacts
         run: ls -la ./artifacts/*.nupkg ./artifacts/*.snupkg 2>/dev/null || true

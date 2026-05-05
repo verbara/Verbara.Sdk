@@ -1,4 +1,4 @@
-// Asterisk.Sdk - ARI Stasis Application Example
+// Verbara.Sdk - ARI Stasis Application Example
 // Demonstrates: connect to ARI WebSocket, subscribe to events, originate a call.
 
 using Verbara.Sdk;

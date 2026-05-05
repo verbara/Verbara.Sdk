@@ -1,6 +1,6 @@
-# Asterisk.Sdk.Sessions
+# Verbara.Sdk.Sessions
 
-Session Engine for the Asterisk.Sdk ecosystem. Provides call session correlation, lifecycle state machines, and domain events for real-time telephony monitoring.
+Session Engine for the Verbara.Sdk ecosystem. Provides call session correlation, lifecycle state machines, and domain events for real-time telephony monitoring.
 
 ## Features
 

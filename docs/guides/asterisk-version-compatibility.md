@@ -1,6 +1,6 @@
 # Asterisk Version Compatibility Matrix
 
-> SDK: Asterisk.Sdk 0.1.0-beta.1 | Supported: Asterisk 18-23
+> SDK: Verbara.Sdk 0.1.0-beta.1 | Supported: Asterisk 18-23
 
 ## AMI Event Coverage by Version
 

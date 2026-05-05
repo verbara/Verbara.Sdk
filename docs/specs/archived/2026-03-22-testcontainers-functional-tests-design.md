@@ -35,8 +35,8 @@ Usar **Testcontainers for .NET** para provisionar infraestructura efímera autom
 ### 4.1 Shared Project
 
 ```
-Tests/Asterisk.Sdk.TestInfrastructure/
-├── Asterisk.Sdk.TestInfrastructure.csproj    ← Class library, not test project
+Tests/Verbara.Sdk.TestInfrastructure/
+├── Verbara.Sdk.TestInfrastructure.csproj    ← Class library, not test project
 ├── Containers/
 │   ├── AsteriskContainer.cs                  ← File-based Asterisk (Dockerfile.asterisk-file)
 │   ├── AsteriskRealtimeContainer.cs          ← ODBC Asterisk (Dockerfile.asterisk-realtime)
@@ -231,8 +231,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: dotnet build Asterisk.Sdk.slnx
-      - run: dotnet test Asterisk.Sdk.slnx --filter "Category!=Functional&Category!=Integration&Category!=Realtime"
+      - run: dotnet build Verbara.Sdk.slnx
+      - run: dotnet test Verbara.Sdk.slnx --filter "Category!=Functional&Category!=Integration&Category!=Realtime"
     # ~2 min, no Docker
 
   aot-check:
@@ -253,7 +253,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: dotnet test Asterisk.Sdk.slnx --filter "Category=Functional|Category=Integration|Category=Realtime"
+      - run: dotnet test Verbara.Sdk.slnx --filter "Category=Functional|Category=Integration|Category=Realtime"
     # ~8 min, Testcontainers auto-provisions Docker
     # ubuntu-latest has Docker pre-installed
 ```

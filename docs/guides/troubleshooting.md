@@ -79,7 +79,7 @@
    ```
 2. Speed up event handlers — offload heavy work to background queues
 3. Filter high-volume events (e.g., `VarSet`) early in your observer
-4. Monitor with: `dotnet-counters monitor --process-id <pid> Asterisk.Sdk.Ami`
+4. Monitor with: `dotnet-counters monitor --process-id <pid> Verbara.Sdk.Ami`
 
 See [High-Load Tuning Guide](high-load-tuning.md) for sizing recommendations.
 
@@ -162,9 +162,9 @@ Enable detailed logging for diagnostics:
   "Logging": {
     "LogLevel": {
       "Default": "Information",
-      "Asterisk.Sdk.Ami": "Debug",
-      "Asterisk.Sdk.Ari": "Debug",
-      "Asterisk.Sdk.Live": "Debug"
+      "Verbara.Sdk.Ami": "Debug",
+      "Verbara.Sdk.Ari": "Debug",
+      "Verbara.Sdk.Live": "Debug"
     }
   }
 }
@@ -175,7 +175,7 @@ For AMI protocol-level debugging (very verbose):
 {
   "Logging": {
     "LogLevel": {
-      "Asterisk.Sdk.Ami.Connection": "Trace"
+      "Verbara.Sdk.Ami.Connection": "Trace"
     }
   }
 }
@@ -191,20 +191,20 @@ For AMI protocol-level debugging (very verbose):
 
 | ActivitySource | Representative spans |
 |----------------|----------------------|
-| `Asterisk.Sdk.Ami` | connect / login / send-action / receive-event |
-| `Asterisk.Sdk.Ari` | request / websocket-event |
-| `Asterisk.Sdk.Agi` | session / command |
-| `Asterisk.Sdk.Live` | manager-load / entity-update |
-| `Asterisk.Sdk.Sessions` | session-start / state-transition / reconcile |
-| `Asterisk.Sdk.Push` | publish / deliver / authorize |
-| `Asterisk.Sdk.VoiceAi` | pipeline-session / stt-recognition / tts-synthesis |
-| `Asterisk.Sdk.VoiceAi.AudioSocket` | inbound-connection / frame-roundtrip |
-| `Asterisk.Sdk.VoiceAi.OpenAiRealtime` | realtime-session / turn |
+| `Verbara.Sdk.Ami` | connect / login / send-action / receive-event |
+| `Verbara.Sdk.Ari` | request / websocket-event |
+| `Verbara.Sdk.Agi` | session / command |
+| `Verbara.Sdk.Live` | manager-load / entity-update |
+| `Verbara.Sdk.Sessions` | session-start / state-transition / reconcile |
+| `Verbara.Sdk.Push` | publish / deliver / authorize |
+| `Verbara.Sdk.VoiceAi` | pipeline-session / stt-recognition / tts-synthesis |
+| `Verbara.Sdk.VoiceAi.AudioSocket` | inbound-connection / frame-roundtrip |
+| `Verbara.Sdk.VoiceAi.OpenAiRealtime` | realtime-session / turn |
 
 Discover them at runtime without hard-coding names:
 
 ```csharp
-using Asterisk.Sdk.Hosting;
+using Verbara.Sdk.Hosting;
 
 builder.Services
     .AddOpenTelemetry()
@@ -215,7 +215,7 @@ builder.Services
 **Quick capture without OpenTelemetry:**
 ```sh
 dotnet-trace collect --process-id <pid> \
-    --providers "System.Diagnostics.Metrics,Asterisk.Sdk.Ami,Asterisk.Sdk.VoiceAi"
+    --providers "System.Diagnostics.Metrics,Verbara.Sdk.Ami,Verbara.Sdk.VoiceAi"
 ```
 Open the resulting `.nettrace` in PerfView or Chromium `about:tracing`.
 
@@ -243,4 +243,4 @@ Open the resulting `.nettrace` in PerfView or Chromium `about:tracing`.
    ```
 3. **Opt out entirely** in non-critical deployments by not registering `SessionReconciliationService` (skip `AddSessions(reconcile: true)` and call the reconciler manually on demand).
 
-**Observability:** watch the `Asterisk.Sdk.Sessions` activity source — `reconcile` spans carry a `sessions.scanned` tag so you can correlate burst size with reconnect events.
+**Observability:** watch the `Verbara.Sdk.Sessions` activity source — `reconcile` spans carry a `sessions.scanned` tag so you can correlate burst size with reconnect events.

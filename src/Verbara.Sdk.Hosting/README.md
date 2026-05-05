@@ -1,6 +1,6 @@
-# Asterisk.Sdk.Hosting
+# Verbara.Sdk.Hosting
 
-The recommended entry point to the [Asterisk.Sdk](https://github.com/Harol-Reina/Asterisk.Sdk) family — single `dotnet add` brings in AMI, AGI, ARI, Live, Activities, Sessions, and Config plus a `Microsoft.Extensions.DependencyInjection` extension that wires everything into your `IHost` with one call. Native AOT, zero reflection, MIT licensed.
+The recommended entry point to the [Verbara.Sdk](https://github.com/verbara/Verbara.Sdk) family — single `dotnet add` brings in AMI, AGI, ARI, Live, Activities, Sessions, and Config plus a `Microsoft.Extensions.DependencyInjection` extension that wires everything into your `IHost` with one call. Native AOT, zero reflection, MIT licensed.
 
 ## What it does
 
@@ -10,18 +10,18 @@ The recommended entry point to the [Asterisk.Sdk](https://github.com/Harol-Reina
 - **Health checks** — `AmiHealthCheck`, `AriHealthCheck`, `AgiHealthCheck` auto-registered. Expose at `/health` for Kubernetes probes.
 - **Multi-server support** — register multiple `AsteriskServer` instances via `AsteriskServerPool` for federated deployments.
 
-This is a **meta-package**: it does not contain its own runtime types. It transitively pulls in `Asterisk.Sdk`, `Asterisk.Sdk.Ami`, `Asterisk.Sdk.Agi`, `Asterisk.Sdk.Ari`, `Asterisk.Sdk.Live`, `Asterisk.Sdk.Activities`, `Asterisk.Sdk.Sessions`, and `Asterisk.Sdk.Config`. Add Voice AI / Push / OpenTelemetry packages on top as needed.
+This is a **meta-package**: it does not contain its own runtime types. It transitively pulls in `Verbara.Sdk`, `Verbara.Sdk.Ami`, `Verbara.Sdk.Agi`, `Verbara.Sdk.Ari`, `Verbara.Sdk.Live`, `Verbara.Sdk.Activities`, `Verbara.Sdk.Sessions`, and `Verbara.Sdk.Config`. Add Voice AI / Push / OpenTelemetry packages on top as needed.
 
 ## Install
 
 ```sh
-dotnet add package Asterisk.Sdk.Hosting
+dotnet add package Verbara.Sdk.Hosting
 ```
 
 ## Quick start — bind from config
 
 ```csharp
-using Asterisk.Sdk.Hosting;
+using Verbara.Sdk.Hosting;
 using Microsoft.Extensions.Hosting;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -91,4 +91,4 @@ See `Examples/MultiServerExample/` for a full federation walkthrough.
 
 ## License
 
-MIT. Part of the [Asterisk.Sdk](https://github.com/Harol-Reina/Asterisk.Sdk) project.
+MIT. Part of the [Verbara.Sdk](https://github.com/verbara/Verbara.Sdk) project.

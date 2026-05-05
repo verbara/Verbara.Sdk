@@ -20,7 +20,7 @@ Create a new hosted service that starts/stops the concrete ARI audio servers, fo
 
 ### Changes
 
-**New file:** `src/Asterisk.Sdk.Hosting/AriAudioHostedService.cs`
+**New file:** `src/Verbara.Sdk.Hosting/AriAudioHostedService.cs`
 
 ```csharp
 public sealed class AriAudioHostedService(
@@ -43,11 +43,11 @@ public sealed class AriAudioHostedService(
 }
 ```
 
-**Modified file:** `src/Asterisk.Sdk.Hosting/ServiceCollectionExtensions.cs`
+**Modified file:** `src/Verbara.Sdk.Hosting/ServiceCollectionExtensions.cs`
 
 Register `AriAudioHostedService` inside the `if (options.Ari.ConfigureAudioServer is not null)` block, after audio server singletons are registered.
 
-**Modified file:** `src/Asterisk.Sdk.Hosting/PublicAPI.Unshipped.txt`
+**Modified file:** `src/Verbara.Sdk.Hosting/PublicAPI.Unshipped.txt`
 
 Add public API entries for the new class.
 

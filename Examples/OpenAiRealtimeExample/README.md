@@ -39,5 +39,5 @@ dotnet run --project Examples/OpenAiRealtimeExample/
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.VoiceAi.AudioSocket` — AudioSocket server
-- `Asterisk.Sdk.VoiceAi.OpenAiRealtime` — `OpenAiRealtimeBridge`, realtime events
+- `Verbara.Sdk.VoiceAi.AudioSocket` — AudioSocket server
+- `Verbara.Sdk.VoiceAi.OpenAiRealtime` — `OpenAiRealtimeBridge`, realtime events

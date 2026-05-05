@@ -37,4 +37,4 @@ exten => 102,1,AGI(agi://localhost:4573/ivr-sales)
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.Agi` — FastAGI server, `IAgiChannel`, `SimpleMappingStrategy`
+- `Verbara.Sdk.Agi` — FastAGI server, `IAgiChannel`, `SimpleMappingStrategy`

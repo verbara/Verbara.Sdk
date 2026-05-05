@@ -8,7 +8,7 @@ Post-v1.15.3 (2026-05-03) accumulating commits — will roll into the next relea
 
 ### Changed
 
-- **Brand transition: `Asterisk.Sdk` → `Verbara Sdk`** — see [ADR-0036](docs/decisions/0036-rebrand-to-verbara.md) and [`NOTICE`](NOTICE). Avoids trademark conflict with Sangoma's Asterisk PBX product. Repository and NuGet package names will migrate to `verbara-sdk` / `Verbara.Sdk.*` in a coordinated technical track. **Existing names continue to work during the transition period** — no code changes required from consumers in this commit (just doc + brand updates). License unchanged (MIT).
+- **Brand transition: `Verbara.Sdk` → `Verbara Sdk`** — see [ADR-0036](docs/decisions/0036-rebrand-to-verbara.md) and [`NOTICE`](NOTICE). Avoids trademark conflict with Sangoma's Asterisk PBX product. Repository and NuGet package names will migrate to `verbara-sdk` / `Verbara.Sdk.*` in a coordinated technical track. **Existing names continue to work during the transition period** — no code changes required from consumers in this commit (just doc + brand updates). License unchanged (MIT).
 - **`Meziantou.Analyzer` 3.0.58 → 3.0.60** (build-time analyzer, patch bump via Dependabot PR #39).
 - **`dotnet-reportgenerator-globaltool` 5.5.7 → 5.5.9** (CI tool, skip 5.5.8 via Dependabot PR #40). Not shipped — dev-time only.
 
@@ -22,9 +22,9 @@ Post-v1.15.3 (2026-05-03) accumulating commits — will roll into the next relea
 
 ### Added — VoiceAi providers
 
-- **`Asterisk.Sdk.VoiceAi.Tts.Deepgram`** — new TTS provider using Deepgram's WebSocket streaming endpoint (`wss://api.deepgram.com/v1/speak`). NOT the older REST `/v1/speak` (which had ~70% higher LLM→TTS latency per Deepgram's published benchmarks). Mirrors the Cartesia WebSocket pattern (`Channel<ReadOnlyMemory<byte>>` + dedicated receive loop, half-close socket post-request). 12-voice catalog: 8 Aura 2 EN voices (Thalia default, Andromeda, Zeus, Orpheus, Helios, Apollo, Luna, Arcas) + 1 Aura 2 ES (Sirio) + 3 legacy Aura 1 voices (Asteria, Orion, Stella) for migration paths. New types under `Asterisk.Sdk.VoiceAi.Tts.Deepgram` namespace: `DeepgramTtsOptions`, `DeepgramSpeechSynthesizer`, `DeepgramVoices`. Register via `services.AddDeepgramSpeechSynthesizer(opts => { opts.ApiKey = "…"; opts.Model = DeepgramVoices.Thalia; })`. Auto-registers `TtsHealthCheck`. Multilingual Aura 2 voices (NL/FR/DE/IT/JA) intentionally not in the catalog yet — voice ids unconfirmed in public Deepgram docs at impl time; tracked as a TODO in `DeepgramVoices.cs`.
+- **`Verbara.Sdk.VoiceAi.Tts.Deepgram`** — new TTS provider using Deepgram's WebSocket streaming endpoint (`wss://api.deepgram.com/v1/speak`). NOT the older REST `/v1/speak` (which had ~70% higher LLM→TTS latency per Deepgram's published benchmarks). Mirrors the Cartesia WebSocket pattern (`Channel<ReadOnlyMemory<byte>>` + dedicated receive loop, half-close socket post-request). 12-voice catalog: 8 Aura 2 EN voices (Thalia default, Andromeda, Zeus, Orpheus, Helios, Apollo, Luna, Arcas) + 1 Aura 2 ES (Sirio) + 3 legacy Aura 1 voices (Asteria, Orion, Stella) for migration paths. New types under `Verbara.Sdk.VoiceAi.Tts.Deepgram` namespace: `DeepgramTtsOptions`, `DeepgramSpeechSynthesizer`, `DeepgramVoices`. Register via `services.AddDeepgramSpeechSynthesizer(opts => { opts.ApiKey = "…"; opts.Model = DeepgramVoices.Thalia; })`. Auto-registers `TtsHealthCheck`. Multilingual Aura 2 voices (NL/FR/DE/IT/JA) intentionally not in the catalog yet — voice ids unconfirmed in public Deepgram docs at impl time; tracked as a TODO in `DeepgramVoices.cs`.
 
-- **`Asterisk.Sdk.VoiceAi.Tts.Lmnt`** — new TTS provider for LMNT (sub-200 ms TTFA per third-party 2026 benchmarks). Supports both transports via `LmntTtsOptions.Transport` enum: `WebSocket` (default, low-latency, `wss://api.lmnt.com/v1/ai/speech/stream`) and `Http` (fallback for environments blocking outbound WS, `POST https://api.lmnt.com/v1/ai/speech/generate`). Auth via `X-API-Key` (header for HTTP; first-message JSON field for WS) + `lmnt-version: 1.0`. 4-voice catalog (`Leah` default, `Amy`, `Ansel`, `Elowen`). New types under `Asterisk.Sdk.VoiceAi.Tts.Lmnt` namespace: `LmntTtsOptions`, `LmntSpeechSynthesizer`, `LmntVoices`. Register via `services.AddLmntSpeechSynthesizer(opts => { opts.ApiKey = "…"; opts.Voice = LmntVoices.Leah; })`. Auto-registers `TtsHealthCheck`. A few contract details in the LMNT public docs were ambiguous; `TODO(R1.5)` comments in the source flag specific lines to verify against the live API at integration-test time.
+- **`Verbara.Sdk.VoiceAi.Tts.Lmnt`** — new TTS provider for LMNT (sub-200 ms TTFA per third-party 2026 benchmarks). Supports both transports via `LmntTtsOptions.Transport` enum: `WebSocket` (default, low-latency, `wss://api.lmnt.com/v1/ai/speech/stream`) and `Http` (fallback for environments blocking outbound WS, `POST https://api.lmnt.com/v1/ai/speech/generate`). Auth via `X-API-Key` (header for HTTP; first-message JSON field for WS) + `lmnt-version: 1.0`. 4-voice catalog (`Leah` default, `Amy`, `Ansel`, `Elowen`). New types under `Verbara.Sdk.VoiceAi.Tts.Lmnt` namespace: `LmntTtsOptions`, `LmntSpeechSynthesizer`, `LmntVoices`. Register via `services.AddLmntSpeechSynthesizer(opts => { opts.ApiKey = "…"; opts.Voice = LmntVoices.Leah; })`. Auto-registers `TtsHealthCheck`. A few contract details in the LMNT public docs were ambiguous; `TODO(R1.5)` comments in the source flag specific lines to verify against the live API at integration-test time.
 
 ### Added — ElevenLabs Flash 2.5
 
@@ -35,7 +35,7 @@ Post-v1.15.3 (2026-05-03) accumulating commits — will roll into the next relea
 
 ### Added — Observability
 
-- **`SpeechSynthesisMetrics.SynthesisTtfaMs`** — new public `Histogram<double>` exposed on the existing `Asterisk.Sdk.VoiceAi.Tts` `Meter`. Records **Time-To-First-Audio**: elapsed milliseconds from synthesis start until the first audio chunk is yielded to the caller. Tagged with `voiceai.provider`. Recommended histogram buckets: 5/10/25/50/100/250/500/1000/2500/5000 ms. The existing `tts.synthesis.latency_ms` (total synthesis duration) is preserved unchanged.
+- **`SpeechSynthesisMetrics.SynthesisTtfaMs`** — new public `Histogram<double>` exposed on the existing `Verbara.Sdk.VoiceAi.Tts` `Meter`. Records **Time-To-First-Audio**: elapsed milliseconds from synthesis start until the first audio chunk is yielded to the caller. Tagged with `voiceai.provider`. Recommended histogram buckets: 5/10/25/50/100/250/500/1000/2500/5000 ms. The existing `tts.synthesis.latency_ms` (total synthesis duration) is preserved unchanged.
 - **`VoiceAiPipeline`** records TTFA inline at the existing metric site — gated by a single boolean so only the first chunk emits the measurement; subsequent chunks pass through without extra cost. Behavior validated by 5 new pipeline tests covering: recording on first yield, no recording on empty enumerable, TTFA ≤ total latency, exactly-once on many chunks, no recording when synthesizer throws.
 
 ### Added — CI / tooling
@@ -45,14 +45,14 @@ Post-v1.15.3 (2026-05-03) accumulating commits — will roll into the next relea
 ### Changed
 
 - **ElevenLabs default model** flips from `eleven_turbo_v2` → `eleven_flash_v2_5`. **Non-breaking default change**: callers who explicitly set `ElevenLabsOptions.ModelId` see no change; callers using the default see the new model. Flash 2.5 targets <150 ms TTFA per ElevenLabs' published latency guidance and is the correct choice for real-time telephony. Eleven v3 (GA 2026-03-14) is intentionally NOT a candidate for this SDK — v3 is the expressive flagship for non-realtime use; Flash 2.5 remains the streaming/telephony target.
-- **`coverlet.collector` 6.0.4 → 10.0.0** — drop-in replacement for code coverage collection. Skips 8.x (no value sitting there). Real fixes that benefit this SDK: IAsyncEnumerable branch math (#1836) used in ARI/Live/Sessions stream code, `LibraryImport`/`DllImport` instrumentation crashes (#1762), `Mediator.SourceGenerator` empty reports (#1718). `nuspec` deps empty + `coverlet.collector.targets` and `VSTestIntegration.md` shipped surface idéntico across versions verified at audit time. Validated locally on `Tests/Asterisk.Sdk.Ami.Tests` with a `VersionOverride` spike — zero delta in coverage metrics (line/branch counts byte-identical between 6.0.4 and 10.0.0 baseline). VSTest collector hook works on .NET 10 SDK + xunit 2.9 without `TestingPlatformDotnetTestSupport=false` guard.
+- **`coverlet.collector` 6.0.4 → 10.0.0** — drop-in replacement for code coverage collection. Skips 8.x (no value sitting there). Real fixes that benefit this SDK: IAsyncEnumerable branch math (#1836) used in ARI/Live/Sessions stream code, `LibraryImport`/`DllImport` instrumentation crashes (#1762), `Mediator.SourceGenerator` empty reports (#1718). `nuspec` deps empty + `coverlet.collector.targets` and `VSTestIntegration.md` shipped surface idéntico across versions verified at audit time. Validated locally on `Tests/Verbara.Sdk.Ami.Tests` with a `VersionOverride` spike — zero delta in coverage metrics (line/branch counts byte-identical between 6.0.4 and 10.0.0 baseline). VSTest collector hook works on .NET 10 SDK + xunit 2.9 without `TestingPlatformDotnetTestSupport=false` guard.
 - **`.github/dependabot.yml`** — removed the obsolete `coverlet.collector` major-version ignore rule that mischaracterized 10.x as breaking. Only the MTP/VSTest split matters for the upgrade and the repo stays VSTest.
 
 ### Documentation
 
 - **R1.5 spec + plan rewritten in place (v2)** — scope correction based on a deep state-of-the-art audit (May 2026): (a) **dropped** Whisper V3 local STT (quality unfit for telephony 8 kHz audio per third-party benchmarks — ~30-40% WER regression vs cloud STT options already in the SDK; Whisper.net AOT support unconfirmed in any release notes; deferred to a future on-prem privacy track); (b) **upgraded** Deepgram Aura 2 integration from REST to WebSocket; (c) **added** LMNT TTS as a new provider. Same total ~1 week of work, no Phase 0 AOT spike, lower risk, more product value. Original v1 spec retained in git history at commit `565a1bb`.
 - **`docs/research/2026-05-03-xunit-v3-v4-migration-readiness.md`** — watch list documenting the four readiness gates that must flip before re-evaluating the migration from xunit 2.9.x: FluentAssertions #2935 detection bug fix shipped in FA 7.x, xunit #3167 NSubstitute false-positive resolved, xunit.v3 v4.0 stable released with full Native AOT, and a canary migration in dotnet/runtime or dotnet/aspnetcore. The `dependabot.yml` ignore rules for `xunit.runner.visualstudio`, `Microsoft.NET.Test.Sdk`, and `FluentAssertions` remain tied to these gates.
-- **`src/Asterisk.Sdk.VoiceAi.Tts/README.md`** — provider table updated to 6 providers (added Deepgram, LMNT). New "Metric catalog" section documents `tts.synthesis.ttfa_ms` and `tts.synthesis.latency_ms` with recommended histogram buckets.
+- **`src/Verbara.Sdk.VoiceAi.Tts/README.md`** — provider table updated to 6 providers (added Deepgram, LMNT). New "Metric catalog" section documents `tts.synthesis.ttfa_ms` and `tts.synthesis.latency_ms` with recommended histogram buckets.
 
 ### Notes
 
@@ -68,19 +68,19 @@ Post-v1.15.3 (2026-05-03) accumulating commits — will roll into the next relea
 
 ### Changed (documentation — root README + ops docs)
 
-- **Root [`README.md`](README.md)** — "Status" paragraph rewritten end-to-end. The previous version still described **v1.12.0 / 24 packages** despite v1.13/v1.14/v1.15 having shipped since. Now describes v1.15.1 cumulative state (26 pkgs, 4-release rollup highlighting `Asterisk.Sdk.Resilience`, `Asterisk.Sdk.Cluster.Primitives`, per-URL circuit breaker on `Push.Webhooks`, `AsteriskSemanticConventions` catalog, multi-RID AOT matrix, dual Asterisk 22 LTS / 23 Standard support, 35 ADRs).
-- **Root README Observability section** — Meter count corrected `14` → `15` (the `Asterisk.Sdk.Resilience` meter shipped in v1.14.0 but the doc still claimed the v1.13 count). Added explicit reference to the `AsteriskSemanticConventions` const-string catalog so consumers know it exists.
+- **Root [`README.md`](README.md)** — "Status" paragraph rewritten end-to-end. The previous version still described **v1.12.0 / 24 packages** despite v1.13/v1.14/v1.15 having shipped since. Now describes v1.15.1 cumulative state (26 pkgs, 4-release rollup highlighting `Verbara.Sdk.Resilience`, `Verbara.Sdk.Cluster.Primitives`, per-URL circuit breaker on `Push.Webhooks`, `AsteriskSemanticConventions` catalog, multi-RID AOT matrix, dual Asterisk 22 LTS / 23 Standard support, 35 ADRs).
+- **Root README Observability section** — Meter count corrected `14` → `15` (the `Verbara.Sdk.Resilience` meter shipped in v1.14.0 but the doc still claimed the v1.13 count). Added explicit reference to the `AsteriskSemanticConventions` const-string catalog so consumers know it exists.
 - **[`docs/operations/README.md`](docs/operations/README.md)** — Same meter-count correction (`12` → `15`) in two places. Added pointer to `AsteriskTelemetry.MeterNames` as the canonical source-of-truth list.
 
 ### Changed (per-package READMEs visible on nuget.org)
 
-Five package READMEs were either 2-line stubs or inadequate-but-better. Each now follows the same template used by the well-documented packages (`Asterisk.Sdk.Resilience` v1.14, `Asterisk.Sdk.Cluster.Primitives` v1.15) — title + 1-line tagline, "What it does" with public surface, install instructions, working quickstart code, ADR cross-references where relevant, and a license note.
+Five package READMEs were either 2-line stubs or inadequate-but-better. Each now follows the same template used by the well-documented packages (`Verbara.Sdk.Resilience` v1.14, `Verbara.Sdk.Cluster.Primitives` v1.15) — title + 1-line tagline, "What it does" with public surface, install instructions, working quickstart code, ADR cross-references where relevant, and a license note.
 
-- **[`src/Asterisk.Sdk/README.md`](src/Asterisk.Sdk/README.md)** — was 10 lines. Now ~60 lines covering the actual public surface consumers reach for: `AsteriskSemanticConventions` catalog (60 const strings / 14 nested classes), `AsteriskTelemetry` runtime-discoverable lists (9 ActivitySources / 15 Meters), source-generator attribute markers, OTel one-liner registration snippet.
-- **[`src/Asterisk.Sdk.Hosting/README.md`](src/Asterisk.Sdk.Hosting/README.md)** — was 20 lines. Now ~90 lines positioning the package as the recommended SDK entry point with `AddAsterisk` variants (`IConfiguration` and inline `Action<AsteriskOptions>`), `appsettings.json` binding example, multi-server pool pointer, health-endpoint wiring, hosted-lifecycle and AOT notes.
-- **[`src/Asterisk.Sdk.VoiceAi.Stt/README.md`](src/Asterisk.Sdk.VoiceAi.Stt/README.md)** — was 2 lines and listed only 4 of 7 providers. Now ~65 lines with full provider table (Deepgram, Whisper local, Azure Whisper, Google Speech, Cartesia Ink-Whisper, AssemblyAI Universal-2, Speechmatics) including mode + latency notes, per-provider DI registration snippets, example pointers, and an ADR-0014 cross-reference for the no-vendor-SDK design rationale.
-- **[`src/Asterisk.Sdk.VoiceAi.Tts/README.md`](src/Asterisk.Sdk.VoiceAi.Tts/README.md)** — was 2 lines and listed only 2 of 4 providers (missing Cartesia and Speechmatics). Now ~70 lines with full provider table (ElevenLabs, Cartesia Sonic-3, Speechmatics, Azure) including TTFA targets and a "choosing a provider" decision guide.
-- **[`src/Asterisk.Sdk.VoiceAi.Testing/README.md`](src/Asterisk.Sdk.VoiceAi.Testing/README.md)** — was 2 lines. Now ~65 lines with the three fakes table (`FakeSpeechRecognizer`, `FakeSpeechSynthesizer`, `FakeConversationHandler`), quickstart code for stubbing recognizers + synthesizers in unit tests, and a "why use it" section (no API keys in CI, deterministic timing, failure injection).
+- **[`src/Verbara.Sdk/README.md`](src/Verbara.Sdk/README.md)** — was 10 lines. Now ~60 lines covering the actual public surface consumers reach for: `AsteriskSemanticConventions` catalog (60 const strings / 14 nested classes), `AsteriskTelemetry` runtime-discoverable lists (9 ActivitySources / 15 Meters), source-generator attribute markers, OTel one-liner registration snippet.
+- **[`src/Verbara.Sdk.Hosting/README.md`](src/Verbara.Sdk.Hosting/README.md)** — was 20 lines. Now ~90 lines positioning the package as the recommended SDK entry point with `AddAsterisk` variants (`IConfiguration` and inline `Action<AsteriskOptions>`), `appsettings.json` binding example, multi-server pool pointer, health-endpoint wiring, hosted-lifecycle and AOT notes.
+- **[`src/Verbara.Sdk.VoiceAi.Stt/README.md`](src/Verbara.Sdk.VoiceAi.Stt/README.md)** — was 2 lines and listed only 4 of 7 providers. Now ~65 lines with full provider table (Deepgram, Whisper local, Azure Whisper, Google Speech, Cartesia Ink-Whisper, AssemblyAI Universal-2, Speechmatics) including mode + latency notes, per-provider DI registration snippets, example pointers, and an ADR-0014 cross-reference for the no-vendor-SDK design rationale.
+- **[`src/Verbara.Sdk.VoiceAi.Tts/README.md`](src/Verbara.Sdk.VoiceAi.Tts/README.md)** — was 2 lines and listed only 2 of 4 providers (missing Cartesia and Speechmatics). Now ~70 lines with full provider table (ElevenLabs, Cartesia Sonic-3, Speechmatics, Azure) including TTFA targets and a "choosing a provider" decision guide.
+- **[`src/Verbara.Sdk.VoiceAi.Testing/README.md`](src/Verbara.Sdk.VoiceAi.Testing/README.md)** — was 2 lines. Now ~65 lines with the three fakes table (`FakeSpeechRecognizer`, `FakeSpeechSynthesizer`, `FakeConversationHandler`), quickstart code for stubbing recognizers + synthesizers in unit tests, and a "why use it" section (no API keys in CI, deterministic timing, failure injection).
 
 ### Fixed (build portability)
 
@@ -104,13 +104,13 @@ Five package READMEs were either 2-line stubs or inadequate-but-better. Each now
 
 ### Fixed
 
-- **`Asterisk.Sdk.Cluster.Primitives.Tests.InMemoryClusterTransportTests`** — eliminated CI flakiness on 5 tests that used `Task.Delay(50)` to "wait for the subscriber's `await foreach` to register the channel". Replaced with deterministic polling on a new `internal int SubscriberCount` accessor (visible only via existing `InternalsVisibleTo` to the test assembly). 20/20 stability runs verified locally; CI verde on `f5a1bd9` and `e2f5e82`.
+- **`Verbara.Sdk.Cluster.Primitives.Tests.InMemoryClusterTransportTests`** — eliminated CI flakiness on 5 tests that used `Task.Delay(50)` to "wait for the subscriber's `await foreach` to register the channel". Replaced with deterministic polling on a new `internal int SubscriberCount` accessor (visible only via existing `InternalsVisibleTo` to the test assembly). 20/20 stability runs verified locally; CI verde on `f5a1bd9` and `e2f5e82`.
 
 ### Changed
 
-- **`Microsoft.Extensions.*` 10.0.6 → 10.0.7** — patch bump on 11 packages (`Logging`, `Logging.Abstractions`, `Logging.Console`, `DependencyInjection`, `DependencyInjection.Abstractions`, `Hosting`, `Hosting.Abstractions`, `Configuration`, `Configuration.Abstractions`, `Diagnostics.HealthChecks`, `Http`, `Options`). Transitively visible to consumers of `Asterisk.Sdk.Hosting`, `Sessions`, `OpenTelemetry`, etc.
-- **`OpenTelemetry` 1.15.2 → 1.15.3** — patch bump on 4 packages (`OpenTelemetry`, `Extensions.Hosting`, `Exporter.Console`, `Exporter.OpenTelemetryProtocol`). Visible to consumers of `Asterisk.Sdk.OpenTelemetry`.
-- **`NATS.Client.Core` / `NATS.Client.Hosting` 2.5.10 → 2.7.3** — minor bump on the upstream client used by `Asterisk.Sdk.Push.Nats`. **Forward-compat verified** end-to-end: 6/6 NATS integration tests (Testcontainers + real `nats:latest`) pass; none of the 2.6.x/2.7.x breaking changes affect our usage (no JetStream APIs, ASCII-only subjects, internal timeouts wrapped in our own `CancellationTokenSource.CreateLinkedTokenSource` so the `OperationCanceledException` → `NatsTimeoutException` rename is irrelevant; OTel tag rename `network.protocol.version` → `network.transport` not referenced in our docs/dashboards).
+- **`Microsoft.Extensions.*` 10.0.6 → 10.0.7** — patch bump on 11 packages (`Logging`, `Logging.Abstractions`, `Logging.Console`, `DependencyInjection`, `DependencyInjection.Abstractions`, `Hosting`, `Hosting.Abstractions`, `Configuration`, `Configuration.Abstractions`, `Diagnostics.HealthChecks`, `Http`, `Options`). Transitively visible to consumers of `Verbara.Sdk.Hosting`, `Sessions`, `OpenTelemetry`, etc.
+- **`OpenTelemetry` 1.15.2 → 1.15.3** — patch bump on 4 packages (`OpenTelemetry`, `Extensions.Hosting`, `Exporter.Console`, `Exporter.OpenTelemetryProtocol`). Visible to consumers of `Verbara.Sdk.OpenTelemetry`.
+- **`NATS.Client.Core` / `NATS.Client.Hosting` 2.5.10 → 2.7.3** — minor bump on the upstream client used by `Verbara.Sdk.Push.Nats`. **Forward-compat verified** end-to-end: 6/6 NATS integration tests (Testcontainers + real `nats:latest`) pass; none of the 2.6.x/2.7.x breaking changes affect our usage (no JetStream APIs, ASCII-only subjects, internal timeouts wrapped in our own `CancellationTokenSource.CreateLinkedTokenSource` so the `OperationCanceledException` → `NatsTimeoutException` rename is irrelevant; OTel tag rename `network.protocol.version` → `network.transport` not referenced in our docs/dashboards).
 - **`Microsoft.SourceLink.GitHub` 10.0.202 → 10.0.203** — patch bump (build-time, not user-facing).
 - **`Meziantou.Analyzer` 3.0.50 → 3.0.52** — patch bump (build-time analyzer).
 - **`dotnet-reportgenerator-globaltool` 5.5.5 → 5.5.6** — patch bump (CI tool, not shipped).
@@ -124,20 +124,20 @@ Five package READMEs were either 2-line stubs or inadequate-but-better. Each now
 
 - 0 build warnings, 0 trim warnings across all 26 NuGet packages. Native AOT clean.
 - 35 ADRs in repo (0001–0035 — no missing numbers; 0031 collision resolved by renumbering COS to 0035, original 0031 "Domain vs Integration events" remains Proposed).
-- Test totals unchanged: ~2,799 unit tests / 154 functional / 65 integration. `Asterisk.Sdk.Cluster.Primitives.Tests` stays at 20 tests (the new helper is not a test).
+- Test totals unchanged: ~2,799 unit tests / 154 functional / 65 integration. `Verbara.Sdk.Cluster.Primitives.Tests` stays at 20 tests (the new helper is not a test).
 - 13 commits on `main` since `v1.15.0` tag, all CI-verified before tag cut.
 
 ## [1.15.0] - 2026-04-20
 
-**Pre-v2 Foundation.** No breaking changes. New MIT package `Asterisk.Sdk.Cluster.Primitives` (26th on nuget.org) ships domain-agnostic cluster abstractions that Pro.Cluster and future consumers can build on. `AsteriskSemanticConventions` catalog grows with `Tenant`/`Event`/`Node` nested classes (6 new const strings). `Asterisk.Sdk.Push.Webhooks` gains per-URL circuit breaker. ADR-0028 "Cadence commitment (v1 preview → v2 stable)" moves to `Accepted`. Operations starter kit (3 Grafana dashboards + Jaeger query catalog) lands in `docs/operations/`. Dual Asterisk support matrix (22 LTS + 23 Standard) added. AOT validation workflow expands to multi-RID matrix.
+**Pre-v2 Foundation.** No breaking changes. New MIT package `Verbara.Sdk.Cluster.Primitives` (26th on nuget.org) ships domain-agnostic cluster abstractions that Pro.Cluster and future consumers can build on. `AsteriskSemanticConventions` catalog grows with `Tenant`/`Event`/`Node` nested classes (6 new const strings). `Verbara.Sdk.Push.Webhooks` gains per-URL circuit breaker. ADR-0028 "Cadence commitment (v1 preview → v2 stable)" moves to `Accepted`. Operations starter kit (3 Grafana dashboards + Jaeger query catalog) lands in `docs/operations/`. Dual Asterisk support matrix (22 LTS + 23 Standard) added. AOT validation workflow expands to multi-RID matrix.
 
 ### Added
 
-- **`Asterisk.Sdk.Cluster.Primitives`** — new MIT package with domain-agnostic cluster abstractions: `ClusterEvent` (abstract record canónico), `NodeInfo`, `NodeState`, `IClusterTransport` (pub/sub), `IDistributedLock`, `IMembershipProvider`. Ships 3 in-memory reference implementations for tests. 20 unit tests. Addresses PSD v2 §9 Mes 3 foundation item. Pro.Cluster consumes this in Pro v1.10.0-pro (R1-B bundled, not included in this release).
+- **`Verbara.Sdk.Cluster.Primitives`** — new MIT package with domain-agnostic cluster abstractions: `ClusterEvent` (abstract record canónico), `NodeInfo`, `NodeState`, `IClusterTransport` (pub/sub), `IDistributedLock`, `IMembershipProvider`. Ships 3 in-memory reference implementations for tests. 20 unit tests. Addresses PSD v2 §9 Mes 3 foundation item. Pro.Cluster consumes this in Pro v1.10.0-pro (R1-B bundled, not included in this release).
 - **`AsteriskSemanticConventions.Tenant`** — new nested class with `Id` constant (`"tenant.id"`). Aligns tenant-context tag name across SDK + Pro telemetry.
 - **`AsteriskSemanticConventions.Event`** — new nested class with `Type`, `Id`, `Count` constants. Standardizes event-attribution tag names for Push/EventStore/Analytics consumers.
 - **`AsteriskSemanticConventions.Node`** — new nested class with `OriginId`, `ReceiverId` constants. Standardizes cluster node-identification tag names.
-- **`Asterisk.Sdk.Push.Webhooks` per-URL circuit breaker** — `WebhookDeliveryService` now keys a `CircuitBreakerState` dictionary by `TargetUrl.AbsoluteUri`. Defaults: 5 failures → 30s open. New counters `CircuitOpened{url}` / `CircuitSkipped{url}` on meter `Asterisk.Sdk.Push.Webhooks`. `TimeProvider` injection for deterministic tests. 5 new unit tests.
+- **`Verbara.Sdk.Push.Webhooks` per-URL circuit breaker** — `WebhookDeliveryService` now keys a `CircuitBreakerState` dictionary by `TargetUrl.AbsoluteUri`. Defaults: 5 failures → 30s open. New counters `CircuitOpened{url}` / `CircuitSkipped{url}` on meter `Verbara.Sdk.Push.Webhooks`. `TimeProvider` injection for deterministic tests. 5 new unit tests.
 - **`docs/operations/` starter kit** — 3 Grafana dashboards (JSON-validated): `grafana-overall.json`, `grafana-webhooks.json`, `grafana-resilience.json`. `jaeger-queries.md` with 9 query patterns for distributed tracing. `README.md` with import instructions.
 - **`docs/guides/asterisk-version-matrix.md`** — dual Asterisk support guide (22 LTS + 23 Standard lifecycle, break-change risk areas, migration notes).
 - **`docker/docker-compose.test-23.yml`** + parameterized `docker/Dockerfile.asterisk` (`ASTERISK_VERSION`, `CODEC_OPUS_VERSION` build args) — run Functional + Integration test matrix against Asterisk 22 and 23 in parallel.
@@ -163,11 +163,11 @@ Five package READMEs were either 2-line stubs or inadequate-but-better. Each now
 
 ## [1.14.0] - 2026-04-20
 
-**Resilience primitives added to SDK (MIT).** No breaking changes. New `Asterisk.Sdk.Resilience` package (25th on nuget.org) ships composable `CircuitBreakerState`, `ResiliencePolicy`, `ResiliencePolicyBuilder`, `CircuitBreakerOpenException`, `ResilienceMetrics`, `BackoffSchedule`, and `AddAsteriskResilience` DI extension. Migrated from `Asterisk.Sdk.Pro.Resilience` v1.8.1-pro per [ADR-0029](docs/decisions/0029-resilience-primitives-mit.md) (stewardship pledge — generic primitives belong in MIT). Internal hot paths (AMI/ARI reconnect, Webhook delivery) now share a single backoff primitive instead of three duplicated open-coded loops.
+**Resilience primitives added to SDK (MIT).** No breaking changes. New `Verbara.Sdk.Resilience` package (25th on nuget.org) ships composable `CircuitBreakerState`, `ResiliencePolicy`, `ResiliencePolicyBuilder`, `CircuitBreakerOpenException`, `ResilienceMetrics`, `BackoffSchedule`, and `AddAsteriskResilience` DI extension. Migrated from `Verbara.Sdk.Pro.Resilience` v1.8.1-pro per [ADR-0029](docs/decisions/0029-resilience-primitives-mit.md) (stewardship pledge — generic primitives belong in MIT). Internal hot paths (AMI/ARI reconnect, Webhook delivery) now share a single backoff primitive instead of three duplicated open-coded loops.
 
 ### Added
 
-- **`Asterisk.Sdk.Resilience`** — new MIT package with composable resilience primitives. AOT-safe, zero reflection, `TimeProvider`-based for testability. 38 migrated unit tests + 12 new `BackoffSchedule` tests (50 total). Meter `Asterisk.Sdk.Resilience` enrolled automatically by `AddAsteriskOpenTelemetry().WithAllSources()` via `AsteriskTelemetry.MeterNames` catalog.
+- **`Verbara.Sdk.Resilience`** — new MIT package with composable resilience primitives. AOT-safe, zero reflection, `TimeProvider`-based for testability. 38 migrated unit tests + 12 new `BackoffSchedule` tests (50 total). Meter `Verbara.Sdk.Resilience` enrolled automatically by `AddAsteriskOpenTelemetry().WithAllSources()` via `AsteriskTelemetry.MeterNames` catalog.
 - **`BackoffSchedule.Compute(attempt, baseDelay, multiplier, maxDelay)`** — stateless helper for reconnect loops and iterative retry schedules that don't fit the bounded `ResiliencePolicy.ExecuteAsync` model. Preserves configurable multiplier + max delay cap (critical for reconnect loops with specific timing requirements).
 - **`BackoffSchedule.ComputeWithJitter`** — same with deterministic ±jitter via caller-provided `Random` source.
 
@@ -179,44 +179,44 @@ Five package READMEs were either 2-line stubs or inadequate-but-better. Each now
 
 ### Migration
 
-Consumers of `Asterisk.Sdk.Pro.Resilience` v1.8.x-pro migrate by renaming `using` + swapping `<PackageReference>`. See [ADR-0029 Migration guide](docs/decisions/0029-resilience-primitives-mit.md#migration-guide). Meter name changes from `Asterisk.Sdk.Pro.Resilience` to `Asterisk.Sdk.Resilience` (dashboards need one-time update; no dual-emit window).
+Consumers of `Verbara.Sdk.Pro.Resilience` v1.8.x-pro migrate by renaming `using` + swapping `<PackageReference>`. See [ADR-0029 Migration guide](docs/decisions/0029-resilience-primitives-mit.md#migration-guide). Meter name changes from `Verbara.Sdk.Pro.Resilience` to `Verbara.Sdk.Resilience` (dashboards need one-time update; no dual-emit window).
 
 ## [1.13.0] - 2026-04-20
 
-**Telemetry + multi-node Push.** No breaking changes. Public API grows with `AsteriskSemanticConventions` catalog (OpenTelemetry attribute names for SIP/Asterisk), `AsteriskSemanticConventions.Events` (span-event names), `RemotePushEvent` envelope, and new `Asterisk.Sdk.Push.Nats` subscribe-side options. Package count stable at 24 on nuget.org.
+**Telemetry + multi-node Push.** No breaking changes. Public API grows with `AsteriskSemanticConventions` catalog (OpenTelemetry attribute names for SIP/Asterisk), `AsteriskSemanticConventions.Events` (span-event names), `RemotePushEvent` envelope, and new `Verbara.Sdk.Push.Nats` subscribe-side options. Package count stable at 24 on nuget.org.
 
 ### Added
 
-- **`Asterisk.Sdk.AsteriskSemanticConventions`** — new public static catalog (54 const strings across 11 nested classes) standardizing OpenTelemetry attribute names for SIP/Asterisk telephony. Consumers reference by name (`AsteriskSemanticConventions.Channel.Id`, `AsteriskSemanticConventions.VoiceAi.Provider`, etc.) so dashboard/query code remains stable across SDK versions. Pinned by 14 unit tests. Backed by the draft in `docs/research/2026-04-19-otel-sip-semantic-conventions.md`. ([c62f8ce](https://github.com/Harol-Reina/Asterisk.Sdk/commit/c62f8ce), [066cb3c](https://github.com/Harol-Reina/Asterisk.Sdk/commit/066cb3c))
-- **`AsteriskSemanticConventions.Events`** nested class — span event names for transient, event-shaped telemetry (use with `Activity.AddEvent`, not `SetTag`). Five entries: `asterisk.channel.hangup`, `asterisk.dtmf.received`, `asterisk.media.started`, `asterisk.media.buffering`, `asterisk.media.mark_processed`. `WebSocketAudioSession` now emits these events on `Activity.Current` when the matching chan_websocket control message arrives. No-op when no span is active. XON/XOFF flow-control signals intentionally NOT instrumented (too noisy for span events). ([df0fe93](https://github.com/Harol-Reina/Asterisk.Sdk/commit/df0fe93), [2a7af1a](https://github.com/Harol-Reina/Asterisk.Sdk/commit/2a7af1a))
-- **`Asterisk.Sdk.Push.Nats` subscribe side (bidirectional bridge)** — closes T2 of the v1.13 roadmap. New `NatsBridgeOptions.NodeId` (optional, enables loop prevention) and nested `Subscribe` options (`SubjectFilters`, `QueueGroup`, `SkipSelfOriginated`) turn the bridge bidirectional. Incoming NATS messages materialize as `Asterisk.Sdk.Push.Events.RemotePushEvent` (new public envelope) and are republished to the local `RxPushEventBus` so SSE / Webhook / dashboard subscribers on receiving nodes see the events without change to their filtering code. Loop prevention via optional `"source":"nodeId"` field in the JSON envelope + a .NET-type guard that never republishes a `RemotePushEvent`. New metrics: `EventsReceived`, `EventsSkipped`, `EventsDecodeFailed`. Extension point `INatsPayloadDeserializer` lets consumers round-trip to their concrete `PushEvent` subclasses if desired; default ships envelope-only. Queue-group semantics are opt-in; default pub/sub matches the local bus fan-out contract. JetStream / durable replay remain out of MIT (ADR-0011 boundary). Backed by [ADR-0025](docs/decisions/0025-push-nats-subscribe-and-loop-prevention.md). ([059e46d](https://github.com/Harol-Reina/Asterisk.Sdk/commit/059e46d) through [c98229f](https://github.com/Harol-Reina/Asterisk.Sdk/commit/c98229f))
-- **Six new example apps** under `Examples/` (16 → 22): `VoiceAiCartesiaExample`, `VoiceAiAssemblyAiExample`, `VoiceAiSpeechmaticsExample`, `WebSocketMediaExample` (chan_websocket control protocol), `AriOutboundExample`, `NatsBridgeExample`. All v1.12 features now have runnable showcases. ([991078e](https://github.com/Harol-Reina/Asterisk.Sdk/commit/991078e), [60fcdbb](https://github.com/Harol-Reina/Asterisk.Sdk/commit/60fcdbb))
-- **4 `Asterisk.Sdk.Push.Nats` Testcontainers integration tests** against real `nats:2.10-alpine` covering subject prefix, payload bytes, multi-event delivery, and custom prefix behavior. `[Trait("Category", "Integration")]`. ([7a6f6fa](https://github.com/Harol-Reina/Asterisk.Sdk/commit/7a6f6fa))
-- **Shared `WebSocketTestServer`** in `Tests/Asterisk.Sdk.TestInfrastructure/WebSocket/` — TcpListener + manual HTTP/1.1 upgrade + `WebSocket.CreateFromStream(IsServer=true)`. Unblocks `ws.Abort()` test paths that previously hung on Linux under `HttpListener`. 2 new abort tests added (AssemblyAi STT, Speechmatics STT) closing the silent coverage gap. ([b02bf18](https://github.com/Harol-Reina/Asterisk.Sdk/commit/b02bf18))
+- **`Verbara.Sdk.AsteriskSemanticConventions`** — new public static catalog (54 const strings across 11 nested classes) standardizing OpenTelemetry attribute names for SIP/Asterisk telephony. Consumers reference by name (`AsteriskSemanticConventions.Channel.Id`, `AsteriskSemanticConventions.VoiceAi.Provider`, etc.) so dashboard/query code remains stable across SDK versions. Pinned by 14 unit tests. Backed by the draft in `docs/research/2026-04-19-otel-sip-semantic-conventions.md`. ([c62f8ce](https://github.com/verbara/Verbara.Sdk/commit/c62f8ce), [066cb3c](https://github.com/verbara/Verbara.Sdk/commit/066cb3c))
+- **`AsteriskSemanticConventions.Events`** nested class — span event names for transient, event-shaped telemetry (use with `Activity.AddEvent`, not `SetTag`). Five entries: `asterisk.channel.hangup`, `asterisk.dtmf.received`, `asterisk.media.started`, `asterisk.media.buffering`, `asterisk.media.mark_processed`. `WebSocketAudioSession` now emits these events on `Activity.Current` when the matching chan_websocket control message arrives. No-op when no span is active. XON/XOFF flow-control signals intentionally NOT instrumented (too noisy for span events). ([df0fe93](https://github.com/verbara/Verbara.Sdk/commit/df0fe93), [2a7af1a](https://github.com/verbara/Verbara.Sdk/commit/2a7af1a))
+- **`Verbara.Sdk.Push.Nats` subscribe side (bidirectional bridge)** — closes T2 of the v1.13 roadmap. New `NatsBridgeOptions.NodeId` (optional, enables loop prevention) and nested `Subscribe` options (`SubjectFilters`, `QueueGroup`, `SkipSelfOriginated`) turn the bridge bidirectional. Incoming NATS messages materialize as `Verbara.Sdk.Push.Events.RemotePushEvent` (new public envelope) and are republished to the local `RxPushEventBus` so SSE / Webhook / dashboard subscribers on receiving nodes see the events without change to their filtering code. Loop prevention via optional `"source":"nodeId"` field in the JSON envelope + a .NET-type guard that never republishes a `RemotePushEvent`. New metrics: `EventsReceived`, `EventsSkipped`, `EventsDecodeFailed`. Extension point `INatsPayloadDeserializer` lets consumers round-trip to their concrete `PushEvent` subclasses if desired; default ships envelope-only. Queue-group semantics are opt-in; default pub/sub matches the local bus fan-out contract. JetStream / durable replay remain out of MIT (ADR-0011 boundary). Backed by [ADR-0025](docs/decisions/0025-push-nats-subscribe-and-loop-prevention.md). ([059e46d](https://github.com/verbara/Verbara.Sdk/commit/059e46d) through [c98229f](https://github.com/verbara/Verbara.Sdk/commit/c98229f))
+- **Six new example apps** under `Examples/` (16 → 22): `VoiceAiCartesiaExample`, `VoiceAiAssemblyAiExample`, `VoiceAiSpeechmaticsExample`, `WebSocketMediaExample` (chan_websocket control protocol), `AriOutboundExample`, `NatsBridgeExample`. All v1.12 features now have runnable showcases. ([991078e](https://github.com/verbara/Verbara.Sdk/commit/991078e), [60fcdbb](https://github.com/verbara/Verbara.Sdk/commit/60fcdbb))
+- **4 `Verbara.Sdk.Push.Nats` Testcontainers integration tests** against real `nats:2.10-alpine` covering subject prefix, payload bytes, multi-event delivery, and custom prefix behavior. `[Trait("Category", "Integration")]`. ([7a6f6fa](https://github.com/verbara/Verbara.Sdk/commit/7a6f6fa))
+- **Shared `WebSocketTestServer`** in `Tests/Verbara.Sdk.TestInfrastructure/WebSocket/` — TcpListener + manual HTTP/1.1 upgrade + `WebSocket.CreateFromStream(IsServer=true)`. Unblocks `ws.Abort()` test paths that previously hung on Linux under `HttpListener`. 2 new abort tests added (AssemblyAi STT, Speechmatics STT) closing the silent coverage gap. ([b02bf18](https://github.com/verbara/Verbara.Sdk/commit/b02bf18))
 
 ### Changed
 
-- **Activity.SetTag call-sites aligned to `AsteriskSemanticConventions`.** Five `Diagnostics/*ActivitySource.cs` files (VoiceAi, VoiceAi.AudioSocket, VoiceAi.OpenAiRealtime, Live, Sessions) now emit the conventions-matching attribute names: `voiceai.channel_id` → `asterisk.channel.id`, `originate.context/extension` → `dialplan.context/extension`, `session.direction/state/duration_ms` → `call.direction/state/duration_ms`. A T1.2 cross-package sweep added `agi.channel` → `asterisk.channel.name` to the list. Zero behavior change; consumer dashboards asserting on the old names will need to update. ([066cb3c](https://github.com/Harol-Reina/Asterisk.Sdk/commit/066cb3c), [4125c9e](https://github.com/Harol-Reina/Asterisk.Sdk/commit/4125c9e))
-- **Cartesia STT/TTS hardening**: linked `CancellationTokenSource` between send/receive loops + 2-second `CloseOutputAsync` timeout. Production path is robust against half-dead WebSocket sockets. ([c0890ac](https://github.com/Harol-Reina/Asterisk.Sdk/commit/c0890ac))
+- **Activity.SetTag call-sites aligned to `AsteriskSemanticConventions`.** Five `Diagnostics/*ActivitySource.cs` files (VoiceAi, VoiceAi.AudioSocket, VoiceAi.OpenAiRealtime, Live, Sessions) now emit the conventions-matching attribute names: `voiceai.channel_id` → `asterisk.channel.id`, `originate.context/extension` → `dialplan.context/extension`, `session.direction/state/duration_ms` → `call.direction/state/duration_ms`. A T1.2 cross-package sweep added `agi.channel` → `asterisk.channel.name` to the list. Zero behavior change; consumer dashboards asserting on the old names will need to update. ([066cb3c](https://github.com/verbara/Verbara.Sdk/commit/066cb3c), [4125c9e](https://github.com/verbara/Verbara.Sdk/commit/4125c9e))
+- **Cartesia STT/TTS hardening**: linked `CancellationTokenSource` between send/receive loops + 2-second `CloseOutputAsync` timeout. Production path is robust against half-dead WebSocket sockets. ([c0890ac](https://github.com/verbara/Verbara.Sdk/commit/c0890ac))
 
 ### Tests
 
-- **Zero deferred tests anywhere in repo.** The 2 `[Fact(Skip=…)]` Cartesia abort tests are un-skipped and passing against the new `WebSocketTestServer`. 2 new abort tests added for AssemblyAi STT + Speechmatics STT. ([b02bf18](https://github.com/Harol-Reina/Asterisk.Sdk/commit/b02bf18))
-- **3 regression fixes** in `LiveActivitySourceTests` and `SessionActivitySourceTests` — assertions updated to match the new conventions-aligned tag names. ([ed7c2cd](https://github.com/Harol-Reina/Asterisk.Sdk/commit/ed7c2cd))
-- **AudioSocketSession flake hardening** — replaced fixed `Task.Delay(100-200)` waits with `TaskCompletionSource` signals on `AudioStreamState` transitions. Avg test duration 210 ms → 28 ms. ([b384bde](https://github.com/Harol-Reina/Asterisk.Sdk/commit/b384bde))
+- **Zero deferred tests anywhere in repo.** The 2 `[Fact(Skip=…)]` Cartesia abort tests are un-skipped and passing against the new `WebSocketTestServer`. 2 new abort tests added for AssemblyAi STT + Speechmatics STT. ([b02bf18](https://github.com/verbara/Verbara.Sdk/commit/b02bf18))
+- **3 regression fixes** in `LiveActivitySourceTests` and `SessionActivitySourceTests` — assertions updated to match the new conventions-aligned tag names. ([ed7c2cd](https://github.com/verbara/Verbara.Sdk/commit/ed7c2cd))
+- **AudioSocketSession flake hardening** — replaced fixed `Task.Delay(100-200)` waits with `TaskCompletionSource` signals on `AudioStreamState` transitions. Avg test duration 210 ms → 28 ms. ([b384bde](https://github.com/verbara/Verbara.Sdk/commit/b384bde))
 - Unit tests **2,703 → 2,729** (+26: deferred cleanup +4, T1.1 pilot +4, T1.1 expansion +3, Tier 2 +2, pin-test extensions). Integration tests 59 → 65 (+6: 4 Push.Nats baseline + 2 bidirectional). Total across all categories: **2,948 pass / 0 fail / 0 Skip**.
 
 ### CI
 
-- **New `pack-check` job** running `dotnet pack -p:TreatWarningsAsErrors=true` on every push/PR. Surfaces PackageValidation baseline drift, PublicAPI drift, missing release notes/icons, license-expression issues at PR time. 24/24 packages pack clean at HEAD. ([7174559](https://github.com/Harol-Reina/Asterisk.Sdk/commit/7174559))
+- **New `pack-check` job** running `dotnet pack -p:TreatWarningsAsErrors=true` on every push/PR. Surfaces PackageValidation baseline drift, PublicAPI drift, missing release notes/icons, license-expression issues at PR time. 24/24 packages pack clean at HEAD. ([7174559](https://github.com/verbara/Verbara.Sdk/commit/7174559))
 
 ### Documentation
 
-- **ADR-0025** — `push.nats` subscribe + loop prevention rationale. Captures the `source`-header design, `RemotePushEvent`-as-envelope decision, queue-group default (pub/sub), and rejection of JetStream durable consumers (ADR-0011 boundary). ([64f0719](https://github.com/Harol-Reina/Asterisk.Sdk/commit/64f0719))
-- **Benchmark re-baseline** — `docs/research/benchmark-analysis.md` §1a confirms hot-path parser/dispatcher numbers are stable vs v1.11.1 after the v1.13 changes. AMI `ParseSingleEvent` 619 ns vs 618 ns baseline; ARI `ParseStasisStart` within noise floor. Const folding validated by exclusion. ([fb078d5](https://github.com/Harol-Reina/Asterisk.Sdk/commit/fb078d5))
-- **CONTRIBUTING** — new Release Process section + safe `NUGET_API_KEY` rotation flow (`pbpaste | gh secret set …` pattern) to prevent chat-exposure during future key rotations. Lesson learned from the v1.12.0 403 publish incident. ([25dc7e7](https://github.com/Harol-Reina/Asterisk.Sdk/commit/25dc7e7))
+- **ADR-0025** — `push.nats` subscribe + loop prevention rationale. Captures the `source`-header design, `RemotePushEvent`-as-envelope decision, queue-group default (pub/sub), and rejection of JetStream durable consumers (ADR-0011 boundary). ([64f0719](https://github.com/verbara/Verbara.Sdk/commit/64f0719))
+- **Benchmark re-baseline** — `docs/research/benchmark-analysis.md` §1a confirms hot-path parser/dispatcher numbers are stable vs v1.11.1 after the v1.13 changes. AMI `ParseSingleEvent` 619 ns vs 618 ns baseline; ARI `ParseStasisStart` within noise floor. Const folding validated by exclusion. ([fb078d5](https://github.com/verbara/Verbara.Sdk/commit/fb078d5))
+- **CONTRIBUTING** — new Release Process section + safe `NUGET_API_KEY` rotation flow (`pbpaste | gh secret set …` pattern) to prevent chat-exposure during future key rotations. Lesson learned from the v1.12.0 403 publish incident. ([25dc7e7](https://github.com/verbara/Verbara.Sdk/commit/25dc7e7))
 - `docs/plans/active/2026-04-20-v1.13.0-roadmap.md`, `2026-04-20-deferred-tests-cleanup.md`, and `2026-04-20-v1.13-tier2-push-nats-subscribe.md` — v1.13 planning + completed cleanup + Tier 2 execution retrospectives.
-- `docs/research/2026-04-19-otel-sip-semantic-conventions.md` — §6 items 1-2 marked shipped. ([2ebacfe](https://github.com/Harol-Reina/Asterisk.Sdk/commit/2ebacfe))
+- `docs/research/2026-04-19-otel-sip-semantic-conventions.md` — §6 items 1-2 marked shipped. ([2ebacfe](https://github.com/verbara/Verbara.Sdk/commit/2ebacfe))
 
 ### Notes
 
@@ -226,18 +226,18 @@ Consumers of `Asterisk.Sdk.Pro.Resilience` v1.8.x-pro migrate by renaming `using
 
 ## [1.12.0] - 2026-04-19
 
-**Asterisk 23 modernization + voice-agent readiness.** No breaking changes. Package count grows 23 → 24 (one new — `Asterisk.Sdk.Push.Nats`). Three new VoiceAI providers ship as subfolders inside the existing `VoiceAi.Stt` / `VoiceAi.Tts` packages (Deepgram/Azure convention, not new top-level packages).
+**Asterisk 23 modernization + voice-agent readiness.** No breaking changes. Package count grows 23 → 24 (one new — `Verbara.Sdk.Push.Nats`). Three new VoiceAI providers ship as subfolders inside the existing `VoiceAi.Stt` / `VoiceAi.Tts` packages (Deepgram/Azure convention, not new top-level packages).
 
 ### Added
 
-- **`Asterisk.Sdk.Push.Nats`** (new MIT package): NATS bridge for `RxPushEventBus`. Subscribes to the local Push bus and republishes every event to a NATS subject derived from the topic hierarchy. Unlocks multi-node deployments (one NATS cluster, N SDK instances, fan-out via subject-tree filtering). `NATS.Client.Core 2.5.10` — AOT-clean, zero reflection. `NatsSubjectTranslator` handles `/` and `.` separators, sanitizes wildcards and control chars. Meter `Asterisk.Sdk.Push.Nats` (`events.published`, `events.failed`). Publish-only in v1.12; subscribe-side planned for v1.12.x.
-- **ARI outbound WebSocket listener**: new `IAriOutboundListener` + `AriOutboundListener` under `src/Asterisk.Sdk.Ari/Outbound/`. The SDK acts as the WS server that Asterisk 22.5+ `application=outbound` dials into. Validates upgrade path, Basic-Auth credentials, and app allowlist. Exposes each accepted connection as an `AriOutboundConnection` with an `IObservable<AriEvent>`. Mirrors the RFC-6455 handshake pattern from `WebSocketAudioServer`. `AriOutboundListenerHostedService` in `Asterisk.Sdk.Hosting` for lifecycle management. DI: `services.AddAriOutboundListener(opts => ...)`.
+- **`Verbara.Sdk.Push.Nats`** (new MIT package): NATS bridge for `RxPushEventBus`. Subscribes to the local Push bus and republishes every event to a NATS subject derived from the topic hierarchy. Unlocks multi-node deployments (one NATS cluster, N SDK instances, fan-out via subject-tree filtering). `NATS.Client.Core 2.5.10` — AOT-clean, zero reflection. `NatsSubjectTranslator` handles `/` and `.` separators, sanitizes wildcards and control chars. Meter `Verbara.Sdk.Push.Nats` (`events.published`, `events.failed`). Publish-only in v1.12; subscribe-side planned for v1.12.x.
+- **ARI outbound WebSocket listener**: new `IAriOutboundListener` + `AriOutboundListener` under `src/Verbara.Sdk.Ari/Outbound/`. The SDK acts as the WS server that Asterisk 22.5+ `application=outbound` dials into. Validates upgrade path, Basic-Auth credentials, and app allowlist. Exposes each accepted connection as an `AriOutboundConnection` with an `IObservable<AriEvent>`. Mirrors the RFC-6455 handshake pattern from `WebSocketAudioServer`. `AriOutboundListenerHostedService` in `Verbara.Sdk.Hosting` for lifecycle management. DI: `services.AddAriOutboundListener(opts => ...)`.
 - **`chan_websocket` JSON control protocol on `WebSocketAudioSession`**: Asterisk 22.8 / 23.2+ sends JSON control messages over TEXT frames (MEDIA_START, MEDIA_BUFFERING, MARK_MEDIA, SET_MEDIA_DIRECTION, XON/XOFF, DTMF, HANGUP). Session now exposes `IObservable<ChanWebSocketControlMessage>` via a new `IChanWebSocketSession : IAudioStream` sub-interface, plus send-side methods `SendMarkAsync`, `SendXonAsync`, `SendXoffAsync`, `SendSetMediaDirectionAsync`. Polymorphic JSON via source-gen `ChanWebSocketJsonContext`. Binary audio path unchanged. Writes serialized through a `SemaphoreSlim` so audio and control frames coexist safely on one WebSocket.
-- **VoiceAI — Cartesia** (STT + TTS): `src/Asterisk.Sdk.VoiceAi.Stt/Cartesia/` (Ink-Whisper over WebSocket, streaming transcripts) and `src/Asterisk.Sdk.VoiceAi.Tts/Cartesia/` (Sonic-3 at 40-90ms TTFA — the lowest in market as of 2026). Raw WS per ADR-0014. `AddCartesiaStt` + `AddCartesiaTts` DI extensions.
-- **VoiceAI — AssemblyAI** (STT): `src/Asterisk.Sdk.VoiceAi.Stt/AssemblyAi/`. Universal Streaming v3 protocol — fills the vacuum left by the discontinued official .NET SDK (April 2025). Parses `Turn` messages, ignores `Begin` / `Termination` lifecycle events. `AddAssemblyAi` DI extension.
-- **VoiceAI — Speechmatics** (STT + TTS): `src/Asterisk.Sdk.VoiceAi.Stt/Speechmatics/` (Realtime v2 WebSocket — sub-150ms, 55+ languages) and `src/Asterisk.Sdk.VoiceAi.Tts/Speechmatics/` (REST synthesis — ~27× cheaper than ElevenLabs). Opens the enterprise price-sensitive segment. `AddSpeechmaticsStt` + `AddSpeechmaticsTts` DI extensions.
+- **VoiceAI — Cartesia** (STT + TTS): `src/Verbara.Sdk.VoiceAi.Stt/Cartesia/` (Ink-Whisper over WebSocket, streaming transcripts) and `src/Verbara.Sdk.VoiceAi.Tts/Cartesia/` (Sonic-3 at 40-90ms TTFA — the lowest in market as of 2026). Raw WS per ADR-0014. `AddCartesiaStt` + `AddCartesiaTts` DI extensions.
+- **VoiceAI — AssemblyAI** (STT): `src/Verbara.Sdk.VoiceAi.Stt/AssemblyAi/`. Universal Streaming v3 protocol — fills the vacuum left by the discontinued official .NET SDK (April 2025). Parses `Turn` messages, ignores `Begin` / `Termination` lifecycle events. `AddAssemblyAi` DI extension.
+- **VoiceAI — Speechmatics** (STT + TTS): `src/Verbara.Sdk.VoiceAi.Stt/Speechmatics/` (Realtime v2 WebSocket — sub-150ms, 55+ languages) and `src/Verbara.Sdk.VoiceAi.Tts/Speechmatics/` (REST synthesis — ~27× cheaper than ElevenLabs). Opens the enterprise price-sensitive segment. `AddSpeechmaticsStt` + `AddSpeechmaticsTts` DI extensions.
 - **`.github/workflows/publish.yml`**: automated nuget.org release on `v*` tag push. Builds Release, packs all shipping projects, runs `dotnet nuget push ... --skip-duplicate` with `NUGET_API_KEY` secret. Concurrency-guarded per tag. Closes the manual-publish exposure risk documented in v1.11.1. `CLAUDE.md`'s claim about CI-driven releases is now accurate.
-- **`Asterisk.Sdk.Push.Nats`** meter enrolled in `AsteriskTelemetry.MeterNames` (14 meters total; `MeterNames_ShouldContainAllPackages` assertion updated accordingly).
+- **`Verbara.Sdk.Push.Nats`** meter enrolled in `AsteriskTelemetry.MeterNames` (14 meters total; `MeterNames_ShouldContainAllPackages` assertion updated accordingly).
 
 ### Documentation
 
@@ -264,7 +264,7 @@ Two items originally scoped for v1.12.0 were found to be **already shipped pre-v
 
 ### Performance
 
-- **AMI event parser** — Fast-path length check on `Output` header accumulation in `AmiProtocolReader`. Restores ~35 ns of the v1.0 → v1.11 regression in `ParseSingleEvent`; `key.Length == 6` short-circuit lets 99%+ of non-`Output` keys skip the `Equals("Output", OrdinalIgnoreCase)` compare. Throughput 1.53M → 1.62M events/sec single-thread (AMD Ryzen 9 9900X, .NET 10.0.6). 633 AMI unit tests unchanged. ([41fff67](https://github.com/Harol-Reina/Asterisk.Sdk/commit/41fff67))
+- **AMI event parser** — Fast-path length check on `Output` header accumulation in `AmiProtocolReader`. Restores ~35 ns of the v1.0 → v1.11 regression in `ParseSingleEvent`; `key.Length == 6` short-circuit lets 99%+ of non-`Output` keys skip the `Equals("Output", OrdinalIgnoreCase)` compare. Throughput 1.53M → 1.62M events/sec single-thread (AMD Ryzen 9 9900X, .NET 10.0.6). 633 AMI unit tests unchanged. ([41fff67](https://github.com/verbara/Verbara.Sdk/commit/41fff67))
 
 ### Documentation
 
@@ -282,17 +282,17 @@ Two items originally scoped for v1.12.0 were found to be **already shipped pre-v
 
 ### Added
 
-- **`Asterisk.Sdk.OpenTelemetry`** (new MIT package): batteries-included OpenTelemetry wiring. `services.AddAsteriskOpenTelemetry(b => b.WithAllSources().WithPrometheusExporter().WithOtlpExporter(...))` enrolls every `AsteriskTelemetry.ActivitySourceNames` + `MeterNames` and attaches Console / OTLP / Prometheus exporters. `ConfigureTracing` / `ConfigureMetrics` escape hatches give direct access to the underlying `TracerProviderBuilder` / `MeterProviderBuilder` for samplers, views, and custom processors. Uses OpenTelemetry 1.15.2 (avoids 1.10.x vulnerability).
-- **`Asterisk.Sdk.Push.Webhooks`** (new MIT package): outbound HTTP webhook delivery consuming the Push bus. `services.AddAsteriskPush().AddAsteriskPushWebhooks(opts => ...)` registers `IWebhookSubscriptionStore` (in-memory default), `IWebhookSigner` (HMAC-SHA256 default), `IWebhookPayloadSerializer` (UTF-8 JSON envelope, AOT-safe), and a `WebhookDeliveryService` `BackgroundService`. Per-delivery HMAC-SHA256 signature in `X-Signature` header, exponential retry capped at `MaxDelay`, trace-context propagation via `traceparent`, per-subscription `MaxRetries`/`Headers` overrides, dead-letter metrics. Meter `Asterisk.Sdk.Push.Webhooks` (enrolled in `AsteriskTelemetry.MeterNames`): counters `deliveries.succeeded`, `deliveries.failed`, `deliveries.retried`, `deliveries.dead_letter`.
-- **Contact-center activities** (in `Asterisk.Sdk.Activities`): four new supervisor/transfer primitives.
+- **`Verbara.Sdk.OpenTelemetry`** (new MIT package): batteries-included OpenTelemetry wiring. `services.AddAsteriskOpenTelemetry(b => b.WithAllSources().WithPrometheusExporter().WithOtlpExporter(...))` enrolls every `AsteriskTelemetry.ActivitySourceNames` + `MeterNames` and attaches Console / OTLP / Prometheus exporters. `ConfigureTracing` / `ConfigureMetrics` escape hatches give direct access to the underlying `TracerProviderBuilder` / `MeterProviderBuilder` for samplers, views, and custom processors. Uses OpenTelemetry 1.15.2 (avoids 1.10.x vulnerability).
+- **`Verbara.Sdk.Push.Webhooks`** (new MIT package): outbound HTTP webhook delivery consuming the Push bus. `services.AddAsteriskPush().AddAsteriskPushWebhooks(opts => ...)` registers `IWebhookSubscriptionStore` (in-memory default), `IWebhookSigner` (HMAC-SHA256 default), `IWebhookPayloadSerializer` (UTF-8 JSON envelope, AOT-safe), and a `WebhookDeliveryService` `BackgroundService`. Per-delivery HMAC-SHA256 signature in `X-Signature` header, exponential retry capped at `MaxDelay`, trace-context propagation via `traceparent`, per-subscription `MaxRetries`/`Headers` overrides, dead-letter metrics. Meter `Verbara.Sdk.Push.Webhooks` (enrolled in `AsteriskTelemetry.MeterNames`): counters `deliveries.succeeded`, `deliveries.failed`, `deliveries.retried`, `deliveries.dead_letter`.
+- **Contact-center activities** (in `Verbara.Sdk.Activities`): four new supervisor/transfer primitives.
   - `AttendedTransferActivity` — wraps AMI `Atxfer` via a new `AmiActivityBase` (takes `IAmiConnection` instead of `IAgiChannel`); required when the supervisor operates outside a live AGI context.
   - `ChanSpyActivity` — AGI `ChanSpy` application with `ChanSpyMode` enum (`Both`, `SpyOnly`, `WhisperOnly`, `Coach`) plus free-form `Options` string for the full flag set.
   - `BargeActivity` — AGI `ChanSpy` with the `B` (barge) flag; supervisor joins as audible third party.
   - `SnoopActivity` — ARI snoop channel creation via `IAriClient.Channels.SnoopAsync`; exposes the resulting snoop channel via `SnoopChannel` property.
-- **`Asterisk.Sdk.Sessions.Redis`** (new MIT package): `RedisSessionStore : SessionStoreBase` promoted from the prior spike. Fluent `UseRedis(...)` extension with three overloads — `Action<RedisSessionStoreOptions>`, pre-built `IConnectionMultiplexer`, and raw connection string. Data layout: one JSON snapshot per session, secondary linked-id index, active set (cursor-scanned), completed sorted-set with TTL-driven eviction. Pipelined I/O via `CreateBatch()` + `Task.WhenAll(...).WaitAsync(ct)`. Cancellation honored at entry and around all batch awaits. AOT-safe (source-gen `SessionJsonContext`). Integration tests use Testcontainers (`redis:7-alpine`, no env-var dependency).
-- **`Asterisk.Sdk.Sessions.Postgres`** (new MIT package): `PostgresSessionStore : SessionStoreBase` using Npgsql 10 + Dapper + JSONB. Fluent `UsePostgres(...)` extension with the same three overloads as Redis. UPSERT via `INSERT ... ON CONFLICT (session_id) DO UPDATE`. `SaveBatchAsync` in a transaction with rollback. Partial index `ix_asterisk_sessions_active` backs `GetActiveAsync`. Identifier validation (`TableName`, `SchemaName`) at resolve time against `^[A-Za-z_][A-Za-z0-9_]*$` via `AddOptions<T>().Validate`. Migration SQL (`001_create_sessions_table.sql`) ships in the `.nupkg` at `contentFiles/any/any/Migrations/`.
-- **`Asterisk.Sdk.Sessions.ISessionStore`** interface: additive companion to `SessionStoreBase` — enables NSubstitute mocking in tests and supports factory-based DI registration. `SessionStoreBase` now declares `: ISessionStore`; zero breaking changes for existing consumers.
-- **`Asterisk.Sdk.Sessions.Extensions.ISessionsBuilder`** fluent-builder interface: entry point for backend-specific registration (`UseInMemory`, `UseRedis`, `UsePostgres`). Exposed by two new overloads in `Asterisk.Sdk.Hosting`: `AddAsteriskSessionsBuilder(...)` and `AddAsteriskSessionsMultiServerBuilder(...)`. The existing `AddAsteriskSessions` / `AddAsteriskSessionsMultiServer` methods still return `IServiceCollection` — consumers opt into the builder at their own pace.
+- **`Verbara.Sdk.Sessions.Redis`** (new MIT package): `RedisSessionStore : SessionStoreBase` promoted from the prior spike. Fluent `UseRedis(...)` extension with three overloads — `Action<RedisSessionStoreOptions>`, pre-built `IConnectionMultiplexer`, and raw connection string. Data layout: one JSON snapshot per session, secondary linked-id index, active set (cursor-scanned), completed sorted-set with TTL-driven eviction. Pipelined I/O via `CreateBatch()` + `Task.WhenAll(...).WaitAsync(ct)`. Cancellation honored at entry and around all batch awaits. AOT-safe (source-gen `SessionJsonContext`). Integration tests use Testcontainers (`redis:7-alpine`, no env-var dependency).
+- **`Verbara.Sdk.Sessions.Postgres`** (new MIT package): `PostgresSessionStore : SessionStoreBase` using Npgsql 10 + Dapper + JSONB. Fluent `UsePostgres(...)` extension with the same three overloads as Redis. UPSERT via `INSERT ... ON CONFLICT (session_id) DO UPDATE`. `SaveBatchAsync` in a transaction with rollback. Partial index `ix_asterisk_sessions_active` backs `GetActiveAsync`. Identifier validation (`TableName`, `SchemaName`) at resolve time against `^[A-Za-z_][A-Za-z0-9_]*$` via `AddOptions<T>().Validate`. Migration SQL (`001_create_sessions_table.sql`) ships in the `.nupkg` at `contentFiles/any/any/Migrations/`.
+- **`Verbara.Sdk.Sessions.ISessionStore`** interface: additive companion to `SessionStoreBase` — enables NSubstitute mocking in tests and supports factory-based DI registration. `SessionStoreBase` now declares `: ISessionStore`; zero breaking changes for existing consumers.
+- **`Verbara.Sdk.Sessions.Extensions.ISessionsBuilder`** fluent-builder interface: entry point for backend-specific registration (`UseInMemory`, `UseRedis`, `UsePostgres`). Exposed by two new overloads in `Verbara.Sdk.Hosting`: `AddAsteriskSessionsBuilder(...)` and `AddAsteriskSessionsMultiServerBuilder(...)`. The existing `AddAsteriskSessions` / `AddAsteriskSessionsMultiServer` methods still return `IServiceCollection` — consumers opt into the builder at their own pace.
 - **`docs/guides/session-store-backends.md`**: decision guide, registration patterns, data layout, identifier-safety notes, benchmark reference.
 - **README:** CI + AOT Trim workflow badges, NuGet download badge, Native AOT badge; `## Documentation` table of contents linking guides/benchmarks/technical+commercial READMEs/CHANGELOG/CONTRIBUTING/SECURITY; **Session Store Backends** subsection in the Packages table.
 - **README Quick Start:** 10-line "First contact" preamble showing a minimal `AddAsterisk` snippet and a pointer to `Examples/BasicAmiExample/`.
@@ -302,12 +302,12 @@ Two items originally scoped for v1.12.0 were found to be **already shipped pre-v
 
 ### Changed
 
-- **`Asterisk.Sdk.Sessions`:** `CallSessionSnapshot` + `SessionJsonContext` hoisted from the Redis spike into `src/Asterisk.Sdk.Sessions/Serialization/` as `internal` — shared round-trip between Redis and Postgres backends. `InternalsVisibleTo` grants added for `Asterisk.Sdk.Sessions.Redis`, `Asterisk.Sdk.Sessions.Postgres`, and the matching test projects.
+- **`Verbara.Sdk.Sessions`:** `CallSessionSnapshot` + `SessionJsonContext` hoisted from the Redis spike into `src/Verbara.Sdk.Sessions/Serialization/` as `internal` — shared round-trip between Redis and Postgres backends. `InternalsVisibleTo` grants added for `Verbara.Sdk.Sessions.Redis`, `Verbara.Sdk.Sessions.Postgres`, and the matching test projects.
 
 ### Removed
 
-- **`Tests/Asterisk.Sdk.Redis.Spike`**: retired after migration to production package `Asterisk.Sdk.Sessions.Redis`. Spike tests moved to `Tests/Asterisk.Sdk.Sessions.Redis.Tests/` (integration-tagged) and `Tests/Asterisk.Sdk.Sessions.Tests/SnapshotSerializationTests.cs` (unit). Latency smoke-test preserved with `[Trait("Category", "Benchmark")]` so CI integration filters can exclude it.
-- **`Tests/Asterisk.Sdk.Redis.Spike.Aot`**: orphaned AOT smoke-check for the retired spike. Production `Asterisk.Sdk.Sessions.Redis` + `Asterisk.Sdk.Sessions.Postgres` are covered by the repo-wide AOT Trim workflow (`<IsAotCompatible>true</IsAotCompatible>` inherited from `Directory.Build.props`).
+- **`Tests/Verbara.Sdk.Redis.Spike`**: retired after migration to production package `Verbara.Sdk.Sessions.Redis`. Spike tests moved to `Tests/Verbara.Sdk.Sessions.Redis.Tests/` (integration-tagged) and `Tests/Verbara.Sdk.Sessions.Tests/SnapshotSerializationTests.cs` (unit). Latency smoke-test preserved with `[Trait("Category", "Benchmark")]` so CI integration filters can exclude it.
+- **`Tests/Verbara.Sdk.Redis.Spike.Aot`**: orphaned AOT smoke-check for the retired spike. Production `Verbara.Sdk.Sessions.Redis` + `Verbara.Sdk.Sessions.Postgres` are covered by the repo-wide AOT Trim workflow (`<IsAotCompatible>true</IsAotCompatible>` inherited from `Directory.Build.props`).
 
 ### Notes
 
@@ -320,7 +320,7 @@ Two items originally scoped for v1.12.0 were found to be **already shipped pre-v
 
 ### Fixed
 
-- **Push:** `RxPushEventBus.PublishAsync` now captures the ambient W3C traceparent from `Activity.Current` into `PushEventMetadata.TraceContext` when the publisher has not already set it. Previously the `ExecutionContext` flow was broken at the bus's internal `Channel` boundary (the dispatch loop runs under a `Task.Run` started at construction time), causing downstream transports — SSE endpoints and `Asterisk.Sdk.Pro.Push` backplanes — to see a null trace context and start receiver spans as new trace roots. The capture is guarded (`TraceContext: null` only) so publishers remain free to override the trace context explicitly.
+- **Push:** `RxPushEventBus.PublishAsync` now captures the ambient W3C traceparent from `Activity.Current` into `PushEventMetadata.TraceContext` when the publisher has not already set it. Previously the `ExecutionContext` flow was broken at the bus's internal `Channel` boundary (the dispatch loop runs under a `Task.Run` started at construction time), causing downstream transports — SSE endpoints and `Verbara.Sdk.Pro.Push` backplanes — to see a null trace context and start receiver spans as new trace roots. The capture is guarded (`TraceContext: null` only) so publishers remain free to override the trace context explicitly.
 
 ### Notes
 
@@ -332,7 +332,7 @@ Two items originally scoped for v1.12.0 were found to be **already shipped pre-v
 
 ### Added
 
-- **Push:** `PushEventMetadata.TraceContext` — optional `string?` parameter carrying a W3C traceparent (`00-{trace-id}-{span-id}-{flags}`) for cross-boundary distributed tracing. When present, transports crossing process/network boundaries (SSE endpoints in `Asterisk.Sdk.Push.AspNetCore`, backplane relays in `Asterisk.Sdk.Pro.Push`) inject it into the wire envelope so downstream subscribers can continue the publisher's trace. Null default; older consumers safely ignore the unknown field. Establishes the pattern for future cross-boundary propagation (AMI/ARI, tracked in a separate spec).
+- **Push:** `PushEventMetadata.TraceContext` — optional `string?` parameter carrying a W3C traceparent (`00-{trace-id}-{span-id}-{flags}`) for cross-boundary distributed tracing. When present, transports crossing process/network boundaries (SSE endpoints in `Verbara.Sdk.Push.AspNetCore`, backplane relays in `Verbara.Sdk.Pro.Push`) inject it into the wire envelope so downstream subscribers can continue the publisher's trace. Null default; older consumers safely ignore the unknown field. Establishes the pattern for future cross-boundary propagation (AMI/ARI, tracked in a separate spec).
 
 ### Notes
 
@@ -392,12 +392,12 @@ Two items originally scoped for v1.12.0 were found to be **already shipped pre-v
 
 ### Added
 
-- **NEW PACKAGE — `Asterisk.Sdk.Push.AspNetCore` (MIT):** SSE endpoint extraction from downstream consumers. `AddAsteriskPushAspNetCore()` DI registration and `IEndpointRouteBuilder.MapPushEndpoints(prefix = "/api/v1/push")` extension wire up Server-Sent Events delivery on top of `IPushEventBus`. Closes the v1.7+ deferred extraction.
-- **Push:** Hierarchical topic routing primitives in the `Asterisk.Sdk.Push.Topics` namespace.
+- **NEW PACKAGE — `Verbara.Sdk.Push.AspNetCore` (MIT):** SSE endpoint extraction from downstream consumers. `AddAsteriskPushAspNetCore()` DI registration and `IEndpointRouteBuilder.MapPushEndpoints(prefix = "/api/v1/push")` extension wire up Server-Sent Events delivery on top of `IPushEventBus`. Closes the v1.7+ deferred extraction.
+- **Push:** Hierarchical topic routing primitives in the `Verbara.Sdk.Push.Topics` namespace.
   - `TopicName` value object (segmented topic identifiers).
   - `TopicPattern` with single-segment (`*`) and multi-segment (`**`) wildcards plus `{self}` placeholder resolution against the current subscriber.
   - `ITopicRegistry` / `TopicRegistry` for mapping event types to topic templates.
-- **Push:** Subscription authorization in the new `Asterisk.Sdk.Push.Authz` namespace — `ISubscriptionAuthorizer`, `AuthorizationResult` (`Allow()` / `Deny(reason)`), `ITopicPermissionMap`, and `AllowAllSubscriptionAuthorizer` default.
+- **Push:** Subscription authorization in the new `Verbara.Sdk.Push.Authz` namespace — `ISubscriptionAuthorizer`, `AuthorizationResult` (`Allow()` / `Deny(reason)`), `ITopicPermissionMap`, and `AllowAllSubscriptionAuthorizer` default.
 - **Push:** New `PushEventMetadata.TopicPath` and `SubscriberContext.RequestedTopicPattern` fields enable topic-aware routing without breaking the existing constructor signature (additional parameters default to `null`).
 - **Hosting:** `AddAsteriskPush()` now also registers `ITopicRegistry` (singleton) and `ISubscriptionAuthorizer` (singleton, defaults to `AllowAllSubscriptionAuthorizer`).
 
@@ -407,9 +407,9 @@ Two items originally scoped for v1.12.0 were found to be **already shipped pre-v
 
 ### Notes
 
-- 19 packages on nuget.org (was 18 in v1.7.0; the new package is `Asterisk.Sdk.Push.AspNetCore`).
+- 19 packages on nuget.org (was 18 in v1.7.0; the new package is `Verbara.Sdk.Push.AspNetCore`).
 - 0 build warnings, 0 trim warnings, all unit tests pass.
-- `PublicAPI.Shipped.txt` finalized for `Asterisk.Sdk.Push`, `Asterisk.Sdk.Push.AspNetCore`, `Asterisk.Sdk.Hosting`, `Asterisk.Sdk.Sessions`, and `Asterisk.Sdk.Live` (the latter three promote leftover entries from v1.5.x and v1.7.0 that were never moved out of Unshipped at release time).
+- `PublicAPI.Shipped.txt` finalized for `Verbara.Sdk.Push`, `Verbara.Sdk.Push.AspNetCore`, `Verbara.Sdk.Hosting`, `Verbara.Sdk.Sessions`, and `Verbara.Sdk.Live` (the latter three promote leftover entries from v1.5.x and v1.7.0 that were never moved out of Unshipped at release time).
 
 ---
 
@@ -421,7 +421,7 @@ Two items originally scoped for v1.12.0 were found to be **already shipped pre-v
 - **Sessions:** `QueueSession` + `QueueSessionTracker` — aggregate queue SLA using the previously-defined-but-unused `SessionOptions.SlaThreshold` (20s) and `.QueueMetricsWindow` (30m).
 - **Sessions:** `SessionReconciliationService` (`IHostedService` with `PeriodicTimer`) — drives the previously-orphaned `SessionReconciler.TryMarkOrphaned` / `.TryMarkTimedOut` on a `SessionOptions.ReconciliationInterval` (30s) cadence.
 - **Sessions:** `SessionOptions.WrapUpDuration` (default 30s).
-- **Observability:** `ActivitySource`s for `Asterisk.Sdk.Live`, `Asterisk.Sdk.Sessions`, and `Asterisk.Sdk.Push` (now 6/6 core packages).
+- **Observability:** `ActivitySource`s for `Verbara.Sdk.Live`, `Verbara.Sdk.Sessions`, and `Verbara.Sdk.Push` (now 6/6 core packages).
 - **Observability:** `IHealthCheck` for Live, Sessions, and Push (now 6/6 core packages, auto-registered in `AddAsterisk()` / `AddSessionsCore()` / `AddAsteriskPush()`).
 - **Hosting:** `AsteriskTelemetry` static helper exposes `ActivitySourceNames[]` (6) and `MeterNames[]` (7) — discoverability without coupling to OpenTelemetry.
 
@@ -435,7 +435,7 @@ Two items originally scoped for v1.12.0 were found to be **already shipped pre-v
 
 ### Added
 
-- **NEW PACKAGE — `Asterisk.Sdk.Push` (MIT):** Domain-layer push event bus with `IPushEventBus` (Rx-based default), `PushEvent` base record + `PushEventMetadata`, `IEventDeliveryFilter` / `DefaultDeliveryFilter`, `ISubscriptionRegistry` / `InMemorySubscriptionRegistry`, `PushMetrics`, and `BackpressureStrategy` (`DropOldest`/`DropNewest`/`Block`).
+- **NEW PACKAGE — `Verbara.Sdk.Push` (MIT):** Domain-layer push event bus with `IPushEventBus` (Rx-based default), `PushEvent` base record + `PushEventMetadata`, `IEventDeliveryFilter` / `DefaultDeliveryFilter`, `ISubscriptionRegistry` / `InMemorySubscriptionRegistry`, `PushMetrics`, and `BackpressureStrategy` (`DropOldest`/`DropNewest`/`Block`).
 
 ### Fixed
 
@@ -480,7 +480,7 @@ Two items originally scoped for v1.12.0 were found to be **already shipped pre-v
 
 ### Changed
 
-- **Repo:** PbxAdmin moved to standalone repository (`Asterisk.Sdk.PbxAdmin`)
+- **Repo:** PbxAdmin moved to standalone repository (`Verbara.Sdk.PbxAdmin`)
 
 ---
 
@@ -498,7 +498,7 @@ Two items originally scoped for v1.12.0 were found to be **already shipped pre-v
 
 ### Changed
 
-- **Repo:** PbxAdmin moved to standalone repository ([Asterisk.Sdk.PbxAdmin](https://github.com/Harol-Reina/Asterisk.Sdk.PbxAdmin))
+- **Repo:** PbxAdmin moved to standalone repository ([Verbara.Sdk.PbxAdmin](https://github.com/verbara/Verbara.Sdk.PbxAdmin))
 
 ---
 
@@ -587,31 +587,31 @@ Two items originally scoped for v1.12.0 were found to be **already shipped pre-v
 
 ## [1.0.0] - 2026-03-21
 
-First stable release of Asterisk.Sdk — a .NET 10 Native AOT SDK for Asterisk PBX.
+First stable release of Verbara.Sdk — a .NET 10 Native AOT SDK for Asterisk PBX.
 
 **API Stability:** API is frozen as of v1.0.0. Semantic versioning applies — no breaking changes in 1.x releases.
 
 ### Core SDK (9 packages)
 
-- **Asterisk.Sdk** — Core interfaces, base types, enums, and attributes shared across all layers
-- **Asterisk.Sdk.Ami** — AMI client with 115 actions, 249 events, and 17 typed responses. Zero-copy TCP parsing via `System.IO.Pipelines`. MD5 challenge-response authentication. Auto-reconnection with exponential backoff. Configurable heartbeat monitoring. Source-generated action serialization and event deserialization (zero reflection).
-- **Asterisk.Sdk.Agi** — FastAGI server with 54 commands and pluggable script mapping strategies (`SimpleMappingStrategy`). Per-connection timeout, status 511 hangup detection, and `AgiMetrics` instrumentation.
-- **Asterisk.Sdk.Ari** — ARI REST + WebSocket client with 8 resource APIs (channels, bridges, playbacks, recordings, endpoints, applications, sounds, device states). Domain exceptions for HTTP error mapping. WebSocket reconnect with exponential backoff. Source-generated JSON serialization via `AriJsonContext`.
-- **Asterisk.Sdk.Live** — Real-time in-memory tracking of channels, queues, agents, and conference rooms from AMI events. Secondary indices for O(1) lookups by name. Observable gauges and event counters via `System.Diagnostics.Metrics`.
-- **Asterisk.Sdk.Activities** — High-level telephony operations (Dial, Hold, Transfer, Park, Bridge, Conference) modeled as async state machines with `IObservable<ActivityStatus>` tracking. Real cancellation support, re-entrance guards, and channel variable capture.
-- **Asterisk.Sdk.Sessions** — Session Engine: AMI event correlation into unified call sessions using LinkedId grouping. State-machine lifecycle (Ringing, Answered, OnHold, Transferred, Completed), domain events (`SessionStarted`, `SessionEnded`, `SessionStateChanged`), automatic orphan detection via `SessionReconciler`, and pluggable extension points (`ISessionEnricher`, `ISessionPolicy`, `ISessionEventHandler`).
-- **Asterisk.Sdk.Config** — Asterisk `.conf` file parser including `extensions.conf` dialplan support. Quote-aware comment stripping.
-- **Asterisk.Sdk.Hosting** — DI registration via `AddAsterisk()` with AOT-safe options validation. `IHostedService` lifecycle for AMI and Live API. `IHealthCheck` for AMI connection state. Meta-package referencing all core sub-packages.
+- **Verbara.Sdk** — Core interfaces, base types, enums, and attributes shared across all layers
+- **Verbara.Sdk.Ami** — AMI client with 115 actions, 249 events, and 17 typed responses. Zero-copy TCP parsing via `System.IO.Pipelines`. MD5 challenge-response authentication. Auto-reconnection with exponential backoff. Configurable heartbeat monitoring. Source-generated action serialization and event deserialization (zero reflection).
+- **Verbara.Sdk.Agi** — FastAGI server with 54 commands and pluggable script mapping strategies (`SimpleMappingStrategy`). Per-connection timeout, status 511 hangup detection, and `AgiMetrics` instrumentation.
+- **Verbara.Sdk.Ari** — ARI REST + WebSocket client with 8 resource APIs (channels, bridges, playbacks, recordings, endpoints, applications, sounds, device states). Domain exceptions for HTTP error mapping. WebSocket reconnect with exponential backoff. Source-generated JSON serialization via `AriJsonContext`.
+- **Verbara.Sdk.Live** — Real-time in-memory tracking of channels, queues, agents, and conference rooms from AMI events. Secondary indices for O(1) lookups by name. Observable gauges and event counters via `System.Diagnostics.Metrics`.
+- **Verbara.Sdk.Activities** — High-level telephony operations (Dial, Hold, Transfer, Park, Bridge, Conference) modeled as async state machines with `IObservable<ActivityStatus>` tracking. Real cancellation support, re-entrance guards, and channel variable capture.
+- **Verbara.Sdk.Sessions** — Session Engine: AMI event correlation into unified call sessions using LinkedId grouping. State-machine lifecycle (Ringing, Answered, OnHold, Transferred, Completed), domain events (`SessionStarted`, `SessionEnded`, `SessionStateChanged`), automatic orphan detection via `SessionReconciler`, and pluggable extension points (`ISessionEnricher`, `ISessionPolicy`, `ISessionEventHandler`).
+- **Verbara.Sdk.Config** — Asterisk `.conf` file parser including `extensions.conf` dialplan support. Quote-aware comment stripping.
+- **Verbara.Sdk.Hosting** — DI registration via `AddAsterisk()` with AOT-safe options validation. `IHostedService` lifecycle for AMI and Live API. `IHealthCheck` for AMI connection state. Meta-package referencing all core sub-packages.
 
 ### Voice AI (7 packages)
 
-- **Asterisk.Sdk.Audio** — Pure C# polyphase FIR resampler with 12 pre-computed rate pairs (8 kHz ↔ 16 kHz ↔ 24 kHz ↔ 48 kHz). Zero-alloc output buffers, PCM16 processing, RMS energy measurement, and voice activity detection. Zero external dependencies.
-- **Asterisk.Sdk.VoiceAi** — Voice AI orchestration pipeline (`VoiceAiPipeline`). Dual-loop design: audio monitor + pipeline. VAD → STT → `IConversationHandler` → TTS with barge-in detection. `ISessionHandler` interchange point makes `VoiceAiPipeline` and `OpenAiRealtimeBridge` drop-in replacements for each other.
-- **Asterisk.Sdk.VoiceAi.AudioSocket** — AudioSocket server and client using `System.IO.Pipelines` for zero-copy bidirectional PCM streaming. `AudioSocketSession` handles bidirectional audio with backpressure. `AudioSocketClient` enables local testing without a live Asterisk instance.
-- **Asterisk.Sdk.VoiceAi.Stt** — Speech-to-text providers: Deepgram (WebSocket streaming, real-time), OpenAI Whisper (batch REST), Azure Whisper, and Google Speech (REST). DI registration via `AddDeepgramSpeechRecognizer()`, `AddWhisperSpeechRecognizer()`, `AddAzureWhisperSpeechRecognizer()`, `AddGoogleSpeechRecognizer()`.
-- **Asterisk.Sdk.VoiceAi.Tts** — Text-to-speech providers: ElevenLabs (WebSocket streaming, ultra-low-latency) and Azure TTS (REST). DI registration via `AddElevenLabsSpeechSynthesizer()`, `AddAzureTtsSpeechSynthesizer()`.
-- **Asterisk.Sdk.VoiceAi.OpenAiRealtime** — Bridges Asterisk AudioSocket directly to the OpenAI Realtime API, bypassing the STT+LLM+TTS chain entirely. Single persistent WebSocket with bidirectional PCM (resampled 8 kHz ↔ 24 kHz). Server-side VAD, function calling (`IRealtimeFunctionHandler`), and typed observable events (`RealtimeSpeechStartedEvent`, `RealtimeTranscriptEvent`, `RealtimeFunctionCalledEvent`).
-- **Asterisk.Sdk.VoiceAi.Testing** — Fake implementations (`FakeSpeechRecognizer`, `FakeSpeechSynthesizer`, `FakeConversationHandler`) for unit testing Voice AI pipelines without real API calls.
+- **Verbara.Sdk.Audio** — Pure C# polyphase FIR resampler with 12 pre-computed rate pairs (8 kHz ↔ 16 kHz ↔ 24 kHz ↔ 48 kHz). Zero-alloc output buffers, PCM16 processing, RMS energy measurement, and voice activity detection. Zero external dependencies.
+- **Verbara.Sdk.VoiceAi** — Voice AI orchestration pipeline (`VoiceAiPipeline`). Dual-loop design: audio monitor + pipeline. VAD → STT → `IConversationHandler` → TTS with barge-in detection. `ISessionHandler` interchange point makes `VoiceAiPipeline` and `OpenAiRealtimeBridge` drop-in replacements for each other.
+- **Verbara.Sdk.VoiceAi.AudioSocket** — AudioSocket server and client using `System.IO.Pipelines` for zero-copy bidirectional PCM streaming. `AudioSocketSession` handles bidirectional audio with backpressure. `AudioSocketClient` enables local testing without a live Asterisk instance.
+- **Verbara.Sdk.VoiceAi.Stt** — Speech-to-text providers: Deepgram (WebSocket streaming, real-time), OpenAI Whisper (batch REST), Azure Whisper, and Google Speech (REST). DI registration via `AddDeepgramSpeechRecognizer()`, `AddWhisperSpeechRecognizer()`, `AddAzureWhisperSpeechRecognizer()`, `AddGoogleSpeechRecognizer()`.
+- **Verbara.Sdk.VoiceAi.Tts** — Text-to-speech providers: ElevenLabs (WebSocket streaming, ultra-low-latency) and Azure TTS (REST). DI registration via `AddElevenLabsSpeechSynthesizer()`, `AddAzureTtsSpeechSynthesizer()`.
+- **Verbara.Sdk.VoiceAi.OpenAiRealtime** — Bridges Asterisk AudioSocket directly to the OpenAI Realtime API, bypassing the STT+LLM+TTS chain entirely. Single persistent WebSocket with bidirectional PCM (resampled 8 kHz ↔ 24 kHz). Server-side VAD, function calling (`IRealtimeFunctionHandler`), and typed observable events (`RealtimeSpeechStartedEvent`, `RealtimeTranscriptEvent`, `RealtimeFunctionCalledEvent`).
+- **Verbara.Sdk.VoiceAi.Testing** — Fake implementations (`FakeSpeechRecognizer`, `FakeSpeechSynthesizer`, `FakeConversationHandler`) for unit testing Voice AI pipelines without real API calls.
 
 ### Key Properties
 
@@ -646,4 +646,4 @@ First stable release of Asterisk.Sdk — a .NET 10 Native AOT SDK for Asterisk P
 - Fix: allow file-mode config writes for queue sync
 
 ### Notes
-- PbxAdmin example has been moved to its own repository: [Asterisk.Sdk.PbxAdmin](https://github.com/Harol-Reina/Asterisk.Sdk.PbxAdmin)
+- PbxAdmin example has been moved to its own repository: [Verbara.Sdk.PbxAdmin](https://github.com/verbara/Verbara.Sdk.PbxAdmin)

@@ -1,4 +1,4 @@
-// Asterisk.Sdk — chan_websocket audio + JSON control protocol example.
+// Verbara.Sdk — chan_websocket audio + JSON control protocol example.
 //
 // Shows how to run WebSocketAudioServer (the native Asterisk 22.8 / 23.2+
 // chan_websocket consumer) and react to the JSON control messages Asterisk
