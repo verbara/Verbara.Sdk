@@ -4,7 +4,6 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using Verbara.Sdk.Audio;
-using Verbara.Sdk.Audio.Processing;
 using Verbara.Sdk.VoiceAi.AudioSocket;
 using Verbara.Sdk.VoiceAi.Diagnostics;
 using Verbara.Sdk.VoiceAi.Events;
@@ -60,6 +59,8 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
     {
         using var scope = _scopeFactory.CreateScope();
         var handler = scope.ServiceProvider.GetRequiredService<IConversationHandler>();
+        var turnDetector = scope.ServiceProvider.GetService<ITurnDetector>()
+            ?? new SilenceTurnDetector(Options.Create(_options));
 
         VoiceAiMetrics.SessionsStarted.Add(1);
         var sessionStart = Stopwatch.GetTimestamp();
@@ -82,7 +83,7 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
         try
         {
             await Task.WhenAll(
-                AudioMonitorLoop(session, utteranceChannel.Writer, ct),
+                AudioMonitorLoop(session, utteranceChannel.Writer, turnDetector, ct),
                 PipelineLoop(session, utteranceChannel.Reader, handler, history, ct)
             ).ConfigureAwait(false);
         }
@@ -108,90 +109,55 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
     private async Task AudioMonitorLoop(
         AudioSocketSession session,
         ChannelWriter<ReadOnlyMemory<byte>[]> utteranceWriter,
+        ITurnDetector turnDetector,
         CancellationToken ct)
     {
         var buffer = new List<ReadOnlyMemory<byte>>();
         var speechStartTime = DateTimeOffset.UtcNow;
-        var silenceDuration = TimeSpan.Zero;
-        var voiceDuration = TimeSpan.Zero;
-        var utteranceDuration = TimeSpan.Zero;
         var isSpeaking = false;
-        var frameDuration = TimeSpan.FromMilliseconds(20);
 
         try
         {
             await foreach (var frame in session.ReadAudioAsync(ct).ConfigureAwait(false))
             {
                 var shortSpan = MemoryMarshal.Cast<byte, short>(frame.Span);
-                var silence = AudioProcessor.IsSilence(shortSpan, _options.SilenceThresholdDb);
+                var signal = turnDetector.Analyze(shortSpan, _state == PipelineState.Speaking);
 
-                if (_state == PipelineState.Speaking)
+                switch (signal.Action)
                 {
-                    if (!silence)
-                    {
-                        voiceDuration += frameDuration;
-                        if (voiceDuration >= _options.BargInVoiceThreshold)
-                        {
-                            var ttsCts = _ttsCts;
-                            ttsCts?.Cancel();
-                            voiceDuration = TimeSpan.Zero;
-                            VoiceAiLog.BargInDetected(_logger, session.ChannelId);
-                            Publish(new BargInDetectedEvent(DateTimeOffset.UtcNow));
-
-                            if (!isSpeaking)
-                            {
-                                isSpeaking = true;
-                                buffer.Clear();
-                                speechStartTime = DateTimeOffset.UtcNow;
-                                utteranceDuration = TimeSpan.Zero;
-                                Publish(new SpeechStartedEvent(DateTimeOffset.UtcNow));
-                            }
-                            buffer.Add(frame);
-                            utteranceDuration += frameDuration;
-                        }
-                    }
-                    else
-                    {
-                        voiceDuration = TimeSpan.Zero;
-                    }
-                    continue;
-                }
-
-                if (!silence)
-                {
-                    silenceDuration = TimeSpan.Zero;
-                    if (!isSpeaking)
-                    {
+                    case TurnAction.SpeechStarted:
                         isSpeaking = true;
                         buffer.Clear();
                         speechStartTime = DateTimeOffset.UtcNow;
-                        utteranceDuration = TimeSpan.Zero;
                         Publish(new SpeechStartedEvent(DateTimeOffset.UtcNow));
-                    }
-                    buffer.Add(frame);
-                    utteranceDuration += frameDuration;
+                        buffer.Add(frame);
+                        break;
 
-                    if (utteranceDuration >= _options.MaxUtteranceDuration)
-                    {
+                    case TurnAction.EndOfUtterance:
                         await FlushUtterance(buffer, utteranceWriter, speechStartTime, ct).ConfigureAwait(false);
                         isSpeaking = false;
-                        utteranceDuration = TimeSpan.Zero;
-                        silenceDuration = TimeSpan.Zero;
-                    }
-                }
-                else
-                {
-                    if (isSpeaking)
-                    {
-                        silenceDuration += frameDuration;
-                        if (silenceDuration >= _options.EndOfUtteranceSilence)
+                        break;
+
+                    case TurnAction.BargIn:
+                        var ttsCts = _ttsCts;
+                        if (ttsCts is not null)
+                            await ttsCts.CancelAsync().ConfigureAwait(false);
+                        VoiceAiLog.BargInDetected(_logger, session.ChannelId);
+                        Publish(new BargInDetectedEvent(DateTimeOffset.UtcNow));
+                        if (!isSpeaking)
                         {
-                            await FlushUtterance(buffer, utteranceWriter, speechStartTime, ct).ConfigureAwait(false);
-                            isSpeaking = false;
-                            silenceDuration = TimeSpan.Zero;
-                            utteranceDuration = TimeSpan.Zero;
+                            isSpeaking = true;
+                            buffer.Clear();
+                            speechStartTime = DateTimeOffset.UtcNow;
+                            Publish(new SpeechStartedEvent(DateTimeOffset.UtcNow));
                         }
-                    }
+                        buffer.Add(frame);
+                        break;
+
+                    case TurnAction.Continue:
+                        if (isSpeaking)
+                            buffer.Add(frame);
+                        break;
                 }
             }
         }
