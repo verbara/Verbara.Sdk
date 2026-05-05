@@ -1,24 +1,24 @@
 // Asterisk.Sdk - Multi-Server Example
-// Demonstrates: AddAsteriskMultiServer(), AsteriskServerPool with federated
+// Demonstrates: AddVerbaraMultiServer(), VerbaraServerPool with federated
 // agent routing, AddServer, GetServerForAgent, RemoveServer.
 
-using Asterisk.Sdk;
-using Asterisk.Sdk.Ami.Connection;
-using Asterisk.Sdk.Hosting;
-using Asterisk.Sdk.Live.Server;
+using Verbara.Sdk;
+using Verbara.Sdk.Ami.Connection;
+using Verbara.Sdk.Hosting;
+using Verbara.Sdk.Live.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-Console.WriteLine("Asterisk.Sdk - Multi-Server Example");
+Console.WriteLine("Verbara.Sdk - Multi-Server Example");
 Console.WriteLine("=====================================");
 
 // 1. Configure services with multi-server support
 var services = new ServiceCollection();
 services.AddLogging(b => b.AddConsole().SetMinimumLevel(LogLevel.Information));
-services.AddAsteriskMultiServer();
+services.AddVerbaraMultiServer();
 
 await using var provider = services.BuildServiceProvider();
-var pool = provider.GetRequiredService<AsteriskServerPool>();
+var pool = provider.GetRequiredService<VerbaraServerPool>();
 var logger = provider.GetRequiredService<ILogger<Program>>();
 
 try

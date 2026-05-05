@@ -1,0 +1,217 @@
+#nullable enable
+abstract Verbara.Sdk.Activities.Activities.ActivityBase.ExecuteAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+abstract Verbara.Sdk.Activities.Activities.AriActivityBase.ExecuteAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Activities.Activities.ActivityBase
+Verbara.Sdk.Activities.Activities.ActivityBase.ActivityBase(Verbara.Sdk.IAgiChannel! channel) -> void
+Verbara.Sdk.Activities.Activities.ActivityBase.CancelAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Activities.Activities.ActivityBase.Channel.get -> Verbara.Sdk.IAgiChannel!
+Verbara.Sdk.Activities.Activities.ActivityBase.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Activities.Activities.ActivityBase.SetStatus(Verbara.Sdk.Activities.Activities.ActivityStatus status) -> void
+Verbara.Sdk.Activities.Activities.ActivityBase.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Activities.Activities.ActivityBase.StatusChanges.get -> System.IObservable<Verbara.Sdk.Activities.Activities.ActivityStatus>!
+Verbara.Sdk.Activities.Activities.ActivityBase.Status.get -> Verbara.Sdk.Activities.Activities.ActivityStatus
+Verbara.Sdk.Activities.Activities.ActivityStatus
+Verbara.Sdk.Activities.Activities.ActivityStatus.Cancelled = 5 -> Verbara.Sdk.Activities.Activities.ActivityStatus
+Verbara.Sdk.Activities.Activities.ActivityStatus.Completed = 3 -> Verbara.Sdk.Activities.Activities.ActivityStatus
+Verbara.Sdk.Activities.Activities.ActivityStatus.Failed = 4 -> Verbara.Sdk.Activities.Activities.ActivityStatus
+Verbara.Sdk.Activities.Activities.ActivityStatus.InProgress = 2 -> Verbara.Sdk.Activities.Activities.ActivityStatus
+Verbara.Sdk.Activities.Activities.ActivityStatus.Pending = 0 -> Verbara.Sdk.Activities.Activities.ActivityStatus
+Verbara.Sdk.Activities.Activities.ActivityStatus.Starting = 1 -> Verbara.Sdk.Activities.Activities.ActivityStatus
+Verbara.Sdk.Activities.Activities.AriActivityBase
+Verbara.Sdk.Activities.Activities.AriActivityBase.AriActivityBase(Verbara.Sdk.IAriClient! ariClient) -> void
+Verbara.Sdk.Activities.Activities.AriActivityBase.AriClient.get -> Verbara.Sdk.IAriClient!
+Verbara.Sdk.Activities.Activities.AriActivityBase.CancelAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Activities.Activities.AriActivityBase.SetStatus(Verbara.Sdk.Activities.Activities.ActivityStatus status) -> void
+Verbara.Sdk.Activities.Activities.AriActivityBase.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Activities.Activities.AriActivityBase.StatusChanges.get -> System.IObservable<Verbara.Sdk.Activities.Activities.ActivityStatus>!
+Verbara.Sdk.Activities.Activities.AriActivityBase.Status.get -> Verbara.Sdk.Activities.Activities.ActivityStatus
+Verbara.Sdk.Activities.Activities.BlindTransferActivity
+Verbara.Sdk.Activities.Activities.BlindTransferActivity.BlindTransferActivity(Verbara.Sdk.IAgiChannel! channel) -> void
+Verbara.Sdk.Activities.Activities.BlindTransferActivity.Destination.get -> Verbara.Sdk.Activities.Models.DialPlanExtension!
+Verbara.Sdk.Activities.Activities.BlindTransferActivity.Destination.init -> void
+Verbara.Sdk.Activities.Activities.BridgeActivity
+Verbara.Sdk.Activities.Activities.BridgeActivity.BridgeActivity(Verbara.Sdk.IAgiChannel! channel) -> void
+Verbara.Sdk.Activities.Activities.BridgeActivity.TargetChannel.get -> string!
+Verbara.Sdk.Activities.Activities.BridgeActivity.TargetChannel.init -> void
+Verbara.Sdk.Activities.Activities.DialActivity
+Verbara.Sdk.Activities.Activities.DialActivity.DialActivity(Verbara.Sdk.IAgiChannel! channel) -> void
+Verbara.Sdk.Activities.Activities.DialActivity.DialStatus.get -> string?
+Verbara.Sdk.Activities.Activities.DialActivity.Options.get -> string?
+Verbara.Sdk.Activities.Activities.DialActivity.Options.init -> void
+Verbara.Sdk.Activities.Activities.DialActivity.Target.get -> Verbara.Sdk.Activities.Models.EndPoint!
+Verbara.Sdk.Activities.Activities.DialActivity.Target.init -> void
+Verbara.Sdk.Activities.Activities.DialActivity.Timeout.get -> System.TimeSpan
+Verbara.Sdk.Activities.Activities.DialActivity.Timeout.init -> void
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.App.get -> string!
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.App.init -> void
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.AudioStream.get -> Verbara.Sdk.IAudioStream?
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.ConnectionTimeout.get -> System.TimeSpan
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.ConnectionTimeout.init -> void
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.Encapsulation.get -> string?
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.Encapsulation.init -> void
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.ExternalHost.get -> string!
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.ExternalHost.init -> void
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.ExternalMediaActivity(Verbara.Sdk.IAriClient! ariClient, Verbara.Sdk.Ari.Audio.AudioSocketServer? audioSocketServer = null, Verbara.Sdk.Ari.Audio.WebSocketAudioServer? webSocketServer = null) -> void
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.Format.get -> string!
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.Format.init -> void
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.Transport.get -> string?
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.Transport.init -> void
+Verbara.Sdk.Activities.Activities.HangupActivity
+Verbara.Sdk.Activities.Activities.HangupActivity.CauseCode.get -> int?
+Verbara.Sdk.Activities.Activities.HangupActivity.CauseCode.init -> void
+Verbara.Sdk.Activities.Activities.HangupActivity.HangupActivity(Verbara.Sdk.IAgiChannel! channel) -> void
+Verbara.Sdk.Activities.Activities.HoldActivity
+Verbara.Sdk.Activities.Activities.HoldActivity.HoldActivity(Verbara.Sdk.IAgiChannel! channel) -> void
+Verbara.Sdk.Activities.Activities.HoldActivity.MusicOnHoldClass.get -> string?
+Verbara.Sdk.Activities.Activities.HoldActivity.MusicOnHoldClass.init -> void
+Verbara.Sdk.Activities.Activities.IActivity
+Verbara.Sdk.Activities.Activities.IActivity.CancelAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Activities.Activities.IActivity.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Activities.Activities.IActivity.StatusChanges.get -> System.IObservable<Verbara.Sdk.Activities.Activities.ActivityStatus>!
+Verbara.Sdk.Activities.Activities.IActivity.Status.get -> Verbara.Sdk.Activities.Activities.ActivityStatus
+Verbara.Sdk.Activities.Activities.MeetmeActivity
+Verbara.Sdk.Activities.Activities.MeetmeActivity.MeetmeActivity(Verbara.Sdk.IAgiChannel! channel) -> void
+Verbara.Sdk.Activities.Activities.MeetmeActivity.Options.get -> string?
+Verbara.Sdk.Activities.Activities.MeetmeActivity.Options.init -> void
+Verbara.Sdk.Activities.Activities.MeetmeActivity.RoomNumber.get -> string!
+Verbara.Sdk.Activities.Activities.MeetmeActivity.RoomNumber.init -> void
+Verbara.Sdk.Activities.Activities.MeetmeActivity.UseConfBridge.get -> bool
+Verbara.Sdk.Activities.Activities.MeetmeActivity.UseConfBridge.init -> void
+Verbara.Sdk.Activities.Activities.ParkActivity
+Verbara.Sdk.Activities.Activities.ParkActivity.ParkActivity(Verbara.Sdk.IAgiChannel! channel) -> void
+Verbara.Sdk.Activities.Activities.ParkActivity.ParkingLot.get -> string?
+Verbara.Sdk.Activities.Activities.ParkActivity.ParkingLot.init -> void
+Verbara.Sdk.Activities.Activities.PlayMessageActivity
+Verbara.Sdk.Activities.Activities.PlayMessageActivity.EscapeDigits.get -> string!
+Verbara.Sdk.Activities.Activities.PlayMessageActivity.EscapeDigits.init -> void
+Verbara.Sdk.Activities.Activities.PlayMessageActivity.FileName.get -> string!
+Verbara.Sdk.Activities.Activities.PlayMessageActivity.FileName.init -> void
+Verbara.Sdk.Activities.Activities.PlayMessageActivity.PlayMessageActivity(Verbara.Sdk.IAgiChannel! channel) -> void
+Verbara.Sdk.Activities.Activities.QueueActivity
+Verbara.Sdk.Activities.Activities.QueueActivity.Options.get -> string?
+Verbara.Sdk.Activities.Activities.QueueActivity.Options.init -> void
+Verbara.Sdk.Activities.Activities.QueueActivity.QueueActivity(Verbara.Sdk.IAgiChannel! channel) -> void
+Verbara.Sdk.Activities.Activities.QueueActivity.QueueName.get -> string!
+Verbara.Sdk.Activities.Activities.QueueActivity.QueueName.init -> void
+Verbara.Sdk.Activities.Activities.QueueActivity.QueueStatus.get -> string?
+Verbara.Sdk.Activities.Activities.QueueActivity.Timeout.get -> System.TimeSpan?
+Verbara.Sdk.Activities.Activities.QueueActivity.Timeout.init -> void
+Verbara.Sdk.Activities.Activities.VoicemailActivity
+Verbara.Sdk.Activities.Activities.VoicemailActivity.Context.get -> string?
+Verbara.Sdk.Activities.Activities.VoicemailActivity.Context.init -> void
+Verbara.Sdk.Activities.Activities.VoicemailActivity.Mailbox.get -> string!
+Verbara.Sdk.Activities.Activities.VoicemailActivity.Mailbox.init -> void
+Verbara.Sdk.Activities.Activities.VoicemailActivity.Urgent.get -> bool
+Verbara.Sdk.Activities.Activities.VoicemailActivity.Urgent.init -> void
+Verbara.Sdk.Activities.Activities.VoicemailActivity.VoicemailActivity(Verbara.Sdk.IAgiChannel! channel) -> void
+Verbara.Sdk.Activities.ActivityException
+Verbara.Sdk.Activities.ActivityException.ActivityException(string! message, System.Exception? inner = null) -> void
+Verbara.Sdk.Activities.ActivityFailedException
+Verbara.Sdk.Activities.ActivityFailedException.ActivityFailedException(string! activityName, string! reason) -> void
+Verbara.Sdk.Activities.InvalidChannelNameException
+Verbara.Sdk.Activities.InvalidChannelNameException.InvalidChannelNameException(string! channelName) -> void
+Verbara.Sdk.Activities.Models.Call
+Verbara.Sdk.Activities.Models.Call.AddChannel(Verbara.Sdk.Activities.Models.PbxChannel! channel) -> void
+Verbara.Sdk.Activities.Models.Call.AnsweredAt.get -> System.DateTimeOffset?
+Verbara.Sdk.Activities.Models.Call.AnsweredAt.set -> void
+Verbara.Sdk.Activities.Models.Call.Call() -> void
+Verbara.Sdk.Activities.Models.Call.Channels.get -> System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Activities.Models.IPbxChannel!>!
+Verbara.Sdk.Activities.Models.Call.CreatedAt.get -> System.DateTimeOffset
+Verbara.Sdk.Activities.Models.Call.CreatedAt.init -> void
+Verbara.Sdk.Activities.Models.CallDirection
+Verbara.Sdk.Activities.Models.Call.Direction.get -> Verbara.Sdk.Activities.Models.CallDirection
+Verbara.Sdk.Activities.Models.CallDirection.Inbound = 0 -> Verbara.Sdk.Activities.Models.CallDirection
+Verbara.Sdk.Activities.Models.Call.Direction.init -> void
+Verbara.Sdk.Activities.Models.CallDirection.Outbound = 1 -> Verbara.Sdk.Activities.Models.CallDirection
+Verbara.Sdk.Activities.Models.Call.EndedAt.get -> System.DateTimeOffset?
+Verbara.Sdk.Activities.Models.Call.EndedAt.set -> void
+Verbara.Sdk.Activities.Models.CallerId
+Verbara.Sdk.Activities.Models.CallerId.CallerId(string! Number, string? Name = null) -> void
+Verbara.Sdk.Activities.Models.CallerId.Name.get -> string?
+Verbara.Sdk.Activities.Models.CallerId.Name.init -> void
+Verbara.Sdk.Activities.Models.CallerId.Number.get -> string!
+Verbara.Sdk.Activities.Models.CallerId.Number.init -> void
+Verbara.Sdk.Activities.Models.Call.Id.get -> string!
+Verbara.Sdk.Activities.Models.Call.Id.init -> void
+Verbara.Sdk.Activities.Models.Call.RemoveChannel(string! uniqueId) -> void
+Verbara.Sdk.Activities.Models.CallState
+Verbara.Sdk.Activities.Models.CallState.Answered = 2 -> Verbara.Sdk.Activities.Models.CallState
+Verbara.Sdk.Activities.Models.CallState.Completed = 6 -> Verbara.Sdk.Activities.Models.CallState
+Verbara.Sdk.Activities.Models.CallState.Failed = 7 -> Verbara.Sdk.Activities.Models.CallState
+Verbara.Sdk.Activities.Models.Call.State.get -> Verbara.Sdk.Activities.Models.CallState
+Verbara.Sdk.Activities.Models.CallState.New = 0 -> Verbara.Sdk.Activities.Models.CallState
+Verbara.Sdk.Activities.Models.CallState.OnHold = 3 -> Verbara.Sdk.Activities.Models.CallState
+Verbara.Sdk.Activities.Models.CallState.Parked = 5 -> Verbara.Sdk.Activities.Models.CallState
+Verbara.Sdk.Activities.Models.CallState.Ringing = 1 -> Verbara.Sdk.Activities.Models.CallState
+Verbara.Sdk.Activities.Models.Call.State.set -> void
+Verbara.Sdk.Activities.Models.CallState.Transferred = 4 -> Verbara.Sdk.Activities.Models.CallState
+Verbara.Sdk.Activities.Models.DialPlanExtension
+Verbara.Sdk.Activities.Models.DialPlanExtension.Context.get -> string!
+Verbara.Sdk.Activities.Models.DialPlanExtension.Context.init -> void
+Verbara.Sdk.Activities.Models.DialPlanExtension.DialPlanExtension(string! Context, string! Extension, int Priority = 1) -> void
+Verbara.Sdk.Activities.Models.DialPlanExtension.Extension.get -> string!
+Verbara.Sdk.Activities.Models.DialPlanExtension.Extension.init -> void
+Verbara.Sdk.Activities.Models.DialPlanExtension.Priority.get -> int
+Verbara.Sdk.Activities.Models.DialPlanExtension.Priority.init -> void
+Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.A = 65 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.B = 66 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.C = 67 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.D = 68 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.Eight = 56 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.Five = 53 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.Four = 52 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.Nine = 57 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.One = 49 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.Pound = 35 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.Seven = 55 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.Six = 54 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.Star = 42 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.Three = 51 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.Two = 50 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.DtmfTone.Zero = 48 -> Verbara.Sdk.Activities.Models.DtmfTone
+Verbara.Sdk.Activities.Models.EndPoint
+Verbara.Sdk.Activities.Models.EndPoint.EndPoint(Verbara.Sdk.Activities.Models.TechType Tech, string! Resource) -> void
+Verbara.Sdk.Activities.Models.EndPoint.Resource.get -> string!
+Verbara.Sdk.Activities.Models.EndPoint.Resource.init -> void
+Verbara.Sdk.Activities.Models.EndPoint.Tech.get -> Verbara.Sdk.Activities.Models.TechType
+Verbara.Sdk.Activities.Models.EndPoint.Tech.init -> void
+Verbara.Sdk.Activities.Models.ICall
+Verbara.Sdk.Activities.Models.ICall.Channels.get -> System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Activities.Models.IPbxChannel!>!
+Verbara.Sdk.Activities.Models.ICall.Direction.get -> Verbara.Sdk.Activities.Models.CallDirection
+Verbara.Sdk.Activities.Models.ICall.Id.get -> string!
+Verbara.Sdk.Activities.Models.ICall.State.get -> Verbara.Sdk.Activities.Models.CallState
+Verbara.Sdk.Activities.Models.IPbxChannel
+Verbara.Sdk.Activities.Models.IPbxChannel.EndPoint.get -> Verbara.Sdk.Activities.Models.EndPoint?
+Verbara.Sdk.Activities.Models.IPbxChannel.Name.get -> string!
+Verbara.Sdk.Activities.Models.IPbxChannel.UniqueId.get -> string!
+Verbara.Sdk.Activities.Models.PbxChannel
+Verbara.Sdk.Activities.Models.PbxChannel.EndPoint.get -> Verbara.Sdk.Activities.Models.EndPoint?
+Verbara.Sdk.Activities.Models.PbxChannel.EndPoint.init -> void
+Verbara.Sdk.Activities.Models.PbxChannel.Name.get -> string!
+Verbara.Sdk.Activities.Models.PbxChannel.Name.init -> void
+Verbara.Sdk.Activities.Models.PbxChannel.PbxChannel() -> void
+Verbara.Sdk.Activities.Models.PbxChannel.UniqueId.get -> string!
+Verbara.Sdk.Activities.Models.PbxChannel.UniqueId.init -> void
+Verbara.Sdk.Activities.Models.PhoneNumber
+Verbara.Sdk.Activities.Models.PhoneNumber.Name.get -> string?
+Verbara.Sdk.Activities.Models.PhoneNumber.Name.init -> void
+Verbara.Sdk.Activities.Models.PhoneNumber.Number.get -> string!
+Verbara.Sdk.Activities.Models.PhoneNumber.Number.init -> void
+Verbara.Sdk.Activities.Models.PhoneNumber.PhoneNumber(string! Number, string? Name = null) -> void
+Verbara.Sdk.Activities.Models.TechType
+Verbara.Sdk.Activities.Models.TechType.Agent = 5 -> Verbara.Sdk.Activities.Models.TechType
+Verbara.Sdk.Activities.Models.TechType.DAHDI = 3 -> Verbara.Sdk.Activities.Models.TechType
+Verbara.Sdk.Activities.Models.TechType.IAX2 = 2 -> Verbara.Sdk.Activities.Models.TechType
+Verbara.Sdk.Activities.Models.TechType.Local = 4 -> Verbara.Sdk.Activities.Models.TechType
+Verbara.Sdk.Activities.Models.TechType.PJSIP = 1 -> Verbara.Sdk.Activities.Models.TechType
+Verbara.Sdk.Activities.Models.TechType.SIP = 0 -> Verbara.Sdk.Activities.Models.TechType
+Verbara.Sdk.Activities.Models.TechType.WebSocket = 6 -> Verbara.Sdk.Activities.Models.TechType
+override Verbara.Sdk.Activities.Activities.ExternalMediaActivity.DisposeAsync() -> System.Threading.Tasks.ValueTask
+override Verbara.Sdk.Activities.Models.EndPoint.ToString() -> string!
+override Verbara.Sdk.Activities.Models.PhoneNumber.ToString() -> string!
+static Verbara.Sdk.Activities.Models.EndPoint.Parse(string! channelString) -> Verbara.Sdk.Activities.Models.EndPoint?
+virtual Verbara.Sdk.Activities.Activities.AriActivityBase.DisposeAsync() -> System.Threading.Tasks.ValueTask
+virtual Verbara.Sdk.Activities.Activities.AriActivityBase.OnCancellingAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask

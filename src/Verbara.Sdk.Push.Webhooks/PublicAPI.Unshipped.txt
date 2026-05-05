@@ -1,0 +1,46 @@
+#nullable enable
+Verbara.Sdk.Push.Webhooks.HmacSha256Signer
+Verbara.Sdk.Push.Webhooks.HmacSha256Signer.HmacSha256Signer() -> void
+Verbara.Sdk.Push.Webhooks.HmacSha256Signer.Sign(System.ReadOnlySpan<byte> payload, string! secret) -> string!
+Verbara.Sdk.Push.Webhooks.InMemoryWebhookSubscriptionStore
+Verbara.Sdk.Push.Webhooks.InMemoryWebhookSubscriptionStore.AddAsync(Verbara.Sdk.Push.Webhooks.WebhookSubscription! subscription, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Push.Webhooks.InMemoryWebhookSubscriptionStore.GetAllAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Push.Webhooks.WebhookSubscription!>!>
+Verbara.Sdk.Push.Webhooks.InMemoryWebhookSubscriptionStore.InMemoryWebhookSubscriptionStore() -> void
+Verbara.Sdk.Push.Webhooks.InMemoryWebhookSubscriptionStore.RemoveAsync(string! id, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Push.Webhooks.IWebhookPayloadSerializer
+Verbara.Sdk.Push.Webhooks.IWebhookPayloadSerializer.Serialize(Verbara.Sdk.Push.Events.PushEvent! evt) -> byte[]!
+Verbara.Sdk.Push.Webhooks.IWebhookSigner
+Verbara.Sdk.Push.Webhooks.IWebhookSigner.Sign(System.ReadOnlySpan<byte> payload, string! secret) -> string!
+Verbara.Sdk.Push.Webhooks.IWebhookSubscriptionStore
+Verbara.Sdk.Push.Webhooks.IWebhookSubscriptionStore.AddAsync(Verbara.Sdk.Push.Webhooks.WebhookSubscription! subscription, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Push.Webhooks.IWebhookSubscriptionStore.GetAllAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Push.Webhooks.WebhookSubscription!>!>
+Verbara.Sdk.Push.Webhooks.IWebhookSubscriptionStore.RemoveAsync(string! id, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.InitialDelay.get -> System.TimeSpan
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.InitialDelay.set -> void
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.MaxDelay.get -> System.TimeSpan
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.MaxDelay.set -> void
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.MaxRetries.get -> int
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.MaxRetries.set -> void
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.TimeoutPerAttempt.get -> System.TimeSpan
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.TimeoutPerAttempt.set -> void
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.UserAgent.get -> string!
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.UserAgent.set -> void
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.WebhookDeliveryOptions() -> void
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryService
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryService.WebhookDeliveryService(Verbara.Sdk.Push.Bus.IPushEventBus! bus, Verbara.Sdk.Push.Webhooks.IWebhookSubscriptionStore! store, Verbara.Sdk.Push.Webhooks.IWebhookSigner! signer, System.Net.Http.IHttpClientFactory! httpFactory, Microsoft.Extensions.Options.IOptions<Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions!>! options, Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> void
+Verbara.Sdk.Push.Webhooks.WebhookServiceCollectionExtensions
+Verbara.Sdk.Push.Webhooks.WebhookSubscription
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.Headers.init -> void
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.Id.get -> string!
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.Id.init -> void
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.MaxRetries.get -> int?
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.MaxRetries.init -> void
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.Secret.get -> string?
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.Secret.init -> void
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.TargetUrl.get -> System.Uri!
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.TargetUrl.init -> void
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.TopicPattern.get -> Verbara.Sdk.Push.Topics.TopicPattern
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.TopicPattern.init -> void
+static Verbara.Sdk.Push.Webhooks.WebhookServiceCollectionExtensions.AddVerbaraPushWebhooks(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

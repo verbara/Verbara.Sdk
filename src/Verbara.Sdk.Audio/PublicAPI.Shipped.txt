@@ -1,0 +1,46 @@
+#nullable enable
+Verbara.Sdk.Audio.AudioEncoding
+Verbara.Sdk.Audio.AudioEncoding.IeeeFloat = 1 -> Verbara.Sdk.Audio.AudioEncoding
+Verbara.Sdk.Audio.AudioEncoding.LinearPcm = 0 -> Verbara.Sdk.Audio.AudioEncoding
+Verbara.Sdk.Audio.AudioFormat
+Verbara.Sdk.Audio.AudioFormat.AudioFormat(int SampleRate, int Channels, int BitsPerSample, Verbara.Sdk.Audio.AudioEncoding Encoding) -> void
+Verbara.Sdk.Audio.AudioFormat.AudioFormat() -> void
+Verbara.Sdk.Audio.AudioFormat.BitsPerSample.get -> int
+Verbara.Sdk.Audio.AudioFormat.BitsPerSample.init -> void
+Verbara.Sdk.Audio.AudioFormat.BytesPerFrame(System.TimeSpan frameDuration) -> int
+Verbara.Sdk.Audio.AudioFormat.BytesPerSample.get -> int
+Verbara.Sdk.Audio.AudioFormat.Channels.get -> int
+Verbara.Sdk.Audio.AudioFormat.Channels.init -> void
+Verbara.Sdk.Audio.AudioFormat.Encoding.get -> Verbara.Sdk.Audio.AudioEncoding
+Verbara.Sdk.Audio.AudioFormat.Encoding.init -> void
+Verbara.Sdk.Audio.AudioFormat.SampleRate.get -> int
+Verbara.Sdk.Audio.AudioFormat.SampleRate.init -> void
+Verbara.Sdk.Audio.AudioFormat.SamplesPerFrame(System.TimeSpan frameDuration) -> int
+Verbara.Sdk.Audio.IAudioTransform
+Verbara.Sdk.Audio.IAudioTransform.InputFormat.get -> Verbara.Sdk.Audio.AudioFormat
+Verbara.Sdk.Audio.IAudioTransform.MaxOutputBytes(int inputBytes) -> int
+Verbara.Sdk.Audio.IAudioTransform.OutputFormat.get -> Verbara.Sdk.Audio.AudioFormat
+Verbara.Sdk.Audio.IAudioTransform.Process(System.ReadOnlySpan<byte> input, System.Span<byte> output) -> int
+Verbara.Sdk.Audio.Processing.AudioProcessor
+Verbara.Sdk.Audio.Resampling.PolyphaseResampler
+Verbara.Sdk.Audio.Resampling.PolyphaseResampler.Dispose() -> void
+Verbara.Sdk.Audio.Resampling.PolyphaseResampler.InputFormat.get -> Verbara.Sdk.Audio.AudioFormat
+Verbara.Sdk.Audio.Resampling.PolyphaseResampler.MaxOutputBytes(int inputBytes) -> int
+Verbara.Sdk.Audio.Resampling.PolyphaseResampler.OutputFormat.get -> Verbara.Sdk.Audio.AudioFormat
+Verbara.Sdk.Audio.Resampling.PolyphaseResampler.Process(System.ReadOnlySpan<byte> input, System.Span<byte> output) -> int
+Verbara.Sdk.Audio.Resampling.PolyphaseResampler.Process(System.ReadOnlySpan<short> input, System.Span<short> output) -> int
+Verbara.Sdk.Audio.Resampling.PolyphaseResampler.Reset() -> void
+Verbara.Sdk.Audio.Resampling.ResamplerFactory
+static Verbara.Sdk.Audio.Processing.AudioProcessor.ApplyGain(System.Span<short> samples, float gainDb) -> void
+static Verbara.Sdk.Audio.Processing.AudioProcessor.CalculateRmsEnergy(System.ReadOnlySpan<short> samples) -> double
+static Verbara.Sdk.Audio.Processing.AudioProcessor.ConvertToFloat32(System.ReadOnlySpan<short> pcm16, System.Span<float> destination) -> void
+static Verbara.Sdk.Audio.Processing.AudioProcessor.ConvertToPcm16(System.ReadOnlySpan<float> source, System.Span<short> destination) -> void
+static Verbara.Sdk.Audio.Processing.AudioProcessor.IsSilence(System.ReadOnlySpan<short> samples, double thresholdDb = -40) -> bool
+static Verbara.Sdk.Audio.Resampling.ResamplerFactory.CalculateOutputSize(int inputSamples, int inputRate, int outputRate) -> int
+static Verbara.Sdk.Audio.Resampling.ResamplerFactory.Create(int inputRate, int outputRate) -> Verbara.Sdk.Audio.Resampling.PolyphaseResampler!
+static Verbara.Sdk.Audio.Resampling.ResamplerFactory.IsSupported(int inputRate, int outputRate) -> bool
+static readonly Verbara.Sdk.Audio.AudioFormat.Float32Mono16kHz -> Verbara.Sdk.Audio.AudioFormat
+static readonly Verbara.Sdk.Audio.AudioFormat.Slin16Mono16kHz -> Verbara.Sdk.Audio.AudioFormat
+static readonly Verbara.Sdk.Audio.AudioFormat.Slin16Mono24kHz -> Verbara.Sdk.Audio.AudioFormat
+static readonly Verbara.Sdk.Audio.AudioFormat.Slin16Mono48kHz -> Verbara.Sdk.Audio.AudioFormat
+static readonly Verbara.Sdk.Audio.AudioFormat.Slin16Mono8kHz -> Verbara.Sdk.Audio.AudioFormat

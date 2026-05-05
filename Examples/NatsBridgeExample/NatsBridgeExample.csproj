@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Push\Asterisk.Sdk.Push.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Push.Nats\Asterisk.Sdk.Push.Nats.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Push\Verbara.Sdk.Push.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Push.Nats\Verbara.Sdk.Push.Nats.csproj" />
   </ItemGroup>
 
   <ItemGroup>

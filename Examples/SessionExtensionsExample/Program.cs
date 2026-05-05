@@ -2,35 +2,35 @@
 // Demonstrates: implementing a custom SessionStoreBase (FileSessionStore) that
 // persists session snapshots as JSON lines to a file.
 
-using Asterisk.Sdk.Hosting;
-using Asterisk.Sdk.Sessions;
-using Asterisk.Sdk.Sessions.Extensions;
-using Asterisk.Sdk.Sessions.Manager;
+using Verbara.Sdk.Hosting;
+using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Extensions;
+using Verbara.Sdk.Sessions.Manager;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using SessionExtensionsExample;
 using System.Globalization;
 
-Console.WriteLine("Asterisk.Sdk - Session Extensions Example");
+Console.WriteLine("Verbara.Sdk - Session Extensions Example");
 Console.WriteLine("==========================================");
 Console.WriteLine("Custom FileSessionStore persists sessions as JSON lines.\n");
 
 // 1. Build host with Asterisk + Sessions
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Services.AddAsterisk(options =>
+builder.Services.AddVerbara(options =>
 {
     options.Ami.Hostname = builder.Configuration["Asterisk:Hostname"] ?? "localhost";
     options.Ami.Username = builder.Configuration["Asterisk:Username"] ?? "admin";
     options.Ami.Password = builder.Configuration["Asterisk:Password"] ?? "secret";
 });
 
-// Register the custom FileSessionStore BEFORE AddAsteriskSessions so that
+// Register the custom FileSessionStore BEFORE AddVerbaraSessions so that
 // TryAddSingleton<SessionStoreBase> sees our registration first.
 var fileStore = new FileSessionStore("sessions.jsonl");
 builder.Services.AddSingleton<SessionStoreBase>(fileStore);
 
-builder.Services.AddAsteriskSessions();
+builder.Services.AddVerbaraSessions();
 
 var app = builder.Build();
 

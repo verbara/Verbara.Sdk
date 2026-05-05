@@ -1,0 +1,118 @@
+#nullable enable
+abstract Verbara.Sdk.Push.Events.PushEvent.EventType.get -> string!
+Verbara.Sdk.Push.Bus.BackpressureStrategy
+Verbara.Sdk.Push.Bus.BackpressureStrategy.Block = 2 -> Verbara.Sdk.Push.Bus.BackpressureStrategy
+Verbara.Sdk.Push.Bus.BackpressureStrategy.DropNewest = 1 -> Verbara.Sdk.Push.Bus.BackpressureStrategy
+Verbara.Sdk.Push.Bus.BackpressureStrategy.DropOldest = 0 -> Verbara.Sdk.Push.Bus.BackpressureStrategy
+Verbara.Sdk.Push.Bus.IPushEventBus
+Verbara.Sdk.Push.Bus.IPushEventBus.AsObservable() -> System.IObservable<Verbara.Sdk.Push.Events.PushEvent!>!
+Verbara.Sdk.Push.Bus.IPushEventBus.OfType<TEvent>() -> System.IObservable<TEvent!>!
+Verbara.Sdk.Push.Bus.IPushEventBus.PublishAsync<TEvent>(TEvent! pushEvent, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Push.Bus.PushEventBusOptions
+Verbara.Sdk.Push.Bus.PushEventBusOptions.BackpressureStrategy.get -> Verbara.Sdk.Push.Bus.BackpressureStrategy
+Verbara.Sdk.Push.Bus.PushEventBusOptions.BackpressureStrategy.set -> void
+Verbara.Sdk.Push.Bus.PushEventBusOptions.BufferCapacity.get -> int
+Verbara.Sdk.Push.Bus.PushEventBusOptions.BufferCapacity.set -> void
+Verbara.Sdk.Push.Bus.PushEventBusOptions.PushEventBusOptions() -> void
+Verbara.Sdk.Push.Bus.RxPushEventBus
+Verbara.Sdk.Push.Bus.RxPushEventBus.AsObservable() -> System.IObservable<Verbara.Sdk.Push.Events.PushEvent!>!
+Verbara.Sdk.Push.Bus.RxPushEventBus.Dispose() -> void
+Verbara.Sdk.Push.Bus.RxPushEventBus.OfType<TEvent>() -> System.IObservable<TEvent!>!
+Verbara.Sdk.Push.Bus.RxPushEventBus.PublishAsync<TEvent>(TEvent! pushEvent, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Push.Bus.RxPushEventBus.RxPushEventBus(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.Push.Bus.PushEventBusOptions!>! options, Microsoft.Extensions.Logging.ILogger<Verbara.Sdk.Push.Bus.RxPushEventBus!>! logger, Verbara.Sdk.Push.Diagnostics.PushMetrics! metrics) -> void
+Verbara.Sdk.Push.Delivery.DefaultDeliveryFilter
+Verbara.Sdk.Push.Delivery.DefaultDeliveryFilter.DefaultDeliveryFilter() -> void
+Verbara.Sdk.Push.Delivery.DefaultDeliveryFilter.IsDeliverableToSubscriber(Verbara.Sdk.Push.Events.PushEvent! pushEvent, Verbara.Sdk.Push.Delivery.SubscriberContext! subscriber) -> bool
+Verbara.Sdk.Push.Delivery.IEventDeliveryFilter
+Verbara.Sdk.Push.Delivery.IEventDeliveryFilter.IsDeliverableToSubscriber(Verbara.Sdk.Push.Events.PushEvent! pushEvent, Verbara.Sdk.Push.Delivery.SubscriberContext! subscriber) -> bool
+Verbara.Sdk.Push.Delivery.SubscriberContext
+Verbara.Sdk.Push.Delivery.SubscriberContext.HasPermission(string! permission) -> bool
+Verbara.Sdk.Push.Delivery.SubscriberContext.HasRole(string! role) -> bool
+Verbara.Sdk.Push.Delivery.SubscriberContext.Permissions.get -> System.Collections.Generic.IReadOnlySet<string!>!
+Verbara.Sdk.Push.Delivery.SubscriberContext.Permissions.init -> void
+Verbara.Sdk.Push.Delivery.SubscriberContext.Roles.get -> System.Collections.Generic.IReadOnlySet<string!>!
+Verbara.Sdk.Push.Delivery.SubscriberContext.Roles.init -> void
+Verbara.Sdk.Push.Delivery.SubscriberContext.RequestedTopicPattern.get -> string?
+Verbara.Sdk.Push.Delivery.SubscriberContext.RequestedTopicPattern.init -> void
+Verbara.Sdk.Push.Delivery.SubscriberContext.SubscriberContext(string! TenantId, string? UserId, System.Collections.Generic.IReadOnlySet<string!>! Roles, System.Collections.Generic.IReadOnlySet<string!>! Permissions, string? RequestedTopicPattern = null) -> void
+Verbara.Sdk.Push.Delivery.SubscriberContext.TenantId.get -> string!
+Verbara.Sdk.Push.Delivery.SubscriberContext.TenantId.init -> void
+Verbara.Sdk.Push.Delivery.SubscriberContext.UserId.get -> string?
+Verbara.Sdk.Push.Delivery.SubscriberContext.UserId.init -> void
+Verbara.Sdk.Push.Diagnostics.PushMetrics
+Verbara.Sdk.Push.Diagnostics.PushMetrics.BindActiveSubscribersGauge(System.Func<int>! provider) -> void
+Verbara.Sdk.Push.Diagnostics.PushMetrics.Dispose() -> void
+Verbara.Sdk.Push.Diagnostics.PushMetrics.EventsDelivered.get -> System.Diagnostics.Metrics.Counter<long>!
+Verbara.Sdk.Push.Diagnostics.PushMetrics.EventsDropped.get -> System.Diagnostics.Metrics.Counter<long>!
+Verbara.Sdk.Push.Diagnostics.PushMetrics.EventsPublished.get -> System.Diagnostics.Metrics.Counter<long>!
+Verbara.Sdk.Push.Diagnostics.PushMetrics.PushMetrics() -> void
+const Verbara.Sdk.Push.Diagnostics.PushMetrics.MeterName = "Verbara.Sdk.Push" -> string!
+Verbara.Sdk.Push.Events.IPushEvent
+Verbara.Sdk.Push.Events.IPushEvent.EventType.get -> string!
+Verbara.Sdk.Push.Events.IPushEvent.Metadata.get -> Verbara.Sdk.Push.Events.PushEventMetadata!
+Verbara.Sdk.Push.Events.PushEvent
+virtual Verbara.Sdk.Push.Events.PushEvent.Metadata.get -> Verbara.Sdk.Push.Events.PushEventMetadata!
+virtual Verbara.Sdk.Push.Events.PushEvent.Metadata.init -> void
+Verbara.Sdk.Push.Events.PushEventMetadata
+Verbara.Sdk.Push.Events.PushEventMetadata.CorrelationId.get -> string?
+Verbara.Sdk.Push.Events.PushEventMetadata.CorrelationId.init -> void
+Verbara.Sdk.Push.Events.PushEventMetadata.OccurredAt.get -> System.DateTimeOffset
+Verbara.Sdk.Push.Events.PushEventMetadata.OccurredAt.init -> void
+Verbara.Sdk.Push.Events.PushEventMetadata.PushEventMetadata(string! TenantId, string? UserId, System.DateTimeOffset OccurredAt, string? CorrelationId, string? TopicPath = null) -> void
+Verbara.Sdk.Push.Events.PushEventMetadata.TopicPath.get -> string?
+Verbara.Sdk.Push.Events.PushEventMetadata.TopicPath.init -> void
+Verbara.Sdk.Push.Events.PushEventMetadata.TenantId.get -> string!
+Verbara.Sdk.Push.Events.PushEventMetadata.TenantId.init -> void
+Verbara.Sdk.Push.Events.PushEventMetadata.UserId.get -> string?
+Verbara.Sdk.Push.Events.PushEventMetadata.UserId.init -> void
+Verbara.Sdk.Push.Hosting.ServiceCollectionExtensions
+Verbara.Sdk.Push.Subscriptions.ISubscriptionRegistry
+Verbara.Sdk.Push.Subscriptions.ISubscriptionRegistry.ActiveCount.get -> int
+Verbara.Sdk.Push.Subscriptions.ISubscriptionRegistry.CountByTenant(string! tenantId) -> int
+Verbara.Sdk.Push.Subscriptions.ISubscriptionRegistry.Register(Verbara.Sdk.Push.Delivery.SubscriberContext! subscriber) -> System.IDisposable!
+Verbara.Sdk.Push.Subscriptions.InMemorySubscriptionRegistry
+Verbara.Sdk.Push.Subscriptions.InMemorySubscriptionRegistry.ActiveCount.get -> int
+Verbara.Sdk.Push.Subscriptions.InMemorySubscriptionRegistry.CountByTenant(string! tenantId) -> int
+Verbara.Sdk.Push.Subscriptions.InMemorySubscriptionRegistry.InMemorySubscriptionRegistry() -> void
+Verbara.Sdk.Push.Subscriptions.InMemorySubscriptionRegistry.InMemorySubscriptionRegistry(Verbara.Sdk.Push.Diagnostics.PushMetrics! metrics) -> void
+Verbara.Sdk.Push.Subscriptions.InMemorySubscriptionRegistry.Register(Verbara.Sdk.Push.Delivery.SubscriberContext! subscriber) -> System.IDisposable!
+static Verbara.Sdk.Push.Hosting.ServiceCollectionExtensions.AddVerbaraPush(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.Push.Bus.PushEventBusOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Verbara.Sdk.Push.Diagnostics.PushHealthCheck
+Verbara.Sdk.Push.Diagnostics.PushHealthCheck.PushHealthCheck(Verbara.Sdk.Push.Subscriptions.ISubscriptionRegistry! registry) -> void
+Verbara.Sdk.Push.Diagnostics.PushHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Verbara.Sdk.Push.Topics.TopicName
+Verbara.Sdk.Push.Topics.TopicName.Equals(Verbara.Sdk.Push.Topics.TopicName other) -> bool
+Verbara.Sdk.Push.Topics.TopicName.Segments.get -> System.Collections.Generic.IReadOnlyList<string!>!
+static Verbara.Sdk.Push.Topics.TopicName.Parse(string! topic) -> Verbara.Sdk.Push.Topics.TopicName
+static Verbara.Sdk.Push.Topics.TopicName.operator ==(Verbara.Sdk.Push.Topics.TopicName left, Verbara.Sdk.Push.Topics.TopicName right) -> bool
+static Verbara.Sdk.Push.Topics.TopicName.operator !=(Verbara.Sdk.Push.Topics.TopicName left, Verbara.Sdk.Push.Topics.TopicName right) -> bool
+Verbara.Sdk.Push.Topics.TopicPattern
+Verbara.Sdk.Push.Topics.TopicPattern.Equals(Verbara.Sdk.Push.Topics.TopicPattern other) -> bool
+Verbara.Sdk.Push.Topics.TopicPattern.Matches(Verbara.Sdk.Push.Topics.TopicName topic, string? selfUserId = null) -> bool
+Verbara.Sdk.Push.Topics.TopicPattern.Resolve(string? selfUserId) -> Verbara.Sdk.Push.Topics.TopicName?
+Verbara.Sdk.Push.Topics.TopicPattern.ResolveSelf(string! selfId) -> Verbara.Sdk.Push.Topics.TopicPattern
+static Verbara.Sdk.Push.Topics.TopicPattern.Parse(string! pattern) -> Verbara.Sdk.Push.Topics.TopicPattern
+static Verbara.Sdk.Push.Topics.TopicPattern.operator ==(Verbara.Sdk.Push.Topics.TopicPattern left, Verbara.Sdk.Push.Topics.TopicPattern right) -> bool
+static Verbara.Sdk.Push.Topics.TopicPattern.operator !=(Verbara.Sdk.Push.Topics.TopicPattern left, Verbara.Sdk.Push.Topics.TopicPattern right) -> bool
+Verbara.Sdk.Push.Topics.ITopicRegistry
+Verbara.Sdk.Push.Topics.ITopicRegistry.Register<TEvent>(string! topicTemplate) -> void
+Verbara.Sdk.Push.Topics.ITopicRegistry.TryGetTemplate(System.Type! eventType, out string? topicTemplate) -> bool
+Verbara.Sdk.Push.Topics.ITopicRegistry.ResolveTopicName(System.Type! eventType, params object![]! args) -> Verbara.Sdk.Push.Topics.TopicName?
+Verbara.Sdk.Push.Topics.TopicRegistry
+Verbara.Sdk.Push.Topics.TopicRegistry.TopicRegistry() -> void
+Verbara.Sdk.Push.Topics.TopicRegistry.Register<TEvent>(string! topicTemplate) -> void
+Verbara.Sdk.Push.Topics.TopicRegistry.TryGetTemplate(System.Type! eventType, out string? topicTemplate) -> bool
+Verbara.Sdk.Push.Topics.TopicRegistry.ResolveTopicName(System.Type! eventType, params object![]! args) -> Verbara.Sdk.Push.Topics.TopicName?
+Verbara.Sdk.Push.Authz.AuthorizationResult
+Verbara.Sdk.Push.Authz.AuthorizationResult.AuthorizationResult(bool Allowed, string? Reason = null) -> void
+Verbara.Sdk.Push.Authz.AuthorizationResult.Allowed.get -> bool
+Verbara.Sdk.Push.Authz.AuthorizationResult.Reason.get -> string?
+static Verbara.Sdk.Push.Authz.AuthorizationResult.Allow() -> Verbara.Sdk.Push.Authz.AuthorizationResult
+static Verbara.Sdk.Push.Authz.AuthorizationResult.Deny(string! reason) -> Verbara.Sdk.Push.Authz.AuthorizationResult
+Verbara.Sdk.Push.Authz.ISubscriptionAuthorizer
+Verbara.Sdk.Push.Authz.ISubscriptionAuthorizer.CanSubscribe(Verbara.Sdk.Push.Delivery.SubscriberContext! subscriber, Verbara.Sdk.Push.Topics.TopicPattern requestedPattern) -> Verbara.Sdk.Push.Authz.AuthorizationResult
+Verbara.Sdk.Push.Authz.AllowAllSubscriptionAuthorizer
+Verbara.Sdk.Push.Authz.AllowAllSubscriptionAuthorizer.AllowAllSubscriptionAuthorizer() -> void
+Verbara.Sdk.Push.Authz.AllowAllSubscriptionAuthorizer.CanSubscribe(Verbara.Sdk.Push.Delivery.SubscriberContext! subscriber, Verbara.Sdk.Push.Topics.TopicPattern requestedPattern) -> Verbara.Sdk.Push.Authz.AuthorizationResult
+Verbara.Sdk.Push.Authz.ITopicPermissionMap
+Verbara.Sdk.Push.Authz.ITopicPermissionMap.GetGrantedPatterns(string! permissionName) -> System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Push.Topics.TopicPattern>!

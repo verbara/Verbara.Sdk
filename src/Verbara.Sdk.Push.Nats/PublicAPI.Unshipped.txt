@@ -1,0 +1,53 @@
+#nullable enable
+Verbara.Sdk.Push.Nats.INatsPayloadDeserializer
+Verbara.Sdk.Push.Nats.INatsPayloadDeserializer.Deserialize(string! subject, System.ReadOnlySpan<byte> payload) -> Verbara.Sdk.Push.Events.RemotePushEvent?
+Verbara.Sdk.Push.Nats.INatsPayloadSerializer
+Verbara.Sdk.Push.Nats.INatsPayloadSerializer.Serialize(Verbara.Sdk.Push.Events.PushEvent! evt) -> byte[]!
+Verbara.Sdk.Push.Nats.INatsPublisher
+Verbara.Sdk.Push.Nats.INatsPublisher.PublishAsync(string! subject, byte[]! payload, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Push.Nats.INatsSubscriber
+Verbara.Sdk.Push.Nats.INatsSubscriber.SubscribeAsync(string! subject, string? queueGroup, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.Push.Nats.NatsSubscriberMessage>!
+Verbara.Sdk.Push.Nats.NatsSubscriberMessage
+Verbara.Sdk.Push.Nats.NatsSubscriberMessage.NatsSubscriberMessage() -> void
+Verbara.Sdk.Push.Nats.NatsSubscriberMessage.NatsSubscriberMessage(string! Subject, byte[]! Payload) -> void
+Verbara.Sdk.Push.Nats.NatsSubscriberMessage.Payload.get -> byte[]!
+Verbara.Sdk.Push.Nats.NatsSubscriberMessage.Payload.init -> void
+Verbara.Sdk.Push.Nats.NatsSubscriberMessage.Subject.get -> string!
+Verbara.Sdk.Push.Nats.NatsSubscriberMessage.Subject.init -> void
+Verbara.Sdk.Push.Nats.NatsBridge
+Verbara.Sdk.Push.Nats.NatsBridge.NatsBridge(Verbara.Sdk.Push.Bus.IPushEventBus! bus, Microsoft.Extensions.Options.IOptions<Verbara.Sdk.Push.Nats.NatsBridgeOptions!>! options, Verbara.Sdk.Push.Nats.INatsPayloadSerializer! serializer, Verbara.Sdk.Push.Nats.INatsPayloadDeserializer! deserializer, Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> void
+Verbara.Sdk.Push.Nats.NatsBridge.NatsBridge(Verbara.Sdk.Push.Bus.IPushEventBus! bus, Microsoft.Extensions.Options.IOptions<Verbara.Sdk.Push.Nats.NatsBridgeOptions!>! options, Verbara.Sdk.Push.Nats.INatsPayloadSerializer! serializer, Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> void
+Verbara.Sdk.Push.Nats.NatsBridgeOptions
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.ConnectTimeoutSeconds.get -> int
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.ConnectTimeoutSeconds.set -> void
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.NatsBridgeOptions() -> void
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.NodeId.get -> string?
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.NodeId.set -> void
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.Password.get -> string?
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.Password.set -> void
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.PublishOnly.get -> bool
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.PublishOnly.set -> void
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.SubjectPrefix.get -> string!
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.SubjectPrefix.set -> void
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.Subscribe.get -> Verbara.Sdk.Push.Nats.NatsSubscribeOptions?
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.Subscribe.set -> void
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.Token.get -> string?
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.Token.set -> void
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.Url.get -> string!
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.Url.set -> void
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.Username.get -> string?
+Verbara.Sdk.Push.Nats.NatsBridgeOptions.Username.set -> void
+Verbara.Sdk.Push.Nats.NatsBridgeOptionsValidator
+Verbara.Sdk.Push.Nats.NatsBridgeOptionsValidator.NatsBridgeOptionsValidator() -> void
+Verbara.Sdk.Push.Nats.NatsServiceCollectionExtensions
+Verbara.Sdk.Push.Nats.NatsSubjectTranslator
+Verbara.Sdk.Push.Nats.NatsSubscribeOptions
+Verbara.Sdk.Push.Nats.NatsSubscribeOptions.NatsSubscribeOptions() -> void
+Verbara.Sdk.Push.Nats.NatsSubscribeOptions.QueueGroup.get -> string?
+Verbara.Sdk.Push.Nats.NatsSubscribeOptions.QueueGroup.set -> void
+Verbara.Sdk.Push.Nats.NatsSubscribeOptions.SkipSelfOriginated.get -> bool
+Verbara.Sdk.Push.Nats.NatsSubscribeOptions.SkipSelfOriginated.set -> void
+Verbara.Sdk.Push.Nats.NatsSubscribeOptions.SubjectFilters.get -> string![]!
+Verbara.Sdk.Push.Nats.NatsSubscribeOptions.SubjectFilters.set -> void
+static Verbara.Sdk.Push.Nats.NatsServiceCollectionExtensions.AddPushNats(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.Push.Nats.NatsBridgeOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Verbara.Sdk.Push.Nats.NatsSubjectTranslator.ToNatsSubject(string! topicPath, string! subjectPrefix) -> string!

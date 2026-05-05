@@ -1,27 +1,27 @@
 // Asterisk.Sdk - Session Example
 // Demonstrates: real-time session monitoring with domain events and periodic summaries.
 
-using Asterisk.Sdk.Hosting;
-using Asterisk.Sdk.Sessions;
-using Asterisk.Sdk.Sessions.Manager;
+using Verbara.Sdk.Hosting;
+using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Manager;
 using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-Console.WriteLine("Asterisk.Sdk - Session Monitor Example");
+Console.WriteLine("Verbara.Sdk - Session Monitor Example");
 Console.WriteLine("=========================================");
 
 // 1. Build host with Asterisk + Sessions
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Services.AddAsterisk(options =>
+builder.Services.AddVerbara(options =>
 {
     options.Ami.Hostname = builder.Configuration["Asterisk:Hostname"] ?? "localhost";
     options.Ami.Username = builder.Configuration["Asterisk:Username"] ?? "admin";
     options.Ami.Password = builder.Configuration["Asterisk:Password"] ?? "secret";
 });
 
-builder.Services.AddAsteriskSessions();
+builder.Services.AddVerbaraSessions();
 
 var app = builder.Build();
 

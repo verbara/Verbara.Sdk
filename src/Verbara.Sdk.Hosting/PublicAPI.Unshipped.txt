@@ -1,0 +1,8 @@
+#nullable enable
+Verbara.Sdk.Hosting.AriOutboundListenerHostedService
+Verbara.Sdk.Hosting.AriOutboundListenerHostedService.AriOutboundListenerHostedService(Verbara.Sdk.Ari.Outbound.IAriOutboundListener! listener) -> void
+Verbara.Sdk.Hosting.AriOutboundListenerHostedService.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.Hosting.AriOutboundListenerHostedService.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+static Verbara.Sdk.Hosting.ServiceCollectionExtensions.AddAriOutboundListener(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Verbara.Sdk.Hosting.ServiceCollectionExtensions.AddVerbaraSessionsBuilder(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.Sessions.Manager.SessionOptions!>? configure = null) -> Verbara.Sdk.Sessions.Extensions.ISessionsBuilder!
+static Verbara.Sdk.Hosting.ServiceCollectionExtensions.AddVerbaraSessionsMultiServerBuilder(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.Sessions.Manager.SessionOptions!>? configure = null) -> Verbara.Sdk.Sessions.Extensions.ISessionsBuilder!

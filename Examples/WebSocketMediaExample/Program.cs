@@ -10,7 +10,7 @@
 //    same => n,WebSocket(ws://127.0.0.1:9093/audio,slin16)
 //    same => n,Hangup()
 
-using Asterisk.Sdk.Ari.Audio;
+using Verbara.Sdk.Ari.Audio;
 using Microsoft.Extensions.Logging.Abstractions;
 
 var options = new AudioServerOptions

@@ -2,21 +2,21 @@
 // Demonstrates: multiple AMI actions (Originate, Hangup, Command, QueueAdd/Remove),
 // event filtering by type, and action/response correlation.
 
-using Asterisk.Sdk;
-using Asterisk.Sdk.Ami.Actions;
-using Asterisk.Sdk.Ami.Connection;
-using Asterisk.Sdk.Ami.Events;
-using Asterisk.Sdk.Hosting;
+using Verbara.Sdk;
+using Verbara.Sdk.Ami.Actions;
+using Verbara.Sdk.Ami.Connection;
+using Verbara.Sdk.Ami.Events;
+using Verbara.Sdk.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-Console.WriteLine("Asterisk.Sdk - Advanced AMI Example");
+Console.WriteLine("Verbara.Sdk - Advanced AMI Example");
 Console.WriteLine("======================================");
 
 // 1. Configure services with DI
 var services = new ServiceCollection();
 services.AddLogging(b => b.AddConsole().SetMinimumLevel(LogLevel.Information));
-services.AddAsterisk(options =>
+services.AddVerbara(options =>
 {
     options.Ami.Hostname = "localhost";
     options.Ami.Port = 5038;

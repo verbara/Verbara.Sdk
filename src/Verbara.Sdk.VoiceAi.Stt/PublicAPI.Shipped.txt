@@ -1,0 +1,65 @@
+#nullable enable
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.ApiKey.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.ApiKey.set -> void
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.DeepgramOptions() -> void
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.InterimResults.get -> bool
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.InterimResults.set -> void
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.Language.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.Language.set -> void
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.Model.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.Model.set -> void
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.Punctuate.get -> bool
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.Punctuate.set -> void
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramSpeechRecognizer
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramSpeechRecognizer.DeepgramSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions!>! options) -> void
+Verbara.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions
+Verbara.Sdk.VoiceAi.Stt.Diagnostics.SttHealthCheck
+Verbara.Sdk.VoiceAi.Stt.Diagnostics.SttHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Verbara.Sdk.VoiceAi.Stt.Diagnostics.SttHealthCheck.SttHealthCheck(Verbara.Sdk.VoiceAi.SpeechRecognizer? recognizer) -> void
+Verbara.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions
+Verbara.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.ApiKey.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.ApiKey.set -> void
+Verbara.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.GoogleSpeechOptions() -> void
+Verbara.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.LanguageCode.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.LanguageCode.set -> void
+Verbara.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.Model.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions.Model.set -> void
+Verbara.Sdk.VoiceAi.Stt.Google.GoogleSpeechRecognizer
+Verbara.Sdk.VoiceAi.Stt.Google.GoogleSpeechRecognizer.GoogleSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions!>! options, System.Net.Http.HttpClient! http) -> void
+Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions
+Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.ApiKey.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.ApiKey.set -> void
+Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.ApiVersion.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.ApiVersion.set -> void
+Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.AzureWhisperOptions() -> void
+Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.Deployment.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.Deployment.set -> void
+Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.Endpoint.get -> System.Uri!
+Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions.Endpoint.set -> void
+Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperSpeechRecognizer
+Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperSpeechRecognizer.AzureWhisperSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions!>! options, System.Net.Http.HttpClient! http) -> void
+Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperOptions
+Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.ApiKey.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.ApiKey.set -> void
+Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.Endpoint.get -> System.Uri!
+Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.Endpoint.set -> void
+Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.Language.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.Language.set -> void
+Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.Model.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.Model.set -> void
+Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperOptions.WhisperOptions() -> void
+Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperSpeechRecognizer
+Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperSpeechRecognizer.WhisperSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperOptions!>! options, System.Net.Http.HttpClient! http) -> void
+override Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramSpeechRecognizer.ProviderName.get -> string!
+override Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Verbara.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.VoiceAi.SpeechRecognitionResult>!
+override Verbara.Sdk.VoiceAi.Stt.Google.GoogleSpeechRecognizer.ProviderName.get -> string!
+override Verbara.Sdk.VoiceAi.Stt.Google.GoogleSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Verbara.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.VoiceAi.SpeechRecognitionResult>!
+override Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperSpeechRecognizer.ProviderName.get -> string!
+override Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Verbara.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.VoiceAi.SpeechRecognitionResult>!
+override Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperSpeechRecognizer.ProviderName.get -> string!
+override Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Verbara.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.VoiceAi.SpeechRecognitionResult>!
+static Verbara.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddAzureWhisperSpeechRecognizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Stt.Whisper.AzureWhisperOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Verbara.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddDeepgramSpeechRecognizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Verbara.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddGoogleSpeechRecognizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Stt.Google.GoogleSpeechOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Verbara.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddWhisperSpeechRecognizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Stt.Whisper.WhisperOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

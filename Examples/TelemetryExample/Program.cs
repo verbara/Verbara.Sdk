@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using Asterisk.Sdk.Hosting;
+using Verbara.Sdk.Hosting;
 using Microsoft.Extensions.Hosting;
 
 // This example demonstrates how to discover every ActivitySource and Meter
@@ -13,13 +13,13 @@ using Microsoft.Extensions.Hosting;
 // equivalent (add the three OpenTelemetry.* NuGet packages, then call
 // builder.Services.AddOpenTelemetry().WithTracing(...).WithMetrics(...)).
 
-Console.WriteLine($"ActivitySources registered: {AsteriskTelemetry.ActivitySourceNames.Length}");
-foreach (var name in AsteriskTelemetry.ActivitySourceNames)
+Console.WriteLine($"ActivitySources registered: {VerbaraTelemetry.ActivitySourceNames.Length}");
+foreach (var name in VerbaraTelemetry.ActivitySourceNames)
     Console.WriteLine($"  activity: {name}");
 
 Console.WriteLine();
-Console.WriteLine($"Meters registered: {AsteriskTelemetry.MeterNames.Length}");
-foreach (var name in AsteriskTelemetry.MeterNames)
+Console.WriteLine($"Meters registered: {VerbaraTelemetry.MeterNames.Length}");
+foreach (var name in VerbaraTelemetry.MeterNames)
     Console.WriteLine($"  meter:    {name}");
 
 Console.WriteLine();
@@ -29,7 +29,7 @@ Console.WriteLine("Attaching listeners. Press Ctrl+C to stop.");
 using var activityListener = new ActivityListener
 {
     ShouldListenTo = src =>
-        AsteriskTelemetry.ActivitySourceNames.Contains(src.Name),
+        VerbaraTelemetry.ActivitySourceNames.Contains(src.Name),
     Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
         ActivitySamplingResult.AllDataAndRecorded,
     ActivityStarted = act =>
@@ -44,7 +44,7 @@ using var meterListener = new MeterListener
 {
     InstrumentPublished = (instrument, listener) =>
     {
-        if (AsteriskTelemetry.MeterNames.Contains(instrument.Meter.Name))
+        if (VerbaraTelemetry.MeterNames.Contains(instrument.Meter.Name))
             listener.EnableMeasurementEvents(instrument);
     },
 };
@@ -55,7 +55,7 @@ meterListener.SetMeasurementEventCallback<double>((inst, value, _, _) =>
 meterListener.Start();
 
 // Start an empty host so the process stays alive; in a real app you would
-// call services.AddAsterisk(...) / AddVoiceAiPipeline<T>() / AddSessionsCore()
+// call services.AddVerbara(...) / AddVoiceAiPipeline<T>() / AddSessionsCore()
 // here and the listeners above would automatically pick up the traffic.
 var host = Host.CreateDefaultBuilder(args).Build();
 await host.RunAsync();
