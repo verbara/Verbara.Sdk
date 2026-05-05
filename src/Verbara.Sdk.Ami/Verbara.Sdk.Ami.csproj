@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Asterisk Manager Interface (AMI) client - actions, events, responses and protocol handling</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Verbara.Sdk.Ami.Tests" />
+    <InternalsVisibleTo Include="Verbara.Sdk.Benchmarks" />
+    <InternalsVisibleTo Include="Verbara.Sdk.FunctionalTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verbara.Sdk\Verbara.Sdk.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Resilience\Verbara.Sdk.Resilience.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Ami.SourceGenerators\Verbara.Sdk.Ami.SourceGenerators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <!-- System.IO.Pipelines is part of net10.0 shared framework -->
+    <PackageReference Include="System.Reactive" />
+  </ItemGroup>
+
+</Project>

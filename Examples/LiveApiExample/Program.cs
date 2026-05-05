@@ -1,19 +1,19 @@
 // Asterisk.Sdk - Live API Example
 // Demonstrates: real-time tracking of channels, queues, and agents via AMI events.
 
-using Asterisk.Sdk;
-using Asterisk.Sdk.Ami.Connection;
-using Asterisk.Sdk.Hosting;
+using Verbara.Sdk;
+using Verbara.Sdk.Ami.Connection;
+using Verbara.Sdk.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-Console.WriteLine("Asterisk.Sdk - Live API Example");
+Console.WriteLine("Verbara.Sdk - Live API Example");
 Console.WriteLine("==================================");
 
 // 1. Configure services
 var services = new ServiceCollection();
 services.AddLogging(b => b.AddConsole().SetMinimumLevel(LogLevel.Information));
-services.AddAsterisk(options =>
+services.AddVerbara(options =>
 {
     options.Ami.Hostname = "localhost";
     options.Ami.Username = "admin";
@@ -23,7 +23,7 @@ services.AddAsterisk(options =>
 await using var provider = services.BuildServiceProvider();
 
 var ami = provider.GetRequiredService<IAmiConnection>();
-var server = provider.GetRequiredService<Asterisk.Sdk.Live.Server.AsteriskServer>();
+var server = provider.GetRequiredService<Verbara.Sdk.Live.Server.VerbaraServer>();
 
 try
 {

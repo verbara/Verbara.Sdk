@@ -1,0 +1,32 @@
+using System.Text.Json;
+using Verbara.Sdk;
+using Verbara.Sdk.Ari.Client;
+
+namespace Verbara.Sdk.Ari.Resources;
+
+/// <summary>ARI Sounds resource - REST operations on sounds.</summary>
+public sealed class AriSoundsResource : IAriSoundsResource
+{
+    private readonly HttpClient _http;
+
+    internal AriSoundsResource(HttpClient http)
+    {
+        _http = http;
+    }
+
+    public async ValueTask<AriSound[]> ListAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetAsync("sounds", cancellationToken);
+        await response.EnsureAriSuccessAsync();
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriSoundArray) ?? [];
+    }
+
+    public async ValueTask<AriSound> GetAsync(string soundId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetAsync($"sounds/{Uri.EscapeDataString(soundId)}", cancellationToken);
+        await response.EnsureAriSuccessAsync("sound", soundId);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriSound)!;
+    }
+}

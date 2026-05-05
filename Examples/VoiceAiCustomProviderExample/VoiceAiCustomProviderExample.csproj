@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi\Asterisk.Sdk.VoiceAi.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi.AudioSocket\Asterisk.Sdk.VoiceAi.AudioSocket.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi\Verbara.Sdk.VoiceAi.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.AudioSocket\Verbara.Sdk.VoiceAi.AudioSocket.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Ari\Asterisk.Sdk.Ari.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Hosting\Asterisk.Sdk.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Ari\Verbara.Sdk.Ari.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Hosting\Verbara.Sdk.Hosting.csproj" />
   </ItemGroup>
 
   <ItemGroup>

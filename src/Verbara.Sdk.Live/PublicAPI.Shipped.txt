@@ -1,0 +1,373 @@
+#nullable enable
+abstract Verbara.Sdk.Live.LiveObjectBase.Id.get -> string!
+Verbara.Sdk.Live.Agents.AgentManager
+Verbara.Sdk.Live.Agents.AgentManager.AgentConnected -> System.Action<string!, string?, string?>?
+Verbara.Sdk.Live.Agents.AgentManager.AgentCount.get -> int
+Verbara.Sdk.Live.Agents.AgentManager.AgentLoggedIn -> System.Action<Verbara.Sdk.Live.Agents.AsteriskAgent!>?
+Verbara.Sdk.Live.Agents.AgentManager.AgentLoggedOff -> System.Action<Verbara.Sdk.Live.Agents.AsteriskAgent!>?
+Verbara.Sdk.Live.Agents.AgentManager.AgentManager(Microsoft.Extensions.Logging.ILogger! logger) -> void
+Verbara.Sdk.Live.Agents.AgentManager.Agents.get -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Live.Agents.AsteriskAgent!>!
+Verbara.Sdk.Live.Agents.AgentManager.AgentStateChanged -> System.Action<Verbara.Sdk.Live.Agents.AsteriskAgent!>?
+Verbara.Sdk.Live.Agents.AgentManager.Clear() -> void
+Verbara.Sdk.Live.Agents.AgentManager.GetAgentsByState(Verbara.Sdk.Live.Agents.AgentState state) -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Live.Agents.AsteriskAgent!>!
+Verbara.Sdk.Live.Agents.AgentManager.GetAgentsWhere(System.Func<Verbara.Sdk.Live.Agents.AsteriskAgent!, bool>! predicate) -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Live.Agents.AsteriskAgent!>!
+Verbara.Sdk.Live.Agents.AgentManager.GetById(string! agentId) -> Verbara.Sdk.Live.Agents.AsteriskAgent?
+Verbara.Sdk.Live.Agents.AgentManager.OnAgentComplete(string! agentId, long talkTimeSecs = 0, long holdTimeSecs = 0) -> void
+Verbara.Sdk.Live.Agents.AgentManager.OnAgentConnect(string! agentId, string? talkingTo = null, string? linkedId = null, string? memberInterface = null) -> void
+Verbara.Sdk.Live.Agents.AgentManager.OnAgentLogin(string! agentId, string? channel = null) -> void
+Verbara.Sdk.Live.Agents.AgentManager.OnAgentLogoff(string! agentId) -> void
+Verbara.Sdk.Live.Agents.AgentManager.OnAgentPaused(string! agentId, bool paused) -> void
+Verbara.Sdk.Live.Agents.AgentManager.RegisterAgent(string! agentId, string? name = null) -> void
+Verbara.Sdk.Live.Agents.AgentState
+Verbara.Sdk.Live.Agents.AgentState.Available = 2 -> Verbara.Sdk.Live.Agents.AgentState
+Verbara.Sdk.Live.Agents.AgentState.LoggedOff = 1 -> Verbara.Sdk.Live.Agents.AgentState
+Verbara.Sdk.Live.Agents.AgentState.OnCall = 3 -> Verbara.Sdk.Live.Agents.AgentState
+Verbara.Sdk.Live.Agents.AgentState.Paused = 4 -> Verbara.Sdk.Live.Agents.AgentState
+Verbara.Sdk.Live.Agents.AgentState.Unknown = 0 -> Verbara.Sdk.Live.Agents.AgentState
+Verbara.Sdk.Live.Agents.AsteriskAgent
+Verbara.Sdk.Live.Agents.AsteriskAgent.AgentId.get -> string!
+Verbara.Sdk.Live.Agents.AsteriskAgent.AgentId.init -> void
+Verbara.Sdk.Live.Agents.AsteriskAgent.AsteriskAgent() -> void
+Verbara.Sdk.Live.Agents.AsteriskAgent.AvgTalkTimeSecs.get -> double
+Verbara.Sdk.Live.Agents.AsteriskAgent.CallsTaken.get -> int
+Verbara.Sdk.Live.Agents.AsteriskAgent.CallsTaken.set -> void
+Verbara.Sdk.Live.Agents.AsteriskAgent.Channel.get -> string?
+Verbara.Sdk.Live.Agents.AsteriskAgent.Channel.set -> void
+Verbara.Sdk.Live.Agents.AsteriskAgent.LastCallTalkTimeSecs.get -> long
+Verbara.Sdk.Live.Agents.AsteriskAgent.LastCallTalkTimeSecs.set -> void
+Verbara.Sdk.Live.Agents.AsteriskAgent.LastStateChangeAt.get -> System.DateTimeOffset?
+Verbara.Sdk.Live.Agents.AsteriskAgent.LastStateChangeAt.set -> void
+Verbara.Sdk.Live.Agents.AsteriskAgent.LoggedInAt.get -> System.DateTimeOffset?
+Verbara.Sdk.Live.Agents.AsteriskAgent.LoggedInAt.set -> void
+Verbara.Sdk.Live.Agents.AsteriskAgent.Name.get -> string?
+Verbara.Sdk.Live.Agents.AsteriskAgent.Name.set -> void
+Verbara.Sdk.Live.Agents.AsteriskAgent.SetName(string! name) -> void
+Verbara.Sdk.Live.Agents.AsteriskAgent.StateElapsed.get -> System.TimeSpan
+Verbara.Sdk.Live.Agents.AsteriskAgent.State.get -> Verbara.Sdk.Live.Agents.AgentState
+Verbara.Sdk.Live.Agents.AsteriskAgent.State.set -> void
+Verbara.Sdk.Live.Agents.AsteriskAgent.TalkingTo.get -> string?
+Verbara.Sdk.Live.Agents.AsteriskAgent.TalkingTo.set -> void
+Verbara.Sdk.Live.Agents.AsteriskAgent.TotalHoldTimeSecs.get -> long
+Verbara.Sdk.Live.Agents.AsteriskAgent.TotalHoldTimeSecs.set -> void
+Verbara.Sdk.Live.Agents.AsteriskAgent.TotalTalkTimeSecs.get -> long
+Verbara.Sdk.Live.Agents.AsteriskAgent.TotalTalkTimeSecs.set -> void
+Verbara.Sdk.Live.AmaFlags
+Verbara.Sdk.Live.AmaFlags.Billing = 2 -> Verbara.Sdk.Live.AmaFlags
+Verbara.Sdk.Live.AmaFlags.Default = 4 -> Verbara.Sdk.Live.AmaFlags
+Verbara.Sdk.Live.AmaFlags.Documentation = 3 -> Verbara.Sdk.Live.AmaFlags
+Verbara.Sdk.Live.AmaFlags.Omit = 1 -> Verbara.Sdk.Live.AmaFlags
+Verbara.Sdk.Live.AmaFlags.Unknown = 0 -> Verbara.Sdk.Live.AmaFlags
+Verbara.Sdk.Live.AmiCommunicationException
+Verbara.Sdk.Live.AmiCommunicationException.AmiCommunicationException(string! message, System.Exception? inner = null) -> void
+Verbara.Sdk.Live.Bridges.AsteriskBridge
+Verbara.Sdk.Live.Bridges.AsteriskBridge.AsteriskBridge() -> void
+Verbara.Sdk.Live.Bridges.AsteriskBridge.BridgeType.get -> string?
+Verbara.Sdk.Live.Bridges.AsteriskBridge.BridgeType.set -> void
+Verbara.Sdk.Live.Bridges.AsteriskBridge.BridgeUniqueid.get -> string!
+Verbara.Sdk.Live.Bridges.AsteriskBridge.BridgeUniqueid.init -> void
+Verbara.Sdk.Live.Bridges.AsteriskBridge.Channels.get -> System.Collections.Concurrent.ConcurrentDictionary<string!, byte>!
+Verbara.Sdk.Live.Bridges.AsteriskBridge.CreatedAt.get -> System.DateTimeOffset
+Verbara.Sdk.Live.Bridges.AsteriskBridge.CreatedAt.init -> void
+Verbara.Sdk.Live.Bridges.AsteriskBridge.Creator.get -> string?
+Verbara.Sdk.Live.Bridges.AsteriskBridge.Creator.set -> void
+Verbara.Sdk.Live.Bridges.AsteriskBridge.DestroyedAt.get -> System.DateTimeOffset?
+Verbara.Sdk.Live.Bridges.AsteriskBridge.DestroyedAt.set -> void
+Verbara.Sdk.Live.Bridges.AsteriskBridge.Name.get -> string?
+Verbara.Sdk.Live.Bridges.AsteriskBridge.Name.set -> void
+Verbara.Sdk.Live.Bridges.AsteriskBridge.NumChannels.get -> int
+Verbara.Sdk.Live.Bridges.AsteriskBridge.Technology.get -> string?
+Verbara.Sdk.Live.Bridges.AsteriskBridge.Technology.set -> void
+Verbara.Sdk.Live.Bridges.BridgeManager
+Verbara.Sdk.Live.Bridges.BridgeManager.ActiveBridges.get -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Live.Bridges.AsteriskBridge!>!
+Verbara.Sdk.Live.Bridges.BridgeManager.BridgeCount.get -> int
+Verbara.Sdk.Live.Bridges.BridgeManager.BridgeCreated -> System.Action<Verbara.Sdk.Live.Bridges.AsteriskBridge!>?
+Verbara.Sdk.Live.Bridges.BridgeManager.BridgeDestroyed -> System.Action<Verbara.Sdk.Live.Bridges.AsteriskBridge!>?
+Verbara.Sdk.Live.Bridges.BridgeManager.BridgeManager(Microsoft.Extensions.Logging.ILogger! logger) -> void
+Verbara.Sdk.Live.Bridges.BridgeManager.ChannelEntered -> System.Action<Verbara.Sdk.Live.Bridges.AsteriskBridge!, string!>?
+Verbara.Sdk.Live.Bridges.BridgeManager.ChannelLeft -> System.Action<Verbara.Sdk.Live.Bridges.AsteriskBridge!, string!>?
+Verbara.Sdk.Live.Bridges.BridgeManager.Clear() -> void
+Verbara.Sdk.Live.Bridges.BridgeManager.GetBridgeForChannel(string! uniqueId) -> Verbara.Sdk.Live.Bridges.AsteriskBridge?
+Verbara.Sdk.Live.Bridges.BridgeManager.GetById(string! bridgeId) -> Verbara.Sdk.Live.Bridges.AsteriskBridge?
+Verbara.Sdk.Live.Bridges.BridgeManager.OnAttendedTransfer(string! origBridgeId, string? secondBridgeId, string? destType, string? result) -> void
+Verbara.Sdk.Live.Bridges.BridgeManager.OnBlindTransfer(string! bridgeId, string? targetChannel, string? extension, string? context) -> void
+Verbara.Sdk.Live.Bridges.BridgeManager.OnBridgeCreated(string! bridgeId, string? type, string? technology, string? creator, string? name) -> void
+Verbara.Sdk.Live.Bridges.BridgeManager.OnBridgeDestroyed(string! bridgeId) -> void
+Verbara.Sdk.Live.Bridges.BridgeManager.OnChannelEntered(string! bridgeId, string! uniqueId) -> void
+Verbara.Sdk.Live.Bridges.BridgeManager.OnChannelLeft(string! bridgeId, string! uniqueId) -> void
+Verbara.Sdk.Live.Bridges.BridgeManager.TransferOccurred -> System.Action<Verbara.Sdk.Live.Bridges.BridgeTransferInfo!>?
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.BridgeId.get -> string!
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.BridgeId.init -> void
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.BridgeTransferInfo(string! BridgeId, string! TransferType, string? TargetChannel, string? SecondBridgeId, string? DestType, string? Result) -> void
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.DestType.get -> string?
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.DestType.init -> void
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.Result.get -> string?
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.Result.init -> void
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.SecondBridgeId.get -> string?
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.SecondBridgeId.init -> void
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.TargetChannel.get -> string?
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.TargetChannel.init -> void
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.TransferType.get -> string!
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.TransferType.init -> void
+Verbara.Sdk.Live.ChannelNotFoundException
+Verbara.Sdk.Live.ChannelNotFoundException.ChannelNotFoundException(string! channelName) -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel
+Verbara.Sdk.Live.Channels.AsteriskChannel.AsteriskChannel() -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.CallerIdName.get -> string?
+Verbara.Sdk.Live.Channels.AsteriskChannel.CallerIdName.set -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.CallerIdNum.get -> string?
+Verbara.Sdk.Live.Channels.AsteriskChannel.CallerIdNum.set -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.ConnectedLineNum.get -> string?
+Verbara.Sdk.Live.Channels.AsteriskChannel.ConnectedLineNum.set -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.Context.get -> string?
+Verbara.Sdk.Live.Channels.AsteriskChannel.Context.set -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.CreatedAt.get -> System.DateTimeOffset
+Verbara.Sdk.Live.Channels.AsteriskChannel.CreatedAt.init -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.DialedChannel.get -> string?
+Verbara.Sdk.Live.Channels.AsteriskChannel.DialedChannel.set -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.DialStatus.get -> string?
+Verbara.Sdk.Live.Channels.AsteriskChannel.DialStatus.set -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.Extension.get -> string?
+Verbara.Sdk.Live.Channels.AsteriskChannel.ExtensionHistory.get -> System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Live.Channels.ExtensionHistoryEntry!>!
+Verbara.Sdk.Live.Channels.AsteriskChannel.Extension.set -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.HangupCause.get -> Verbara.Sdk.Enums.HangupCause
+Verbara.Sdk.Live.Channels.AsteriskChannel.HangupCause.set -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.HoldMusicClass.get -> string?
+Verbara.Sdk.Live.Channels.AsteriskChannel.HoldMusicClass.set -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.IsOnHold.get -> bool
+Verbara.Sdk.Live.Channels.AsteriskChannel.IsOnHold.set -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.LinkedChannel.get -> Verbara.Sdk.Live.Channels.AsteriskChannel?
+Verbara.Sdk.Live.Channels.AsteriskChannel.LinkedChannel.set -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.LinkedId.get -> string?
+Verbara.Sdk.Live.Channels.AsteriskChannel.LinkedId.init -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.Name.get -> string!
+Verbara.Sdk.Live.Channels.AsteriskChannel.Name.set -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.Priority.get -> int
+Verbara.Sdk.Live.Channels.AsteriskChannel.Priority.set -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.State.get -> Verbara.Sdk.Enums.ChannelState
+Verbara.Sdk.Live.Channels.AsteriskChannel.State.set -> void
+Verbara.Sdk.Live.Channels.AsteriskChannel.UniqueId.get -> string!
+Verbara.Sdk.Live.Channels.AsteriskChannel.UniqueId.init -> void
+Verbara.Sdk.Live.Channels.ChannelManager
+Verbara.Sdk.Live.Channels.ChannelManager.ActiveChannels.get -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Live.Channels.AsteriskChannel!>!
+Verbara.Sdk.Live.Channels.ChannelManager.ChannelAdded -> System.Action<Verbara.Sdk.Live.Channels.AsteriskChannel!>?
+Verbara.Sdk.Live.Channels.ChannelManager.ChannelCount.get -> int
+Verbara.Sdk.Live.Channels.ChannelManager.ChannelDialBegin -> System.Action<Verbara.Sdk.Live.Channels.AsteriskChannel!>?
+Verbara.Sdk.Live.Channels.ChannelManager.ChannelDialEnd -> System.Action<Verbara.Sdk.Live.Channels.AsteriskChannel!>?
+Verbara.Sdk.Live.Channels.ChannelManager.ChannelHeld -> System.Action<Verbara.Sdk.Live.Channels.AsteriskChannel!>?
+Verbara.Sdk.Live.Channels.ChannelManager.ChannelManager(Microsoft.Extensions.Logging.ILogger! logger) -> void
+Verbara.Sdk.Live.Channels.ChannelManager.ChannelRemoved -> System.Action<Verbara.Sdk.Live.Channels.AsteriskChannel!>?
+Verbara.Sdk.Live.Channels.ChannelManager.ChannelStateChanged -> System.Action<Verbara.Sdk.Live.Channels.AsteriskChannel!>?
+Verbara.Sdk.Live.Channels.ChannelManager.ChannelUnheld -> System.Action<Verbara.Sdk.Live.Channels.AsteriskChannel!>?
+Verbara.Sdk.Live.Channels.ChannelManager.Clear() -> void
+Verbara.Sdk.Live.Channels.ChannelManager.CountChannelsByTechnology(string! technology) -> int
+Verbara.Sdk.Live.Channels.ChannelManager.GetByName(string! name) -> Verbara.Sdk.Live.Channels.AsteriskChannel?
+Verbara.Sdk.Live.Channels.ChannelManager.GetByUniqueId(string! uniqueId) -> Verbara.Sdk.Live.Channels.AsteriskChannel?
+Verbara.Sdk.Live.Channels.ChannelManager.GetChannelsByState(Verbara.Sdk.Enums.ChannelState state) -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Live.Channels.AsteriskChannel!>!
+Verbara.Sdk.Live.Channels.ChannelManager.GetChannelsByTechnology(string! technology) -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Live.Channels.AsteriskChannel!>!
+Verbara.Sdk.Live.Channels.ChannelManager.OnDialBegin(string! uniqueId, string! destUniqueId, string! destChannel, string? dialString) -> void
+Verbara.Sdk.Live.Channels.ChannelManager.OnDialEnd(string! uniqueId, string? dialStatus) -> void
+Verbara.Sdk.Live.Channels.ChannelManager.OnHangup(string! uniqueId, Verbara.Sdk.Enums.HangupCause cause = Verbara.Sdk.Enums.HangupCause.NormalClearing) -> void
+Verbara.Sdk.Live.Channels.ChannelManager.OnHold(string! uniqueId, string? musicClass) -> void
+Verbara.Sdk.Live.Channels.ChannelManager.OnLink(string! uniqueId1, string! uniqueId2) -> void
+Verbara.Sdk.Live.Channels.ChannelManager.OnNewChannel(string! uniqueId, string! channelName, Verbara.Sdk.Enums.ChannelState state, string? callerIdNum = null, string? callerIdName = null, string? context = null, string? exten = null, int priority = 1, string? linkedId = null) -> void
+Verbara.Sdk.Live.Channels.ChannelManager.OnNewState(string! uniqueId, Verbara.Sdk.Enums.ChannelState newState, string? channelName = null) -> void
+Verbara.Sdk.Live.Channels.ChannelManager.OnRename(string! uniqueId, string! newName) -> void
+Verbara.Sdk.Live.Channels.ChannelManager.OnUnhold(string! uniqueId) -> void
+Verbara.Sdk.Live.Channels.ChannelManager.OnUnlink(string! uniqueId1, string! uniqueId2) -> void
+Verbara.Sdk.Live.Channels.ExtensionHistoryEntry
+Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.Context.get -> string!
+Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.Context.init -> void
+Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.Extension.get -> string!
+Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.ExtensionHistoryEntry(string! Context, string! Extension, int Priority, System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.Extension.init -> void
+Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.Priority.get -> int
+Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.Priority.init -> void
+Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.Timestamp.get -> System.DateTimeOffset
+Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.Timestamp.init -> void
+Verbara.Sdk.Live.Diagnostics.LiveMetrics
+Verbara.Sdk.Live.Disposition
+Verbara.Sdk.Live.Disposition.Answered = 4 -> Verbara.Sdk.Live.Disposition
+Verbara.Sdk.Live.Disposition.Busy = 3 -> Verbara.Sdk.Live.Disposition
+Verbara.Sdk.Live.Disposition.Congestion = 5 -> Verbara.Sdk.Live.Disposition
+Verbara.Sdk.Live.Disposition.Failed = 2 -> Verbara.Sdk.Live.Disposition
+Verbara.Sdk.Live.Disposition.NoAnswer = 1 -> Verbara.Sdk.Live.Disposition
+Verbara.Sdk.Live.Disposition.Unknown = 0 -> Verbara.Sdk.Live.Disposition
+Verbara.Sdk.Live.ILiveObject
+Verbara.Sdk.Live.ILiveObject.Id.get -> string!
+Verbara.Sdk.Live.InterfaceNotFoundException
+Verbara.Sdk.Live.InterfaceNotFoundException.InterfaceNotFoundException(string! interfaceName) -> void
+Verbara.Sdk.Live.InvalidPenaltyException
+Verbara.Sdk.Live.InvalidPenaltyException.InvalidPenaltyException(int penalty) -> void
+Verbara.Sdk.Live.LiveException
+Verbara.Sdk.Live.LiveException.LiveException(string! message, System.Exception? inner = null) -> void
+Verbara.Sdk.Live.LiveObjectBase
+Verbara.Sdk.Live.LiveObjectBase.LiveObjectBase() -> void
+Verbara.Sdk.Live.LiveObjectBase.OnPropertyChanged(string! propertyName) -> void
+Verbara.Sdk.Live.LiveObjectBase.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
+Verbara.Sdk.Live.LiveObjectBase.SetField<T>(ref T field, T value, string! propertyName) -> bool
+Verbara.Sdk.Live.MeetMe.MeetMeManager
+Verbara.Sdk.Live.MeetMe.MeetMeManager.Clear() -> void
+Verbara.Sdk.Live.MeetMe.MeetMeManager.GetRoom(string! roomNumber) -> Verbara.Sdk.Live.MeetMe.MeetMeRoom?
+Verbara.Sdk.Live.MeetMe.MeetMeManager.MeetMeManager(Microsoft.Extensions.Logging.ILogger! logger) -> void
+Verbara.Sdk.Live.MeetMe.MeetMeManager.OnUserJoined(string! roomNumber, int userNum, string! channel) -> void
+Verbara.Sdk.Live.MeetMe.MeetMeManager.OnUserLeft(string! roomNumber, int userNum) -> void
+Verbara.Sdk.Live.MeetMe.MeetMeManager.Rooms.get -> System.Collections.Generic.IReadOnlyCollection<Verbara.Sdk.Live.MeetMe.MeetMeRoom!>!
+Verbara.Sdk.Live.MeetMe.MeetMeManager.UserJoined -> System.Action<Verbara.Sdk.Live.MeetMe.MeetMeRoom!, Verbara.Sdk.Live.MeetMe.MeetMeUser!>?
+Verbara.Sdk.Live.MeetMe.MeetMeManager.UserLeft -> System.Action<Verbara.Sdk.Live.MeetMe.MeetMeRoom!, Verbara.Sdk.Live.MeetMe.MeetMeUser!>?
+Verbara.Sdk.Live.MeetMe.MeetMeRoom
+Verbara.Sdk.Live.MeetMe.MeetMeRoom.MeetMeRoom() -> void
+Verbara.Sdk.Live.MeetMe.MeetMeRoom.RoomNumber.get -> string!
+Verbara.Sdk.Live.MeetMe.MeetMeRoom.RoomNumber.init -> void
+Verbara.Sdk.Live.MeetMe.MeetMeRoom.UserCount.get -> int
+Verbara.Sdk.Live.MeetMe.MeetMeRoom.Users.get -> System.Collections.Concurrent.ConcurrentDictionary<int, Verbara.Sdk.Live.MeetMe.MeetMeUser!>!
+Verbara.Sdk.Live.MeetMe.MeetMeUser
+Verbara.Sdk.Live.MeetMe.MeetMeUser.Channel.get -> string!
+Verbara.Sdk.Live.MeetMe.MeetMeUser.Channel.init -> void
+Verbara.Sdk.Live.MeetMe.MeetMeUser.MeetMeUser() -> void
+Verbara.Sdk.Live.MeetMe.MeetMeUser.Muted.get -> bool
+Verbara.Sdk.Live.MeetMe.MeetMeUser.Muted.set -> void
+Verbara.Sdk.Live.MeetMe.MeetMeUser.State.get -> Verbara.Sdk.Live.MeetMeUserState
+Verbara.Sdk.Live.MeetMe.MeetMeUser.State.set -> void
+Verbara.Sdk.Live.MeetMe.MeetMeUser.Talking.get -> bool
+Verbara.Sdk.Live.MeetMe.MeetMeUser.Talking.set -> void
+Verbara.Sdk.Live.MeetMe.MeetMeUser.UserNum.get -> int
+Verbara.Sdk.Live.MeetMe.MeetMeUser.UserNum.init -> void
+Verbara.Sdk.Live.MeetMeUserState
+Verbara.Sdk.Live.MeetMeUserState.Joined = 0 -> Verbara.Sdk.Live.MeetMeUserState
+Verbara.Sdk.Live.MeetMeUserState.Left = 1 -> Verbara.Sdk.Live.MeetMeUserState
+Verbara.Sdk.Live.MeetMeUserState.Talking = 2 -> Verbara.Sdk.Live.MeetMeUserState
+Verbara.Sdk.Live.QueueEntryState
+Verbara.Sdk.Live.QueueEntryState.Abandoned = 1 -> Verbara.Sdk.Live.QueueEntryState
+Verbara.Sdk.Live.QueueEntryState.Completed = 2 -> Verbara.Sdk.Live.QueueEntryState
+Verbara.Sdk.Live.QueueEntryState.Joined = 0 -> Verbara.Sdk.Live.QueueEntryState
+Verbara.Sdk.Live.QueueMemberState
+Verbara.Sdk.Live.QueueMemberState.DeviceBusy = 3 -> Verbara.Sdk.Live.QueueMemberState
+Verbara.Sdk.Live.QueueMemberState.DeviceInUse = 2 -> Verbara.Sdk.Live.QueueMemberState
+Verbara.Sdk.Live.QueueMemberState.DeviceInvalid = 4 -> Verbara.Sdk.Live.QueueMemberState
+Verbara.Sdk.Live.QueueMemberState.DeviceNotInUse = 1 -> Verbara.Sdk.Live.QueueMemberState
+Verbara.Sdk.Live.QueueMemberState.DeviceOnHold = 8 -> Verbara.Sdk.Live.QueueMemberState
+Verbara.Sdk.Live.QueueMemberState.DeviceRinging = 6 -> Verbara.Sdk.Live.QueueMemberState
+Verbara.Sdk.Live.QueueMemberState.DeviceRingInUse = 7 -> Verbara.Sdk.Live.QueueMemberState
+Verbara.Sdk.Live.QueueMemberState.DeviceUnavailable = 5 -> Verbara.Sdk.Live.QueueMemberState
+Verbara.Sdk.Live.QueueMemberState.DeviceUnknown = 0 -> Verbara.Sdk.Live.QueueMemberState
+Verbara.Sdk.Live.Queues.AsteriskQueue
+Verbara.Sdk.Live.Queues.AsteriskQueue.Abandoned.get -> int
+Verbara.Sdk.Live.Queues.AsteriskQueue.Abandoned.set -> void
+Verbara.Sdk.Live.Queues.AsteriskQueue.AsteriskQueue() -> void
+Verbara.Sdk.Live.Queues.AsteriskQueue.Calls.get -> int
+Verbara.Sdk.Live.Queues.AsteriskQueue.Calls.set -> void
+Verbara.Sdk.Live.Queues.AsteriskQueue.Completed.get -> int
+Verbara.Sdk.Live.Queues.AsteriskQueue.Completed.set -> void
+Verbara.Sdk.Live.Queues.AsteriskQueue.Entries.get -> System.Collections.Concurrent.ConcurrentDictionary<string!, Verbara.Sdk.Live.Queues.AsteriskQueueEntry!>!
+Verbara.Sdk.Live.Queues.AsteriskQueueEntry
+Verbara.Sdk.Live.Queues.AsteriskQueueEntry.AsteriskQueueEntry() -> void
+Verbara.Sdk.Live.Queues.AsteriskQueueEntry.CallerId.get -> string?
+Verbara.Sdk.Live.Queues.AsteriskQueueEntry.CallerId.set -> void
+Verbara.Sdk.Live.Queues.AsteriskQueueEntry.Channel.get -> string!
+Verbara.Sdk.Live.Queues.AsteriskQueueEntry.Channel.init -> void
+Verbara.Sdk.Live.Queues.AsteriskQueue.EntryCount.get -> int
+Verbara.Sdk.Live.Queues.AsteriskQueueEntry.JoinedAt.get -> System.DateTimeOffset
+Verbara.Sdk.Live.Queues.AsteriskQueueEntry.JoinedAt.init -> void
+Verbara.Sdk.Live.Queues.AsteriskQueueEntry.Position.get -> int
+Verbara.Sdk.Live.Queues.AsteriskQueueEntry.Position.set -> void
+Verbara.Sdk.Live.Queues.AsteriskQueue.HoldTime.get -> int
+Verbara.Sdk.Live.Queues.AsteriskQueue.HoldTime.set -> void
+Verbara.Sdk.Live.Queues.AsteriskQueue.Max.get -> int
+Verbara.Sdk.Live.Queues.AsteriskQueue.Max.set -> void
+Verbara.Sdk.Live.Queues.AsteriskQueueMember
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.AsteriskQueueMember() -> void
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.CallsTaken.get -> int
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.CallsTaken.set -> void
+Verbara.Sdk.Live.Queues.AsteriskQueue.MemberCount.get -> int
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.Interface.get -> string!
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.Interface.init -> void
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.MemberName.get -> string?
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.MemberName.set -> void
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.Paused.get -> bool
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.PausedReason.get -> string?
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.PausedReason.set -> void
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.Paused.set -> void
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.Penalty.get -> int
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.Penalty.set -> void
+Verbara.Sdk.Live.Queues.AsteriskQueue.Members.get -> System.Collections.Concurrent.ConcurrentDictionary<string!, Verbara.Sdk.Live.Queues.AsteriskQueueMember!>!
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.Status.get -> Verbara.Sdk.Live.QueueMemberState
+Verbara.Sdk.Live.Queues.AsteriskQueueMember.Status.set -> void
+Verbara.Sdk.Live.Queues.AsteriskQueue.Name.get -> string!
+Verbara.Sdk.Live.Queues.AsteriskQueue.Name.init -> void
+Verbara.Sdk.Live.Queues.AsteriskQueue.Strategy.get -> string?
+Verbara.Sdk.Live.Queues.AsteriskQueue.Strategy.set -> void
+Verbara.Sdk.Live.Queues.AsteriskQueue.TalkTime.get -> int
+Verbara.Sdk.Live.Queues.AsteriskQueue.TalkTime.set -> void
+Verbara.Sdk.Live.Queues.QueueManager
+Verbara.Sdk.Live.Queues.QueueManager.CallerJoined -> System.Action<string!, Verbara.Sdk.Live.Queues.AsteriskQueueEntry!>?
+Verbara.Sdk.Live.Queues.QueueManager.CallerLeft -> System.Action<string!, Verbara.Sdk.Live.Queues.AsteriskQueueEntry!>?
+Verbara.Sdk.Live.Queues.QueueManager.Clear() -> void
+Verbara.Sdk.Live.Queues.QueueManager.GetByName(string! name) -> Verbara.Sdk.Live.Queues.AsteriskQueue?
+Verbara.Sdk.Live.Queues.QueueManager.GetMembersWhere(string! queueName, System.Func<Verbara.Sdk.Live.Queues.AsteriskQueueMember!, bool>! predicate) -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Live.Queues.AsteriskQueueMember!>!
+Verbara.Sdk.Live.Queues.QueueManager.GetQueueObjectsForMember(string! memberInterface) -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Live.Queues.AsteriskQueue!>!
+Verbara.Sdk.Live.Queues.QueueManager.GetQueuesForMember(string! memberInterface) -> System.Collections.Generic.IEnumerable<string!>!
+Verbara.Sdk.Live.Queues.QueueManager.MemberAdded -> System.Action<string!, Verbara.Sdk.Live.Queues.AsteriskQueueMember!>?
+Verbara.Sdk.Live.Queues.QueueManager.MemberRemoved -> System.Action<string!, Verbara.Sdk.Live.Queues.AsteriskQueueMember!>?
+Verbara.Sdk.Live.Queues.QueueManager.MemberStatusChanged -> System.Action<string!, Verbara.Sdk.Live.Queues.AsteriskQueueMember!>?
+Verbara.Sdk.Live.Queues.QueueManager.OnCallerJoined(string! queueName, string! channel, string? callerId, int position) -> void
+Verbara.Sdk.Live.Queues.QueueManager.OnCallerLeft(string! queueName, string! channel) -> void
+Verbara.Sdk.Live.Queues.QueueManager.OnDeviceStateChanged(string! device, string! state) -> void
+Verbara.Sdk.Live.Queues.QueueManager.OnMemberAdded(string! queueName, string! iface, string? memberName, int penalty, bool paused, int status) -> void
+Verbara.Sdk.Live.Queues.QueueManager.OnMemberPaused(string! queueName, string! iface, bool paused, string? reason = null) -> void
+Verbara.Sdk.Live.Queues.QueueManager.OnMemberRemoved(string! queueName, string! iface) -> void
+Verbara.Sdk.Live.Queues.QueueManager.OnMemberStatusChanged(string! queueName, string! iface, int status) -> void
+Verbara.Sdk.Live.Queues.QueueManager.OnQueueParams(string! queueName, int max, string? strategy, int calls, int holdTime, int talkTime, int completed, int abandoned) -> void
+Verbara.Sdk.Live.Queues.QueueManager.QueueCount.get -> int
+Verbara.Sdk.Live.Queues.QueueManager.QueueManager(Microsoft.Extensions.Logging.ILogger! logger) -> void
+Verbara.Sdk.Live.Queues.QueueManager.Queues.get -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Live.Queues.AsteriskQueue!>!
+Verbara.Sdk.Live.Queues.QueueManager.QueueUpdated -> System.Action<Verbara.Sdk.Live.Queues.AsteriskQueue!>?
+Verbara.Sdk.Live.Queues.QueueManager.RemoveQueue(string! queueName) -> bool
+Verbara.Sdk.Live.Server.VerbaraServer
+Verbara.Sdk.Live.Server.VerbaraServer.Agents.get -> Verbara.Sdk.Live.Agents.AgentManager!
+Verbara.Sdk.Live.Server.VerbaraServer.VerbaraServer(Verbara.Sdk.IAmiConnection! connection, Microsoft.Extensions.Logging.ILogger<Verbara.Sdk.Live.Server.VerbaraServer!>! logger) -> void
+Verbara.Sdk.Live.Server.VerbaraServer.AsteriskVersion.get -> string?
+Verbara.Sdk.Live.Server.VerbaraServer.Bridges.get -> Verbara.Sdk.Live.Bridges.BridgeManager!
+Verbara.Sdk.Live.Server.VerbaraServer.Channels.get -> Verbara.Sdk.Live.Channels.ChannelManager!
+Verbara.Sdk.Live.Server.VerbaraServer.Connection.get -> Verbara.Sdk.IAmiConnection!
+Verbara.Sdk.Live.Server.VerbaraServer.ConnectionLost -> System.Action<System.Exception?>?
+Verbara.Sdk.Live.Server.VerbaraServer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Live.Server.VerbaraServer.MeetMe.get -> Verbara.Sdk.Live.MeetMe.MeetMeManager!
+Verbara.Sdk.Live.Server.VerbaraServer.OriginateAsync(string! channel, string! context, string! extension, int priority = 1, string? callerId = null, System.TimeSpan? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Live.Server.OriginateResult!>
+Verbara.Sdk.Live.Server.VerbaraServerPool
+Verbara.Sdk.Live.Server.VerbaraServerPool.AddExistingServer(string! serverId, Verbara.Sdk.Live.Server.VerbaraServer! server) -> void
+Verbara.Sdk.Live.Server.VerbaraServerPool.AddServerAsync(string! serverId, Verbara.Sdk.Ami.Connection.AmiConnectionOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Live.Server.VerbaraServer!>
+Verbara.Sdk.Live.Server.VerbaraServerPool.VerbaraServerPool(Verbara.Sdk.Ami.Connection.IAmiConnectionFactory! connectionFactory, Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> void
+Verbara.Sdk.Live.Server.VerbaraServerPool.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Live.Server.VerbaraServerPool.GetServerForAgent(string! agentId) -> Verbara.Sdk.Live.Server.VerbaraServer?
+Verbara.Sdk.Live.Server.VerbaraServerPool.GetServer(string! serverId) -> Verbara.Sdk.Live.Server.VerbaraServer?
+Verbara.Sdk.Live.Server.VerbaraServerPool.RemoveServerAsync(string! serverId) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Live.Server.VerbaraServerPool.ServerCount.get -> int
+Verbara.Sdk.Live.Server.VerbaraServerPool.Servers.get -> System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, Verbara.Sdk.Live.Server.VerbaraServer!>>!
+Verbara.Sdk.Live.Server.VerbaraServerPool.TotalAgentCount.get -> int
+Verbara.Sdk.Live.Server.VerbaraServer.Queues.get -> Verbara.Sdk.Live.Queues.QueueManager!
+Verbara.Sdk.Live.Server.VerbaraServer.RequestInitialStateAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Live.Server.VerbaraServer.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Verbara.Sdk.Live.Server.OriginateResult
+Verbara.Sdk.Live.Server.OriginateResult.ChannelId.get -> string?
+Verbara.Sdk.Live.Server.OriginateResult.ChannelId.init -> void
+Verbara.Sdk.Live.Server.OriginateResult.Message.get -> string?
+Verbara.Sdk.Live.Server.OriginateResult.Message.init -> void
+Verbara.Sdk.Live.Server.OriginateResult.OriginateResult() -> void
+Verbara.Sdk.Live.Server.OriginateResult.Success.get -> bool
+Verbara.Sdk.Live.Server.OriginateResult.Success.init -> void
+override Verbara.Sdk.Live.Agents.AsteriskAgent.Id.get -> string!
+override Verbara.Sdk.Live.Bridges.AsteriskBridge.Id.get -> string!
+override Verbara.Sdk.Live.Channels.AsteriskChannel.Id.get -> string!
+static readonly Verbara.Sdk.Live.Diagnostics.LiveMetrics.AgentStateChanges -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Live.Diagnostics.LiveMetrics.BridgesCreated -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Live.Diagnostics.LiveMetrics.BridgesDestroyed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Live.Diagnostics.LiveMetrics.ChannelsCreated -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Live.Diagnostics.LiveMetrics.ChannelsDestroyed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Live.Diagnostics.LiveMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Verbara.Sdk.Live.Diagnostics.LiveMetrics.QueueCallsJoined -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Live.Diagnostics.LiveMetrics.QueueCallsLeft -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Live.Diagnostics.LiveMetrics.QueueWaitTimeMs -> System.Diagnostics.Metrics.Histogram<double>!
+Verbara.Sdk.Live.Diagnostics.LiveHealthCheck
+Verbara.Sdk.Live.Diagnostics.LiveHealthCheck.LiveHealthCheck(Verbara.Sdk.Live.Server.VerbaraServer! server) -> void
+Verbara.Sdk.Live.Diagnostics.LiveHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!

@@ -1,5 +1,5 @@
 // Asterisk.Sdk - Webhook Subscriber Example
-// Demonstrates: outbound HTTP webhooks driven by Asterisk.Sdk.Push.
+// Demonstrates: outbound HTTP webhooks driven by Verbara.Sdk.Push.
 //
 // Flow:
 //   1. Start a tiny in-process HTTP listener to play the role of "webhook receiver".
@@ -12,11 +12,11 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
-using Asterisk.Sdk.Push.Bus;
-using Asterisk.Sdk.Push.Events;
-using Asterisk.Sdk.Push.Hosting;
-using Asterisk.Sdk.Push.Topics;
-using Asterisk.Sdk.Push.Webhooks;
+using Verbara.Sdk.Push.Bus;
+using Verbara.Sdk.Push.Events;
+using Verbara.Sdk.Push.Hosting;
+using Verbara.Sdk.Push.Topics;
+using Verbara.Sdk.Push.Webhooks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -48,8 +48,8 @@ _ = Task.Run(async () =>
 // 2. Build the Push + Webhooks host.
 var builder = Host.CreateApplicationBuilder();
 builder.Logging.ClearProviders().AddConsole();
-builder.Services.AddAsteriskPush();
-builder.Services.AddAsteriskPushWebhooks(opts =>
+builder.Services.AddVerbaraPush();
+builder.Services.AddVerbaraPushWebhooks(opts =>
 {
     opts.MaxRetries = 2;
     opts.InitialDelay = TimeSpan.FromMilliseconds(250);

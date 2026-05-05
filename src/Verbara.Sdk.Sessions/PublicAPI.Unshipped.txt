@@ -1,0 +1,12 @@
+#nullable enable
+Verbara.Sdk.Sessions.Extensions.VerbaraSessionsBuilderExtensions
+Verbara.Sdk.Sessions.Extensions.ISessionsBuilder
+Verbara.Sdk.Sessions.Extensions.ISessionsBuilder.Services.get -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Verbara.Sdk.Sessions.ISessionStore
+Verbara.Sdk.Sessions.ISessionStore.DeleteAsync(string! sessionId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Sessions.ISessionStore.GetActiveAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IEnumerable<Verbara.Sdk.Sessions.CallSession!>!>
+Verbara.Sdk.Sessions.ISessionStore.GetAsync(string! sessionId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Sessions.CallSession?>
+Verbara.Sdk.Sessions.ISessionStore.GetByLinkedIdAsync(string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Sessions.CallSession?>
+Verbara.Sdk.Sessions.ISessionStore.SaveAsync(Verbara.Sdk.Sessions.CallSession! session, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Sessions.ISessionStore.SaveBatchAsync(System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Sessions.CallSession!>! sessions, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+static Verbara.Sdk.Sessions.Extensions.VerbaraSessionsBuilderExtensions.UseInMemory(this Verbara.Sdk.Sessions.Extensions.ISessionsBuilder! builder) -> Verbara.Sdk.Sessions.Extensions.ISessionsBuilder!

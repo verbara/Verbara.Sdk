@@ -1,0 +1,456 @@
+#nullable enable
+abstract Verbara.Sdk.Agi.Commands.AgiCommandBase.BuildCommand() -> string!
+Verbara.Sdk.Agi.Commands.AgiCommand
+Verbara.Sdk.Agi.Commands.AgiCommand.AgiCommand() -> void
+Verbara.Sdk.Agi.Commands.AgiCommand.Args.get -> string?
+Verbara.Sdk.Agi.Commands.AgiCommand.Args.set -> void
+Verbara.Sdk.Agi.Commands.AgiCommandBase
+Verbara.Sdk.Agi.Commands.AgiCommandBase.AgiCommandBase() -> void
+Verbara.Sdk.Agi.Commands.AgiCommand.Command.get -> string?
+Verbara.Sdk.Agi.Commands.AgiCommand.Command.set -> void
+Verbara.Sdk.Agi.Commands.AnswerCommand
+Verbara.Sdk.Agi.Commands.AnswerCommand.AnswerCommand() -> void
+Verbara.Sdk.Agi.Commands.AsyncAgiBreakCommand
+Verbara.Sdk.Agi.Commands.AsyncAgiBreakCommand.AsyncAgiBreakCommand() -> void
+Verbara.Sdk.Agi.Commands.BridgeCommand
+Verbara.Sdk.Agi.Commands.BridgeCommand.BridgeCommand() -> void
+Verbara.Sdk.Agi.Commands.BridgeCommand.Channel.get -> string?
+Verbara.Sdk.Agi.Commands.BridgeCommand.Channel.set -> void
+Verbara.Sdk.Agi.Commands.BridgeCommand.Options.get -> string?
+Verbara.Sdk.Agi.Commands.BridgeCommand.Options.set -> void
+Verbara.Sdk.Agi.Commands.ChannelStatusCommand
+Verbara.Sdk.Agi.Commands.ChannelStatusCommand.Channel.get -> string?
+Verbara.Sdk.Agi.Commands.ChannelStatusCommand.Channel.set -> void
+Verbara.Sdk.Agi.Commands.ChannelStatusCommand.ChannelStatusCommand() -> void
+Verbara.Sdk.Agi.Commands.ConfbridgeCommand
+Verbara.Sdk.Agi.Commands.ConfbridgeCommand.BridgeProfile.get -> string?
+Verbara.Sdk.Agi.Commands.ConfbridgeCommand.BridgeProfile.set -> void
+Verbara.Sdk.Agi.Commands.ConfbridgeCommand.ConfbridgeCommand() -> void
+Verbara.Sdk.Agi.Commands.ConfbridgeCommand.Conference.get -> string?
+Verbara.Sdk.Agi.Commands.ConfbridgeCommand.Conference.set -> void
+Verbara.Sdk.Agi.Commands.ConfbridgeCommand.Menu.get -> string?
+Verbara.Sdk.Agi.Commands.ConfbridgeCommand.Menu.set -> void
+Verbara.Sdk.Agi.Commands.ConfbridgeCommand.UserProfile.get -> string?
+Verbara.Sdk.Agi.Commands.ConfbridgeCommand.UserProfile.set -> void
+Verbara.Sdk.Agi.Commands.ControlStreamFileCommand
+Verbara.Sdk.Agi.Commands.ControlStreamFileCommand.ControlStreamFileCommand() -> void
+Verbara.Sdk.Agi.Commands.ControlStreamFileCommand.EscapeDigits.get -> string?
+Verbara.Sdk.Agi.Commands.ControlStreamFileCommand.EscapeDigits.set -> void
+Verbara.Sdk.Agi.Commands.ControlStreamFileCommand.File.get -> string?
+Verbara.Sdk.Agi.Commands.ControlStreamFileCommand.File.set -> void
+Verbara.Sdk.Agi.Commands.ControlStreamFileCommand.ForwardDigit.get -> string?
+Verbara.Sdk.Agi.Commands.ControlStreamFileCommand.ForwardDigit.set -> void
+Verbara.Sdk.Agi.Commands.ControlStreamFileCommand.Offset.get -> int?
+Verbara.Sdk.Agi.Commands.ControlStreamFileCommand.Offset.set -> void
+Verbara.Sdk.Agi.Commands.ControlStreamFileCommand.PauseDigit.get -> string?
+Verbara.Sdk.Agi.Commands.ControlStreamFileCommand.PauseDigit.set -> void
+Verbara.Sdk.Agi.Commands.ControlStreamFileCommand.RewindDigit.get -> string?
+Verbara.Sdk.Agi.Commands.ControlStreamFileCommand.RewindDigit.set -> void
+Verbara.Sdk.Agi.Commands.DatabaseDelCommand
+Verbara.Sdk.Agi.Commands.DatabaseDelCommand.DatabaseDelCommand() -> void
+Verbara.Sdk.Agi.Commands.DatabaseDelCommand.Family.get -> string?
+Verbara.Sdk.Agi.Commands.DatabaseDelCommand.Family.set -> void
+Verbara.Sdk.Agi.Commands.DatabaseDelCommand.KeyTree.get -> string?
+Verbara.Sdk.Agi.Commands.DatabaseDelCommand.KeyTree.set -> void
+Verbara.Sdk.Agi.Commands.DatabaseDelTreeCommand
+Verbara.Sdk.Agi.Commands.DatabaseDelTreeCommand.DatabaseDelTreeCommand() -> void
+Verbara.Sdk.Agi.Commands.DatabaseDelTreeCommand.Family.get -> string?
+Verbara.Sdk.Agi.Commands.DatabaseDelTreeCommand.Family.set -> void
+Verbara.Sdk.Agi.Commands.DatabaseDelTreeCommand.KeyTree.get -> string?
+Verbara.Sdk.Agi.Commands.DatabaseDelTreeCommand.KeyTree.set -> void
+Verbara.Sdk.Agi.Commands.DatabaseGetCommand
+Verbara.Sdk.Agi.Commands.DatabaseGetCommand.DatabaseGetCommand() -> void
+Verbara.Sdk.Agi.Commands.DatabaseGetCommand.Family.get -> string?
+Verbara.Sdk.Agi.Commands.DatabaseGetCommand.Family.set -> void
+Verbara.Sdk.Agi.Commands.DatabaseGetCommand.Key.get -> string?
+Verbara.Sdk.Agi.Commands.DatabaseGetCommand.Key.set -> void
+Verbara.Sdk.Agi.Commands.DatabasePutCommand
+Verbara.Sdk.Agi.Commands.DatabasePutCommand.DatabasePutCommand() -> void
+Verbara.Sdk.Agi.Commands.DatabasePutCommand.Family.get -> string?
+Verbara.Sdk.Agi.Commands.DatabasePutCommand.Family.set -> void
+Verbara.Sdk.Agi.Commands.DatabasePutCommand.Key.get -> string?
+Verbara.Sdk.Agi.Commands.DatabasePutCommand.Key.set -> void
+Verbara.Sdk.Agi.Commands.DatabasePutCommand.Value.get -> string?
+Verbara.Sdk.Agi.Commands.DatabasePutCommand.Value.set -> void
+Verbara.Sdk.Agi.Commands.DialCommand
+Verbara.Sdk.Agi.Commands.DialCommand.DialCommand() -> void
+Verbara.Sdk.Agi.Commands.DialCommand.Options.get -> string?
+Verbara.Sdk.Agi.Commands.DialCommand.Options.set -> void
+Verbara.Sdk.Agi.Commands.DialCommand.Target.get -> string?
+Verbara.Sdk.Agi.Commands.DialCommand.Target.set -> void
+Verbara.Sdk.Agi.Commands.DialCommand.Timeout.get -> int?
+Verbara.Sdk.Agi.Commands.DialCommand.Timeout.set -> void
+Verbara.Sdk.Agi.Commands.ExecCommand
+Verbara.Sdk.Agi.Commands.ExecCommand.Application.get -> string?
+Verbara.Sdk.Agi.Commands.ExecCommand.Application.set -> void
+Verbara.Sdk.Agi.Commands.ExecCommand.ExecCommand() -> void
+Verbara.Sdk.Agi.Commands.ExecCommand.Options.get -> string?
+Verbara.Sdk.Agi.Commands.ExecCommand.Options.set -> void
+Verbara.Sdk.Agi.Commands.GetDataCommand
+Verbara.Sdk.Agi.Commands.GetDataCommand.File.get -> string?
+Verbara.Sdk.Agi.Commands.GetDataCommand.File.set -> void
+Verbara.Sdk.Agi.Commands.GetDataCommand.GetDataCommand() -> void
+Verbara.Sdk.Agi.Commands.GetDataCommand.MaxDigits.get -> int?
+Verbara.Sdk.Agi.Commands.GetDataCommand.MaxDigits.set -> void
+Verbara.Sdk.Agi.Commands.GetDataCommand.Timeout.get -> long?
+Verbara.Sdk.Agi.Commands.GetDataCommand.Timeout.set -> void
+Verbara.Sdk.Agi.Commands.GetFullVariableCommand
+Verbara.Sdk.Agi.Commands.GetFullVariableCommand.Channel.get -> string?
+Verbara.Sdk.Agi.Commands.GetFullVariableCommand.Channel.set -> void
+Verbara.Sdk.Agi.Commands.GetFullVariableCommand.GetFullVariableCommand() -> void
+Verbara.Sdk.Agi.Commands.GetFullVariableCommand.Variable.get -> string?
+Verbara.Sdk.Agi.Commands.GetFullVariableCommand.Variable.set -> void
+Verbara.Sdk.Agi.Commands.GetOptionCommand
+Verbara.Sdk.Agi.Commands.GetOptionCommand.EscapeDigits.get -> string?
+Verbara.Sdk.Agi.Commands.GetOptionCommand.EscapeDigits.set -> void
+Verbara.Sdk.Agi.Commands.GetOptionCommand.File.get -> string?
+Verbara.Sdk.Agi.Commands.GetOptionCommand.File.set -> void
+Verbara.Sdk.Agi.Commands.GetOptionCommand.GetOptionCommand() -> void
+Verbara.Sdk.Agi.Commands.GetOptionCommand.Timeout.get -> long?
+Verbara.Sdk.Agi.Commands.GetOptionCommand.Timeout.set -> void
+Verbara.Sdk.Agi.Commands.GetVariableCommand
+Verbara.Sdk.Agi.Commands.GetVariableCommand.GetVariableCommand() -> void
+Verbara.Sdk.Agi.Commands.GetVariableCommand.Variable.get -> string?
+Verbara.Sdk.Agi.Commands.GetVariableCommand.Variable.set -> void
+Verbara.Sdk.Agi.Commands.GosubCommand
+Verbara.Sdk.Agi.Commands.GosubCommand.Context.get -> string?
+Verbara.Sdk.Agi.Commands.GosubCommand.Context.set -> void
+Verbara.Sdk.Agi.Commands.GosubCommand.Extension.get -> string?
+Verbara.Sdk.Agi.Commands.GosubCommand.Extension.set -> void
+Verbara.Sdk.Agi.Commands.GosubCommand.GosubCommand() -> void
+Verbara.Sdk.Agi.Commands.GosubCommand.OptionalArg.get -> string?
+Verbara.Sdk.Agi.Commands.GosubCommand.OptionalArg.set -> void
+Verbara.Sdk.Agi.Commands.GosubCommand.Priority.get -> string?
+Verbara.Sdk.Agi.Commands.GosubCommand.Priority.set -> void
+Verbara.Sdk.Agi.Commands.HangupCommand
+Verbara.Sdk.Agi.Commands.HangupCommand.Channel.get -> string?
+Verbara.Sdk.Agi.Commands.HangupCommand.Channel.set -> void
+Verbara.Sdk.Agi.Commands.HangupCommand.HangupCommand() -> void
+Verbara.Sdk.Agi.Commands.MeetmeCommand
+Verbara.Sdk.Agi.Commands.MeetmeCommand.Conference.get -> string?
+Verbara.Sdk.Agi.Commands.MeetmeCommand.Conference.set -> void
+Verbara.Sdk.Agi.Commands.MeetmeCommand.MeetmeCommand() -> void
+Verbara.Sdk.Agi.Commands.MeetmeCommand.Options.get -> string?
+Verbara.Sdk.Agi.Commands.MeetmeCommand.Options.set -> void
+Verbara.Sdk.Agi.Commands.MeetmeCommand.Pin.get -> string?
+Verbara.Sdk.Agi.Commands.MeetmeCommand.Pin.set -> void
+Verbara.Sdk.Agi.Commands.NoopCommand
+Verbara.Sdk.Agi.Commands.NoopCommand.NoopCommand() -> void
+Verbara.Sdk.Agi.Commands.QueueCommand
+Verbara.Sdk.Agi.Commands.QueueCommand.Options.get -> string?
+Verbara.Sdk.Agi.Commands.QueueCommand.Options.set -> void
+Verbara.Sdk.Agi.Commands.QueueCommand.QueueCommand() -> void
+Verbara.Sdk.Agi.Commands.QueueCommand.QueueName.get -> string?
+Verbara.Sdk.Agi.Commands.QueueCommand.QueueName.set -> void
+Verbara.Sdk.Agi.Commands.ReceiveCharCommand
+Verbara.Sdk.Agi.Commands.ReceiveCharCommand.ReceiveCharCommand() -> void
+Verbara.Sdk.Agi.Commands.ReceiveCharCommand.Timeout.get -> int?
+Verbara.Sdk.Agi.Commands.ReceiveCharCommand.Timeout.set -> void
+Verbara.Sdk.Agi.Commands.ReceiveTextCommand
+Verbara.Sdk.Agi.Commands.ReceiveTextCommand.ReceiveTextCommand() -> void
+Verbara.Sdk.Agi.Commands.ReceiveTextCommand.Timeout.get -> int?
+Verbara.Sdk.Agi.Commands.ReceiveTextCommand.Timeout.set -> void
+Verbara.Sdk.Agi.Commands.RecordFileCommand
+Verbara.Sdk.Agi.Commands.RecordFileCommand.Beep.get -> bool?
+Verbara.Sdk.Agi.Commands.RecordFileCommand.Beep.set -> void
+Verbara.Sdk.Agi.Commands.RecordFileCommand.EscapeDigits.get -> string?
+Verbara.Sdk.Agi.Commands.RecordFileCommand.EscapeDigits.set -> void
+Verbara.Sdk.Agi.Commands.RecordFileCommand.File.get -> string?
+Verbara.Sdk.Agi.Commands.RecordFileCommand.File.set -> void
+Verbara.Sdk.Agi.Commands.RecordFileCommand.Format.get -> string?
+Verbara.Sdk.Agi.Commands.RecordFileCommand.Format.set -> void
+Verbara.Sdk.Agi.Commands.RecordFileCommand.MaxSilence.get -> int?
+Verbara.Sdk.Agi.Commands.RecordFileCommand.MaxSilence.set -> void
+Verbara.Sdk.Agi.Commands.RecordFileCommand.Offset.get -> int?
+Verbara.Sdk.Agi.Commands.RecordFileCommand.Offset.set -> void
+Verbara.Sdk.Agi.Commands.RecordFileCommand.RecordFileCommand() -> void
+Verbara.Sdk.Agi.Commands.RecordFileCommand.Timeout.get -> int?
+Verbara.Sdk.Agi.Commands.RecordFileCommand.Timeout.set -> void
+Verbara.Sdk.Agi.Commands.SayAlphaCommand
+Verbara.Sdk.Agi.Commands.SayAlphaCommand.EscapeDigits.get -> string?
+Verbara.Sdk.Agi.Commands.SayAlphaCommand.EscapeDigits.set -> void
+Verbara.Sdk.Agi.Commands.SayAlphaCommand.SayAlphaCommand() -> void
+Verbara.Sdk.Agi.Commands.SayAlphaCommand.Text.get -> string?
+Verbara.Sdk.Agi.Commands.SayAlphaCommand.Text.set -> void
+Verbara.Sdk.Agi.Commands.SayDateTimeCommand
+Verbara.Sdk.Agi.Commands.SayDateTimeCommand.EscapeDigits.get -> string?
+Verbara.Sdk.Agi.Commands.SayDateTimeCommand.EscapeDigits.set -> void
+Verbara.Sdk.Agi.Commands.SayDateTimeCommand.Format.get -> string?
+Verbara.Sdk.Agi.Commands.SayDateTimeCommand.Format.set -> void
+Verbara.Sdk.Agi.Commands.SayDateTimeCommand.SayDateTimeCommand() -> void
+Verbara.Sdk.Agi.Commands.SayDateTimeCommand.Time.get -> long?
+Verbara.Sdk.Agi.Commands.SayDateTimeCommand.Time.set -> void
+Verbara.Sdk.Agi.Commands.SayDateTimeCommand.Timezone.get -> string?
+Verbara.Sdk.Agi.Commands.SayDateTimeCommand.Timezone.set -> void
+Verbara.Sdk.Agi.Commands.SayDigitsCommand
+Verbara.Sdk.Agi.Commands.SayDigitsCommand.Digits.get -> string?
+Verbara.Sdk.Agi.Commands.SayDigitsCommand.Digits.set -> void
+Verbara.Sdk.Agi.Commands.SayDigitsCommand.EscapeDigits.get -> string?
+Verbara.Sdk.Agi.Commands.SayDigitsCommand.EscapeDigits.set -> void
+Verbara.Sdk.Agi.Commands.SayDigitsCommand.SayDigitsCommand() -> void
+Verbara.Sdk.Agi.Commands.SayNumberCommand
+Verbara.Sdk.Agi.Commands.SayNumberCommand.EscapeDigits.get -> string?
+Verbara.Sdk.Agi.Commands.SayNumberCommand.EscapeDigits.set -> void
+Verbara.Sdk.Agi.Commands.SayNumberCommand.Number.get -> string?
+Verbara.Sdk.Agi.Commands.SayNumberCommand.Number.set -> void
+Verbara.Sdk.Agi.Commands.SayNumberCommand.SayNumberCommand() -> void
+Verbara.Sdk.Agi.Commands.SayPhoneticCommand
+Verbara.Sdk.Agi.Commands.SayPhoneticCommand.EscapeDigits.get -> string?
+Verbara.Sdk.Agi.Commands.SayPhoneticCommand.EscapeDigits.set -> void
+Verbara.Sdk.Agi.Commands.SayPhoneticCommand.SayPhoneticCommand() -> void
+Verbara.Sdk.Agi.Commands.SayPhoneticCommand.Text.get -> string?
+Verbara.Sdk.Agi.Commands.SayPhoneticCommand.Text.set -> void
+Verbara.Sdk.Agi.Commands.SayTimeCommand
+Verbara.Sdk.Agi.Commands.SayTimeCommand.EscapeDigits.get -> string?
+Verbara.Sdk.Agi.Commands.SayTimeCommand.EscapeDigits.set -> void
+Verbara.Sdk.Agi.Commands.SayTimeCommand.SayTimeCommand() -> void
+Verbara.Sdk.Agi.Commands.SayTimeCommand.Time.get -> long?
+Verbara.Sdk.Agi.Commands.SayTimeCommand.Time.set -> void
+Verbara.Sdk.Agi.Commands.SendImageCommand
+Verbara.Sdk.Agi.Commands.SendImageCommand.Image.get -> string?
+Verbara.Sdk.Agi.Commands.SendImageCommand.Image.set -> void
+Verbara.Sdk.Agi.Commands.SendImageCommand.SendImageCommand() -> void
+Verbara.Sdk.Agi.Commands.SendTextCommand
+Verbara.Sdk.Agi.Commands.SendTextCommand.SendTextCommand() -> void
+Verbara.Sdk.Agi.Commands.SendTextCommand.Text.get -> string?
+Verbara.Sdk.Agi.Commands.SendTextCommand.Text.set -> void
+Verbara.Sdk.Agi.Commands.SetAutoHangupCommand
+Verbara.Sdk.Agi.Commands.SetAutoHangupCommand.SetAutoHangupCommand() -> void
+Verbara.Sdk.Agi.Commands.SetAutoHangupCommand.Time.get -> int?
+Verbara.Sdk.Agi.Commands.SetAutoHangupCommand.Time.set -> void
+Verbara.Sdk.Agi.Commands.SetCallerIdCommand
+Verbara.Sdk.Agi.Commands.SetCallerIdCommand.CallerId.get -> string?
+Verbara.Sdk.Agi.Commands.SetCallerIdCommand.CallerId.set -> void
+Verbara.Sdk.Agi.Commands.SetCallerIdCommand.SetCallerIdCommand() -> void
+Verbara.Sdk.Agi.Commands.SetContextCommand
+Verbara.Sdk.Agi.Commands.SetContextCommand.Context.get -> string?
+Verbara.Sdk.Agi.Commands.SetContextCommand.Context.set -> void
+Verbara.Sdk.Agi.Commands.SetContextCommand.SetContextCommand() -> void
+Verbara.Sdk.Agi.Commands.SetExtensionCommand
+Verbara.Sdk.Agi.Commands.SetExtensionCommand.Extension.get -> string?
+Verbara.Sdk.Agi.Commands.SetExtensionCommand.Extension.set -> void
+Verbara.Sdk.Agi.Commands.SetExtensionCommand.SetExtensionCommand() -> void
+Verbara.Sdk.Agi.Commands.SetMusicOffCommand
+Verbara.Sdk.Agi.Commands.SetMusicOffCommand.SetMusicOffCommand() -> void
+Verbara.Sdk.Agi.Commands.SetMusicOnCommand
+Verbara.Sdk.Agi.Commands.SetMusicOnCommand.MusicOnHoldClass.get -> string?
+Verbara.Sdk.Agi.Commands.SetMusicOnCommand.MusicOnHoldClass.set -> void
+Verbara.Sdk.Agi.Commands.SetMusicOnCommand.SetMusicOnCommand() -> void
+Verbara.Sdk.Agi.Commands.SetPriorityCommand
+Verbara.Sdk.Agi.Commands.SetPriorityCommand.Priority.get -> string?
+Verbara.Sdk.Agi.Commands.SetPriorityCommand.Priority.set -> void
+Verbara.Sdk.Agi.Commands.SetPriorityCommand.SetPriorityCommand() -> void
+Verbara.Sdk.Agi.Commands.SetVariableCommand
+Verbara.Sdk.Agi.Commands.SetVariableCommand.SetVariableCommand() -> void
+Verbara.Sdk.Agi.Commands.SetVariableCommand.Value.get -> string?
+Verbara.Sdk.Agi.Commands.SetVariableCommand.Value.set -> void
+Verbara.Sdk.Agi.Commands.SetVariableCommand.Variable.get -> string?
+Verbara.Sdk.Agi.Commands.SetVariableCommand.Variable.set -> void
+Verbara.Sdk.Agi.Commands.SpeechActivateGrammarCommand
+Verbara.Sdk.Agi.Commands.SpeechActivateGrammarCommand.Name.get -> string?
+Verbara.Sdk.Agi.Commands.SpeechActivateGrammarCommand.Name.set -> void
+Verbara.Sdk.Agi.Commands.SpeechActivateGrammarCommand.SpeechActivateGrammarCommand() -> void
+Verbara.Sdk.Agi.Commands.SpeechCreateCommand
+Verbara.Sdk.Agi.Commands.SpeechCreateCommand.Engine.get -> string?
+Verbara.Sdk.Agi.Commands.SpeechCreateCommand.Engine.set -> void
+Verbara.Sdk.Agi.Commands.SpeechCreateCommand.SpeechCreateCommand() -> void
+Verbara.Sdk.Agi.Commands.SpeechDeactivateGrammarCommand
+Verbara.Sdk.Agi.Commands.SpeechDeactivateGrammarCommand.Name.get -> string?
+Verbara.Sdk.Agi.Commands.SpeechDeactivateGrammarCommand.Name.set -> void
+Verbara.Sdk.Agi.Commands.SpeechDeactivateGrammarCommand.SpeechDeactivateGrammarCommand() -> void
+Verbara.Sdk.Agi.Commands.SpeechDestroyCommand
+Verbara.Sdk.Agi.Commands.SpeechDestroyCommand.SpeechDestroyCommand() -> void
+Verbara.Sdk.Agi.Commands.SpeechLoadGrammarCommand
+Verbara.Sdk.Agi.Commands.SpeechLoadGrammarCommand.Name.get -> string?
+Verbara.Sdk.Agi.Commands.SpeechLoadGrammarCommand.Name.set -> void
+Verbara.Sdk.Agi.Commands.SpeechLoadGrammarCommand.Path.get -> string?
+Verbara.Sdk.Agi.Commands.SpeechLoadGrammarCommand.Path.set -> void
+Verbara.Sdk.Agi.Commands.SpeechLoadGrammarCommand.SpeechLoadGrammarCommand() -> void
+Verbara.Sdk.Agi.Commands.SpeechRecognizeCommand
+Verbara.Sdk.Agi.Commands.SpeechRecognizeCommand.Offset.get -> int?
+Verbara.Sdk.Agi.Commands.SpeechRecognizeCommand.Offset.set -> void
+Verbara.Sdk.Agi.Commands.SpeechRecognizeCommand.Prompt.get -> string?
+Verbara.Sdk.Agi.Commands.SpeechRecognizeCommand.Prompt.set -> void
+Verbara.Sdk.Agi.Commands.SpeechRecognizeCommand.SpeechRecognizeCommand() -> void
+Verbara.Sdk.Agi.Commands.SpeechRecognizeCommand.Timeout.get -> int?
+Verbara.Sdk.Agi.Commands.SpeechRecognizeCommand.Timeout.set -> void
+Verbara.Sdk.Agi.Commands.SpeechSetCommand
+Verbara.Sdk.Agi.Commands.SpeechSetCommand.Name.get -> string?
+Verbara.Sdk.Agi.Commands.SpeechSetCommand.Name.set -> void
+Verbara.Sdk.Agi.Commands.SpeechSetCommand.SpeechSetCommand() -> void
+Verbara.Sdk.Agi.Commands.SpeechSetCommand.Value.get -> string?
+Verbara.Sdk.Agi.Commands.SpeechSetCommand.Value.set -> void
+Verbara.Sdk.Agi.Commands.SpeechUnloadGrammarCommand
+Verbara.Sdk.Agi.Commands.SpeechUnloadGrammarCommand.Name.get -> string?
+Verbara.Sdk.Agi.Commands.SpeechUnloadGrammarCommand.Name.set -> void
+Verbara.Sdk.Agi.Commands.SpeechUnloadGrammarCommand.SpeechUnloadGrammarCommand() -> void
+Verbara.Sdk.Agi.Commands.StreamFileCommand
+Verbara.Sdk.Agi.Commands.StreamFileCommand.EscapeDigits.get -> string?
+Verbara.Sdk.Agi.Commands.StreamFileCommand.EscapeDigits.set -> void
+Verbara.Sdk.Agi.Commands.StreamFileCommand.File.get -> string?
+Verbara.Sdk.Agi.Commands.StreamFileCommand.File.set -> void
+Verbara.Sdk.Agi.Commands.StreamFileCommand.Offset.get -> int?
+Verbara.Sdk.Agi.Commands.StreamFileCommand.Offset.set -> void
+Verbara.Sdk.Agi.Commands.StreamFileCommand.StreamFileCommand() -> void
+Verbara.Sdk.Agi.Commands.TddModeCommand
+Verbara.Sdk.Agi.Commands.TddModeCommand.Mode.get -> string?
+Verbara.Sdk.Agi.Commands.TddModeCommand.Mode.set -> void
+Verbara.Sdk.Agi.Commands.TddModeCommand.TddModeCommand() -> void
+Verbara.Sdk.Agi.Commands.VerboseCommand
+Verbara.Sdk.Agi.Commands.VerboseCommand.Level.get -> int?
+Verbara.Sdk.Agi.Commands.VerboseCommand.Level.set -> void
+Verbara.Sdk.Agi.Commands.VerboseCommand.Message.get -> string?
+Verbara.Sdk.Agi.Commands.VerboseCommand.Message.set -> void
+Verbara.Sdk.Agi.Commands.VerboseCommand.VerboseCommand() -> void
+Verbara.Sdk.Agi.Commands.WaitForDigitCommand
+Verbara.Sdk.Agi.Commands.WaitForDigitCommand.Timeout.get -> long?
+Verbara.Sdk.Agi.Commands.WaitForDigitCommand.Timeout.set -> void
+Verbara.Sdk.Agi.Commands.WaitForDigitCommand.WaitForDigitCommand() -> void
+Verbara.Sdk.Agi.Diagnostics.AgiActivitySource
+Verbara.Sdk.Agi.Diagnostics.AgiHealthCheck
+Verbara.Sdk.Agi.Diagnostics.AgiHealthCheck.AgiHealthCheck(Verbara.Sdk.IAgiServer! server) -> void
+Verbara.Sdk.Agi.Diagnostics.AgiHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Verbara.Sdk.Agi.Diagnostics.AgiMetrics
+Verbara.Sdk.Agi.Hosting.AgiHostedService
+Verbara.Sdk.Agi.Hosting.AgiHostedService.AgiHostedService(Verbara.Sdk.IAgiServer! agiServer) -> void
+Verbara.Sdk.Agi.Hosting.AgiHostedService.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.Agi.Hosting.AgiHostedService.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.Agi.Mapping.CompositeMappingStrategy
+Verbara.Sdk.Agi.Mapping.CompositeMappingStrategy.Add(Verbara.Sdk.Agi.Mapping.IMappingStrategy! strategy) -> void
+Verbara.Sdk.Agi.Mapping.CompositeMappingStrategy.CompositeMappingStrategy(params Verbara.Sdk.Agi.Mapping.IMappingStrategy![]! strategies) -> void
+Verbara.Sdk.Agi.Mapping.CompositeMappingStrategy.Resolve(Verbara.Sdk.IAgiRequest! request) -> Verbara.Sdk.IAgiScript?
+Verbara.Sdk.Agi.Mapping.IMappingStrategy
+Verbara.Sdk.Agi.Mapping.IMappingStrategy.Resolve(Verbara.Sdk.IAgiRequest! request) -> Verbara.Sdk.IAgiScript?
+Verbara.Sdk.Agi.Mapping.SimpleMappingStrategy
+Verbara.Sdk.Agi.Mapping.SimpleMappingStrategy.Add(string! scriptName, Verbara.Sdk.IAgiScript! script) -> void
+Verbara.Sdk.Agi.Mapping.SimpleMappingStrategy.Remove(string! scriptName) -> bool
+Verbara.Sdk.Agi.Mapping.SimpleMappingStrategy.Resolve(Verbara.Sdk.IAgiRequest! request) -> Verbara.Sdk.IAgiScript?
+Verbara.Sdk.Agi.Mapping.SimpleMappingStrategy.SimpleMappingStrategy() -> void
+Verbara.Sdk.Agi.Mapping.TypeNameMappingStrategy
+Verbara.Sdk.Agi.Mapping.TypeNameMappingStrategy.Register(string! name, System.Func<Verbara.Sdk.IAgiScript!>! factory) -> void
+Verbara.Sdk.Agi.Mapping.TypeNameMappingStrategy.Register<TScript>(System.Func<TScript>! factory) -> void
+Verbara.Sdk.Agi.Mapping.TypeNameMappingStrategy.Resolve(Verbara.Sdk.IAgiRequest! request) -> Verbara.Sdk.IAgiScript?
+Verbara.Sdk.Agi.Mapping.TypeNameMappingStrategy.TypeNameMappingStrategy() -> void
+Verbara.Sdk.Agi.Server.AgiChannel
+Verbara.Sdk.Agi.Server.AgiChannel.AgiChannel(Verbara.Sdk.Agi.Server.FastAgiWriter! writer, Verbara.Sdk.Agi.Server.FastAgiReader! reader, Microsoft.Extensions.Logging.ILogger? logger = null) -> void
+Verbara.Sdk.Agi.Server.AgiChannel.AnswerAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Agi.Server.AgiChannel.ExecAsync(string! application, string! args = "", System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Agi.Server.AgiChannel.GetDataAsync(string! file, int timeout = 0, int maxDigits = 0, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
+Verbara.Sdk.Agi.Server.AgiChannel.GetVariableAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
+Verbara.Sdk.Agi.Server.AgiChannel.HangupAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Agi.Server.AgiChannel.SendCommandAsync(Verbara.Sdk.Agi.Commands.AgiCommandBase! command, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Agi.Server.AgiReply!>
+Verbara.Sdk.Agi.Server.AgiChannel.SendCommandAsync(string! command, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Agi.Server.AgiReply!>
+Verbara.Sdk.Agi.Server.AgiChannel.SetVariableAsync(string! name, string! value, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Agi.Server.AgiChannel.StreamFileAsync(string! file, string! escapeDigits = "", System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<char>
+Verbara.Sdk.Agi.Server.AgiException
+Verbara.Sdk.Agi.Server.AgiException.AgiException(string! message, System.Exception? innerException = null) -> void
+Verbara.Sdk.Agi.Server.AgiHangupException
+Verbara.Sdk.Agi.Server.AgiHangupException.AgiHangupException(string! message = "Channel hung up") -> void
+Verbara.Sdk.Agi.Server.AgiNetworkException
+Verbara.Sdk.Agi.Server.AgiNetworkException.AgiNetworkException(string! message, System.Exception? innerException = null) -> void
+Verbara.Sdk.Agi.Server.AgiReply
+Verbara.Sdk.Agi.Server.AgiReply.AgiReply() -> void
+Verbara.Sdk.Agi.Server.AgiReply.Extra.get -> string?
+Verbara.Sdk.Agi.Server.AgiReply.Extra.init -> void
+Verbara.Sdk.Agi.Server.AgiReply.IsSuccess.get -> bool
+Verbara.Sdk.Agi.Server.AgiReply.RawLine.get -> string!
+Verbara.Sdk.Agi.Server.AgiReply.RawLine.init -> void
+Verbara.Sdk.Agi.Server.AgiReply.ResultAsChar.get -> char
+Verbara.Sdk.Agi.Server.AgiReply.ResultAsInt.get -> int
+Verbara.Sdk.Agi.Server.AgiReply.Result.get -> string!
+Verbara.Sdk.Agi.Server.AgiReply.Result.init -> void
+Verbara.Sdk.Agi.Server.AgiReply.StatusCode.get -> int
+Verbara.Sdk.Agi.Server.AgiReply.StatusCode.init -> void
+Verbara.Sdk.Agi.Server.AgiRequest
+Verbara.Sdk.Agi.Server.AgiRequest.CallerId.get -> string?
+Verbara.Sdk.Agi.Server.AgiRequest.CallerIdName.get -> string?
+Verbara.Sdk.Agi.Server.AgiRequest.Channel.get -> string?
+Verbara.Sdk.Agi.Server.AgiRequest.Context.get -> string?
+Verbara.Sdk.Agi.Server.AgiRequest.Extension.get -> string?
+Verbara.Sdk.Agi.Server.AgiRequest.IsNetwork.get -> bool
+Verbara.Sdk.Agi.Server.AgiRequest.Language.get -> string?
+Verbara.Sdk.Agi.Server.AgiRequest.Priority.get -> int
+Verbara.Sdk.Agi.Server.AgiRequest.Script.get -> string?
+Verbara.Sdk.Agi.Server.AgiRequest.UniqueId.get -> string?
+Verbara.Sdk.Agi.Server.AgiRequest.Variables.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+Verbara.Sdk.Agi.Server.FastAgiReader
+Verbara.Sdk.Agi.Server.FastAgiReader.FastAgiReader(System.IO.Pipelines.PipeReader! reader) -> void
+Verbara.Sdk.Agi.Server.FastAgiReader.ReadLineAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
+Verbara.Sdk.Agi.Server.FastAgiReader.ReadReplyAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Agi.Server.AgiReply?>
+Verbara.Sdk.Agi.Server.FastAgiReader.ReadRequestAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Agi.Server.AgiRequest!>
+Verbara.Sdk.Agi.Server.FastAgiServer
+Verbara.Sdk.Agi.Server.FastAgiServer.ConnectionTimeout.get -> System.TimeSpan
+Verbara.Sdk.Agi.Server.FastAgiServer.ConnectionTimeout.set -> void
+Verbara.Sdk.Agi.Server.FastAgiServer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Agi.Server.FastAgiServer.FastAgiServer(int port, Verbara.Sdk.Agi.Mapping.IMappingStrategy! mappingStrategy, Microsoft.Extensions.Logging.ILogger<Verbara.Sdk.Agi.Server.FastAgiServer!>! logger) -> void
+Verbara.Sdk.Agi.Server.FastAgiServer.IsRunning.get -> bool
+Verbara.Sdk.Agi.Server.FastAgiServer.Port.get -> int
+Verbara.Sdk.Agi.Server.FastAgiServer.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Agi.Server.FastAgiServer.State.get -> Verbara.Sdk.Enums.AgiServerState
+Verbara.Sdk.Agi.Server.FastAgiServer.StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Agi.Server.FastAgiWriter
+Verbara.Sdk.Agi.Server.FastAgiWriter.FastAgiWriter(System.IO.Pipelines.PipeWriter! writer) -> void
+Verbara.Sdk.Agi.Server.FastAgiWriter.SendCommandAsync(string! command, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+override Verbara.Sdk.Agi.Commands.AgiCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.AnswerCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.AsyncAgiBreakCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.BridgeCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.ChannelStatusCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.ConfbridgeCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.ControlStreamFileCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.DatabaseDelCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.DatabaseDelTreeCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.DatabaseGetCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.DatabasePutCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.DialCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.ExecCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.GetDataCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.GetFullVariableCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.GetOptionCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.GetVariableCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.GosubCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.HangupCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.MeetmeCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.NoopCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.QueueCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.ReceiveCharCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.ReceiveTextCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.RecordFileCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SayAlphaCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SayDateTimeCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SayDigitsCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SayNumberCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SayPhoneticCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SayTimeCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SendImageCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SendTextCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SetAutoHangupCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SetCallerIdCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SetContextCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SetExtensionCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SetMusicOffCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SetMusicOnCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SetPriorityCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SetVariableCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SpeechActivateGrammarCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SpeechCreateCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SpeechDeactivateGrammarCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SpeechDestroyCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SpeechLoadGrammarCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SpeechRecognizeCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SpeechSetCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.SpeechUnloadGrammarCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.StreamFileCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.TddModeCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.VerboseCommand.BuildCommand() -> string!
+override Verbara.Sdk.Agi.Commands.WaitForDigitCommand.BuildCommand() -> string!
+static Verbara.Sdk.Agi.Server.AgiReply.Parse(string! line) -> Verbara.Sdk.Agi.Server.AgiReply!
+static Verbara.Sdk.Agi.Server.AgiRequest.Parse(System.Collections.Generic.IEnumerable<string!>! lines) -> Verbara.Sdk.Agi.Server.AgiRequest!
+static readonly Verbara.Sdk.Agi.Diagnostics.AgiActivitySource.Source -> System.Diagnostics.ActivitySource!
+static readonly Verbara.Sdk.Agi.Diagnostics.AgiMetrics.ConnectionsAccepted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Agi.Diagnostics.AgiMetrics.Hangups -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Agi.Diagnostics.AgiMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Verbara.Sdk.Agi.Diagnostics.AgiMetrics.ScriptDurationMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Verbara.Sdk.Agi.Diagnostics.AgiMetrics.ScriptsExecuted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Agi.Diagnostics.AgiMetrics.ScriptsFailed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Agi.Diagnostics.AgiMetrics.ScriptsNotFound -> System.Diagnostics.Metrics.Counter<long>!

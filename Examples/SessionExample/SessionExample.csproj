@@ -7,7 +7,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Asterisk.Sdk.Hosting/Asterisk.Sdk.Hosting.csproj" />
-    <ProjectReference Include="../../src/Asterisk.Sdk.Sessions/Asterisk.Sdk.Sessions.csproj" />
+    <ProjectReference Include="../../src/Verbara.Sdk.Hosting/Verbara.Sdk.Hosting.csproj" />
+    <ProjectReference Include="../../src/Verbara.Sdk.Sessions/Verbara.Sdk.Sessions.csproj" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,136 @@
+#nullable enable
+abstract Verbara.Sdk.VoiceAi.SpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Verbara.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.VoiceAi.SpeechRecognitionResult>!
+abstract Verbara.Sdk.VoiceAi.SpeechSynthesizer.SynthesizeAsync(string! text, Verbara.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+Verbara.Sdk.VoiceAi.ConversationContext
+Verbara.Sdk.VoiceAi.ConversationContext.ChannelId.get -> System.Guid
+Verbara.Sdk.VoiceAi.ConversationContext.ChannelId.init -> void
+Verbara.Sdk.VoiceAi.ConversationContext.ConversationContext() -> void
+Verbara.Sdk.VoiceAi.ConversationContext.History.get -> System.Collections.Generic.IReadOnlyList<Verbara.Sdk.VoiceAi.ConversationTurn>!
+Verbara.Sdk.VoiceAi.ConversationContext.History.init -> void
+Verbara.Sdk.VoiceAi.ConversationContext.InputFormat.get -> Verbara.Sdk.Audio.AudioFormat
+Verbara.Sdk.VoiceAi.ConversationContext.InputFormat.init -> void
+Verbara.Sdk.VoiceAi.ConversationTurn
+Verbara.Sdk.VoiceAi.ConversationTurn.AssistantResponse.get -> string!
+Verbara.Sdk.VoiceAi.ConversationTurn.AssistantResponse.init -> void
+Verbara.Sdk.VoiceAi.ConversationTurn.ConversationTurn(string! UserTranscript, string! AssistantResponse, System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.ConversationTurn.ConversationTurn() -> void
+Verbara.Sdk.VoiceAi.ConversationTurn.Timestamp.get -> System.DateTimeOffset
+Verbara.Sdk.VoiceAi.ConversationTurn.Timestamp.init -> void
+Verbara.Sdk.VoiceAi.ConversationTurn.UserTranscript.get -> string!
+Verbara.Sdk.VoiceAi.ConversationTurn.UserTranscript.init -> void
+Verbara.Sdk.VoiceAi.DependencyInjection.VoiceAiServiceCollectionExtensions
+Verbara.Sdk.VoiceAi.Diagnostics.SpeechRecognitionMetrics
+Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics
+Verbara.Sdk.VoiceAi.Diagnostics.VoiceAiActivitySource
+Verbara.Sdk.VoiceAi.Diagnostics.VoiceAiHealthCheck
+Verbara.Sdk.VoiceAi.Diagnostics.VoiceAiHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Verbara.Sdk.VoiceAi.Diagnostics.VoiceAiHealthCheck.VoiceAiHealthCheck(Verbara.Sdk.VoiceAi.ISessionHandler! handler) -> void
+Verbara.Sdk.VoiceAi.Diagnostics.VoiceAiMetrics
+Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent
+Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent.BargInDetectedEvent(System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent
+Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.Exception.get -> System.Exception?
+Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.Exception.init -> void
+Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.Message.get -> string!
+Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.Message.init -> void
+Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.PipelineErrorEvent(System.DateTimeOffset Timestamp, string! Message, System.Exception? Exception, Verbara.Sdk.VoiceAi.Events.PipelineErrorSource Source) -> void
+Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.Source.get -> Verbara.Sdk.VoiceAi.Events.PipelineErrorSource
+Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.Source.init -> void
+Verbara.Sdk.VoiceAi.Events.PipelineErrorSource
+Verbara.Sdk.VoiceAi.Events.PipelineErrorSource.Handler = 2 -> Verbara.Sdk.VoiceAi.Events.PipelineErrorSource
+Verbara.Sdk.VoiceAi.Events.PipelineErrorSource.Stt = 0 -> Verbara.Sdk.VoiceAi.Events.PipelineErrorSource
+Verbara.Sdk.VoiceAi.Events.PipelineErrorSource.Tts = 1 -> Verbara.Sdk.VoiceAi.Events.PipelineErrorSource
+Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent
+Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.ResponseGeneratedEvent(System.DateTimeOffset Timestamp, string! Response) -> void
+Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.Response.get -> string!
+Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.Response.init -> void
+Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent
+Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.Duration.get -> System.TimeSpan
+Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.Duration.init -> void
+Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.SpeechEndedEvent(System.DateTimeOffset Timestamp, System.TimeSpan Duration) -> void
+Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent
+Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent.SpeechStartedEvent(System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent
+Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.Duration.get -> System.TimeSpan
+Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.Duration.init -> void
+Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.SynthesisEndedEvent(System.DateTimeOffset Timestamp, System.TimeSpan Duration) -> void
+Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent
+Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent.SynthesisStartedEvent(System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent
+Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.Confidence.get -> float
+Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.Confidence.init -> void
+Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.IsFinal.get -> bool
+Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.IsFinal.init -> void
+Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.Transcript.get -> string!
+Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.Transcript.init -> void
+Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.TranscriptReceivedEvent(System.DateTimeOffset Timestamp, string! Transcript, float Confidence, bool IsFinal) -> void
+Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent
+Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.Timestamp.get -> System.DateTimeOffset
+Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.Timestamp.init -> void
+Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.VoiceAiPipelineEvent(System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.IConversationHandler
+Verbara.Sdk.VoiceAi.IConversationHandler.HandleAsync(string! transcript, Verbara.Sdk.VoiceAi.ConversationContext! context, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
+Verbara.Sdk.VoiceAi.ISessionHandler
+Verbara.Sdk.VoiceAi.ISessionHandler.HandleSessionAsync(Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession! session, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipeline
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipeline.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipeline.Events.get -> System.IObservable<Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent!>!
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipeline.HandleSessionAsync(Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession! session, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.BargInVoiceThreshold.get -> System.TimeSpan
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.BargInVoiceThreshold.set -> void
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.EndOfUtteranceSilence.get -> System.TimeSpan
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.EndOfUtteranceSilence.set -> void
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.InputFormat.get -> Verbara.Sdk.Audio.AudioFormat
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.InputFormat.set -> void
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.MaxHistoryTurns.get -> int
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.MaxHistoryTurns.set -> void
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.MaxUtteranceDuration.get -> System.TimeSpan
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.MaxUtteranceDuration.set -> void
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.OutputFormat.get -> Verbara.Sdk.Audio.AudioFormat
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.OutputFormat.set -> void
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.SilenceThresholdDb.get -> double
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.SilenceThresholdDb.set -> void
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions.VoiceAiPipelineOptions() -> void
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipeline.VoiceAiPipeline(Verbara.Sdk.VoiceAi.SpeechRecognizer! stt, Verbara.Sdk.VoiceAi.SpeechSynthesizer! tts, Microsoft.Extensions.DependencyInjection.IServiceScopeFactory! scopeFactory, Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions!>! options, Microsoft.Extensions.Logging.ILogger<Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipeline!>! logger) -> void
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiSessionBroker
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiSessionBroker.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiSessionBroker.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiSessionBroker.VoiceAiSessionBroker(Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer! server, Verbara.Sdk.VoiceAi.ISessionHandler! handler, Microsoft.Extensions.Logging.ILogger<Verbara.Sdk.VoiceAi.Pipeline.VoiceAiSessionBroker!>! logger) -> void
+Verbara.Sdk.VoiceAi.SpeechRecognitionResult
+Verbara.Sdk.VoiceAi.SpeechRecognitionResult.Confidence.get -> float
+Verbara.Sdk.VoiceAi.SpeechRecognitionResult.Confidence.init -> void
+Verbara.Sdk.VoiceAi.SpeechRecognitionResult.Duration.get -> System.TimeSpan
+Verbara.Sdk.VoiceAi.SpeechRecognitionResult.Duration.init -> void
+Verbara.Sdk.VoiceAi.SpeechRecognitionResult.IsFinal.get -> bool
+Verbara.Sdk.VoiceAi.SpeechRecognitionResult.IsFinal.init -> void
+Verbara.Sdk.VoiceAi.SpeechRecognitionResult.SpeechRecognitionResult(string! Transcript, float Confidence, bool IsFinal, System.TimeSpan Duration) -> void
+Verbara.Sdk.VoiceAi.SpeechRecognitionResult.SpeechRecognitionResult() -> void
+Verbara.Sdk.VoiceAi.SpeechRecognitionResult.Transcript.get -> string!
+Verbara.Sdk.VoiceAi.SpeechRecognitionResult.Transcript.init -> void
+Verbara.Sdk.VoiceAi.SpeechRecognizer
+Verbara.Sdk.VoiceAi.SpeechRecognizer.SpeechRecognizer() -> void
+Verbara.Sdk.VoiceAi.SpeechSynthesizer
+Verbara.Sdk.VoiceAi.SpeechSynthesizer.SpeechSynthesizer() -> void
+static Verbara.Sdk.VoiceAi.DependencyInjection.VoiceAiServiceCollectionExtensions.AddVoiceAiPipeline<THandler>(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechRecognitionMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechRecognitionMetrics.TranscriptionLatencyMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechRecognitionMetrics.TranscriptionsCompleted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechRecognitionMetrics.TranscriptionsFailed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechRecognitionMetrics.TranscriptionsStarted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesesCompleted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesesFailed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesesStarted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesisCharacters -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesisLatencyMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.VoiceAiActivitySource.Source -> System.Diagnostics.ActivitySource!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.VoiceAiMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.VoiceAiMetrics.SessionDurationMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.VoiceAiMetrics.SessionsCompleted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.VoiceAiMetrics.SessionsFailed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.VoiceAiMetrics.SessionsStarted -> System.Diagnostics.Metrics.Counter<long>!
+virtual Verbara.Sdk.VoiceAi.SpeechRecognizer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+virtual Verbara.Sdk.VoiceAi.SpeechRecognizer.ProviderName.get -> string!
+virtual Verbara.Sdk.VoiceAi.SpeechSynthesizer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+virtual Verbara.Sdk.VoiceAi.SpeechSynthesizer.ProviderName.get -> string!

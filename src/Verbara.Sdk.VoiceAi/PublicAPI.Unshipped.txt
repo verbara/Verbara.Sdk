@@ -1,0 +1,2 @@
+#nullable enable
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesisTtfaMs -> System.Diagnostics.Metrics.Histogram<double>!

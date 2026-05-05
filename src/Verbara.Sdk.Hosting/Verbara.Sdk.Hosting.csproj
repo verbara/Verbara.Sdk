@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Verbara.Sdk.Hosting - DI extensions and meta-package referencing all Asterisk SDK sub-packages</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Verbara.Sdk.Hosting.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verbara.Sdk\Verbara.Sdk.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Ami\Verbara.Sdk.Ami.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Agi\Verbara.Sdk.Agi.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Live\Verbara.Sdk.Live.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Activities\Verbara.Sdk.Activities.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Ari\Verbara.Sdk.Ari.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Config\Verbara.Sdk.Config.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Sessions\Verbara.Sdk.Sessions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+
+</Project>

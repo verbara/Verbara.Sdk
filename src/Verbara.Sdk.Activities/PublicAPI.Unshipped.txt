@@ -1,0 +1,56 @@
+#nullable enable
+abstract Verbara.Sdk.Activities.Activities.AmiActivityBase.ExecuteAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Activities.Activities.AmiActivityBase
+Verbara.Sdk.Activities.Activities.AmiActivityBase.AmiActivityBase(Verbara.Sdk.IAmiConnection! ami) -> void
+Verbara.Sdk.Activities.Activities.AmiActivityBase.Ami.get -> Verbara.Sdk.IAmiConnection!
+Verbara.Sdk.Activities.Activities.AmiActivityBase.CancelAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Activities.Activities.AmiActivityBase.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Activities.Activities.AmiActivityBase.SetStatus(Verbara.Sdk.Activities.Activities.ActivityStatus status) -> void
+Verbara.Sdk.Activities.Activities.AmiActivityBase.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Activities.Activities.AmiActivityBase.StatusChanges.get -> System.IObservable<Verbara.Sdk.Activities.Activities.ActivityStatus>!
+Verbara.Sdk.Activities.Activities.AmiActivityBase.Status.get -> Verbara.Sdk.Activities.Activities.ActivityStatus
+Verbara.Sdk.Activities.Activities.AttendedTransferActivity
+Verbara.Sdk.Activities.Activities.AttendedTransferActivity.AttendedTransferActivity(Verbara.Sdk.IAmiConnection! ami) -> void
+Verbara.Sdk.Activities.Activities.AttendedTransferActivity.Channel.get -> string!
+Verbara.Sdk.Activities.Activities.AttendedTransferActivity.Channel.init -> void
+Verbara.Sdk.Activities.Activities.AttendedTransferActivity.Destination.get -> Verbara.Sdk.Activities.Models.DialPlanExtension!
+Verbara.Sdk.Activities.Activities.AttendedTransferActivity.Destination.init -> void
+Verbara.Sdk.Activities.Activities.AttendedTransferActivity.Priority.get -> int
+Verbara.Sdk.Activities.Activities.AttendedTransferActivity.Priority.init -> void
+Verbara.Sdk.Activities.Activities.BargeActivity
+Verbara.Sdk.Activities.Activities.BargeActivity.BargeActivity(Verbara.Sdk.IAgiChannel! channel) -> void
+Verbara.Sdk.Activities.Activities.BargeActivity.Options.get -> string?
+Verbara.Sdk.Activities.Activities.BargeActivity.Options.init -> void
+Verbara.Sdk.Activities.Activities.BargeActivity.TargetChannel.get -> string!
+Verbara.Sdk.Activities.Activities.BargeActivity.TargetChannel.init -> void
+Verbara.Sdk.Activities.Activities.ChanSpyActivity
+Verbara.Sdk.Activities.Activities.ChanSpyActivity.ChanSpyActivity(Verbara.Sdk.IAgiChannel! channel) -> void
+Verbara.Sdk.Activities.Activities.ChanSpyActivity.Mode.get -> Verbara.Sdk.Activities.Activities.ChanSpyMode
+Verbara.Sdk.Activities.Activities.ChanSpyActivity.Mode.init -> void
+Verbara.Sdk.Activities.Activities.ChanSpyActivity.Options.get -> string?
+Verbara.Sdk.Activities.Activities.ChanSpyActivity.Options.init -> void
+Verbara.Sdk.Activities.Activities.ChanSpyActivity.TargetChannel.get -> string?
+Verbara.Sdk.Activities.Activities.ChanSpyActivity.TargetChannel.init -> void
+Verbara.Sdk.Activities.Activities.ChanSpyMode
+Verbara.Sdk.Activities.Activities.ChanSpyMode.Both = 0 -> Verbara.Sdk.Activities.Activities.ChanSpyMode
+Verbara.Sdk.Activities.Activities.ChanSpyMode.Coach = 3 -> Verbara.Sdk.Activities.Activities.ChanSpyMode
+Verbara.Sdk.Activities.Activities.ChanSpyMode.SpyOnly = 1 -> Verbara.Sdk.Activities.Activities.ChanSpyMode
+Verbara.Sdk.Activities.Activities.ChanSpyMode.WhisperOnly = 2 -> Verbara.Sdk.Activities.Activities.ChanSpyMode
+Verbara.Sdk.Activities.Activities.SnoopActivity
+Verbara.Sdk.Activities.Activities.SnoopActivity.App.get -> string!
+Verbara.Sdk.Activities.Activities.SnoopActivity.App.init -> void
+Verbara.Sdk.Activities.Activities.SnoopActivity.SnoopActivity(Verbara.Sdk.IAriClient! ariClient) -> void
+Verbara.Sdk.Activities.Activities.SnoopActivity.SnoopChannel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Activities.Activities.SnoopActivity.SnoopId.get -> string?
+Verbara.Sdk.Activities.Activities.SnoopActivity.SnoopId.init -> void
+Verbara.Sdk.Activities.Activities.SnoopActivity.Spy.get -> Verbara.Sdk.Activities.Activities.SnoopDirection
+Verbara.Sdk.Activities.Activities.SnoopActivity.Spy.init -> void
+Verbara.Sdk.Activities.Activities.SnoopActivity.TargetChannelId.get -> string!
+Verbara.Sdk.Activities.Activities.SnoopActivity.TargetChannelId.init -> void
+Verbara.Sdk.Activities.Activities.SnoopActivity.Whisper.get -> Verbara.Sdk.Activities.Activities.SnoopDirection
+Verbara.Sdk.Activities.Activities.SnoopActivity.Whisper.init -> void
+Verbara.Sdk.Activities.Activities.SnoopDirection
+Verbara.Sdk.Activities.Activities.SnoopDirection.Both = 3 -> Verbara.Sdk.Activities.Activities.SnoopDirection
+Verbara.Sdk.Activities.Activities.SnoopDirection.In = 1 -> Verbara.Sdk.Activities.Activities.SnoopDirection
+Verbara.Sdk.Activities.Activities.SnoopDirection.None = 0 -> Verbara.Sdk.Activities.Activities.SnoopDirection
+Verbara.Sdk.Activities.Activities.SnoopDirection.Out = 2 -> Verbara.Sdk.Activities.Activities.SnoopDirection

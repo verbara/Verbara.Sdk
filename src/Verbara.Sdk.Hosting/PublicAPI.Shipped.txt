@@ -1,0 +1,33 @@
+#nullable enable
+Verbara.Sdk.Hosting.AmiConnectionHostedService
+Verbara.Sdk.Hosting.AmiConnectionHostedService.AmiConnectionHostedService(Verbara.Sdk.IAmiConnection! connection) -> void
+Verbara.Sdk.Hosting.AmiConnectionHostedService.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.Hosting.AmiConnectionHostedService.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.Hosting.VerbaraOptions
+Verbara.Sdk.Hosting.VerbaraOptions.AgiMappingStrategy.get -> Verbara.Sdk.Agi.Mapping.IMappingStrategy?
+Verbara.Sdk.Hosting.VerbaraOptions.AgiMappingStrategy.set -> void
+Verbara.Sdk.Hosting.VerbaraOptions.AgiPort.get -> int
+Verbara.Sdk.Hosting.VerbaraOptions.AgiPort.set -> void
+Verbara.Sdk.Hosting.VerbaraOptions.Ami.get -> Verbara.Sdk.Ami.Connection.AmiConnectionOptions!
+Verbara.Sdk.Hosting.VerbaraOptions.Ami.set -> void
+Verbara.Sdk.Hosting.VerbaraOptions.Ari.get -> Verbara.Sdk.Ari.Client.AriClientOptions?
+Verbara.Sdk.Hosting.VerbaraOptions.Ari.set -> void
+Verbara.Sdk.Hosting.VerbaraOptions.VerbaraOptions() -> void
+Verbara.Sdk.Hosting.VerbaraServerHostedService
+Verbara.Sdk.Hosting.VerbaraServerHostedService.VerbaraServerHostedService(Verbara.Sdk.IVerbaraServer! server) -> void
+Verbara.Sdk.Hosting.VerbaraServerHostedService.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.Hosting.VerbaraServerHostedService.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.Hosting.ServiceCollectionExtensions
+static Verbara.Sdk.Hosting.ServiceCollectionExtensions.AddVerbaraMultiServer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Verbara.Sdk.Hosting.ServiceCollectionExtensions.AddVerbaraSessionsMultiServer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.Sessions.Manager.SessionOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Verbara.Sdk.Hosting.ServiceCollectionExtensions.AddVerbaraSessions(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.Sessions.Manager.SessionOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Verbara.Sdk.Hosting.ServiceCollectionExtensions.AddVerbara(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfiguration! configuration) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Verbara.Sdk.Hosting.ServiceCollectionExtensions.AddVerbara(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.Hosting.VerbaraOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Verbara.Sdk.Hosting.AriConnectionHostedService
+Verbara.Sdk.Hosting.AriConnectionHostedService.AriConnectionHostedService(Verbara.Sdk.IAriClient! client) -> void
+Verbara.Sdk.Hosting.AriConnectionHostedService.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.Hosting.AriConnectionHostedService.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.Hosting.AriAudioHostedService
+Verbara.Sdk.Hosting.AriAudioHostedService.AriAudioHostedService(Verbara.Sdk.Ari.Audio.AudioSocketServer! audioSocketServer, Verbara.Sdk.Ari.Audio.WebSocketAudioServer? webSocketAudioServer = null) -> void
+Verbara.Sdk.Hosting.AriAudioHostedService.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.Hosting.AriAudioHostedService.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!

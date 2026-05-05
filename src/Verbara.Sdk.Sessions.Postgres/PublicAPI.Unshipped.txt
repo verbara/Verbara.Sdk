@@ -1,0 +1,21 @@
+#nullable enable
+Verbara.Sdk.Sessions.Postgres.PostgresSessionStore
+Verbara.Sdk.Sessions.Postgres.PostgresSessionStore.PostgresSessionStore(Npgsql.NpgsqlDataSource! dataSource, Microsoft.Extensions.Options.IOptions<Verbara.Sdk.Sessions.Postgres.PostgresSessionStoreOptions!>! options) -> void
+Verbara.Sdk.Sessions.Postgres.PostgresSessionStoreOptions
+Verbara.Sdk.Sessions.Postgres.PostgresSessionStoreOptions.PostgresSessionStoreOptions() -> void
+Verbara.Sdk.Sessions.Postgres.PostgresSessionStoreOptions.ConnectionString.get -> string?
+Verbara.Sdk.Sessions.Postgres.PostgresSessionStoreOptions.ConnectionString.set -> void
+Verbara.Sdk.Sessions.Postgres.PostgresSessionStoreOptions.TableName.get -> string!
+Verbara.Sdk.Sessions.Postgres.PostgresSessionStoreOptions.TableName.set -> void
+Verbara.Sdk.Sessions.Postgres.PostgresSessionStoreOptions.SchemaName.get -> string!
+Verbara.Sdk.Sessions.Postgres.PostgresSessionStoreOptions.SchemaName.set -> void
+Verbara.Sdk.Sessions.Postgres.PostgresSessionsBuilderExtensions
+override Verbara.Sdk.Sessions.Postgres.PostgresSessionStore.SaveAsync(Verbara.Sdk.Sessions.CallSession! session, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+override Verbara.Sdk.Sessions.Postgres.PostgresSessionStore.GetAsync(string! sessionId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Sessions.CallSession?>
+override Verbara.Sdk.Sessions.Postgres.PostgresSessionStore.GetByLinkedIdAsync(string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Sessions.CallSession?>
+override Verbara.Sdk.Sessions.Postgres.PostgresSessionStore.GetActiveAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IEnumerable<Verbara.Sdk.Sessions.CallSession!>!>
+override Verbara.Sdk.Sessions.Postgres.PostgresSessionStore.DeleteAsync(string! sessionId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+override Verbara.Sdk.Sessions.Postgres.PostgresSessionStore.SaveBatchAsync(System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Sessions.CallSession!>! sessions, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+static Verbara.Sdk.Sessions.Postgres.PostgresSessionsBuilderExtensions.UsePostgres(this Verbara.Sdk.Sessions.Extensions.ISessionsBuilder! builder, System.Action<Verbara.Sdk.Sessions.Postgres.PostgresSessionStoreOptions!>? configure = null) -> Verbara.Sdk.Sessions.Extensions.ISessionsBuilder!
+static Verbara.Sdk.Sessions.Postgres.PostgresSessionsBuilderExtensions.UsePostgres(this Verbara.Sdk.Sessions.Extensions.ISessionsBuilder! builder, Npgsql.NpgsqlDataSource! dataSource, System.Action<Verbara.Sdk.Sessions.Postgres.PostgresSessionStoreOptions!>? configure = null) -> Verbara.Sdk.Sessions.Extensions.ISessionsBuilder!
+static Verbara.Sdk.Sessions.Postgres.PostgresSessionsBuilderExtensions.UsePostgres(this Verbara.Sdk.Sessions.Extensions.ISessionsBuilder! builder, string! connectionString, System.Action<Verbara.Sdk.Sessions.Postgres.PostgresSessionStoreOptions!>? configure = null) -> Verbara.Sdk.Sessions.Extensions.ISessionsBuilder!

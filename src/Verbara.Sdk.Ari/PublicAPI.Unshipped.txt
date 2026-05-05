@@ -1,0 +1,102 @@
+#nullable enable
+Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage
+Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer
+Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf
+Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.ChanWebSocketDtmf(string! Digit, int DurationMs) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.Digit.get -> string!
+Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.Digit.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.DurationMs.get -> int
+Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.DurationMs.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketHangup
+Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.Cause.get -> string?
+Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.Cause.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.ChanWebSocketHangup(string? Cause) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext
+Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketJsonContext() -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketJsonContext(System.Text.Json.JsonSerializerOptions! options) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia
+Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.ChanWebSocketMarkMedia(string! Mark) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.Mark.get -> string!
+Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.Mark.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.Bytes.get -> int
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.Bytes.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.ChanWebSocketMediaBuffering(int Bytes) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection.Both = 2 -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection.In = 0 -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection.Out = 1 -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.ChanWebSocketMediaMarkProcessed(string! Mark) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.Mark.get -> string!
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.Mark.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Channels.get -> int
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Channels.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.ChanWebSocketMediaStart(string! Format, int Rate, int Channels) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Format.get -> string!
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Format.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Rate.get -> int
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Rate.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon
+Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection
+Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.ChanWebSocketSetMediaDirection(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection Direction) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.Direction.get -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection
+Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.Direction.init -> void
+Verbara.Sdk.Ari.Audio.IChanWebSocketSession
+Verbara.Sdk.Ari.Audio.IChanWebSocketSession.ControlMessages.get -> System.IObservable<Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage!>!
+Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendMarkAsync(string! mark, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendSetMediaDirectionAsync(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection direction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendXoffAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendXonAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+static Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.Deserialize(string! json) -> Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage?
+static Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.Deserialize(System.ReadOnlySpan<byte> utf8Json) -> Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage?
+static Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.Serialize(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage! message) -> string!
+static Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage! message) -> byte[]!
+Verbara.Sdk.Ari.Outbound.AriOutboundConnection
+Verbara.Sdk.Ari.Outbound.AriOutboundConnection.ApplicationName.get -> string!
+Verbara.Sdk.Ari.Outbound.AriOutboundConnection.ConnectedAt.get -> System.DateTimeOffset
+Verbara.Sdk.Ari.Outbound.AriOutboundConnection.DisconnectAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Outbound.AriOutboundConnection.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Outbound.AriOutboundConnection.Events.get -> System.IObservable<Verbara.Sdk.AriEvent!>!
+Verbara.Sdk.Ari.Outbound.AriOutboundConnection.IsConnected.get -> bool
+Verbara.Sdk.Ari.Outbound.AriOutboundConnection.RemoteEndpoint.get -> string!
+Verbara.Sdk.Ari.Outbound.AriOutboundListener
+Verbara.Sdk.Ari.Outbound.AriOutboundListener.ActiveConnectionCount.get -> int
+Verbara.Sdk.Ari.Outbound.AriOutboundListener.ActiveConnections.get -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Ari.Outbound.AriOutboundConnection!>!
+Verbara.Sdk.Ari.Outbound.AriOutboundListener.AriOutboundListener(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions!>! options, Microsoft.Extensions.Logging.ILogger<Verbara.Sdk.Ari.Outbound.AriOutboundListener!>! logger) -> void
+Verbara.Sdk.Ari.Outbound.AriOutboundListener.BoundPort.get -> int
+Verbara.Sdk.Ari.Outbound.AriOutboundListener.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Outbound.AriOutboundListener.GetByApplication(string! applicationName) -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Ari.Outbound.AriOutboundConnection!>!
+Verbara.Sdk.Ari.Outbound.AriOutboundListener.IsRunning.get -> bool
+Verbara.Sdk.Ari.Outbound.AriOutboundListener.OnConnectionAccepted.get -> System.IObservable<Verbara.Sdk.Ari.Outbound.AriOutboundConnection!>!
+Verbara.Sdk.Ari.Outbound.AriOutboundListener.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Outbound.AriOutboundListener.StopAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.AllowedApplications.get -> System.Collections.Generic.HashSet<string!>!
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.AllowedApplications.set -> void
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.AriOutboundListenerOptions() -> void
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.ConnectionIdleTimeout.get -> System.TimeSpan
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.ConnectionIdleTimeout.set -> void
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.ExpectedPassword.get -> string?
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.ExpectedPassword.set -> void
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.ExpectedUsername.get -> string?
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.ExpectedUsername.set -> void
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.ListenAddress.get -> string!
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.ListenAddress.set -> void
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.Path.get -> string!
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.Path.set -> void
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.Port.get -> int
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions.Port.set -> void
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptionsValidator
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptionsValidator.AriOutboundListenerOptionsValidator() -> void
+Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptionsValidator.Validate(string? name, Verbara.Sdk.Ari.Outbound.AriOutboundListenerOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Verbara.Sdk.Ari.Outbound.IAriOutboundListener
+Verbara.Sdk.Ari.Outbound.IAriOutboundListener.ActiveConnectionCount.get -> int
+Verbara.Sdk.Ari.Outbound.IAriOutboundListener.ActiveConnections.get -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Ari.Outbound.AriOutboundConnection!>!
+Verbara.Sdk.Ari.Outbound.IAriOutboundListener.GetByApplication(string! applicationName) -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Ari.Outbound.AriOutboundConnection!>!
+Verbara.Sdk.Ari.Outbound.IAriOutboundListener.IsRunning.get -> bool
+Verbara.Sdk.Ari.Outbound.IAriOutboundListener.OnConnectionAccepted.get -> System.IObservable<Verbara.Sdk.Ari.Outbound.AriOutboundConnection!>!
+Verbara.Sdk.Ari.Outbound.IAriOutboundListener.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Outbound.IAriOutboundListener.StopAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask

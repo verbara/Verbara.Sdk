@@ -1,12 +1,12 @@
 // Asterisk.Sdk - FastAGI Server Example
 // Demonstrates: start AGI server, register script handler, handle calls.
 
-using Asterisk.Sdk;
-using Asterisk.Sdk.Agi.Mapping;
-using Asterisk.Sdk.Agi.Server;
+using Verbara.Sdk;
+using Verbara.Sdk.Agi.Mapping;
+using Verbara.Sdk.Agi.Server;
 using Microsoft.Extensions.Logging;
 
-Console.WriteLine("Asterisk.Sdk - FastAGI Server Example");
+Console.WriteLine("Verbara.Sdk - FastAGI Server Example");
 Console.WriteLine("========================================");
 
 using var loggerFactory = LoggerFactory.Create(b => b.AddConsole());

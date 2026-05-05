@@ -3,9 +3,9 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Asterisk.Sdk.Enums;
-using Asterisk.Sdk.Sessions;
-using Asterisk.Sdk.Sessions.Extensions;
+using Verbara.Sdk.Enums;
+using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Extensions;
 
 namespace SessionExtensionsExample;
 

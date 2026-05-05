@@ -8,11 +8,11 @@
 // events automatically; this example constructs sessions manually to demonstrate the
 // store round-trip. Run two copies simultaneously to confirm both see the same data.
 
-using Asterisk.Sdk;
-using Asterisk.Sdk.Hosting;
-using Asterisk.Sdk.Sessions;
-using Asterisk.Sdk.Sessions.Extensions;
-using Asterisk.Sdk.Sessions.Redis;
+using Verbara.Sdk;
+using Verbara.Sdk.Hosting;
+using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Extensions;
+using Verbara.Sdk.Sessions.Redis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -22,8 +22,8 @@ services.AddLogging(b => b.AddConsole());
 var redisConn = Environment.GetEnvironmentVariable("REDIS_CONNECTION") ?? "localhost:6379";
 
 // 1. Register Sessions with the Redis backend — UseRedis overrides the in-memory default
-//    registered by AddAsteriskSessionsBuilder.
-services.AddAsteriskSessionsBuilder()
+//    registered by AddVerbaraSessionsBuilder.
+services.AddVerbaraSessionsBuilder()
     .UseRedis(opts =>
     {
         opts.ConfigurationString = redisConn;

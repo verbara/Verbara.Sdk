@@ -44,13 +44,13 @@
     <PackageVersion Include="StackExchange.Redis" Version="2.12.14" />
   </ItemGroup>
 
-  <!-- NATS (Asterisk.Sdk.Push.Nats bridge) -->
+  <!-- NATS (Verbara.Sdk.Push.Nats bridge) -->
   <ItemGroup>
     <PackageVersion Include="NATS.Client.Core" Version="2.7.3" />
     <PackageVersion Include="NATS.Client.Hosting" Version="2.7.3" />
   </ItemGroup>
 
-  <!-- OpenTelemetry (Asterisk.Sdk.OpenTelemetry batteries-included package) -->
+  <!-- OpenTelemetry (Verbara.Sdk.OpenTelemetry batteries-included package) -->
   <ItemGroup>
     <PackageVersion Include="OpenTelemetry" Version="1.15.3" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />

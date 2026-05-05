@@ -1,0 +1,29 @@
+#nullable enable
+Verbara.Sdk.VoiceAi.Testing.FakeConversationHandler
+Verbara.Sdk.VoiceAi.Testing.FakeConversationHandler.CallCount.get -> int
+Verbara.Sdk.VoiceAi.Testing.FakeConversationHandler.FakeConversationHandler() -> void
+Verbara.Sdk.VoiceAi.Testing.FakeConversationHandler.HandleAsync(string! transcript, Verbara.Sdk.VoiceAi.ConversationContext! context, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
+Verbara.Sdk.VoiceAi.Testing.FakeConversationHandler.ReceivedTranscripts.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Verbara.Sdk.VoiceAi.Testing.FakeConversationHandler.WithDelay(System.TimeSpan delay) -> Verbara.Sdk.VoiceAi.Testing.FakeConversationHandler!
+Verbara.Sdk.VoiceAi.Testing.FakeConversationHandler.WithResponses(System.Collections.Generic.IEnumerable<string!>! responses) -> Verbara.Sdk.VoiceAi.Testing.FakeConversationHandler!
+Verbara.Sdk.VoiceAi.Testing.FakeConversationHandler.WithResponse(string! response) -> Verbara.Sdk.VoiceAi.Testing.FakeConversationHandler!
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechRecognizer
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.CallCount.get -> int
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.FakeSpeechRecognizer() -> void
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.ReceivedFrameCounts.get -> System.Collections.Generic.IReadOnlyList<int>!
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.WithDelay(System.TimeSpan delay) -> Verbara.Sdk.VoiceAi.Testing.FakeSpeechRecognizer!
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.WithError(System.Exception! exception, int afterCount = 0) -> Verbara.Sdk.VoiceAi.Testing.FakeSpeechRecognizer!
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.WithTranscripts(System.Collections.Generic.IEnumerable<string!>! transcripts) -> Verbara.Sdk.VoiceAi.Testing.FakeSpeechRecognizer!
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.WithTranscript(string! transcript, float confidence = 1) -> Verbara.Sdk.VoiceAi.Testing.FakeSpeechRecognizer!
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.CallCount.get -> int
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.FakeSpeechSynthesizer() -> void
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.SynthesizedTexts.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.WithAudio(System.ReadOnlyMemory<byte> pcmAudio) -> Verbara.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer!
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.WithDelay(System.TimeSpan delay) -> Verbara.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer!
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.WithError(System.Exception! exception, int afterCount = 0) -> Verbara.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer!
+Verbara.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.WithSilence(System.TimeSpan duration) -> Verbara.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer!
+override Verbara.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.ProviderName.get -> string!
+override Verbara.Sdk.VoiceAi.Testing.FakeSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Verbara.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.VoiceAi.SpeechRecognitionResult>!
+override Verbara.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.ProviderName.get -> string!
+override Verbara.Sdk.VoiceAi.Testing.FakeSpeechSynthesizer.SynthesizeAsync(string! text, Verbara.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!

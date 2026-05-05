@@ -10,25 +10,25 @@
     <NoWarn>$(NoWarn);NU5118;NU5125</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Asterisk.Sdk\Asterisk.Sdk.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Ami\Asterisk.Sdk.Ami.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Agi\Asterisk.Sdk.Agi.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Ari\Asterisk.Sdk.Ari.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Live\Asterisk.Sdk.Live.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Activities\Asterisk.Sdk.Activities.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Config\Asterisk.Sdk.Config.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Hosting\Asterisk.Sdk.Hosting.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Sessions\Asterisk.Sdk.Sessions.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Audio\Asterisk.Sdk.Audio.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi\Asterisk.Sdk.VoiceAi.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi.AudioSocket\Asterisk.Sdk.VoiceAi.AudioSocket.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi.Stt\Asterisk.Sdk.VoiceAi.Stt.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi.Tts\Asterisk.Sdk.VoiceAi.Tts.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi.Testing\Asterisk.Sdk.VoiceAi.Testing.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.VoiceAi.OpenAiRealtime\Asterisk.Sdk.VoiceAi.OpenAiRealtime.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Push\Asterisk.Sdk.Push.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Push.Webhooks\Asterisk.Sdk.Push.Webhooks.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Resilience\Asterisk.Sdk.Resilience.csproj" />
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Cluster.Primitives\Asterisk.Sdk.Cluster.Primitives.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk\Verbara.Sdk.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Ami\Verbara.Sdk.Ami.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Agi\Verbara.Sdk.Agi.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Ari\Verbara.Sdk.Ari.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Live\Verbara.Sdk.Live.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Activities\Verbara.Sdk.Activities.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Config\Verbara.Sdk.Config.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Hosting\Verbara.Sdk.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Sessions\Verbara.Sdk.Sessions.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Audio\Verbara.Sdk.Audio.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi\Verbara.Sdk.VoiceAi.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.AudioSocket\Verbara.Sdk.VoiceAi.AudioSocket.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.Stt\Verbara.Sdk.VoiceAi.Stt.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.Tts\Verbara.Sdk.VoiceAi.Tts.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.Testing\Verbara.Sdk.VoiceAi.Testing.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.OpenAiRealtime\Verbara.Sdk.VoiceAi.OpenAiRealtime.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Push\Verbara.Sdk.Push.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Push.Webhooks\Verbara.Sdk.Push.Webhooks.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Resilience\Verbara.Sdk.Resilience.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Cluster.Primitives\Verbara.Sdk.Cluster.Primitives.csproj" />
   </ItemGroup>
 </Project>
