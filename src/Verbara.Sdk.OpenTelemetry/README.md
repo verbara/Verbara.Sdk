@@ -1,11 +1,11 @@
-# Asterisk.Sdk.OpenTelemetry
+# Verbara.Sdk.OpenTelemetry
 
-Batteries-included OpenTelemetry wiring for `Asterisk.Sdk`. One call enrolls every ActivitySource and Meter registered across the SDK and attaches a choice of Console, OTLP, and Prometheus exporters.
+Batteries-included OpenTelemetry wiring for `Verbara.Sdk`. One call enrolls every ActivitySource and Meter registered across the SDK and attaches a choice of Console, OTLP, and Prometheus exporters.
 
 ## Usage
 
 ```csharp
-using Asterisk.Sdk.OpenTelemetry;
+using Verbara.Sdk.OpenTelemetry;
 
 builder.Services.AddAsteriskOpenTelemetry(b => b
     .WithAllSources()                                      // enlist the 9 ActivitySources + 12 Meters

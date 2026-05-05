@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install per-clone git hooks for Asterisk.Sdk contributors.
+# Install per-clone git hooks for Verbara.Sdk contributors.
 #
 # Why: git does not track .git/hooks/; each contributor must opt-in once.
 # What: installs a pre-commit hook that runs `claudelint` when CLAUDE.md or
@@ -23,7 +23,7 @@ fi
 
 cat >"$HOOK_FILE" <<'HOOK'
 #!/usr/bin/env bash
-# Asterisk.Sdk pre-commit: lint CLAUDE.md and .claude/ via claudelint.
+# Verbara.Sdk pre-commit: lint CLAUDE.md and .claude/ via claudelint.
 # Installed by tools/install-hooks.sh. Non-blocking if claudelint is absent.
 
 set -euo pipefail

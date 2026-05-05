@@ -1,4 +1,4 @@
-# Sprint 24: Asterisk.Sdk.VoiceAi.OpenAiRealtime
+# Sprint 24: Verbara.Sdk.VoiceAi.OpenAiRealtime
 
 **Fecha:** 2026-03-19
 **Estado:** Aprobado
@@ -27,7 +27,7 @@ Sprint 23 entregó el pipeline turn-based: AudioSocket → VAD local → STT (De
 
 ### ISessionHandler — extensión mínima a VoiceAi existente
 
-Se extrae `ISessionHandler` de `Asterisk.Sdk.VoiceAi` con un único método:
+Se extrae `ISessionHandler` de `Verbara.Sdk.VoiceAi` con un único método:
 
 ```csharp
 public interface ISessionHandler
@@ -100,10 +100,10 @@ Mapping correcto para start/end de response:
 
 ## Estructura de Archivos
 
-### Cambios a `Asterisk.Sdk.VoiceAi` (mínimos)
+### Cambios a `Verbara.Sdk.VoiceAi` (mínimos)
 
 ```
-src/Asterisk.Sdk.VoiceAi/
+src/Verbara.Sdk.VoiceAi/
 ├── ISessionHandler.cs                              ← NUEVO
 ├── Pipeline/
 │   ├── VoiceAiPipeline.cs                         ← : ISessionHandler (1 línea)
@@ -112,10 +112,10 @@ src/Asterisk.Sdk.VoiceAi/
     └── VoiceAiServiceCollectionExtensions.cs       ← registra VoiceAiPipeline como ISessionHandler
 ```
 
-### Nuevo paquete `Asterisk.Sdk.VoiceAi.OpenAiRealtime`
+### Nuevo paquete `Verbara.Sdk.VoiceAi.OpenAiRealtime`
 
 ```
-src/Asterisk.Sdk.VoiceAi.OpenAiRealtime/
+src/Verbara.Sdk.VoiceAi.OpenAiRealtime/
 ├── OpenAiRealtimeBridge.cs
 ├── OpenAiRealtimeOptions.cs
 ├── OpenAiRealtimeOptionsValidator.cs
@@ -136,7 +136,7 @@ src/Asterisk.Sdk.VoiceAi.OpenAiRealtime/
 ### Tests
 
 ```
-Tests/Asterisk.Sdk.VoiceAi.OpenAiRealtime.Tests/
+Tests/Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests/
 ├── Bridge/
 │   └── OpenAiRealtimeBridgeTests.cs
 ├── FunctionCalling/
@@ -159,7 +159,7 @@ Examples/OpenAiRealtimeExample/
 ### `ISessionHandler`
 
 ```csharp
-namespace Asterisk.Sdk.VoiceAi;
+namespace Verbara.Sdk.VoiceAi;
 
 public interface ISessionHandler
 {
@@ -523,9 +523,9 @@ await host.RunAsync();
 ## Métricas objetivo
 
 - ~18 tests nuevos, 0 warnings, AOT-compatible (`IsAotCompatible=true`)
-- 1 paquete NuGet nuevo: `Asterisk.Sdk.VoiceAi.OpenAiRealtime`
+- 1 paquete NuGet nuevo: `Verbara.Sdk.VoiceAi.OpenAiRealtime`
 - 1 demo funcional: `OpenAiRealtimeExample`
-- Cambio a paquete existente `Asterisk.Sdk.VoiceAi`: ~17 líneas, zero breaking changes
+- Cambio a paquete existente `Verbara.Sdk.VoiceAi`: ~17 líneas, zero breaking changes
 - N sesiones simultáneas soportadas (estado completamente aislado por sesión)
 
 ---
@@ -533,9 +533,9 @@ await host.RunAsync();
 ## Dependencias del paquete
 
 ```
-Asterisk.Sdk.VoiceAi.OpenAiRealtime
-    → Asterisk.Sdk.VoiceAi     (ISessionHandler, AudioSocketSession, VoiceAiSessionBroker)
-    → Asterisk.Sdk.Audio       (ResamplerFactory, PolyphaseResampler, AudioFormat)
+Verbara.Sdk.VoiceAi.OpenAiRealtime
+    → Verbara.Sdk.VoiceAi     (ISessionHandler, AudioSocketSession, VoiceAiSessionBroker)
+    → Verbara.Sdk.Audio       (ResamplerFactory, PolyphaseResampler, AudioFormat)
     → Microsoft.Extensions.DependencyInjection.Abstractions
     → Microsoft.Extensions.Logging.Abstractions
     → Microsoft.Extensions.Options

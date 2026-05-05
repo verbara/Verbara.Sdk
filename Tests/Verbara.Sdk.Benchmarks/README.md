@@ -1,4 +1,4 @@
-# Asterisk.Sdk.Benchmarks
+# Verbara.Sdk.Benchmarks
 
 Micro-benchmarks for the SDK's hot paths, driven by [BenchmarkDotNet](https://benchmarkdotnet.org/).
 
@@ -25,20 +25,20 @@ Micro-benchmarks for the SDK's hot paths, driven by [BenchmarkDotNet](https://be
 **All benchmarks** (long — typically 20-40 min on a Ryzen 9 9900X):
 
 ```sh
-dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/
+dotnet run -c Release --project Tests/Verbara.Sdk.Benchmarks/
 ```
 
 **A single class** (fast feedback loop):
 
 ```sh
-dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/ -- \
+dotnet run -c Release --project Tests/Verbara.Sdk.Benchmarks/ -- \
     --filter "*VoiceAi*"
 ```
 
 **Smoke test only** (1 iteration, no statistical validity — for CI gating only):
 
 ```sh
-dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/ -- \
+dotnet run -c Release --project Tests/Verbara.Sdk.Benchmarks/ -- \
     --filter "*ChannelManager*" --iterationCount 1 --warmupCount 1
 ```
 
@@ -70,7 +70,7 @@ Re-runs on different hardware will scale roughly linearly for ALU-heavy paths an
 
 ## Updating the published analysis
 
-1. Run the full suite: `dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/`
+1. Run the full suite: `dotnet run -c Release --project Tests/Verbara.Sdk.Benchmarks/`
 2. Pick the `*.md` reports you want to cite from `BenchmarkDotNet.Artifacts/results/`.
 3. Edit `docs/research/benchmark-analysis.md` — preserve the narrative, paste fresh tables, note the date/commit SHA.
 4. Commit both the regenerated markdown report(s) and the updated analysis under `docs(bench):`.

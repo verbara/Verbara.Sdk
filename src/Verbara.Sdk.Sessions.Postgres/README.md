@@ -1,13 +1,13 @@
-# Asterisk.Sdk.Sessions.Postgres
+# Verbara.Sdk.Sessions.Postgres
 
-Postgres-backed `SessionStoreBase` implementation for `Asterisk.Sdk.Sessions`. Persists active and
+Postgres-backed `SessionStoreBase` implementation for `Verbara.Sdk.Sessions`. Persists active and
 completed call sessions as JSONB rows in a shared Postgres database, enabling multi-instance
 deployments where multiple SDK hosts share a single durable session store.
 
 ## Install
 
 ```
-dotnet add package Asterisk.Sdk.Sessions.Postgres
+dotnet add package Verbara.Sdk.Sessions.Postgres
 ```
 
 ## Configure

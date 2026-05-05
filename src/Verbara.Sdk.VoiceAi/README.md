@@ -1,11 +1,11 @@
-# Asterisk.Sdk.VoiceAi
+# Verbara.Sdk.VoiceAi
 
-Voice AI pipeline for Asterisk.Sdk — orchestration layer for STT, TTS, and conversation with turn-taking and barge-in detection.
+Voice AI pipeline for Verbara.Sdk — orchestration layer for STT, TTS, and conversation with turn-taking and barge-in detection.
 
 ## Installation
 
 ```bash
-dotnet add package Asterisk.Sdk.VoiceAi
+dotnet add package Verbara.Sdk.VoiceAi
 ```
 
 ## Quick Start
@@ -71,7 +71,7 @@ If you don't override `ProviderName` the default falls back to `GetType().Name` 
 - **Metrics:** `VoiceAiMetrics` (sessions started/completed/failed, session duration), `SpeechRecognitionMetrics` (transcriptions started/completed/failed, latency), `SpeechSynthesisMetrics` (syntheses started/completed/failed, latency, characters).
 - **Tracing:** `VoiceAiActivitySource` — session / recognition / synthesis spans.
 - **Health:** `VoiceAiHealthCheck`, `SttHealthCheck`, `TtsHealthCheck` auto-registered by `AddVoiceAiPipeline<THandler>()`.
-- Discover names via `AsteriskTelemetry.ActivitySourceNames` / `MeterNames` from `Asterisk.Sdk.Hosting`.
+- Discover names via `AsteriskTelemetry.ActivitySourceNames` / `MeterNames` from `Verbara.Sdk.Hosting`.
 
 ## Documentation
 

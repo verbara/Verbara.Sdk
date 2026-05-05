@@ -1,4 +1,4 @@
-// Asterisk.Sdk - ARI Channel Control Example
+// Verbara.Sdk - ARI Channel Control Example
 // Demonstrates: ARI REST (originate, bridge, add channels, play media, hangup),
 // WebSocket event subscription with StasisStart/StasisEnd filtering.
 

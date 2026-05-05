@@ -1,6 +1,6 @@
 # High-Load Tuning Guide
 
-> Guidance for configuring Asterisk.Sdk in high-load scenarios (1K-100K+ agents).
+> Guidance for configuring Verbara.Sdk in high-load scenarios (1K-100K+ agents).
 
 ---
 
@@ -42,7 +42,7 @@ services.AddAsterisk(options =>
 
 Use `dotnet-counters`, OpenTelemetry, or Prometheus to track these metrics.
 
-### AMI Metrics (`Asterisk.Sdk.Ami`)
+### AMI Metrics (`Verbara.Sdk.Ami`)
 
 | Metric | Type | Alert Threshold | Description |
 |--------|------|-----------------|-------------|
@@ -53,7 +53,7 @@ Use `dotnet-counters`, OpenTelemetry, or Prometheus to track these metrics.
 | `ami.action.roundtrip` | Histogram (ms) | p99 > 2000ms | Action send-to-response time. High values indicate Asterisk overload |
 | `ami.reconnections` | Counter | > 0 | Connection drops. Investigate network or Asterisk stability |
 
-### ARI Metrics (`Asterisk.Sdk.Ari`)
+### ARI Metrics (`Verbara.Sdk.Ari`)
 
 | Metric | Type | Alert Threshold | Description |
 |--------|------|-----------------|-------------|
@@ -66,15 +66,15 @@ Use `dotnet-counters`, OpenTelemetry, or Prometheus to track these metrics.
 
 ### VoiceAi Telemetry (v1.9.0+)
 
-All five VoiceAi packages publish a `Meter` + `ActivitySource` + `IHealthCheck`. Auto-registered by `AddVoiceAiPipeline<THandler>()` in `Asterisk.Sdk.VoiceAi` and the `AddStt*` / `AddTts*` / `AddAudioSocketServer()` / `AddOpenAiRealtime*` DI helpers.
+All five VoiceAi packages publish a `Meter` + `ActivitySource` + `IHealthCheck`. Auto-registered by `AddVoiceAiPipeline<THandler>()` in `Verbara.Sdk.VoiceAi` and the `AddStt*` / `AddTts*` / `AddAudioSocketServer()` / `AddOpenAiRealtime*` DI helpers.
 
 | Meter | Key Instruments |
 |-------|-----------------|
-| `Asterisk.Sdk.VoiceAi` | `voiceai.sessions.started` / `.completed` / `.failed`, `voiceai.session.duration` (histogram) |
-| `Asterisk.Sdk.VoiceAi.Stt` | `stt.transcriptions.started` / `.completed` / `.failed`, `stt.transcription.latency` |
-| `Asterisk.Sdk.VoiceAi.Tts` | `tts.syntheses.started` / `.completed` / `.failed`, `tts.synthesis.latency`, `tts.synthesis.characters` |
-| `Asterisk.Sdk.VoiceAi.AudioSocket` | `audiosocket.frames.{in,out}`, `audiosocket.bytes.{in,out}` |
-| `Asterisk.Sdk.VoiceAi.OpenAiRealtime` | `openai.realtime.sessions.{started,completed,failed}`, `openai.realtime.session.duration` |
+| `Verbara.Sdk.VoiceAi` | `voiceai.sessions.started` / `.completed` / `.failed`, `voiceai.session.duration` (histogram) |
+| `Verbara.Sdk.VoiceAi.Stt` | `stt.transcriptions.started` / `.completed` / `.failed`, `stt.transcription.latency` |
+| `Verbara.Sdk.VoiceAi.Tts` | `tts.syntheses.started` / `.completed` / `.failed`, `tts.synthesis.latency`, `tts.synthesis.characters` |
+| `Verbara.Sdk.VoiceAi.AudioSocket` | `audiosocket.frames.{in,out}`, `audiosocket.bytes.{in,out}` |
+| `Verbara.Sdk.VoiceAi.OpenAiRealtime` | `openai.realtime.sessions.{started,completed,failed}`, `openai.realtime.session.duration` |
 
 HealthChecks exposed via `/health` when using the standard ASP.NET Core pipeline:
 `VoiceAiHealthCheck`, `SttHealthCheck`, `TtsHealthCheck`, `AudioSocketHealthCheck`, `OpenAiRealtimeHealthCheck`.
@@ -82,7 +82,7 @@ HealthChecks exposed via `/health` when using the standard ASP.NET Core pipeline
 **Discovery at runtime** (avoid hard-coding strings):
 
 ```csharp
-using Asterisk.Sdk.Hosting;
+using Verbara.Sdk.Hosting;
 
 builder.Services
     .AddOpenTelemetry()
@@ -112,16 +112,16 @@ Skipping the override is correct but keeps the reflection call on the hot path â
 
 ```sh
 # Real-time AMI metrics
-dotnet-counters monitor --process-id <pid> Asterisk.Sdk.Ami
+dotnet-counters monitor --process-id <pid> Verbara.Sdk.Ami
 
 # Real-time ARI metrics
-dotnet-counters monitor --process-id <pid> Asterisk.Sdk.Ari
+dotnet-counters monitor --process-id <pid> Verbara.Sdk.Ari
 
 # Core + VoiceAi meters simultaneously
 dotnet-counters monitor --process-id <pid> \
-    Asterisk.Sdk.Ami Asterisk.Sdk.Ari Asterisk.Sdk.Live \
-    Asterisk.Sdk.Sessions Asterisk.Sdk.Push \
-    Asterisk.Sdk.VoiceAi Asterisk.Sdk.VoiceAi.Stt Asterisk.Sdk.VoiceAi.Tts
+    Verbara.Sdk.Ami Verbara.Sdk.Ari Verbara.Sdk.Live \
+    Verbara.Sdk.Sessions Verbara.Sdk.Push \
+    Verbara.Sdk.VoiceAi Verbara.Sdk.VoiceAi.Stt Verbara.Sdk.VoiceAi.Tts
 ```
 
 ---
@@ -179,7 +179,7 @@ Both AMI and ARI support exponential backoff reconnection.
 
 ## Session Reconciliation (v1.7.0+)
 
-`Asterisk.Sdk.Sessions` runs a `SessionReconciliationService` (`IHostedService` with `PeriodicTimer`) that scans in-flight sessions every `SessionOptions.ReconciliationInterval` (default **30s**) to detect orphans and timeouts.
+`Verbara.Sdk.Sessions` runs a `SessionReconciliationService` (`IHostedService` with `PeriodicTimer`) that scans in-flight sessions every `SessionOptions.ReconciliationInterval` (default **30s**) to detect orphans and timeouts.
 
 **High-load impact:** after an AMI reconnect, the first reconciliation pass re-validates every active session in a single tick. At 100K active sessions this can enqueue a burst of `SessionStateChanged` events that competes with the normal AMI event stream and may trigger `ami.events.dropped`.
 
@@ -204,7 +204,7 @@ services.AddSessionsCore(options =>
 });
 ```
 
-**Observability:** `Asterisk.Sdk.Sessions` `ActivitySource` emits a `reconcile` span per scan with tags `sessions.scanned` and `sessions.marked_orphaned`. Correlate these tags with `ami.reconnections` counter to identify whether a spike in `ami.events.dropped` came from reconciliation or from Asterisk itself.
+**Observability:** `Verbara.Sdk.Sessions` `ActivitySource` emits a `reconcile` span per scan with tags `sessions.scanned` and `sessions.marked_orphaned`. Correlate these tags with `ami.reconnections` counter to identify whether a spike in `ami.events.dropped` came from reconciliation or from Asterisk itself.
 
 ---
 

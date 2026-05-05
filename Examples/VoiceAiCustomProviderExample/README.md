@@ -1,10 +1,10 @@
 # VoiceAiCustomProviderExample
 
-Shows how to run the Asterisk.Sdk Voice AI pipeline with your own `SpeechRecognizer` and `SpeechSynthesizer` implementations instead of one of the built-in STT/TTS provider packages.
+Shows how to run the Verbara.Sdk Voice AI pipeline with your own `SpeechRecognizer` and `SpeechSynthesizer` implementations instead of one of the built-in STT/TTS provider packages.
 
 ## What it demonstrates
 
-- Subclassing `SpeechRecognizer` (→ `MyEchoRecognizer`) and `SpeechSynthesizer` (→ `MySilenceSynthesizer`) directly — no `Asterisk.Sdk.VoiceAi.Stt` / `.Tts` package required.
+- Subclassing `SpeechRecognizer` (→ `MyEchoRecognizer`) and `SpeechSynthesizer` (→ `MySilenceSynthesizer`) directly — no `Verbara.Sdk.VoiceAi.Stt` / `.Tts` package required.
 - Overriding the `ProviderName` virtual property with a stable literal so the pipeline's STT/TTS activity tags don't fall back to the (slightly slower, reflective) `GetType().Name` default.
 - Registering the custom types as the `SpeechRecognizer` / `SpeechSynthesizer` DI services consumed by `AddVoiceAiPipeline<THandler>()`.
 
@@ -37,6 +37,6 @@ This is intentionally inert — replace `MyEchoRecognizer.StreamAsync` and `MySi
 
 ## See also
 
-- [`src/Asterisk.Sdk.VoiceAi/README.md`](../../src/Asterisk.Sdk.VoiceAi/README.md) — `ProviderName` doc + observability stack
+- [`src/Verbara.Sdk.VoiceAi/README.md`](../../src/Verbara.Sdk.VoiceAi/README.md) — `ProviderName` doc + observability stack
 - [`Examples/VoiceAiExample/`](../VoiceAiExample/) — the built-in-provider version (Deepgram STT + ElevenLabs TTS)
 - [`docs/guides/high-load-tuning.md`](../../docs/guides/high-load-tuning.md) — provider identification on the hot path

@@ -2,107 +2,107 @@
 // References a representative public type from each package so the linker
 // processes all assemblies during dotnet publish /p:PublishAot=true.
 
-using Asterisk.Sdk;
-using Asterisk.Sdk.Ami.Actions;
-using Asterisk.Sdk.Ami.Connection;
-using Asterisk.Sdk.Ami.Events;
-using Asterisk.Sdk.Agi.Server;
-using Asterisk.Sdk.Ari.Client;
-using Asterisk.Sdk.Live.Server;
-using Asterisk.Sdk.Activities.Activities;
-using Asterisk.Sdk.Config;
-using Asterisk.Sdk.Hosting;
-using Asterisk.Sdk.Sessions;
-using Asterisk.Sdk.Sessions.Manager;
-using Asterisk.Sdk.Audio;
-using Asterisk.Sdk.Audio.Processing;
-using Asterisk.Sdk.VoiceAi;
-using Asterisk.Sdk.VoiceAi.Pipeline;
-using Asterisk.Sdk.VoiceAi.AudioSocket;
-using Asterisk.Sdk.VoiceAi.Stt.Deepgram;
-using Asterisk.Sdk.VoiceAi.Tts.ElevenLabs;
-using Asterisk.Sdk.VoiceAi.Testing;
-using Asterisk.Sdk.VoiceAi.OpenAiRealtime;
-using Asterisk.Sdk.Push.Bus;
-using Asterisk.Sdk.Push.Delivery;
-using Asterisk.Sdk.Push.Diagnostics;
-using Asterisk.Sdk.Push.Events;
-using Asterisk.Sdk.Push.Hosting;
-using Asterisk.Sdk.Push.Subscriptions;
-using Asterisk.Sdk.Push.Webhooks;
-using Asterisk.Sdk.Resilience;
-using Asterisk.Sdk.Cluster.Primitives;
-using Asterisk.Sdk.Cluster.Primitives.InMemory;
+using Verbara.Sdk;
+using Verbara.Sdk.Ami.Actions;
+using Verbara.Sdk.Ami.Connection;
+using Verbara.Sdk.Ami.Events;
+using Verbara.Sdk.Agi.Server;
+using Verbara.Sdk.Ari.Client;
+using Verbara.Sdk.Live.Server;
+using Verbara.Sdk.Activities.Activities;
+using Verbara.Sdk.Config;
+using Verbara.Sdk.Hosting;
+using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Manager;
+using Verbara.Sdk.Audio;
+using Verbara.Sdk.Audio.Processing;
+using Verbara.Sdk.VoiceAi;
+using Verbara.Sdk.VoiceAi.Pipeline;
+using Verbara.Sdk.VoiceAi.AudioSocket;
+using Verbara.Sdk.VoiceAi.Stt.Deepgram;
+using Verbara.Sdk.VoiceAi.Tts.ElevenLabs;
+using Verbara.Sdk.VoiceAi.Testing;
+using Verbara.Sdk.VoiceAi.OpenAiRealtime;
+using Verbara.Sdk.Push.Bus;
+using Verbara.Sdk.Push.Delivery;
+using Verbara.Sdk.Push.Diagnostics;
+using Verbara.Sdk.Push.Events;
+using Verbara.Sdk.Push.Hosting;
+using Verbara.Sdk.Push.Subscriptions;
+using Verbara.Sdk.Push.Webhooks;
+using Verbara.Sdk.Resilience;
+using Verbara.Sdk.Cluster.Primitives;
+using Verbara.Sdk.Cluster.Primitives.InMemory;
 using Microsoft.Extensions.DependencyInjection;
 
 Console.WriteLine("AOT Canary — all SDK types are trim-safe");
 
-// Asterisk.Sdk — core interfaces and enums
+// Verbara.Sdk — core interfaces and enums
 _ = typeof(IAmiConnection);
 
-// Asterisk.Sdk.Ami — AMI protocol: actions, events, connection
+// Verbara.Sdk.Ami — AMI protocol: actions, events, connection
 _ = typeof(PingAction);
 _ = typeof(HangupEvent);
 _ = typeof(AmiConnection);
 _ = typeof(AmiConnectionOptions);
 
-// Asterisk.Sdk.Agi — FastAGI server
+// Verbara.Sdk.Agi — FastAGI server
 _ = typeof(FastAgiServer);
 _ = typeof(AgiChannel);
 
-// Asterisk.Sdk.Ari — ARI REST/WebSocket client
+// Verbara.Sdk.Ari — ARI REST/WebSocket client
 _ = typeof(AriClient);
 _ = typeof(AriClientOptions);
 
-// Asterisk.Sdk.Live — real-time domain objects
+// Verbara.Sdk.Live — real-time domain objects
 _ = typeof(AsteriskServer);
 _ = typeof(AsteriskServerPool);
 
-// Asterisk.Sdk.Activities — call activity state machines
+// Verbara.Sdk.Activities — call activity state machines
 _ = typeof(ActivityBase);
 
-// Asterisk.Sdk.Config — .conf file parsers
+// Verbara.Sdk.Config — .conf file parsers
 _ = typeof(ConfigFileReader);
 _ = typeof(ConfigFile);
 
-// Asterisk.Sdk.Hosting — DI registration
+// Verbara.Sdk.Hosting — DI registration
 _ = typeof(AsteriskOptions);
 _ = typeof(AmiConnectionHostedService);
 
-// Asterisk.Sdk.Sessions — session manager
+// Verbara.Sdk.Sessions — session manager
 _ = typeof(CallSession);
 _ = typeof(CallSessionManager);
 
-// Asterisk.Sdk.Audio — audio processing and resampling
+// Verbara.Sdk.Audio — audio processing and resampling
 _ = typeof(AudioEncoding);
 _ = typeof(AudioProcessor);
 
-// Asterisk.Sdk.VoiceAi — conversation pipeline
+// Verbara.Sdk.VoiceAi — conversation pipeline
 _ = typeof(ConversationContext);
 _ = typeof(VoiceAiPipeline);
 
-// Asterisk.Sdk.VoiceAi.AudioSocket — AudioSocket protocol
+// Verbara.Sdk.VoiceAi.AudioSocket — AudioSocket protocol
 _ = typeof(AudioSocketClient);
 _ = typeof(AudioSocketOptions);
 
-// Asterisk.Sdk.VoiceAi.Stt — speech-to-text providers
+// Verbara.Sdk.VoiceAi.Stt — speech-to-text providers
 _ = typeof(DeepgramSpeechRecognizer);
 _ = typeof(DeepgramOptions);
 
-// Asterisk.Sdk.VoiceAi.Tts — text-to-speech providers
+// Verbara.Sdk.VoiceAi.Tts — text-to-speech providers
 _ = typeof(ElevenLabsSpeechSynthesizer);
 _ = typeof(ElevenLabsOptions);
 
-// Asterisk.Sdk.VoiceAi.Testing — fakes for unit testing
+// Verbara.Sdk.VoiceAi.Testing — fakes for unit testing
 _ = typeof(FakeSpeechRecognizer);
 _ = typeof(FakeConversationHandler);
 
-// Asterisk.Sdk.VoiceAi.OpenAiRealtime — OpenAI Realtime bridge
+// Verbara.Sdk.VoiceAi.OpenAiRealtime — OpenAI Realtime bridge
 _ = typeof(OpenAiRealtimeBridge);
 _ = typeof(OpenAiRealtimeOptions);
 _ = typeof(VadMode);
 
-// Asterisk.Sdk.Push — in-memory push event bus + subscription registry + delivery filter
+// Verbara.Sdk.Push — in-memory push event bus + subscription registry + delivery filter
 _ = typeof(IPushEventBus);
 _ = typeof(RxPushEventBus);
 _ = typeof(PushEventBusOptions);
@@ -116,20 +116,20 @@ _ = typeof(ISubscriptionRegistry);
 _ = typeof(InMemorySubscriptionRegistry);
 _ = typeof(PushMetrics);
 
-// Asterisk.Sdk.Push.Webhooks — outbound webhook delivery with HMAC + circuit breaker
+// Verbara.Sdk.Push.Webhooks — outbound webhook delivery with HMAC + circuit breaker
 _ = typeof(WebhookSubscription);
 _ = typeof(WebhookDeliveryOptions);
 _ = typeof(WebhookDeliveryService);
 _ = typeof(HmacSha256Signer);
 
-// Asterisk.Sdk.Resilience — composable circuit breaker + retry + timeout primitives
+// Verbara.Sdk.Resilience — composable circuit breaker + retry + timeout primitives
 _ = typeof(CircuitBreakerState);
 _ = typeof(ResiliencePolicy);
 _ = typeof(ResiliencePolicyBuilder);
 _ = typeof(BackoffSchedule);
 _ = typeof(CircuitBreakerOpenException);
 
-// Asterisk.Sdk.Cluster.Primitives — cluster transport / membership / lock abstractions
+// Verbara.Sdk.Cluster.Primitives — cluster transport / membership / lock abstractions
 _ = typeof(ClusterEvent);
 _ = typeof(NodeInfo);
 _ = typeof(NodeState);
@@ -160,10 +160,10 @@ var subscriber = new SubscriberContext(
     Permissions: new HashSet<string> { "conversation:read" });
 using var _registration = registry.Register(subscriber);
 
-using var sub = bus.OfType<Asterisk.Sdk.AotCanary.CanaryPushEvent>().Subscribe(static evt =>
+using var sub = bus.OfType<Verbara.Sdk.AotCanary.CanaryPushEvent>().Subscribe(static evt =>
     Console.WriteLine($"received: {evt.EventType} tenant={evt.Metadata.TenantId}"));
 
-var sample = new Asterisk.Sdk.AotCanary.CanaryPushEvent
+var sample = new Verbara.Sdk.AotCanary.CanaryPushEvent
 {
     Metadata = new PushEventMetadata("tenant-1", "user-1", DateTimeOffset.UtcNow, CorrelationId: null),
 };

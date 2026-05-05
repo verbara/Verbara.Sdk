@@ -1,6 +1,6 @@
-# Asterisk.Sdk.VoiceAi.Testing
+# Verbara.Sdk.VoiceAi.Testing
 
-Test fakes for [Asterisk.Sdk.VoiceAi](https://www.nuget.org/packages/Asterisk.Sdk.VoiceAi) — exercise your turn-based pipeline, conversation handlers, and AudioSocket plumbing without touching real STT/TTS APIs (no API keys, no network, no flakiness). Native AOT, zero reflection, MIT licensed.
+Test fakes for [Verbara.Sdk.VoiceAi](https://www.nuget.org/packages/Verbara.Sdk.VoiceAi) — exercise your turn-based pipeline, conversation handlers, and AudioSocket plumbing without touching real STT/TTS APIs (no API keys, no network, no flakiness). Native AOT, zero reflection, MIT licensed.
 
 ## What it does
 
@@ -17,7 +17,7 @@ Drop-in replacements: same DI shape, same lifecycle, same telemetry surface — 
 ## Install
 
 ```sh
-dotnet add package Asterisk.Sdk.VoiceAi.Testing
+dotnet add package Verbara.Sdk.VoiceAi.Testing
 ```
 
 Typically referenced from your test project only.
@@ -25,8 +25,8 @@ Typically referenced from your test project only.
 ## Quick start
 
 ```csharp
-using Asterisk.Sdk.VoiceAi.Testing;
-using Asterisk.Sdk.VoiceAi.DependencyInjection;
+using Verbara.Sdk.VoiceAi.Testing;
+using Verbara.Sdk.VoiceAi.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 
 // Stub the recognizer with a fixed transcript sequence
@@ -60,8 +60,8 @@ Assert.True(fakeTts.SynthesizeInvocations >= 1);
 
 ## Examples
 
-See `Tests/Asterisk.Sdk.VoiceAi.Tests/` and `Tests/Asterisk.Sdk.VoiceAi.Testing.Tests/` for end-to-end usage patterns including barge-in, turn-taking, and pipeline-level integration tests.
+See `Tests/Verbara.Sdk.VoiceAi.Tests/` and `Tests/Verbara.Sdk.VoiceAi.Testing.Tests/` for end-to-end usage patterns including barge-in, turn-taking, and pipeline-level integration tests.
 
 ## License
 
-MIT. Part of the [Asterisk.Sdk](https://github.com/Harol-Reina/Asterisk.Sdk) project.
+MIT. Part of the [Verbara.Sdk](https://github.com/verbara/Verbara.Sdk) project.

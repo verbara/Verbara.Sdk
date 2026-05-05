@@ -1,4 +1,4 @@
-// Asterisk.Sdk - Advanced AMI Example
+// Verbara.Sdk - Advanced AMI Example
 // Demonstrates: multiple AMI actions (Originate, Hangup, Command, QueueAdd/Remove),
 // event filtering by type, and action/response correlation.
 

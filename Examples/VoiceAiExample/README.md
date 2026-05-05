@@ -41,7 +41,7 @@ dotnet run --project Examples/VoiceAiExample/
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.VoiceAi.AudioSocket` — AudioSocket server
-- `Asterisk.Sdk.VoiceAi.Stt` — Deepgram speech recognizer
-- `Asterisk.Sdk.VoiceAi.Tts` — ElevenLabs speech synthesizer
-- `Asterisk.Sdk.VoiceAi` — `IConversationHandler`, `AddVoiceAiPipeline`
+- `Verbara.Sdk.VoiceAi.AudioSocket` — AudioSocket server
+- `Verbara.Sdk.VoiceAi.Stt` — Deepgram speech recognizer
+- `Verbara.Sdk.VoiceAi.Tts` — ElevenLabs speech synthesizer
+- `Verbara.Sdk.VoiceAi` — `IConversationHandler`, `AddVoiceAiPipeline`

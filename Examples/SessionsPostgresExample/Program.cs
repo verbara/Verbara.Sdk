@@ -1,4 +1,4 @@
-// Asterisk.Sdk - Sessions.Postgres Example
+// Verbara.Sdk - Sessions.Postgres Example
 // Demonstrates: pluggable session backend with Postgres (Npgsql + Dapper + JSONB).
 //
 // Prereq: a running Postgres with a database for the demo. Quick start:

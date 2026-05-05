@@ -1,4 +1,4 @@
-// Asterisk.Sdk — Push.Nats bridge example.
+// Verbara.Sdk — Push.Nats bridge example.
 //
 // Shows Verbara.Sdk.Push.Nats fanning PushEvent instances out to a NATS
 // cluster. The topic hierarchy (calls/agents/queues/etc.) maps to a NATS

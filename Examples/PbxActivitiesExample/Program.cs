@@ -1,4 +1,4 @@
-// Asterisk.Sdk - PBX Activities Example
+// Verbara.Sdk - PBX Activities Example
 // Demonstrates: high-level Activities (PlayMessage, Dial, Queue, Hangup)
 // on a FastAGI channel with status tracking.
 

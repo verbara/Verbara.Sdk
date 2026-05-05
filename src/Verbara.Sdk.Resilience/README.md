@@ -1,4 +1,4 @@
-# Asterisk.Sdk.Resilience
+# Verbara.Sdk.Resilience
 
 Composable resilience primitives for .NET. AOT-safe, zero reflection, `TimeProvider`-based for testability. No Polly dependency. MIT licensed.
 
@@ -8,21 +8,21 @@ Composable resilience primitives for .NET. AOT-safe, zero reflection, `TimeProvi
 - **Retry with exponential backoff** — configurable `maxAttempts` (capped at 10) and `baseDelay` with ±20% deterministic jitter.
 - **Per-attempt timeout** — wraps action in linked `CancellationTokenSource` that honours both caller token and timeout.
 - **Fluent builder** — compose any subset of the three primitives via `ResiliencePolicyBuilder` and call `Build()`.
-- **First-class diagnostics** via `System.Diagnostics.Metrics` (meter name `Asterisk.Sdk.Resilience`): `retry.attempts`, `circuit.opened`, `circuit.closed`, `timeout.fired`, `circuit.state` observable gauge.
+- **First-class diagnostics** via `System.Diagnostics.Metrics` (meter name `Verbara.Sdk.Resilience`): `retry.attempts`, `circuit.opened`, `circuit.closed`, `timeout.fired`, `circuit.state` observable gauge.
 
 No external runtime dependencies beyond `Microsoft.Extensions.*` abstractions. Trim-safe.
 
 ## Install
 
 ```
-dotnet add package Asterisk.Sdk.Resilience
+dotnet add package Verbara.Sdk.Resilience
 ```
 
 ## Quick start
 
 ```csharp
-using Asterisk.Sdk.Resilience;
-using Asterisk.Sdk.Resilience.DependencyInjection;
+using Verbara.Sdk.Resilience;
+using Verbara.Sdk.Resilience.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 
 // 1) Register a default policy (or a no-op if configure is null).
@@ -59,11 +59,11 @@ await policy.ExecuteAsync("key", async ct => { /* work */ return 42; }, ct: defa
 
 ## Observability
 
-Meter name: `Asterisk.Sdk.Resilience`. Enrol in OpenTelemetry:
+Meter name: `Verbara.Sdk.Resilience`. Enrol in OpenTelemetry:
 
 ```csharp
 builder.Services.AddOpenTelemetry()
-    .WithMetrics(m => m.AddMeter("Asterisk.Sdk.Resilience"));
+    .WithMetrics(m => m.AddMeter("Verbara.Sdk.Resilience"));
 ```
 
 Or transparently via `AddAsteriskOpenTelemetry().WithAllSources()`.
@@ -84,4 +84,4 @@ Instruments emitted:
 
 ## License
 
-MIT. Part of the [Asterisk.Sdk](https://github.com/Harol-Reina/Asterisk.Sdk) project.
+MIT. Part of the [Verbara.Sdk](https://github.com/verbara/Verbara.Sdk) project.

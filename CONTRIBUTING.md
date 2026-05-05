@@ -1,6 +1,6 @@
-# Contributing to Asterisk.Sdk
+# Contributing to Verbara.Sdk
 
-Thank you for your interest in contributing to Asterisk.Sdk! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Verbara.Sdk! This document provides guidelines and instructions for contributing.
 
 ## Getting Started
 
@@ -13,10 +13,10 @@ Thank you for your interest in contributing to Asterisk.Sdk! This document provi
 ### Setup
 
 ```bash
-git clone https://github.com/Harol-Reina/Asterisk.Sdk.git
-cd Asterisk.Sdk
-dotnet build Asterisk.Sdk.slnx
-dotnet test Asterisk.Sdk.slnx
+git clone https://github.com/verbara/Verbara.Sdk.git
+cd Verbara.Sdk
+dotnet build Verbara.Sdk.slnx
+dotnet test Verbara.Sdk.slnx
 
 # One-time: install the pre-commit hook that lints CLAUDE.md + .claude/
 # on every commit using claudelint. Install claudelint first:
@@ -73,16 +73,16 @@ Scope is optional but recommended. Common scopes: `ami`, `agi`, `ari`, `live`, `
 
 ```bash
 # Build entire solution
-dotnet build Asterisk.Sdk.slnx
+dotnet build Verbara.Sdk.slnx
 
 # Run all unit tests
-dotnet test Asterisk.Sdk.slnx
+dotnet test Verbara.Sdk.slnx
 
 # Run a specific test project
-dotnet test Tests/Asterisk.Sdk.Ami.Tests/
+dotnet test Tests/Verbara.Sdk.Ami.Tests/
 
 # Run a single test by name
-dotnet test Tests/Asterisk.Sdk.Ami.Tests/ --filter "FullyQualifiedName~AmiProtocolReaderTests"
+dotnet test Tests/Verbara.Sdk.Ami.Tests/ --filter "FullyQualifiedName~AmiProtocolReaderTests"
 
 # Run functional tests (requires Docker)
 docker compose -f docker/docker-compose.test.yml up --build
@@ -119,17 +119,17 @@ The safe flow is local-only — the value never appears in the command line or s
 ```bash
 # 1. Generate / rotate at https://www.nuget.org/account/apikeys
 #    Scopes: "Push new packages and package versions"
-#    Glob Pattern: Asterisk.Sdk.*
+#    Glob Pattern: Verbara.Sdk.*
 #    Expiration: 365 days (max)
 
 # 2. Pipe from clipboard or password manager directly to gh secret set:
-pbpaste | gh secret set NUGET_API_KEY --repo Harol-Reina/Asterisk.Sdk              # macOS
-xclip -selection clipboard -o | gh secret set NUGET_API_KEY --repo Harol-Reina/Asterisk.Sdk   # Linux X11
-wl-paste | gh secret set NUGET_API_KEY --repo Harol-Reina/Asterisk.Sdk              # Linux Wayland
-pass show nuget/api-key | gh secret set NUGET_API_KEY --repo Harol-Reina/Asterisk.Sdk         # pass(1)
+pbpaste | gh secret set NUGET_API_KEY --repo Harol-Reina/Verbara.Sdk              # macOS
+xclip -selection clipboard -o | gh secret set NUGET_API_KEY --repo Harol-Reina/Verbara.Sdk   # Linux X11
+wl-paste | gh secret set NUGET_API_KEY --repo Harol-Reina/Verbara.Sdk              # Linux Wayland
+pass show nuget/api-key | gh secret set NUGET_API_KEY --repo Harol-Reina/Verbara.Sdk         # pass(1)
 
 # 3. Verify the secret is registered (value stays encrypted):
-gh secret list --repo Harol-Reina/Asterisk.Sdk
+gh secret list --repo Harol-Reina/Verbara.Sdk
 ```
 
 ### Cutting a release
@@ -162,7 +162,7 @@ git push origin vX.Y.Z              # re-push → re-fires publish.yml
 
 ## Reporting Issues
 
-- Use [GitHub Issues](https://github.com/Harol-Reina/Asterisk.Sdk/issues) for bugs and feature requests.
+- Use [GitHub Issues](https://github.com/verbara/Verbara.Sdk/issues) for bugs and feature requests.
 - For security vulnerabilities, see [SECURITY.md](SECURITY.md).
 
 ## License

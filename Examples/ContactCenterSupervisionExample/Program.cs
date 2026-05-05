@@ -1,4 +1,4 @@
-// Asterisk.Sdk - Contact-Center Supervision Example
+// Verbara.Sdk - Contact-Center Supervision Example
 // Demonstrates the four supervisor/transfer activities added in v1.11.0:
 //   - AttendedTransferActivity (AMI Atxfer, via new AmiActivityBase)
 //   - ChanSpyActivity (silent listen, whisper-only, coach)

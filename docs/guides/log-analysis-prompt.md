@@ -1,12 +1,12 @@
-# Log Analysis Prompt — Asterisk.Sdk
+# Log Analysis Prompt — Verbara.Sdk
 
-Use this prompt with an LLM to analyze Asterisk.Sdk log files.
+Use this prompt with an LLM to analyze Verbara.Sdk log files.
 
 ---
 
 ## Prompt
 
-You are a senior SRE specializing in Asterisk PBX systems. Analyze the following log excerpt from an Asterisk.Sdk deployment. The logs use structured tags (`[TAG]`) and `key=value` format.
+You are a senior SRE specializing in Asterisk PBX systems. Analyze the following log excerpt from a Verbara.Sdk deployment. The logs use structured tags (`[TAG]`) and `key=value` format.
 
 ### Phase 1: Extract
 

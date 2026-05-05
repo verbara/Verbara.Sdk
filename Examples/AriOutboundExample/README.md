@@ -1,6 +1,6 @@
 # AriOutboundExample
 
-Demonstrates the **ARI Outbound WebSocket** pattern added in Asterisk 22.5+ and covered by the SDK in v1.12.0 (see `src/Asterisk.Sdk.Ari/Outbound/`).
+Demonstrates the **ARI Outbound WebSocket** pattern added in Asterisk 22.5+ and covered by the SDK in v1.12.0 (see `src/Verbara.Sdk.Ari/Outbound/`).
 
 In this mode the control relationship is reversed: rather than the consumer app dialing into Asterisk's `/ari/events` endpoint, **Asterisk dials into the consumer app's WebSocket server**. It unlocks deployments where the consumer sits behind a NAT with no inbound port, or where per-call application registration is wanted.
 
@@ -68,5 +68,5 @@ Then dial extension `7000`. You should see:
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.Ari` — `IAriOutboundListener`, `AriOutboundConnection`, `AriOutboundListenerOptions`.
-- `Asterisk.Sdk.Hosting` — `AddAriOutboundListener` DI extension + hosted service.
+- `Verbara.Sdk.Ari` — `IAriOutboundListener`, `AriOutboundConnection`, `AriOutboundListenerOptions`.
+- `Verbara.Sdk.Hosting` — `AddAriOutboundListener` DI extension + hosted service.

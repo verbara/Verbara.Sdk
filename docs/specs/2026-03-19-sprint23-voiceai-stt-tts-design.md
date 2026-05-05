@@ -1,4 +1,4 @@
-# Sprint 23: Asterisk.Sdk.VoiceAi — STT + TTS + Core Pipeline
+# Sprint 23: Verbara.Sdk.VoiceAi — STT + TTS + Core Pipeline
 
 **Fecha:** 2026-03-19
 **Estado:** Aprobado
@@ -8,13 +8,13 @@
 
 ## Contexto
 
-Sprint 21-22 entregó `Asterisk.Sdk.Audio` (resampler FIR, AudioProcessor, VAD) y `Asterisk.Sdk.VoiceAi.AudioSocket` (TCP server/client protocolo AudioSocket). Sprint 23 construye sobre esa base con:
+Sprint 21-22 entregó `Verbara.Sdk.Audio` (resampler FIR, AudioProcessor, VAD) y `Verbara.Sdk.VoiceAi.AudioSocket` (TCP server/client protocolo AudioSocket). Sprint 23 construye sobre esa base con:
 
-- `Asterisk.Sdk.VoiceAi` — abstracciones core + pipeline de orquestación
-- `Asterisk.Sdk.VoiceAi.Stt` — 4 providers STT (Deepgram, Whisper, Azure, Google)
-- `Asterisk.Sdk.VoiceAi.Tts` — 2 providers TTS (ElevenLabs, Azure)
-- `Asterisk.Sdk.VoiceAi.Testing` — fakes MIT publicados en NuGet para usuarios del SDK
-- `examples/Asterisk.Sdk.Examples.VoiceAi` — demo E2E con consola
+- `Verbara.Sdk.VoiceAi` — abstracciones core + pipeline de orquestación
+- `Verbara.Sdk.VoiceAi.Stt` — 4 providers STT (Deepgram, Whisper, Azure, Google)
+- `Verbara.Sdk.VoiceAi.Tts` — 2 providers TTS (ElevenLabs, Azure)
+- `Verbara.Sdk.VoiceAi.Testing` — fakes MIT publicados en NuGet para usuarios del SDK
+- `examples/Verbara.Sdk.Examples.VoiceAi` — demo E2E con consola
 
 ---
 
@@ -47,7 +47,7 @@ Combina tres patrones ya establecidos en el codebase:
 ### Testing: VoiceAi.Testing package + fake servers in-process
 
 Dos capas independientes:
-1. **`Asterisk.Sdk.VoiceAi.Testing`** (NuGet MIT público) — fakes para que usuarios del SDK testeen sus propias apps sin API keys
+1. **`Verbara.Sdk.VoiceAi.Testing`** (NuGet MIT público) — fakes para que usuarios del SDK testeen sus propias apps sin API keys
 2. **Fake servers in-process** (internos a los test projects) — WebSocket loopback que hablan el wire protocol real de cada provider, sin API keys
 
 ---
@@ -55,24 +55,24 @@ Dos capas independientes:
 ## Estructura de Paquetes
 
 ```
-Asterisk.Sdk.Audio                      (Sprint 21-22 — ya existe)
-Asterisk.Sdk.VoiceAi.AudioSocket        (Sprint 21-22 — ya existe)
+Verbara.Sdk.Audio                      (Sprint 21-22 — ya existe)
+Verbara.Sdk.VoiceAi.AudioSocket        (Sprint 21-22 — ya existe)
      ↑
-Asterisk.Sdk.VoiceAi                    (NUEVO — core: abstractions + pipeline)
+Verbara.Sdk.VoiceAi                    (NUEVO — core: abstractions + pipeline)
      ↑
-Asterisk.Sdk.VoiceAi.Stt               (NUEVO — Deepgram, Whisper, Azure, Google)
-Asterisk.Sdk.VoiceAi.Tts               (NUEVO — ElevenLabs, Azure)
+Verbara.Sdk.VoiceAi.Stt               (NUEVO — Deepgram, Whisper, Azure, Google)
+Verbara.Sdk.VoiceAi.Tts               (NUEVO — ElevenLabs, Azure)
      ↑
-Asterisk.Sdk.VoiceAi.Testing           (NUEVO — FakeSpeechRecognizer, FakeSpeechSynthesizer)
+Verbara.Sdk.VoiceAi.Testing           (NUEVO — FakeSpeechRecognizer, FakeSpeechSynthesizer)
 
-examples/Asterisk.Sdk.Examples.VoiceAi (NUEVO — demo E2E consola)
+examples/Verbara.Sdk.Examples.VoiceAi (NUEVO — demo E2E consola)
 ```
 
 **Dependencias NuGet nuevas: cero.** Todos los paquetes dependen únicamente de otros paquetes MIT del SDK.
 
 ---
 
-## Asterisk.Sdk.VoiceAi — Core
+## Verbara.Sdk.VoiceAi — Core
 
 ### Abstracciones públicas
 
@@ -298,7 +298,7 @@ Esto evita la captive dependency (Scoped resuelto en Singleton) y es el patrón 
 
 ---
 
-## Asterisk.Sdk.VoiceAi.Stt — STT Providers
+## Verbara.Sdk.VoiceAi.Stt — STT Providers
 
 Todos extienden `SpeechRecognizer`. Cero dependencias de terceros.
 
@@ -307,7 +307,7 @@ Todos extienden `SpeechRecognizer`. Cero dependencias de terceros.
 Cada provider define DTOs internos y un `[JsonSerializable]` context:
 
 ```csharp
-// Interno a Asterisk.Sdk.VoiceAi.Stt — no expuesto públicamente
+// Interno a Verbara.Sdk.VoiceAi.Stt — no expuesto públicamente
 [JsonSerializable(typeof(DeepgramResultMessage))]
 [JsonSerializable(typeof(WhisperTranscriptionResponse))]
 [JsonSerializable(typeof(GoogleSpeechRequest))]    // request body serializado con source gen
@@ -477,7 +477,7 @@ services.AddGoogleSpeechRecognizer(opt => { opt.ApiKey = "..."; opt.LanguageCode
 
 ---
 
-## Asterisk.Sdk.VoiceAi.Tts — TTS Providers
+## Verbara.Sdk.VoiceAi.Tts — TTS Providers
 
 Todos extienden `SpeechSynthesizer`. Cero dependencias de terceros.
 
@@ -582,7 +582,7 @@ services.AddAzureTtsSpeechSynthesizer(opt =>
 
 ---
 
-## Asterisk.Sdk.VoiceAi.Testing
+## Verbara.Sdk.VoiceAi.Testing
 
 Paquete MIT publicado en NuGet. Permite a usuarios del SDK testear sus apps Voice AI sin API keys.
 
@@ -637,7 +637,7 @@ public sealed class FakeConversationHandler : IConversationHandler
 
 ---
 
-## Ejemplo E2E: `examples/Asterisk.Sdk.Examples.VoiceAi`
+## Ejemplo E2E: `examples/Verbara.Sdk.Examples.VoiceAi`
 
 App de consola: Asterisk → AudioSocket → Deepgram STT → EchoHandler → ElevenLabs TTS → Asterisk.
 
@@ -697,10 +697,10 @@ Configuración via `appsettings.json`. El wiring `AudioSocketServer → VoiceAiP
 - History truncation a `MaxHistoryTurns`
 
 **Tests estimados:** ~70 total
-- `Asterisk.Sdk.VoiceAi.Tests`: ~28 (pipeline state machine, turn-taking, barge-in, DI, wiring)
-- `Asterisk.Sdk.VoiceAi.Stt.Tests`: ~20 (protocol tests por provider + DI + JSON deserialization)
-- `Asterisk.Sdk.VoiceAi.Tts.Tests`: ~12 (protocol tests por provider + DI + JSON filtering)
-- `Asterisk.Sdk.VoiceAi.Testing.Tests`: ~10 (fakes behavior + assertions API)
+- `Verbara.Sdk.VoiceAi.Tests`: ~28 (pipeline state machine, turn-taking, barge-in, DI, wiring)
+- `Verbara.Sdk.VoiceAi.Stt.Tests`: ~20 (protocol tests por provider + DI + JSON deserialization)
+- `Verbara.Sdk.VoiceAi.Tts.Tests`: ~12 (protocol tests por provider + DI + JSON filtering)
+- `Verbara.Sdk.VoiceAi.Testing.Tests`: ~10 (fakes behavior + assertions API)
 
 ---
 
@@ -708,9 +708,9 @@ Configuración via `appsettings.json`. El wiring `AudioSocketServer → VoiceAiP
 
 | Paquete | Tests | Dependencias nuevas |
 |---------|-------|---------------------|
-| `Asterisk.Sdk.VoiceAi` | ~28 | 0 |
-| `Asterisk.Sdk.VoiceAi.Stt` | ~20 | 0 |
-| `Asterisk.Sdk.VoiceAi.Tts` | ~12 | 0 |
-| `Asterisk.Sdk.VoiceAi.Testing` | ~10 | 0 |
+| `Verbara.Sdk.VoiceAi` | ~28 | 0 |
+| `Verbara.Sdk.VoiceAi.Stt` | ~20 | 0 |
+| `Verbara.Sdk.VoiceAi.Tts` | ~12 | 0 |
+| `Verbara.Sdk.VoiceAi.Testing` | ~10 | 0 |
 | Example | 0 | 0 |
 | **Total** | **~70** | **0** |

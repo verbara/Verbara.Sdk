@@ -1,11 +1,11 @@
-# Asterisk.Sdk.Audio
+# Verbara.Sdk.Audio
 
-Audio processing library for Asterisk.Sdk — resampling, format conversion, gain, and silence detection.
+Audio processing library for Verbara.Sdk — resampling, format conversion, gain, and silence detection.
 
 ## Installation
 
 ```bash
-dotnet add package Asterisk.Sdk.Audio
+dotnet add package Verbara.Sdk.Audio
 ```
 
 ## Quick Start

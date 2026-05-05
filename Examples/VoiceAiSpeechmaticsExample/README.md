@@ -44,7 +44,7 @@ Point Asterisk's `AudioSocket()` dialplan at `127.0.0.1:9092`.
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.VoiceAi.AudioSocket` — AudioSocket server.
-- `Asterisk.Sdk.VoiceAi.Stt` — Speechmatics recognizer.
-- `Asterisk.Sdk.VoiceAi.Tts` — Speechmatics synthesizer.
-- `Asterisk.Sdk.VoiceAi` — `IConversationHandler`, `AddVoiceAiPipeline`.
+- `Verbara.Sdk.VoiceAi.AudioSocket` — AudioSocket server.
+- `Verbara.Sdk.VoiceAi.Stt` — Speechmatics recognizer.
+- `Verbara.Sdk.VoiceAi.Tts` — Speechmatics synthesizer.
+- `Verbara.Sdk.VoiceAi` — `IConversationHandler`, `AddVoiceAiPipeline`.

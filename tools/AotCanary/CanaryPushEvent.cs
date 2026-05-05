@@ -1,6 +1,6 @@
-using Asterisk.Sdk.Push.Events;
+using Verbara.Sdk.Push.Events;
 
-namespace Asterisk.Sdk.AotCanary;
+namespace Verbara.Sdk.AotCanary;
 
 internal sealed record CanaryPushEvent : PushEvent
 {

@@ -1,6 +1,6 @@
-# Asterisk.Sdk.Ami.SourceGenerators
+# Verbara.Sdk.Ami.SourceGenerators
 
-Roslyn source generators for the Asterisk.Sdk.Ami package. Generates serialization and deserialization code at compile time, enabling Native AOT support with zero runtime reflection.
+Roslyn source generators for the Verbara.Sdk.Ami package. Generates serialization and deserialization code at compile time, enabling Native AOT support with zero runtime reflection.
 
 ## Generators
 

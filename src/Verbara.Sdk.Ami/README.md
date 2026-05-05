@@ -1,4 +1,4 @@
-# Asterisk.Sdk.Ami
+# Verbara.Sdk.Ami
 
 Asterisk Manager Interface (AMI) client for .NET 10 with Native AOT support.
 

@@ -45,4 +45,4 @@ Sent SET_MEDIA_DIRECTION  direction=both
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.Ari` — `WebSocketAudioServer`, `IChanWebSocketSession`, `ChanWebSocketControlMessage` hierarchy.
+- `Verbara.Sdk.Ari` — `WebSocketAudioServer`, `IChanWebSocketSession`, `ChanWebSocketControlMessage` hierarchy.

@@ -1,4 +1,4 @@
-# Sprint 23: Asterisk.Sdk.Audio + Asterisk.Sdk.VoiceAi.AudioSocket — Design Spec
+# Sprint 23: Verbara.Sdk.Audio + Verbara.Sdk.VoiceAi.AudioSocket — Design Spec
 
 **Fecha:** 2026-03-19
 **Estado:** Draft
@@ -10,7 +10,7 @@
 
 | Decisión | Resultado |
 |---|---|
-| Paquetes | `Asterisk.Sdk.Audio` (audio processing) + `Asterisk.Sdk.VoiceAi.AudioSocket` (transport) |
+| Paquetes | `Verbara.Sdk.Audio` (audio processing) + `Verbara.Sdk.VoiceAi.AudioSocket` (transport) |
 | Licencia | MIT (open source) — atrae adopción, monetización en Pro.AgentAssist/Pro.CallAnalytics |
 | Resampling | Pure C# polyphase FIR, pre-computed coefficients, zero-alloc hot path |
 | Rate pairs | 6 soportados: 8↔16, 8↔24, 8↔48, 16↔24, 16↔48, 24↔48 kHz |
@@ -24,8 +24,8 @@
 ## 2. Estructura del Proyecto
 
 ```
-src/Asterisk.Sdk.Audio/
-├── Asterisk.Sdk.Audio.csproj
+src/Verbara.Sdk.Audio/
+├── Verbara.Sdk.Audio.csproj
 ├── AudioFormat.cs                    (value type: sample rate, channels, bits, encoding)
 ├── AudioEncoding.cs                  (enum: LinearPcm, Float32)
 ├── Resampling/
@@ -36,8 +36,8 @@ src/Asterisk.Sdk.Audio/
 │   ├── AudioProcessor.cs             (static: gain, PCM16↔float32, clamp)
 │   └── IAudioTransform.cs            (interface for chainable transforms)
 
-src/Asterisk.Sdk.VoiceAi.AudioSocket/
-├── Asterisk.Sdk.VoiceAi.AudioSocket.csproj
+src/Verbara.Sdk.VoiceAi.AudioSocket/
+├── Verbara.Sdk.VoiceAi.AudioSocket.csproj
 ├── AudioSocketServer.cs              (TCP listener, accepts Asterisk connections)
 ├── AudioSocketClient.cs              (TCP client, for testing)
 ├── AudioSocketSession.cs             (bidirectional audio stream per connection)
@@ -47,14 +47,14 @@ src/Asterisk.Sdk.VoiceAi.AudioSocket/
 ├── DependencyInjection/
 │   └── AudioSocketServiceCollectionExtensions.cs
 
-tests/Asterisk.Sdk.Audio.Tests/
+tests/Verbara.Sdk.Audio.Tests/
 ├── Resampling/
 │   ├── PolyphaseResamplerTests.cs
 │   └── ResamplerFactoryTests.cs
 ├── Processing/
 │   └── AudioProcessorTests.cs
 
-tests/Asterisk.Sdk.VoiceAi.AudioSocket.Tests/
+tests/Verbara.Sdk.VoiceAi.AudioSocket.Tests/
 ├── AudioSocketServerTests.cs
 ├── AudioSocketClientTests.cs
 ├── AudioSocketFrameTests.cs
@@ -63,12 +63,12 @@ tests/Asterisk.Sdk.VoiceAi.AudioSocket.Tests/
 ```
 
 **Dependencias:**
-- `Asterisk.Sdk.Audio` → ninguna (standalone, pure audio processing)
-- `Asterisk.Sdk.VoiceAi.AudioSocket` → `Asterisk.Sdk.Audio` + `Microsoft.Extensions.Logging.Abstractions` + `Microsoft.Extensions.Hosting.Abstractions`
+- `Verbara.Sdk.Audio` → ninguna (standalone, pure audio processing)
+- `Verbara.Sdk.VoiceAi.AudioSocket` → `Verbara.Sdk.Audio` + `Microsoft.Extensions.Logging.Abstractions` + `Microsoft.Extensions.Hosting.Abstractions`
 
 ---
 
-## 3. Asterisk.Sdk.Audio — Domain Models
+## 3. Verbara.Sdk.Audio — Domain Models
 
 ### AudioFormat
 
@@ -411,7 +411,7 @@ services.AddAudioSocketServer(options =>
 
 ### Sprint 23 (2 semanas)
 
-**Asterisk.Sdk.Audio:**
+**Verbara.Sdk.Audio:**
 - AudioFormat, AudioEncoding
 - PolyphaseResampler (6 rate pairs, pre-computed coefficients)
 - ResamplerFactory
@@ -419,7 +419,7 @@ services.AddAudioSocketServer(options =>
 - IAudioTransform interface
 - Unit tests: ~20
 
-**Asterisk.Sdk.VoiceAi.AudioSocket:**
+**Verbara.Sdk.VoiceAi.AudioSocket:**
 - AudioSocketFrameType, AudioSocketFrame
 - AudioSocketServer (TCP listener, PipeReader/PipeWriter, session management)
 - AudioSocketSession (bidirectional audio, hangup detection)

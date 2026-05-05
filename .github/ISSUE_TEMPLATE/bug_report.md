@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug in Asterisk.Sdk
+about: Report a bug in Verbara.Sdk
 title: "[Bug] "
 labels: bug
 assignees: ''
@@ -26,8 +26,8 @@ What actually happened. Include error messages or stack traces if available.
 
 ## Environment
 
-- **Asterisk.Sdk version:** (e.g., 1.4.0)
-- **Package:** (e.g., Asterisk.Sdk.Ami, Asterisk.Sdk.Ari)
+- **Verbara.Sdk version:** (e.g., 1.4.0)
+- **Package:** (e.g., Verbara.Sdk.Ami, Verbara.Sdk.Ari)
 - **.NET version:** (e.g., 10.0.100)
 - **Asterisk version:** (e.g., 22.8.2)
 - **OS:** (e.g., Linux, Windows, macOS)

@@ -1,8 +1,8 @@
 # Asterisk Realtime Setup Manual
 
-> **Scope note.** The Asterisk.Sdk core (AMI / AGI / ARI / Live / Sessions / Push / VoiceAi) does **not** read configuration from Asterisk Realtime databases — that is the PBX's concern, not the SDK's. The `Asterisk.Sdk.Config` package only parses flat `.conf` files.
+> **Scope note.** The Verbara.Sdk core (AMI / AGI / ARI / Live / Sessions / Push / VoiceAi) does **not** read configuration from Asterisk Realtime databases — that is the PBX's concern, not the SDK's. The `Verbara.Sdk.Config` package only parses flat `.conf` files.
 >
-> This guide describes how to run Asterisk in Realtime mode so that external tooling (dashboards, provisioning services, admin panels) can manage PJSIP endpoints, queues, and voicemail via SQL instead of config files. The companion admin dashboard referenced below — `Asterisk.Sdk.PbxAdmin` — lives in its own repository: [github.com/Harol-Reina/Asterisk.Sdk.PbxAdmin](https://github.com/Harol-Reina/Asterisk.Sdk.PbxAdmin). Consult that repo for schema DDL, `docker-compose.dashboard.yml`, and seed data referenced in the Docker section.
+> This guide describes how to run Asterisk in Realtime mode so that external tooling (dashboards, provisioning services, admin panels) can manage PJSIP endpoints, queues, and voicemail via SQL instead of config files. The companion admin dashboard referenced below — `Verbara.Sdk.PbxAdmin` — lives in its own repository: [github.com/verbara/Verbara.Sdk.PbxAdmin](https://github.com/verbara/Verbara.Sdk.PbxAdmin). Consult that repo for schema DDL, `docker-compose.dashboard.yml`, and seed data referenced in the Docker section.
 
 ## Overview
 
@@ -78,7 +78,7 @@ isql -v asterisk-connector asterisk your-secure-password
 
 ### Step 3: Create Database and Schema
 
-The Asterisk.Sdk repo does **not** ship a Realtime DDL. Use the Asterisk official schema (from `contrib/scripts/`) or the ready-made schema from the PbxAdmin companion repo:
+The Verbara.Sdk repo does **not** ship a Realtime DDL. Use the Asterisk official schema (from `contrib/scripts/`) or the ready-made schema from the PbxAdmin companion repo:
 
 ```bash
 psql -U postgres -c "CREATE USER asterisk WITH PASSWORD 'your-secure-password';"
@@ -175,10 +175,10 @@ For other admin tools (custom .NET apps, Flask, Node, etc.), any SQL client that
 
 ## Docker Quick Start
 
-The Asterisk.Sdk repo ships `docker/Dockerfile.asterisk` and `docker/docker-compose.test.yml` that bring up Asterisk in Realtime mode backed by PostgreSQL — this is what the SDK's functional and integration tests use via Testcontainers. To run them by hand:
+The Verbara.Sdk repo ships `docker/Dockerfile.asterisk` and `docker/docker-compose.test.yml` that bring up Asterisk in Realtime mode backed by PostgreSQL — this is what the SDK's functional and integration tests use via Testcontainers. To run them by hand:
 
 ```bash
-cd /path/to/Asterisk.Sdk
+cd /path/to/Verbara.Sdk
 docker compose -f docker/docker-compose.test.yml up --build
 ```
 

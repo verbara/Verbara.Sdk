@@ -1,6 +1,6 @@
 # v1.0 Release Sprint — Design Spec
 
-**Goal:** Polish and release Asterisk.Sdk v1.0.0 — CHANGELOG, security policy, documentation (READMEs), benchmarks, version bump, and tag.
+**Goal:** Polish and release Verbara.Sdk v1.0.0 — CHANGELOG, security policy, documentation (READMEs), benchmarks, version bump, and tag.
 
 **Current state:** v0.6.0-beta.1, 16 packages, 878+ unit tests, 513 functional tests, 0 trim warnings, API stable (no experimental markers).
 
@@ -59,24 +59,24 @@ Standard vulnerability disclosure policy:
 
 Each src/ package gets a focused README.md (already packed into NuGet via `PackageReadmeFile`). Structure per README:
 - One-line description
-- Installation (`dotnet add package Asterisk.Sdk.Xxx`)
+- Installation (`dotnet add package Verbara.Sdk.Xxx`)
 - Quick example (5-15 lines of code)
 - Key features (bullet list)
 - Link to main README for full docs
 
-Packages needing READMEs (~12 — exclude Asterisk.Sdk.Ami.SourceGenerators which is an analyzer, and Asterisk.Sdk which already has the main README):
-1. Asterisk.Sdk.Ami
-2. Asterisk.Sdk.Agi
-3. Asterisk.Sdk.Ari
-4. Asterisk.Sdk.Live
-5. Asterisk.Sdk.Activities
-6. Asterisk.Sdk.Sessions
-7. Asterisk.Sdk.Config
-8. Asterisk.Sdk.Hosting
-9. Asterisk.Sdk.Audio
-10. Asterisk.Sdk.VoiceAi
-11. Asterisk.Sdk.VoiceAi.AudioSocket
-12. Asterisk.Sdk.VoiceAi.OpenAiRealtime
+Packages needing READMEs (~12 — exclude Verbara.Sdk.Ami.SourceGenerators which is an analyzer, and Verbara.Sdk which already has the main README):
+1. Verbara.Sdk.Ami
+2. Verbara.Sdk.Agi
+3. Verbara.Sdk.Ari
+4. Verbara.Sdk.Live
+5. Verbara.Sdk.Activities
+6. Verbara.Sdk.Sessions
+7. Verbara.Sdk.Config
+8. Verbara.Sdk.Hosting
+9. Verbara.Sdk.Audio
+10. Verbara.Sdk.VoiceAi
+11. Verbara.Sdk.VoiceAi.AudioSocket
+12. Verbara.Sdk.VoiceAi.OpenAiRealtime
 
 Skip VoiceAi.Stt, VoiceAi.Tts, VoiceAi.Testing — these are thin provider wrappers, a one-liner in the parent VoiceAi README is sufficient.
 
@@ -90,7 +90,7 @@ Each of the 13 console examples (excluding PbxAdmin which already has one) gets 
 
 ## 5. Benchmarks in README-technical.md
 
-Run `dotnet run --project Tests/Asterisk.Sdk.Benchmarks/ -c Release` and capture results. Add a "Performance" section to README-technical.md with:
+Run `dotnet run --project Tests/Verbara.Sdk.Benchmarks/ -c Release` and capture results. Add a "Performance" section to README-technical.md with:
 - Event deserialization throughput (ops/sec)
 - Protocol parsing latency (ns/op)
 - Memory allocation per operation (bytes)

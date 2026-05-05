@@ -1,4 +1,4 @@
-# Asterisk.Sdk.Live
+# Verbara.Sdk.Live
 
 Real-time domain objects for Asterisk PBX, built on AMI events.
 

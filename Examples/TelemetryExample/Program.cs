@@ -4,7 +4,7 @@ using Verbara.Sdk.Hosting;
 using Microsoft.Extensions.Hosting;
 
 // This example demonstrates how to discover every ActivitySource and Meter
-// registered by the Asterisk.Sdk stack at runtime and consume them without
+// registered by the Verbara.Sdk stack at runtime and consume them without
 // hard-coding any names. The lists grow automatically as new packages register
 // telemetry — consumer code written today keeps working for future releases.
 //

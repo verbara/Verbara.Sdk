@@ -29,5 +29,5 @@ dotnet run --project Examples/BasicAmiExample/
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.Ami` — AMI connection and actions
-- `Asterisk.Sdk.Hosting` — DI registration (`AddAsterisk`)
+- `Verbara.Sdk.Ami` — AMI connection and actions
+- `Verbara.Sdk.Hosting` — DI registration (`AddAsterisk`)

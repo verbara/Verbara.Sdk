@@ -1,32 +1,32 @@
-# Verbara Sdk (formerly Asterisk.Sdk)
+# Verbara Sdk (formerly Verbara.Sdk)
 
 > The modern .NET SDK for Asterisk PBX. AMI, AGI, ARI, Live API, Sessions, Voice AI — all in one package. Native AOT. Zero reflection. MIT licensed.
 >
 > **Rebrand notice (2026-05-03):** this project is rebranding to **Verbara** ([ADR-0036](docs/decisions/0036-rebrand-to-verbara.md)) to avoid trademark conflict with Sangoma's Asterisk PBX product. Repository and NuGet package names will migrate to `verbara-sdk` / `Verbara.Sdk.*` in a coordinated technical track. Existing names continue to work during the transition period.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/Harol-Reina/Asterisk.Sdk/ci.yml?branch=main&label=CI)](https://github.com/Harol-Reina/Asterisk.Sdk/actions/workflows/ci.yml)
-[![AOT Trim](https://img.shields.io/github/actions/workflow/status/Harol-Reina/Asterisk.Sdk/aot-trim-check.yml?branch=main&label=AOT%20Trim)](https://github.com/Harol-Reina/Asterisk.Sdk/actions/workflows/aot-trim-check.yml)
-[![NuGet](https://img.shields.io/nuget/v/Asterisk.Sdk?label=NuGet&color=blue)](https://www.nuget.org/packages/Asterisk.Sdk)
-[![Downloads](https://img.shields.io/nuget/dt/Asterisk.Sdk?label=Downloads&color=blue)](https://www.nuget.org/packages/Asterisk.Sdk)
+[![CI](https://img.shields.io/github/actions/workflow/status/verbara/Verbara.Sdk/ci.yml?branch=main&label=CI)](https://github.com/verbara/Verbara.Sdk/actions/workflows/ci.yml)
+[![AOT Trim](https://img.shields.io/github/actions/workflow/status/verbara/Verbara.Sdk/aot-trim-check.yml?branch=main&label=AOT%20Trim)](https://github.com/verbara/Verbara.Sdk/actions/workflows/aot-trim-check.yml)
+[![NuGet](https://img.shields.io/nuget/v/Verbara.Sdk?label=NuGet&color=blue)](https://www.nuget.org/packages/Verbara.Sdk)
+[![Downloads](https://img.shields.io/nuget/dt/Verbara.Sdk?label=Downloads&color=blue)](https://www.nuget.org/packages/Verbara.Sdk)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![Trim-safe](https://img.shields.io/badge/Native%20AOT-ready-brightgreen)](docs/research/benchmark-analysis.md)
 
 ---
 
-## Why Asterisk.Sdk?
+## Why Verbara Sdk?
 
 The .NET Asterisk ecosystem is stalled. AsterNET targets .NET Framework 4.0 and has been abandoned since 2018. AsterNET.NetStandard is a minimal fork stuck at .NET Standard 2.0. Sufficit covers AMI and AGI on .NET 9 but offers no ARI, no Live objects, no Session Engine, and no Voice AI. None of them support Native AOT.
 
-Asterisk.Sdk is the complete, modern alternative. One NuGet meta-package gives you AMI + AGI + ARI + Live API + Sessions with full DI integration. Add Voice AI packages to build AI-powered telephony — turn-based STT/TTS pipelines or a direct OpenAI Realtime bridge. Everything is AOT-safe, zero-reflection, and backed by four source generators that replace runtime code generation entirely.
+Verbara Sdk is the complete, modern alternative. One NuGet meta-package gives you AMI + AGI + ARI + Live API + Sessions with full DI integration. Add Voice AI packages to build AI-powered telephony — turn-based STT/TTS pipelines or a direct OpenAI Realtime bridge. Everything is AOT-safe, zero-reflection, and backed by four source generators that replace runtime code generation entirely.
 
-The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk-java) 3.42.0 — the most mature Asterisk library in any language, with 790+ classes covering every protocol detail. Asterisk.Sdk takes that foundation and redesigns it from the ground up for .NET 10 performance patterns: `System.IO.Pipelines` for zero-copy TCP parsing, `System.Threading.Channels` for async event dispatch, `System.Reactive` for observable state machines, and `System.Text.Json` source generation for ARI serialization.
+The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk-java) 3.42.0 — the most mature Asterisk library in any language, with 790+ classes covering every protocol detail. Verbara Sdk takes that foundation and redesigns it from the ground up for .NET 10 performance patterns: `System.IO.Pipelines` for zero-copy TCP parsing, `System.Threading.Channels` for async event dispatch, `System.Reactive` for observable state machines, and `System.Text.Json` source generation for ARI serialization.
 
 ---
 
 ## How It Compares
 
-| Capability | Asterisk.Sdk | AsterNET | Sufficit | asterisk-java |
+| Capability | Verbara.Sdk | AsterNET | Sufficit | asterisk-java |
 |---|:---:|:---:|:---:|:---:|
 | AMI | Yes | Yes | Yes | Yes |
 | AGI | Yes | Yes | Yes | Yes |
@@ -52,7 +52,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 - **Config Parser** — Read and parse Asterisk `.conf` files and `extensions.conf` dialplans. Quote-aware comment stripping.
 - **Hosting** — `IHostedService` for AMI and Live API lifecycle. `IHealthCheck` for AMI connection state. AOT-safe `IConfiguration` binding.
 - **Native AOT** — Zero reflection at runtime. Four source generators replace runtime code generation. 0 trim warnings.
-- **Multi-Server** — Federate multiple Asterisk servers with `AsteriskServerPool` and agent routing.
+- **Multi-Server** — Federate multiple Asterisk servers with `VerbaraServerPool` and agent routing.
 
 ---
 
@@ -63,9 +63,9 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 - **v1.15.3** "R1.5 VoiceAi Refresh" (2026-05-03) — Three new TTS providers (ElevenLabs Flash 2.5 polish + Deepgram Aura 2 via WebSocket + LMNT TTS with WS+HTTP transport) plus `tts.synthesis.ttfa_ms` histogram for Time-To-First-Audio observability across all six TTS providers. Strictly additive minor patch — zero breaking changes. Also rolls in `coverlet.collector` 6→10 dev-dep bump, new `dependency-review` CI workflow, and the `xunit v3/v4` migration readiness watch list. Whisper V3 local STT was scoped into the original v1 R1.5 spec but deferred (telephony 8 kHz quality concerns + Whisper.net AOT unconfirmed).
 - **v1.15.2** (2026-04-27) — Documentation refresh. Doc-only patch (zero `PublicAPI.Shipped.txt` delta, zero functional changes). Root README + 5 critical-stub package READMEs expanded; `nuget.config` CI portability fix.
 - **v1.15.1** (2026-04-26) — Housekeeping patch. Dependency maintenance (NATS 2.7.3, OpenTelemetry 1.15.3, Microsoft.Extensions 10.0.7) plus test stability + ADR catalog cleanup. Zero `PublicAPI.Shipped.txt` delta, zero functional change. Forward-compat verified end-to-end for the NATS minor bump.
-- **v1.15.0** "Pre-v2 Foundation" (2026-04-20) — New MIT package `Asterisk.Sdk.Cluster.Primitives` (`IClusterTransport`, `IDistributedLock`, `IMembershipProvider` + in-memory references). `AsteriskSemanticConventions` catalog grows with `Tenant`/`Event`/`Node` nested classes (60 const strings across 14 nested classes total). Per-URL circuit breaker on `Asterisk.Sdk.Push.Webhooks`. ADR-0028 "Cadence commitment" → Accepted. Operations starter kit (3 Grafana dashboards + Jaeger query catalog) under `docs/operations/`. AOT validation expanded to multi-RID matrix (linux-x64 / win-x64 / osx-arm64). Dual Asterisk 22 LTS + 23 Standard test matrix.
-- **v1.14.0** (2026-04-20) — New MIT package `Asterisk.Sdk.Resilience` — composable circuit breaker + retry + timeout primitives shared by AMI/ARI/Webhook reconnect loops.
-- **v1.13.0** (2026-04-20) — Telemetry layer + multi-node Push bus. `Asterisk.Sdk.Push.Nats` bidirectional bridge with W3C trace context propagation. `WebSocketTestServer` shared infrastructure. Pack-warnings CI gate.
+- **v1.15.0** "Pre-v2 Foundation" (2026-04-20) — New MIT package `Verbara.Sdk.Cluster.Primitives` (`IClusterTransport`, `IDistributedLock`, `IMembershipProvider` + in-memory references). `VerbaraSemanticConventions` catalog grows with `Tenant`/`Event`/`Node` nested classes (60 const strings across 14 nested classes total). Per-URL circuit breaker on `Verbara.Sdk.Push.Webhooks`. ADR-0028 "Cadence commitment" → Accepted. Operations starter kit (3 Grafana dashboards + Jaeger query catalog) under `docs/operations/`. AOT validation expanded to multi-RID matrix (linux-x64 / win-x64 / osx-arm64). Dual Asterisk 22 LTS + 23 Standard test matrix.
+- **v1.14.0** (2026-04-20) — New MIT package `Verbara.Sdk.Resilience` — composable circuit breaker + retry + timeout primitives shared by AMI/ARI/Webhook reconnect loops.
+- **v1.13.0** (2026-04-20) — Telemetry layer + multi-node Push bus. `Verbara.Sdk.Push.Nats` bidirectional bridge with W3C trace context propagation. `WebSocketTestServer` shared infrastructure. Pack-warnings CI gate.
 
 API coverage (cumulative): 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%), 27/27 ARI models (100%), 278 AMI events covering Asterisk 18-23. Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` JSON control protocol both supported. Compatible with **Asterisk 18, 20, 22 LTS, and 23 Standard** — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for lifecycle and break-change risk areas.
 
@@ -105,7 +105,7 @@ Benchmarked on AMD Ryzen 9 9900X (12C/24T), .NET 10.0.5, BenchmarkDotNet v0.14.0
 | Session store Redis `SaveAsync` | **~12.6K saves/sec** (p50 79 µs) / batch 65,738 sess/sec |
 | Session store Postgres `SaveAsync` | **~500 saves/sec** (p50 1.97 ms) / batch 9,491 sess/sec |
 
-Full methodology, machine-readable results, and cross-language comparison (asterisk-java, asterisk-ami-client, pyst2) in [docs/research/benchmark-analysis.md](docs/research/benchmark-analysis.md). Raw BenchmarkDotNet reports are under `BenchmarkDotNet.Artifacts/results/`. Reproduce: `dotnet run -c Release --project Tests/Asterisk.Sdk.Benchmarks/`.
+Full methodology, machine-readable results, and cross-language comparison (asterisk-java, asterisk-ami-client, pyst2) in [docs/research/benchmark-analysis.md](docs/research/benchmark-analysis.md). Raw BenchmarkDotNet reports are under `BenchmarkDotNet.Artifacts/results/`. Reproduce: `dotnet run -c Release --project Tests/Verbara.Sdk.Benchmarks/`.
 
 ---
 
@@ -114,23 +114,23 @@ Full methodology, machine-readable results, and cross-language comparison (aster
 Every package ships a `Meter`, `ActivitySource`, and `IHealthCheck`. Registered names are exposed as runtime-discoverable lists so consumers don't hard-code strings:
 
 ```csharp
-using Asterisk.Sdk.Hosting;
+using Verbara.Sdk.Hosting;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
 builder.Services
     .AddOpenTelemetry()
-    .WithTracing(t => t.AddSource([.. AsteriskTelemetry.ActivitySourceNames])
+    .WithTracing(t => t.AddSource([.. VerbaraTelemetry.ActivitySourceNames])
                        .AddOtlpExporter())
-    .WithMetrics(m => m.AddMeter([.. AsteriskTelemetry.MeterNames])
+    .WithMetrics(m => m.AddMeter([.. VerbaraTelemetry.MeterNames])
                        .AddOtlpExporter());
 ```
 
 - **9 `ActivitySource`s** — AMI, ARI, AGI, Live, Sessions, Push, VoiceAi, VoiceAi.AudioSocket, VoiceAi.OpenAiRealtime
 - **15 `Meter`s** — all of the above plus Ari.Audio, VoiceAi.Stt, VoiceAi.Tts, Push.Webhooks, Push.Nats, Resilience
 - **11 `IHealthCheck`s** auto-registered — 6 core + 5 VoiceAi
-- **`AsteriskSemanticConventions`** — public static catalog of 60 const strings across 14 nested classes (Resource, Channel, Bridge, Calls, Dialplan, Sip, Media, Queues, Agent, VoiceAi, Events, Tenant, Event, Node) — pinned by 14+ unit tests so dashboard queries stay stable across SDK versions
+- **`VerbaraSemanticConventions`** — public static catalog of 60 const strings across 14 nested classes (Resource, Channel, Bridge, Calls, Dialplan, Sip, Media, Queues, Agent, VoiceAi, Events, Tenant, Event, Node) — pinned by 14+ unit tests so dashboard queries stay stable across SDK versions
 
 See the [high-load tuning guide](docs/guides/high-load-tuning.md) for metric definitions and sizing recommendations at 10K / 100K agent scale.
 
@@ -140,32 +140,32 @@ See the [high-load tuning guide](docs/guides/high-load-tuning.md) for metric def
 
 ```bash
 # Core SDK + protocol clients + hosting
-dotnet add package Asterisk.Sdk.Hosting
+dotnet add package Verbara.Sdk.Hosting
 
 # Voice AI — turn-based pipeline (STT + TTS)
-dotnet add package Asterisk.Sdk.VoiceAi.AudioSocket
-dotnet add package Asterisk.Sdk.VoiceAi
-dotnet add package Asterisk.Sdk.VoiceAi.Stt      # STT providers
-dotnet add package Asterisk.Sdk.VoiceAi.Tts      # TTS providers
+dotnet add package Verbara.Sdk.VoiceAi.AudioSocket
+dotnet add package Verbara.Sdk.VoiceAi
+dotnet add package Verbara.Sdk.VoiceAi.Stt      # STT providers
+dotnet add package Verbara.Sdk.VoiceAi.Tts      # TTS providers
 
 # Voice AI — OpenAI Realtime (GPT-4o direct bridge)
-dotnet add package Asterisk.Sdk.VoiceAi.OpenAiRealtime
+dotnet add package Verbara.Sdk.VoiceAi.OpenAiRealtime
 ```
 
-The `Asterisk.Sdk.Hosting` meta-package includes all core sub-packages and DI extensions. Install VoiceAi packages individually as needed.
+The `Verbara.Sdk.Hosting` meta-package includes all core sub-packages and DI extensions. Install VoiceAi packages individually as needed.
 
 ---
 
 ## Quick Start
 
-**First contact in 10 lines.** Create a new console app, install `Asterisk.Sdk.Hosting`, and drop the snippet below into `Program.cs` — on start it connects to your Asterisk over AMI, exposes a `/health` endpoint, and auto-disconnects on shutdown.
+**First contact in 10 lines.** Create a new console app, install `Verbara.Sdk.Hosting`, and drop the snippet below into `Program.cs` — on start it connects to your Asterisk over AMI, exposes a `/health` endpoint, and auto-disconnects on shutdown.
 
 ```csharp
-using Asterisk.Sdk.Hosting;
+using Verbara.Sdk.Hosting;
 using Microsoft.Extensions.Hosting;
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddAsterisk(options =>
+builder.Services.AddVerbara(options =>
 {
     options.Ami.Hostname = "192.168.1.100";
     options.Ami.Username = "admin";
@@ -185,7 +185,7 @@ Need a full runnable example (including `appsettings.json` config and event subs
 Or bind from `appsettings.json`:
 
 ```csharp
-builder.Services.AddAsterisk(builder.Configuration);
+builder.Services.AddVerbara(builder.Configuration);
 ```
 
 ```json
@@ -199,14 +199,14 @@ builder.Services.AddAsterisk(builder.Configuration);
 ### AMI: Events and Actions
 
 ```csharp
-using Asterisk.Sdk;
-using Asterisk.Sdk.Ami.Actions;
-using Asterisk.Sdk.Hosting;
+using Verbara.Sdk;
+using Verbara.Sdk.Ami.Actions;
+using Verbara.Sdk.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
 var services = new ServiceCollection();
 services.AddLogging();
-services.AddAsterisk(options =>
+services.AddVerbara(options =>
 {
     options.Ami.Hostname = "192.168.1.100";
     options.Ami.Username = "admin";
@@ -234,8 +234,8 @@ await ami.DisconnectAsync();
 ### AGI: FastAGI Server with Script Handler
 
 ```csharp
-using Asterisk.Sdk.Agi.Mapping;
-using Asterisk.Sdk.Hosting;
+using Verbara.Sdk.Agi.Mapping;
+using Verbara.Sdk.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
 var mapping = new SimpleMappingStrategy();
@@ -243,7 +243,7 @@ mapping.Add("hello-world", new HelloWorldScript());
 
 var services = new ServiceCollection();
 services.AddLogging();
-services.AddAsterisk(options =>
+services.AddVerbara(options =>
 {
     options.Ami.Username = "admin";
     options.Ami.Password = "secret";
@@ -275,14 +275,14 @@ class HelloWorldScript : IAgiScript
 ### Live API: Track Channels and Queues in Real-Time
 
 ```csharp
-using Asterisk.Sdk;
-using Asterisk.Sdk.Hosting;
-using Asterisk.Sdk.Live.Server;
+using Verbara.Sdk;
+using Verbara.Sdk.Hosting;
+using Verbara.Sdk.Live.Server;
 using Microsoft.Extensions.DependencyInjection;
 
 var services = new ServiceCollection();
 services.AddLogging();
-services.AddAsterisk(options =>
+services.AddVerbara(options =>
 {
     options.Ami.Hostname = "192.168.1.100";
     options.Ami.Username = "admin";
@@ -291,7 +291,7 @@ services.AddAsterisk(options =>
 
 await using var provider = services.BuildServiceProvider();
 var ami = provider.GetRequiredService<IAmiConnection>();
-var server = provider.GetRequiredService<AsteriskServer>();
+var server = provider.GetRequiredService<VerbaraServer>();
 
 await ami.ConnectAsync();
 await server.StartAsync();
@@ -310,11 +310,11 @@ await ami.DisconnectAsync();
 Connect Asterisk AudioSocket to a conversation handler powered by Deepgram STT + ElevenLabs TTS:
 
 ```csharp
-using Asterisk.Sdk.VoiceAi;
-using Asterisk.Sdk.VoiceAi.AudioSocket.DependencyInjection;
-using Asterisk.Sdk.VoiceAi.DependencyInjection;
-using Asterisk.Sdk.VoiceAi.Stt.DependencyInjection;
-using Asterisk.Sdk.VoiceAi.Tts.DependencyInjection;
+using Verbara.Sdk.VoiceAi;
+using Verbara.Sdk.VoiceAi.AudioSocket.DependencyInjection;
+using Verbara.Sdk.VoiceAi.DependencyInjection;
+using Verbara.Sdk.VoiceAi.Stt.DependencyInjection;
+using Verbara.Sdk.VoiceAi.Tts.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 var host = Host.CreateDefaultBuilder(args)
@@ -350,9 +350,9 @@ class MyConversationHandler : IConversationHandler
 Replace the entire STT+LLM+TTS chain with a single WebSocket to OpenAI Realtime API:
 
 ```csharp
-using Asterisk.Sdk.VoiceAi.OpenAiRealtime;
-using Asterisk.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection;
-using Asterisk.Sdk.VoiceAi.AudioSocket.DependencyInjection;
+using Verbara.Sdk.VoiceAi.OpenAiRealtime;
+using Verbara.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection;
+using Verbara.Sdk.VoiceAi.AudioSocket.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Reactive.Linq;
 
@@ -408,44 +408,44 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 
 | Package | Description |
 |---------|-------------|
-| **Asterisk.Sdk** | Core abstractions: interfaces, base classes, enums, attributes |
-| **Asterisk.Sdk.Ami** | AMI client with System.IO.Pipelines transport, source-generated serialization |
-| **Asterisk.Sdk.Agi** | FastAGI server with pluggable script mapping strategies |
-| **Asterisk.Sdk.Ari** | ARI REST + WebSocket client with source-generated JSON serialization |
-| **Asterisk.Sdk.Live** | Real-time channel, queue, agent, and conference tracking from AMI events |
-| **Asterisk.Sdk.Activities** | High-level telephony activities: Dial, Hold, Transfer, Park, Bridge, Conference |
-| **Asterisk.Sdk.Sessions** | Session Engine: call session correlation, state machines, and domain events |
-| **Asterisk.Sdk.Config** | Asterisk `.conf` and `extensions.conf` file parsers |
-| **Asterisk.Sdk.Hosting** | DI extensions (`AddAsterisk`) and meta-package referencing all core packages |
+| **Verbara.Sdk** | Core abstractions: interfaces, base classes, enums, attributes |
+| **Verbara.Sdk.Ami** | AMI client with System.IO.Pipelines transport, source-generated serialization |
+| **Verbara.Sdk.Agi** | FastAGI server with pluggable script mapping strategies |
+| **Verbara.Sdk.Ari** | ARI REST + WebSocket client with source-generated JSON serialization |
+| **Verbara.Sdk.Live** | Real-time channel, queue, agent, and conference tracking from AMI events |
+| **Verbara.Sdk.Activities** | High-level telephony activities: Dial, Hold, Transfer, Park, Bridge, Conference |
+| **Verbara.Sdk.Sessions** | Session Engine: call session correlation, state machines, and domain events |
+| **Verbara.Sdk.Config** | Asterisk `.conf` and `extensions.conf` file parsers |
+| **Verbara.Sdk.Hosting** | DI extensions (`AddAsterisk`) and meta-package referencing all core packages |
 
 ### Session Store Backends
 
 | Package | Description |
 |---------|-------------|
-| **Asterisk.Sdk.Sessions.Redis** | `RedisSessionStore` + `UseRedis(...)` fluent builder (StackExchange.Redis, pipelined I/O, TTL-driven retention, AOT-safe) |
-| **Asterisk.Sdk.Sessions.Postgres** | `PostgresSessionStore` + `UsePostgres(...)` fluent builder (Npgsql + Dapper + JSONB, UPSERT on `ON CONFLICT`, migration SQL shipped in the nupkg) |
+| **Verbara.Sdk.Sessions.Redis** | `RedisSessionStore` + `UseRedis(...)` fluent builder (StackExchange.Redis, pipelined I/O, TTL-driven retention, AOT-safe) |
+| **Verbara.Sdk.Sessions.Postgres** | `PostgresSessionStore` + `UsePostgres(...)` fluent builder (Npgsql + Dapper + JSONB, UPSERT on `ON CONFLICT`, migration SQL shipped in the nupkg) |
 
 ### Observability & Integrations
 
 | Package | Description |
 |---------|-------------|
-| **Asterisk.Sdk.OpenTelemetry** | Batteries-included OpenTelemetry wiring: one call enrolls every ActivitySource + Meter, ships Console/OTLP/Prometheus exporter helpers |
-| **Asterisk.Sdk.Push** | Real-time push primitives: topic hierarchy, subscription management, authorization, in-memory event fan-out |
-| **Asterisk.Sdk.Push.AspNetCore** | SSE streaming endpoint for the Push bus (ASP.NET Core) |
-| **Asterisk.Sdk.Push.Webhooks** | Outbound HTTP webhooks: HMAC-SHA256 signing, exponential retry/backoff, topic-pattern matching |
-| **Asterisk.Sdk.Push.Nats** | NATS bridge for `RxPushEventBus`: mirrors topic hierarchy to subject tree for multi-node deployments |
+| **Verbara.Sdk.OpenTelemetry** | Batteries-included OpenTelemetry wiring: one call enrolls every ActivitySource + Meter, ships Console/OTLP/Prometheus exporter helpers |
+| **Verbara.Sdk.Push** | Real-time push primitives: topic hierarchy, subscription management, authorization, in-memory event fan-out |
+| **Verbara.Sdk.Push.AspNetCore** | SSE streaming endpoint for the Push bus (ASP.NET Core) |
+| **Verbara.Sdk.Push.Webhooks** | Outbound HTTP webhooks: HMAC-SHA256 signing, exponential retry/backoff, topic-pattern matching |
+| **Verbara.Sdk.Push.Nats** | NATS bridge for `RxPushEventBus`: mirrors topic hierarchy to subject tree for multi-node deployments |
 
 ### Voice AI
 
 | Package | Description |
 |---------|-------------|
-| **Asterisk.Sdk.Audio** | Polyphase FIR resampler, VAD, PCM16 processing — zero dependencies |
-| **Asterisk.Sdk.VoiceAi** | Pipeline orchestration (`VoiceAiPipeline`), `ISessionHandler`, `IConversationHandler` |
-| **Asterisk.Sdk.VoiceAi.AudioSocket** | AudioSocket + `chan_websocket` (JSON control protocol) servers with `System.IO.Pipelines` bidirectional streaming |
-| **Asterisk.Sdk.VoiceAi.Stt** | STT providers: Deepgram, Whisper, Azure Whisper, Google Speech, Cartesia (Ink-Whisper), AssemblyAI (Universal), Speechmatics |
-| **Asterisk.Sdk.VoiceAi.Tts** | TTS providers: ElevenLabs, Azure, Cartesia (Sonic-3, 40-90ms TTFA), Speechmatics |
-| **Asterisk.Sdk.VoiceAi.OpenAiRealtime** | OpenAI Realtime API bridge (GPT-4o): dual-loop WebSocket, function calling, observability events |
-| **Asterisk.Sdk.VoiceAi.Testing** | Fake STT/TTS/handler implementations for unit testing pipelines |
+| **Verbara.Sdk.Audio** | Polyphase FIR resampler, VAD, PCM16 processing — zero dependencies |
+| **Verbara.Sdk.VoiceAi** | Pipeline orchestration (`VoiceAiPipeline`), `ISessionHandler`, `IConversationHandler` |
+| **Verbara.Sdk.VoiceAi.AudioSocket** | AudioSocket + `chan_websocket` (JSON control protocol) servers with `System.IO.Pipelines` bidirectional streaming |
+| **Verbara.Sdk.VoiceAi.Stt** | STT providers: Deepgram, Whisper, Azure Whisper, Google Speech, Cartesia (Ink-Whisper), AssemblyAI (Universal), Speechmatics |
+| **Verbara.Sdk.VoiceAi.Tts** | TTS providers: ElevenLabs, Azure, Cartesia (Sonic-3, 40-90ms TTFA), Speechmatics |
+| **Verbara.Sdk.VoiceAi.OpenAiRealtime** | OpenAI Realtime API bridge (GPT-4o): dual-loop WebSocket, function calling, observability events |
+| **Verbara.Sdk.VoiceAi.Testing** | Fake STT/TTS/handler implementations for unit testing pipelines |
 
 ---
 
@@ -469,7 +469,7 @@ The `Examples/` directory contains standalone console applications demonstrating
 | `VoiceAiExample` | Turn-based Voice AI pipeline: Deepgram STT + ElevenLabs TTS + echo handler |
 | `OpenAiRealtimeExample` | GPT-4o direct bridge via OpenAI Realtime API with function calling |
 
-See also [Asterisk.Sdk.PbxAdmin](https://github.com/Harol-Reina/Asterisk.Sdk.PbxAdmin) — a full Blazor Server PBX administration panel built with this SDK.
+See also [Verbara.Sdk.PbxAdmin](https://github.com/verbara/Verbara.Sdk.PbxAdmin) — a full Blazor Server PBX administration panel built with this SDK.
 
 ---
 
@@ -477,7 +477,7 @@ See also [Asterisk.Sdk.PbxAdmin](https://github.com/Harol-Reina/Asterisk.Sdk.Pbx
 
 Need skill-based routing, predictive dialer, real-time analytics, or AI agent assist?
 
-[Asterisk.Sdk.Pro](https://github.com/Harol-Reina/Asterisk.Sdk.Pro) extends this SDK
+[Verbara.Sdk.Pro](https://github.com/verbara/Verbara.Sdk.Pro) extends this SDK
 with enterprise contact center capabilities — same architecture, same AOT guarantees,
 composable NuGet packages for clustering, outbound campaigns, event sourcing, and more.
 
@@ -487,7 +487,7 @@ composable NuGet packages for clustering, outbound campaigns, event sourcing, an
 
 - **For decision-makers** — [docs/README-commercial.md](docs/README-commercial.md)
 - **For developers** — [docs/README-technical.md](docs/README-technical.md)
-- **Pro (enterprise)** — [Asterisk.Sdk.Pro](https://github.com/Harol-Reina/Asterisk.Sdk.Pro)
+- **Pro (enterprise)** — [Verbara.Sdk.Pro](https://github.com/verbara/Verbara.Sdk.Pro)
 
 ---
 
@@ -507,9 +507,9 @@ This is the open-source base SDK of the **Verbara** open-core contact-center sta
 | Repository | License | Role |
 |---|---|---|
 | **Verbara Sdk** (this repository) | **MIT** | Telephony primitives (AMI / AGI / ARI / Live API / Sessions / Voice AI) — community attractor |
-| **Verbara Web** (currently `Asterisk.Platform.Web`) | Apache 2.0 | Frontend UI |
-| **Verbara Platform** (currently `Asterisk.Platform`) | Apache 2.0 | Backend application |
-| **Verbara Sdk Pro** (currently `Asterisk.Sdk.Pro`) | Commercial | Enterprise overlays (multi-tenant, analytics, cluster, licensing) |
+| **Verbara Web** | Apache 2.0 | Frontend UI |
+| **Verbara Platform** | Apache 2.0 | Backend application |
+| **Verbara Sdk Pro** | Commercial | Enterprise overlays (multi-tenant, analytics, cluster, licensing) |
 
 **Why MIT here:** the SDK is the community attractor of the Verbara stack — maximum permissive license to encourage adoption, evaluation, and contributions. Pro features (skill routing, predictive dialer, real-time analytics, cluster, multi-tenant) are commercial via a separate package family. See [ADR-0027 (stewardship pledge)](docs/decisions/0027-stewardship-pledge-mit-commercial.md) and [ADR-0036 (rebrand to Verbara)](docs/decisions/0036-rebrand-to-verbara.md).
 

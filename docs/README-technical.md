@@ -1,4 +1,4 @@
-# Asterisk.Sdk -- Technical Reference
+# Verbara.Sdk -- Technical Reference
 
 > Complete .NET 10 SDK for Asterisk PBX. AMI, AGI, ARI, Live, Sessions, Voice AI.
 > Native AOT. Zero reflection. MIT licensed.
@@ -20,32 +20,32 @@
 
 ```bash
 # Pulls in Sdk, Ami, Agi, Ari, Live, Activities, Sessions, Config
-dotnet add package Asterisk.Sdk.Hosting
+dotnet add package Verbara.Sdk.Hosting
 ```
 
 ### Individual core packages
 
 ```bash
-dotnet add package Asterisk.Sdk
-dotnet add package Asterisk.Sdk.Ami
-dotnet add package Asterisk.Sdk.Agi
-dotnet add package Asterisk.Sdk.Ari
-dotnet add package Asterisk.Sdk.Live
-dotnet add package Asterisk.Sdk.Activities
-dotnet add package Asterisk.Sdk.Sessions
-dotnet add package Asterisk.Sdk.Config
+dotnet add package Verbara.Sdk
+dotnet add package Verbara.Sdk.Ami
+dotnet add package Verbara.Sdk.Agi
+dotnet add package Verbara.Sdk.Ari
+dotnet add package Verbara.Sdk.Live
+dotnet add package Verbara.Sdk.Activities
+dotnet add package Verbara.Sdk.Sessions
+dotnet add package Verbara.Sdk.Config
 ```
 
 ### Voice AI packages
 
 ```bash
-dotnet add package Asterisk.Sdk.Audio
-dotnet add package Asterisk.Sdk.VoiceAi
-dotnet add package Asterisk.Sdk.VoiceAi.AudioSocket
-dotnet add package Asterisk.Sdk.VoiceAi.Stt
-dotnet add package Asterisk.Sdk.VoiceAi.Tts
-dotnet add package Asterisk.Sdk.VoiceAi.OpenAiRealtime
-dotnet add package Asterisk.Sdk.VoiceAi.Testing
+dotnet add package Verbara.Sdk.Audio
+dotnet add package Verbara.Sdk.VoiceAi
+dotnet add package Verbara.Sdk.VoiceAi.AudioSocket
+dotnet add package Verbara.Sdk.VoiceAi.Stt
+dotnet add package Verbara.Sdk.VoiceAi.Tts
+dotnet add package Verbara.Sdk.VoiceAi.OpenAiRealtime
+dotnet add package Verbara.Sdk.VoiceAi.Testing
 ```
 
 ---
@@ -185,42 +185,42 @@ public class MyConversationHandler : IConversationHandler
 
 | Package | Description |
 |---------|-------------|
-| `Asterisk.Sdk` | Core abstractions: interfaces, base classes, enums, attributes |
-| `Asterisk.Sdk.Ami` | AMI client with System.IO.Pipelines, source-generated serialization |
-| `Asterisk.Sdk.Agi` | FastAGI server with pluggable script mapping |
-| `Asterisk.Sdk.Ari` | ARI REST + WebSocket client with source-generated JSON |
-| `Asterisk.Sdk.Live` | Real-time channel, queue, agent, conference tracking |
-| `Asterisk.Sdk.Activities` | High-level telephony: Dial, Hold, Transfer, Park, Bridge, Conference |
-| `Asterisk.Sdk.Sessions` | Session Engine: call correlation, state machines, domain events |
-| `Asterisk.Sdk.Config` | Asterisk `.conf` and `extensions.conf` parsers |
-| `Asterisk.Sdk.Hosting` | DI extensions (`AddAsterisk`) + meta-package |
+| `Verbara.Sdk` | Core abstractions: interfaces, base classes, enums, attributes |
+| `Verbara.Sdk.Ami` | AMI client with System.IO.Pipelines, source-generated serialization |
+| `Verbara.Sdk.Agi` | FastAGI server with pluggable script mapping |
+| `Verbara.Sdk.Ari` | ARI REST + WebSocket client with source-generated JSON |
+| `Verbara.Sdk.Live` | Real-time channel, queue, agent, conference tracking |
+| `Verbara.Sdk.Activities` | High-level telephony: Dial, Hold, Transfer, Park, Bridge, Conference |
+| `Verbara.Sdk.Sessions` | Session Engine: call correlation, state machines, domain events |
+| `Verbara.Sdk.Config` | Asterisk `.conf` and `extensions.conf` parsers |
+| `Verbara.Sdk.Hosting` | DI extensions (`AddAsterisk`) + meta-package |
 
 ### Voice AI (7 packages)
 
 | Package | Description |
 |---------|-------------|
-| `Asterisk.Sdk.Audio` | Polyphase FIR resampler, VAD, PCM16 processing |
-| `Asterisk.Sdk.VoiceAi` | Pipeline orchestration, `ISessionHandler`, `IConversationHandler`, `SpeechRecognizer`/`SpeechSynthesizer` base types with `ProviderName` (v1.10.0+) |
-| `Asterisk.Sdk.VoiceAi.AudioSocket` | AudioSocket server/client with Pipelines streaming |
-| `Asterisk.Sdk.VoiceAi.Stt` | STT providers: Deepgram, Whisper, Azure Whisper, Google Speech |
-| `Asterisk.Sdk.VoiceAi.Tts` | TTS providers: ElevenLabs, Azure TTS |
-| `Asterisk.Sdk.VoiceAi.OpenAiRealtime` | OpenAI Realtime API bridge (GPT-4o voice-to-voice) |
-| `Asterisk.Sdk.VoiceAi.Testing` | Fakes for unit testing Voice AI pipelines |
+| `Verbara.Sdk.Audio` | Polyphase FIR resampler, VAD, PCM16 processing |
+| `Verbara.Sdk.VoiceAi` | Pipeline orchestration, `ISessionHandler`, `IConversationHandler`, `SpeechRecognizer`/`SpeechSynthesizer` base types with `ProviderName` (v1.10.0+) |
+| `Verbara.Sdk.VoiceAi.AudioSocket` | AudioSocket server/client with Pipelines streaming |
+| `Verbara.Sdk.VoiceAi.Stt` | STT providers: Deepgram, Whisper, Azure Whisper, Google Speech |
+| `Verbara.Sdk.VoiceAi.Tts` | TTS providers: ElevenLabs, Azure TTS |
+| `Verbara.Sdk.VoiceAi.OpenAiRealtime` | OpenAI Realtime API bridge (GPT-4o voice-to-voice) |
+| `Verbara.Sdk.VoiceAi.Testing` | Fakes for unit testing Voice AI pipelines |
 
-> All Voice AI packages expose a `Meter`, `ActivitySource` and `IHealthCheck` via the v1.9.0 telemetry stack — discoverable at runtime through `AsteriskTelemetry.ActivitySourceNames` and `AsteriskTelemetry.MeterNames` (see `Asterisk.Sdk.Hosting`).
+> All Voice AI packages expose a `Meter`, `ActivitySource` and `IHealthCheck` via the v1.9.0 telemetry stack — discoverable at runtime through `AsteriskTelemetry.ActivitySourceNames` and `AsteriskTelemetry.MeterNames` (see `Verbara.Sdk.Hosting`).
 
 ### Push (2 packages)
 
 | Package | Description |
 |---------|-------------|
-| `Asterisk.Sdk.Push` | Domain-layer push event bus: `IPushEventBus`, hierarchical topic routing (`TopicPattern` with `*` / `**` / `{self}`), `ISubscriptionAuthorizer` |
-| `Asterisk.Sdk.Push.AspNetCore` | Server-Sent Events delivery endpoints on top of `IPushEventBus`: `MapPushEndpoints(prefix)` |
+| `Verbara.Sdk.Push` | Domain-layer push event bus: `IPushEventBus`, hierarchical topic routing (`TopicPattern` with `*` / `**` / `{self}`), `ISubscriptionAuthorizer` |
+| `Verbara.Sdk.Push.AspNetCore` | Server-Sent Events delivery endpoints on top of `IPushEventBus`: `MapPushEndpoints(prefix)` |
 
 ### Source Generators (1 analyzer)
 
 | Package | Description |
 |---------|-------------|
-| `Asterisk.Sdk.Ami.SourceGenerators` | Compile-time AMI action/event/response serializers (ships as analyzer with `Asterisk.Sdk.Ami`) |
+| `Verbara.Sdk.Ami.SourceGenerators` | Compile-time AMI action/event/response serializers (ships as analyzer with `Verbara.Sdk.Ami`) |
 
 ---
 
@@ -229,7 +229,7 @@ public class MyConversationHandler : IConversationHandler
 ### Dependency Graph
 
 ```
-Asterisk.Sdk (core: interfaces, attributes, enums, base types)
+Verbara.Sdk (core: interfaces, attributes, enums, base types)
      |
      +--- Ami (+ Ami.SourceGenerators as analyzer)
      |     |
@@ -394,7 +394,7 @@ Zero allocation on the hot path regardless of subscriber count.
 ### Reproduce
 
 ```bash
-dotnet run --project Tests/Asterisk.Sdk.Benchmarks/ -c Release
+dotnet run --project Tests/Verbara.Sdk.Benchmarks/ -c Release
 ```
 
 Results are exported to `BenchmarkDotNet.Artifacts/results/` as CSV, HTML, and Markdown.
@@ -405,19 +405,19 @@ Results are exported to `BenchmarkDotNet.Artifacts/results/` as CSV, HTML, and M
 
 ```bash
 # Build entire solution
-dotnet build Asterisk.Sdk.slnx
+dotnet build Verbara.Sdk.slnx
 
 # Run all tests
-dotnet test Asterisk.Sdk.slnx
+dotnet test Verbara.Sdk.slnx
 
 # Run a single test project
-dotnet test Tests/Asterisk.Sdk.Ami.Tests/
+dotnet test Tests/Verbara.Sdk.Ami.Tests/
 
 # Run tests by name filter
-dotnet test Tests/Asterisk.Sdk.Ami.Tests/ --filter "FullyQualifiedName~AmiProtocolReaderTests"
+dotnet test Tests/Verbara.Sdk.Ami.Tests/ --filter "FullyQualifiedName~AmiProtocolReaderTests"
 
 # Run benchmarks
-dotnet run --project Tests/Asterisk.Sdk.Benchmarks/
+dotnet run --project Tests/Verbara.Sdk.Benchmarks/
 
 # Integration tests (requires Docker)
 docker compose -f docker/docker-compose.test.yml up --build
@@ -430,24 +430,24 @@ All projects enforce `TreatWarningsAsErrors`. The build must produce zero warnin
 ## Project Structure
 
 ```
-Asterisk.Sdk/
-|-- Asterisk.Sdk/
-|-- Asterisk.Sdk.Ami/
-|-- Asterisk.Sdk.Ami.SourceGenerators/
-|-- Asterisk.Sdk.Agi/
-|-- Asterisk.Sdk.Ari/
-|-- Asterisk.Sdk.Live/
-|-- Asterisk.Sdk.Activities/
-|-- Asterisk.Sdk.Sessions/
-|-- Asterisk.Sdk.Config/
-|-- Asterisk.Sdk.Hosting/
-|-- Asterisk.Sdk.Audio/
-|-- Asterisk.Sdk.VoiceAi/
-|-- Asterisk.Sdk.VoiceAi.AudioSocket/
-|-- Asterisk.Sdk.VoiceAi.Stt/
-|-- Asterisk.Sdk.VoiceAi.Tts/
-|-- Asterisk.Sdk.VoiceAi.OpenAiRealtime/
-|-- Asterisk.Sdk.VoiceAi.Testing/
+Verbara.Sdk/
+|-- Verbara.Sdk/
+|-- Verbara.Sdk.Ami/
+|-- Verbara.Sdk.Ami.SourceGenerators/
+|-- Verbara.Sdk.Agi/
+|-- Verbara.Sdk.Ari/
+|-- Verbara.Sdk.Live/
+|-- Verbara.Sdk.Activities/
+|-- Verbara.Sdk.Sessions/
+|-- Verbara.Sdk.Config/
+|-- Verbara.Sdk.Hosting/
+|-- Verbara.Sdk.Audio/
+|-- Verbara.Sdk.VoiceAi/
+|-- Verbara.Sdk.VoiceAi.AudioSocket/
+|-- Verbara.Sdk.VoiceAi.Stt/
+|-- Verbara.Sdk.VoiceAi.Tts/
+|-- Verbara.Sdk.VoiceAi.OpenAiRealtime/
+|-- Verbara.Sdk.VoiceAi.Testing/
 |-- Examples/
 |   |-- BasicAmiExample/
 |   |-- AmiAdvancedExample/
@@ -463,10 +463,10 @@ Asterisk.Sdk/
 |   |-- OpenAiRealtimeExample/
 |   +-- AgiIvrExample/
 |-- Tests/
-|   |-- Asterisk.Sdk.Ami.Tests/
-|   |-- Asterisk.Sdk.Agi.Tests/
-|   |-- Asterisk.Sdk.Live.Tests/
-|   |-- Asterisk.Sdk.Benchmarks/
+|   |-- Verbara.Sdk.Ami.Tests/
+|   |-- Verbara.Sdk.Agi.Tests/
+|   |-- Verbara.Sdk.Live.Tests/
+|   |-- Verbara.Sdk.Benchmarks/
 |   +-- ...
 +-- docker/
     +-- docker-compose.test.yml
@@ -531,20 +531,20 @@ services.AddOpenAiRealtimeBridge(o => { o.ApiKey = "..."; o.Model = "gpt-4o-real
 
 | Type | Namespace | Purpose |
 |------|-----------|---------|
-| `IAmiConnection` | `Asterisk.Sdk.Ami` | Send actions, receive events/responses |
-| `AmiAction` | `Asterisk.Sdk.Ami.Actions` | Base class for all 111 AMI actions |
-| `AmiEvent` | `Asterisk.Sdk.Ami.Events` | Base class for all 215 AMI events |
-| `AsteriskServer` | `Asterisk.Sdk.Live` | Top-level live model: channels, queues, agents |
-| `ChannelManager` | `Asterisk.Sdk.Live` | Real-time channel tracking with secondary indices |
-| `QueueManager` | `Asterisk.Sdk.Live` | Real-time queue tracking with member reverse index |
-| `AgentManager` | `Asterisk.Sdk.Live` | Real-time agent state tracking |
-| `AsteriskServerPool` | `Asterisk.Sdk.Live` | Multi-server federation with agent routing |
-| `ICallSessionManager` | `Asterisk.Sdk.Sessions` | Call session correlation and lifecycle |
-| `FastAgiServer` | `Asterisk.Sdk.Agi` | FastAGI TCP server |
-| `AgiChannel` | `Asterisk.Sdk.Agi` | Per-call AGI command interface |
-| `AriClient` | `Asterisk.Sdk.Ari` | ARI REST + WebSocket client |
-| `IAudioSocketServer` | `Asterisk.Sdk.VoiceAi.AudioSocket` | AudioSocket protocol server |
-| `IConversationHandler` | `Asterisk.Sdk.VoiceAi` | Voice AI pipeline callback interface |
+| `IAmiConnection` | `Verbara.Sdk.Ami` | Send actions, receive events/responses |
+| `AmiAction` | `Verbara.Sdk.Ami.Actions` | Base class for all 111 AMI actions |
+| `AmiEvent` | `Verbara.Sdk.Ami.Events` | Base class for all 215 AMI events |
+| `AsteriskServer` | `Verbara.Sdk.Live` | Top-level live model: channels, queues, agents |
+| `ChannelManager` | `Verbara.Sdk.Live` | Real-time channel tracking with secondary indices |
+| `QueueManager` | `Verbara.Sdk.Live` | Real-time queue tracking with member reverse index |
+| `AgentManager` | `Verbara.Sdk.Live` | Real-time agent state tracking |
+| `AsteriskServerPool` | `Verbara.Sdk.Live` | Multi-server federation with agent routing |
+| `ICallSessionManager` | `Verbara.Sdk.Sessions` | Call session correlation and lifecycle |
+| `FastAgiServer` | `Verbara.Sdk.Agi` | FastAGI TCP server |
+| `AgiChannel` | `Verbara.Sdk.Agi` | Per-call AGI command interface |
+| `AriClient` | `Verbara.Sdk.Ari` | ARI REST + WebSocket client |
+| `IAudioSocketServer` | `Verbara.Sdk.VoiceAi.AudioSocket` | AudioSocket protocol server |
+| `IConversationHandler` | `Verbara.Sdk.VoiceAi` | Voice AI pipeline callback interface |
 
 ---
 
@@ -563,7 +563,7 @@ services.AddOpenAiRealtimeBridge(o => { o.ApiKey = "..."; o.Model = "gpt-4o-real
 
 - [Repository overview](../README.md)
 - [For decision-makers](README-commercial.md)
-- [Pro (enterprise extension)](https://github.com/Harol-Reina/Asterisk.Sdk.Pro)
+- [Pro (enterprise extension)](https://github.com/verbara/Verbara.Sdk.Pro)
 - [Architecture review (high-load)](architecture/architecture-review-high-load.md)
 
 ---

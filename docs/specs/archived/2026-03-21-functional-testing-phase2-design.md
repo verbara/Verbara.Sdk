@@ -84,7 +84,7 @@ Test `IEventGeneratingAction` pipeline (actions that produce event streams):
 ### Key API Surface
 
 ```
-AmiStringPool: internal static class in Asterisk.Sdk.Ami.Internal
+AmiStringPool: internal static class in Verbara.Sdk.Ami.Internal
   GetKey(ReadOnlySpan<byte>) → string
   GetValue(ReadOnlySpan<byte>) → string
 
@@ -101,7 +101,7 @@ GeneratedResponseDeserializer: internal static class (generated)
 GeneratedEventRegistry: internal static class (generated)
   Create(string eventName) → ManagerEvent?
 
-AmiMessage: internal class in Asterisk.Sdk.Ami.Internal
+AmiMessage: internal class in Verbara.Sdk.Ami.Internal
   string? this[string key] — case-insensitive field access
   string? EventType
   string? ActionId
@@ -241,13 +241,13 @@ Existing tests cover basic Healthy/Degraded/Unhealthy states. Missing: state tra
 ### Key API Surface
 
 ```
-AmiHealthCheck : IHealthCheck (Asterisk.Sdk.Ami.Diagnostics)
+AmiHealthCheck : IHealthCheck (Verbara.Sdk.Ami.Diagnostics)
   Connected → Healthy, Reconnecting → Degraded, else → Unhealthy
 
-AgiHealthCheck : IHealthCheck (Asterisk.Sdk.Agi.Diagnostics)
+AgiHealthCheck : IHealthCheck (Verbara.Sdk.Agi.Diagnostics)
   Listening → Healthy, Starting → Degraded, else → Unhealthy
 
-AriHealthCheck : IHealthCheck (Asterisk.Sdk.Ari.Diagnostics)
+AriHealthCheck : IHealthCheck (Verbara.Sdk.Ari.Diagnostics)
   Connected → Healthy, Reconnecting → Degraded, else → Unhealthy
 ```
 

@@ -1,4 +1,4 @@
-// Asterisk.Sdk - Basic AMI Example
+// Verbara.Sdk - Basic AMI Example
 // Demonstrates: DI setup, connect, PingAction, event subscription, disconnect.
 
 using Verbara.Sdk;

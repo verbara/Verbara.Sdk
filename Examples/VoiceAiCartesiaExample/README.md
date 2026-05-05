@@ -38,10 +38,10 @@ Point Asterisk's `AudioSocket()` dialplan at `127.0.0.1:9092` (or the host/IP wh
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.VoiceAi.AudioSocket` — AudioSocket server.
-- `Asterisk.Sdk.VoiceAi.Stt` — Cartesia Ink-Whisper recognizer.
-- `Asterisk.Sdk.VoiceAi.Tts` — Cartesia Sonic-3 synthesizer.
-- `Asterisk.Sdk.VoiceAi` — `IConversationHandler`, `AddVoiceAiPipeline`.
+- `Verbara.Sdk.VoiceAi.AudioSocket` — AudioSocket server.
+- `Verbara.Sdk.VoiceAi.Stt` — Cartesia Ink-Whisper recognizer.
+- `Verbara.Sdk.VoiceAi.Tts` — Cartesia Sonic-3 synthesizer.
+- `Verbara.Sdk.VoiceAi` — `IConversationHandler`, `AddVoiceAiPipeline`.
 
 ## Why Cartesia
 

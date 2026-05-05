@@ -1,15 +1,15 @@
-# Asterisk.Sdk — Functional Testing Suite Design
+# Verbara.Sdk — Functional Testing Suite Design
 
 **Date:** 2026-03-20
 **Status:** Approved
 **Scope:** Comprehensive functional testing for MIT and Pro repos
-**Repos:** MIT (`Asterisk.Sdk`) + Pro (`Asterisk.Sdk.Pro`)
+**Repos:** MIT (`Verbara.Sdk`) + Pro (`Verbara.Sdk.Pro`)
 
 ---
 
 ## 1. Goal
 
-Build a reproducible, realistic, self-contained functional testing suite that validates the entire Asterisk.Sdk stack — from protocol parsing to full Voice AI pipelines — without requiring external API keys or infrastructure. Tests must run identically on any machine with Docker installed.
+Build a reproducible, realistic, self-contained functional testing suite that validates the entire Verbara.Sdk stack — from protocol parsing to full Voice AI pipelines — without requiring external API keys or infrastructure. Tests must run identically on any machine with Docker installed.
 
 ## 2. Problem
 
@@ -65,7 +65,7 @@ Current testing covers unit tests (878+ MIT, 520+ Pro) and basic integration tes
 ```
 MIT repo:
   Tests/
-    Asterisk.Sdk.FunctionalTests/           ← New project
+    Verbara.Sdk.FunctionalTests/           ← New project
       Layer1_UnitText/
       Layer2_UnitProtocol/
       Layer3_Contract/
@@ -115,7 +115,7 @@ MIT repo:
 
 Pro repo:
   tests/
-    Asterisk.Sdk.Pro.FunctionalTests/       ← New project
+    Verbara.Sdk.Pro.FunctionalTests/       ← New project
       Layer1_UnitText/                      ← Pro handlers/providers
       Layer5_Integration/                   ← Cluster, Dialer, Routing
       Layer6_E2E/                           ← AgentAssist, CallAnalytics
@@ -361,7 +361,7 @@ enabled = yes
 
 Verification:
 ```bash
-dotnet publish src/Asterisk.Sdk.Hosting/ -r linux-x64 -c Release \
+dotnet publish src/Verbara.Sdk.Hosting/ -r linux-x64 -c Release \
   --self-contained -p:PublishAot=true 2>&1 | grep -i "warning"
 # Must exit 0 with 0 warnings
 ```
@@ -369,7 +369,7 @@ dotnet publish src/Asterisk.Sdk.Hosting/ -r linux-x64 -c Release \
 Add as CI gate that fails on any trim/AOT warning.
 
 #### 4.11 Source Generator Tests
-**Location:** MIT `Tests/Asterisk.Sdk.Ami.SourceGenerators.Tests/` (existing, expand)
+**Location:** MIT `Tests/Verbara.Sdk.Ami.SourceGenerators.Tests/` (existing, expand)
 
 Tests:
 - Verify generated code compiles for all 111 actions
@@ -644,25 +644,25 @@ metricsCapture.Get<long>("ami.events.dropped").Should().Be(0);
 
 ```bash
 # Layer 1-3: No dependencies (fast, CI-friendly)
-dotnet test Tests/Asterisk.Sdk.FunctionalTests/ \
+dotnet test Tests/Verbara.Sdk.FunctionalTests/ \
   --filter "Category=Unit|Category=Contract"
 
 # Layer 4: Optional Docker (pipeline tests)
-dotnet test Tests/Asterisk.Sdk.FunctionalTests/ \
+dotnet test Tests/Verbara.Sdk.FunctionalTests/ \
   --filter "Category=Functional"
 
 # Layer 5-6: Docker Compose required
 docker compose -f docker/functional/docker-compose.functional.yml up -d
-dotnet test Tests/Asterisk.Sdk.FunctionalTests/ \
+dotnet test Tests/Verbara.Sdk.FunctionalTests/ \
   --filter "Category=Integration|Category=E2E"
 
 # Layer 7: Stress tests (separate run)
-dotnet test Tests/Asterisk.Sdk.FunctionalTests/ \
+dotnet test Tests/Verbara.Sdk.FunctionalTests/ \
   --filter "Category=Stress"
 
 # Pro tests
 docker compose -f docker/functional/docker-compose.functional.yml up -d
-dotnet test tests/Asterisk.Sdk.Pro.FunctionalTests/ \
+dotnet test tests/Verbara.Sdk.Pro.FunctionalTests/ \
   --filter "Category!=Stress"
 ```
 
@@ -831,7 +831,7 @@ Pro `docker-compose.functional.yml` uses Docker Compose `include` (v2.20+) to re
 ```yaml
 # Pro docker/functional/docker-compose.functional.yml
 include:
-  - path: /media/Data/Source/Verbara/Asterisk.Sdk/docker/functional/docker-compose.functional.yml
+  - path: /media/Data/Source/Verbara/Verbara.Sdk/docker/functional/docker-compose.functional.yml
 
 services:
   # Additional Asterisk instances for cluster testing

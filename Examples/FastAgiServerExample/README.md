@@ -34,4 +34,4 @@ exten => 100,1,AGI(agi://localhost/hello)
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.Agi` — FastAGI server, `IAgiScript`, `IAgiChannel`
+- `Verbara.Sdk.Agi` — FastAGI server, `IAgiScript`, `IAgiChannel`

@@ -3,13 +3,13 @@
 **Date:** 2026-03-17
 **Phase:** 2 — Session Engine MIT
 **Target:** v0.5.0-beta
-**Scope:** Live Layer Gap Fixes + Asterisk.Sdk.Sessions + PbxAdmin Migration
+**Scope:** Live Layer Gap Fixes + Verbara.Sdk.Sessions + PbxAdmin Migration
 
 ---
 
 ## 1. Overview
 
-Build `Asterisk.Sdk.Sessions` — a domain layer that correlates AMI events into cohesive call sessions with state machines, domain events, and extension points for PRO consumers.
+Build `Verbara.Sdk.Sessions` — a domain layer that correlates AMI events into cohesive call sessions with state machines, domain events, and extension points for PRO consumers.
 
 **Approach:** Opción 2 modificada (SDK puro primero, PbxAdmin migration después).
 
@@ -34,7 +34,7 @@ The EventObserver in `AsteriskServer` handles only 14 event types. 10 critical e
 
 ### 2.2 New: BridgeManager
 
-New manager in `Asterisk.Sdk.Live`, following ChannelManager/QueueManager patterns.
+New manager in `Verbara.Sdk.Live`, following ChannelManager/QueueManager patterns.
 
 **AsteriskBridge (domain object):**
 
@@ -503,7 +503,7 @@ public sealed class SessionOptions
 
 ### 5.1 Abstract Base Classes
 
-All extension points live in `Asterisk.Sdk.Sessions` (not core) to avoid circular dependencies.
+All extension points live in `Verbara.Sdk.Sessions` (not core) to avoid circular dependencies.
 
 ```csharp
 public abstract class CallRouterBase
@@ -547,7 +547,7 @@ All `internal` — registered as defaults in DI, user never instantiates directl
 ### 5.3 PRO Override Pattern
 
 ```csharp
-// Future: Asterisk.Sdk.Pro.Hosting
+// Future: Verbara.Sdk.Pro.Hosting
 services.AddAsteriskSessions();
 services.Replace(ServiceDescriptor.Singleton<SessionStoreBase, PostgresSessionStore>());
 services.Replace(ServiceDescriptor.Singleton<CallRouterBase, ClusterRouter>());
@@ -559,7 +559,7 @@ services.Replace(ServiceDescriptor.Singleton<CallRouterBase, ClusterRouter>());
 
 ### 6.1 New Extension Method
 
-In `Asterisk.Sdk.Hosting`:
+In `Verbara.Sdk.Hosting`:
 
 ```csharp
 public static IServiceCollection AddAsteriskSessions(
@@ -711,8 +711,8 @@ Migrate in order of increasing coupling:
 ## 9. Project Structure
 
 ```
-src/Asterisk.Sdk.Sessions/
-├── Asterisk.Sdk.Sessions.csproj
+src/Verbara.Sdk.Sessions/
+├── Verbara.Sdk.Sessions.csproj
 ├── CallSession.cs
 ├── CallSessionState.cs
 ├── CallSessionEvent.cs
@@ -745,9 +745,9 @@ src/Asterisk.Sdk.Sessions/
 **Dependencies:**
 
 ```xml
-<ProjectReference Include="../Asterisk.Sdk/Asterisk.Sdk.csproj" />
-<ProjectReference Include="../Asterisk.Sdk.Ami/Asterisk.Sdk.Ami.csproj" />
-<ProjectReference Include="../Asterisk.Sdk.Live/Asterisk.Sdk.Live.csproj" />
+<ProjectReference Include="../Verbara.Sdk/Verbara.Sdk.csproj" />
+<ProjectReference Include="../Verbara.Sdk.Ami/Verbara.Sdk.Ami.csproj" />
+<ProjectReference Include="../Verbara.Sdk.Live/Verbara.Sdk.Live.csproj" />
 ```
 
 ---
@@ -772,7 +772,7 @@ src/Asterisk.Sdk.Sessions/
 ## 11. Test Strategy
 
 ```
-Tests/Asterisk.Sdk.Sessions.Tests/
+Tests/Verbara.Sdk.Sessions.Tests/
 ├── CallSessionTests.cs              // State transitions, invalid transitions throw
 ├── CallSessionManagerTests.cs       // Correlation, event processing, lifecycle
 ├── SessionCorrelatorTests.cs        // LinkedId resolution, direction inference
@@ -784,7 +784,7 @@ Tests/Asterisk.Sdk.Sessions.Tests/
     └── SessionIntegrationTests.cs   // Docker Asterisk, end-to-end call flow
 ```
 
-**Benchmarks (in Asterisk.Sdk.Benchmarks):**
+**Benchmarks (in Verbara.Sdk.Benchmarks):**
 - Session creation throughput
 - Correlation lookup (by LinkedId, ChannelId, BridgeId)
 - Reconciliation sweep with 10K/100K sessions

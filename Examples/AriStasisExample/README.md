@@ -28,4 +28,4 @@ dotnet run --project Examples/AriStasisExample/
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.Ari` — `AriClient`, `AriClientOptions`, `AriEvent`
+- `Verbara.Sdk.Ari` — `AriClient`, `AriClientOptions`, `AriEvent`

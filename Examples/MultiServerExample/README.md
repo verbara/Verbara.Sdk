@@ -30,6 +30,6 @@ dotnet run --project Examples/MultiServerExample/
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.Live` — `AsteriskServerPool`, `AsteriskServer`
-- `Asterisk.Sdk.Ami` — `AmiConnectionOptions`
-- `Asterisk.Sdk.Hosting` — `AddAsteriskMultiServer()`
+- `Verbara.Sdk.Live` — `AsteriskServerPool`, `AsteriskServer`
+- `Verbara.Sdk.Ami` — `AmiConnectionOptions`
+- `Verbara.Sdk.Hosting` — `AddAsteriskMultiServer()`

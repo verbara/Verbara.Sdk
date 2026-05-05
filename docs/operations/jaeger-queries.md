@@ -4,19 +4,19 @@ Example searches for the 9 SDK `ActivitySource`s. All tag keys use `AsteriskSema
 
 ## Source names
 
-The SDK publishes these source names (`Asterisk.Sdk.Hosting.AsteriskTelemetry.SourceNames` is the canonical catalog):
+The SDK publishes these source names (`Verbara.Sdk.Hosting.AsteriskTelemetry.SourceNames` is the canonical catalog):
 
 | Source | Emitted by |
 |---|---|
-| `Asterisk.Sdk.Ami` | AMI connection handshake, action send/response |
-| `Asterisk.Sdk.Ari` | ARI REST calls, WebSocket subscribe / receive |
-| `Asterisk.Sdk.Agi` | FastAGI session execution |
-| `Asterisk.Sdk.Sessions` | Session manager lifecycle (Created / Attached / Completed) |
-| `Asterisk.Sdk.Activities` | Activity state machines (Call, Hold, Transfer, Play) |
-| `Asterisk.Sdk.VoiceAi` | STT/TTS pipeline spans (per-turn) |
-| `Asterisk.Sdk.VoiceAi.AudioSocket` | AudioSocket session accept / stream lifecycle |
-| `Asterisk.Sdk.Push` | Local push event dispatch + NATS bridge publish/receive |
-| `Asterisk.Sdk.Push.Webhooks` | Webhook HTTP delivery (retry + circuit) |
+| `Verbara.Sdk.Ami` | AMI connection handshake, action send/response |
+| `Verbara.Sdk.Ari` | ARI REST calls, WebSocket subscribe / receive |
+| `Verbara.Sdk.Agi` | FastAGI session execution |
+| `Verbara.Sdk.Sessions` | Session manager lifecycle (Created / Attached / Completed) |
+| `Verbara.Sdk.Activities` | Activity state machines (Call, Hold, Transfer, Play) |
+| `Verbara.Sdk.VoiceAi` | STT/TTS pipeline spans (per-turn) |
+| `Verbara.Sdk.VoiceAi.AudioSocket` | AudioSocket session accept / stream lifecycle |
+| `Verbara.Sdk.Push` | Local push event dispatch + NATS bridge publish/receive |
+| `Verbara.Sdk.Push.Webhooks` | Webhook HTTP delivery (retry + circuit) |
 
 ## Queries
 

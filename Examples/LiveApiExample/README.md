@@ -28,6 +28,6 @@ dotnet run --project Examples/LiveApiExample/
 
 ## Key SDK Packages Used
 
-- `Asterisk.Sdk.Ami` — AMI connection
-- `Asterisk.Sdk.Live` — `AsteriskServer`, `ChannelManager`, `QueueManager`, `AgentManager`
-- `Asterisk.Sdk.Hosting` — DI registration (`AddAsterisk`)
+- `Verbara.Sdk.Ami` — AMI connection
+- `Verbara.Sdk.Live` — `AsteriskServer`, `ChannelManager`, `QueueManager`, `AgentManager`
+- `Verbara.Sdk.Hosting` — DI registration (`AddAsterisk`)

@@ -1,14 +1,14 @@
 # Session Store Backends
 
-> Choosing and configuring a `SessionStoreBase` backend for `Asterisk.Sdk.Sessions`.
+> Choosing and configuring a `SessionStoreBase` backend for `Verbara.Sdk.Sessions`.
 
 The Session Engine tracks live call sessions (`CallSession`) from AMI/ARI events and persists them through a pluggable store. Three backends ship as MIT packages on nuget.org:
 
 | Package | Backend | Multi-instance | Crash recovery | Read latency | Recommended for |
 |---------|---------|----------------|----------------|--------------|-----------------|
-| **`Asterisk.Sdk.Sessions`** (default) | `InMemorySessionStore` | ❌ | ❌ | <0.1 ms | Single-process apps, tests, POCs |
-| **`Asterisk.Sdk.Sessions.Redis`** | `RedisSessionStore` | ✅ | ✅ (with `completedRetention`) | <1 ms | HA deployments, low-latency SLAs |
-| **`Asterisk.Sdk.Sessions.Postgres`** | `PostgresSessionStore` | ✅ | ✅ (durable) | 5-10 ms | Teams already running Postgres, regulatory/audit workloads |
+| **`Verbara.Sdk.Sessions`** (default) | `InMemorySessionStore` | ❌ | ❌ | <0.1 ms | Single-process apps, tests, POCs |
+| **`Verbara.Sdk.Sessions.Redis`** | `RedisSessionStore` | ✅ | ✅ (with `completedRetention`) | <1 ms | HA deployments, low-latency SLAs |
+| **`Verbara.Sdk.Sessions.Postgres`** | `PostgresSessionStore` | ✅ | ✅ (durable) | 5-10 ms | Teams already running Postgres, regulatory/audit workloads |
 
 All three implement the public **`ISessionStore`** interface and derive from **`SessionStoreBase`** — the `SessionReconciliationService` and `CallSessionManager` are agnostic to the backend choice. Switching is a one-line DI change; no code outside the registration needs to move.
 
@@ -36,10 +36,10 @@ All three implement the public **`ISessionStore`** interface and derive from **`
 
 ---
 
-## `Asterisk.Sdk.Sessions.Redis`
+## `Verbara.Sdk.Sessions.Redis`
 
 ```csharp
-using Asterisk.Sdk.Sessions.Redis;
+using Verbara.Sdk.Sessions.Redis;
 
 builder.Services
     .AddAsteriskSessionsBuilder()
@@ -78,10 +78,10 @@ I/O is pipelined via `IDatabase.CreateBatch()` + `Task.WhenAll(...).WaitAsync(ct
 
 ---
 
-## `Asterisk.Sdk.Sessions.Postgres`
+## `Verbara.Sdk.Sessions.Postgres`
 
 ```csharp
-using Asterisk.Sdk.Sessions.Postgres;
+using Verbara.Sdk.Sessions.Postgres;
 
 builder.Services
     .AddAsteriskSessionsBuilder()
@@ -159,7 +159,7 @@ builder.Services
     .Replace(ServiceDescriptor.Singleton<SessionStoreBase, MyMongoSessionStore>());
 ```
 
-The serialization DTO `CallSessionSnapshot` is `internal` to `Asterisk.Sdk.Sessions` — reach it from a third-party store by adding your assembly to the `InternalsVisibleTo` grant list (or fork the package).
+The serialization DTO `CallSessionSnapshot` is `internal` to `Verbara.Sdk.Sessions` — reach it from a third-party store by adding your assembly to the `InternalsVisibleTo` grant list (or fork the package).
 
 ---
 

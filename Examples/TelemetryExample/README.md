@@ -1,6 +1,6 @@
 # TelemetryExample
 
-Minimal example showing how to consume every `ActivitySource` and `Meter` published by Asterisk.Sdk without hard-coding any names.
+Minimal example showing how to consume every `ActivitySource` and `Meter` published by Verbara.Sdk without hard-coding any names.
 
 ## What it demonstrates
 
@@ -32,7 +32,7 @@ Add the three OpenTelemetry packages to `Directory.Packages.props`:
 Then replace the listeners with:
 
 ```csharp
-using Asterisk.Sdk.Hosting;
+using Verbara.Sdk.Hosting;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;

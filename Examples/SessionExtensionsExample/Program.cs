@@ -1,4 +1,4 @@
-// Asterisk.Sdk - Session Extensions Example
+// Verbara.Sdk - Session Extensions Example
 // Demonstrates: implementing a custom SessionStoreBase (FileSessionStore) that
 // persists session snapshots as JSON lines to a file.
 

@@ -1,4 +1,4 @@
-// Asterisk.Sdk - Webhook Subscriber Example
+// Verbara.Sdk - Webhook Subscriber Example
 // Demonstrates: outbound HTTP webhooks driven by Verbara.Sdk.Push.
 //
 // Flow:
