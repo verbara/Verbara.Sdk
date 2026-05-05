@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-03-19-sprint23-voiceai-audiosocket-design.md`
 
-**Repo:** `/media/Data/Source/IPcom/Asterisk.Sdk/` (MIT SDK — these are open source packages)
+**Repo:** `/media/Data/Source/Verbara/Asterisk.Sdk/` (MIT SDK — these are open source packages)
 
 **Execution strategy:** FCM
 - Phase A: Audio package (AudioFormat + Resampler + AudioProcessor)

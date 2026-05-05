@@ -117,7 +117,7 @@ This package provides **in-memory primitives** suitable for single-node hosts. F
 
 ## Links
 
-- Repository: [github.com/ipcom/Asterisk.Sdk](https://github.com/ipcom/Asterisk.Sdk)
+- Repository: [github.com/Harol-Reina/Asterisk.Sdk](https://github.com/Harol-Reina/Asterisk.Sdk)
 - Parent SDK README: [../../README.md](../../README.md)
 - Changelog: [../../CHANGELOG.md](../../CHANGELOG.md)
 

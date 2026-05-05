@@ -2,7 +2,7 @@
 
 ## Context
 
-**Por qué este cambio:** ADR-0029 ([docs/decisions/0029-resilience-primitives-mit.md](/media/Data/Source/IPcom/Asterisk.Sdk/docs/decisions/0029-resilience-primitives-mit.md)) declara que `Asterisk.Sdk.Pro.Resilience` es infraestructura genérica sin domain commercial y debe migrar al SDK (MIT) — alineado con stewardship pledge (ADR-0027) y evidencia industry (Polly/Resilience4j/Hystrix todos OSS). Hoy los primitives están "trapped in commercial": MIT users no pueden usar circuit breaker sin comprar Pro, y SDK mantiene 3 retry loops open-coded (AMI reconnect, ARI reconnect, Webhook delivery).
+**Por qué este cambio:** ADR-0029 ([docs/decisions/0029-resilience-primitives-mit.md](/media/Data/Source/Verbara/Asterisk.Sdk/docs/decisions/0029-resilience-primitives-mit.md)) declara que `Asterisk.Sdk.Pro.Resilience` es infraestructura genérica sin domain commercial y debe migrar al SDK (MIT) — alineado con stewardship pledge (ADR-0027) y evidencia industry (Polly/Resilience4j/Hystrix todos OSS). Hoy los primitives están "trapped in commercial": MIT users no pueden usar circuit breaker sin comprar Pro, y SDK mantiene 3 retry loops open-coded (AMI reconnect, ARI reconnect, Webhook delivery).
 
 **Alcance aprobado:** Fase 1 (crear paquete SDK) + Fase 2 (Pro elimina duplicación + 5 consumers migran namespace) + Fase 3 (SDK adopta primitive internamente en AMI/ARI/Webhooks). Target: **SDK v1.14.0** + **Pro v1.9.0-pro** coordinated release.
 
@@ -26,21 +26,21 @@
 
 **Target files creados:**
 
-1. **`src/Asterisk.Sdk.Resilience/Asterisk.Sdk.Resilience.csproj`** — clon del patrón [Asterisk.Sdk.Push.csproj](/media/Data/Source/IPcom/Asterisk.Sdk/src/Asterisk.Sdk.Push/Asterisk.Sdk.Push.csproj) con `EnablePackageValidation=false` (baseline nuevo). Dependencies: `Microsoft.Extensions.Logging.Abstractions`, `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions`. `InternalsVisibleTo Asterisk.Sdk.Resilience.Tests`.
+1. **`src/Asterisk.Sdk.Resilience/Asterisk.Sdk.Resilience.csproj`** — clon del patrón [Asterisk.Sdk.Push.csproj](/media/Data/Source/Verbara/Asterisk.Sdk/src/Asterisk.Sdk.Push/Asterisk.Sdk.Push.csproj) con `EnablePackageValidation=false` (baseline nuevo). Dependencies: `Microsoft.Extensions.Logging.Abstractions`, `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Options`, `Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions`. `InternalsVisibleTo Asterisk.Sdk.Resilience.Tests`.
 
-2. **`src/Asterisk.Sdk.Resilience/CircuitBreakerState.cs`** — copia verbatim de [Pro.Resilience/CircuitBreakerState.cs](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.Resilience/CircuitBreakerState.cs), cambia `namespace Asterisk.Sdk.Pro.Resilience;` → `namespace Asterisk.Sdk.Resilience;`.
+2. **`src/Asterisk.Sdk.Resilience/CircuitBreakerState.cs`** — copia verbatim de [Pro.Resilience/CircuitBreakerState.cs](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.Resilience/CircuitBreakerState.cs), cambia `namespace Asterisk.Sdk.Pro.Resilience;` → `namespace Asterisk.Sdk.Resilience;`.
 
-3. **`src/Asterisk.Sdk.Resilience/ResiliencePolicy.cs`** — idem con [Pro.Resilience/ResiliencePolicy.cs](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.Resilience/ResiliencePolicy.cs).
+3. **`src/Asterisk.Sdk.Resilience/ResiliencePolicy.cs`** — idem con [Pro.Resilience/ResiliencePolicy.cs](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.Resilience/ResiliencePolicy.cs).
 
-4. **`src/Asterisk.Sdk.Resilience/ResiliencePolicyBuilder.cs`** — idem con [Pro.Resilience/ResiliencePolicyBuilder.cs](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.Resilience/ResiliencePolicyBuilder.cs).
+4. **`src/Asterisk.Sdk.Resilience/ResiliencePolicyBuilder.cs`** — idem con [Pro.Resilience/ResiliencePolicyBuilder.cs](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.Resilience/ResiliencePolicyBuilder.cs).
 
-5. **`src/Asterisk.Sdk.Resilience/CircuitBreakerOpenException.cs`** — idem con [Pro.Resilience/CircuitBreakerOpenException.cs](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.Resilience/CircuitBreakerOpenException.cs).
+5. **`src/Asterisk.Sdk.Resilience/CircuitBreakerOpenException.cs`** — idem con [Pro.Resilience/CircuitBreakerOpenException.cs](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.Resilience/CircuitBreakerOpenException.cs).
 
 6. **`src/Asterisk.Sdk.Resilience/Diagnostics/ResilienceMetrics.cs`** — **meter renamed** `Asterisk.Sdk.Pro.Resilience` → `Asterisk.Sdk.Resilience`. Namespace `Asterisk.Sdk.Resilience.Diagnostics`.
 
 7. **`src/Asterisk.Sdk.Resilience/DependencyInjection/ResilienceServiceCollectionExtensions.cs`** — renombrar `AddProResilience()` → `AddAsteriskResilience()` (alineado con SDK convention `AddAsterisk*`). Namespace `Asterisk.Sdk.Resilience.DependencyInjection`.
 
-8. **`src/Asterisk.Sdk.Resilience/README.md`** — patrón de [Push README](/media/Data/Source/IPcom/Asterisk.Sdk/src/Asterisk.Sdk.Push/README.md): "What it does" + Install + Quick start + Observability section (meter `Asterisk.Sdk.Resilience`).
+8. **`src/Asterisk.Sdk.Resilience/README.md`** — patrón de [Push README](/media/Data/Source/Verbara/Asterisk.Sdk/src/Asterisk.Sdk.Push/README.md): "What it does" + Install + Quick start + Observability section (meter `Asterisk.Sdk.Resilience`).
 
 9. **`src/Asterisk.Sdk.Resilience/PublicAPI.Shipped.txt`** — `#nullable enable` + vacío.
 
@@ -48,23 +48,23 @@
 
 **Tests migrados (38 tests):**
 
-11. **`Tests/Asterisk.Sdk.Resilience.Tests/Asterisk.Sdk.Resilience.Tests.csproj`** — clon de [Push.Tests.csproj](/media/Data/Source/IPcom/Asterisk.Sdk/Tests/Asterisk.Sdk.Push.Tests/Asterisk.Sdk.Push.Tests.csproj).
+11. **`Tests/Asterisk.Sdk.Resilience.Tests/Asterisk.Sdk.Resilience.Tests.csproj`** — clon de [Push.Tests.csproj](/media/Data/Source/Verbara/Asterisk.Sdk/Tests/Asterisk.Sdk.Push.Tests/Asterisk.Sdk.Push.Tests.csproj).
 
-12. Migrar 6 archivos de test desde [tests/Asterisk.Sdk.Pro.Resilience.Tests/](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/tests/Asterisk.Sdk.Pro.Resilience.Tests/) — cambiar namespace `Asterisk.Sdk.Pro.Resilience.Tests` → `Asterisk.Sdk.Resilience.Tests`. 38 tests cubren CircuitBreakerState (10) + ResiliencePolicyBuilder (7) + ResiliencePolicy (14) + ResilienceMetrics (3) + DI (4). Renombrar `AddProResilience()` a `AddAsteriskResilience()` en los tests de DI.
+12. Migrar 6 archivos de test desde [tests/Asterisk.Sdk.Pro.Resilience.Tests/](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/tests/Asterisk.Sdk.Pro.Resilience.Tests/) — cambiar namespace `Asterisk.Sdk.Pro.Resilience.Tests` → `Asterisk.Sdk.Resilience.Tests`. 38 tests cubren CircuitBreakerState (10) + ResiliencePolicyBuilder (7) + ResiliencePolicy (14) + ResilienceMetrics (3) + DI (4). Renombrar `AddProResilience()` a `AddAsteriskResilience()` en los tests de DI.
 
 **Solution + packages registry:**
 
-13. **[Asterisk.Sdk.slnx](/media/Data/Source/IPcom/Asterisk.Sdk/Asterisk.Sdk.slnx)** — agregar 2 entries (`/src/` + `/Tests/`).
+13. **[Asterisk.Sdk.slnx](/media/Data/Source/Verbara/Asterisk.Sdk/Asterisk.Sdk.slnx)** — agregar 2 entries (`/src/` + `/Tests/`).
 
-14. **[Directory.Packages.props](/media/Data/Source/IPcom/Asterisk.Sdk/Directory.Packages.props)** — agregar `<PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions">` si no existe (copiar versión actualmente usada por otro package).
+14. **[Directory.Packages.props](/media/Data/Source/Verbara/Asterisk.Sdk/Directory.Packages.props)** — agregar `<PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions">` si no existe (copiar versión actualmente usada por otro package).
 
 **Validación Fase 1:**
 ```sh
-cd /media/Data/Source/IPcom/Asterisk.Sdk
+cd /media/Data/Source/Verbara/Asterisk.Sdk
 dotnet build Asterisk.Sdk.slnx --nologo /warnaserror   # 0 warnings
 dotnet test Tests/Asterisk.Sdk.Resilience.Tests/       # 38 passing
 dotnet pack src/Asterisk.Sdk.Resilience/Asterisk.Sdk.Resilience.csproj \
-  -c Release -o /media/Data/Source/IPcom/local-nuget-feed/
+  -c Release -o /media/Data/Source/Verbara/local-nuget-feed/
 ```
 
 ---
@@ -73,50 +73,50 @@ dotnet pack src/Asterisk.Sdk.Resilience/Asterisk.Sdk.Resilience.csproj \
 
 **Deleted files:**
 
-15. Eliminar directorio completo: [src/Asterisk.Sdk.Pro.Resilience/](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.Resilience/).
-16. Eliminar directorio completo: [tests/Asterisk.Sdk.Pro.Resilience.Tests/](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/tests/Asterisk.Sdk.Pro.Resilience.Tests/).
+15. Eliminar directorio completo: [src/Asterisk.Sdk.Pro.Resilience/](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.Resilience/).
+16. Eliminar directorio completo: [tests/Asterisk.Sdk.Pro.Resilience.Tests/](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/tests/Asterisk.Sdk.Pro.Resilience.Tests/).
 
 **Updated files (slnx + central package management):**
 
-17. **[Asterisk.Sdk.Pro.slnx](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/Asterisk.Sdk.Pro.slnx)** — eliminar 2 entries (`src/Asterisk.Sdk.Pro.Resilience/*` + `tests/Asterisk.Sdk.Pro.Resilience.Tests/*`).
+17. **[Asterisk.Sdk.Pro.slnx](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/Asterisk.Sdk.Pro.slnx)** — eliminar 2 entries (`src/Asterisk.Sdk.Pro.Resilience/*` + `tests/Asterisk.Sdk.Pro.Resilience.Tests/*`).
 
-18. **[Directory.Packages.props](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/Directory.Packages.props)** — agregar `<PackageVersion Include="Asterisk.Sdk.Resilience" Version="1.14.0" />`.
+18. **[Directory.Packages.props](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/Directory.Packages.props)** — agregar `<PackageVersion Include="Asterisk.Sdk.Resilience" Version="1.14.0" />`.
 
 **5 consumers: rename `using` + swap reference (`<ProjectReference>` → `<PackageReference>`):**
 
-19. **Pro.EventStore** — [EventStoreServiceCollectionExtensions.cs](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.EventStore/EventStoreServiceCollectionExtensions.cs): `using Asterisk.Sdk.Pro.Resilience;` → `using Asterisk.Sdk.Resilience;`. csproj: `<ProjectReference Include="..\Asterisk.Sdk.Pro.Resilience\*" />` → `<PackageReference Include="Asterisk.Sdk.Resilience" />`. También `using Asterisk.Sdk.Pro.Resilience.DependencyInjection;` → `using Asterisk.Sdk.Resilience.DependencyInjection;`; `AddProResilience()` → `AddAsteriskResilience()`.
+19. **Pro.EventStore** — [EventStoreServiceCollectionExtensions.cs](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.EventStore/EventStoreServiceCollectionExtensions.cs): `using Asterisk.Sdk.Pro.Resilience;` → `using Asterisk.Sdk.Resilience;`. csproj: `<ProjectReference Include="..\Asterisk.Sdk.Pro.Resilience\*" />` → `<PackageReference Include="Asterisk.Sdk.Resilience" />`. También `using Asterisk.Sdk.Pro.Resilience.DependencyInjection;` → `using Asterisk.Sdk.Resilience.DependencyInjection;`; `AddProResilience()` → `AddAsteriskResilience()`.
 
-20. **Pro.Analytics** — misma transformación en [AnalyticsServiceCollectionExtensions.cs](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.Analytics/AnalyticsServiceCollectionExtensions.cs).
+20. **Pro.Analytics** — misma transformación en [AnalyticsServiceCollectionExtensions.cs](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.Analytics/AnalyticsServiceCollectionExtensions.cs).
 
-21. **Pro.AgentAssist** — misma transformación en [AgentAssistServiceCollectionExtensions.cs](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.AgentAssist/AgentAssistServiceCollectionExtensions.cs), [Engine/AgentAssistEngine.cs](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.AgentAssist/Engine/AgentAssistEngine.cs), [Engine/AgentAssistSession.cs](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.AgentAssist/Engine/AgentAssistSession.cs).
+21. **Pro.AgentAssist** — misma transformación en [AgentAssistServiceCollectionExtensions.cs](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.AgentAssist/AgentAssistServiceCollectionExtensions.cs), [Engine/AgentAssistEngine.cs](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.AgentAssist/Engine/AgentAssistEngine.cs), [Engine/AgentAssistSession.cs](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.AgentAssist/Engine/AgentAssistSession.cs).
 
-22. **Pro.CallAnalytics** — misma transformación en [CallAnalyticsServiceCollectionExtensions.cs](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.CallAnalytics/CallAnalyticsServiceCollectionExtensions.cs), [Engine/CallAnalyticsEngine.cs](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.CallAnalytics/Engine/CallAnalyticsEngine.cs).
+22. **Pro.CallAnalytics** — misma transformación en [CallAnalyticsServiceCollectionExtensions.cs](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.CallAnalytics/CallAnalyticsServiceCollectionExtensions.cs), [Engine/CallAnalyticsEngine.cs](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.CallAnalytics/Engine/CallAnalyticsEngine.cs).
 
-23. **Pro.Dialer** — [Execution/DefaultOriginateExecutor.cs](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.Dialer/Execution/DefaultOriginateExecutor.cs) usa `CircuitBreakerState` directamente. Misma transformación.
+23. **Pro.Dialer** — [Execution/DefaultOriginateExecutor.cs](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.Dialer/Execution/DefaultOriginateExecutor.cs) usa `CircuitBreakerState` directamente. Misma transformación.
 
 **Pro.OpenTelemetry wrapper:**
 
-24. **[Pro.OpenTelemetry/ProTelemetryExtensions.cs](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.OpenTelemetry/)** — remover `.AddMeter("Asterisk.Sdk.Pro.Resilience")`. El meter `Asterisk.Sdk.Resilience` es enrollado ahora por SDK's OpenTelemetry wrapper (Fase 3 lo confirma).
+24. **[Pro.OpenTelemetry/ProTelemetryExtensions.cs](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/src/Asterisk.Sdk.Pro.OpenTelemetry/)** — remover `.AddMeter("Asterisk.Sdk.Pro.Resilience")`. El meter `Asterisk.Sdk.Resilience` es enrollado ahora por SDK's OpenTelemetry wrapper (Fase 3 lo confirma).
 
 **Otros tests Pro que importan Resilience types:**
 
-25. Grep ancho: buscar `Asterisk.Sdk.Pro.Resilience` en `/media/Data/Source/IPcom/Asterisk.Sdk.Pro/tests/` para capturar fixture setups / helpers que puedan referenciar el namespace antiguo. Update según se encuentre.
+25. Grep ancho: buscar `Asterisk.Sdk.Pro.Resilience` en `/media/Data/Source/Verbara/Asterisk.Sdk.Pro/tests/` para capturar fixture setups / helpers que puedan referenciar el namespace antiguo. Update según se encuentre.
 
 **Version bump + CHANGELOG:**
 
-26. **[Directory.Build.props](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/Directory.Build.props)** — `PackageVersion` `1.8.1-pro` → `1.9.0-pro`.
+26. **[Directory.Build.props](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/Directory.Build.props)** — `PackageVersion` `1.8.1-pro` → `1.9.0-pro`.
 
-27. **[CHANGELOG.md](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/CHANGELOG.md)** — nueva sección `[1.9.0-pro] - 2026-04-20` explicando: package `Asterisk.Sdk.Pro.Resilience` removed; namespace migration guide; meter name change; breaking source rename.
+27. **[CHANGELOG.md](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/CHANGELOG.md)** — nueva sección `[1.9.0-pro] - 2026-04-20` explicando: package `Asterisk.Sdk.Pro.Resilience` removed; namespace migration guide; meter name change; breaking source rename.
 
-28. **[docs/packages.md](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/docs/packages.md)** — eliminar fila `Pro.Resilience`. 25 packages → 24.
+28. **[docs/packages.md](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/docs/packages.md)** — eliminar fila `Pro.Resilience`. 25 packages → 24.
 
-29. **[docs/roadmap.md](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/docs/roadmap.md)** — entry en "Shipped" para 1.9.0-pro.
+29. **[docs/roadmap.md](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/docs/roadmap.md)** — entry en "Shipped" para 1.9.0-pro.
 
-30. **[docs/architecture.md](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/docs/architecture.md)** — reemplazar referencias a `Pro.Resilience` con `Asterisk.Sdk.Resilience` en ASCII diagrams + pipeline descriptions.
+30. **[docs/architecture.md](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/docs/architecture.md)** — reemplazar referencias a `Pro.Resilience` con `Asterisk.Sdk.Resilience` en ASCII diagrams + pipeline descriptions.
 
-31. **[docs/di-registration.md](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/docs/di-registration.md)** — reemplazar `services.AddProResilience(...)` con `services.AddAsteriskResilience(...)`.
+31. **[docs/di-registration.md](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/docs/di-registration.md)** — reemplazar `services.AddProResilience(...)` con `services.AddAsteriskResilience(...)`.
 
-32. **[CLAUDE.md](/media/Data/Source/IPcom/Asterisk.Sdk.Pro/CLAUDE.md)** — version bump + meter count (16 meters reducido si se contabilizaba Resilience, verificar).
+32. **[CLAUDE.md](/media/Data/Source/Verbara/Asterisk.Sdk.Pro/CLAUDE.md)** — version bump + meter count (16 meters reducido si se contabilizaba Resilience, verificar).
 
 **Nuevo ADR Pro (documenta la sunset):**
 
@@ -124,7 +124,7 @@ dotnet pack src/Asterisk.Sdk.Resilience/Asterisk.Sdk.Resilience.csproj \
 
 **Validación Fase 2:**
 ```sh
-cd /media/Data/Source/IPcom/Asterisk.Sdk.Pro
+cd /media/Data/Source/Verbara/Asterisk.Sdk.Pro
 dotnet nuget locals all --clear                              # clear cache
 rm -rf ~/.nuget/packages/asterisk.sdk.resilience/            # ensure fresh pull
 dotnet restore Asterisk.Sdk.Pro.slnx
@@ -209,11 +209,11 @@ SDK tiene Meziantou analyzer (Pro no). Fixes mecánicos:
 
 **Refactoring interno (0 cambios en public API surface):**
 
-34. **[src/Asterisk.Sdk.Ami/Connection/AmiConnection.cs](/media/Data/Source/IPcom/Asterisk.Sdk/src/Asterisk.Sdk.Ami/Connection/AmiConnection.cs)** — `ReconnectLoopAsync` (lines 545-569) reemplazar exponential backoff loop con `ResiliencePolicyBuilder.WithRetry(_options.MaxReconnectAttempts, _options.ReconnectInitialDelay).WithTimeProvider(_time).Build()`. Mantener meter `AmiMetrics.ReconnectionAttempts.Add(1)` (distinto del meter Resilience — sirven propósitos separados).
+34. **[src/Asterisk.Sdk.Ami/Connection/AmiConnection.cs](/media/Data/Source/Verbara/Asterisk.Sdk/src/Asterisk.Sdk.Ami/Connection/AmiConnection.cs)** — `ReconnectLoopAsync` (lines 545-569) reemplazar exponential backoff loop con `ResiliencePolicyBuilder.WithRetry(_options.MaxReconnectAttempts, _options.ReconnectInitialDelay).WithTimeProvider(_time).Build()`. Mantener meter `AmiMetrics.ReconnectionAttempts.Add(1)` (distinto del meter Resilience — sirven propósitos separados).
 
-35. **[src/Asterisk.Sdk.Ari/Client/AriClient.cs](/media/Data/Source/IPcom/Asterisk.Sdk/src/Asterisk.Sdk.Ari/Client/AriClient.cs)** — `ReconnectLoopAsync` (lines 196-225) misma refactorización.
+35. **[src/Asterisk.Sdk.Ari/Client/AriClient.cs](/media/Data/Source/Verbara/Asterisk.Sdk/src/Asterisk.Sdk.Ari/Client/AriClient.cs)** — `ReconnectLoopAsync` (lines 196-225) misma refactorización.
 
-36. **[src/Asterisk.Sdk.Push.Webhooks/WebhookDeliveryService.cs](/media/Data/Source/IPcom/Asterisk.Sdk/src/Asterisk.Sdk.Push.Webhooks/WebhookDeliveryService.cs)** — `DeliverAsync` (lines 121-190) reemplazar retry loop con `ResiliencePolicy.ExecuteAsync(...)`. Circuit breaker opcional por URL subscription (nuevo feature deseable — documentar si se activa ahora o queda diferido).
+36. **[src/Asterisk.Sdk.Push.Webhooks/WebhookDeliveryService.cs](/media/Data/Source/Verbara/Asterisk.Sdk/src/Asterisk.Sdk.Push.Webhooks/WebhookDeliveryService.cs)** — `DeliverAsync` (lines 121-190) reemplazar retry loop con `ResiliencePolicy.ExecuteAsync(...)`. Circuit breaker opcional por URL subscription (nuevo feature deseable — documentar si se activa ahora o queda diferido).
 
 37. Agregar `<ProjectReference Include="..\Asterisk.Sdk.Resilience\*" />` en 3 csproj afectados.
 
@@ -223,7 +223,7 @@ SDK tiene Meziantou analyzer (Pro no). Fixes mecánicos:
 
 **Validación Fase 3:**
 ```sh
-cd /media/Data/Source/IPcom/Asterisk.Sdk
+cd /media/Data/Source/Verbara/Asterisk.Sdk
 dotnet test Tests/Asterisk.Sdk.Ami.Tests/
 dotnet test Tests/Asterisk.Sdk.Ari.Tests/
 dotnet test Tests/Asterisk.Sdk.Push.Webhooks.Tests/
@@ -233,11 +233,11 @@ dotnet test Tests/Asterisk.Sdk.Push.Webhooks.Tests/
 
 ## Phase 4 — SDK v1.14.0 release + CHANGELOG + ADR update
 
-39. **[CHANGELOG.md](/media/Data/Source/IPcom/Asterisk.Sdk/CHANGELOG.md)** — sección `[1.14.0] - 2026-04-20` documentando: new package `Asterisk.Sdk.Resilience` + AMI/ARI/Webhook internal adoption + migration guide link.
+39. **[CHANGELOG.md](/media/Data/Source/Verbara/Asterisk.Sdk/CHANGELOG.md)** — sección `[1.14.0] - 2026-04-20` documentando: new package `Asterisk.Sdk.Resilience` + AMI/ARI/Webhook internal adoption + migration guide link.
 
-40. **[Directory.Build.props](/media/Data/Source/IPcom/Asterisk.Sdk/Directory.Build.props)** — `PackageVersion` `1.13.0` → `1.14.0`.
+40. **[Directory.Build.props](/media/Data/Source/Verbara/Asterisk.Sdk/Directory.Build.props)** — `PackageVersion` `1.13.0` → `1.14.0`.
 
-41. **[docs/decisions/0029-resilience-primitives-mit.md](/media/Data/Source/IPcom/Asterisk.Sdk/docs/decisions/0029-resilience-primitives-mit.md)** — actualizar:
+41. **[docs/decisions/0029-resilience-primitives-mit.md](/media/Data/Source/Verbara/Asterisk.Sdk/docs/decisions/0029-resilience-primitives-mit.md)** — actualizar:
     - Status: `Proposed` → `Accepted`.
     - Section Consequences: reemplazar "type-forwards backward compat" con "clean break namespace rename + migration guide".
     - Añadir sección "Migration guide" con before/after code.
@@ -252,23 +252,23 @@ dotnet test Tests/Asterisk.Sdk.Push.Webhooks.Tests/
 
 ```sh
 # SDK 1.14.0 pack
-cd /media/Data/Source/IPcom/Asterisk.Sdk
-dotnet pack Asterisk.Sdk.slnx -c Release -o /media/Data/Source/IPcom/local-nuget-feed/
+cd /media/Data/Source/Verbara/Asterisk.Sdk
+dotnet pack Asterisk.Sdk.slnx -c Release -o /media/Data/Source/Verbara/local-nuget-feed/
 
 # Clear caches de Pro
 rm -rf ~/.nuget/packages/asterisk.sdk*/
 rm -rf ~/.nuget/packages/asterisk.sdk.pro*/
 
 # Pro restore + build + test + pack
-cd /media/Data/Source/IPcom/Asterisk.Sdk.Pro
+cd /media/Data/Source/Verbara/Asterisk.Sdk.Pro
 dotnet restore Asterisk.Sdk.Pro.slnx
 dotnet build Asterisk.Sdk.Pro.slnx --nologo /warnaserror
 dotnet test Asterisk.Sdk.Pro.slnx --filter "FullyQualifiedName!~Postgres"  # 1,287 unit green
 dotnet test tests/Asterisk.Sdk.Pro.IntegrationTests/                        # 149 IT (Docker)
-dotnet pack Asterisk.Sdk.Pro.slnx -c Release -o /media/Data/Source/IPcom/local-nuget-feed/
+dotnet pack Asterisk.Sdk.Pro.slnx -c Release -o /media/Data/Source/Verbara/local-nuget-feed/
 
 # Platform smoke (opcional en este plan — Platform bump es separate release)
-# cd /media/Data/Source/IPcom/Asterisk.Platform
+# cd /media/Data/Source/Verbara/Asterisk.Platform
 # docker compose -f docker/docker-compose.full.yml up --build
 ```
 

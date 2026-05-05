@@ -831,7 +831,7 @@ Pro `docker-compose.functional.yml` uses Docker Compose `include` (v2.20+) to re
 ```yaml
 # Pro docker/functional/docker-compose.functional.yml
 include:
-  - path: /media/Data/Source/IPcom/Asterisk.Sdk/docker/functional/docker-compose.functional.yml
+  - path: /media/Data/Source/Verbara/Asterisk.Sdk/docker/functional/docker-compose.functional.yml
 
 services:
   # Additional Asterisk instances for cluster testing
