@@ -1,0 +1,68 @@
+#nullable enable
+Verbara.Sdk.Config.ConfigCategory
+Verbara.Sdk.Config.ConfigCategory.ConfigCategory() -> void
+Verbara.Sdk.Config.ConfigCategory.Name.get -> string!
+Verbara.Sdk.Config.ConfigCategory.Name.init -> void
+Verbara.Sdk.Config.ConfigCategory.OrderedVariables.get -> System.Collections.Generic.List<Verbara.Sdk.Config.ConfigVariable!>!
+Verbara.Sdk.Config.ConfigCategory.Template.get -> string?
+Verbara.Sdk.Config.ConfigCategory.Template.init -> void
+Verbara.Sdk.Config.ConfigCategory.Variables.get -> System.Collections.Generic.Dictionary<string!, string!>!
+Verbara.Sdk.Config.ConfigDirective
+Verbara.Sdk.Config.ConfigDirective.ConfigDirective() -> void
+Verbara.Sdk.Config.ConfigDirective.LineNumber.get -> int
+Verbara.Sdk.Config.ConfigDirective.LineNumber.init -> void
+Verbara.Sdk.Config.ConfigFile
+Verbara.Sdk.Config.ConfigFile.Categories.get -> System.Collections.Generic.List<Verbara.Sdk.Config.ConfigCategory!>!
+Verbara.Sdk.Config.ConfigFile.ConfigFile() -> void
+Verbara.Sdk.Config.ConfigFile.Directives.get -> System.Collections.Generic.List<Verbara.Sdk.Config.ConfigDirective!>!
+Verbara.Sdk.Config.ConfigFile.FileName.get -> string!
+Verbara.Sdk.Config.ConfigFile.FileName.set -> void
+Verbara.Sdk.Config.ConfigFile.GetCategory(string! name) -> Verbara.Sdk.Config.ConfigCategory?
+Verbara.Sdk.Config.ConfigFileReader
+Verbara.Sdk.Config.ConfigFileReader.ConfigFileReader() -> void
+Verbara.Sdk.Config.ConfigParseException
+Verbara.Sdk.Config.ConfigParseException.ConfigParseException(string! message) -> void
+Verbara.Sdk.Config.ConfigVariable
+Verbara.Sdk.Config.ConfigVariable.ConfigVariable() -> void
+Verbara.Sdk.Config.ConfigVariable.IsAppend.get -> bool
+Verbara.Sdk.Config.ConfigVariable.IsAppend.init -> void
+Verbara.Sdk.Config.ConfigVariable.Key.get -> string!
+Verbara.Sdk.Config.ConfigVariable.Key.init -> void
+Verbara.Sdk.Config.ConfigVariable.LineNumber.get -> int
+Verbara.Sdk.Config.ConfigVariable.LineNumber.init -> void
+Verbara.Sdk.Config.ConfigVariable.Value.get -> string!
+Verbara.Sdk.Config.ConfigVariable.Value.init -> void
+Verbara.Sdk.Config.DialplanContext
+Verbara.Sdk.Config.DialplanContext.DialplanContext() -> void
+Verbara.Sdk.Config.DialplanContext.Extensions.get -> System.Collections.Generic.List<Verbara.Sdk.Config.DialplanExtension!>!
+Verbara.Sdk.Config.DialplanContext.Includes.get -> System.Collections.Generic.List<string!>!
+Verbara.Sdk.Config.DialplanContext.Name.get -> string!
+Verbara.Sdk.Config.DialplanContext.Name.init -> void
+Verbara.Sdk.Config.DialplanExtension
+Verbara.Sdk.Config.DialplanExtension.Application.get -> string!
+Verbara.Sdk.Config.DialplanExtension.Application.init -> void
+Verbara.Sdk.Config.DialplanExtension.DialplanExtension() -> void
+Verbara.Sdk.Config.DialplanExtension.Extension.get -> string!
+Verbara.Sdk.Config.DialplanExtension.Extension.init -> void
+Verbara.Sdk.Config.DialplanExtension.Priority.get -> int
+Verbara.Sdk.Config.DialplanExtension.Priority.init -> void
+Verbara.Sdk.Config.ExecDirective
+Verbara.Sdk.Config.ExecDirective.Command.get -> string!
+Verbara.Sdk.Config.ExecDirective.Command.init -> void
+Verbara.Sdk.Config.ExecDirective.ExecDirective() -> void
+Verbara.Sdk.Config.ExtensionsConfigFile
+Verbara.Sdk.Config.ExtensionsConfigFile.Contexts.get -> System.Collections.Generic.List<Verbara.Sdk.Config.DialplanContext!>!
+Verbara.Sdk.Config.ExtensionsConfigFile.ExtensionsConfigFile() -> void
+Verbara.Sdk.Config.ExtensionsConfigFile.FileName.get -> string!
+Verbara.Sdk.Config.ExtensionsConfigFile.FileName.set -> void
+Verbara.Sdk.Config.ExtensionsConfigFile.GetContext(string! name) -> Verbara.Sdk.Config.DialplanContext?
+Verbara.Sdk.Config.ExtensionsConfigFileReader
+Verbara.Sdk.Config.ExtensionsConfigFileReader.ExtensionsConfigFileReader() -> void
+Verbara.Sdk.Config.IncludeDirective
+Verbara.Sdk.Config.IncludeDirective.IncludeDirective() -> void
+Verbara.Sdk.Config.IncludeDirective.Path.get -> string!
+Verbara.Sdk.Config.IncludeDirective.Path.init -> void
+static Verbara.Sdk.Config.ConfigFileReader.Parse(string! filePath) -> Verbara.Sdk.Config.ConfigFile!
+static Verbara.Sdk.Config.ConfigFileReader.Parse(System.IO.TextReader! reader, string? fileName = null) -> Verbara.Sdk.Config.ConfigFile!
+static Verbara.Sdk.Config.ExtensionsConfigFileReader.Parse(string! filePath) -> Verbara.Sdk.Config.ExtensionsConfigFile!
+static Verbara.Sdk.Config.ExtensionsConfigFileReader.Parse(System.IO.TextReader! reader, string? fileName = null) -> Verbara.Sdk.Config.ExtensionsConfigFile!

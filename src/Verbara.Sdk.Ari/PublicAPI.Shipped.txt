@@ -1,0 +1,548 @@
+#nullable enable
+Verbara.Sdk.Ari.AriConflictException
+Verbara.Sdk.Ari.AriConflictException.AriConflictException(string! message, System.Exception? innerException = null) -> void
+Verbara.Sdk.Ari.AriException
+Verbara.Sdk.Ari.AriException.AriException(string! message, int? statusCode = null, System.Exception? innerException = null) -> void
+Verbara.Sdk.Ari.AriException.StatusCode.get -> int?
+Verbara.Sdk.Ari.AriNotFoundException
+Verbara.Sdk.Ari.AriNotFoundException.AriNotFoundException(string! message, System.Exception? innerException = null) -> void
+Verbara.Sdk.Ari.Audio.AudioChannelVars
+Verbara.Sdk.Ari.Audio.AudioFrameType
+Verbara.Sdk.Ari.Audio.AudioFrameType.Audio = 1 -> Verbara.Sdk.Ari.Audio.AudioFrameType
+Verbara.Sdk.Ari.Audio.AudioFrameType.Error = 16 -> Verbara.Sdk.Ari.Audio.AudioFrameType
+Verbara.Sdk.Ari.Audio.AudioFrameType.Hangup = 255 -> Verbara.Sdk.Ari.Audio.AudioFrameType
+Verbara.Sdk.Ari.Audio.AudioFrameType.Silence = 2 -> Verbara.Sdk.Ari.Audio.AudioFrameType
+Verbara.Sdk.Ari.Audio.AudioFrameType.Uuid = 0 -> Verbara.Sdk.Ari.Audio.AudioFrameType
+Verbara.Sdk.Ari.Audio.AudioServerOptions
+Verbara.Sdk.Ari.Audio.AudioServerOptions.AudioServerOptions() -> void
+Verbara.Sdk.Ari.Audio.AudioServerOptions.AudioSocketPort.get -> int
+Verbara.Sdk.Ari.Audio.AudioServerOptions.AudioSocketPort.set -> void
+Verbara.Sdk.Ari.Audio.AudioServerOptions.DefaultFormat.get -> string!
+Verbara.Sdk.Ari.Audio.AudioServerOptions.DefaultFormat.set -> void
+Verbara.Sdk.Ari.Audio.AudioServerOptions.IdleTimeout.get -> System.TimeSpan
+Verbara.Sdk.Ari.Audio.AudioServerOptions.IdleTimeout.set -> void
+Verbara.Sdk.Ari.Audio.AudioServerOptions.ListenAddress.get -> string!
+Verbara.Sdk.Ari.Audio.AudioServerOptions.ListenAddress.set -> void
+Verbara.Sdk.Ari.Audio.AudioServerOptions.MaxConcurrentStreams.get -> int
+Verbara.Sdk.Ari.Audio.AudioServerOptions.MaxConcurrentStreams.set -> void
+Verbara.Sdk.Ari.Audio.AudioServerOptions.WebSocketPort.get -> int
+Verbara.Sdk.Ari.Audio.AudioServerOptions.WebSocketPort.set -> void
+Verbara.Sdk.Ari.Audio.AudioSocketServer
+Verbara.Sdk.Ari.Audio.AudioSocketServer.ActiveStreamCount.get -> int
+Verbara.Sdk.Ari.Audio.AudioSocketServer.ActiveStreams.get -> System.Collections.Generic.IEnumerable<Verbara.Sdk.IAudioStream!>!
+Verbara.Sdk.Ari.Audio.AudioSocketServer.AudioSocketServer(Verbara.Sdk.Ari.Audio.AudioServerOptions! options, Microsoft.Extensions.Logging.ILogger<Verbara.Sdk.Ari.Audio.AudioSocketServer!>! logger) -> void
+Verbara.Sdk.Ari.Audio.AudioSocketServer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.AudioSocketServer.GetStream(string! channelId) -> Verbara.Sdk.IAudioStream?
+Verbara.Sdk.Ari.Audio.AudioSocketServer.IsRunning.get -> bool
+Verbara.Sdk.Ari.Audio.AudioSocketServer.OnStreamConnected.get -> System.IObservable<Verbara.Sdk.IAudioStream!>!
+Verbara.Sdk.Ari.Audio.AudioSocketServer.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.AudioSocketServer.StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.CompositeAudioServer
+Verbara.Sdk.Ari.Audio.CompositeAudioServer.ActiveStreamCount.get -> int
+Verbara.Sdk.Ari.Audio.CompositeAudioServer.ActiveStreams.get -> System.Collections.Generic.IEnumerable<Verbara.Sdk.IAudioStream!>!
+Verbara.Sdk.Ari.Audio.CompositeAudioServer.CompositeAudioServer(System.Collections.Generic.IEnumerable<Verbara.Sdk.IAudioServer!>! servers) -> void
+Verbara.Sdk.Ari.Audio.CompositeAudioServer.GetStream(string! channelId) -> Verbara.Sdk.IAudioStream?
+Verbara.Sdk.Ari.Audio.CompositeAudioServer.OnStreamConnected.get -> System.IObservable<Verbara.Sdk.IAudioStream!>!
+Verbara.Sdk.Ari.Audio.WebSocketAudioServer
+Verbara.Sdk.Ari.Audio.WebSocketAudioServer.ActiveStreamCount.get -> int
+Verbara.Sdk.Ari.Audio.WebSocketAudioServer.ActiveStreams.get -> System.Collections.Generic.IEnumerable<Verbara.Sdk.IAudioStream!>!
+Verbara.Sdk.Ari.Audio.WebSocketAudioServer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.WebSocketAudioServer.GetStream(string! channelId) -> Verbara.Sdk.IAudioStream?
+Verbara.Sdk.Ari.Audio.WebSocketAudioServer.IsRunning.get -> bool
+Verbara.Sdk.Ari.Audio.WebSocketAudioServer.OnStreamConnected.get -> System.IObservable<Verbara.Sdk.IAudioStream!>!
+Verbara.Sdk.Ari.Audio.WebSocketAudioServer.StartAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.WebSocketAudioServer.StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.WebSocketAudioServer.WebSocketAudioServer(Verbara.Sdk.Ari.Audio.AudioServerOptions! options, Microsoft.Extensions.Logging.ILogger<Verbara.Sdk.Ari.Audio.WebSocketAudioServer!>! logger) -> void
+Verbara.Sdk.Ari.Client.AriClient
+Verbara.Sdk.Ari.Client.AriClient.Applications.get -> Verbara.Sdk.IAriApplicationsResource!
+Verbara.Sdk.Ari.Client.AriClient.AriClient(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.Ari.Client.AriClientOptions!>! options, Microsoft.Extensions.Logging.ILogger<Verbara.Sdk.Ari.Client.AriClient!>! logger, Verbara.Sdk.IAudioServer? audioServer = null) -> void
+Verbara.Sdk.Ari.Client.AriClient.Asterisk.get -> Verbara.Sdk.IAriAsteriskResource!
+Verbara.Sdk.Ari.Client.AriClient.AudioServer.get -> Verbara.Sdk.IAudioServer?
+Verbara.Sdk.Ari.Client.AriClient.Bridges.get -> Verbara.Sdk.IAriBridgesResource!
+Verbara.Sdk.Ari.Client.AriClient.Channels.get -> Verbara.Sdk.IAriChannelsResource!
+Verbara.Sdk.Ari.Client.AriClient.ConnectAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Client.AriClient.DeviceStates.get -> Verbara.Sdk.IAriDeviceStatesResource!
+Verbara.Sdk.Ari.Client.AriClient.DisconnectAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Client.AriClient.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Client.AriClient.Endpoints.get -> Verbara.Sdk.IAriEndpointsResource!
+Verbara.Sdk.Ari.Client.AriClient.GenerateUserEventAsync(string! eventName, string! application, string? source = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Client.AriClient.IsConnected.get -> bool
+Verbara.Sdk.Ari.Client.AriClient.Mailboxes.get -> Verbara.Sdk.IAriMailboxesResource!
+Verbara.Sdk.Ari.Client.AriClientOptions
+Verbara.Sdk.Ari.Client.AriClientOptions.Application.get -> string!
+Verbara.Sdk.Ari.Client.AriClientOptions.Application.set -> void
+Verbara.Sdk.Ari.Client.AriClientOptions.AriClientOptions() -> void
+Verbara.Sdk.Ari.Client.AriClientOptions.AutoReconnect.get -> bool
+Verbara.Sdk.Ari.Client.AriClientOptions.AutoReconnect.set -> void
+Verbara.Sdk.Ari.Client.AriClientOptions.BaseUrl.get -> string!
+Verbara.Sdk.Ari.Client.AriClientOptions.BaseUrl.set -> void
+Verbara.Sdk.Ari.Client.AriClientOptions.ConfigureAudioServer.get -> System.Action<Verbara.Sdk.Ari.Audio.AudioServerOptions!>?
+Verbara.Sdk.Ari.Client.AriClientOptions.ConfigureAudioServer.set -> void
+Verbara.Sdk.Ari.Client.AriClientOptions.MaxReconnectAttempts.get -> int
+Verbara.Sdk.Ari.Client.AriClientOptions.MaxReconnectAttempts.set -> void
+Verbara.Sdk.Ari.Client.AriClientOptions.Password.get -> string!
+Verbara.Sdk.Ari.Client.AriClientOptions.Password.set -> void
+Verbara.Sdk.Ari.Client.AriClientOptions.ReconnectInitialDelay.get -> System.TimeSpan
+Verbara.Sdk.Ari.Client.AriClientOptions.ReconnectInitialDelay.set -> void
+Verbara.Sdk.Ari.Client.AriClientOptions.ReconnectMaxDelay.get -> System.TimeSpan
+Verbara.Sdk.Ari.Client.AriClientOptions.ReconnectMaxDelay.set -> void
+Verbara.Sdk.Ari.Client.AriClientOptions.ReconnectMultiplier.get -> double
+Verbara.Sdk.Ari.Client.AriClientOptions.ReconnectMultiplier.set -> void
+Verbara.Sdk.Ari.Client.AriClientOptions.Username.get -> string!
+Verbara.Sdk.Ari.Client.AriClientOptions.Username.set -> void
+Verbara.Sdk.Ari.Client.AriClientOptionsValidator
+Verbara.Sdk.Ari.Client.AriClientOptionsValidator.AriClientOptionsValidator() -> void
+Verbara.Sdk.Ari.Client.AriClient.Playbacks.get -> Verbara.Sdk.IAriPlaybacksResource!
+Verbara.Sdk.Ari.Client.AriClient.Recordings.get -> Verbara.Sdk.IAriRecordingsResource!
+Verbara.Sdk.Ari.Client.AriClient.Sounds.get -> Verbara.Sdk.IAriSoundsResource!
+Verbara.Sdk.Ari.Client.AriClient.State.get -> Verbara.Sdk.Enums.AriConnectionState
+Verbara.Sdk.Ari.Client.AriClient.Subscribe(System.IObserver<Verbara.Sdk.AriEvent!>! observer) -> System.IDisposable!
+Verbara.Sdk.Ari.Diagnostics.AriActivitySource
+Verbara.Sdk.Ari.Diagnostics.AriHealthCheck
+Verbara.Sdk.Ari.Diagnostics.AriHealthCheck.AriHealthCheck(Verbara.Sdk.IAriClient! client) -> void
+Verbara.Sdk.Ari.Diagnostics.AriHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Verbara.Sdk.Ari.Diagnostics.AriMetrics
+Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics
+Verbara.Sdk.Ari.Events.ApplicationMoveFailedEvent
+Verbara.Sdk.Ari.Events.ApplicationMoveFailedEvent.ApplicationMoveFailedEvent() -> void
+Verbara.Sdk.Ari.Events.ApplicationMoveFailedEvent.Args.get -> string![]?
+Verbara.Sdk.Ari.Events.ApplicationMoveFailedEvent.Args.set -> void
+Verbara.Sdk.Ari.Events.ApplicationMoveFailedEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ApplicationMoveFailedEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ApplicationMoveFailedEvent.Destination.get -> string?
+Verbara.Sdk.Ari.Events.ApplicationMoveFailedEvent.Destination.set -> void
+Verbara.Sdk.Ari.Events.ApplicationRegisteredEvent
+Verbara.Sdk.Ari.Events.ApplicationRegisteredEvent.ApplicationRegisteredEvent() -> void
+Verbara.Sdk.Ari.Events.ApplicationRegisteredEvent.RegisteredApplication.get -> Verbara.Sdk.AriApplication?
+Verbara.Sdk.Ari.Events.ApplicationRegisteredEvent.RegisteredApplication.set -> void
+Verbara.Sdk.Ari.Events.ApplicationReplacedEvent
+Verbara.Sdk.Ari.Events.ApplicationReplacedEvent.ApplicationReplacedEvent() -> void
+Verbara.Sdk.Ari.Events.ApplicationUnregisteredEvent
+Verbara.Sdk.Ari.Events.ApplicationUnregisteredEvent.ApplicationUnregisteredEvent() -> void
+Verbara.Sdk.Ari.Events.ApplicationUnregisteredEvent.UnregisteredApplication.get -> Verbara.Sdk.AriApplication?
+Verbara.Sdk.Ari.Events.ApplicationUnregisteredEvent.UnregisteredApplication.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.BridgeAttendedTransferEvent() -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationApplication.get -> string?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationApplication.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationBridge.get -> string?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationBridge.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationLinkFirstLeg.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationLinkFirstLeg.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationLinkSecondLeg.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationLinkSecondLeg.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationThreewayBridge.get -> Verbara.Sdk.AriBridge?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationThreewayBridge.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationThreewayChannel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationThreewayChannel.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationType.get -> string?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.DestinationType.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.IsExternal.get -> bool
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.IsExternal.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.ReplaceChannel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.ReplaceChannel.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.Result.get -> string?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.Result.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.Transferee.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.Transferee.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererFirstLegBridge.get -> Verbara.Sdk.AriBridge?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererFirstLegBridge.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererFirstLeg.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererFirstLeg.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererSecondLegBridge.get -> Verbara.Sdk.AriBridge?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererSecondLegBridge.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererSecondLeg.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransfererSecondLeg.set -> void
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransferTarget.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent.TransferTarget.set -> void
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.BridgeBlindTransferEvent() -> void
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.Bridge.get -> Verbara.Sdk.AriBridge?
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.Bridge.set -> void
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.Context.get -> string?
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.Context.set -> void
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.Exten.get -> string?
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.Exten.set -> void
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.IsExternal.get -> bool
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.IsExternal.set -> void
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.ReplaceChannel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.ReplaceChannel.set -> void
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.Result.get -> string?
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.Result.set -> void
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.Transferee.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.Transferee.set -> void
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.Transferer.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent.Transferer.set -> void
+Verbara.Sdk.Ari.Events.BridgeCreatedEvent
+Verbara.Sdk.Ari.Events.BridgeCreatedEvent.BridgeCreatedEvent() -> void
+Verbara.Sdk.Ari.Events.BridgeCreatedEvent.Bridge.get -> Verbara.Sdk.AriBridge?
+Verbara.Sdk.Ari.Events.BridgeCreatedEvent.Bridge.set -> void
+Verbara.Sdk.Ari.Events.BridgeDestroyedEvent
+Verbara.Sdk.Ari.Events.BridgeDestroyedEvent.BridgeDestroyedEvent() -> void
+Verbara.Sdk.Ari.Events.BridgeDestroyedEvent.Bridge.get -> Verbara.Sdk.AriBridge?
+Verbara.Sdk.Ari.Events.BridgeDestroyedEvent.Bridge.set -> void
+Verbara.Sdk.Ari.Events.BridgeMergedEvent
+Verbara.Sdk.Ari.Events.BridgeMergedEvent.BridgeFrom.get -> Verbara.Sdk.AriBridge?
+Verbara.Sdk.Ari.Events.BridgeMergedEvent.BridgeFrom.set -> void
+Verbara.Sdk.Ari.Events.BridgeMergedEvent.Bridge.get -> Verbara.Sdk.AriBridge?
+Verbara.Sdk.Ari.Events.BridgeMergedEvent.BridgeMergedEvent() -> void
+Verbara.Sdk.Ari.Events.BridgeMergedEvent.Bridge.set -> void
+Verbara.Sdk.Ari.Events.BridgeVideoSourceChangedEvent
+Verbara.Sdk.Ari.Events.BridgeVideoSourceChangedEvent.Bridge.get -> Verbara.Sdk.AriBridge?
+Verbara.Sdk.Ari.Events.BridgeVideoSourceChangedEvent.Bridge.set -> void
+Verbara.Sdk.Ari.Events.BridgeVideoSourceChangedEvent.BridgeVideoSourceChangedEvent() -> void
+Verbara.Sdk.Ari.Events.BridgeVideoSourceChangedEvent.OldVideoSourceId.get -> string?
+Verbara.Sdk.Ari.Events.BridgeVideoSourceChangedEvent.OldVideoSourceId.set -> void
+Verbara.Sdk.Ari.Events.ChannelCallerIdEvent
+Verbara.Sdk.Ari.Events.ChannelCallerIdEvent.CallerPresentation.get -> int?
+Verbara.Sdk.Ari.Events.ChannelCallerIdEvent.CallerPresentation.set -> void
+Verbara.Sdk.Ari.Events.ChannelCallerIdEvent.CallerPresentationTxt.get -> string?
+Verbara.Sdk.Ari.Events.ChannelCallerIdEvent.CallerPresentationTxt.set -> void
+Verbara.Sdk.Ari.Events.ChannelCallerIdEvent.ChannelCallerIdEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelCallerIdEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelCallerIdEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelConnectedLineEvent
+Verbara.Sdk.Ari.Events.ChannelConnectedLineEvent.ChannelConnectedLineEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelConnectedLineEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelConnectedLineEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelCreatedEvent
+Verbara.Sdk.Ari.Events.ChannelCreatedEvent.ChannelCreatedEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelCreatedEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelCreatedEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelDestroyedEvent
+Verbara.Sdk.Ari.Events.ChannelDestroyedEvent.Cause.get -> int?
+Verbara.Sdk.Ari.Events.ChannelDestroyedEvent.Cause.set -> void
+Verbara.Sdk.Ari.Events.ChannelDestroyedEvent.CauseTxt.get -> string?
+Verbara.Sdk.Ari.Events.ChannelDestroyedEvent.CauseTxt.set -> void
+Verbara.Sdk.Ari.Events.ChannelDestroyedEvent.ChannelDestroyedEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelDestroyedEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelDestroyedEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelDestroyedEvent.TechCause.get -> string?
+Verbara.Sdk.Ari.Events.ChannelDestroyedEvent.TechCause.set -> void
+Verbara.Sdk.Ari.Events.ChannelDialplanEvent
+Verbara.Sdk.Ari.Events.ChannelDialplanEvent.ChannelDialplanEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelDialplanEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelDialplanEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelDialplanEvent.DialplanAppData.get -> string?
+Verbara.Sdk.Ari.Events.ChannelDialplanEvent.DialplanAppData.set -> void
+Verbara.Sdk.Ari.Events.ChannelDialplanEvent.DialplanApp.get -> string?
+Verbara.Sdk.Ari.Events.ChannelDialplanEvent.DialplanApp.set -> void
+Verbara.Sdk.Ari.Events.ChannelDtmfReceivedEvent
+Verbara.Sdk.Ari.Events.ChannelDtmfReceivedEvent.ChannelDtmfReceivedEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelDtmfReceivedEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelDtmfReceivedEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelDtmfReceivedEvent.Digit.get -> string?
+Verbara.Sdk.Ari.Events.ChannelDtmfReceivedEvent.Digit.set -> void
+Verbara.Sdk.Ari.Events.ChannelDtmfReceivedEvent.DurationMs.get -> int?
+Verbara.Sdk.Ari.Events.ChannelDtmfReceivedEvent.DurationMs.set -> void
+Verbara.Sdk.Ari.Events.ChannelEnteredBridgeEvent
+Verbara.Sdk.Ari.Events.ChannelEnteredBridgeEvent.Bridge.get -> Verbara.Sdk.AriBridge?
+Verbara.Sdk.Ari.Events.ChannelEnteredBridgeEvent.Bridge.set -> void
+Verbara.Sdk.Ari.Events.ChannelEnteredBridgeEvent.ChannelEnteredBridgeEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelEnteredBridgeEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelEnteredBridgeEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelHangupRequestEvent
+Verbara.Sdk.Ari.Events.ChannelHangupRequestEvent.Cause.get -> int?
+Verbara.Sdk.Ari.Events.ChannelHangupRequestEvent.Cause.set -> void
+Verbara.Sdk.Ari.Events.ChannelHangupRequestEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelHangupRequestEvent.ChannelHangupRequestEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelHangupRequestEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelHangupRequestEvent.TechCause.get -> string?
+Verbara.Sdk.Ari.Events.ChannelHangupRequestEvent.TechCause.set -> void
+Verbara.Sdk.Ari.Events.ChannelHoldEvent
+Verbara.Sdk.Ari.Events.ChannelHoldEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelHoldEvent.ChannelHoldEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelHoldEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelHoldEvent.MusicClass.get -> string?
+Verbara.Sdk.Ari.Events.ChannelHoldEvent.MusicClass.set -> void
+Verbara.Sdk.Ari.Events.ChannelLeftBridgeEvent
+Verbara.Sdk.Ari.Events.ChannelLeftBridgeEvent.Bridge.get -> Verbara.Sdk.AriBridge?
+Verbara.Sdk.Ari.Events.ChannelLeftBridgeEvent.Bridge.set -> void
+Verbara.Sdk.Ari.Events.ChannelLeftBridgeEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelLeftBridgeEvent.ChannelLeftBridgeEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelLeftBridgeEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelStateChangeEvent
+Verbara.Sdk.Ari.Events.ChannelStateChangeEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelStateChangeEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelStateChangeEvent.ChannelStateChangeEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelTalkingFinishedEvent
+Verbara.Sdk.Ari.Events.ChannelTalkingFinishedEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelTalkingFinishedEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelTalkingFinishedEvent.ChannelTalkingFinishedEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelTalkingFinishedEvent.Duration.get -> int?
+Verbara.Sdk.Ari.Events.ChannelTalkingFinishedEvent.Duration.set -> void
+Verbara.Sdk.Ari.Events.ChannelTalkingStartedEvent
+Verbara.Sdk.Ari.Events.ChannelTalkingStartedEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelTalkingStartedEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelTalkingStartedEvent.ChannelTalkingStartedEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelToneDetectedEvent
+Verbara.Sdk.Ari.Events.ChannelToneDetectedEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelToneDetectedEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelToneDetectedEvent.ChannelToneDetectedEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelTransferEvent
+Verbara.Sdk.Ari.Events.ChannelTransferEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelTransferEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelTransferEvent.ChannelTransferEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelUnholdEvent
+Verbara.Sdk.Ari.Events.ChannelUnholdEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelUnholdEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelUnholdEvent.ChannelUnholdEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelUsereventEvent
+Verbara.Sdk.Ari.Events.ChannelUsereventEvent.Bridge.get -> Verbara.Sdk.AriBridge?
+Verbara.Sdk.Ari.Events.ChannelUsereventEvent.Bridge.set -> void
+Verbara.Sdk.Ari.Events.ChannelUsereventEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelUsereventEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelUsereventEvent.ChannelUsereventEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelUsereventEvent.Endpoint.get -> Verbara.Sdk.AriEndpoint?
+Verbara.Sdk.Ari.Events.ChannelUsereventEvent.Endpoint.set -> void
+Verbara.Sdk.Ari.Events.ChannelUsereventEvent.Eventname.get -> string?
+Verbara.Sdk.Ari.Events.ChannelUsereventEvent.Eventname.set -> void
+Verbara.Sdk.Ari.Events.ChannelVarsetEvent
+Verbara.Sdk.Ari.Events.ChannelVarsetEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ChannelVarsetEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ChannelVarsetEvent.ChannelVarsetEvent() -> void
+Verbara.Sdk.Ari.Events.ChannelVarsetEvent.Value.get -> string?
+Verbara.Sdk.Ari.Events.ChannelVarsetEvent.Value.set -> void
+Verbara.Sdk.Ari.Events.ChannelVarsetEvent.Variable.get -> string?
+Verbara.Sdk.Ari.Events.ChannelVarsetEvent.Variable.set -> void
+Verbara.Sdk.Ari.Events.ContactStatusChangeEvent
+Verbara.Sdk.Ari.Events.ContactStatusChangeEvent.ContactInfo.get -> Verbara.Sdk.AriContactInfo?
+Verbara.Sdk.Ari.Events.ContactStatusChangeEvent.ContactInfo.set -> void
+Verbara.Sdk.Ari.Events.ContactStatusChangeEvent.ContactStatusChangeEvent() -> void
+Verbara.Sdk.Ari.Events.ContactStatusChangeEvent.Endpoint.get -> Verbara.Sdk.AriEndpoint?
+Verbara.Sdk.Ari.Events.ContactStatusChangeEvent.Endpoint.set -> void
+Verbara.Sdk.Ari.Events.DeviceStateChangedEvent
+Verbara.Sdk.Ari.Events.DeviceStateChangedEvent.DeviceStateChangedEvent() -> void
+Verbara.Sdk.Ari.Events.DeviceStateChangedEvent.DeviceState.get -> Verbara.Sdk.AriDeviceState?
+Verbara.Sdk.Ari.Events.DeviceStateChangedEvent.DeviceState.set -> void
+Verbara.Sdk.Ari.Events.DialEvent
+Verbara.Sdk.Ari.Events.DialEvent.Caller.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.DialEvent.Caller.set -> void
+Verbara.Sdk.Ari.Events.DialEvent.DialEvent() -> void
+Verbara.Sdk.Ari.Events.DialEvent.Dialstatus.get -> string?
+Verbara.Sdk.Ari.Events.DialEvent.Dialstatus.set -> void
+Verbara.Sdk.Ari.Events.DialEvent.Peer.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.DialEvent.Peer.set -> void
+Verbara.Sdk.Ari.Events.EndpointStateChangeEvent
+Verbara.Sdk.Ari.Events.EndpointStateChangeEvent.Endpoint.get -> Verbara.Sdk.AriEndpoint?
+Verbara.Sdk.Ari.Events.EndpointStateChangeEvent.Endpoint.set -> void
+Verbara.Sdk.Ari.Events.EndpointStateChangeEvent.EndpointStateChangeEvent() -> void
+Verbara.Sdk.Ari.Events.MissingParamsEvent
+Verbara.Sdk.Ari.Events.MissingParamsEvent.MissingParamsEvent() -> void
+Verbara.Sdk.Ari.Events.MissingParamsEvent.Params.get -> string![]?
+Verbara.Sdk.Ari.Events.MissingParamsEvent.Params.set -> void
+Verbara.Sdk.Ari.Events.PeerStatusChangeEvent
+Verbara.Sdk.Ari.Events.PeerStatusChangeEvent.Endpoint.get -> Verbara.Sdk.AriEndpoint?
+Verbara.Sdk.Ari.Events.PeerStatusChangeEvent.Endpoint.set -> void
+Verbara.Sdk.Ari.Events.PeerStatusChangeEvent.Peer.get -> Verbara.Sdk.AriPeer?
+Verbara.Sdk.Ari.Events.PeerStatusChangeEvent.Peer.set -> void
+Verbara.Sdk.Ari.Events.PeerStatusChangeEvent.PeerStatusChangeEvent() -> void
+Verbara.Sdk.Ari.Events.PlaybackContinuingEvent
+Verbara.Sdk.Ari.Events.PlaybackContinuingEvent.PlaybackContinuingEvent() -> void
+Verbara.Sdk.Ari.Events.PlaybackContinuingEvent.Playback.get -> Verbara.Sdk.AriPlayback?
+Verbara.Sdk.Ari.Events.PlaybackContinuingEvent.Playback.set -> void
+Verbara.Sdk.Ari.Events.PlaybackFinishedEvent
+Verbara.Sdk.Ari.Events.PlaybackFinishedEvent.PlaybackFinishedEvent() -> void
+Verbara.Sdk.Ari.Events.PlaybackFinishedEvent.Playback.get -> Verbara.Sdk.AriPlayback?
+Verbara.Sdk.Ari.Events.PlaybackFinishedEvent.Playback.set -> void
+Verbara.Sdk.Ari.Events.PlaybackStartedEvent
+Verbara.Sdk.Ari.Events.PlaybackStartedEvent.Playback.get -> Verbara.Sdk.AriPlayback?
+Verbara.Sdk.Ari.Events.PlaybackStartedEvent.Playback.set -> void
+Verbara.Sdk.Ari.Events.PlaybackStartedEvent.PlaybackStartedEvent() -> void
+Verbara.Sdk.Ari.Events.RecordingFailedEvent
+Verbara.Sdk.Ari.Events.RecordingFailedEvent.RecordingFailedEvent() -> void
+Verbara.Sdk.Ari.Events.RecordingFailedEvent.Recording.get -> Verbara.Sdk.AriLiveRecording?
+Verbara.Sdk.Ari.Events.RecordingFailedEvent.Recording.set -> void
+Verbara.Sdk.Ari.Events.RecordingFinishedEvent
+Verbara.Sdk.Ari.Events.RecordingFinishedEvent.RecordingFinishedEvent() -> void
+Verbara.Sdk.Ari.Events.RecordingFinishedEvent.Recording.get -> Verbara.Sdk.AriLiveRecording?
+Verbara.Sdk.Ari.Events.RecordingFinishedEvent.Recording.set -> void
+Verbara.Sdk.Ari.Events.RecordingStartedEvent
+Verbara.Sdk.Ari.Events.RecordingStartedEvent.Recording.get -> Verbara.Sdk.AriLiveRecording?
+Verbara.Sdk.Ari.Events.RecordingStartedEvent.Recording.set -> void
+Verbara.Sdk.Ari.Events.RecordingStartedEvent.RecordingStartedEvent() -> void
+Verbara.Sdk.Ari.Events.ReferredByEvent
+Verbara.Sdk.Ari.Events.ReferredByEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ReferredByEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ReferredByEvent.ReferredByEvent() -> void
+Verbara.Sdk.Ari.Events.ReferredByEvent.ReferredBy.get -> string?
+Verbara.Sdk.Ari.Events.ReferredByEvent.ReferredBy.set -> void
+Verbara.Sdk.Ari.Events.ReferToEvent
+Verbara.Sdk.Ari.Events.ReferToEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.ReferToEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.ReferToEvent.ReferredBy.get -> string?
+Verbara.Sdk.Ari.Events.ReferToEvent.ReferredBy.set -> void
+Verbara.Sdk.Ari.Events.ReferToEvent.ReferToEvent() -> void
+Verbara.Sdk.Ari.Events.ReferToEvent.ReferTo.get -> string?
+Verbara.Sdk.Ari.Events.ReferToEvent.ReferTo.set -> void
+Verbara.Sdk.Ari.Events.RequiredDestinationEvent
+Verbara.Sdk.Ari.Events.RequiredDestinationEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.RequiredDestinationEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.RequiredDestinationEvent.RequiredDestinationEvent() -> void
+Verbara.Sdk.Ari.Events.StasisEndEvent
+Verbara.Sdk.Ari.Events.StasisEndEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.StasisEndEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.StasisEndEvent.StasisEndEvent() -> void
+Verbara.Sdk.Ari.Events.StasisStartEvent
+Verbara.Sdk.Ari.Events.StasisStartEvent.Args.get -> string![]?
+Verbara.Sdk.Ari.Events.StasisStartEvent.Args.set -> void
+Verbara.Sdk.Ari.Events.StasisStartEvent.Channel.get -> Verbara.Sdk.AriChannel?
+Verbara.Sdk.Ari.Events.StasisStartEvent.Channel.set -> void
+Verbara.Sdk.Ari.Events.StasisStartEvent.StasisStartEvent() -> void
+Verbara.Sdk.Ari.Events.TextMessageReceivedEvent
+Verbara.Sdk.Ari.Events.TextMessageReceivedEvent.Endpoint.get -> Verbara.Sdk.AriEndpoint?
+Verbara.Sdk.Ari.Events.TextMessageReceivedEvent.Endpoint.set -> void
+Verbara.Sdk.Ari.Events.TextMessageReceivedEvent.Message.get -> Verbara.Sdk.AriTextMessage?
+Verbara.Sdk.Ari.Events.TextMessageReceivedEvent.Message.set -> void
+Verbara.Sdk.Ari.Events.TextMessageReceivedEvent.TextMessageReceivedEvent() -> void
+Verbara.Sdk.Ari.Internal.AriEventPump
+Verbara.Sdk.Ari.Internal.AriEventPump.AriEventPump(int capacity = 20000) -> void
+Verbara.Sdk.Ari.Internal.AriEventPump.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Internal.AriEventPump.DroppedEvents.get -> long
+Verbara.Sdk.Ari.Internal.AriEventPump.OnEventDropped.get -> System.Action<Verbara.Sdk.AriEvent!>?
+Verbara.Sdk.Ari.Internal.AriEventPump.OnEventDropped.set -> void
+Verbara.Sdk.Ari.Internal.AriEventPump.PendingCount.get -> int
+Verbara.Sdk.Ari.Internal.AriEventPump.ProcessedEvents.get -> long
+Verbara.Sdk.Ari.Internal.AriEventPump.Start(System.Func<Verbara.Sdk.AriEvent!, System.Threading.Tasks.ValueTask>! handler) -> void
+Verbara.Sdk.Ari.Internal.AriEventPump.TryEnqueue(Verbara.Sdk.AriEvent! evt) -> bool
+Verbara.Sdk.Ari.Resources.AriApplicationsResource
+Verbara.Sdk.Ari.Resources.AriApplicationsResource.GetAsync(string! applicationName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriApplication!>
+Verbara.Sdk.Ari.Resources.AriApplicationsResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriApplication![]!>
+Verbara.Sdk.Ari.Resources.AriApplicationsResource.SetEventFilterAsync(string! applicationName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriApplication!>
+Verbara.Sdk.Ari.Resources.AriApplicationsResource.SubscribeAsync(string! applicationName, string! eventSource, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriApplication!>
+Verbara.Sdk.Ari.Resources.AriApplicationsResource.UnsubscribeAsync(string! applicationName, string! eventSource, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriApplication!>
+Verbara.Sdk.Ari.Resources.AriAsteriskResource
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.AddLogChannelAsync(string! logChannelName, string! configuration, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.DeleteConfigAsync(string! configClass, string! objectType, string! id, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.DeleteLogChannelAsync(string! logChannelName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.GetConfigAsync(string! configClass, string! objectType, string! id, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriConfigTuple![]!>
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.GetInfoAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriAsteriskInfo!>
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.GetModuleAsync(string! moduleName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriModule!>
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.GetVariableAsync(string! variable, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.ListLoggingAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriLogChannel![]!>
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.ListModulesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriModule![]!>
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.LoadModuleAsync(string! moduleName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.PingAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriAsteriskPing!>
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.ReloadModuleAsync(string! moduleName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.RotateLogChannelAsync(string! logChannelName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.SetVariableAsync(string! variable, string! value, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.UnloadModuleAsync(string! moduleName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriAsteriskResource.UpdateConfigAsync(string! configClass, string! objectType, string! id, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriBridgesResource
+Verbara.Sdk.Ari.Resources.AriBridgesResource.AddChannelAsync(string! bridgeId, string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriBridgesResource.ClearVideoSourceAsync(string! bridgeId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriBridgesResource.CreateAsync(string? type = null, string? name = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriBridge!>
+Verbara.Sdk.Ari.Resources.AriBridgesResource.CreateWithIdAsync(string! bridgeId, string? type = null, string? name = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriBridge!>
+Verbara.Sdk.Ari.Resources.AriBridgesResource.DestroyAsync(string! bridgeId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriBridgesResource.GetAsync(string! bridgeId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriBridge!>
+Verbara.Sdk.Ari.Resources.AriBridgesResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriBridge![]!>
+Verbara.Sdk.Ari.Resources.AriBridgesResource.PlayAsync(string! bridgeId, string! media, string? lang = null, int? offsetms = null, int? skipms = null, string? playbackId = null, string? format = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriPlayback!>
+Verbara.Sdk.Ari.Resources.AriBridgesResource.RecordAsync(string! bridgeId, string! name, string! recordingFormat, int? maxDurationSeconds = null, int? maxSilenceSeconds = null, string? ifExists = null, bool? beep = null, string? terminateOn = null, string? format = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriLiveRecording!>
+Verbara.Sdk.Ari.Resources.AriBridgesResource.RemoveChannelAsync(string! bridgeId, string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriBridgesResource.SetVideoSourceAsync(string! bridgeId, string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriBridgesResource.StartMohAsync(string! bridgeId, string? mohClass = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriBridgesResource.StopMohAsync(string! bridgeId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource
+Verbara.Sdk.Ari.Resources.AriChannelsResource.AnswerAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.ContinueAsync(string! channelId, string? context = null, string? extension = null, int? priority = null, string? label = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.CreateAsync(string! endpoint, string? app = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
+Verbara.Sdk.Ari.Resources.AriChannelsResource.CreateExternalMediaAsync(string! app, string! externalHost, string! format, string? encapsulation = null, string? transport = null, string? connectionType = null, string? direction = null, string? data = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
+Verbara.Sdk.Ari.Resources.AriChannelsResource.CreateWithoutDialAsync(string! endpoint, string! app, string? channelId = null, string? otherChannelId = null, string? originator = null, System.Collections.Generic.IReadOnlyDictionary<string!, string!>? variables = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
+Verbara.Sdk.Ari.Resources.AriChannelsResource.DialAsync(string! channelId, string? caller = null, int? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.GetAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
+Verbara.Sdk.Ari.Resources.AriChannelsResource.GetRtpStatisticsAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriRtpStats!>
+Verbara.Sdk.Ari.Resources.AriChannelsResource.GetVariableAsync(string! channelId, string! variable, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriVariable!>
+Verbara.Sdk.Ari.Resources.AriChannelsResource.HangupAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.HoldAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel![]!>
+Verbara.Sdk.Ari.Resources.AriChannelsResource.MoveAsync(string! channelId, string! app, string? appArgs = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.MuteAsync(string! channelId, string? direction = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.OriginateAsync(string! endpoint, string? extension = null, string? context = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
+Verbara.Sdk.Ari.Resources.AriChannelsResource.PlayAsync(string! channelId, string! media, string? lang = null, int? offsetms = null, int? skipms = null, string? playbackId = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriPlayback!>
+Verbara.Sdk.Ari.Resources.AriChannelsResource.ProgressAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.RecordAsync(string! channelId, string! name, string! format, int? maxDurationSeconds = null, int? maxSilenceSeconds = null, string? ifExists = null, bool? beep = null, string? terminateOn = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriLiveRecording!>
+Verbara.Sdk.Ari.Resources.AriChannelsResource.RedirectAsync(string! channelId, string! endpoint, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.RingAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.SendDtmfAsync(string! channelId, string! dtmf, int? before = null, int? between = null, int? duration = null, int? after = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.SetVariableAsync(string! channelId, string! variable, string! value, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.SilenceAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.SnoopAsync(string! channelId, string! app, string? spy = null, string? whisper = null, string? snoopId = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
+Verbara.Sdk.Ari.Resources.AriChannelsResource.StartMohAsync(string! channelId, string? mohClass = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.StopMohAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.StopRingAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.StopSilenceAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.UnholdAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriChannelsResource.UnmuteAsync(string! channelId, string? direction = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriDeviceStatesResource
+Verbara.Sdk.Ari.Resources.AriDeviceStatesResource.DeleteAsync(string! deviceName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriDeviceStatesResource.GetAsync(string! deviceName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriDeviceState!>
+Verbara.Sdk.Ari.Resources.AriDeviceStatesResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriDeviceState![]!>
+Verbara.Sdk.Ari.Resources.AriDeviceStatesResource.UpdateAsync(string! deviceName, string! deviceState, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriEndpointsResource
+Verbara.Sdk.Ari.Resources.AriEndpointsResource.GetAsync(string! tech, string! resource, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriEndpoint!>
+Verbara.Sdk.Ari.Resources.AriEndpointsResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriEndpoint![]!>
+Verbara.Sdk.Ari.Resources.AriEndpointsResource.ListByTechAsync(string! tech, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriEndpoint![]!>
+Verbara.Sdk.Ari.Resources.AriEndpointsResource.SendMessageAsync(string! destination, string! from, string? body = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriEndpointsResource.SendMessageToEndpointAsync(string! tech, string! resource, string! from, string? body = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriJsonContext
+Verbara.Sdk.Ari.Resources.AriMailboxesResource
+Verbara.Sdk.Ari.Resources.AriMailboxesResource.DeleteAsync(string! mailboxName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriMailboxesResource.GetAsync(string! mailboxName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriMailbox!>
+Verbara.Sdk.Ari.Resources.AriMailboxesResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriMailbox![]!>
+Verbara.Sdk.Ari.Resources.AriMailboxesResource.UpdateAsync(string! mailboxName, int oldMessages, int newMessages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriPlaybacksResource
+Verbara.Sdk.Ari.Resources.AriPlaybacksResource.ControlAsync(string! playbackId, string! operation, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriPlaybacksResource.GetAsync(string! playbackId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriPlayback!>
+Verbara.Sdk.Ari.Resources.AriPlaybacksResource.StopAsync(string! playbackId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriRecordingsResource
+Verbara.Sdk.Ari.Resources.AriRecordingsResource.CancelAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriRecordingsResource.CopyStoredAsync(string! recordingName, string! destinationRecordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriStoredRecording!>
+Verbara.Sdk.Ari.Resources.AriRecordingsResource.DeleteStoredAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriRecordingsResource.GetLiveAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriLiveRecording!>
+Verbara.Sdk.Ari.Resources.AriRecordingsResource.GetStoredAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriStoredRecording!>
+Verbara.Sdk.Ari.Resources.AriRecordingsResource.GetStoredFileAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.IO.Stream!>
+Verbara.Sdk.Ari.Resources.AriRecordingsResource.ListStoredAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriStoredRecording![]!>
+Verbara.Sdk.Ari.Resources.AriRecordingsResource.MuteAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriRecordingsResource.PauseAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriRecordingsResource.StopAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriRecordingsResource.UnmuteAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriRecordingsResource.UnpauseAsync(string! recordingName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Resources.AriSoundsResource
+Verbara.Sdk.Ari.Resources.AriSoundsResource.GetAsync(string! soundId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriSound!>
+Verbara.Sdk.Ari.Resources.AriSoundsResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriSound![]!>
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.Alaw = "alaw" -> string!
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.ExternalMediaAddress = "EXTERNALMEDIA_ADDRESS" -> string!
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.ExternalMediaProtocol = "EXTERNALMEDIA_PROTOCOL" -> string!
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.G729 = "g729" -> string!
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.Opus = "opus" -> string!
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.PeerIp = "CHANNEL(peerip)" -> string!
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.ReadFormat = "CHANNEL(readformat)" -> string!
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.Slin16 = "slin16" -> string!
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.Slin48 = "slin48" -> string!
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.Slin8 = "slin" -> string!
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.Ulaw = "ulaw" -> string!
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.WebSocketGuid = "WEBSOCKET_GUID" -> string!
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.WebSocketProtocol = "WEBSOCKET_PROTOCOL" -> string!
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.WebSocketUri = "WEBSOCKET_URI" -> string!
+const Verbara.Sdk.Ari.Audio.AudioChannelVars.WriteFormat = "CHANNEL(writeformat)" -> string!
+const Verbara.Sdk.Ari.Internal.AriEventPump.DefaultCapacity = 20000 -> int
+static readonly Verbara.Sdk.Ari.Diagnostics.AriActivitySource.Source -> System.Diagnostics.ActivitySource!
+static readonly Verbara.Sdk.Ari.Diagnostics.AriMetrics.EventDispatchMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AriMetrics.EventsDispatched -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AriMetrics.EventsDropped -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AriMetrics.EventsReceived -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AriMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Verbara.Sdk.Ari.Diagnostics.AriMetrics.Reconnections -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AriMetrics.RestRequestsSent -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AriMetrics.RestRoundtripMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.BufferUnderruns -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.BytesReceived -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.BytesSent -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.ErrorFrames -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.FrameLatency -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.FramesReceived -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.FramesSent -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.HangupFrames -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.StreamsClosed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.StreamsOpened -> System.Diagnostics.Metrics.Counter<long>!

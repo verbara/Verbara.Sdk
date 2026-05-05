@@ -5,15 +5,15 @@
 //     docker run --rm -p 5432:5432 -e POSTGRES_PASSWORD=postgres \
 //         -e POSTGRES_DB=asterisk_sessions_demo postgres:18-alpine
 //
-// The migration SQL ships inside the Asterisk.Sdk.Sessions.Postgres NuGet at
+// The migration SQL ships inside the Verbara.Sdk.Sessions.Postgres NuGet at
 //     contentFiles/any/any/Migrations/001_create_sessions_table.sql
 // This example executes the same statements inline before using the store.
 
-using Asterisk.Sdk;
-using Asterisk.Sdk.Hosting;
-using Asterisk.Sdk.Sessions;
-using Asterisk.Sdk.Sessions.Extensions;
-using Asterisk.Sdk.Sessions.Postgres;
+using Verbara.Sdk;
+using Verbara.Sdk.Hosting;
+using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Extensions;
+using Verbara.Sdk.Sessions.Postgres;
 using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -51,7 +51,7 @@ await using (var conn = new NpgsqlConnection(connString))
 // 2. Register Sessions with Postgres backend.
 var services = new ServiceCollection();
 services.AddLogging(b => b.AddConsole());
-services.AddAsteriskSessionsBuilder()
+services.AddVerbaraSessionsBuilder()
     .UsePostgres(connString);
 
 using var provider = services.BuildServiceProvider();

@@ -1,4 +1,4 @@
-using Asterisk.Sdk.VoiceAi;
+using Verbara.Sdk.VoiceAi;
 
 namespace VoiceAiCustomProviderExample;
 

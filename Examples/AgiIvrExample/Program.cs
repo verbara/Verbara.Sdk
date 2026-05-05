@@ -2,12 +2,12 @@
 // Demonstrates: complex IVR script with Answer, GetData, conditional routing,
 // Dial/VoiceMail, and Hangup using SimpleMappingStrategy.
 
-using Asterisk.Sdk;
-using Asterisk.Sdk.Agi.Mapping;
-using Asterisk.Sdk.Agi.Server;
+using Verbara.Sdk;
+using Verbara.Sdk.Agi.Mapping;
+using Verbara.Sdk.Agi.Server;
 using Microsoft.Extensions.Logging;
 
-Console.WriteLine("Asterisk.Sdk - AGI IVR Example");
+Console.WriteLine("Verbara.Sdk - AGI IVR Example");
 Console.WriteLine("================================");
 
 using var loggerFactory = LoggerFactory.Create(b => b.AddConsole().SetMinimumLevel(LogLevel.Debug));

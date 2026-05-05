@@ -20,8 +20,8 @@
 //    same => n,Stasis(outbound-app)
 //    same => n,Hangup()
 
-using Asterisk.Sdk.Ari.Outbound;
-using Asterisk.Sdk.Hosting;
+using Verbara.Sdk.Ari.Outbound;
+using Verbara.Sdk.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;

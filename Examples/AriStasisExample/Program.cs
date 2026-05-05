@@ -1,11 +1,11 @@
 // Asterisk.Sdk - ARI Stasis Application Example
 // Demonstrates: connect to ARI WebSocket, subscribe to events, originate a call.
 
-using Asterisk.Sdk;
-using Asterisk.Sdk.Ari.Client;
+using Verbara.Sdk;
+using Verbara.Sdk.Ari.Client;
 using Microsoft.Extensions.Options;
 
-Console.WriteLine("Asterisk.Sdk - ARI Stasis Example");
+Console.WriteLine("Verbara.Sdk - ARI Stasis Example");
 Console.WriteLine("====================================");
 
 // 1. Create ARI client with options

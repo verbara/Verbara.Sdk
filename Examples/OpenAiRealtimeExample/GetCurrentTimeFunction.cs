@@ -1,4 +1,4 @@
-using Asterisk.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling;
+using Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling;
 
 namespace OpenAiRealtimeExample;
 

@@ -5,7 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Hosting\Asterisk.Sdk.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Hosting\Verbara.Sdk.Hosting.csproj" />
   </ItemGroup>
 
   <ItemGroup>

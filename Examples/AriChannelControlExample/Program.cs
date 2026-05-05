@@ -2,19 +2,19 @@
 // Demonstrates: ARI REST (originate, bridge, add channels, play media, hangup),
 // WebSocket event subscription with StasisStart/StasisEnd filtering.
 
-using Asterisk.Sdk;
-using Asterisk.Sdk.Ari.Client;
-using Asterisk.Sdk.Hosting;
+using Verbara.Sdk;
+using Verbara.Sdk.Ari.Client;
+using Verbara.Sdk.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-Console.WriteLine("Asterisk.Sdk - ARI Channel Control Example");
+Console.WriteLine("Verbara.Sdk - ARI Channel Control Example");
 Console.WriteLine("=============================================");
 
 // 1. Configure services
 var services = new ServiceCollection();
 services.AddLogging(b => b.AddConsole().SetMinimumLevel(LogLevel.Information));
-services.AddAsterisk(options =>
+services.AddVerbara(options =>
 {
     options.Ami.Hostname = "localhost";
     options.Ami.Username = "admin";

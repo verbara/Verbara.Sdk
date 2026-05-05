@@ -1,5 +1,5 @@
-using Asterisk.Sdk.Audio;
-using Asterisk.Sdk.VoiceAi;
+using Verbara.Sdk.Audio;
+using Verbara.Sdk.VoiceAi;
 
 namespace VoiceAiCustomProviderExample;
 

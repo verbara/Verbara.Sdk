@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Asterisk.Sdk.Activities\Asterisk.Sdk.Activities.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Activities\Verbara.Sdk.Activities.csproj" />
   </ItemGroup>
 
   <ItemGroup>

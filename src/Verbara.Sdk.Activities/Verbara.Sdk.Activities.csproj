@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Activities - high-level telephony operations: Dial, Hold, Transfer, Park, Bridge, Conference</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verbara.Sdk\Verbara.Sdk.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Ami\Verbara.Sdk.Ami.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Agi\Verbara.Sdk.Agi.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Live\Verbara.Sdk.Live.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Ari\Verbara.Sdk.Ari.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+</Project>

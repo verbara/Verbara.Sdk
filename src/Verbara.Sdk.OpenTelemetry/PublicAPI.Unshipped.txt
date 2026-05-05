@@ -1,0 +1,15 @@
+#nullable enable
+Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder
+Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder.AddActivitySource(string! name) -> Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder!
+Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder.AddMeter(string! name) -> Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder!
+Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder.VerbaraOpenTelemetryBuilder() -> void
+Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder.ConfigureMetrics(System.Action<OpenTelemetry.Metrics.MeterProviderBuilder!>! configure) -> Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder!
+Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder.ConfigureTracing(System.Action<OpenTelemetry.Trace.TracerProviderBuilder!>! configure) -> Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder!
+Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder.ServiceName.get -> string!
+Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder.ServiceName.set -> void
+Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder.WithAllSources() -> Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder!
+Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder.WithConsoleExporter() -> Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder!
+Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder.WithOtlpExporter(System.Action<OpenTelemetry.Exporter.OtlpExporterOptions!>? configure = null) -> Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder!
+Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder.WithPrometheusExporter() -> Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder!
+Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryExtensions
+static Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryExtensions.AddVerbaraOpenTelemetry(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryBuilder!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

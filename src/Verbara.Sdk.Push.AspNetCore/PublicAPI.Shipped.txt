@@ -1,0 +1,5 @@
+#nullable enable
+Verbara.Sdk.Push.AspNetCore.PushAspNetCoreServiceExtensions
+static Verbara.Sdk.Push.AspNetCore.PushAspNetCoreServiceExtensions.AddVerbaraPushAspNetCore(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.Push.Bus.PushEventBusOptions!>? configurePush = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Verbara.Sdk.Push.AspNetCore.SsePushEndpoints
+static Verbara.Sdk.Push.AspNetCore.SsePushEndpoints.MapPushEndpoints(this Microsoft.AspNetCore.Routing.IEndpointRouteBuilder! app, string! prefix = "/api/v1/push") -> Microsoft.AspNetCore.Routing.IEndpointRouteBuilder!

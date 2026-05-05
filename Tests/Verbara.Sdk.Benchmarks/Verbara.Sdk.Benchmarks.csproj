@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>false</IsTestProject>
+    <!-- BenchmarkDotNet requires instance methods; suppress CA1822 -->
+    <NoWarn>$(NoWarn);CA1822</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Ami\Verbara.Sdk.Ami.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Agi\Verbara.Sdk.Agi.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Ari\Verbara.Sdk.Ari.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Live\Verbara.Sdk.Live.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Sessions\Verbara.Sdk.Sessions.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Sessions.Redis\Verbara.Sdk.Sessions.Redis.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Sessions.Postgres\Verbara.Sdk.Sessions.Postgres.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi\Verbara.Sdk.VoiceAi.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.Testing\Verbara.Sdk.VoiceAi.Testing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="Testcontainers" />
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Dapper" />
+  </ItemGroup>
+
+</Project>

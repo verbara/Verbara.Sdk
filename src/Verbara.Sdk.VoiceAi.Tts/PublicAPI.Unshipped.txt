@@ -1,0 +1,150 @@
+#nullable enable
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.ApiKey.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.ApiKey.set -> void
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.ApiVersion.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.ApiVersion.set -> void
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.BaseUri.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.BaseUri.set -> void
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.CartesiaOptions() -> void
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.ConnectTimeoutSeconds.get -> int
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.ConnectTimeoutSeconds.set -> void
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.Language.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.Language.set -> void
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.Model.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.Model.set -> void
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.OutputFormat.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.OutputFormat.set -> void
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.OutputSampleRate.get -> int
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.OutputSampleRate.set -> void
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.VoiceId.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions.VoiceId.set -> void
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptionsValidator
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptionsValidator.CartesiaOptionsValidator() -> void
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptionsValidator.Validate(string? name, Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaSpeechSynthesizer
+Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaSpeechSynthesizer.CartesiaSpeechSynthesizer(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions!>! options) -> void
+override Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaSpeechSynthesizer.ProviderName.get -> string!
+override Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaSpeechSynthesizer.SynthesizeAsync(string! text, Verbara.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+static Verbara.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions.AddCartesiaSpeechSynthesizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.ApiKey.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.ApiKey.set -> void
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.BaseUri.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.BaseUri.set -> void
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.ConnectTimeoutSeconds.get -> int
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.ConnectTimeoutSeconds.set -> void
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.Language.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.Language.set -> void
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.SampleRate.get -> int
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.SampleRate.set -> void
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.SpeechmaticsOptions() -> void
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.Voice.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.Voice.set -> void
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptionsValidator
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptionsValidator.SpeechmaticsOptionsValidator() -> void
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptionsValidator.Validate(string? name, Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsSpeechSynthesizer
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsSpeechSynthesizer.SpeechmaticsSpeechSynthesizer(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions!>! options) -> void
+override Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsSpeechSynthesizer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+override Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsSpeechSynthesizer.ProviderName.get -> string!
+override Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsSpeechSynthesizer.SynthesizeAsync(string! text, Verbara.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+static Verbara.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions.AddSpeechmaticsTts(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization.High = 3 -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization.Low = 1 -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization.Max = 4 -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization.Mid = 2 -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization.Off = 0 -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsModels
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat.Pcm16k = 0 -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat.Pcm22050 = 1 -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat.Pcm24k = 2 -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.LatencyOptimization.get -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.LatencyOptimization.set -> void
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.OutputFormat.get -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.OutputFormat.set -> void
+const Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsModels.Flash25 = "eleven_flash_v2_5" -> string!
+const Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsModels.Multilingual2 = "eleven_multilingual_v2" -> string!
+const Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsModels.Turbo2 = "eleven_turbo_v2" -> string!
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.ApiKey.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.ApiKey.set -> void
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.BaseUri.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.BaseUri.set -> void
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.ConnectTimeoutSeconds.get -> int
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.ConnectTimeoutSeconds.set -> void
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.DeepgramTtsOptions() -> void
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.Encoding.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.Encoding.set -> void
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.Model.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.Model.set -> void
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.SampleRate.get -> int
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.SampleRate.set -> void
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.Speed.get -> double
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions.Speed.set -> void
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptionsValidator
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptionsValidator.DeepgramTtsOptionsValidator() -> void
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptionsValidator.Validate(string? name, Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramSpeechSynthesizer
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramSpeechSynthesizer.DeepgramSpeechSynthesizer(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions!>! options) -> void
+override Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramSpeechSynthesizer.ProviderName.get -> string!
+override Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramSpeechSynthesizer.SynthesizeAsync(string! text, Verbara.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Andromeda = "aura-2-andromeda-en" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Apollo = "aura-2-apollo-en" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Arcas = "aura-2-arcas-en" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Asteria = "aura-asteria-en" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Helios = "aura-2-helios-en" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Luna = "aura-2-luna-en" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Orion = "aura-orion-en" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Orpheus = "aura-2-orpheus-en" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Sirio = "aura-2-sirio-es" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Stella = "aura-stella-en" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Thalia = "aura-2-thalia-en" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Zeus = "aura-2-zeus-en" -> string!
+static Verbara.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions.AddDeepgramSpeechSynthesizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramTtsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTransport
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTransport.Http = 1 -> Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTransport
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTransport.WebSocket = 0 -> Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTransport
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.ApiKey.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.ApiKey.set -> void
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.ApiVersion.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.ApiVersion.set -> void
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.ConnectTimeoutSeconds.get -> int
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.ConnectTimeoutSeconds.set -> void
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.Format.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.Format.set -> void
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.HttpTimeoutSeconds.get -> int
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.HttpTimeoutSeconds.set -> void
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.Language.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.Language.set -> void
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.LmntTtsOptions() -> void
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.Model.get -> string?
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.Model.set -> void
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.SampleRate.get -> int
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.SampleRate.set -> void
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.Speed.get -> double
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.Speed.set -> void
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.Transport.get -> Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTransport
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.Transport.set -> void
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.Voice.get -> string!
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions.Voice.set -> void
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptionsValidator
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptionsValidator.LmntTtsOptionsValidator() -> void
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptionsValidator.Validate(string? name, Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntSpeechSynthesizer
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntSpeechSynthesizer.LmntSpeechSynthesizer(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions!>! options) -> void
+override Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntSpeechSynthesizer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+override Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntSpeechSynthesizer.ProviderName.get -> string!
+override Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntSpeechSynthesizer.SynthesizeAsync(string! text, Verbara.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntVoices
+const Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntVoices.Amy = "amy" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntVoices.Ansel = "ansel" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntVoices.Daniel = "daniel" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntVoices.Elowen = "elowen" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntVoices.Leah = "leah" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntVoices.Lily = "lily" -> string!
+static Verbara.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions.AddLmntSpeechSynthesizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
