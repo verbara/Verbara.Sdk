@@ -461,15 +461,26 @@ The `Examples/` directory contains standalone console applications demonstrating
 | `AgiIvrExample` | Interactive Voice Response (IVR) menu via AGI |
 | `AriStasisExample` | ARI WebSocket connection and Stasis event handling |
 | `AriChannelControlExample` | ARI channel origination and bridge management |
+| `AriOutboundExample` | ARI outbound WebSocket listener (Asterisk connects to your app) |
 | `LiveApiExample` | Real-time channel and queue tracking via Live API |
 | `MultiServerExample` | Federated multi-server management with agent routing |
 | `PbxActivitiesExample` | High-level telephony activities (Dial, Hold, Transfer) |
 | `SessionExample` | Session Engine: call session correlation and domain events |
 | `SessionExtensionsExample` | Session Engine extension points: enrichers, policies, event handlers |
+| `SessionsRedisExample` | Redis-backed distributed session store |
+| `SessionsPostgresExample` | PostgreSQL-backed persistent session store |
+| `ContactCenterSupervisionExample` | Contact center supervision: ChanSpy, Barge, Snoop |
+| `NatsBridgeExample` | Push.Nats bridge for cross-service event distribution |
+| `WebhookSubscriberExample` | Webhook subscriber with HMAC-signed delivery |
 | `VoiceAiExample` | Turn-based Voice AI pipeline: Deepgram STT + ElevenLabs TTS + echo handler |
+| `VoiceAiAssemblyAiExample` | Voice AI with AssemblyAI STT provider |
+| `VoiceAiCartesiaExample` | Voice AI with Cartesia Sonic TTS provider |
+| `VoiceAiSpeechmaticsExample` | Voice AI with Speechmatics STT provider |
+| `VoiceAiCustomProviderExample` | Custom VoiceAi provider implementation pattern |
 | `OpenAiRealtimeExample` | GPT-4o direct bridge via OpenAI Realtime API with function calling |
-
-See also [Verbara.Sdk.PbxAdmin](https://github.com/verbara/Verbara.Sdk.PbxAdmin) — a full Blazor Server PBX administration panel built with this SDK.
+| `WebSocketMediaExample` | chan_websocket audio + JSON control protocol |
+| `TelemetryExample` | OpenTelemetry discovery: ActivitySources, Meters, HealthChecks |
+| `PbxAdmin` | _(Moved to [own repo](https://github.com/verbara/Verbara.Sdk.PbxAdmin))_ |
 
 ---
 
