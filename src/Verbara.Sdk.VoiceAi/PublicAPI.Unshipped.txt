@@ -1,2 +1,21 @@
 #nullable enable
 static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesisTtfaMs -> System.Diagnostics.Metrics.Histogram<double>!
+Verbara.Sdk.VoiceAi.ITurnDetector
+Verbara.Sdk.VoiceAi.ITurnDetector.Analyze(System.ReadOnlySpan<short> samples, bool isAssistantSpeaking) -> Verbara.Sdk.VoiceAi.TurnSignal
+Verbara.Sdk.VoiceAi.ITurnDetector.Reset() -> void
+Verbara.Sdk.VoiceAi.Pipeline.SilenceTurnDetector
+Verbara.Sdk.VoiceAi.Pipeline.SilenceTurnDetector.Analyze(System.ReadOnlySpan<short> samples, bool isAssistantSpeaking) -> Verbara.Sdk.VoiceAi.TurnSignal
+Verbara.Sdk.VoiceAi.Pipeline.SilenceTurnDetector.Reset() -> void
+Verbara.Sdk.VoiceAi.Pipeline.SilenceTurnDetector.SilenceTurnDetector(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions!>! options) -> void
+Verbara.Sdk.VoiceAi.TurnAction
+Verbara.Sdk.VoiceAi.TurnAction.BargIn = 3 -> Verbara.Sdk.VoiceAi.TurnAction
+Verbara.Sdk.VoiceAi.TurnAction.Continue = 0 -> Verbara.Sdk.VoiceAi.TurnAction
+Verbara.Sdk.VoiceAi.TurnAction.EndOfUtterance = 2 -> Verbara.Sdk.VoiceAi.TurnAction
+Verbara.Sdk.VoiceAi.TurnAction.SpeechStarted = 1 -> Verbara.Sdk.VoiceAi.TurnAction
+Verbara.Sdk.VoiceAi.TurnSignal
+Verbara.Sdk.VoiceAi.TurnSignal.Action.get -> Verbara.Sdk.VoiceAi.TurnAction
+Verbara.Sdk.VoiceAi.TurnSignal.Action.init -> void
+Verbara.Sdk.VoiceAi.TurnSignal.Confidence.get -> float
+Verbara.Sdk.VoiceAi.TurnSignal.Confidence.init -> void
+Verbara.Sdk.VoiceAi.TurnSignal.TurnSignal() -> void
+Verbara.Sdk.VoiceAi.TurnSignal.TurnSignal(Verbara.Sdk.VoiceAi.TurnAction Action, float Confidence = 1) -> void
