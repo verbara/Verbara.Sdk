@@ -29,6 +29,7 @@ public static class VoiceAiServiceCollectionExtensions
         services.TryAddSingleton<ISessionHandler>(sp => sp.GetRequiredService<VoiceAiPipeline>());
         services.TryAddSingleton<VoiceAiSessionBroker>();
         services.AddHostedService<VoiceAiSessionBroker>(sp => sp.GetRequiredService<VoiceAiSessionBroker>());
+        services.TryAddTransient<ITurnDetector, SilenceTurnDetector>();
 
         services.AddHealthChecks().AddCheck<VoiceAiHealthCheck>("voiceai");
 

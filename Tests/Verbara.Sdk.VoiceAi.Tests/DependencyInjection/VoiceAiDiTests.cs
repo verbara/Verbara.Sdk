@@ -122,6 +122,40 @@ public class VoiceAiDiTests
         var broker = provider.GetRequiredService<VoiceAiSessionBroker>();
         broker.Should().NotBeNull();
     }
+
+    [Fact]
+    public async Task AddVoiceAiPipeline_ShouldRegisterSilenceTurnDetector_AsDefault()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<SpeechRecognizer>(new FakeSpeechRecognizer());
+        services.AddSingleton<SpeechSynthesizer>(new FakeSpeechSynthesizer());
+        services.AddAudioSocketServer();
+        services.AddVoiceAiPipeline<FakeConversationHandlerScoped>();
+
+        await using var provider = services.BuildServiceProvider();
+        var detector = provider.GetService<ITurnDetector>();
+
+        detector.Should().NotBeNull();
+        detector.Should().BeOfType<SilenceTurnDetector>();
+    }
+
+    [Fact]
+    public async Task AddVoiceAiPipeline_ShouldAllowCustomTurnDetector_Override()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<SpeechRecognizer>(new FakeSpeechRecognizer());
+        services.AddSingleton<SpeechSynthesizer>(new FakeSpeechSynthesizer());
+        services.AddTransient<ITurnDetector, FakeTurnDetector>();
+        services.AddAudioSocketServer();
+        services.AddVoiceAiPipeline<FakeConversationHandlerScoped>();
+
+        await using var provider = services.BuildServiceProvider();
+        var detector = provider.GetService<ITurnDetector>();
+
+        detector.Should().BeOfType<FakeTurnDetector>();
+    }
 }
 
 file sealed class FakeConversationHandlerScoped : IConversationHandler
