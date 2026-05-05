@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-03-19-sprint23-voiceai-stt-tts-design.md`
 
-**Repo:** `/media/Data/Source/IPcom/Asterisk.Sdk/`
+**Repo:** `/media/Data/Source/Verbara/Asterisk.Sdk/`
 
 **Execution strategy:** Sequential (each task depends on prior artifacts)
 - Phase A: VoiceAi core abstractions + Testing fakes
@@ -328,7 +328,7 @@ Add to the `/Tests/` folder:
 - [ ] **Step 5: Build to verify 0 warnings**
 
 ```bash
-cd /media/Data/Source/IPcom/Asterisk.Sdk
+cd /media/Data/Source/Verbara/Asterisk.Sdk
 dotnet build src/Asterisk.Sdk.VoiceAi/Asterisk.Sdk.VoiceAi.csproj
 ```
 
@@ -4098,7 +4098,7 @@ git commit -m "feat(voiceai): add VoiceAiExample E2E console app (Deepgram + Ele
 - [ ] **Step 1: Build entire solution — 0 warnings**
 
 ```bash
-cd /media/Data/Source/IPcom/Asterisk.Sdk
+cd /media/Data/Source/Verbara/Asterisk.Sdk
 dotnet build Asterisk.Sdk.slnx
 ```
 

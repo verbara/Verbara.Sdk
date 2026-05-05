@@ -84,7 +84,7 @@ Five package READMEs were either 2-line stubs or inadequate-but-better. Each now
 
 ### Fixed (build portability)
 
-- **[`nuget.config`](nuget.config)** — drop the machine-specific local feed entry. The previous commit (`4393dfc`) added `<add key="local" value="/media/Data/Source/IPcom/local-nuget-feed/" />` to mirror the Pro/Platform pattern, but the MIT SDK is the **producer** of that cross-repo local feed (Pro and Platform are the consumers). The hard-coded absolute path broke `aot-check` on GitHub runners with `NU1301: The local source ... doesn't exist`. Comment expanded to document why no local source belongs in this repo's `nuget.config`.
+- **[`nuget.config`](nuget.config)** — drop the machine-specific local feed entry. The previous commit (`4393dfc`) added `<add key="local" value="/media/Data/Source/Verbara/local-nuget-feed/" />` to mirror the Pro/Platform pattern, but the MIT SDK is the **producer** of that cross-repo local feed (Pro and Platform are the consumers). The hard-coded absolute path broke `aot-check` on GitHub runners with `NU1301: The local source ... doesn't exist`. Comment expanded to document why no local source belongs in this repo's `nuget.config`.
 
 ### Documentation
 

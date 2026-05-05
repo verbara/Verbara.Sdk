@@ -51,7 +51,7 @@ FastAgiServer(AgiPort, ...)       FastAgiServer(4573, ...)
 - [ ] **Step 1: Confirmar fallos de base (pre-fix)**
 
 ```bash
-cd /media/Data/Source/IPcom/Asterisk.Sdk
+cd /media/Data/Source/Verbara/Asterisk.Sdk
 dotnet test Tests/Asterisk.Sdk.IntegrationTests/ --filter "FullyQualifiedName~FastAgiIntegrationTests" 2>&1 | tail -6
 ```
 
