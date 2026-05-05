@@ -1,0 +1,14 @@
+using Verbara.Sdk;
+using Verbara.Sdk.Attributes;
+
+namespace Verbara.Sdk.Ami.Actions;
+
+[VerbaraMapping("QueuePause")]
+public sealed class QueuePauseAction : ManagerAction
+{
+    public string? Interface { get; set; }
+    public string? Queue { get; set; }
+    public bool? Paused { get; set; }
+    public string? Reason { get; set; }
+}
+

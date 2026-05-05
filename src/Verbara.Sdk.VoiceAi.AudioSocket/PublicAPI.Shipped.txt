@@ -1,0 +1,82 @@
+#nullable enable
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketClient
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketClient.AudioSocketClient(string! host, int port, System.Guid channelId) -> void
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketClient.ConnectAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketClient.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketClient.ReadAudioAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketClient.SendAudioAsync(System.ReadOnlyMemory<byte> pcmData, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketClient.SendHangupAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.AudioSocketFrame(Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType Type, System.ReadOnlyMemory<byte> Payload) -> void
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.AudioSocketFrame() -> void
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.Payload.get -> System.ReadOnlyMemory<byte>
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.Payload.init -> void
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Audio = 1 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin12 = 17 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin16 = 18 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin192 = 24 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin24 = 19 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin32 = 20 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin44 = 21 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin48 = 22 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.AudioSlin96 = 23 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Error = 4 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameTypeExtensions
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.Type.get -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Hangup = 255 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.Type.init -> void
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Silence = 2 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Uuid = 0 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.AudioSocketOptions() -> void
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.ConnectionTimeout.get -> System.TimeSpan
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.ConnectionTimeout.set -> void
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.DefaultFormat.get -> Verbara.Sdk.Audio.AudioFormat
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.DefaultFormat.set -> void
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.ListenAddress.get -> string!
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.ListenAddress.set -> void
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.MaxConcurrentSessions.get -> int
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.MaxConcurrentSessions.set -> void
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.Port.get -> int
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.Port.set -> void
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.ReceiveBufferSize.get -> int
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions.ReceiveBufferSize.set -> void
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer.ActiveSessionCount.get -> int
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer.AudioSocketServer(Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions! options, Microsoft.Extensions.Logging.ILogger<Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer!>! logger) -> void
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer.BoundPort.get -> int
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer.OnSessionStarted -> System.Func<Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession!, System.Threading.Tasks.ValueTask>?
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession.ChannelId.get -> System.Guid
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession.HangupAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession.InputFormat.get -> Verbara.Sdk.Audio.AudioFormat
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession.IsConnected.get -> bool
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession.OnHangup -> System.Action?
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession.ReadAudioAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession.RemoteEndpoint.get -> string!
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession.WriteAudioAsync(System.ReadOnlyMemory<byte> pcmData, Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType frameType, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession.WriteAudioAsync(System.ReadOnlyMemory<byte> pcmData, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession.WriteSilenceAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.AudioSocket.DependencyInjection.AudioSocketServiceCollectionExtensions
+Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketActivitySource
+Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketHealthCheck
+Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketHealthCheck.AudioSocketHealthCheck(Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer! server) -> void
+Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics
+static Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameTypeExtensions.GetSampleRate(this Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType type) -> int
+static Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameTypeExtensions.IsAudio(this Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType type) -> bool
+static Verbara.Sdk.VoiceAi.AudioSocket.DependencyInjection.AudioSocketServiceCollectionExtensions.AddAudioSocketServer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static readonly Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketActivitySource.Source -> System.Diagnostics.ActivitySource!
+static readonly Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.BytesReceived -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.BytesSent -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.ConnectionsAccepted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.ConnectionsClosed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.FramesReceived -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.FramesSent -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.SessionDurationMs -> System.Diagnostics.Metrics.Histogram<double>!

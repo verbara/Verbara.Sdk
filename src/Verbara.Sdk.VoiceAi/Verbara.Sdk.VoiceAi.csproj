@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Voice AI pipeline for Verbara.Sdk — orchestration layer for STT, TTS and conversation with turn-taking and barge-in detection.</Description>
+    <PackageTags>$(PackageTags);voiceai;stt;tts;ai;pipeline</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Verbara.Sdk.VoiceAi.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Verbara.Sdk.Audio\Verbara.Sdk.Audio.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.VoiceAi.AudioSocket\Verbara.Sdk.VoiceAi.AudioSocket.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="System.Reactive" />
+  </ItemGroup>
+</Project>

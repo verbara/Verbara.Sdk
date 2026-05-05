@@ -1,6 +1,6 @@
 // Asterisk.Sdk — Push.Nats bridge example.
 //
-// Shows Asterisk.Sdk.Push.Nats fanning PushEvent instances out to a NATS
+// Shows Verbara.Sdk.Push.Nats fanning PushEvent instances out to a NATS
 // cluster. The topic hierarchy (calls/agents/queues/etc.) maps to a NATS
 // subject tree rooted at the configured prefix (default "asterisk.sdk"),
 // so a separate subscriber — in another process, on another host — can
@@ -13,10 +13,10 @@
 //   docker run -p 4222:4222 nats:2.10-alpine
 // (or any reachable NATS server at nats://127.0.0.1:4222)
 
-using Asterisk.Sdk.Push.Bus;
-using Asterisk.Sdk.Push.Events;
-using Asterisk.Sdk.Push.Hosting;
-using Asterisk.Sdk.Push.Nats;
+using Verbara.Sdk.Push.Bus;
+using Verbara.Sdk.Push.Events;
+using Verbara.Sdk.Push.Hosting;
+using Verbara.Sdk.Push.Nats;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -28,7 +28,7 @@ const string subjectPrefix = "asterisk.sdk";
 
 var builder = Host.CreateApplicationBuilder();
 builder.Logging.ClearProviders().AddConsole();
-builder.Services.AddAsteriskPush();
+builder.Services.AddVerbaraPush();
 builder.Services.AddPushNats(opt =>
 {
     opt.Url = natsUrl;

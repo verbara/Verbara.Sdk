@@ -1,0 +1,80 @@
+#nullable enable
+Verbara.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection.RealtimeServiceCollectionExtensions
+Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeActivitySource
+Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeHealthCheck
+Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeHealthCheck.RealtimeHealthCheck(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions!>! options) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics
+Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling.IRealtimeFunctionHandler
+Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling.IRealtimeFunctionHandler.Description.get -> string!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling.IRealtimeFunctionHandler.ExecuteAsync(string! argumentsJson, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string!>
+Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling.IRealtimeFunctionHandler.Name.get -> string!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling.IRealtimeFunctionHandler.ParametersSchema.get -> string!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeBridge
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeBridge.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeBridge.Events.get -> System.IObservable<Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent!>!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeBridge.HandleSessionAsync(Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession! session, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.ApiKey.get -> string!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.ApiKey.set -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.InputFormat.get -> Verbara.Sdk.Audio.AudioFormat
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.InputFormat.set -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.Instructions.get -> string!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.Instructions.set -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.Model.get -> string!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.Model.set -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.OpenAiRealtimeOptions() -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.VadMode.get -> Verbara.Sdk.VoiceAi.OpenAiRealtime.VadMode
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.VadMode.set -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptionsValidator
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptionsValidator.OpenAiRealtimeOptionsValidator() -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.Voice.get -> string!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.Voice.set -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.Message.get -> string!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.Message.init -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.RealtimeErrorEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp, string! Message) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.ChannelId.get -> System.Guid
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.ChannelId.init -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.RealtimeEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.Timestamp.get -> System.DateTimeOffset
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.Timestamp.init -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.ArgumentsJson.get -> string!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.ArgumentsJson.init -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.FunctionName.get -> string!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.FunctionName.init -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.RealtimeFunctionCalledEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp, string! FunctionName, string! ArgumentsJson, string! ResultJson) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.ResultJson.get -> string!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.ResultJson.init -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.Duration.get -> System.TimeSpan
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.Duration.init -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.RealtimeResponseEndedEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp, System.TimeSpan Duration) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent.RealtimeResponseStartedEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent.RealtimeSpeechStartedEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent.RealtimeSpeechStoppedEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.IsFinal.get -> bool
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.IsFinal.init -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.RealtimeTranscriptEvent(System.Guid ChannelId, System.DateTimeOffset Timestamp, string! Transcript, bool IsFinal) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.Transcript.get -> string!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.Transcript.init -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.VadMode
+Verbara.Sdk.VoiceAi.OpenAiRealtime.VadMode.Disabled = 1 -> Verbara.Sdk.VoiceAi.OpenAiRealtime.VadMode
+Verbara.Sdk.VoiceAi.OpenAiRealtime.VadMode.ServerSide = 0 -> Verbara.Sdk.VoiceAi.OpenAiRealtime.VadMode
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection.RealtimeServiceCollectionExtensions.AddFunction<THandler>(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection.RealtimeServiceCollectionExtensions.AddOpenAiRealtimeBridge(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeActivitySource.Source -> System.Diagnostics.ActivitySource!
+static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.FunctionCallsTotal -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.MessagesReceived -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.MessagesSent -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionDurationMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsCompleted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsFailed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsStarted -> System.Diagnostics.Metrics.Counter<long>!

@@ -26,16 +26,16 @@
 
   <!-- Package metadata -->
   <PropertyGroup>
-    <Authors>Asterisk.Sdk Contributors</Authors>
-    <Company>Asterisk.Sdk</Company>
-    <Product>Asterisk.Sdk</Product>
+    <Authors>Verbara.Sdk Contributors</Authors>
+    <Company>Verbara.Sdk</Company>
+    <Product>Verbara.Sdk</Product>
     <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/Harol-Reina/Asterisk.Sdk</RepositoryUrl>
-    <PackageProjectUrl>https://github.com/Harol-Reina/Asterisk.Sdk</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/verbara/verbara-sdk</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/verbara/verbara-sdk</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageTags>asterisk;ami;agi;ari;voip;pbx;telephony;native-aot;sdk</PackageTags>
-    <PackageVersion>1.15.3</PackageVersion>
+    <PackageTags>verbara;asterisk;ami;agi;ari;voip;pbx;telephony;native-aot;sdk</PackageTags>
+    <PackageVersion>2.0.0</PackageVersion>
   </PropertyGroup>
 
   <!-- Deterministic builds + SourceLink (debuggable NuGet packages) -->
@@ -47,10 +47,10 @@
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
-  <!-- Package validation: detect binary breaking changes against v1.5.0 baseline -->
+  <!-- Package validation: disabled during rebrand — no baseline packages exist under Verbara.Sdk yet -->
   <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('src'))">
-    <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>1.5.3</PackageValidationBaselineVersion>
+    <EnablePackageValidation>false</EnablePackageValidation>
+    <!-- Re-enable after first Verbara.Sdk publish: <PackageValidationBaselineVersion>2.0.0</PackageValidationBaselineVersion> -->
   </PropertyGroup>
 
   <!-- Analyzers for all projects (except SourceGenerators which targets netstandard2.0) -->

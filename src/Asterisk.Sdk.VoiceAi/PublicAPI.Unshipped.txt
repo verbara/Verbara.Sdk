@@ -1,2 +1,0 @@
-#nullable enable
-static readonly Asterisk.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesisTtfaMs -> System.Diagnostics.Metrics.Histogram<double>!

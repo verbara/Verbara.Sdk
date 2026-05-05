@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Session Engine - call session correlation, state machines, and domain events</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Verbara.Sdk.Pro.Cluster" />
+    <InternalsVisibleTo Include="Verbara.Sdk.Sessions.Tests" />
+    <InternalsVisibleTo Include="Verbara.Sdk.Sessions.FunctionalTests" />
+    <InternalsVisibleTo Include="Verbara.Sdk.Hosting" />
+    <InternalsVisibleTo Include="Verbara.Sdk.Hosting.Tests" />
+    <InternalsVisibleTo Include="Verbara.Sdk.Sessions.Redis" />
+    <InternalsVisibleTo Include="Verbara.Sdk.Sessions.Redis.Tests" />
+    <InternalsVisibleTo Include="Verbara.Sdk.Sessions.Postgres" />
+    <InternalsVisibleTo Include="Verbara.Sdk.Sessions.Postgres.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Verbara.Sdk\Verbara.Sdk.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Ami\Verbara.Sdk.Ami.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Live\Verbara.Sdk.Live.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="System.Reactive" />
+  </ItemGroup>
+</Project>

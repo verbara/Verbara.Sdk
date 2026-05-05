@@ -2,14 +2,14 @@
 // Demonstrates: high-level Activities (PlayMessage, Dial, Queue, Hangup)
 // on a FastAGI channel with status tracking.
 
-using Asterisk.Sdk;
-using Asterisk.Sdk.Activities.Activities;
-using Asterisk.Sdk.Activities.Models;
-using Asterisk.Sdk.Agi.Mapping;
-using Asterisk.Sdk.Agi.Server;
+using Verbara.Sdk;
+using Verbara.Sdk.Activities.Activities;
+using Verbara.Sdk.Activities.Models;
+using Verbara.Sdk.Agi.Mapping;
+using Verbara.Sdk.Agi.Server;
 using Microsoft.Extensions.Logging;
 
-Console.WriteLine("Asterisk.Sdk - PBX Activities Example");
+Console.WriteLine("Verbara.Sdk - PBX Activities Example");
 Console.WriteLine("========================================");
 Console.WriteLine("This example runs a FastAGI server that uses Activities");
 Console.WriteLine("to control calls with status tracking.\n");

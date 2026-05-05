@@ -1,4 +1,4 @@
-using Asterisk.Sdk.Push.Events;
+using Verbara.Sdk.Push.Events;
 
 namespace WebhookSubscriberExample;
 

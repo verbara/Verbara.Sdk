@@ -1,6 +1,6 @@
-using Asterisk.Sdk.VoiceAi.OpenAiRealtime;
-using Asterisk.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection;
-using Asterisk.Sdk.VoiceAi.AudioSocket.DependencyInjection;
+using Verbara.Sdk.VoiceAi.OpenAiRealtime;
+using Verbara.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection;
+using Verbara.Sdk.VoiceAi.AudioSocket.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenAiRealtimeExample;

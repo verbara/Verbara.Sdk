@@ -9,10 +9,10 @@
 // This demo substitutes each dependency with NSubstitute so it runs without a PBX
 // and prints exactly what would be dispatched to Asterisk in each case.
 
-using Asterisk.Sdk;
-using Asterisk.Sdk.Activities.Activities;
-using Asterisk.Sdk.Activities.Models;
-using Asterisk.Sdk.Ami.Actions;
+using Verbara.Sdk;
+using Verbara.Sdk.Activities.Activities;
+using Verbara.Sdk.Activities.Models;
+using Verbara.Sdk.Ami.Actions;
 using NSubstitute;
 
 Console.WriteLine("Contact-Center Supervision — activity dispatch demo");

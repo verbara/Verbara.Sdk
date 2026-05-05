@@ -1,0 +1,14 @@
+using Verbara.Sdk;
+using Verbara.Sdk.Attributes;
+
+namespace Verbara.Sdk.Ami.Events;
+
+[VerbaraMapping("DongleNewSMS")]
+public sealed class DongleNewSMSEvent : ManagerEvent
+{
+    public string? Device { get; set; }
+    public string? From { get; set; }
+    public string? Linecount { get; set; }
+    public string? Messageline0 { get; set; }
+}
+

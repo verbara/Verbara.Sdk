@@ -1,0 +1,263 @@
+#nullable enable
+abstract Verbara.Sdk.Sessions.Extensions.AgentSelectorBase.SelectAgentAsync(Verbara.Sdk.Live.Queues.AsteriskQueue! queue, Verbara.Sdk.Sessions.CallSession! session, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Live.Agents.AsteriskAgent?>
+abstract Verbara.Sdk.Sessions.Extensions.CallRouterBase.SelectNodeAsync(Verbara.Sdk.Sessions.CallSession! session, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<string!>
+abstract Verbara.Sdk.Sessions.Extensions.SessionStoreBase.GetAsync(string! sessionId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Sessions.CallSession?>
+abstract Verbara.Sdk.Sessions.Extensions.SessionStoreBase.SaveAsync(Verbara.Sdk.Sessions.CallSession! session, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Sessions.CallConnectedEvent
+Verbara.Sdk.Sessions.CallConnectedEvent.AgentId.get -> string?
+Verbara.Sdk.Sessions.CallConnectedEvent.AgentId.init -> void
+Verbara.Sdk.Sessions.CallConnectedEvent.CallConnectedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string? AgentId, string? QueueName, System.TimeSpan WaitTime) -> void
+Verbara.Sdk.Sessions.CallConnectedEvent.QueueName.get -> string?
+Verbara.Sdk.Sessions.CallConnectedEvent.QueueName.init -> void
+Verbara.Sdk.Sessions.CallConnectedEvent.WaitTime.get -> System.TimeSpan
+Verbara.Sdk.Sessions.CallConnectedEvent.WaitTime.init -> void
+Verbara.Sdk.Sessions.CallDirection
+Verbara.Sdk.Sessions.CallDirection.Inbound = 0 -> Verbara.Sdk.Sessions.CallDirection
+Verbara.Sdk.Sessions.CallDirection.Outbound = 1 -> Verbara.Sdk.Sessions.CallDirection
+Verbara.Sdk.Sessions.CallEndedEvent
+Verbara.Sdk.Sessions.CallEndedEvent.CallEndedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, Verbara.Sdk.Enums.HangupCause? Cause, System.TimeSpan Duration, System.TimeSpan? TalkTime) -> void
+Verbara.Sdk.Sessions.CallEndedEvent.Cause.get -> Verbara.Sdk.Enums.HangupCause?
+Verbara.Sdk.Sessions.CallEndedEvent.Cause.init -> void
+Verbara.Sdk.Sessions.CallEndedEvent.Duration.get -> System.TimeSpan
+Verbara.Sdk.Sessions.CallEndedEvent.Duration.init -> void
+Verbara.Sdk.Sessions.CallEndedEvent.TalkTime.get -> System.TimeSpan?
+Verbara.Sdk.Sessions.CallEndedEvent.TalkTime.init -> void
+Verbara.Sdk.Sessions.CallFailedEvent
+Verbara.Sdk.Sessions.CallFailedEvent.CallFailedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string! Reason) -> void
+Verbara.Sdk.Sessions.CallFailedEvent.Reason.get -> string!
+Verbara.Sdk.Sessions.CallFailedEvent.Reason.init -> void
+Verbara.Sdk.Sessions.CallHeldEvent
+Verbara.Sdk.Sessions.CallHeldEvent.CallHeldEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.Sessions.CallQueuedEvent
+Verbara.Sdk.Sessions.CallQueuedEvent.CallQueuedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string! QueueName, int? Position) -> void
+Verbara.Sdk.Sessions.CallQueuedEvent.Position.get -> int?
+Verbara.Sdk.Sessions.CallQueuedEvent.Position.init -> void
+Verbara.Sdk.Sessions.CallQueuedEvent.QueueName.get -> string!
+Verbara.Sdk.Sessions.CallQueuedEvent.QueueName.init -> void
+Verbara.Sdk.Sessions.CallResumedEvent
+Verbara.Sdk.Sessions.CallResumedEvent.CallResumedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.Sessions.CallRingNoAnswerEvent
+Verbara.Sdk.Sessions.CallRingNoAnswerEvent.AgentId.get -> string!
+Verbara.Sdk.Sessions.CallRingNoAnswerEvent.AgentId.init -> void
+Verbara.Sdk.Sessions.CallRingNoAnswerEvent.CallRingNoAnswerEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string! AgentId, string? QueueName) -> void
+Verbara.Sdk.Sessions.CallRingNoAnswerEvent.QueueName.get -> string?
+Verbara.Sdk.Sessions.CallRingNoAnswerEvent.QueueName.init -> void
+Verbara.Sdk.Sessions.CallSession
+Verbara.Sdk.Sessions.CallSession.AgentId.get -> string?
+Verbara.Sdk.Sessions.CallSession.AgentId.set -> void
+Verbara.Sdk.Sessions.CallSession.AgentInterface.get -> string?
+Verbara.Sdk.Sessions.CallSession.AgentInterface.set -> void
+Verbara.Sdk.Sessions.CallSession.BridgeId.get -> string?
+Verbara.Sdk.Sessions.CallSession.BridgeId.set -> void
+Verbara.Sdk.Sessions.CallSession.CallerIdName.get -> string?
+Verbara.Sdk.Sessions.CallSession.CallerIdNum.get -> string?
+Verbara.Sdk.Sessions.CallSession.CallSession(string! sessionId, string! linkedId, string! serverId, Verbara.Sdk.Sessions.CallDirection direction) -> void
+Verbara.Sdk.Sessions.CallSession.CompletedAt.get -> System.DateTimeOffset?
+Verbara.Sdk.Sessions.CallSession.CompletedAt.set -> void
+Verbara.Sdk.Sessions.CallSession.ConnectedAt.get -> System.DateTimeOffset?
+Verbara.Sdk.Sessions.CallSession.ConnectedAt.set -> void
+Verbara.Sdk.Sessions.CallSession.Context.get -> string?
+Verbara.Sdk.Sessions.CallSession.CreatedAt.get -> System.DateTimeOffset
+Verbara.Sdk.Sessions.CallSession.CreatedAt.init -> void
+Verbara.Sdk.Sessions.CallSession.DialingAt.get -> System.DateTimeOffset?
+Verbara.Sdk.Sessions.CallSession.DialingAt.set -> void
+Verbara.Sdk.Sessions.CallSession.Direction.get -> Verbara.Sdk.Sessions.CallDirection
+Verbara.Sdk.Sessions.CallSession.Duration.get -> System.TimeSpan
+Verbara.Sdk.Sessions.CallSessionEvent
+Verbara.Sdk.Sessions.CallSessionEvent.CallSessionEvent(System.DateTimeOffset Timestamp, Verbara.Sdk.Sessions.CallSessionEventType Type, string? SourceChannel, string? TargetChannel, string? Detail) -> void
+Verbara.Sdk.Sessions.CallSessionEvent.Detail.get -> string?
+Verbara.Sdk.Sessions.CallSessionEvent.Detail.init -> void
+Verbara.Sdk.Sessions.CallSession.Events.get -> System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Sessions.CallSessionEvent!>!
+Verbara.Sdk.Sessions.CallSessionEvent.SourceChannel.get -> string?
+Verbara.Sdk.Sessions.CallSessionEvent.SourceChannel.init -> void
+Verbara.Sdk.Sessions.CallSessionEvent.TargetChannel.get -> string?
+Verbara.Sdk.Sessions.CallSessionEvent.TargetChannel.init -> void
+Verbara.Sdk.Sessions.CallSessionEvent.Timestamp.get -> System.DateTimeOffset
+Verbara.Sdk.Sessions.CallSessionEvent.Timestamp.init -> void
+Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEventType.AgentConnected = 11 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEventType.Completed = 12 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEventType.Conference = 7 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEventType.Connected = 3 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEventType.Created = 0 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEventType.Dialing = 1 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEventType.Failed = 13 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEvent.Type.get -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEventType.Hold = 4 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEvent.Type.init -> void
+Verbara.Sdk.Sessions.CallSessionEventType.ParticipantJoined = 8 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEventType.ParticipantLeft = 9 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEventType.QueueJoined = 10 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEventType.Ringing = 2 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEventType.TimedOut = 14 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEventType.Transfer = 6 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSessionEventType.Unhold = 5 -> Verbara.Sdk.Sessions.CallSessionEventType
+Verbara.Sdk.Sessions.CallSession.Extension.get -> string?
+Verbara.Sdk.Sessions.CallSession.HangupCause.get -> Verbara.Sdk.Enums.HangupCause?
+Verbara.Sdk.Sessions.CallSession.HangupCause.set -> void
+Verbara.Sdk.Sessions.CallSession.HoldTime.get -> System.TimeSpan
+Verbara.Sdk.Sessions.CallSession.LinkedId.get -> string!
+Verbara.Sdk.Sessions.CallSession.Metadata.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+Verbara.Sdk.Sessions.CallSession.Participants.get -> System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Sessions.SessionParticipant!>!
+Verbara.Sdk.Sessions.CallSession.QueuedAt.get -> System.DateTimeOffset?
+Verbara.Sdk.Sessions.CallSession.QueuedAt.set -> void
+Verbara.Sdk.Sessions.CallSession.QueueName.get -> string?
+Verbara.Sdk.Sessions.CallSession.QueueName.set -> void
+Verbara.Sdk.Sessions.CallSession.RingingAt.get -> System.DateTimeOffset?
+Verbara.Sdk.Sessions.CallSession.RingingAt.set -> void
+Verbara.Sdk.Sessions.CallSession.ServerId.get -> string!
+Verbara.Sdk.Sessions.CallSession.SessionId.get -> string!
+Verbara.Sdk.Sessions.CallSession.SetMetadata(string! key, string! value) -> void
+Verbara.Sdk.Sessions.CallSessionState
+Verbara.Sdk.Sessions.CallSessionState.Completed = 8 -> Verbara.Sdk.Sessions.CallSessionState
+Verbara.Sdk.Sessions.CallSessionState.Conference = 7 -> Verbara.Sdk.Sessions.CallSessionState
+Verbara.Sdk.Sessions.CallSessionState.Connected = 4 -> Verbara.Sdk.Sessions.CallSessionState
+Verbara.Sdk.Sessions.CallSessionState.Created = 0 -> Verbara.Sdk.Sessions.CallSessionState
+Verbara.Sdk.Sessions.CallSessionState.Dialing = 1 -> Verbara.Sdk.Sessions.CallSessionState
+Verbara.Sdk.Sessions.CallSessionState.Failed = 9 -> Verbara.Sdk.Sessions.CallSessionState
+Verbara.Sdk.Sessions.CallSession.State.get -> Verbara.Sdk.Sessions.CallSessionState
+Verbara.Sdk.Sessions.CallSessionState.OnHold = 5 -> Verbara.Sdk.Sessions.CallSessionState
+Verbara.Sdk.Sessions.CallSessionState.Queued = 3 -> Verbara.Sdk.Sessions.CallSessionState
+Verbara.Sdk.Sessions.CallSessionState.Ringing = 2 -> Verbara.Sdk.Sessions.CallSessionState
+Verbara.Sdk.Sessions.CallSessionState.TimedOut = 10 -> Verbara.Sdk.Sessions.CallSessionState
+Verbara.Sdk.Sessions.CallSessionState.Transferring = 6 -> Verbara.Sdk.Sessions.CallSessionState
+Verbara.Sdk.Sessions.CallSession.TalkTime.get -> System.TimeSpan?
+Verbara.Sdk.Sessions.CallSession.TenantId.get -> string?
+Verbara.Sdk.Sessions.CallSession.TenantId.set -> void
+Verbara.Sdk.Sessions.CallSession.WaitTime.get -> System.TimeSpan?
+Verbara.Sdk.Sessions.CallStartedEvent
+Verbara.Sdk.Sessions.CallStartedEvent.CallerIdNum.get -> string?
+Verbara.Sdk.Sessions.CallStartedEvent.CallerIdNum.init -> void
+Verbara.Sdk.Sessions.CallStartedEvent.CallStartedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, Verbara.Sdk.Sessions.CallDirection Direction, string? CallerIdNum) -> void
+Verbara.Sdk.Sessions.CallStartedEvent.Direction.get -> Verbara.Sdk.Sessions.CallDirection
+Verbara.Sdk.Sessions.CallStartedEvent.Direction.init -> void
+Verbara.Sdk.Sessions.CallTransferredEvent
+Verbara.Sdk.Sessions.CallTransferredEvent.CallTransferredEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string! TransferType, string? TargetChannel) -> void
+Verbara.Sdk.Sessions.CallTransferredEvent.TargetChannel.get -> string?
+Verbara.Sdk.Sessions.CallTransferredEvent.TargetChannel.init -> void
+Verbara.Sdk.Sessions.CallTransferredEvent.TransferType.get -> string!
+Verbara.Sdk.Sessions.CallTransferredEvent.TransferType.init -> void
+Verbara.Sdk.Sessions.CallWrapUpEvent
+Verbara.Sdk.Sessions.CallWrapUpEvent.AgentId.get -> string?
+Verbara.Sdk.Sessions.CallWrapUpEvent.AgentId.init -> void
+Verbara.Sdk.Sessions.CallWrapUpEvent.CallWrapUpEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string? AgentId, string? QueueName, System.TimeSpan WrapUpDuration) -> void
+Verbara.Sdk.Sessions.CallWrapUpEvent.QueueName.get -> string?
+Verbara.Sdk.Sessions.CallWrapUpEvent.QueueName.init -> void
+Verbara.Sdk.Sessions.CallWrapUpEvent.WrapUpDuration.get -> System.TimeSpan
+Verbara.Sdk.Sessions.CallWrapUpEvent.WrapUpDuration.init -> void
+Verbara.Sdk.Sessions.Diagnostics.SessionMetrics
+Verbara.Sdk.Sessions.Exceptions.InvalidSessionStateTransitionException
+Verbara.Sdk.Sessions.Exceptions.InvalidSessionStateTransitionException.InvalidSessionStateTransitionException(Verbara.Sdk.Sessions.CallSessionState from, Verbara.Sdk.Sessions.CallSessionState to) -> void
+Verbara.Sdk.Sessions.Exceptions.SessionException
+Verbara.Sdk.Sessions.Exceptions.SessionException.SessionException(string! message, System.Exception? inner = null) -> void
+Verbara.Sdk.Sessions.Extensions.AgentSelectorBase
+Verbara.Sdk.Sessions.Extensions.AgentSelectorBase.AgentSelectorBase() -> void
+Verbara.Sdk.Sessions.Extensions.CallRouterBase
+Verbara.Sdk.Sessions.Extensions.CallRouterBase.CallRouterBase() -> void
+Verbara.Sdk.Sessions.Extensions.SessionStoreBase
+Verbara.Sdk.Sessions.Extensions.SessionStoreBase.SessionStoreBase() -> void
+Verbara.Sdk.Sessions.Manager.CallSessionManager
+Verbara.Sdk.Sessions.Manager.CallSessionManager.ActiveSessions.get -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Sessions.CallSession!>!
+Verbara.Sdk.Sessions.Manager.CallSessionManager.AttachToServer(Verbara.Sdk.Live.Server.VerbaraServer! server, string! serverId) -> void
+Verbara.Sdk.Sessions.Manager.CallSessionManager.CallSessionManager(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.Sessions.Manager.SessionOptions!>! options, Microsoft.Extensions.Logging.ILogger<Verbara.Sdk.Sessions.Manager.CallSessionManager!>! logger, Verbara.Sdk.Sessions.Extensions.SessionStoreBase! store) -> void
+Verbara.Sdk.Sessions.Manager.CallSessionManager.DetachFromServer(string! serverId) -> void
+Verbara.Sdk.Sessions.Manager.CallSessionManager.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Sessions.Manager.CallSessionManager.Events.get -> System.IObservable<Verbara.Sdk.Sessions.SessionDomainEvent!>!
+Verbara.Sdk.Sessions.Manager.CallSessionManager.GetByBridgeId(string! bridgeId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.CallSessionManager.GetByChannelId(string! uniqueId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.CallSessionManager.GetById(string! sessionId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.CallSessionManager.GetByLinkedId(string! linkedId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.CallSessionManager.GetRecentCompleted(int count = 100) -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Sessions.CallSession!>!
+Verbara.Sdk.Sessions.Manager.CallSessionManager.RegisterReconstructedSession(Verbara.Sdk.Sessions.CallSession! session) -> bool
+Verbara.Sdk.Sessions.Manager.ICallSessionManager
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.ActiveSessions.get -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Sessions.CallSession!>!
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.AttachToServer(Verbara.Sdk.Live.Server.VerbaraServer! server, string! serverId) -> void
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.DetachFromServer(string! serverId) -> void
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.Events.get -> System.IObservable<Verbara.Sdk.Sessions.SessionDomainEvent!>!
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.GetByBridgeId(string! bridgeId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.GetByChannelId(string! uniqueId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.GetById(string! sessionId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.GetByLinkedId(string! linkedId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.GetRecentCompleted(int count = 100) -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Sessions.CallSession!>!
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.RegisterReconstructedSession(Verbara.Sdk.Sessions.CallSession! session) -> bool
+Verbara.Sdk.Sessions.Manager.SessionOptions
+Verbara.Sdk.Sessions.Manager.SessionOptions.CompletedRetention.get -> System.TimeSpan
+Verbara.Sdk.Sessions.Manager.SessionOptions.CompletedRetention.set -> void
+Verbara.Sdk.Sessions.Manager.SessionOptions.DialingTimeout.get -> System.TimeSpan
+Verbara.Sdk.Sessions.Manager.SessionOptions.DialingTimeout.set -> void
+Verbara.Sdk.Sessions.Manager.SessionOptions.InboundContextPatterns.get -> string![]!
+Verbara.Sdk.Sessions.Manager.SessionOptions.InboundContextPatterns.set -> void
+Verbara.Sdk.Sessions.Manager.SessionOptions.MaxCompletedSessions.get -> int
+Verbara.Sdk.Sessions.Manager.SessionOptions.MaxCompletedSessions.set -> void
+Verbara.Sdk.Sessions.Manager.SessionOptions.OutboundContextPatterns.get -> string![]!
+Verbara.Sdk.Sessions.Manager.SessionOptions.OutboundContextPatterns.set -> void
+Verbara.Sdk.Sessions.Manager.SessionOptions.QueueMetricsWindow.get -> System.TimeSpan
+Verbara.Sdk.Sessions.Manager.SessionOptions.QueueMetricsWindow.set -> void
+Verbara.Sdk.Sessions.Manager.SessionOptions.ReconciliationInterval.get -> System.TimeSpan
+Verbara.Sdk.Sessions.Manager.SessionOptions.ReconciliationInterval.set -> void
+Verbara.Sdk.Sessions.Manager.SessionOptions.RingingTimeout.get -> System.TimeSpan
+Verbara.Sdk.Sessions.Manager.SessionOptions.RingingTimeout.set -> void
+Verbara.Sdk.Sessions.Manager.SessionOptions.SessionOptions() -> void
+Verbara.Sdk.Sessions.Manager.SessionOptions.SlaThreshold.get -> System.TimeSpan
+Verbara.Sdk.Sessions.Manager.SessionOptions.SlaThreshold.set -> void
+Verbara.Sdk.Sessions.ParticipantRole
+Verbara.Sdk.Sessions.ParticipantRole.Agent = 2 -> Verbara.Sdk.Sessions.ParticipantRole
+Verbara.Sdk.Sessions.ParticipantRole.Caller = 0 -> Verbara.Sdk.Sessions.ParticipantRole
+Verbara.Sdk.Sessions.ParticipantRole.Conference = 4 -> Verbara.Sdk.Sessions.ParticipantRole
+Verbara.Sdk.Sessions.ParticipantRole.Destination = 1 -> Verbara.Sdk.Sessions.ParticipantRole
+Verbara.Sdk.Sessions.ParticipantRole.Internal = 5 -> Verbara.Sdk.Sessions.ParticipantRole
+Verbara.Sdk.Sessions.ParticipantRole.Transfer = 3 -> Verbara.Sdk.Sessions.ParticipantRole
+Verbara.Sdk.Sessions.SessionDomainEvent
+Verbara.Sdk.Sessions.SessionDomainEvent.ServerId.get -> string!
+Verbara.Sdk.Sessions.SessionDomainEvent.ServerId.init -> void
+Verbara.Sdk.Sessions.SessionDomainEvent.SessionDomainEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.Sessions.SessionDomainEvent.SessionId.get -> string!
+Verbara.Sdk.Sessions.SessionDomainEvent.SessionId.init -> void
+Verbara.Sdk.Sessions.SessionDomainEvent.Timestamp.get -> System.DateTimeOffset
+Verbara.Sdk.Sessions.SessionDomainEvent.Timestamp.init -> void
+Verbara.Sdk.Sessions.SessionMergedEvent
+Verbara.Sdk.Sessions.SessionMergedEvent.MergedSessionId.get -> string!
+Verbara.Sdk.Sessions.SessionMergedEvent.MergedSessionId.init -> void
+Verbara.Sdk.Sessions.SessionMergedEvent.SessionMergedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string! MergedSessionId) -> void
+Verbara.Sdk.Sessions.SessionParticipant
+Verbara.Sdk.Sessions.SessionParticipant.CallerIdName.get -> string?
+Verbara.Sdk.Sessions.SessionParticipant.CallerIdName.set -> void
+Verbara.Sdk.Sessions.SessionParticipant.CallerIdNum.get -> string?
+Verbara.Sdk.Sessions.SessionParticipant.CallerIdNum.set -> void
+Verbara.Sdk.Sessions.SessionParticipant.Channel.get -> string!
+Verbara.Sdk.Sessions.SessionParticipant.Channel.init -> void
+Verbara.Sdk.Sessions.SessionParticipant.HangupCause.get -> Verbara.Sdk.Enums.HangupCause?
+Verbara.Sdk.Sessions.SessionParticipant.HangupCause.set -> void
+Verbara.Sdk.Sessions.SessionParticipant.JoinedAt.get -> System.DateTimeOffset
+Verbara.Sdk.Sessions.SessionParticipant.JoinedAt.init -> void
+Verbara.Sdk.Sessions.SessionParticipant.LeftAt.get -> System.DateTimeOffset?
+Verbara.Sdk.Sessions.SessionParticipant.LeftAt.set -> void
+Verbara.Sdk.Sessions.SessionParticipant.Role.get -> Verbara.Sdk.Sessions.ParticipantRole
+Verbara.Sdk.Sessions.SessionParticipant.Role.set -> void
+Verbara.Sdk.Sessions.SessionParticipant.SessionParticipant() -> void
+Verbara.Sdk.Sessions.SessionParticipant.Technology.get -> string!
+Verbara.Sdk.Sessions.SessionParticipant.Technology.init -> void
+Verbara.Sdk.Sessions.SessionParticipant.UniqueId.get -> string!
+Verbara.Sdk.Sessions.SessionParticipant.UniqueId.init -> void
+static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.DurationMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.HoldTimeMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.Meter -> System.Diagnostics.Metrics.Meter!
+static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsCompleted -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsCreated -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsFailed -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsOrphaned -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsTimedOut -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.TalkTimeMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.WaitTimeMs -> System.Diagnostics.Metrics.Histogram<double>!
+virtual Verbara.Sdk.Sessions.Extensions.AgentSelectorBase.RankAgentsAsync(Verbara.Sdk.Live.Queues.AsteriskQueue! queue, Verbara.Sdk.Sessions.CallSession! session, System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Live.Agents.AsteriskAgent!>! candidates, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Live.Agents.AsteriskAgent!>!>
+virtual Verbara.Sdk.Sessions.Extensions.CallRouterBase.CanRouteAsync(Verbara.Sdk.Sessions.CallSession! session, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<bool>
+virtual Verbara.Sdk.Sessions.Extensions.CallRouterBase.SelectNodeForOriginateAsync(string? queueName, string? phoneNumber, System.Collections.Generic.Dictionary<string!, string!>? metadata, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<string!>
+virtual Verbara.Sdk.Sessions.Extensions.SessionStoreBase.DeleteAsync(string! sessionId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+virtual Verbara.Sdk.Sessions.Extensions.SessionStoreBase.GetActiveAsync(System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IEnumerable<Verbara.Sdk.Sessions.CallSession!>!>
+virtual Verbara.Sdk.Sessions.Extensions.SessionStoreBase.GetByLinkedIdAsync(string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Sessions.CallSession?>
+virtual Verbara.Sdk.Sessions.Extensions.SessionStoreBase.SaveBatchAsync(System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Sessions.CallSession!>! sessions, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Sessions.Diagnostics.SessionActivitySource
+Verbara.Sdk.Sessions.Diagnostics.SessionHealthCheck
+Verbara.Sdk.Sessions.Diagnostics.SessionHealthCheck.SessionHealthCheck(Verbara.Sdk.Sessions.Manager.ICallSessionManager! manager) -> void
+Verbara.Sdk.Sessions.Diagnostics.SessionHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+static readonly Verbara.Sdk.Sessions.Diagnostics.SessionActivitySource.Source -> System.Diagnostics.ActivitySource!

@@ -1,6 +1,6 @@
-using Asterisk.Sdk.VoiceAi;
-using Asterisk.Sdk.VoiceAi.AudioSocket.DependencyInjection;
-using Asterisk.Sdk.VoiceAi.DependencyInjection;
+using Verbara.Sdk.VoiceAi;
+using Verbara.Sdk.VoiceAi.AudioSocket.DependencyInjection;
+using Verbara.Sdk.VoiceAi.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using VoiceAiCustomProviderExample;

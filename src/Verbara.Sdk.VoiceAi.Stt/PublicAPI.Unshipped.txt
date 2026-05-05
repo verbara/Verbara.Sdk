@@ -1,0 +1,73 @@
+#nullable enable
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.ApiKey.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.ApiKey.set -> void
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.ApiVersion.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.ApiVersion.set -> void
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.BaseUri.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.BaseUri.set -> void
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.CartesiaOptions() -> void
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.ConnectTimeoutSeconds.get -> int
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.ConnectTimeoutSeconds.set -> void
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.KeepAliveSeconds.get -> int
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.KeepAliveSeconds.set -> void
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.Language.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.Language.set -> void
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.Model.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions.Model.set -> void
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptionsValidator
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptionsValidator.CartesiaOptionsValidator() -> void
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptionsValidator.Validate(string? name, Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaSpeechRecognizer
+Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaSpeechRecognizer.CartesiaSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions!>! options) -> void
+override Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaSpeechRecognizer.ProviderName.get -> string!
+override Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Verbara.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.VoiceAi.SpeechRecognitionResult>!
+static Verbara.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddCartesiaSpeechRecognizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Stt.Cartesia.CartesiaOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.ApiKey.get -> string!
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.ApiKey.set -> void
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.AssemblyAiOptions() -> void
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.BaseUri.get -> string!
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.BaseUri.set -> void
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.ConnectTimeoutSeconds.get -> int
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.ConnectTimeoutSeconds.set -> void
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.EndOfTurnConfidenceThreshold.get -> int
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.EndOfTurnConfidenceThreshold.set -> void
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.FormatTurns.get -> int
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.FormatTurns.set -> void
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.SampleRate.get -> int
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions.SampleRate.set -> void
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptionsValidator
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptionsValidator.AssemblyAiOptionsValidator() -> void
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptionsValidator.Validate(string? name, Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiSpeechRecognizer
+Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiSpeechRecognizer.AssemblyAiSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions!>! options) -> void
+override Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiSpeechRecognizer.ProviderName.get -> string!
+override Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Verbara.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.VoiceAi.SpeechRecognitionResult>!
+static Verbara.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddAssemblyAi(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Stt.AssemblyAi.AssemblyAiOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.ApiKey.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.ApiKey.set -> void
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.BaseUri.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.BaseUri.set -> void
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.ConnectTimeoutSeconds.get -> int
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.ConnectTimeoutSeconds.set -> void
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.EnablePartials.get -> bool
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.EnablePartials.set -> void
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.Language.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.Language.set -> void
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.MaxDelaySeconds.get -> int
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.MaxDelaySeconds.set -> void
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.OperatingPoint.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.OperatingPoint.set -> void
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.SampleRate.get -> int
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.SampleRate.set -> void
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions.SpeechmaticsOptions() -> void
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptionsValidator
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptionsValidator.SpeechmaticsOptionsValidator() -> void
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptionsValidator.Validate(string? name, Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsSpeechRecognizer
+Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsSpeechRecognizer.SpeechmaticsSpeechRecognizer(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions!>! options) -> void
+override Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsSpeechRecognizer.ProviderName.get -> string!
+override Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Verbara.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.VoiceAi.SpeechRecognitionResult>!
+static Verbara.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddSpeechmaticsStt(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
