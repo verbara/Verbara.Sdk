@@ -49,7 +49,7 @@ The decision, stated in one or two sentences.
 ## Catalog
 
 - [ADR-0001](0001-native-aot-first.md) — Target Native AOT from day one for zero runtime reflection.
-- [ADR-0002](0002-open-core-mit-plus-pro.md) — MIT SDK as public core; commercial features ship in a separate private `Asterisk.Sdk.Pro` repo.
+- [ADR-0002](0002-open-core-mit-plus-pro.md) — MIT SDK as public core; commercial features ship in a separate private `Verbara.Sdk.Pro` repo.
 - [ADR-0003](0003-source-generators-over-reflection.md) — Use Roslyn source generators for AMI/ARI/JSON (de)serialization instead of runtime reflection.
 - [ADR-0004](0004-central-package-management.md) — All NuGet versions pinned in `Directory.Packages.props` with `TreatWarningsAsErrors=true`.
 - [ADR-0005](0005-testcontainers-for-integration.md) — Docker-backed Testcontainers is the integration-test substrate; no in-process PBX mocks for functional tests.
@@ -59,7 +59,7 @@ The decision, stated in one or two sentences.
 - [ADR-0009](0009-three-tier-test-strategy.md) — Three-tier test pyramid: Unit (no Docker) + Integration (Testcontainers) + Functional (live Asterisk, Layer2/Layer5).
 - [ADR-0010](0010-ari-asymmetric-transport.md) — `AriClient` mirrors Asterisk's native split: one `ClientWebSocket` for events, one `HttpClient` for REST commands.
 - [ADR-0011](0011-push-bus-in-memory-non-durable.md) — Push bus is in-memory fire-and-forget with bounded `Channel<T>`; durability/federation lives in Pro.
-- [ADR-0012](0012-live-aggregate-root-orthogonal.md) — `Asterisk.Sdk.Live` is a separate package owning domain state; AMI + ARI are data sources, not owners.
+- [ADR-0012](0012-live-aggregate-root-orthogonal.md) — `Verbara.Sdk.Live` is a separate package owning domain state; AMI + ARI are data sources, not owners.
 - [ADR-0013](0013-isessionhandler-abstraction.md) — `ISessionHandler` is the single VoiceAi dispatch seam; turn-based pipeline and OpenAI Realtime bridge are swappable at DI time.
 - [ADR-0014](0014-raw-http-websocket-voiceai-providers.md) — VoiceAi providers ship as hand-rolled `HttpClient` / `ClientWebSocket` code; no vendor SDKs (AOT-incompatible).
 - [ADR-0015](0015-ami-string-interning-pool.md) — AMI protocol reader uses a 2048-bucket FNV-1a string pool pre-computed with 941 keys + 35 values; zero-alloc on the hot path.
@@ -72,6 +72,15 @@ The decision, stated in one or two sentences.
 - [ADR-0022](0022-activity-cancellation-semantics.md) — `IActivity.CancelAsync()` is a first-class method alongside `CancellationToken`; consumers observe terminal outcomes through `Status`, not exceptions.
 - [ADR-0023](0023-publicapi-tracker-adoption.md) — Every shipping package carries `PublicAPI.Shipped.txt` / `PublicAPI.Unshipped.txt`; breaking API changes cannot merge silently.
 - [ADR-0024](0024-bannedsymbols-as-aot-policy.md) — `BannedSymbols.txt` + `Microsoft.CodeAnalysis.BannedApiAnalyzers` enforce the AOT policy at build time (no reflection, no `DateTime.Now`).
+- [ADR-0025](0025-push-nats-subscribe-and-loop-prevention.md) — `Verbara.Sdk.Push.Nats` subscribe side: `source` header loop prevention + `RemotePushEvent` envelope.
+- [ADR-0026](0026-product-identity-runtime-not-sdk.md) — Product identity is "Verbara Runtime for .NET" (not "SDK") in user-facing copy.
+- [ADR-0027](0027-stewardship-pledge-mit-commercial.md) — Stewardship pledge: "Primitives stay MIT. Forever."
+- [ADR-0028](0028-cadence-v1-preview-v2-stable.md) — Cadence commitment: v1.x preview series, v2.0 stable Q4 2026.
+- [ADR-0029](0029-resilience-primitives-mit.md) — Resilience primitives (`BackoffSchedule`, `RetryBudget`) move from Pro to SDK (MIT).
+- [ADR-0030](0030-cloudevents-v1-adoption.md) — CloudEvents v1.0 adoption as canonical envelope + domain extensions.
+- [ADR-0031](0031-domain-vs-integration-events.md) — Domain events vs Integration events: namespace convention + stability guarantees.
+- [ADR-0032](0032-events-not-commands.md) — Event bus transports facts only; commands use a separate `ICommandDispatcher`.
+- [ADR-0033](0033-eventlog-sdk-eventstore-pro-split.md) — `IEventLog` (SDK MIT) vs `IEventStore` (Pro): tier split.
+- [ADR-0034](0034-isessioninterceptor-public-contract.md) — `ISessionInterceptor` public contract replaces `InternalsVisibleTo Pro.Cluster` leak.
+- [ADR-0035](0035-cos-deferred-customer-driven.md) — COS (Calling Permissions System) deferred: customer-driven trigger only.
 - [ADR-0036](0036-rebrand-to-verbara.md) — Rebrand product family from `Asterisk.Sdk` to **Verbara Sdk** for trademark safety (Sangoma owns "Asterisk" trademark). License unchanged (MIT). (Accepted, 2026-05-03)
-
-> **Note:** ADRs 0025-0035 exist as files but are not yet listed in this catalog (maintenance gap, separate cleanup task).
