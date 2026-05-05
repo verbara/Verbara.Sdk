@@ -1,1 +1,10 @@
 #nullable enable
+Verbara.Sdk.VoiceAi.Testing.FakeTurnDetector
+Verbara.Sdk.VoiceAi.Testing.FakeTurnDetector.Analyze(System.ReadOnlySpan<short> samples, bool isAssistantSpeaking) -> Verbara.Sdk.VoiceAi.TurnSignal
+Verbara.Sdk.VoiceAi.Testing.FakeTurnDetector.CallCount.get -> int
+Verbara.Sdk.VoiceAi.Testing.FakeTurnDetector.FakeTurnDetector() -> void
+Verbara.Sdk.VoiceAi.Testing.FakeTurnDetector.Reset() -> void
+Verbara.Sdk.VoiceAi.Testing.FakeTurnDetector.ResetCount.get -> int
+Verbara.Sdk.VoiceAi.Testing.FakeTurnDetector.WithDefault(Verbara.Sdk.VoiceAi.TurnAction action) -> Verbara.Sdk.VoiceAi.Testing.FakeTurnDetector!
+Verbara.Sdk.VoiceAi.Testing.FakeTurnDetector.WithSignal(Verbara.Sdk.VoiceAi.TurnAction action, float confidence = 1) -> Verbara.Sdk.VoiceAi.Testing.FakeTurnDetector!
+Verbara.Sdk.VoiceAi.Testing.FakeTurnDetector.WithSignals(System.Collections.Generic.IEnumerable<Verbara.Sdk.VoiceAi.TurnAction>! actions) -> Verbara.Sdk.VoiceAi.Testing.FakeTurnDetector!
