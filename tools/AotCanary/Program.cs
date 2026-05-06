@@ -55,8 +55,8 @@ _ = typeof(AriClient);
 _ = typeof(AriClientOptions);
 
 // Verbara.Sdk.Live — real-time domain objects
-_ = typeof(AsteriskServer);
-_ = typeof(AsteriskServerPool);
+_ = typeof(VerbaraServer);
+_ = typeof(VerbaraServerPool);
 
 // Verbara.Sdk.Activities — call activity state machines
 _ = typeof(ActivityBase);
@@ -66,7 +66,7 @@ _ = typeof(ConfigFileReader);
 _ = typeof(ConfigFile);
 
 // Verbara.Sdk.Hosting — DI registration
-_ = typeof(AsteriskOptions);
+_ = typeof(VerbaraOptions);
 _ = typeof(AmiConnectionHostedService);
 
 // Verbara.Sdk.Sessions — session manager
@@ -140,10 +140,10 @@ _ = typeof(InMemoryClusterTransport);
 _ = typeof(InMemoryDistributedLock);
 _ = typeof(InMemoryMembershipProvider);
 
-// Exercise AddAsteriskPush + publish/subscribe path to force linker analysis of runtime code.
+// Exercise AddVerbaraPush + publish/subscribe path to force linker analysis of runtime code.
 var services = new ServiceCollection();
 services.AddLogging();
-services.AddAsteriskPush(o =>
+services.AddVerbaraPush(o =>
 {
     o.BufferCapacity = 64;
     o.BackpressureStrategy = BackpressureStrategy.DropOldest;
