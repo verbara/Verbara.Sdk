@@ -1,1 +1,5 @@
 #nullable enable
+Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider
+Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider.Cpu = 0 -> Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider
+Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider.Cuda = 1 -> Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider
+Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider.DirectMl = 2 -> Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider
