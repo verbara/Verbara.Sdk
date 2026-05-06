@@ -53,6 +53,7 @@
     <Project Path="src/Verbara.Sdk.Push.Nats/Verbara.Sdk.Push.Nats.csproj" />
     <Project Path="src/Verbara.Sdk.Resilience/Verbara.Sdk.Resilience.csproj" />
     <Project Path="src/Verbara.Sdk.Cluster.Primitives/Verbara.Sdk.Cluster.Primitives.csproj" />
+    <Project Path="src/Verbara.Sdk.VoiceAi.TurnDetection/Verbara.Sdk.VoiceAi.TurnDetection.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/Verbara.Sdk.Agi.Tests/Verbara.Sdk.Agi.Tests.csproj" />
@@ -85,5 +86,6 @@
     <Project Path="Tests/Verbara.Sdk.Push.Webhooks.Tests/Verbara.Sdk.Push.Webhooks.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Push.Nats.Tests/Verbara.Sdk.Push.Nats.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Push.Nats.IntegrationTests/Verbara.Sdk.Push.Nats.IntegrationTests.csproj" />
+    <Project Path="Tests/Verbara.Sdk.VoiceAi.TurnDetection.Tests/Verbara.Sdk.VoiceAi.TurnDetection.Tests.csproj" />
   </Folder>
 </Solution>

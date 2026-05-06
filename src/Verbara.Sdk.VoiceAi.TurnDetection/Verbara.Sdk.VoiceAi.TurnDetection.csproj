@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>ML-based turn detection for Verbara.Sdk VoiceAi pipeline using Pipecat smart-turn-v3 ONNX model.</Description>
+    <PackageTags>$(PackageTags);voice-ai;turn-detection;onnx;smart-turn</PackageTags>
+    <IsAotCompatible>false</IsAotCompatible>
+    <EnableAotAnalyzer>false</EnableAotAnalyzer>
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Verbara.Sdk.VoiceAi.TurnDetection.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Verbara.Sdk.VoiceAi\Verbara.Sdk.VoiceAi.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Audio\Verbara.Sdk.Audio.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Models\smart-turn-v3.2-cpu.onnx" LogicalName="smart-turn-v3.2-cpu.onnx" />
+  </ItemGroup>
+</Project>
