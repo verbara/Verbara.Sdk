@@ -24,6 +24,7 @@ public sealed class SmartTurnDetector : ITurnDetector, IDisposable
 
     private TimeSpan _silenceDuration;
     private TimeSpan _voiceDuration;
+    private TimeSpan _utteranceDuration;
     private bool _isSpeaking;
     private bool _hasPendingSpeech;
 
@@ -51,6 +52,7 @@ public sealed class SmartTurnDetector : ITurnDetector, IDisposable
     {
         _silenceDuration = TimeSpan.Zero;
         _voiceDuration = TimeSpan.Zero;
+        _utteranceDuration = TimeSpan.Zero;
         _isSpeaking = false;
         _hasPendingSpeech = false;
         _audioBuffer.Clear();
@@ -99,7 +101,18 @@ public sealed class SmartTurnDetector : ITurnDetector, IDisposable
             {
                 _isSpeaking = true;
                 _hasPendingSpeech = true;
+                _utteranceDuration = FrameDuration;
                 return new TurnSignal(TurnAction.SpeechStarted);
+            }
+
+            _utteranceDuration += FrameDuration;
+            if (_utteranceDuration >= _options.MaxUtteranceDuration)
+            {
+                _isSpeaking = false;
+                _hasPendingSpeech = false;
+                _utteranceDuration = TimeSpan.Zero;
+                _audioBuffer.Clear();
+                return new TurnSignal(TurnAction.EndOfUtterance);
             }
 
             _hasPendingSpeech = true;
@@ -123,6 +136,7 @@ public sealed class SmartTurnDetector : ITurnDetector, IDisposable
                 {
                     _isSpeaking = false;
                     _hasPendingSpeech = false;
+                    _utteranceDuration = TimeSpan.Zero;
                     _audioBuffer.Clear();
                     return new TurnSignal(TurnAction.EndOfUtterance, prob);
                 }

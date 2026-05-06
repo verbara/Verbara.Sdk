@@ -12,6 +12,8 @@ Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider.DirectMl = 2 -> Verbara.Sdk.
 Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions
 Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.BargInVoiceThreshold.get -> System.TimeSpan
 Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.BargInVoiceThreshold.set -> void
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.MaxUtteranceDuration.get -> System.TimeSpan
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.MaxUtteranceDuration.set -> void
 Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.ExecutionProvider.get -> Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider
 Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.ExecutionProvider.set -> void
 Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.IntraOpThreads.get -> int
