@@ -1,4 +1,6 @@
 #nullable enable
+static Verbara.Sdk.VoiceAi.TurnDetection.TurnDetectionServiceCollectionExtensions.AddSmartTurnDetection(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Verbara.Sdk.VoiceAi.TurnDetection.TurnDetectionServiceCollectionExtensions
 Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetector
 Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetector.Analyze(System.ReadOnlySpan<short> samples, bool isAssistantSpeaking) -> Verbara.Sdk.VoiceAi.TurnSignal
 Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetector.Dispose() -> void
