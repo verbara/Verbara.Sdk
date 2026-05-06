@@ -1,4 +1,8 @@
 #nullable enable
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetector
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetector.Analyze(System.ReadOnlySpan<short> samples, bool isAssistantSpeaking) -> Verbara.Sdk.VoiceAi.TurnSignal
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetector.Dispose() -> void
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetector.Reset() -> void
 Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider
 Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider.Cpu = 0 -> Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider
 Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider.Cuda = 1 -> Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider
