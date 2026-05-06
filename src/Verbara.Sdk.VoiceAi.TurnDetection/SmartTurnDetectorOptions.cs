@@ -15,6 +15,9 @@ public sealed class SmartTurnDetectorOptions
     /// <summary>Duration of voice during TTS playback to trigger barge-in. Default 200ms.</summary>
     public TimeSpan BargInVoiceThreshold { get; set; } = TimeSpan.FromMilliseconds(200);
 
+    /// <summary>Maximum utterance duration before forcing end-of-turn. Default 30 seconds.</summary>
+    public TimeSpan MaxUtteranceDuration { get; set; } = TimeSpan.FromSeconds(30);
+
     /// <summary>ONNX Runtime execution provider. Default CPU.</summary>
     public ExecutionProvider ExecutionProvider { get; set; } = ExecutionProvider.Cpu;
 

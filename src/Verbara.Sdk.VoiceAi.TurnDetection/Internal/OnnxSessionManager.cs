@@ -25,9 +25,17 @@ internal sealed class OnnxSessionManager : IDisposable
             IntraOpNumThreads = intraOpThreads,
         };
 
-        if (provider == ExecutionProvider.Cuda)
+        switch (provider)
         {
-            options.AppendExecutionProvider_CUDA();
+            case ExecutionProvider.Cuda:
+                options.AppendExecutionProvider_CUDA();
+                break;
+            case ExecutionProvider.DirectMl:
+                throw new NotSupportedException(
+                    "DirectML requires the Microsoft.ML.OnnxRuntime.DirectML package.");
+            case ExecutionProvider.Cpu:
+            default:
+                break;
         }
 
         _session = new InferenceSession(ms.ToArray(), options);

@@ -63,3 +63,6 @@ CLAUDE.md
 .project-memory/
 .worktrees/
 .claudelint-cache/
+
+## Playwright MCP (browser automation logs/snapshots)
+.playwright-mcp/
