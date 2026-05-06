@@ -9,3 +9,17 @@ Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider
 Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider.Cpu = 0 -> Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider
 Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider.Cuda = 1 -> Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider
 Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider.DirectMl = 2 -> Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.BargInVoiceThreshold.get -> System.TimeSpan
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.BargInVoiceThreshold.set -> void
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.ExecutionProvider.get -> Verbara.Sdk.VoiceAi.TurnDetection.ExecutionProvider
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.ExecutionProvider.set -> void
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.IntraOpThreads.get -> int
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.IntraOpThreads.set -> void
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.SilenceThresholdDb.get -> double
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.SilenceThresholdDb.set -> void
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.SilenceTriggerDuration.get -> System.TimeSpan
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.SilenceTriggerDuration.set -> void
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.SmartTurnDetectorOptions() -> void
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.TurnConfidenceThreshold.get -> float
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.TurnConfidenceThreshold.set -> void
