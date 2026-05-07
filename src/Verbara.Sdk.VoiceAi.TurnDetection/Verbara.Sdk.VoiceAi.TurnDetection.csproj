@@ -6,6 +6,8 @@
     <EnableAotAnalyzer>false</EnableAotAnalyzer>
     <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
+    <!-- New package — no v2.0.0 baseline on nuget.org -->
+    <EnablePackageValidation>false</EnablePackageValidation>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Verbara.Sdk.VoiceAi.TurnDetection.Tests" />
