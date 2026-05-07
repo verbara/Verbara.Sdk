@@ -30,12 +30,12 @@
     <Company>Verbara.Sdk</Company>
     <Product>Verbara.Sdk</Product>
     <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/verbara/verbara-sdk</RepositoryUrl>
-    <PackageProjectUrl>https://github.com/verbara/verbara-sdk</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/verbara/Verbara.Sdk</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/verbara/Verbara.Sdk</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>verbara;asterisk;ami;agi;ari;voip;pbx;telephony;native-aot;sdk</PackageTags>
-    <PackageVersion>2.1.0</PackageVersion>
+    <PackageVersion>2.1.1</PackageVersion>
   </PropertyGroup>
 
   <!-- Deterministic builds + SourceLink (debuggable NuGet packages) -->
@@ -50,7 +50,7 @@
   <!-- Package validation: detect breaking API changes against the last published version -->
   <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('src'))">
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>2.0.0</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>2.1.0</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <!-- Analyzers for all projects (except SourceGenerators which targets netstandard2.0) -->

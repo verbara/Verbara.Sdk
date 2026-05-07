@@ -39,7 +39,7 @@ This ADR establishes the **policy**. Technical migration (repo rename, NuGet pac
 | `Asterisk.Sdk` (NuGet) | `Verbara.Sdk` (NuGet) | Dual-publish for 12 months as deprecation path |
 | `Asterisk.Sdk.Hosting` (NuGet) | `Verbara.Sdk.Hosting` (NuGet) | Dual-publish |
 | `namespace Asterisk.Sdk` (.NET) | `namespace Verbara.Sdk` (.NET) | Coordinated build-time alias for ~6 months |
-| `https://github.com/Harol-Reina/Asterisk.Sdk` | `https://github.com/verbara/verbara-sdk` | Redirect maintained by GitHub |
+| `https://github.com/Harol-Reina/Asterisk.Sdk` | `https://github.com/verbara/Verbara.Sdk` | Redirect maintained by GitHub |
 
 ### Identity infrastructure (cross-repo, established 2026-05-03)
 
