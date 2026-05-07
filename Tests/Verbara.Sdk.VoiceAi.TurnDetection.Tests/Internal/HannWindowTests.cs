@@ -13,28 +13,35 @@ public sealed class HannWindowTests
     }
 
     [Fact]
-    public void Values_ShouldBeZeroAtEdges()
+    public void Values_ShouldBeZeroAtStart()
     {
         HannWindow.Values[0].Should().BeApproximately(0f, 1e-6f);
-        HannWindow.Values[399].Should().BeApproximately(0f, 1e-6f);
     }
 
     [Fact]
-    public void Values_ShouldBeOneAtCenter()
+    public void Values_ShouldNotBeZeroAtEnd_PeriodicWindow()
     {
-        var center1 = HannWindow.Values[199];
-        var center2 = HannWindow.Values[200];
-        MathF.Max(center1, center2).Should().BeGreaterThan(0.999f);
+        // Periodic Hann: last sample is NOT zero (unlike symmetric)
+        HannWindow.Values[399].Should().BeGreaterThan(0f);
+        HannWindow.Values[399].Should().BeLessThan(0.001f);
     }
 
     [Fact]
-    public void Values_ShouldBeSymmetric()
+    public void Values_ShouldPeakAtCenter()
     {
+        var center = HannWindow.Values[200];
+        center.Should().BeGreaterThan(0.999f);
+    }
+
+    [Fact]
+    public void Values_ShouldBeSymmetric_AroundCenter()
+    {
+        // Periodic Hann of size N: w[k] = w[N-k] for k=1..N-1
         var values = HannWindow.Values;
-        for (int i = 0; i < 200; i++)
+        for (int i = 1; i < 200; i++)
         {
-            values[i].Should().BeApproximately(values[399 - i], 1e-6f,
-                $"values[{i}] should equal values[{399 - i}]");
+            values[i].Should().BeApproximately(values[400 - i], 1e-6f,
+                $"values[{i}] should equal values[{400 - i}]");
         }
     }
 }

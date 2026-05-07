@@ -8,10 +8,12 @@ internal static class HannWindow
 
     private static float[] Precompute(int size)
     {
+        // Periodic Hann window: equivalent to np.hanning(size+1)[:size].
+        // Matches HuggingFace WhisperFeatureExtractor and librosa convention.
         var window = new float[size];
         for (int i = 0; i < size; i++)
         {
-            window[i] = 0.5f * (1.0f - MathF.Cos(2.0f * MathF.PI * i / (size - 1)));
+            window[i] = 0.5f * (1.0f - MathF.Cos(2.0f * MathF.PI * i / size));
         }
 
         return window;
