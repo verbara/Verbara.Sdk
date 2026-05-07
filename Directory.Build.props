@@ -35,7 +35,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>verbara;asterisk;ami;agi;ari;voip;pbx;telephony;native-aot;sdk</PackageTags>
-    <PackageVersion>2.0.0</PackageVersion>
+    <PackageVersion>2.1.0</PackageVersion>
   </PropertyGroup>
 
   <!-- Deterministic builds + SourceLink (debuggable NuGet packages) -->
@@ -47,10 +47,10 @@
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
-  <!-- Package validation: disabled during rebrand — no baseline packages exist under Verbara.Sdk yet -->
+  <!-- Package validation: detect breaking API changes against the last published version -->
   <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('src'))">
-    <EnablePackageValidation>false</EnablePackageValidation>
-    <!-- Re-enable after first Verbara.Sdk publish: <PackageValidationBaselineVersion>2.0.0</PackageValidationBaselineVersion> -->
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>2.0.0</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <!-- Analyzers for all projects (except SourceGenerators which targets netstandard2.0) -->
