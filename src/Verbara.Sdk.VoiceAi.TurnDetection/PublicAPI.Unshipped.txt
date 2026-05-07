@@ -25,3 +25,5 @@ Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.SilenceTriggerDuratio
 Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.SmartTurnDetectorOptions() -> void
 Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.TurnConfidenceThreshold.get -> float
 Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions.TurnConfidenceThreshold.set -> void
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptionsValidator
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptionsValidator.SmartTurnDetectorOptionsValidator() -> void

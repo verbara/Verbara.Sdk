@@ -21,10 +21,10 @@ public static class TurnDetectionServiceCollectionExtensions
         this IServiceCollection services,
         Action<SmartTurnDetectorOptions>? configure = null)
     {
-        if (configure is not null)
-            services.Configure(configure);
-        else
-            services.AddOptions<SmartTurnDetectorOptions>();
+        services.AddOptions<SmartTurnDetectorOptions>()
+            .Configure(configure ?? (_ => { }))
+            .ValidateOnStart();
+        services.TryAddSingleton<IValidateOptions<SmartTurnDetectorOptions>, SmartTurnDetectorOptionsValidator>();
 
         services.TryAddSingleton(sp =>
         {
