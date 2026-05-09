@@ -518,8 +518,8 @@ This is the open-source base SDK of the **Verbara** open-core contact-center sta
 | Repository | License | Role |
 |---|---|---|
 | **Verbara Sdk** (this repository) | **MIT** | Telephony primitives (AMI / AGI / ARI / Live API / Sessions / Voice AI) — community attractor |
-| **Verbara Web** | Apache 2.0 | Frontend UI |
-| **Verbara Platform** | Apache 2.0 | Backend application |
+| **Verbara Web** | Apache 2.0 | Frontend UI (admin / agent / analytics / operations) |
+| **Verbara Platform** | Apache 2.0 | Backend application — full contact-center engine |
 | **Verbara Sdk Pro** | Commercial | Enterprise overlays (multi-tenant, analytics, cluster, licensing) |
 
 **Why MIT here:** the SDK is the community attractor of the Verbara stack — maximum permissive license to encourage adoption, evaluation, and contributions. Pro features (skill routing, predictive dialer, real-time analytics, cluster, multi-tenant) are commercial via a separate package family. See [ADR-0027 (stewardship pledge)](docs/decisions/0027-stewardship-pledge-mit-commercial.md) and [ADR-0036 (rebrand to Verbara)](docs/decisions/0036-rebrand-to-verbara.md).
