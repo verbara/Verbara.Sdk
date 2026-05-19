@@ -5,6 +5,10 @@
     <IsTestProject>false</IsTestProject>
     <!-- BenchmarkDotNet requires instance methods; suppress CA1822 -->
     <NoWarn>$(NoWarn);CA1822</NoWarn>
+    <!-- ADR-0022 Phase D: Dapper.AOT interceptor support + IL2026/IL3050 suppression
+         (false positives — analyzer doesn't track interceptor replacement). -->
+    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);Dapper.AOT</InterceptorsPreviewNamespaces>
+    <NoWarn>$(NoWarn);IL2026;IL3050</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,7 +28,8 @@
     <PackageReference Include="Testcontainers" />
     <PackageReference Include="StackExchange.Redis" />
     <PackageReference Include="Npgsql" />
-    <PackageReference Include="Dapper" />
+    <!-- Dapper comes transitively via Sessions.Postgres → Verbara.Sdk.Dapper.Stubs. -->
+    <PackageReference Include="Dapper.AOT" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

@@ -4,6 +4,17 @@
     <PackageTags>asterisk;sessions;postgres;postgresql;state-store;sdk</PackageTags>
     <!-- New package - no baseline published yet; skip binary compatibility check -->
     <EnablePackageValidation>false</EnablePackageValidation>
+    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);Dapper.AOT</InterceptorsPreviewNamespaces>
+    <!-- ADR-0022 Phase D canary: Verbara.Sdk.Dapper.Stubs annotates Dapper call sites with
+         [RequiresUnreferencedCode] + [RequiresDynamicCode] so unintercepted sites trip
+         IL2026/IL3050 at build time when consumers are IsAotCompatible=true. Dapper.AOT
+         1.0.52 does NOT intercept the `new CommandDefinition(...)` overload (upstream PR
+         #153 unmerged); PostgresSessionStore.cs uses that overload in 6 of 6 sites.
+         Suppression is SCOPED to this assembly and is the canonical Phase D.3 marker:
+         the entries below MUST be removed once PostgresSessionStore is refactored to
+         either NpgsqlCommand raw or simple-shape conn.X<T>(sql, params, ct) calls per
+         the Phase D.3 decision matrix. -->
+    <NoWarn>$(NoWarn);IL2026;IL3050</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,7 +27,8 @@
 
   <ItemGroup>
     <PackageReference Include="Npgsql" />
-    <PackageReference Include="Dapper" />
+    <PackageReference Include="Verbara.Sdk.Dapper.Stubs" />
+    <PackageReference Include="Dapper.AOT" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
