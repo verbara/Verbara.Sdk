@@ -5,13 +5,16 @@ namespace Dapper;
 public static partial class SqlMapper
 {
     /// <summary>
-    /// AOT-clean stub of <c>SqlMapper.Link&lt;TKey,TValue&gt;</c>. Real Dapper uses this as a
-    /// lock-free linked-list cache primitive. No generic constraint in real Dapper
-    /// (TKey/TValue both unconstrained). Static helpers throw via canonical template.
+    /// AOT-clean stub of <c>SqlMapper.Link&lt;TKey,TValue&gt;</c>. Real Dapper declares this as a
+    /// nested-internal lock-free linked-list cache primitive (verified via reflection on Dapper
+    /// 2.1.72 — not exported). Mirrored as <c>internal</c> here so the type occupies the same slot
+    /// without leaking into the public API surface.
     /// </summary>
     [SuppressMessage("Design", "CA1000:Do not declare static members on generic types",
         Justification = "Drop-in mirror of Dapper.SqlMapper.Link<TKey,TValue> — surface MUST match real Dapper, including its static helpers.")]
-    public sealed class Link<TKey, TValue>
+    [SuppressMessage("Performance", "CA1822:Mark members as static",
+        Justification = "Drop-in mirror of Dapper.SqlMapper.Link<TKey,TValue> — instance shape (Key/Value/Tail) MUST match real Dapper.")]
+    internal sealed class Link<TKey, TValue>
     {
         // Real Dapper's ctor is private — surface tests treat that as "not on the API".
         private Link() { }

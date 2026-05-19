@@ -11,15 +11,7 @@ public static partial class SqlMapper
     // throws on >1. Untyped (dynamic), typed-by-Type, and generic variants
     // each get sync + async overloads.
     //
-    // Deferred to Task 6 (Phase C.4) — CommandDefinition overloads:
-    //   - QuerySingle<T>(this IDbConnection cnn, CommandDefinition)                -> T
-    //   - QuerySingleAsync(this IDbConnection cnn, CommandDefinition)              -> Task<object>
-    //   - QuerySingleAsync<T>(this IDbConnection cnn, CommandDefinition)           -> Task<T>
-    //   - QuerySingleAsync(this IDbConnection cnn, Type, CommandDefinition)        -> Task<object>
-    //   - QuerySingleOrDefault<T>(this IDbConnection cnn, CommandDefinition)       -> T
-    //   - QuerySingleOrDefaultAsync(this IDbConnection cnn, CommandDefinition)     -> Task<object>
-    //   - QuerySingleOrDefaultAsync<T>(this IDbConnection cnn, CommandDefinition)  -> Task<T>
-    //   - QuerySingleOrDefaultAsync(this IDbConnection cnn, Type, CommandDefinition) -> Task<object>
+    // CommandDefinition-typed overloads (Task 6 / Phase C.4) sit at the bottom.
     // -----------------------------------------------------------------------
 
     // ---- QuerySingle sync ----
@@ -72,5 +64,38 @@ public static partial class SqlMapper
 
     [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
     public static Task<T> QuerySingleOrDefaultAsync<T>(this IDbConnection cnn, string sql, object? param = null, IDbTransaction? transaction = null, int? commandTimeout = null, CommandType? commandType = null)
+        => Task.FromException<T>(new NotSupportedException(StubMessage));
+
+    // ---- CommandDefinition-typed overloads ----
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static T QuerySingle<T>(this IDbConnection cnn, CommandDefinition command)
+        => throw new NotSupportedException(StubMessage);
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<dynamic> QuerySingleAsync(this IDbConnection cnn, CommandDefinition command)
+        => Task.FromException<dynamic>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<object> QuerySingleAsync(this IDbConnection cnn, Type type, CommandDefinition command)
+        => Task.FromException<object>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<T> QuerySingleAsync<T>(this IDbConnection cnn, CommandDefinition command)
+        => Task.FromException<T>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static T QuerySingleOrDefault<T>(this IDbConnection cnn, CommandDefinition command)
+        => throw new NotSupportedException(StubMessage);
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<dynamic> QuerySingleOrDefaultAsync(this IDbConnection cnn, CommandDefinition command)
+        => Task.FromException<dynamic>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<object> QuerySingleOrDefaultAsync(this IDbConnection cnn, Type type, CommandDefinition command)
+        => Task.FromException<object>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<T> QuerySingleOrDefaultAsync<T>(this IDbConnection cnn, CommandDefinition command)
         => Task.FromException<T>(new NotSupportedException(StubMessage));
 }

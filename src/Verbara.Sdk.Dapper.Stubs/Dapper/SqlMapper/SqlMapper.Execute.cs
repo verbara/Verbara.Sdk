@@ -14,16 +14,8 @@ public static partial class SqlMapper
     // methods return Task.FromException<T> so awaiters can observe the failure
     // without thread-pool starvation on synchronous throw.
     //
-    // Deferred to Task 6 (Phase C.4): once Dapper.CommandDefinition lands, add
-    // these missing overloads to match real Dapper 2.1.72:
-    //   - Execute(this IDbConnection cnn, CommandDefinition command)              -> int
-    //   - ExecuteAsync(this IDbConnection cnn, CommandDefinition command)         -> Task<int>
-    //   - ExecuteReader(this IDbConnection cnn, CommandDefinition command)        -> IDataReader
-    //   - ExecuteReader(this IDbConnection cnn, CommandDefinition, CommandBehavior) -> IDataReader
-    //   - ExecuteReaderAsync(this IDbConnection cnn, CommandDefinition)           -> Task<IDataReader>
-    //   - ExecuteReaderAsync(this DbConnection cnn, CommandDefinition)            -> Task<DbDataReader>
-    //   - ExecuteReaderAsync(this IDbConnection cnn, CommandDefinition, CommandBehavior) -> Task<IDataReader>
-    //   - ExecuteReaderAsync(this DbConnection cnn, CommandDefinition, CommandBehavior)  -> Task<DbDataReader>
+    // CommandDefinition-typed overloads (Task 6 / Phase C.4) sit below their
+    // (sql, param, …) counterparts to keep the grouping legible.
     // -----------------------------------------------------------------------
 
     [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
@@ -44,5 +36,38 @@ public static partial class SqlMapper
 
     [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
     public static Task<System.Data.Common.DbDataReader> ExecuteReaderAsync(this System.Data.Common.DbConnection cnn, string sql, object? param = null, IDbTransaction? transaction = null, int? commandTimeout = null, CommandType? commandType = null)
+        => Task.FromException<System.Data.Common.DbDataReader>(new NotSupportedException(StubMessage));
+
+    // ---- CommandDefinition-typed overloads ----
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static int Execute(this IDbConnection cnn, CommandDefinition command)
+        => throw new NotSupportedException(StubMessage);
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<int> ExecuteAsync(this IDbConnection cnn, CommandDefinition command)
+        => Task.FromException<int>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static IDataReader ExecuteReader(this IDbConnection cnn, CommandDefinition command)
+        => throw new NotSupportedException(StubMessage);
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static IDataReader ExecuteReader(this IDbConnection cnn, CommandDefinition command, CommandBehavior commandBehavior)
+        => throw new NotSupportedException(StubMessage);
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<IDataReader> ExecuteReaderAsync(this IDbConnection cnn, CommandDefinition command)
+        => Task.FromException<IDataReader>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<IDataReader> ExecuteReaderAsync(this IDbConnection cnn, CommandDefinition command, CommandBehavior commandBehavior)
+        => Task.FromException<IDataReader>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<System.Data.Common.DbDataReader> ExecuteReaderAsync(this System.Data.Common.DbConnection cnn, CommandDefinition command)
+        => Task.FromException<System.Data.Common.DbDataReader>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<System.Data.Common.DbDataReader> ExecuteReaderAsync(this System.Data.Common.DbConnection cnn, CommandDefinition command, CommandBehavior commandBehavior)
         => Task.FromException<System.Data.Common.DbDataReader>(new NotSupportedException(StubMessage));
 }

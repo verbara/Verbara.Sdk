@@ -10,9 +10,7 @@ public static partial class SqlMapper
     // (declared in SqlMapper.Nested.GridReader.cs) that walks each result set
     // sequentially via its own Read* methods.
     //
-    // Deferred to Task 6 (Phase C.4) — CommandDefinition overloads:
-    //   - QueryMultiple(this IDbConnection cnn, CommandDefinition)        -> GridReader
-    //   - QueryMultipleAsync(this IDbConnection cnn, CommandDefinition)   -> Task<GridReader>
+    // CommandDefinition-typed overloads (Task 6 / Phase C.4) sit at the bottom.
     // -----------------------------------------------------------------------
 
     [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
@@ -21,5 +19,14 @@ public static partial class SqlMapper
 
     [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
     public static Task<GridReader> QueryMultipleAsync(this IDbConnection cnn, string sql, object? param = null, IDbTransaction? transaction = null, int? commandTimeout = null, CommandType? commandType = null)
+        => Task.FromException<GridReader>(new NotSupportedException(StubMessage));
+
+    // ---- CommandDefinition-typed overloads ----
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static GridReader QueryMultiple(this IDbConnection cnn, CommandDefinition command)
+        => throw new NotSupportedException(StubMessage);
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<GridReader> QueryMultipleAsync(this IDbConnection cnn, CommandDefinition command)
         => Task.FromException<GridReader>(new NotSupportedException(StubMessage));
 }

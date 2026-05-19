@@ -10,12 +10,10 @@ public static partial class SqlMapper
     // (2..7 types + dynamic-types overload) and the QueryUnbufferedAsync
     // streaming variant (DbConnection-typed only, returns IAsyncEnumerable).
     //
-    // Deferred to Task 6 (Phase C.4) — CommandDefinition overloads:
-    //   - QueryAsync(this IDbConnection cnn, CommandDefinition)                 -> Task<IEnumerable<object>>
-    //   - QueryAsync<T>(this IDbConnection cnn, CommandDefinition)              -> Task<IEnumerable<T>>
-    //   - QueryAsync(this IDbConnection cnn, Type, CommandDefinition)           -> Task<IEnumerable<object>>
-    //   - QueryAsync<T1,T2,TReturn>(this IDbConnection cnn, CommandDefinition, Func<T1,T2,TReturn>, string splitOn = "Id") -> Task<IEnumerable<TReturn>>
-    //   - … and 4 more multi-mapping CommandDefinition variants (T1..T7).
+    // CommandDefinition-typed overloads (Task 6 / Phase C.4) sit at the bottom:
+    // untyped + typed-by-Type + generic single-type + 6 multi-mapping variants
+    // (T1..T7). Real Dapper does NOT expose multi-mapping CommandDefinition
+    // overloads via Func<object[], TReturn> — only the strongly-typed Func<…>.
     // -----------------------------------------------------------------------
 
     // ---- Untyped + typed-by-Type async ----
@@ -71,4 +69,42 @@ public static partial class SqlMapper
     [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
     public static IAsyncEnumerable<T> QueryUnbufferedAsync<T>(this System.Data.Common.DbConnection cnn, string sql, object? param = null, System.Data.Common.DbTransaction? transaction = null, int? commandTimeout = null, CommandType? commandType = null)
         => throw new NotSupportedException(StubMessage);
+
+    // ---- CommandDefinition-typed overloads ----
+    // Untyped — source-typed as IEnumerable<dynamic>; IL is IEnumerable<object>.
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<IEnumerable<dynamic>> QueryAsync(this IDbConnection cnn, CommandDefinition command)
+        => Task.FromException<IEnumerable<dynamic>>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<IEnumerable<object>> QueryAsync(this IDbConnection cnn, Type type, CommandDefinition command)
+        => Task.FromException<IEnumerable<object>>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<IEnumerable<T>> QueryAsync<T>(this IDbConnection cnn, CommandDefinition command)
+        => Task.FromException<IEnumerable<T>>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<IEnumerable<TReturn>> QueryAsync<TFirst, TSecond, TReturn>(this IDbConnection cnn, CommandDefinition command, Func<TFirst, TSecond, TReturn> map, string splitOn = "Id")
+        => Task.FromException<IEnumerable<TReturn>>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<IEnumerable<TReturn>> QueryAsync<TFirst, TSecond, TThird, TReturn>(this IDbConnection cnn, CommandDefinition command, Func<TFirst, TSecond, TThird, TReturn> map, string splitOn = "Id")
+        => Task.FromException<IEnumerable<TReturn>>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<IEnumerable<TReturn>> QueryAsync<TFirst, TSecond, TThird, TFourth, TReturn>(this IDbConnection cnn, CommandDefinition command, Func<TFirst, TSecond, TThird, TFourth, TReturn> map, string splitOn = "Id")
+        => Task.FromException<IEnumerable<TReturn>>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<IEnumerable<TReturn>> QueryAsync<TFirst, TSecond, TThird, TFourth, TFifth, TReturn>(this IDbConnection cnn, CommandDefinition command, Func<TFirst, TSecond, TThird, TFourth, TFifth, TReturn> map, string splitOn = "Id")
+        => Task.FromException<IEnumerable<TReturn>>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<IEnumerable<TReturn>> QueryAsync<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn>(this IDbConnection cnn, CommandDefinition command, Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn> map, string splitOn = "Id")
+        => Task.FromException<IEnumerable<TReturn>>(new NotSupportedException(StubMessage));
+
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static Task<IEnumerable<TReturn>> QueryAsync<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(this IDbConnection cnn, CommandDefinition command, Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn> map, string splitOn = "Id")
+        => Task.FromException<IEnumerable<TReturn>>(new NotSupportedException(StubMessage));
 }

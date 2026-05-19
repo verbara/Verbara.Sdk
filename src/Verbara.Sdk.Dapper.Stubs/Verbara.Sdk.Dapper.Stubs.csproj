@@ -3,12 +3,13 @@
     <!-- DROP-IN: assembly is named "Dapper" so it replaces Dapper.dll in the runtime closure -->
     <AssemblyName>Dapper</AssemblyName>
     <RootNamespace>Dapper</RootNamespace>
-    <!-- Assembly version matches real Dapper 2.1.72 so [assembly: ReferenceAssembly] bindings remain satisfied.
-         DRIFT WARNING: when upstream Dapper publishes a new minor/patch (2.1.73, 2.2.0, etc.),
-         bump <AssemblyVersion>/<FileVersion>/<Version>/<PackageVersion> here in lockstep — otherwise
-         consumers binding to the newer Dapper version will fail to load this stub.
-         The PublicApiSurfaceTests (Phase B) will also need its real-Dapper.dll path updated. -->
-    <AssemblyVersion>2.1.72.0</AssemblyVersion>
+    <!-- Drop-in IL identity must match Dapper.dll exactly. Real Dapper 2.1.72 ships with
+         AssemblyVersion=2.0.0.0 (only the FileVersion + InformationalVersion track patch
+         releases). Verified via reflection on /home/orion75/.nuget/packages/dapper/2.1.72/lib/net8.0/Dapper.dll.
+         DRIFT WARNING: if upstream Dapper ever bumps AssemblyVersion (e.g. a future 3.x major),
+         update <AssemblyVersion> in lockstep — otherwise CLR runtime binding redirects to this
+         stub will fail. <FileVersion> + <Version> track the upstream patch revision instead. -->
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
     <FileVersion>2.1.72.0</FileVersion>
     <!-- Package version is semver-distinct from real Dapper -->
     <PackageId>Verbara.Sdk.Dapper.Stubs</PackageId>

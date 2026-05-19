@@ -10,8 +10,8 @@ public static partial class SqlMapper
     // Includes untyped, typed-by-Type, generic, and multi-mapping (2..7 types
     // plus the Type[] + Func<object[], TReturn> dynamic-types overload).
     //
-    // Deferred to Task 6 (Phase C.4) — CommandDefinition overload:
-    //   - Query<T>(this IDbConnection cnn, CommandDefinition)               -> IEnumerable<T>
+    // The CommandDefinition-typed overload (Task 6 / Phase C.4) sits at the
+    // bottom — real Dapper only exposes the generic single-type variant.
     // -----------------------------------------------------------------------
 
     // ---- Untyped + typed-by-Type ----
@@ -61,5 +61,10 @@ public static partial class SqlMapper
     // ---- Dynamic-types Type[] + Func<object[], TReturn> ----
     [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
     public static IEnumerable<TReturn> Query<TReturn>(this IDbConnection cnn, string sql, Type[] types, Func<object[], TReturn> map, object? param = null, IDbTransaction? transaction = null, bool buffered = true, string splitOn = "Id", int? commandTimeout = null, CommandType? commandType = null)
+        => throw new NotSupportedException(StubMessage);
+
+    // ---- CommandDefinition-typed overload ----
+    [RequiresDynamicCode(RequiresDynamicCodeMessage), RequiresUnreferencedCode(RequiresUnreferencedCodeMessage)]
+    public static IEnumerable<T> Query<T>(this IDbConnection cnn, CommandDefinition command)
         => throw new NotSupportedException(StubMessage);
 }

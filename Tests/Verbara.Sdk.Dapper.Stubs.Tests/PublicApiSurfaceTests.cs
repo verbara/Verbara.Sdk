@@ -10,7 +10,7 @@ namespace Verbara.Sdk.Dapper.Stubs.Tests;
 /// that isn't in real Dapper. This is the drop-in contract.
 ///
 /// Uses <see cref="MetadataLoadContext"/> rather than <see cref="Assembly.LoadFrom(string)"/>
-/// because both DLLs share the exact same <see cref="AssemblyName"/> ("Dapper, Version=2.1.72.0,
+/// because both DLLs share the exact same <see cref="AssemblyName"/> ("Dapper, Version=2.0.0.0,
 /// PublicKeyToken=null") by design — that's the drop-in identity. The default runtime loader
 /// collapses identical identities to the first-loaded assembly, which would make both DLLs
 /// report 0 exported types (silent green test). MetadataLoadContext gives us reflection-only
