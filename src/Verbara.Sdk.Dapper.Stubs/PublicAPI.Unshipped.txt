@@ -1,8 +1,134 @@
 #nullable enable
+abstract Dapper.SqlMapper.StringTypeHandler<T>.Format(T xml) -> string!
+abstract Dapper.SqlMapper.StringTypeHandler<T>.Parse(string! xml) -> T?
+abstract Dapper.SqlMapper.TypeHandler<T>.Parse(object! value) -> T?
+abstract Dapper.SqlMapper.TypeHandler<T>.SetValue(System.Data.IDbDataParameter! parameter, T? value) -> void
 Dapper.CommandFlags
 Dapper.CommandFlags.Buffered = 1 -> Dapper.CommandFlags
+Dapper.CommandFlags.NoCache = 4 -> Dapper.CommandFlags
 Dapper.CommandFlags.None = 0 -> Dapper.CommandFlags
 Dapper.CommandFlags.Pipelined = 2 -> Dapper.CommandFlags
-Dapper.CommandFlags.NoCache = 4 -> Dapper.CommandFlags
 Dapper.ExplicitConstructorAttribute
 Dapper.ExplicitConstructorAttribute.ExplicitConstructorAttribute() -> void
+Dapper.SqlMapper
+Dapper.SqlMapper.DontMap
+Dapper.SqlMapper.DontMap.DontMap() -> void
+Dapper.SqlMapper.GridReader
+Dapper.SqlMapper.GridReader.Command.get -> System.Data.IDbCommand?
+Dapper.SqlMapper.GridReader.Command.set -> void
+Dapper.SqlMapper.GridReader.Dispose() -> void
+Dapper.SqlMapper.GridReader.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Dapper.SqlMapper.GridReader.IsConsumed.get -> bool
+Dapper.SqlMapper.GridReader.Read(bool buffered = true) -> System.Collections.Generic.IEnumerable<object!>!
+Dapper.SqlMapper.GridReader.Read(System.Type! type, bool buffered = true) -> System.Collections.Generic.IEnumerable<object!>!
+Dapper.SqlMapper.GridReader.Read<T>(bool buffered = true) -> System.Collections.Generic.IEnumerable<T>!
+Dapper.SqlMapper.GridReader.Read<TFirst, TSecond, TReturn>(System.Func<TFirst, TSecond, TReturn>! func, string! splitOn = "id", bool buffered = true) -> System.Collections.Generic.IEnumerable<TReturn>!
+Dapper.SqlMapper.GridReader.Read<TFirst, TSecond, TThird, TReturn>(System.Func<TFirst, TSecond, TThird, TReturn>! func, string! splitOn = "id", bool buffered = true) -> System.Collections.Generic.IEnumerable<TReturn>!
+Dapper.SqlMapper.GridReader.Read<TFirst, TSecond, TThird, TFourth, TReturn>(System.Func<TFirst, TSecond, TThird, TFourth, TReturn>! func, string! splitOn = "id", bool buffered = true) -> System.Collections.Generic.IEnumerable<TReturn>!
+Dapper.SqlMapper.GridReader.Read<TFirst, TSecond, TThird, TFourth, TFifth, TReturn>(System.Func<TFirst, TSecond, TThird, TFourth, TFifth, TReturn>! func, string! splitOn = "id", bool buffered = true) -> System.Collections.Generic.IEnumerable<TReturn>!
+Dapper.SqlMapper.GridReader.Read<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn>(System.Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn>! func, string! splitOn = "id", bool buffered = true) -> System.Collections.Generic.IEnumerable<TReturn>!
+Dapper.SqlMapper.GridReader.Read<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>(System.Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>! func, string! splitOn = "id", bool buffered = true) -> System.Collections.Generic.IEnumerable<TReturn>!
+Dapper.SqlMapper.GridReader.Read<TReturn>(System.Type![]! types, System.Func<object![]!, TReturn>! map, string! splitOn = "id", bool buffered = true) -> System.Collections.Generic.IEnumerable<TReturn>!
+Dapper.SqlMapper.GridReader.ReadAsync(bool buffered = true) -> System.Threading.Tasks.Task<System.Collections.Generic.IEnumerable<object!>!>!
+Dapper.SqlMapper.GridReader.ReadAsync(System.Type! type, bool buffered = true) -> System.Threading.Tasks.Task<System.Collections.Generic.IEnumerable<object!>!>!
+Dapper.SqlMapper.GridReader.ReadAsync<T>(bool buffered = true) -> System.Threading.Tasks.Task<System.Collections.Generic.IEnumerable<T>!>!
+Dapper.SqlMapper.GridReader.ReadFirst() -> object!
+Dapper.SqlMapper.GridReader.ReadFirst(System.Type! type) -> object!
+Dapper.SqlMapper.GridReader.ReadFirst<T>() -> T
+Dapper.SqlMapper.GridReader.ReadFirstAsync() -> System.Threading.Tasks.Task<object!>!
+Dapper.SqlMapper.GridReader.ReadFirstAsync(System.Type! type) -> System.Threading.Tasks.Task<object!>!
+Dapper.SqlMapper.GridReader.ReadFirstAsync<T>() -> System.Threading.Tasks.Task<T>!
+Dapper.SqlMapper.GridReader.ReadFirstOrDefault() -> object!
+Dapper.SqlMapper.GridReader.ReadFirstOrDefault(System.Type! type) -> object!
+Dapper.SqlMapper.GridReader.ReadFirstOrDefault<T>() -> T
+Dapper.SqlMapper.GridReader.ReadFirstOrDefaultAsync() -> System.Threading.Tasks.Task<object!>!
+Dapper.SqlMapper.GridReader.ReadFirstOrDefaultAsync(System.Type! type) -> System.Threading.Tasks.Task<object!>!
+Dapper.SqlMapper.GridReader.ReadFirstOrDefaultAsync<T>() -> System.Threading.Tasks.Task<T>!
+Dapper.SqlMapper.GridReader.ReadSingle() -> object!
+Dapper.SqlMapper.GridReader.ReadSingle(System.Type! type) -> object!
+Dapper.SqlMapper.GridReader.ReadSingle<T>() -> T
+Dapper.SqlMapper.GridReader.ReadSingleAsync() -> System.Threading.Tasks.Task<object!>!
+Dapper.SqlMapper.GridReader.ReadSingleAsync(System.Type! type) -> System.Threading.Tasks.Task<object!>!
+Dapper.SqlMapper.GridReader.ReadSingleAsync<T>() -> System.Threading.Tasks.Task<T>!
+Dapper.SqlMapper.GridReader.ReadSingleOrDefault() -> object!
+Dapper.SqlMapper.GridReader.ReadSingleOrDefault(System.Type! type) -> object!
+Dapper.SqlMapper.GridReader.ReadSingleOrDefault<T>() -> T
+Dapper.SqlMapper.GridReader.ReadSingleOrDefaultAsync() -> System.Threading.Tasks.Task<object!>!
+Dapper.SqlMapper.GridReader.ReadSingleOrDefaultAsync(System.Type! type) -> System.Threading.Tasks.Task<object!>!
+Dapper.SqlMapper.GridReader.ReadSingleOrDefaultAsync<T>() -> System.Threading.Tasks.Task<T>!
+Dapper.SqlMapper.GridReader.ReadUnbufferedAsync() -> System.Collections.Generic.IAsyncEnumerable<object!>!
+Dapper.SqlMapper.GridReader.ReadUnbufferedAsync<T>() -> System.Collections.Generic.IAsyncEnumerable<T>!
+Dapper.SqlMapper.ICustomQueryParameter
+Dapper.SqlMapper.ICustomQueryParameter.AddParameter(System.Data.IDbCommand! command, string! name) -> void
+Dapper.SqlMapper.Identity
+Dapper.SqlMapper.Identity.CommandType.get -> System.Data.CommandType?
+Dapper.SqlMapper.Identity.Equals(Dapper.SqlMapper.Identity? other) -> bool
+Dapper.SqlMapper.Identity.ForDynamicParameters(System.Type! type) -> Dapper.SqlMapper.Identity!
+Dapper.SqlMapper.Identity.GridIndex.get -> int
+Dapper.SqlMapper.Identity.ParametersType.get -> System.Type?
+Dapper.SqlMapper.Identity.Sql.get -> string!
+Dapper.SqlMapper.Identity.Type.get -> System.Type?
+Dapper.SqlMapper.IDynamicParameters
+Dapper.SqlMapper.IDynamicParameters.AddParameters(System.Data.IDbCommand! command, Dapper.SqlMapper.Identity! identity) -> void
+Dapper.SqlMapper.IMemberMap
+Dapper.SqlMapper.IMemberMap.ColumnName.get -> string!
+Dapper.SqlMapper.IMemberMap.Field.get -> System.Reflection.FieldInfo?
+Dapper.SqlMapper.IMemberMap.MemberType.get -> System.Type!
+Dapper.SqlMapper.IMemberMap.Parameter.get -> System.Reflection.ParameterInfo?
+Dapper.SqlMapper.IMemberMap.Property.get -> System.Reflection.PropertyInfo?
+Dapper.SqlMapper.IParameterCallbacks
+Dapper.SqlMapper.IParameterCallbacks.OnCompleted() -> void
+Dapper.SqlMapper.IParameterLookup
+Dapper.SqlMapper.IParameterLookup.this[string! name].get -> object?
+Dapper.SqlMapper.ITypeHandler
+Dapper.SqlMapper.ITypeHandler.Parse(System.Type! destinationType, object! value) -> object?
+Dapper.SqlMapper.ITypeHandler.SetValue(System.Data.IDbDataParameter! parameter, object? value) -> void
+Dapper.SqlMapper.ITypeMap
+Dapper.SqlMapper.ITypeMap.FindConstructor(string![]! names, System.Type![]! types) -> System.Reflection.ConstructorInfo?
+Dapper.SqlMapper.ITypeMap.FindExplicitConstructor() -> System.Reflection.ConstructorInfo?
+Dapper.SqlMapper.ITypeMap.GetConstructorParameter(System.Reflection.ConstructorInfo! constructor, string! columnName) -> Dapper.SqlMapper.IMemberMap?
+Dapper.SqlMapper.ITypeMap.GetMember(string! columnName) -> Dapper.SqlMapper.IMemberMap?
+Dapper.SqlMapper.Link<TKey, TValue>
+Dapper.SqlMapper.Link<TKey, TValue>.Key.get -> TKey
+Dapper.SqlMapper.Link<TKey, TValue>.Tail.get -> Dapper.SqlMapper.Link<TKey, TValue>?
+Dapper.SqlMapper.Link<TKey, TValue>.Value.get -> TValue
+Dapper.SqlMapper.LiteralToken
+Dapper.SqlMapper.LiteralToken.Member.get -> string!
+Dapper.SqlMapper.LiteralToken.Token.get -> string!
+Dapper.SqlMapper.Settings
+Dapper.SqlMapper.StringTypeHandler<T>
+Dapper.SqlMapper.StringTypeHandler<T>.StringTypeHandler() -> void
+Dapper.SqlMapper.TypeHandler<T>
+Dapper.SqlMapper.TypeHandler<T>.TypeHandler() -> void
+Dapper.SqlMapper.TypeHandlerCache<T>
+Dapper.SqlMapper.UdtTypeHandler
+Dapper.SqlMapper.UdtTypeHandler.UdtTypeHandler(string! udtTypeName) -> void
+override Dapper.SqlMapper.Identity.Equals(object? obj) -> bool
+override Dapper.SqlMapper.Identity.GetHashCode() -> int
+override Dapper.SqlMapper.Identity.ToString() -> string!
+override Dapper.SqlMapper.StringTypeHandler<T>.Parse(object! value) -> T?
+override Dapper.SqlMapper.StringTypeHandler<T>.SetValue(System.Data.IDbDataParameter! parameter, T? value) -> void
+static Dapper.SqlMapper.Link<TKey, TValue>.Clear(ref Dapper.SqlMapper.Link<TKey, TValue>? head) -> void
+static Dapper.SqlMapper.Link<TKey, TValue>.TryAdd(ref Dapper.SqlMapper.Link<TKey, TValue>? head, TKey key, ref TValue value) -> bool
+static Dapper.SqlMapper.Link<TKey, TValue>.TryGet(Dapper.SqlMapper.Link<TKey, TValue>? link, TKey key, out TValue value) -> bool
+static Dapper.SqlMapper.Settings.ApplyNullValues.get -> bool
+static Dapper.SqlMapper.Settings.ApplyNullValues.set -> void
+static Dapper.SqlMapper.Settings.CommandTimeout.get -> int?
+static Dapper.SqlMapper.Settings.CommandTimeout.set -> void
+static Dapper.SqlMapper.Settings.FetchSize.get -> long
+static Dapper.SqlMapper.Settings.FetchSize.set -> void
+static Dapper.SqlMapper.Settings.InListStringSplitCount.get -> int
+static Dapper.SqlMapper.Settings.InListStringSplitCount.set -> void
+static Dapper.SqlMapper.Settings.PadListExpansions.get -> bool
+static Dapper.SqlMapper.Settings.PadListExpansions.set -> void
+static Dapper.SqlMapper.Settings.SetDefaults() -> void
+static Dapper.SqlMapper.Settings.SupportLegacyParameterTokens.get -> bool
+static Dapper.SqlMapper.Settings.SupportLegacyParameterTokens.set -> void
+static Dapper.SqlMapper.Settings.UseIncrementalPseudoPositionalParameterNames.get -> bool
+static Dapper.SqlMapper.Settings.UseIncrementalPseudoPositionalParameterNames.set -> void
+static Dapper.SqlMapper.Settings.UseSingleResultOptimization.get -> bool
+static Dapper.SqlMapper.Settings.UseSingleResultOptimization.set -> void
+static Dapper.SqlMapper.Settings.UseSingleRowOptimization.get -> bool
+static Dapper.SqlMapper.Settings.UseSingleRowOptimization.set -> void
+static Dapper.SqlMapper.TypeHandlerCache<T>.Parse(object! value) -> T
+static Dapper.SqlMapper.TypeHandlerCache<T>.SetValue(System.Data.IDbDataParameter! parameter, object! value) -> void
