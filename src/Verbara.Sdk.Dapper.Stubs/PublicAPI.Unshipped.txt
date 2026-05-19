@@ -1,0 +1,8 @@
+#nullable enable
+Dapper.CommandFlags
+Dapper.CommandFlags.Buffered = 1 -> Dapper.CommandFlags
+Dapper.CommandFlags.None = 0 -> Dapper.CommandFlags
+Dapper.CommandFlags.Pipelined = 2 -> Dapper.CommandFlags
+Dapper.CommandFlags.NoCache = 4 -> Dapper.CommandFlags
+Dapper.ExplicitConstructorAttribute
+Dapper.ExplicitConstructorAttribute.ExplicitConstructorAttribute() -> void
