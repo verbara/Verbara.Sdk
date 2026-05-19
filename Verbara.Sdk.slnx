@@ -33,6 +33,7 @@
     <Project Path="src/Verbara.Sdk.Ari/Verbara.Sdk.Ari.csproj" />
     <Project Path="src/Verbara.Sdk.Audio/Verbara.Sdk.Audio.csproj" />
     <Project Path="src/Verbara.Sdk.Config/Verbara.Sdk.Config.csproj" />
+    <Project Path="src/Verbara.Sdk.Dapper.Stubs/Verbara.Sdk.Dapper.Stubs.csproj" />
     <Project Path="src/Verbara.Sdk.Live/Verbara.Sdk.Live.csproj" />
     <Project Path="src/Verbara.Sdk.Activities/Verbara.Sdk.Activities.csproj" />
     <Project Path="src/Verbara.Sdk.VoiceAi.AudioSocket/Verbara.Sdk.VoiceAi.AudioSocket.csproj" />

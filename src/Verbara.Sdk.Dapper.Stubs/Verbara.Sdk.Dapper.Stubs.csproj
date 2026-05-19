@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- DROP-IN: assembly is named "Dapper" so it replaces Dapper.dll in the runtime closure -->
+    <AssemblyName>Dapper</AssemblyName>
+    <RootNamespace>Dapper</RootNamespace>
+    <!-- Assembly version matches real Dapper 2.1.72 so [assembly: ReferenceAssembly] bindings remain satisfied -->
+    <AssemblyVersion>2.1.72.0</AssemblyVersion>
+    <FileVersion>2.1.72.0</FileVersion>
+    <!-- Package version is semver-distinct from real Dapper -->
+    <PackageId>Verbara.Sdk.Dapper.Stubs</PackageId>
+    <Version>2.1.72-aotstub.1</Version>
+    <PackageVersion>2.1.72-aotstub.1</PackageVersion>
+    <Description>AOT-clean drop-in replacement for Dapper.dll. Mirrors Dapper 2.1.72 public API surface so consumer code compiles and Dapper.AOT analyzer can intercept call sites. Runtime method bodies throw NotSupportedException with [RequiresDynamicCode] + [RequiresUnreferencedCode] annotations so ILC trims them cleanly during Native AOT publish. Use WITH the Dapper.AOT package. Resolves DapperLib/DapperAOT#168.</Description>
+    <PackageTags>dapper;aot;native-aot;stubs;sdk</PackageTags>
+    <!-- Clear inherited TargetFramework from Directory.Build.props so multi-targeting via TargetFrameworks takes effect -->
+    <TargetFramework></TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <EnablePackageValidation>false</EnablePackageValidation>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Verbara.Sdk.Dapper.Stubs.Tests" />
+  </ItemGroup>
+</Project>
