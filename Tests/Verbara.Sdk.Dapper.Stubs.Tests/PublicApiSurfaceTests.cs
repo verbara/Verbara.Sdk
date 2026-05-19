@@ -119,7 +119,13 @@ public sealed class PublicApiSurfaceTests
 
     private static string FormatSignature(Type declaringType, MethodInfo m)
     {
+        // Use Name fallback for both parameters AND return type: for methods with generic type
+        // parameters, FullName is null (e.g. `T` returns null but Name returns "T"). Without this
+        // symmetric fallback, signatures with generic returns render as "-> " (empty) which both
+        // (a) is visually broken for the human reader, and (b) creates a latent collision risk
+        // if real Dapper ever adds overloads differing only by generic return type.
         var paramStr = string.Join(", ", m.GetParameters().Select(p => p.ParameterType.FullName ?? p.ParameterType.Name));
-        return $"{declaringType.FullName}::{m.Name}({paramStr}) -> {m.ReturnType.FullName}";
+        var returnStr = m.ReturnType.FullName ?? m.ReturnType.Name;
+        return $"{declaringType.FullName}::{m.Name}({paramStr}) -> {returnStr}";
     }
 }
