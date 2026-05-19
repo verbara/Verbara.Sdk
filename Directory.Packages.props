@@ -107,6 +107,7 @@
     <PackageVersion Include="coverlet.collector" Version="10.0.0" />
     <PackageVersion Include="Testcontainers" Version="4.11.0" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.51.0" />
+    <PackageVersion Include="System.Reflection.MetadataLoadContext" Version="10.0.0" />
   </ItemGroup>
 
   <!-- Benchmark dependencies -->
