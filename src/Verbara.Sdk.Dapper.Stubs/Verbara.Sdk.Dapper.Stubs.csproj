@@ -3,7 +3,11 @@
     <!-- DROP-IN: assembly is named "Dapper" so it replaces Dapper.dll in the runtime closure -->
     <AssemblyName>Dapper</AssemblyName>
     <RootNamespace>Dapper</RootNamespace>
-    <!-- Assembly version matches real Dapper 2.1.72 so [assembly: ReferenceAssembly] bindings remain satisfied -->
+    <!-- Assembly version matches real Dapper 2.1.72 so [assembly: ReferenceAssembly] bindings remain satisfied.
+         DRIFT WARNING: when upstream Dapper publishes a new minor/patch (2.1.73, 2.2.0, etc.),
+         bump <AssemblyVersion>/<FileVersion>/<Version>/<PackageVersion> here in lockstep — otherwise
+         consumers binding to the newer Dapper version will fail to load this stub.
+         The PublicApiSurfaceTests (Phase B) will also need its real-Dapper.dll path updated. -->
     <AssemblyVersion>2.1.72.0</AssemblyVersion>
     <FileVersion>2.1.72.0</FileVersion>
     <!-- Package version is semver-distinct from real Dapper -->
