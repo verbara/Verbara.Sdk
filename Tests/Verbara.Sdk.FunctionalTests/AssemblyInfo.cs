@@ -1,5 +1,3 @@
-using Dapper;
-
-// ADR-0022 Phase D — Module-level opt-in so Dapper.AOT intercepts the simple-shape
-// Dapper call sites in RealtimeFixture.cs + RealtimePjsipTests.cs + RealtimeQueueTests.cs.
-[module: DapperAot]
+// Assembly-level attributes for Verbara.Sdk.FunctionalTests.
+// No special attributes required — all Postgres interactions use the
+// Verbara.Sdk.Data.Npgsql facade or raw NpgsqlCommand.

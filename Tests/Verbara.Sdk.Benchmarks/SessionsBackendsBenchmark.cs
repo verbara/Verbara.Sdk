@@ -4,7 +4,6 @@ using Verbara.Sdk.Sessions.Postgres;
 using Verbara.Sdk.Sessions.Redis;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
-using Dapper;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.Options;
@@ -83,7 +82,10 @@ public class SessionsBackendsBenchmark
             CREATE INDEX IF NOT EXISTS ix_asterisk_sessions_active ON asterisk_call_sessions (state) WHERE completed_at IS NULL;
             """;
         await using (var conn = await _postgresDs.OpenConnectionAsync())
-            await conn.ExecuteAsync(migrationSql);
+        {
+            await using var cmd = new NpgsqlCommand(migrationSql, conn);
+            await cmd.ExecuteNonQueryAsync();
+        }
 
         var pgOptions = Options.Create(new PostgresSessionStoreOptions
         {

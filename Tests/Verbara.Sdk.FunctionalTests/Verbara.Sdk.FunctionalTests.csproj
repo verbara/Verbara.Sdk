@@ -5,10 +5,6 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <NoWarn>CA1707</NoWarn>
-    <!-- ADR-0022 Phase D: Dapper.AOT interceptor support + IL2026/IL3050 suppression
-         (false positives — analyzer doesn't track interceptor replacement). -->
-    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);Dapper.AOT</InterceptorsPreviewNamespaces>
-    <NoWarn>$(NoWarn);IL2026;IL3050</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
@@ -22,9 +18,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="System.Reactive" />
     <PackageReference Include="Npgsql" />
-    <!-- ADR-0022 Phase D: pulls stubs directly (no transitive path via ProjectReferences). -->
-    <PackageReference Include="Verbara.Sdk.Dapper.Stubs" />
-    <PackageReference Include="Dapper.AOT" PrivateAssets="all" />
+    <PackageReference Include="Verbara.Sdk.Data.Npgsql" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Verbara.Sdk.Ami\Verbara.Sdk.Ami.csproj" />

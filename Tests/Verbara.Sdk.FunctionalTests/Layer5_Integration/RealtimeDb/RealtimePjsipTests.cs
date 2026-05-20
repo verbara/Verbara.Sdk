@@ -6,10 +6,10 @@ using Verbara.Sdk.Ami;
 using Verbara.Sdk.Ami.Transport;
 using Verbara.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Verbara.Sdk.FunctionalTests.Infrastructure.Fixtures;
-using Dapper;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Npgsql;
 
 /// <summary>
 /// Tests that PJSIP endpoints configured via PostgreSQL realtime (Sorcery/res_config_pgsql)
@@ -34,12 +34,16 @@ public sealed class RealtimePjsipTests : FunctionalTestBase
         {
             // Insert endpoint and AOR into realtime DB
             await using var conn = await _fixture.DataSource.OpenConnectionAsync();
-            await conn.ExecuteAsync(
-                "INSERT INTO ps_endpoints (id, transport, aors, context, disallow, allow) VALUES (@Id, 'transport-udp', @Id, 'default', 'all', 'ulaw')",
-                new { Id = endpointId });
-            await conn.ExecuteAsync(
-                "INSERT INTO ps_aors (id, max_contacts) VALUES (@Id, 1)",
-                new { Id = endpointId });
+
+            await using var insertEndpoint = new NpgsqlCommand(
+                "INSERT INTO ps_endpoints (id, transport, aors, context, disallow, allow) VALUES ($1, 'transport-udp', $1, 'default', 'all', 'ulaw')", conn);
+            insertEndpoint.Parameters.Add(new NpgsqlParameter { Value = endpointId });
+            await insertEndpoint.ExecuteNonQueryAsync();
+
+            await using var insertAor = new NpgsqlCommand(
+                "INSERT INTO ps_aors (id, max_contacts) VALUES ($1, 1)", conn);
+            insertAor.Parameters.Add(new NpgsqlParameter { Value = endpointId });
+            await insertAor.ExecuteNonQueryAsync();
 
             // Query the endpoint via AMI — PJSIP realtime loads on demand via Sorcery
             await using var ami = CreateRealtimeAmiConnection();
@@ -66,12 +70,16 @@ public sealed class RealtimePjsipTests : FunctionalTestBase
         {
             // Insert endpoint with initial callerid
             await using var conn = await _fixture.DataSource.OpenConnectionAsync();
-            await conn.ExecuteAsync(
-                "INSERT INTO ps_endpoints (id, transport, aors, context, disallow, allow, callerid) VALUES (@Id, 'transport-udp', @Id, 'default', 'all', 'ulaw', 'Original <1000>')",
-                new { Id = endpointId });
-            await conn.ExecuteAsync(
-                "INSERT INTO ps_aors (id, max_contacts) VALUES (@Id, 1)",
-                new { Id = endpointId });
+
+            await using var insertEndpoint = new NpgsqlCommand(
+                "INSERT INTO ps_endpoints (id, transport, aors, context, disallow, allow, callerid) VALUES ($1, 'transport-udp', $1, 'default', 'all', 'ulaw', 'Original <1000>')", conn);
+            insertEndpoint.Parameters.Add(new NpgsqlParameter { Value = endpointId });
+            await insertEndpoint.ExecuteNonQueryAsync();
+
+            await using var insertAor = new NpgsqlCommand(
+                "INSERT INTO ps_aors (id, max_contacts) VALUES ($1, 1)", conn);
+            insertAor.Parameters.Add(new NpgsqlParameter { Value = endpointId });
+            await insertAor.ExecuteNonQueryAsync();
 
             await using var ami = CreateRealtimeAmiConnection();
             await ami.ConnectAsync();
@@ -83,9 +91,10 @@ public sealed class RealtimePjsipTests : FunctionalTestBase
                 "endpoint must be visible before update");
 
             // Update callerid in DB and reload PJSIP
-            await conn.ExecuteAsync(
-                "UPDATE ps_endpoints SET callerid = 'Updated <2000>' WHERE id = @Id",
-                new { Id = endpointId });
+            await using var updateEndpoint = new NpgsqlCommand(
+                "UPDATE ps_endpoints SET callerid = 'Updated <2000>' WHERE id = $1", conn);
+            updateEndpoint.Parameters.Add(new NpgsqlParameter { Value = endpointId });
+            await updateEndpoint.ExecuteNonQueryAsync();
             await ami.SendActionAsync(new CommandAction { Command = "pjsip reload" });
             await Task.Delay(TimeSpan.FromSeconds(3));
 
@@ -110,12 +119,16 @@ public sealed class RealtimePjsipTests : FunctionalTestBase
         {
             // Insert endpoint
             await using var conn = await _fixture.DataSource.OpenConnectionAsync();
-            await conn.ExecuteAsync(
-                "INSERT INTO ps_endpoints (id, transport, aors, context, disallow, allow) VALUES (@Id, 'transport-udp', @Id, 'default', 'all', 'ulaw')",
-                new { Id = endpointId });
-            await conn.ExecuteAsync(
-                "INSERT INTO ps_aors (id, max_contacts) VALUES (@Id, 1)",
-                new { Id = endpointId });
+
+            await using var insertEndpoint = new NpgsqlCommand(
+                "INSERT INTO ps_endpoints (id, transport, aors, context, disallow, allow) VALUES ($1, 'transport-udp', $1, 'default', 'all', 'ulaw')", conn);
+            insertEndpoint.Parameters.Add(new NpgsqlParameter { Value = endpointId });
+            await insertEndpoint.ExecuteNonQueryAsync();
+
+            await using var insertAor = new NpgsqlCommand(
+                "INSERT INTO ps_aors (id, max_contacts) VALUES ($1, 1)", conn);
+            insertAor.Parameters.Add(new NpgsqlParameter { Value = endpointId });
+            await insertAor.ExecuteNonQueryAsync();
 
             await using var ami = CreateRealtimeAmiConnection();
             await ami.ConnectAsync();
@@ -127,12 +140,18 @@ public sealed class RealtimePjsipTests : FunctionalTestBase
                 "endpoint must exist before deletion");
 
             // Delete from DB
-            await conn.ExecuteAsync("DELETE FROM ps_aors WHERE id = @Id", new { Id = endpointId });
-            await conn.ExecuteAsync("DELETE FROM ps_endpoints WHERE id = @Id", new { Id = endpointId });
+            await using var deleteAor = new NpgsqlCommand("DELETE FROM ps_aors WHERE id = $1", conn);
+            deleteAor.Parameters.Add(new NpgsqlParameter { Value = endpointId });
+            await deleteAor.ExecuteNonQueryAsync();
+
+            await using var deleteEndpoint = new NpgsqlCommand("DELETE FROM ps_endpoints WHERE id = $1", conn);
+            deleteEndpoint.Parameters.Add(new NpgsqlParameter { Value = endpointId });
+            await deleteEndpoint.ExecuteNonQueryAsync();
 
             // Verify DB deletion committed
-            var dbCheck = await conn.ExecuteScalarAsync<int>(
-                "SELECT COUNT(*) FROM ps_endpoints WHERE id = @Id", new { Id = endpointId });
+            await using var countCmd = new NpgsqlCommand("SELECT COUNT(*) FROM ps_endpoints WHERE id = $1", conn);
+            countCmd.Parameters.Add(new NpgsqlParameter { Value = endpointId });
+            var dbCheck = (long?)await countCmd.ExecuteScalarAsync();
             dbCheck.Should().Be(0, "endpoint must be deleted from DB before checking Asterisk");
 
             // Reload PJSIP and use a fresh AMI connection to avoid stale state
