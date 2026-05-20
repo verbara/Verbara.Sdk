@@ -78,6 +78,43 @@ public static class NpgsqlExecutor
     }
 
     /// <summary>
+    /// Executes a query via <paramref name="dataSource"/> and returns the single row mapped by
+    /// <paramref name="map"/>. Throws <see cref="InvalidOperationException"/> when the query
+    /// returns zero rows or more than one row, matching the behaviour of
+    /// <c>Dapper.QuerySingle</c>.
+    /// </summary>
+    public static async Task<T> QuerySingleAsync<T>(this NpgsqlDataSource dataSource, string sql,
+        Action<NpgsqlParameterCollection> bind, Func<NpgsqlDataReader, T> map, CancellationToken ct)
+    {
+        await using var cmd = dataSource.CreateCommand(sql);
+        bind(cmd.Parameters);
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if (!await reader.ReadAsync(ct).ConfigureAwait(false))
+            throw new InvalidOperationException("Sequence contains no elements.");
+        var result = map(reader);
+        if (await reader.ReadAsync(ct).ConfigureAwait(false))
+            throw new InvalidOperationException("Sequence contains more than one element.");
+        return result;
+    }
+
+    /// <summary>
+    /// Executes a query via <paramref name="dataSource"/> and returns the first row mapped by
+    /// <paramref name="map"/>, or <see langword="default"/> when no rows are returned.
+    /// Does not throw when the query returns more than one row, matching the behaviour of
+    /// <c>Dapper.QueryFirstOrDefault</c>.
+    /// </summary>
+    public static async Task<T?> QueryFirstOrDefaultAsync<T>(this NpgsqlDataSource dataSource, string sql,
+        Action<NpgsqlParameterCollection> bind, Func<NpgsqlDataReader, T> map, CancellationToken ct)
+    {
+        await using var cmd = dataSource.CreateCommand(sql);
+        bind(cmd.Parameters);
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if (!await reader.ReadAsync(ct).ConfigureAwait(false))
+            return default;
+        return map(reader);
+    }
+
+    /// <summary>
     /// Executes a non-query SQL statement on an existing <paramref name="connection"/>, optionally
     /// within a <paramref name="transaction"/>, and returns the number of rows affected.
     /// </summary>

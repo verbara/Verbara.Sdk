@@ -62,6 +62,43 @@ public sealed class NpgsqlExecutorTests
     }
 
     [Fact]
+    public async Task QuerySingle_ShouldThrow_WhenZeroRows()
+    {
+        await _ds.ExecuteAsync("CREATE TABLE IF NOT EXISTS single_t (id int)", static _ => { }, CancellationToken.None);
+        await _ds.ExecuteAsync("DELETE FROM single_t", static _ => { }, CancellationToken.None);
+        var act = async () => await _ds.QuerySingleAsync("SELECT id, 'x' AS name FROM single_t",
+            static _ => { }, Map, CancellationToken.None);
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task QuerySingle_ShouldReturnRow_WhenExactlyOne()
+    {
+        await _ds.ExecuteAsync("CREATE TABLE IF NOT EXISTS single_one (id int)", static _ => { }, CancellationToken.None);
+        await _ds.ExecuteAsync("DELETE FROM single_one", static _ => { }, CancellationToken.None);
+        await _ds.ExecuteAsync("INSERT INTO single_one (id) VALUES (5)", static _ => { }, CancellationToken.None);
+        var item = await _ds.QuerySingleAsync("SELECT id, 'y' AS name FROM single_one",
+            static _ => { }, Map, CancellationToken.None);
+        item.Should().Be(new Item(5, "y"));
+    }
+
+    [Fact]
+    public async Task QueryFirstOrDefault_ShouldReturnFirst_WhenMultiple_AndDefault_WhenEmpty()
+    {
+        await _ds.ExecuteAsync("CREATE TABLE IF NOT EXISTS first_t (id int)", static _ => { }, CancellationToken.None);
+        await _ds.ExecuteAsync("DELETE FROM first_t", static _ => { }, CancellationToken.None);
+        await _ds.ExecuteAsync("INSERT INTO first_t (id) VALUES (1), (2), (3)", static _ => { }, CancellationToken.None);
+        var first = await _ds.QueryFirstOrDefaultAsync("SELECT id, 'z' AS name FROM first_t ORDER BY id",
+            static _ => { }, Map, CancellationToken.None);
+        first.Should().Be(new Item(1, "z"));
+
+        await _ds.ExecuteAsync("DELETE FROM first_t", static _ => { }, CancellationToken.None);
+        var none = await _ds.QueryFirstOrDefaultAsync("SELECT id, 'z' AS name FROM first_t",
+            static _ => { }, Map, CancellationToken.None);
+        none.Should().BeNull();
+    }
+
+    [Fact]
     public async Task ExecuteOnConnection_ShouldHonorTransaction_WhenRolledBack()
     {
         await _ds.ExecuteAsync("CREATE TABLE IF NOT EXISTS tx_items (id int primary key)", static _ => { }, CancellationToken.None);
