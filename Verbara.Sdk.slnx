@@ -43,6 +43,7 @@
     <Project Path="src/Verbara.Sdk.VoiceAi.Tts/Verbara.Sdk.VoiceAi.Tts.csproj" />
     <Project Path="src/Verbara.Sdk.VoiceAi.OpenAiRealtime/Verbara.Sdk.VoiceAi.OpenAiRealtime.csproj" />
     <Project Path="src/Verbara.Sdk/Verbara.Sdk.csproj" />
+    <Project Path="src/Verbara.Sdk.Data.Npgsql/Verbara.Sdk.Data.Npgsql.csproj" />
     <Project Path="src/Verbara.Sdk.Hosting/Verbara.Sdk.Hosting.csproj" />
     <Project Path="src/Verbara.Sdk.Sessions/Verbara.Sdk.Sessions.csproj" />
     <Project Path="src/Verbara.Sdk.Sessions.Redis/Verbara.Sdk.Sessions.Redis.csproj" />

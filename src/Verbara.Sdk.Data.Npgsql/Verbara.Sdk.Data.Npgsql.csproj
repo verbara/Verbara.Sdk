@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Verbara.Sdk.Data.Npgsql - AOT-clean micro-layer over raw Npgsql ADO.NET: NpgsqlExecutor facade + reflection-free NpgsqlDataReader helpers. Replaces Dapper for Native AOT publishing. No reflection, no source generators.</Description>
+    <PackageTags>npgsql;postgresql;ado-net;aot;data-access;sdk</PackageTags>
+    <EnablePackageValidation>false</EnablePackageValidation>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+</Project>
