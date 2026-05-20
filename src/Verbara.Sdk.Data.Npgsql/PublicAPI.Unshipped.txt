@@ -1,1 +1,19 @@
 #nullable enable
+Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetBoolean(this Npgsql.NpgsqlDataReader! r, string! column) -> bool
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetBooleanOrNull(this Npgsql.NpgsqlDataReader! r, string! column) -> bool?
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetDateOnly(this Npgsql.NpgsqlDataReader! r, string! column) -> System.DateOnly
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetDateTime(this Npgsql.NpgsqlDataReader! r, string! column) -> System.DateTime
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetDateTimeOffset(this Npgsql.NpgsqlDataReader! r, string! column) -> System.DateTimeOffset
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetDateTimeOffsetOrNull(this Npgsql.NpgsqlDataReader! r, string! column) -> System.DateTimeOffset?
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetDateTimeOrNull(this Npgsql.NpgsqlDataReader! r, string! column) -> System.DateTime?
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetDecimal(this Npgsql.NpgsqlDataReader! r, string! column) -> decimal
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetDouble(this Npgsql.NpgsqlDataReader! r, string! column) -> double
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetGuid(this Npgsql.NpgsqlDataReader! r, string! column) -> System.Guid
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetInt16(this Npgsql.NpgsqlDataReader! r, string! column) -> short
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetInt32(this Npgsql.NpgsqlDataReader! r, string! column) -> int
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetInt32OrNull(this Npgsql.NpgsqlDataReader! r, string! column) -> int?
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetInt64(this Npgsql.NpgsqlDataReader! r, string! column) -> long
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetInt64OrNull(this Npgsql.NpgsqlDataReader! r, string! column) -> long?
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetString(this Npgsql.NpgsqlDataReader! r, string! column) -> string!
+static Verbara.Sdk.Data.Npgsql.NpgsqlReaderExtensions.GetStringOrNull(this Npgsql.NpgsqlDataReader! r, string! column) -> string?

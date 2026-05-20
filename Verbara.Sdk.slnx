@@ -67,6 +67,7 @@
     <Project Path="Tests/Verbara.Sdk.Audio.Tests/Verbara.Sdk.Audio.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Benchmarks/Verbara.Sdk.Benchmarks.csproj" />
     <Project Path="Tests/Verbara.Sdk.Config.Tests/Verbara.Sdk.Config.Tests.csproj" />
+    <Project Path="Tests/Verbara.Sdk.Data.Npgsql.Tests/Verbara.Sdk.Data.Npgsql.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTests.csproj" />
     <Project Path="Tests/Verbara.Sdk.IntegrationTests/Verbara.Sdk.IntegrationTests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Live.Tests/Verbara.Sdk.Live.Tests.csproj" />
