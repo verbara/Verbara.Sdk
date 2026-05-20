@@ -107,4 +107,19 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
 
+  <!-- ADR-0022 — Dapper is PERMANENTLY BANNED ecosystem-wide. It relies on
+       DynamicMethod + MakeGenericType (runtime IL emit) and blocks Native AOT, which every
+       shippable Verbara image MUST use so closed-source Pro IP never ships as decompilable
+       IL ("la imagen siempre debe ser AOT"). Use Verbara.Sdk.Data.Npgsql (NpgsqlExecutor
+       facade + reflection-free NpgsqlDataReader getters) instead. This guard fails the build
+       if Dapper / Dapper.AOT / Verbara.Sdk.Dapper.Stubs is ever (re)introduced. -->
+  <Target Name="BanDapperPackageReferences" BeforeTargets="CollectPackageReferences;BeforeCompile">
+    <ItemGroup>
+      <_BannedDapperRef Include="@(PackageReference)"
+                        Condition="$([System.String]::Copy('%(PackageReference.Identity)').StartsWith('Dapper')) Or '%(PackageReference.Identity)' == 'Verbara.Sdk.Dapper.Stubs'" />
+    </ItemGroup>
+    <Error Condition="'@(_BannedDapperRef)' != ''"
+           Text="ADR-0022: '@(_BannedDapperRef)' is a BANNED package — Dapper blocks Native AOT. Remove it from $(MSBuildProjectName) and use Verbara.Sdk.Data.Npgsql instead." />
+  </Target>
+
 </Project>

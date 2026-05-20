@@ -33,7 +33,6 @@
     <Project Path="src/Verbara.Sdk.Ari/Verbara.Sdk.Ari.csproj" />
     <Project Path="src/Verbara.Sdk.Audio/Verbara.Sdk.Audio.csproj" />
     <Project Path="src/Verbara.Sdk.Config/Verbara.Sdk.Config.csproj" />
-    <Project Path="src/Verbara.Sdk.Dapper.Stubs/Verbara.Sdk.Dapper.Stubs.csproj" />
     <Project Path="src/Verbara.Sdk.Live/Verbara.Sdk.Live.csproj" />
     <Project Path="src/Verbara.Sdk.Activities/Verbara.Sdk.Activities.csproj" />
     <Project Path="src/Verbara.Sdk.VoiceAi.AudioSocket/Verbara.Sdk.VoiceAi.AudioSocket.csproj" />
@@ -61,7 +60,6 @@
     <Project Path="Tests/Verbara.Sdk.Agi.Tests/Verbara.Sdk.Agi.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Resilience.Tests/Verbara.Sdk.Resilience.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Cluster.Primitives.Tests/Verbara.Sdk.Cluster.Primitives.Tests.csproj" />
-    <Project Path="Tests/Verbara.Sdk.Dapper.Stubs.Tests/Verbara.Sdk.Dapper.Stubs.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Ami.Tests/Verbara.Sdk.Ami.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Ari.Tests/Verbara.Sdk.Ari.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Audio.Tests/Verbara.Sdk.Audio.Tests.csproj" />
