@@ -28,7 +28,8 @@ await dataSource.ExecuteAsync(
     p => p.Add(new NpgsqlParameter("Id", id)),
     cancellationToken);
 
-// Scalar
+// Scalar — T must match the exact CLR type Npgsql boxes for that column.
+// Postgres COUNT(*)/int8 boxes a long, so use <long> (not <int>) or InvalidCastException is thrown.
 var count = await dataSource.ExecuteScalarAsync<long>(
     "SELECT COUNT(*) FROM items",
     static _ => { },

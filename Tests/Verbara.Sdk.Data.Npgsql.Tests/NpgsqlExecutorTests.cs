@@ -39,6 +39,29 @@ public sealed class NpgsqlExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteScalar_ShouldReturnDefault_WhenResultIsNull()
+    {
+        await _ds.ExecuteAsync("CREATE TABLE IF NOT EXISTS empty_t (id int)", static _ => { }, CancellationToken.None);
+        await _ds.ExecuteAsync("DELETE FROM empty_t", static _ => { }, CancellationToken.None);
+        var max = await _ds.ExecuteScalarAsync<int?>("SELECT MAX(id) FROM empty_t", static _ => { }, CancellationToken.None);
+        max.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task QuerySingleOrDefault_ShouldThrow_WhenMoreThanOneRow()
+    {
+        await _ds.ExecuteAsync("CREATE TABLE IF NOT EXISTS multi (id int)", static _ => { }, CancellationToken.None);
+        await _ds.ExecuteAsync("DELETE FROM multi", static _ => { }, CancellationToken.None);
+        await _ds.ExecuteAsync("INSERT INTO multi (id) VALUES (1), (2)", static _ => { }, CancellationToken.None);
+
+        var act = async () => await _ds.QuerySingleOrDefaultAsync(
+            "SELECT id, 'x' AS name FROM multi ORDER BY id",
+            static _ => { }, Map, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
     public async Task ExecuteOnConnection_ShouldHonorTransaction_WhenRolledBack()
     {
         await _ds.ExecuteAsync("CREATE TABLE IF NOT EXISTS tx_items (id int primary key)", static _ => { }, CancellationToken.None);

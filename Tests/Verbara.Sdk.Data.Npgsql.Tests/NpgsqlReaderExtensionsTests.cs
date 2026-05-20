@@ -37,4 +37,52 @@ public sealed class NpgsqlReaderExtensionsTests
         r.GetInt32OrNull("nn").Should().BeNull();
         r.GetStringOrNull("s").Should().Be("hi");
     }
+
+    [Fact]
+    public async Task GetGetters_ShouldReadAllExtendedTypes_AndNullVariants()
+    {
+        await using var conn = await _dataSource.OpenConnectionAsync();
+        // Table: one value row + one all-null row to exercise every getter and its OrNull variant
+        await using (var ddl = new NpgsqlCommand(
+            "CREATE TEMP TABLE ext (" +
+            "  i8 bigint, i2 smallint, dec numeric(10,2), dbl float8," +
+            "  ts timestamp, tstz timestamptz, i8n bigint, bn boolean, sn text," +
+            "  dton timestamptz" +
+            ")", conn))
+            await ddl.ExecuteNonQueryAsync();
+
+        await using (var ins = new NpgsqlCommand(
+            "INSERT INTO ext VALUES " +
+            "  (9876543210, 32767, 12345.67, 3.14, '2026-01-02T03:04:05', '2026-01-02T03:04:05Z', 42, true, 'hello', '2026-01-02T03:04:05Z')," +
+            "  (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)", conn))
+            await ins.ExecuteNonQueryAsync();
+
+        await using var cmd = new NpgsqlCommand(
+            "SELECT i8, i2, dec, dbl, ts, tstz, i8n, bn, sn, dton FROM ext ORDER BY i8 NULLS LAST", conn);
+        await using var r = await cmd.ExecuteReaderAsync();
+
+        // --- Value row ---
+        (await r.ReadAsync()).Should().BeTrue();
+
+        r.GetInt64("i8").Should().Be(9876543210L);
+        r.GetInt16("i2").Should().Be((short)32767);
+        r.GetDecimal("dec").Should().Be(12345.67m);
+        r.GetDouble("dbl").Should().BeApproximately(3.14, 0.001);
+        r.GetDateTime("ts").Should().Be(new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Unspecified));
+        r.GetDateTimeOffset("tstz").Should().Be(new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero));
+        r.GetInt64OrNull("i8n").Should().Be(42L);
+        r.GetBooleanOrNull("bn").Should().BeTrue();
+        r.GetStringOrNull("sn").Should().Be("hello");
+        r.GetDateTimeOrNull("ts").Should().Be(new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Unspecified));
+        r.GetDateTimeOffsetOrNull("dton").Should().Be(new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero));
+
+        // --- All-null row ---
+        (await r.ReadAsync()).Should().BeTrue();
+
+        r.GetInt64OrNull("i8n").Should().BeNull();
+        r.GetBooleanOrNull("bn").Should().BeNull();
+        r.GetStringOrNull("sn").Should().BeNull();
+        r.GetDateTimeOrNull("ts").Should().BeNull();
+        r.GetDateTimeOffsetOrNull("dton").Should().BeNull();
+    }
 }
