@@ -12,11 +12,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Verbara.Sdk.Sessions\Verbara.Sdk.Sessions.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Data.Npgsql\Verbara.Sdk.Data.Npgsql.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Npgsql" />
-    <PackageReference Include="Verbara.Sdk.Data.Npgsql" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>

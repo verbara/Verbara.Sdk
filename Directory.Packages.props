@@ -36,7 +36,6 @@
   <!-- Database dependencies -->
   <ItemGroup>
     <PackageVersion Include="Npgsql" Version="10.0.2" />
-    <PackageVersion Include="Verbara.Sdk.Data.Npgsql" Version="2.1.2" />
   </ItemGroup>
 
   <!-- Redis (spike validation) -->

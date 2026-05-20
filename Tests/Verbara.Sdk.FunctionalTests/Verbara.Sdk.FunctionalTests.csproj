@@ -18,9 +18,9 @@
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="System.Reactive" />
     <PackageReference Include="Npgsql" />
-    <PackageReference Include="Verbara.Sdk.Data.Npgsql" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Data.Npgsql\Verbara.Sdk.Data.Npgsql.csproj" />
     <ProjectReference Include="..\..\src\Verbara.Sdk.Ami\Verbara.Sdk.Ami.csproj" />
     <ProjectReference Include="..\..\src\Verbara.Sdk.Ari\Verbara.Sdk.Ari.csproj" />
     <ProjectReference Include="..\..\src\Verbara.Sdk.Hosting\Verbara.Sdk.Hosting.csproj" />
