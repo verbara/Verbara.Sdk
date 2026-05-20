@@ -1,7 +1,3 @@
-using Dapper;
-
-// ADR-0022 Phase D — Module-level opt-in so Dapper.AOT intercepts the simple-shape
-// `conn.ExecuteAsync(sql)` calls in PostgresFixture.cs. Without this, the stubs'
-// [RequiresUnreferencedCode] + [RequiresDynamicCode] annotations trip IL2026/IL3050
-// at the call sites and TreatWarningsAsErrors upgrades them to compile errors.
-[module: DapperAot]
+// Assembly-level attributes for Verbara.Sdk.Sessions.Postgres.Tests.
+// No special attributes required — all Postgres interactions use raw NpgsqlCommand
+// (fixture DDL/truncate) or the Verbara.Sdk.Data.Npgsql facade (via ProjectReference).

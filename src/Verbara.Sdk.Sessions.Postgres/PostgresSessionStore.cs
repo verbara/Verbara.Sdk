@@ -1,9 +1,8 @@
-using System.Data;
 using System.Globalization;
 using System.Text.Json;
+using Verbara.Sdk.Data.Npgsql;
 using Verbara.Sdk.Sessions.Extensions;
 using Verbara.Sdk.Sessions.Serialization;
-using Dapper;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using NpgsqlTypes;
@@ -14,7 +13,7 @@ namespace Verbara.Sdk.Sessions.Postgres;
 /// Postgres-backed <see cref="SessionStoreBase"/>. Persists active and completed sessions as
 /// JSONB rows in a single table, with secondary indexes on <c>linked_id</c> and partial index
 /// on active sessions (<c>completed_at IS NULL</c>). All JSON is emitted via
-/// <see cref="SessionJsonContext"/> (source-generated) so the store is AOT-safe. Dapper
+/// <see cref="SessionJsonContext"/> (source-generated) so the store is AOT-safe. Npgsql
 /// parameters are passed by value only — table/schema identifiers are validated at
 /// registration time and interpolated safely into SQL.
 /// </summary>
@@ -101,25 +100,20 @@ public sealed class PostgresSessionStore : SessionStoreBase
             ? null
             : JsonSerializer.Deserialize(json, SessionJsonContext.Default.CallSessionSnapshot);
 
-    private static DynamicParameters BuildSaveParameters(CallSession session, CallSessionSnapshot snapshot, string json)
+    private static void BindSaveParameters(
+        NpgsqlParameterCollection p, CallSession session, CallSessionSnapshot snapshot, string json)
     {
         var now = DateTimeOffset.UtcNow;
-        DateTimeOffset? completedAt = IsTerminal(snapshot.State)
-            ? snapshot.CompletedAt ?? now
-            : null;
-
-        var parameters = new DynamicParameters();
-        parameters.Add("session_id", session.SessionId, DbType.String);
-        parameters.Add("linked_id", snapshot.LinkedId, DbType.String);
-        parameters.Add("server_id", snapshot.ServerId, DbType.String);
-        parameters.Add("state", (short)snapshot.State, DbType.Int16);
-        parameters.Add("direction", (short)snapshot.Direction, DbType.Int16);
-        parameters.Add("created_at", snapshot.CreatedAt, DbType.DateTimeOffset);
-        parameters.Add("updated_at", now, DbType.DateTimeOffset);
-        parameters.Add("completed_at", completedAt, DbType.DateTimeOffset);
-        // Dapper routes NpgsqlDbType via a typed parameter
-        parameters.Add("snapshot", new JsonbParameter(json));
-        return parameters;
+        DateTimeOffset? completedAt = IsTerminal(snapshot.State) ? snapshot.CompletedAt ?? now : null;
+        p.Add(new NpgsqlParameter("session_id", session.SessionId));
+        p.Add(new NpgsqlParameter("linked_id", (object?)snapshot.LinkedId ?? DBNull.Value));
+        p.Add(new NpgsqlParameter("server_id", (object?)snapshot.ServerId ?? DBNull.Value));
+        p.Add(new NpgsqlParameter("state", (short)snapshot.State));
+        p.Add(new NpgsqlParameter("direction", (short)snapshot.Direction));
+        p.Add(new NpgsqlParameter("created_at", snapshot.CreatedAt));
+        p.Add(new NpgsqlParameter("updated_at", now));
+        p.Add(new NpgsqlParameter("completed_at", (object?)completedAt ?? DBNull.Value));
+        p.Add(new NpgsqlParameter("snapshot", NpgsqlDbType.Jsonb) { Value = json });
     }
 
     /// <inheritdoc />
@@ -127,14 +121,10 @@ public sealed class PostgresSessionStore : SessionStoreBase
     {
         ct.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(session);
-
         var snapshot = CallSessionSnapshot.FromSession(session);
         var json = Serialize(snapshot);
-
-        await using var conn = await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
-        var parameters = BuildSaveParameters(session, snapshot, json);
-        await conn.ExecuteAsync(new CommandDefinition(
-            _upsertSql, parameters, cancellationToken: ct)).ConfigureAwait(false);
+        await _dataSource.ExecuteAsync(_upsertSql,
+            p => BindSaveParameters(p, session, snapshot, json), ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -142,10 +132,9 @@ public sealed class PostgresSessionStore : SessionStoreBase
     {
         ct.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(sessionId);
-
-        await using var conn = await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
-        var json = await conn.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(
-            _getByIdSql, new { id = sessionId }, cancellationToken: ct)).ConfigureAwait(false);
+        var json = await _dataSource.QuerySingleOrDefaultAsync(_getByIdSql,
+            p => p.Add(new NpgsqlParameter("id", sessionId)),
+            static r => r.GetStringOrNull("snapshot"), ct).ConfigureAwait(false);
         return Deserialize(json)?.ToSession();
     }
 
@@ -154,10 +143,9 @@ public sealed class PostgresSessionStore : SessionStoreBase
     {
         ct.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(linkedId);
-
-        await using var conn = await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
-        var json = await conn.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(
-            _getByLinkedIdSql, new { linked = linkedId }, cancellationToken: ct)).ConfigureAwait(false);
+        var json = await _dataSource.QuerySingleOrDefaultAsync(_getByLinkedIdSql,
+            p => p.Add(new NpgsqlParameter("linked", linkedId)),
+            static r => r.GetStringOrNull("snapshot"), ct).ConfigureAwait(false);
         return Deserialize(json)?.ToSession();
     }
 
@@ -165,17 +153,13 @@ public sealed class PostgresSessionStore : SessionStoreBase
     public override async ValueTask<IEnumerable<CallSession>> GetActiveAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-
-        await using var conn = await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
-        var rows = await conn.QueryAsync<string>(new CommandDefinition(
-            _getActiveSql, cancellationToken: ct)).ConfigureAwait(false);
-
+        var jsons = await _dataSource.QueryListAsync(_getActiveSql,
+            static _ => { }, static r => r.GetStringOrNull("snapshot"), ct).ConfigureAwait(false);
         var sessions = new List<CallSession>();
-        foreach (var json in rows)
+        foreach (var json in jsons)
         {
             var snapshot = Deserialize(json);
-            if (snapshot is not null)
-                sessions.Add(snapshot.ToSession());
+            if (snapshot is not null) sessions.Add(snapshot.ToSession());
         }
         return sessions;
     }
@@ -185,10 +169,8 @@ public sealed class PostgresSessionStore : SessionStoreBase
     {
         ct.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(sessionId);
-
-        await using var conn = await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
-        await conn.ExecuteAsync(new CommandDefinition(
-            _deleteSql, new { id = sessionId }, cancellationToken: ct)).ConfigureAwait(false);
+        await _dataSource.ExecuteAsync(_deleteSql,
+            p => p.Add(new NpgsqlParameter("id", sessionId)), ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -197,10 +179,8 @@ public sealed class PostgresSessionStore : SessionStoreBase
         ct.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(sessions);
         if (sessions.Count == 0) return;
-
         await using var conn = await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
         await using var tx = await conn.BeginTransactionAsync(ct).ConfigureAwait(false);
-
         try
         {
             foreach (var session in sessions)
@@ -208,37 +188,15 @@ public sealed class PostgresSessionStore : SessionStoreBase
                 ct.ThrowIfCancellationRequested();
                 var snapshot = CallSessionSnapshot.FromSession(session);
                 var json = Serialize(snapshot);
-                var parameters = BuildSaveParameters(session, snapshot, json);
-                await conn.ExecuteAsync(new CommandDefinition(
-                    _upsertSql, parameters, transaction: tx, cancellationToken: ct)).ConfigureAwait(false);
+                await conn.ExecuteAsync(_upsertSql,
+                    p => BindSaveParameters(p, session, snapshot, json), tx, ct).ConfigureAwait(false);
             }
-
             await tx.CommitAsync(ct).ConfigureAwait(false);
         }
         catch
         {
             await tx.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
             throw;
-        }
-    }
-
-    /// <summary>
-    /// Wraps a JSON string as a JSONB Npgsql parameter so Dapper routes it with
-    /// <see cref="NpgsqlDbType.Jsonb"/> instead of plain text, giving Postgres the
-    /// JSONB representation directly.
-    /// </summary>
-    private sealed class JsonbParameter(string json) : SqlMapper.ICustomQueryParameter
-    {
-        private readonly string _json = json;
-
-        public void AddParameter(IDbCommand command, string name)
-        {
-            ArgumentNullException.ThrowIfNull(command);
-            var parameter = new NpgsqlParameter(name, NpgsqlDbType.Jsonb)
-            {
-                Value = _json,
-            };
-            command.Parameters.Add(parameter);
         }
     }
 }

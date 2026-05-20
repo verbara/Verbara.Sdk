@@ -2,14 +2,6 @@
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
-    <!-- Required so Dapper.AOT's [InterceptsLocation(...)] attributes are honored by Roslyn. -->
-    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);Dapper.AOT</InterceptorsPreviewNamespaces>
-    <!-- IL2026/IL3050 are false positives when Dapper.AOT interceptors replace the call sites:
-         the analyzer sees the original stub method symbol (annotated [RequiresXxx]) but the
-         generated interceptor takes over at runtime. Verified via inspecting the emitted
-         Dapper.AOT interceptor file under obj/generated. Same scope marker as the Sessions.Postgres
-         project — drop once analyzer learns to track interceptor replacement. -->
-    <NoWarn>$(NoWarn);IL2026;IL3050</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,15 +18,8 @@
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Testcontainers" />
     <PackageReference Include="Npgsql" />
-    <!-- Dapper comes transitively via ProjectReference to Verbara.Sdk.Sessions.Postgres
-         which now resolves to Verbara.Sdk.Dapper.Stubs (ADR-0022 Phase D canary).
-         The test fixture uses `conn.ExecuteAsync(sql)` simple-shape calls, which ARE
-         intercepted by Dapper.AOT — so the test path itself is AOT-safe. -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Options" />
-    <!-- Dapper.AOT analyzer + interceptor generator needed locally so this assembly's
-         Dapper call sites in PostgresFixture.cs get intercepted (simple-shape calls). -->
-    <PackageReference Include="Dapper.AOT" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

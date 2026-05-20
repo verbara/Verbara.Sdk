@@ -1,4 +1,3 @@
-using Dapper;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using Npgsql;
@@ -53,7 +52,8 @@ public sealed class PostgresFixture : IAsyncLifetime
         // Retry the first real connection — CI runners sometimes reset the TCP stream
         // within ~100 ms of pg_isready reporting success.
         await using var conn = await OpenWithRetryAsync(_dataSource, attempts: 10, delay: TimeSpan.FromMilliseconds(500));
-        await conn.ExecuteAsync(migrationSql);
+        await using var cmd = new NpgsqlCommand(migrationSql, conn);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     private static async Task<NpgsqlConnection> OpenWithRetryAsync(NpgsqlDataSource dataSource, int attempts, TimeSpan delay)
@@ -88,7 +88,8 @@ public sealed class PostgresFixture : IAsyncLifetime
     public async Task FlushAsync()
     {
         await using var conn = await DataSource.OpenConnectionAsync();
-        await conn.ExecuteAsync("TRUNCATE asterisk_call_sessions");
+        await using var cmd = new NpgsqlCommand("TRUNCATE asterisk_call_sessions", conn);
+        await cmd.ExecuteNonQueryAsync();
     }
 }
 

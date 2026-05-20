@@ -36,6 +36,7 @@
   <!-- Database dependencies -->
   <ItemGroup>
     <PackageVersion Include="Npgsql" Version="10.0.2" />
+    <PackageVersion Include="Verbara.Sdk.Data.Npgsql" Version="2.1.2" />
     <PackageVersion Include="Verbara.Sdk.Dapper.Stubs" Version="2.1.72-aotstub.1" />
     <PackageVersion Include="Dapper.AOT" Version="1.0.52" />
   </ItemGroup>
