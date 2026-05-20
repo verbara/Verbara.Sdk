@@ -1,7 +1,6 @@
 namespace Verbara.Sdk.FunctionalTests.Infrastructure.Fixtures;
 
 using Verbara.Sdk.TestInfrastructure.Stacks;
-using Dapper;
 using Npgsql;
 
 /// <summary>
@@ -67,7 +66,8 @@ public sealed class RealtimeDbFixture : Xunit.IAsyncLifetime
         }
 
         await using var conn = await _dataSource.OpenConnectionAsync().ConfigureAwait(false);
-        await conn.ExecuteAsync("SELECT 1").ConfigureAwait(false);
+        await using var cmd = new NpgsqlCommand("SELECT 1", conn);
+        await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     public async Task DisposeAsync()
@@ -82,15 +82,30 @@ public sealed class RealtimeDbFixture : Xunit.IAsyncLifetime
     public async Task CleanupTestEndpointAsync(string endpointId)
     {
         await using var conn = await DataSource.OpenConnectionAsync().ConfigureAwait(false);
-        await conn.ExecuteAsync("DELETE FROM ps_endpoints WHERE id = @Id", new { Id = endpointId }).ConfigureAwait(false);
-        await conn.ExecuteAsync("DELETE FROM ps_auths WHERE id = @Id", new { Id = endpointId }).ConfigureAwait(false);
-        await conn.ExecuteAsync("DELETE FROM ps_aors WHERE id = @Id", new { Id = endpointId }).ConfigureAwait(false);
+
+        await using var cmd1 = new NpgsqlCommand("DELETE FROM ps_endpoints WHERE id = $1", conn);
+        cmd1.Parameters.Add(new NpgsqlParameter { Value = endpointId });
+        await cmd1.ExecuteNonQueryAsync().ConfigureAwait(false);
+
+        await using var cmd2 = new NpgsqlCommand("DELETE FROM ps_auths WHERE id = $1", conn);
+        cmd2.Parameters.Add(new NpgsqlParameter { Value = endpointId });
+        await cmd2.ExecuteNonQueryAsync().ConfigureAwait(false);
+
+        await using var cmd3 = new NpgsqlCommand("DELETE FROM ps_aors WHERE id = $1", conn);
+        cmd3.Parameters.Add(new NpgsqlParameter { Value = endpointId });
+        await cmd3.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
     public async Task CleanupTestQueueAsync(string queueName)
     {
         await using var conn = await DataSource.OpenConnectionAsync().ConfigureAwait(false);
-        await conn.ExecuteAsync("DELETE FROM queue_members WHERE queue_name = @Name", new { Name = queueName }).ConfigureAwait(false);
-        await conn.ExecuteAsync("DELETE FROM queue_table WHERE name = @Name", new { Name = queueName }).ConfigureAwait(false);
+
+        await using var cmd1 = new NpgsqlCommand("DELETE FROM queue_members WHERE queue_name = $1", conn);
+        cmd1.Parameters.Add(new NpgsqlParameter { Value = queueName });
+        await cmd1.ExecuteNonQueryAsync().ConfigureAwait(false);
+
+        await using var cmd2 = new NpgsqlCommand("DELETE FROM queue_table WHERE name = $1", conn);
+        cmd2.Parameters.Add(new NpgsqlParameter { Value = queueName });
+        await cmd2.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 }

@@ -24,7 +24,6 @@
     <PackageReference Include="Testcontainers" />
     <PackageReference Include="StackExchange.Redis" />
     <PackageReference Include="Npgsql" />
-    <PackageReference Include="Dapper" />
   </ItemGroup>
 
 </Project>

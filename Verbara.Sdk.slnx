@@ -33,6 +33,7 @@
     <Project Path="src/Verbara.Sdk.Ari/Verbara.Sdk.Ari.csproj" />
     <Project Path="src/Verbara.Sdk.Audio/Verbara.Sdk.Audio.csproj" />
     <Project Path="src/Verbara.Sdk.Config/Verbara.Sdk.Config.csproj" />
+    <Project Path="src/Verbara.Sdk.Dapper.Stubs/Verbara.Sdk.Dapper.Stubs.csproj" />
     <Project Path="src/Verbara.Sdk.Live/Verbara.Sdk.Live.csproj" />
     <Project Path="src/Verbara.Sdk.Activities/Verbara.Sdk.Activities.csproj" />
     <Project Path="src/Verbara.Sdk.VoiceAi.AudioSocket/Verbara.Sdk.VoiceAi.AudioSocket.csproj" />
@@ -42,6 +43,7 @@
     <Project Path="src/Verbara.Sdk.VoiceAi.Tts/Verbara.Sdk.VoiceAi.Tts.csproj" />
     <Project Path="src/Verbara.Sdk.VoiceAi.OpenAiRealtime/Verbara.Sdk.VoiceAi.OpenAiRealtime.csproj" />
     <Project Path="src/Verbara.Sdk/Verbara.Sdk.csproj" />
+    <Project Path="src/Verbara.Sdk.Data.Npgsql/Verbara.Sdk.Data.Npgsql.csproj" />
     <Project Path="src/Verbara.Sdk.Hosting/Verbara.Sdk.Hosting.csproj" />
     <Project Path="src/Verbara.Sdk.Sessions/Verbara.Sdk.Sessions.csproj" />
     <Project Path="src/Verbara.Sdk.Sessions.Redis/Verbara.Sdk.Sessions.Redis.csproj" />
@@ -59,11 +61,13 @@
     <Project Path="Tests/Verbara.Sdk.Agi.Tests/Verbara.Sdk.Agi.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Resilience.Tests/Verbara.Sdk.Resilience.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Cluster.Primitives.Tests/Verbara.Sdk.Cluster.Primitives.Tests.csproj" />
+    <Project Path="Tests/Verbara.Sdk.Dapper.Stubs.Tests/Verbara.Sdk.Dapper.Stubs.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Ami.Tests/Verbara.Sdk.Ami.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Ari.Tests/Verbara.Sdk.Ari.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Audio.Tests/Verbara.Sdk.Audio.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Benchmarks/Verbara.Sdk.Benchmarks.csproj" />
     <Project Path="Tests/Verbara.Sdk.Config.Tests/Verbara.Sdk.Config.Tests.csproj" />
+    <Project Path="Tests/Verbara.Sdk.Data.Npgsql.Tests/Verbara.Sdk.Data.Npgsql.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTests.csproj" />
     <Project Path="Tests/Verbara.Sdk.IntegrationTests/Verbara.Sdk.IntegrationTests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Live.Tests/Verbara.Sdk.Live.Tests.csproj" />

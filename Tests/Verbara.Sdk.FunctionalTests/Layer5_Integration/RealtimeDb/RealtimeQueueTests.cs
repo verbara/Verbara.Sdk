@@ -6,10 +6,10 @@ using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Ami.Transport;
 using Verbara.Sdk.FunctionalTests.Infrastructure.Attributes;
 using Verbara.Sdk.FunctionalTests.Infrastructure.Fixtures;
-using Dapper;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Npgsql;
 
 /// <summary>
 /// Tests that Asterisk realtime queues and members configured via PostgreSQL
@@ -33,12 +33,16 @@ public sealed class RealtimeQueueTests : FunctionalTestBase
         try
         {
             await using var conn = await _fixture.DataSource.OpenConnectionAsync();
-            await conn.ExecuteAsync(
-                "INSERT INTO queue_table (name, strategy, timeout) VALUES (@Name, 'ringall', 15)",
-                new { Name = queueName });
-            await conn.ExecuteAsync(
-                "INSERT INTO queue_members (queue_name, interface, membername, penalty, paused) VALUES (@Queue, 'Local/100@default', 'TestAgent', 0, 0)",
-                new { Queue = queueName });
+
+            await using var insertQueue = new NpgsqlCommand(
+                "INSERT INTO queue_table (name, strategy, timeout) VALUES ($1, 'ringall', 15)", conn);
+            insertQueue.Parameters.Add(new NpgsqlParameter { Value = queueName });
+            await insertQueue.ExecuteNonQueryAsync();
+
+            await using var insertMember = new NpgsqlCommand(
+                "INSERT INTO queue_members (queue_name, interface, membername, penalty, paused) VALUES ($1, 'Local/100@default', 'TestAgent', 0, 0)", conn);
+            insertMember.Parameters.Add(new NpgsqlParameter { Value = queueName });
+            await insertMember.ExecuteNonQueryAsync();
 
             await using var ami = CreateRealtimeAmiConnection();
             await ami.ConnectAsync();
@@ -65,9 +69,11 @@ public sealed class RealtimeQueueTests : FunctionalTestBase
         try
         {
             await using var conn = await _fixture.DataSource.OpenConnectionAsync();
-            await conn.ExecuteAsync(
-                "INSERT INTO queue_table (name, strategy, timeout) VALUES (@Name, 'ringall', 15)",
-                new { Name = queueName });
+
+            await using var insertQueue = new NpgsqlCommand(
+                "INSERT INTO queue_table (name, strategy, timeout) VALUES ($1, 'ringall', 15)", conn);
+            insertQueue.Parameters.Add(new NpgsqlParameter { Value = queueName });
+            await insertQueue.ExecuteNonQueryAsync();
 
             await using var ami = CreateRealtimeAmiConnection();
             await ami.ConnectAsync();
@@ -80,9 +86,10 @@ public sealed class RealtimeQueueTests : FunctionalTestBase
             before.Response.Should().Be("Success");
 
             // Add member and reload
-            await conn.ExecuteAsync(
-                "INSERT INTO queue_members (queue_name, interface, membername, penalty, paused) VALUES (@Queue, 'Local/200@default', 'DynamicAgent', 0, 0)",
-                new { Queue = queueName });
+            await using var insertMember = new NpgsqlCommand(
+                "INSERT INTO queue_members (queue_name, interface, membername, penalty, paused) VALUES ($1, 'Local/200@default', 'DynamicAgent', 0, 0)", conn);
+            insertMember.Parameters.Add(new NpgsqlParameter { Value = queueName });
+            await insertMember.ExecuteNonQueryAsync();
             await ami.SendActionAsync(new CommandAction { Command = "queue reload all" });
             await Task.Delay(TimeSpan.FromSeconds(3));
 
@@ -105,12 +112,16 @@ public sealed class RealtimeQueueTests : FunctionalTestBase
         try
         {
             await using var conn = await _fixture.DataSource.OpenConnectionAsync();
-            await conn.ExecuteAsync(
-                "INSERT INTO queue_table (name, strategy, timeout) VALUES (@Name, 'ringall', 15)",
-                new { Name = queueName });
-            await conn.ExecuteAsync(
-                "INSERT INTO queue_members (queue_name, interface, membername, penalty, paused) VALUES (@Queue, 'Local/300@default', 'RemovableAgent', 0, 0)",
-                new { Queue = queueName });
+
+            await using var insertQueue = new NpgsqlCommand(
+                "INSERT INTO queue_table (name, strategy, timeout) VALUES ($1, 'ringall', 15)", conn);
+            insertQueue.Parameters.Add(new NpgsqlParameter { Value = queueName });
+            await insertQueue.ExecuteNonQueryAsync();
+
+            await using var insertMember = new NpgsqlCommand(
+                "INSERT INTO queue_members (queue_name, interface, membername, penalty, paused) VALUES ($1, 'Local/300@default', 'RemovableAgent', 0, 0)", conn);
+            insertMember.Parameters.Add(new NpgsqlParameter { Value = queueName });
+            await insertMember.ExecuteNonQueryAsync();
 
             await using var ami = CreateRealtimeAmiConnection();
             await ami.ConnectAsync();
@@ -123,9 +134,10 @@ public sealed class RealtimeQueueTests : FunctionalTestBase
             before.Response.Should().Be("Success", "queue must exist before member removal");
 
             // Remove member and reload
-            await conn.ExecuteAsync(
-                "DELETE FROM queue_members WHERE queue_name = @Queue AND interface = 'Local/300@default'",
-                new { Queue = queueName });
+            await using var deleteMember = new NpgsqlCommand(
+                "DELETE FROM queue_members WHERE queue_name = $1 AND interface = 'Local/300@default'", conn);
+            deleteMember.Parameters.Add(new NpgsqlParameter { Value = queueName });
+            await deleteMember.ExecuteNonQueryAsync();
             await ami.SendActionAsync(new CommandAction { Command = "queue reload all" });
             await Task.Delay(TimeSpan.FromSeconds(3));
 

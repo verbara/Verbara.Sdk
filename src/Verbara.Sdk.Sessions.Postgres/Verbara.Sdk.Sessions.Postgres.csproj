@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Verbara.Sdk.Sessions.Postgres - Postgres-backed SessionStoreBase for multi-instance deployments. Ships PostgresSessionStore + fluent UsePostgres(...) registration for Verbara.Sdk.Sessions. AOT-safe (source-generated JSON only, Dapper parameterized SQL).</Description>
+    <Description>Verbara.Sdk.Sessions.Postgres - Postgres-backed SessionStoreBase for multi-instance deployments. Ships PostgresSessionStore + fluent UsePostgres(...) registration for Verbara.Sdk.Sessions. AOT-safe (source-generated JSON only, raw Npgsql parameterized SQL).</Description>
     <PackageTags>asterisk;sessions;postgres;postgresql;state-store;sdk</PackageTags>
     <!-- New package - no baseline published yet; skip binary compatibility check -->
     <EnablePackageValidation>false</EnablePackageValidation>
@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="Npgsql" />
-    <PackageReference Include="Dapper" />
+    <PackageReference Include="Verbara.Sdk.Data.Npgsql" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>

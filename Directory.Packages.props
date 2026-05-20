@@ -36,7 +36,7 @@
   <!-- Database dependencies -->
   <ItemGroup>
     <PackageVersion Include="Npgsql" Version="10.0.2" />
-    <PackageVersion Include="Dapper" Version="2.1.72" />
+    <PackageVersion Include="Verbara.Sdk.Data.Npgsql" Version="2.1.2" />
   </ItemGroup>
 
   <!-- Redis (spike validation) -->
@@ -107,6 +107,7 @@
     <PackageVersion Include="coverlet.collector" Version="10.0.0" />
     <PackageVersion Include="Testcontainers" Version="4.11.0" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.51.0" />
+    <PackageVersion Include="System.Reflection.MetadataLoadContext" Version="10.0.0" />
   </ItemGroup>
 
   <!-- Benchmark dependencies -->

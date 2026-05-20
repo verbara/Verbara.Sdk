@@ -1,5 +1,5 @@
 // Verbara.Sdk - Sessions.Postgres Example
-// Demonstrates: pluggable session backend with Postgres (Npgsql + Dapper + JSONB).
+// Demonstrates: pluggable session backend with Postgres (Npgsql + JSONB).
 //
 // Prereq: a running Postgres with a database for the demo. Quick start:
 //     docker run --rm -p 5432:5432 -e POSTGRES_PASSWORD=postgres \
@@ -14,7 +14,6 @@ using Verbara.Sdk.Hosting;
 using Verbara.Sdk.Sessions;
 using Verbara.Sdk.Sessions.Extensions;
 using Verbara.Sdk.Sessions.Postgres;
-using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -44,7 +43,8 @@ const string migrationSql = """
 await using (var conn = new NpgsqlConnection(connString))
 {
     await conn.OpenAsync();
-    await conn.ExecuteAsync(migrationSql);
+    await using var migCmd = new NpgsqlCommand(migrationSql, conn);
+    await migCmd.ExecuteNonQueryAsync();
     Console.WriteLine("Migration applied (idempotent).");
 }
 
@@ -64,7 +64,8 @@ Console.WriteLine();
 await using (var conn = new NpgsqlConnection(connString))
 {
     await conn.OpenAsync();
-    await conn.ExecuteAsync("TRUNCATE asterisk_call_sessions");
+    await using var truncCmd = new NpgsqlCommand("TRUNCATE asterisk_call_sessions", conn);
+    await truncCmd.ExecuteNonQueryAsync();
 }
 
 // 4. Save three sample sessions.
