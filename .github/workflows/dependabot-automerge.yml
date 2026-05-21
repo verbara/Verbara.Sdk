@@ -28,7 +28,11 @@ jobs:
             steps.meta.outputs.package-ecosystem == 'github_actions' ||
             steps.meta.outputs.dependency-group == 'analyzers'
           )
-        run: gh pr merge --auto --squash "$PR_URL"
+        # No merge-method flag: with the merge queue active on main, the queue
+        # ruleset dictates the strategy (SQUASH). Passing --squash here is rejected
+        # ("The merge strategy for main is set by the merge queue") and silently
+        # fails to enqueue the PR. --auto simply adds it to the queue when ready.
+        run: gh pr merge --auto "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
