@@ -1,10 +1,13 @@
 name: CodeQL
 
 on:
+  # push:[main] is kept (unlike ci.yml) so the default-branch security baseline
+  # stays fresh — the merge_group ref is not main, so it cannot maintain it.
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  merge_group:
   schedule:
     # Weekly Sundays 06:00 UTC (keeps baseline fresh without pressuring weekday CI).
     - cron: "0 6 * * 0"
