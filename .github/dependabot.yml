@@ -12,6 +12,14 @@ updates:
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
+    # Wait after a release before opening a version-update PR, so freshly
+    # published (potentially compromised) packages settle first. Does not
+    # delay security updates — those still open as soon as an alert lands.
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
     ignore:
       # FluentAssertions 8.x switched to a commercial license — incompatible
       # with the SDK's MIT licensing. Pin to 7.x until a license strategy is decided.
@@ -45,6 +53,12 @@ updates:
           - "Meziantou.*"
           - "IDisposableAnalyzers"
           - "Microsoft.VisualStudio.Threading.Analyzers"
+      # Collapse all CVE-driven security updates into a single PR. Groups
+      # default to version-updates only, so this needs an explicit applies-to.
+      nuget-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
 
   # GitHub Actions used by workflows under .github/workflows/
   - package-ecosystem: "github-actions"
@@ -57,3 +71,5 @@ updates:
       - "github-actions"
     commit-message:
       prefix: "chore(ci)"
+    cooldown:
+      default-days: 7
