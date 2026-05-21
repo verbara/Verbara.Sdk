@@ -1,10 +1,13 @@
 name: CI
 
+# PR runs give fast feedback; the merge queue (merge_group) is the authoritative
+# gate that tests the real merge result before landing on main. The post-merge
+# push run is intentionally dropped — merge_group already validated that exact
+# tree, so re-running on push:[main] would be pure redundancy.
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  merge_group:
 
 jobs:
   unit-tests:
@@ -59,6 +62,9 @@ jobs:
     name: Functional Tests (Testcontainers)
     runs-on: ubuntu-latest
     needs: unit-tests
+    # Not a required check and ~19 min long: keep it on PRs for coverage, but skip
+    # it in the merge queue so the queue stays fast (gated only on the 4 required jobs).
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
         with:
