@@ -4,6 +4,7 @@
 - **Date:** 2026-04-25
 - **Deciders:** Harold Reina
 - **Renumbered:** 0031 → 0035 on 2026-04-26 (administrative — original number collided with prior Proposed ADR-0031 "Domain vs Integration events" added 2026-04-20 in the Event Model v2 batch). **Decision content unchanged.**
+- **Canonical HEAD corrected:** 2026-05-21 (administrative — the original HEAD `9e6bb13` cited below no longer exists in any clone, and the branch had been lost from `origin`. The surviving reference is `origin/feat/calling-permissions` at HEAD `85e431d1` — the same 14 `feat(cos)` commits, content-identical. The branch was re-pushed to `origin` on 2026-05-21 to restore the "branch retained, not deleted" guarantee. The in-body `9e6bb13` references are kept as original historical record. **Decision content unchanged.**)
 - **Related:**
   - R5 release train spec §344-356 "Branch `feat/calling-permissions` decision gate" (`Asterisk.Platform/docs/plans/active/2026-04-22-r5-production-readiness-release-train.md`)
   - Post-ship R5.1 triage D-FORCE-1 (`Asterisk.Platform/docs/plans/active/2026-04-25-r5.1-post-ship-triage.md`)
