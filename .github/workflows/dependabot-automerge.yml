@@ -35,4 +35,11 @@ jobs:
         run: gh pr merge --auto "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use AUTOMERGE_PAT instead of GITHUB_TOKEN so the merge_group event
+          # this enqueue creates is attributed to a non-bot identity. GitHub's
+          # anti-recursion rule blocks workflows triggered by GITHUB_TOKEN from
+          # triggering further workflows, which means a queue enqueue done with
+          # GITHUB_TOKEN leaves the merge_group CI/CodeQL checks never starting
+          # and the PR stuck. See github/community#70310 and the 2026-05-22
+          # session that diagnosed this on PR #19/#20.
+          GH_TOKEN: ${{ secrets.AUTOMERGE_PAT }}
