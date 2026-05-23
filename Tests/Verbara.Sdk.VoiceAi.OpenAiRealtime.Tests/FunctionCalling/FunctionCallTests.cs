@@ -192,8 +192,10 @@ public sealed class FunctionCallTests
         await cts.CancelAsync();
         await client.SendHangupAsync();
 
-        // Should complete without throwing
         try { await bridgeTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch (OperationCanceledException) { }
+
+        bridgeTask.Status.Should().BeOneOf(TaskStatus.RanToCompletion, TaskStatus.Canceled);
+        bridgeTask.Exception.Should().BeNull();
 
         await client.DisposeAsync();
         await audioServer.StopAsync(CancellationToken.None);

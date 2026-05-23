@@ -39,8 +39,9 @@ public sealed class CallSessionManagerTests : IAsyncDisposable
     [Fact]
     public void AttachToServer_ShouldAcceptServer()
     {
-        _sut.AttachToServer(_server, "srv-1");
-        // No throw = success
+        Action act = () => _sut.AttachToServer(_server, "srv-1");
+
+        act.Should().NotThrow();
     }
 
     [Fact]

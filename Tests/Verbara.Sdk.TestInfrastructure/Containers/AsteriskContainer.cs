@@ -7,8 +7,14 @@ using DotNet.Testcontainers.Networks;
 namespace Verbara.Sdk.TestInfrastructure.Containers;
 
 /// <summary>
-/// Wraps the unified Asterisk 22 container running in Realtime mode
+/// Wraps the unified Asterisk container running in Realtime mode
 /// (PostgreSQL-backed PJSIP). Requires a shared network with PostgresContainer.
+///
+/// Asterisk version is controlled by the <c>ASTERISK_VERSION</c> environment variable
+/// (defaults to <c>22</c>). CI matrices set this per job to validate the SDK against
+/// both Asterisk 22 LTS and Asterisk 23 Standard. <c>CODEC_OPUS_VERSION</c> defaults
+/// to <c>{ASTERISK_VERSION}.0_1.3.0</c>; override only if a non-default Digium codec
+/// build is required.
 /// </summary>
 public sealed class AsteriskContainer : IAsyncDisposable
 {
@@ -54,9 +60,15 @@ public sealed class AsteriskContainer : IAsyncDisposable
         {
             if (_cachedImage is not null) return _cachedImage;
 
+            var asteriskVersion = Environment.GetEnvironmentVariable("ASTERISK_VERSION") ?? "22";
+            var codecOpusVersion = Environment.GetEnvironmentVariable("CODEC_OPUS_VERSION")
+                ?? $"{asteriskVersion}.0_1.3.0";
+
             var image = new ImageFromDockerfileBuilder()
                 .WithDockerfile("Dockerfile.asterisk")
                 .WithDockerfileDirectory(DockerPaths.DockerDir)
+                .WithBuildArgument("ASTERISK_VERSION", asteriskVersion)
+                .WithBuildArgument("CODEC_OPUS_VERSION", codecOpusVersion)
                 .Build();
 
             await image.CreateAsync(ct).ConfigureAwait(false);
