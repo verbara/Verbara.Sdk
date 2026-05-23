@@ -1,0 +1,5 @@
+#nullable enable
+Verbara.Sdk.Cluster.Postgres.DependencyInjection.ClusterPostgresServiceCollectionExtensions
+static Verbara.Sdk.Cluster.Postgres.DependencyInjection.ClusterPostgresServiceCollectionExtensions.AddPostgresDistributedLock(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! connectionStringName = "Cluster") -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Verbara.Sdk.Cluster.Postgres.Migrations.MigrationRunner
+static Verbara.Sdk.Cluster.Postgres.Migrations.MigrationRunner.EnsureSchemaAsync(Npgsql.NpgsqlDataSource! dataSource, Microsoft.Extensions.Logging.ILogger! logger, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
