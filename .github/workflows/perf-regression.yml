@@ -1,0 +1,75 @@
+name: Perf Regression
+
+# Guard #4 of Fase 1 — pins the marketing performance numbers cited in README.md
+# "Performance" section against a runnable BenchmarkDotNet suite.
+#
+# Why scheduled, not per-PR:
+#   BenchmarkDotNet runs take ~3-5 min per benchmark for stable numbers
+#   (warmup + multiple iterations). Five hot-path benchmarks = ~20-25 min per
+#   matrix dimension. Per-PR cost would add that to every queue entry — not
+#   worth the slowdown for a number that drifts slowly.
+#
+#   Instead: weekly scheduled run + downloadable JSON artifact. Operators
+#   compare manually for now; a regression-detection gate that diffs against
+#   `Tests/Verbara.Sdk.Benchmarks/baseline.json` is a follow-up issue.
+#
+# Manual run: gh workflow run "Perf Regression"
+
+on:
+  schedule:
+    # Sundays 04:00 UTC — quietest weekly slot for GitHub Actions hosted runners
+    # so timing measurements suffer the least neighbor-VM noise.
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    name: Run BenchmarkDotNet hot-paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build benchmarks (Release)
+        run: dotnet build Tests/Verbara.Sdk.Benchmarks/ -c Release --nologo
+
+      # Each `--filter` argument runs ONE benchmark class. We run the five
+      # README-cited hot paths in series so a single failure (timeout, missing
+      # type) doesn't kill the whole job before the rest produce data.
+      #
+      # Filters use BenchmarkDotNet glob syntax: '*' is wildcard. Add new hot
+      # paths here when the README adds a new "Performance" table row.
+      - name: AMI parse + dispatch
+        run: |
+          cd Tests/Verbara.Sdk.Benchmarks
+          dotnet run -c Release --no-build -- --filter '*AmiProtocolReader*' --exporters json --artifacts ../../artifacts/ami || true
+      - name: ARI JSON deserialize Channel
+        run: |
+          cd Tests/Verbara.Sdk.Benchmarks
+          dotnet run -c Release --no-build -- --filter '*AriJson*' --exporters json --artifacts ../../artifacts/ari-json || true
+      - name: ARI parse StasisStart event
+        run: |
+          cd Tests/Verbara.Sdk.Benchmarks
+          dotnet run -c Release --no-build -- --filter '*AriParseEvent*' --exporters json --artifacts ../../artifacts/ari-event || true
+      - name: ChannelManager.GetById
+        run: |
+          cd Tests/Verbara.Sdk.Benchmarks
+          dotnet run -c Release --no-build -- --filter '*ChannelManager*' --exporters json --artifacts ../../artifacts/channel-manager || true
+      - name: Observer dispatch
+        run: |
+          cd Tests/Verbara.Sdk.Benchmarks
+          dotnet run -c Release --no-build -- --filter '*ObserverDispatch*' --exporters json --artifacts ../../artifacts/observer || true
+
+      - name: Upload BenchmarkDotNet JSON reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-reports-${{ github.run_id }}
+          path: artifacts/**/results/*.json
+          if-no-files-found: warn
+          retention-days: 90

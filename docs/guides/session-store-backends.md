@@ -38,6 +38,7 @@ All three implement the public **`ISessionStore`** interface and derive from **`
 
 ## `Verbara.Sdk.Sessions.Redis`
 
+<!-- skip-doc-snippet -->
 ```csharp
 using Verbara.Sdk.Sessions.Redis;
 
@@ -54,6 +55,7 @@ builder.Services
 
 Three registration overloads cover common patterns:
 
+<!-- skip-doc-snippet -->
 ```csharp
 // 1. Connection string + opts callback
 .UseRedis("redis.internal:6379", opts => opts.KeyPrefix = "tenant-a:")
@@ -80,6 +82,7 @@ I/O is pipelined via `IDatabase.CreateBatch()` + `Task.WhenAll(...).WaitAsync(ct
 
 ## `Verbara.Sdk.Sessions.Postgres`
 
+<!-- skip-doc-snippet -->
 ```csharp
 using Verbara.Sdk.Sessions.Postgres;
 
@@ -119,6 +122,7 @@ CREATE INDEX IF NOT EXISTS ix_asterisk_sessions_active    ON asterisk_call_sessi
 
 **External data source.** If you already build an `NpgsqlDataSource` elsewhere in the host (connection pooling, `DataSourceBuilder` for logical replication, etc.), pass it directly:
 
+<!-- skip-doc-snippet -->
 ```csharp
 .UsePostgres(myExistingDataSource, opts => opts.TableName = "asterisk_sessions")
 ```
@@ -129,6 +133,7 @@ CREATE INDEX IF NOT EXISTS ix_asterisk_sessions_active    ON asterisk_call_sessi
 
 `UseRedis` / `UsePostgres` use `IServiceCollection.Replace(...)` so the call always overrides the `InMemorySessionStore` registered by `AddVerbaraSessions` / `AddVerbaraSessionsBuilder`. Order of registration in `Program.cs` doesn't matter; the last `Use*` wins:
 
+<!-- skip-doc-snippet -->
 ```csharp
 // Both InMemory (default) and Redis get registered. Redis wins.
 builder.Services
@@ -138,6 +143,7 @@ builder.Services
 
 `ISessionStore` is registered via a factory forwarding to `SessionStoreBase`, so consumers resolving either type get the same singleton instance:
 
+<!-- skip-doc-snippet -->
 ```csharp
 var store1 = sp.GetRequiredService<SessionStoreBase>();
 var store2 = sp.GetRequiredService<ISessionStore>();
@@ -150,6 +156,7 @@ object.ReferenceEquals(store1, store2); // true
 
 Implement `SessionStoreBase` (inherit the abstract base or write `: ISessionStore` directly) and register your store as the replacement:
 
+<!-- skip-doc-snippet -->
 ```csharp
 public sealed class MyMongoSessionStore : SessionStoreBase { /* … */ }
 

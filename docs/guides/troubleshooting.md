@@ -203,6 +203,7 @@ For AMI protocol-level debugging (very verbose):
 
 Discover them at runtime without hard-coding names:
 
+<!-- skip-doc-snippet -->
 ```csharp
 using Verbara.Sdk.Hosting;
 

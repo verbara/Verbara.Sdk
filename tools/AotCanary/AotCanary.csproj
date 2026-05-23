@@ -30,5 +30,8 @@
     <ProjectReference Include="..\..\src\Verbara.Sdk.Push.Webhooks\Verbara.Sdk.Push.Webhooks.csproj" />
     <ProjectReference Include="..\..\src\Verbara.Sdk.Resilience\Verbara.Sdk.Resilience.csproj" />
     <ProjectReference Include="..\..\src\Verbara.Sdk.Cluster.Primitives\Verbara.Sdk.Cluster.Primitives.csproj" />
+    <!-- v2.2.0+ — Dapper-replacement + Postgres cluster. Both designed AOT-clean per ADR-0022. -->
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Data.Npgsql\Verbara.Sdk.Data.Npgsql.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Cluster.Postgres\Verbara.Sdk.Cluster.Postgres.csproj" />
   </ItemGroup>
 </Project>

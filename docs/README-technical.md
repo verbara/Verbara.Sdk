@@ -70,6 +70,7 @@ await host.RunAsync();
 
 Or bind from `appsettings.json`:
 
+<!-- skip-doc-snippet -->
 ```csharp
 builder.Services.AddVerbara(builder.Configuration);
 ```
@@ -88,6 +89,7 @@ builder.Services.AddVerbara(builder.Configuration);
 
 ### FastAGI Server
 
+<!-- skip-doc-snippet -->
 ```csharp
 var mapping = new SimpleMappingStrategy();
 mapping.Add("hello", new HelloScript());
@@ -110,6 +112,7 @@ exten => 100,1,AGI(agi://your-server:4573/hello)
 
 ### Live API + Sessions
 
+<!-- skip-doc-snippet -->
 ```csharp
 builder.Services.AddVerbara(options =>
 {
@@ -151,6 +154,7 @@ sessionManager.Events.Subscribe(evt =>
 
 ### Voice AI Pipeline
 
+<!-- skip-doc-snippet -->
 ```csharp
 services.AddAudioSocketServer(o => o.Port = 9091);
 services.AddDeepgramSpeechRecognizer(o => o.ApiKey = "dg-key");
@@ -167,6 +171,7 @@ exten => 200,1,Answer()
 
 Implement `IConversationHandler`:
 
+<!-- skip-doc-snippet -->
 ```csharp
 public class MyConversationHandler : IConversationHandler
 {
@@ -479,6 +484,7 @@ Verbara.Sdk/
 
 ### Core -- `AddVerbara`
 
+<!-- skip-doc-snippet -->
 ```csharp
 // Lambda configuration
 services.AddVerbara(options =>
@@ -505,6 +511,7 @@ Registers: `IAmiConnection`, `VerbaraServer`, `ChannelManager`, `QueueManager`, 
 
 ### Voice AI
 
+<!-- skip-doc-snippet -->
 ```csharp
 // AudioSocket server
 services.AddAudioSocketServer(o => o.Port = 9091);

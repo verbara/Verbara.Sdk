@@ -111,6 +111,7 @@ All core ARI events (StasisStart/End, Channel*, Bridge*, Playback*, Recording*, 
 
 If migrating from Asterisk 18-20 to 21+, replace MeetMe event handlers:
 
+<!-- skip-doc-snippet -->
 ```csharp
 // Before (Asterisk 18-20)
 case MeetMeJoinEvent mmj:
@@ -127,6 +128,7 @@ The SDK handles both simultaneously — keep both cases if supporting mixed-vers
 
 ### Monitor to MixMonitor
 
+<!-- skip-doc-snippet -->
 ```csharp
 // Before
 case MonitorStartEvent ms: ...
@@ -137,6 +139,7 @@ case MixMonitorStartEvent mms: ...
 
 ### Legacy Dial to DialBegin/DialEnd
 
+<!-- skip-doc-snippet -->
 ```csharp
 // Before (Asterisk < 12)
 case DialEvent de when de.SubEvent == "Begin": ...

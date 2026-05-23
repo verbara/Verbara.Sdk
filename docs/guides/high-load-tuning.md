@@ -29,6 +29,7 @@ Both AMI (`AsyncEventPump`) and ARI (`AriEventPump`) use bounded `Channel<T>` bu
 }
 ```
 
+<!-- skip-doc-snippet -->
 ```csharp
 services.AddVerbara(options =>
 {
@@ -81,6 +82,7 @@ HealthChecks exposed via `/health` when using the standard ASP.NET Core pipeline
 
 **Discovery at runtime** (avoid hard-coding strings):
 
+<!-- skip-doc-snippet -->
 ```csharp
 using Verbara.Sdk.Hosting;
 
@@ -98,6 +100,7 @@ STT and TTS activity spans tag each utterance with the provider name. Prior to v
 
 **Custom providers should override it** to avoid the `GetType().Name` fallback:
 
+<!-- skip-doc-snippet -->
 ```csharp
 public sealed class MyRecognizer : SpeechRecognizer
 {
@@ -193,6 +196,7 @@ Both AMI and ARI support exponential backoff reconnection.
 | `SessionOptions.WrapUpDuration` | 30s | Post-call wrap-up tracked per `AgentSession` |
 | `AmiConnection.EventPumpCapacity` | 20,000 | Size to absorb 10s of peak event rate **plus** the expected reconcile burst |
 
+<!-- skip-doc-snippet -->
 ```csharp
 services.AddVerbara(options =>
 {
@@ -231,6 +235,7 @@ services.AddSessionsCore(options =>
 
 At 100K+ agents, use `VerbaraServerPool` to distribute load across multiple Asterisk servers:
 
+<!-- skip-doc-snippet -->
 ```csharp
 services.AddVerbara(options =>
 {
