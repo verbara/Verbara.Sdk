@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Verbara.Sdk.Cluster.Postgres - Postgres-backed IDistributedLock implementation for cluster-wide mutual exclusion. AOT-safe (raw Npgsql via Verbara.Sdk.Data.Npgsql facade, no reflection). Ships idempotent migration for the cluster_distributed_lock table.</Description>
+    <PackageTags>verbara;cluster;distributed-lock;postgres;postgresql;aot;sdk</PackageTags>
+    <!-- New package — no baseline published yet; skip binary compatibility check -->
+    <EnablePackageValidation>false</EnablePackageValidation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Verbara.Sdk.Cluster.Postgres.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Verbara.Sdk.Cluster.Primitives\Verbara.Sdk.Cluster.Primitives.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.Data.Npgsql\Verbara.Sdk.Data.Npgsql.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\V001__DistributedLockSchema.sql" />
+  </ItemGroup>
+
+</Project>
