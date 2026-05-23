@@ -4,17 +4,151 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-Post-v1.15.3 (2026-05-03) accumulating commits — will roll into the next release cut.
+_No unreleased changes._
 
-### Changed
+## [2.2.1] - 2026-05-23
 
-- **Brand transition: `Verbara.Sdk` → `Verbara Sdk`** — see [ADR-0036](docs/decisions/0036-rebrand-to-verbara.md) and [`NOTICE`](NOTICE). Avoids trademark conflict with Sangoma's Asterisk PBX product. Repository and NuGet package names will migrate to `verbara-sdk` / `Verbara.Sdk.*` in a coordinated technical track. **Existing names continue to work during the transition period** — no code changes required from consumers in this commit (just doc + brand updates). License unchanged (MIT).
-- **`Meziantou.Analyzer` 3.0.58 → 3.0.60** (build-time analyzer, patch bump via Dependabot PR #39).
-- **`dotnet-reportgenerator-globaltool` 5.5.7 → 5.5.9** (CI tool, skip 5.5.8 via Dependabot PR #40). Not shipped — dev-time only.
+**ADR-0022 Phase A.5 — `Verbara.Sdk.Cluster.Postgres`.** New Postgres-backed implementation of the cluster primitives shipped in v2.2.0 (`Verbara.Sdk.Cluster.Primitives`), built on `Verbara.Sdk.Data.Npgsql` (zero Dapper, AOT-clean).
+
+### Added — Cluster package
+
+- **`Verbara.Sdk.Cluster.Postgres`** (new) — Postgres-backed cluster primitives.
+  - `PostgresDistributedLock` — advisory-lock-backed distributed lock implementing `IDistributedLock`. Full unit coverage; integration suite uses Testcontainers (`Category=Integration`).
+  - `MigrationRunner` + embedded `V001__DistributedLockSchema.sql` for one-shot schema setup.
+  - `AddPostgresClusterPrimitives(...)` DI helper.
+
+### Changed — CI hardening
+
+- **Merge queue activated** on `main` (SQUASH, ALLGREEN, batch ≤ 5, min wait 5 min).
+- **Dependabot auto-merge** for analyzers + github-actions groups (non-major). Cooldown + grouped security updates configured.
+- LFS pulled in CI so the ONNX turn-detection model arrives as the real binary, not a pointer.
+- Fixed merge-queue recursion: dependabot auto-merge uses `AUTOMERGE_PAT` (not `GITHUB_TOKEN`) to clear GitHub's anti-recursion block on `merge_group` workflows; dropped `--squash` from the auto-merge step (queue owns the merge method).
+- Removed redundant `push:[main]` CI run; `merge_group` triggers active.
+
+### Changed — Dependency bumps
+
+- `Microsoft.ML.OnnxRuntime` 1.22.0 → 1.26.0
+- `NATS.Client.Core` 2.7.3 → 2.8.0
+- `microsoft-extensions` group — 11 packages
+- `Meziantou.Analyzer` 3.0.60 → 3.0.85
+- `Microsoft.SourceLink.GitHub` 10.0.203 → 10.0.300
+- `coverlet.collector` 10.0.0 → 10.0.1
+- `dotnet-stryker` 4.14.1 → 4.14.2
+- `dotnet-reportgenerator-globaltool` 5.5.9 → 5.5.10
+- `github/codeql-action` 4 → 4.35.5
+- `actions/dependency-review-action` 4 → 5
+- `dependabot/fetch-metadata` 2 → 3
 
 ### Documentation
 
-- **Root `README.md`** — Status block refreshed v1.15.1 → v1.15.3 cumulative (added v1.15.3 + v1.15.2 release entries that were missing); Voice AI Features bullet now reflects the v1.15.3 expansion (6 TTS providers + `tts.synthesis.ttfa_ms` metric); License section expanded with the Verbara open-core stack table and trademark note.
+- ADR-0035 — canonical HEAD reference correction.
+
+## [2.2.0] - 2026-05-20
+
+**ADR-0022 Phase D — Dapper removed from the SDK.** Verbara.Sdk + every consumer ships Native-AOT-clean with zero Dapper code paths.
+
+### Added — Data-access package
+
+- **`Verbara.Sdk.Data.Npgsql`** (new) — reflection-free Postgres data-access facade.
+  - `NpgsqlExecutor` (Dapper-parity surface: `ExecuteAsync`, `QueryAsync<T>`, `QuerySingleAsync`, `QueryFirstOrDefaultAsync`, `QuerySingleOrDefaultAsync`, `ExecuteScalarAsync<T>`).
+  - Name-based `NpgsqlDataReader` getters, hand-written `static Map(NpgsqlDataReader)` row mapping.
+  - No `DynamicMethod`, no `MakeGenericType` — clean Native AOT.
+
+### Changed — Migrations
+
+- `Verbara.Sdk.Sessions.Postgres` refactored to use `Verbara.Sdk.Data.Npgsql` (Dapper-free).
+- `Dapper` + `Dapper.AOT` dropped from `Directory.Packages.props` — no remaining SDK consumer.
+- Dead `Verbara.Sdk.Dapper.Stubs` canary project removed.
+
+### Added — Build guards
+
+- Permanent `BanDapperPackageReferences` MSBuild guard — any future reference to `Dapper`, `Dapper.AOT`, or `Verbara.Sdk.Dapper.Stubs` fails the build.
+
+### Fixed — CI
+
+- `NU1301` fixed: siblings reference `Verbara.Sdk.Data.Npgsql` via `ProjectReference` (matching every other Verbara.Sdk.* sibling), dropped the maintainer-only local NuGet feed from `nuget.config`. `dotnet pack` still emits the correct `Verbara.Sdk.Data.Npgsql 2.2.0` nuspec dependency.
+
+### Documentation
+
+- New `docs/research/` gitleaks audit baseline.
+- README stack table aligned to canonical role wording.
+
+## [2.1.2] - 2026-05-08
+
+**SmartTurn polish + observability hardening.**
+
+### Added
+
+- `[OptionsValidator]` source generator on `SmartTurnDetectorOptions` — AOT-safe validation with `[Range]` on `TurnConfidenceThreshold` [0,1], `SilenceThresholdDb` [-100,0], `IntraOpThreads` [1,64]. `ValidateOnStart()` wired in DI.
+- 8 dedicated `MelFilterBank` tests + 7 options-validation tests.
+
+### Fixed
+
+- Hann window aligned to the periodic formula (`2πi/N`) matching HuggingFace WhisperFeatureExtractor and librosa convention used during smart-turn-v3 model training. Improves mel spectrogram accuracy.
+
+### Infrastructure
+
+- ONNX model (8.3 MB) migrated to Git LFS.
+
+## [2.1.1] - 2026-05-07
+
+### Fixed
+
+- Corrected `RepositoryUrl` and `PackageProjectUrl` in package metadata — was pointing to `verbara/verbara-sdk` (wrong) instead of `verbara/Verbara.Sdk`.
+
+## [2.1.0] - 2026-05-07
+
+**Smart Turn Detection — ML-based pluggable turn detector.**
+
+### Added — VoiceAi package
+
+- **`Verbara.Sdk.VoiceAi.TurnDetection`** (new) — ML-based turn detector using the [Pipecat smart-turn-v3.2](https://huggingface.co/pipecat-ai/smart-turn-v3) ONNX model.
+  - Detects semantic end-of-turn boundaries, not just silence pauses (94.3% English accuracy, ~12 ms CPU inference).
+  - Drop-in replacement for `SilenceTurnDetector` via `services.AddSmartTurnDetection(...)`.
+  - Pipeline: PCM16 8 kHz → 16 kHz resampling → Whisper-compatible Mel spectrogram → ONNX inference.
+  - Configurable: confidence threshold, silence trigger duration, execution provider (CPU/CUDA), max utterance duration.
+  - `IsAotCompatible=false` (ONNX Runtime uses reflection) — the rest of the SDK remains fully AOT-compatible.
+
+### Added — Package validation
+
+- API compatibility validation enabled against v2.0.0 baseline for all 26 existing packages.
+- Removed stale Asterisk-era `CompatibilitySuppressions.xml` files.
+
+## [2.0.0] - 2026-05-06
+
+**Full rebrand from `Asterisk.Sdk.*` → `Verbara.Sdk.*` ([ADR-0036](docs/decisions/0036-rebrand-to-verbara.md)).** Breaking change: every namespace, assembly, and NuGet package renamed. The legacy `Asterisk.Sdk.*` packages on nuget.org are deprecated and each points to its `Verbara.Sdk.*` replacement.
+
+### Breaking — Rebrand
+
+- All namespaces, assemblies, and NuGet packages renamed from `Asterisk.Sdk.*` to `Verbara.Sdk.*`.
+- DI methods renamed: `AddAsterisk*()` → `AddVerbara*()`.
+- Types renamed: `AsteriskServer` → `VerbaraServer`, `AsteriskOptions` → `VerbaraOptions`, `AsteriskTelemetry` → `VerbaraTelemetry`, etc.
+
+#### Migration from v1.x
+
+1. Update all NuGet package references from `Asterisk.Sdk.*` to `Verbara.Sdk.*`.
+2. Replace `using Asterisk.Sdk.*` with `using Verbara.Sdk.*` in all source files.
+3. Rename DI methods: `AddAsterisk*()` → `AddVerbara*()`.
+4. Rename types: `AsteriskServer` → `VerbaraServer`, `AsteriskOptions` → `VerbaraOptions`, etc.
+
+### Added — Turn detection
+
+- **`ITurnDetector`** interface — pluggable turn detection for the VoiceAi pipeline. Replace the default silence-based detector with custom implementations (e.g., ML-based turn detection).
+- **`SilenceTurnDetector`** — default implementation refactored out of the hardcoded `AudioMonitorLoop` logic. Registered automatically via DI; override by registering your own `ITurnDetector` before calling `AddVoiceAiPipeline<T>()`.
+- **`FakeTurnDetector`** — test fake in `Verbara.Sdk.VoiceAi.Testing` for deterministic pipeline testing.
+
+### Documentation
+
+- `Examples/README.md` — full 26-example catalog.
+- ADR catalog — entries 0025–0036 added.
+- `docs/guides/README.md` — 8-guide index created.
+- Open-core stack table + trademark note added to root `README.md` License section.
+
+### Stats
+
+- 26 NuGet packages published.
+- 2,868 unit tests passing.
+- 0 build warnings, 0 trim warnings.
 
 ## [1.15.3] - 2026-05-03
 

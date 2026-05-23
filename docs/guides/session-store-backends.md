@@ -42,7 +42,7 @@ All three implement the public **`ISessionStore`** interface and derive from **`
 using Verbara.Sdk.Sessions.Redis;
 
 builder.Services
-    .AddAsteriskSessionsBuilder()
+    .AddVerbaraSessionsBuilder()
     .UseRedis(opts =>
     {
         opts.ConfigurationString = "redis.internal:6379,abortConnect=false";
@@ -84,7 +84,7 @@ I/O is pipelined via `IDatabase.CreateBatch()` + `Task.WhenAll(...).WaitAsync(ct
 using Verbara.Sdk.Sessions.Postgres;
 
 builder.Services
-    .AddAsteriskSessionsBuilder()
+    .AddVerbaraSessionsBuilder()
     .UsePostgres(opts =>
     {
         opts.ConnectionString = "Host=pg.internal;Database=sessions;Username=asterisk;Password=…;SSL Mode=Require";
@@ -127,12 +127,12 @@ CREATE INDEX IF NOT EXISTS ix_asterisk_sessions_active    ON asterisk_call_sessi
 
 ## Switching backends
 
-`UseRedis` / `UsePostgres` use `IServiceCollection.Replace(...)` so the call always overrides the `InMemorySessionStore` registered by `AddAsteriskSessions` / `AddAsteriskSessionsBuilder`. Order of registration in `Program.cs` doesn't matter; the last `Use*` wins:
+`UseRedis` / `UsePostgres` use `IServiceCollection.Replace(...)` so the call always overrides the `InMemorySessionStore` registered by `AddVerbaraSessions` / `AddVerbaraSessionsBuilder`. Order of registration in `Program.cs` doesn't matter; the last `Use*` wins:
 
 ```csharp
 // Both InMemory (default) and Redis get registered. Redis wins.
 builder.Services
-    .AddAsteriskSessionsBuilder()
+    .AddVerbaraSessionsBuilder()
     .UseRedis(opts => opts.ConfigurationString = cs);
 ```
 
@@ -154,7 +154,7 @@ Implement `SessionStoreBase` (inherit the abstract base or write `: ISessionStor
 public sealed class MyMongoSessionStore : SessionStoreBase { /* … */ }
 
 builder.Services
-    .AddAsteriskSessionsBuilder()
+    .AddVerbaraSessionsBuilder()
     .Services // the underlying IServiceCollection
     .Replace(ServiceDescriptor.Singleton<SessionStoreBase, MyMongoSessionStore>());
 ```

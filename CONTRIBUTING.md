@@ -27,11 +27,13 @@ dotnet test Verbara.Sdk.slnx
 ### Project Structure
 
 ```
-src/                    # SDK packages (9 core + 7 VoiceAi + 1 SourceGenerators)
-Examples/               # 16 example applications + PbxAdmin demo
-Tests/                  # Unit, functional, integration, E2E tests
+src/                    # 28 SDK packages: 9 core + 8 VoiceAi + 4 Push + 2 Sessions backends
+                        # + 2 Cluster (Primitives + Postgres) + 1 Data.Npgsql + 1 Resilience
+                        # + 1 OpenTelemetry meta + 1 SourceGenerators analyzer
+Examples/               # 26 example applications (BasicAmi, FastAGI, ARI, Sessions, VoiceAi, ...)
+Tests/                  # 33 test projects — Unit, Functional, Integration (Testcontainers)
 docker/                 # Docker Compose stacks for development and testing
-docs/                   # Architecture, guides, plans, analysis
+docs/                   # Architecture (specs + decisions + research) and guides
 ```
 
 ## Development Workflow
