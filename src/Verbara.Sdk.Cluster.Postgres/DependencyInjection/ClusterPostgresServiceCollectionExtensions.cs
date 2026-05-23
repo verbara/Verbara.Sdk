@@ -1,4 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Npgsql;
+using Verbara.Sdk.Cluster.Primitives;
 
 namespace Verbara.Sdk.Cluster.Postgres.DependencyInjection;
 
@@ -21,8 +25,18 @@ public static class ClusterPostgresServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionStringName);
 
-#pragma warning disable MA0025 // Phase B scaffolding — DI wiring lands in next session
-        throw new NotImplementedException("Phase B");
-#pragma warning restore MA0025
+        // TimeProvider.System satisfies the ctor for production hosts; tests inject a fake
+        // TimeProvider directly into PostgresDistributedLock without going through DI.
+        services.TryAddSingleton(TimeProvider.System);
+
+        services.TryAddSingleton<IDistributedLock>(sp =>
+        {
+            var dataSource = sp.GetRequiredKeyedService<NpgsqlDataSource>(connectionStringName);
+            var logger = sp.GetRequiredService<ILogger<PostgresDistributedLock>>();
+            var timeProvider = sp.GetRequiredService<TimeProvider>();
+            return new PostgresDistributedLock(dataSource, logger, timeProvider);
+        });
+
+        return services;
     }
 }
