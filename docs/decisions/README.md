@@ -84,3 +84,4 @@ The decision, stated in one or two sentences.
 - [ADR-0034](0034-isessioninterceptor-public-contract.md) — `ISessionInterceptor` public contract replaces `InternalsVisibleTo Pro.Cluster` leak.
 - [ADR-0035](0035-cos-deferred-customer-driven.md) — COS (Calling Permissions System) deferred: customer-driven trigger only.
 - [ADR-0036](0036-rebrand-to-verbara.md) — Rebrand product family from `Asterisk.Sdk` to **Verbara Sdk** for trademark safety (Sangoma owns "Asterisk" trademark). License unchanged (MIT). (Accepted, 2026-05-03)
+- [ADR-0037](0037-cross-repo-adr-reference-convention.md) — Cross-repo ADR reference convention: bare `ADR-NNNN` = this-repo, `Platform/ADR-NNNN` / `Pro/ADR-NNNN` / `Web/ADR-NNNN` for sister-repo references. Disambiguates the `Platform/ADR-0022` references in this repo's v2.2.x commit history. (Accepted, 2026-05-23)
