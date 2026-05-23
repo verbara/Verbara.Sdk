@@ -62,6 +62,7 @@
     <Project Path="Tests/Verbara.Sdk.Resilience.Tests/Verbara.Sdk.Resilience.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Cluster.Primitives.Tests/Verbara.Sdk.Cluster.Primitives.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Cluster.Postgres.Tests/Verbara.Sdk.Cluster.Postgres.Tests.csproj" />
+    <Project Path="Tests/Verbara.Sdk.DocSnippets.Tests/Verbara.Sdk.DocSnippets.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Ami.Tests/Verbara.Sdk.Ami.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Ari.Tests/Verbara.Sdk.Ari.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Audio.Tests/Verbara.Sdk.Audio.Tests.csproj" />

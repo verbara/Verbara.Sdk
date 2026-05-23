@@ -2,6 +2,17 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Verbara.Sdk.OpenTelemetry\Verbara.Sdk.OpenTelemetry.csproj" />
     <ProjectReference Include="..\..\src\Verbara.Sdk.Hosting\Verbara.Sdk.Hosting.csproj" />
+    <!--
+      Test-only references — MarketingClaimsTests counts IHealthCheck implementers
+      across every SDK assembly that ships one. Without these references the test
+      assemblies don't load, so reflection misses the HealthCheck types.
+    -->
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Push\Verbara.Sdk.Push.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi\Verbara.Sdk.VoiceAi.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.Stt\Verbara.Sdk.VoiceAi.Stt.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.Tts\Verbara.Sdk.VoiceAi.Tts.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.AudioSocket\Verbara.Sdk.VoiceAi.AudioSocket.csproj" />
+    <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.OpenAiRealtime\Verbara.Sdk.VoiceAi.OpenAiRealtime.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

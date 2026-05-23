@@ -115,6 +115,7 @@ Full methodology, machine-readable results, and cross-language comparison (aster
 
 Every package ships a `Meter`, `ActivitySource`, and `IHealthCheck`. Registered names are exposed as runtime-discoverable lists so consumers don't hard-code strings:
 
+<!-- skip-doc-snippet -->
 ```csharp
 using Verbara.Sdk.Hosting;
 using OpenTelemetry;
@@ -186,6 +187,7 @@ Need a full runnable example (including `appsettings.json` config and event subs
 
 Or bind from `appsettings.json`:
 
+<!-- skip-doc-snippet -->
 ```csharp
 builder.Services.AddVerbara(builder.Configuration);
 ```
@@ -351,6 +353,7 @@ class MyConversationHandler : IConversationHandler
 
 Replace the entire STT+LLM+TTS chain with a single WebSocket to OpenAI Realtime API:
 
+<!-- skip-doc-snippet -->
 ```csharp
 using Verbara.Sdk.VoiceAi.OpenAiRealtime;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.DependencyInjection;
