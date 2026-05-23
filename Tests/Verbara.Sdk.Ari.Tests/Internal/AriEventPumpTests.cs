@@ -57,8 +57,10 @@ public class AriEventPumpTests
         pump.Start(_ => ValueTask.CompletedTask);
         pump.TryEnqueue(new AriEvent { Type = "Test" });
 
-        // Should complete without hanging or throwing
-        await pump.DisposeAsync();
+        var disposeTask = pump.DisposeAsync().AsTask();
+        await disposeTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+        disposeTask.IsCompletedSuccessfully.Should().BeTrue();
     }
 
     [Fact]

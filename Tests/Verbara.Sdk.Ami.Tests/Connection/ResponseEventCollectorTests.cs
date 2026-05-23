@@ -10,7 +10,7 @@ public class ResponseEventCollectorTests
         new() { EventType = type };
 
     [Fact]
-    public void Add_ShouldBufferEvents()
+    public async Task Add_ShouldBufferEvents()
     {
         var collector = new ResponseEventCollector();
 
@@ -19,7 +19,14 @@ public class ResponseEventCollectorTests
         collector.Add(CreateEvent("Status"));
         collector.Complete();
 
-        // Should not throw; events are buffered
+        var events = new List<ManagerEvent>();
+        await foreach (var evt in collector.ReadAllAsync())
+        {
+            events.Add(evt);
+        }
+
+        events.Should().HaveCount(3);
+        events.Should().AllSatisfy(e => e.EventType.Should().Be("Status"));
     }
 
     [Fact]

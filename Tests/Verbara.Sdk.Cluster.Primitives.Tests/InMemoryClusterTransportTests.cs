@@ -139,7 +139,7 @@ public sealed class InMemoryClusterTransportTests
         cts.Cancel();
         await task.WaitAsync(TimeSpan.FromSeconds(2));
 
-        // After cancellation, publishing doesn't throw and delivery is silent (no subscribers).
+        transport.SubscriberCount.Should().Be(0);
         await transport.PublishAsync(new TestEvent("i", DateTimeOffset.UtcNow, "post-cancel"));
     }
 
@@ -158,5 +158,7 @@ public sealed class InMemoryClusterTransportTests
         await transport.DisposeAsync();
 
         await task.WaitAsync(TimeSpan.FromSeconds(2));
+        task.IsCompletedSuccessfully.Should().BeTrue();
+        transport.SubscriberCount.Should().Be(0);
     }
 }

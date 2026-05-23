@@ -24,12 +24,20 @@ public sealed class AriActivitySourceExtendedTests
     }
 
     [Fact]
-    public void StartRequest_ShouldReturnNull_WhenNoListenerRegistered()
+    public void StartRequest_ShouldNotThrow_WhenInvokedWithoutExplicitListener()
     {
-        // Without a listener sampling this source, activity will be null
-        var activity = AriActivitySource.StartRequest("POST", "/ari/bridges");
-        // May or may not be null depending on other test listeners, so just verify no throw
-        activity?.Dispose();
+        // We can't deterministically force the "no listener" state in a shared xunit
+        // process — other tests in this collection may attach listeners. So instead we
+        // assert the contract that does hold regardless of listener state: invoking
+        // StartRequest is always safe and disposing the (possibly-null) Activity does
+        // not throw.
+        Action act = () =>
+        {
+            var activity = AriActivitySource.StartRequest("POST", "/ari/bridges");
+            activity?.Dispose();
+        };
+
+        act.Should().NotThrow();
     }
 
     [Fact]
