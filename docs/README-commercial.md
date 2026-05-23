@@ -29,7 +29,7 @@ The SDK is ported from asterisk-java, the most mature Asterisk library in any la
 
 **Voice AI Ready** -- Add artificial intelligence to your calls with a pluggable Voice AI stack. Speech-to-text transcription, text-to-speech synthesis, custom conversation handlers, and direct OpenAI Realtime API integration are all included. Providers like Deepgram, ElevenLabs, Azure, Google, and Whisper can be swapped without changing application code.
 
-**Production Hardened** -- The SDK includes 1,430 unit tests and 640 functional tests, produces zero compiler warnings, and passes AOT trim analysis cleanly. It supports multi-server federation with automatic agent routing, connection auto-reconnect with state reload, health check endpoints, and observability through System.Diagnostics.Metrics. It has been designed and tested for high-load scenarios exceeding 100,000 concurrent agents.
+**Production Hardened** -- The SDK includes ~2,924 unit tests plus 154 functional tests against a real Asterisk PBX and 65 integration tests (Testcontainers), produces zero compiler warnings, and passes AOT trim analysis cleanly. It supports multi-server federation with automatic agent routing, connection auto-reconnect with state reload, health check endpoints, and observability through System.Diagnostics.Metrics. It has been designed and tested for high-load scenarios exceeding 100,000 concurrent agents.
 
 **Free Forever** -- Verbara.Sdk is released under the MIT license. There are no per-minute fees, no seat licenses, no usage caps, and no feature gates. Use it in production, modify it, fork it, embed it in your product, distribute it to your customers. The full SDK is free for any purpose, commercial or otherwise.
 
@@ -53,9 +53,9 @@ The SDK is ported from asterisk-java, the most mature Asterisk library in any la
 
 **Source generators replace runtime code generation** -- Four Roslyn source generators produce serialization and deserialization code at compile time for AMI actions, events, responses, and the event registry. This eliminates the reflection that typically prevents .NET libraries from working with AOT, while also improving runtime performance.
 
-**19 composable NuGet packages** -- The SDK is modular by design. Install only the packages your application needs. The core alone is under 200 KB. Voice AI packages are completely separate from the AMI/AGI/ARI stack. Every package declares its dependencies explicitly, so your deployment includes only what you use.
+**28 composable NuGet packages** -- The SDK is modular by design. Install only the packages your application needs. The core alone is under 200 KB. Voice AI, cluster, data-access, and observability packages are completely separate from the AMI/AGI/ARI stack. Every package declares its dependencies explicitly, so your deployment includes only what you use.
 
-**2,821 automated tests and 16 example applications** -- Every protocol parser, every event mapping, every state machine transition is covered by 2,597 unit tests plus 37 Sessions functional tests plus 154 Asterisk-against-real-PBX functional tests and 33 integration tests that run against a real Asterisk 23 instance in CI. The repository includes 16 runnable example applications demonstrating common integration patterns (including OpenTelemetry wiring and custom STT/TTS providers). A full PBX administration panel built with Blazor Server is available as a separate project.
+**~3,000+ automated tests and 26 example applications** -- Every protocol parser, every event mapping, every state machine transition is covered by ~2,924 unit tests plus 154 functional tests against a real Asterisk PBX and 65 integration tests (Testcontainers, including a real Asterisk 23 instance in CI). The repository includes 26 runnable example applications demonstrating common integration patterns (including OpenTelemetry wiring and custom STT/TTS providers).
 
 
 ## Enterprise Extension

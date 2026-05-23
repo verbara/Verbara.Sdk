@@ -9,14 +9,14 @@
 | `[AMI]` | AMI connection | `AmiConnectionLog` | Connect, disconnect, reconnect, reader error |
 | `[AMI_EVENT]` | AMI events | `AmiConnectionLog` | Event received, dropped |
 | `[AMI_ACTION]` | AMI actions | `AmiConnectionLog` | Response received |
-| `[LIVE]` | Live state | `AsteriskServerLog` | Initial state, reconnect reload |
+| `[LIVE]` | Live state | `VerbaraServerLog` | Initial state, reconnect reload |
 | `[CHANNEL]` | Channels | `ChannelManagerLog` | New, state change, hangup, rename, link/unlink |
 | `[QUEUE]` | Queues | `QueueManagerLog` | Params, member add/remove/pause/status, caller join/leave |
 | `[AGENT]` | Agents | `AgentManagerLog` | Login, logoff, connect, complete, pause |
 | `[CONFERENCE]` | Conferences | `MeetMeManagerLog` | Join, leave |
 | `[AGI]` | FastAGI | `FastAgiServerLog` | Server start/stop, script map, connection |
 | `[ARI]` | ARI client | `AriClientLog` | Connect, disconnect, WS event, reconnect |
-| `[POOL]` | Multi-server | `AsteriskServerPool` | Server added/removed (future) |
+| `[POOL]` | Multi-server | `VerbaraServerPool` | Server added/removed (future) |
 
 ### Dashboard Tags (8)
 

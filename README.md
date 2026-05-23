@@ -1,11 +1,11 @@
-# Verbara Sdk (formerly Verbara.Sdk)
+# Verbara Sdk (formerly Asterisk.Sdk)
 
 > The modern .NET SDK for Asterisk PBX. AMI, AGI, ARI, Live API, Sessions, Voice AI — all in one package. Native AOT. Zero reflection. MIT licensed.
 >
-> **Rebrand notice (2026-05-03):** this project is rebranding to **Verbara** ([ADR-0036](docs/decisions/0036-rebrand-to-verbara.md)) to avoid trademark conflict with Sangoma's Asterisk PBX product. Repository and NuGet package names will migrate to `verbara-sdk` / `Verbara.Sdk.*` in a coordinated technical track. Existing names continue to work during the transition period.
+> **Rebrand history:** released as `Asterisk.Sdk.*` through v1.15.3, fully renamed to `Verbara.Sdk.*` in **v2.0.0** (2026-05-06) — see [ADR-0036](docs/decisions/0036-rebrand-to-verbara.md). The legacy `Asterisk.Sdk.*` packages on nuget.org are deprecated; each points to its `Verbara.Sdk.*` replacement.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/verbara/Verbara.Sdk/ci.yml?branch=main&label=CI)](https://github.com/verbara/Verbara.Sdk/actions/workflows/ci.yml)
-[![AOT Trim](https://img.shields.io/github/actions/workflow/status/verbara/Verbara.Sdk/aot-trim-check.yml?branch=main&label=AOT%20Trim)](https://github.com/verbara/Verbara.Sdk/actions/workflows/aot-trim-check.yml)
+[![AOT](https://img.shields.io/github/actions/workflow/status/verbara/Verbara.Sdk/aot-validate.yml?branch=main&label=AOT)](https://github.com/verbara/Verbara.Sdk/actions/workflows/aot-validate.yml)
 [![NuGet](https://img.shields.io/nuget/v/Verbara.Sdk?label=NuGet&color=blue)](https://www.nuget.org/packages/Verbara.Sdk)
 [![Downloads](https://img.shields.io/nuget/dt/Verbara.Sdk?label=Downloads&color=blue)](https://www.nuget.org/packages/Verbara.Sdk)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
@@ -58,18 +58,20 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ## Status
 
-**v1.15.3** — 26 NuGet packages, 0 build warnings, 0 trim warnings, ~2,837 unit tests + 154 functional + 65 integration (Testcontainers). Latest releases:
+**v2.2.1** — 28 NuGet packages, 0 build warnings, 0 trim warnings, ~2,924 unit tests + 154 functional + 65 integration (Testcontainers). Latest releases:
 
-- **v1.15.3** "R1.5 VoiceAi Refresh" (2026-05-03) — Three new TTS providers (ElevenLabs Flash 2.5 polish + Deepgram Aura 2 via WebSocket + LMNT TTS with WS+HTTP transport) plus `tts.synthesis.ttfa_ms` histogram for Time-To-First-Audio observability across all six TTS providers. Strictly additive minor patch — zero breaking changes. Also rolls in `coverlet.collector` 6→10 dev-dep bump, new `dependency-review` CI workflow, and the `xunit v3/v4` migration readiness watch list. Whisper V3 local STT was scoped into the original v1 R1.5 spec but deferred (telephony 8 kHz quality concerns + Whisper.net AOT unconfirmed).
-- **v1.15.2** (2026-04-27) — Documentation refresh. Doc-only patch (zero `PublicAPI.Shipped.txt` delta, zero functional changes). Root README + 5 critical-stub package READMEs expanded; `nuget.config` CI portability fix.
-- **v1.15.1** (2026-04-26) — Housekeeping patch. Dependency maintenance (NATS 2.7.3, OpenTelemetry 1.15.3, Microsoft.Extensions 10.0.7) plus test stability + ADR catalog cleanup. Zero `PublicAPI.Shipped.txt` delta, zero functional change. Forward-compat verified end-to-end for the NATS minor bump.
-- **v1.15.0** "Pre-v2 Foundation" (2026-04-20) — New MIT package `Verbara.Sdk.Cluster.Primitives` (`IClusterTransport`, `IDistributedLock`, `IMembershipProvider` + in-memory references). `VerbaraSemanticConventions` catalog grows with `Tenant`/`Event`/`Node` nested classes (60 const strings across 14 nested classes total). Per-URL circuit breaker on `Verbara.Sdk.Push.Webhooks`. ADR-0028 "Cadence commitment" → Accepted. Operations starter kit (3 Grafana dashboards + Jaeger query catalog) under `docs/operations/`. AOT validation expanded to multi-RID matrix (linux-x64 / win-x64 / osx-arm64). Dual Asterisk 22 LTS + 23 Standard test matrix.
-- **v1.14.0** (2026-04-20) — New MIT package `Verbara.Sdk.Resilience` — composable circuit breaker + retry + timeout primitives shared by AMI/ARI/Webhook reconnect loops.
-- **v1.13.0** (2026-04-20) — Telemetry layer + multi-node Push bus. `Verbara.Sdk.Push.Nats` bidirectional bridge with W3C trace context propagation. `WebSocketTestServer` shared infrastructure. Pack-warnings CI gate.
+- **v2.2.1** (2026-05-23) — **`Verbara.Sdk.Cluster.Postgres`** (new): Postgres-backed implementation of the cluster primitives shipped in v2.2.0, with `PostgresDistributedLock` (advisory-lock-backed `IDistributedLock`) running on `Verbara.Sdk.Data.Npgsql` — zero Dapper, AOT-clean. Plus CI hardening (merge queue activation on `main`, Dependabot auto-merge for analyzers/actions, LFS-in-CI for the ONNX model) and the v2.2.0+ dependency bump train (OnnxRuntime 1.22→1.26, NATS 2.7.3→2.8, microsoft-extensions, etc.).
+- **v2.2.0** (2026-05-20) — **ADR-0022 Phase D: Dapper removed cross-repo.** New **`Verbara.Sdk.Data.Npgsql`** package — reflection-free Postgres facade with a `NpgsqlExecutor` (Dapper-parity surface) + name-based `NpgsqlDataReader` getters + hand-written `static Map(NpgsqlDataReader)` row mapping. `Verbara.Sdk.Sessions.Postgres` migrated off Dapper; the dead `Verbara.Sdk.Dapper.Stubs` canary was removed; a permanent `BanDapperPackageReferences` MSBuild guard makes the ban load-bearing.
+- **v2.1.2** (2026-05-08) — `SmartTurnDetectorOptionsValidator` (`[OptionsValidator]` + `[Range]` + `ValidateOnStart()`), Hann window aligned to the periodic formula (`2πi/N`) matching HuggingFace WhisperFeatureExtractor + librosa, 8 dedicated `MelFilterBank` tests + 7 options-validation tests, ONNX model (8.3 MB) migrated to Git LFS.
+- **v2.1.1** (2026-05-07) — Package metadata fix: `RepositoryUrl` and `PackageProjectUrl` corrected to `verbara/Verbara.Sdk`.
+- **v2.1.0** (2026-05-07) — **`Verbara.Sdk.VoiceAi.TurnDetection`** (new): ML-based turn detector using [Pipecat smart-turn-v3.2](https://huggingface.co/pipecat-ai/smart-turn-v3) ONNX (94.3% English accuracy, ~12 ms CPU inference). Drop-in replacement for `SilenceTurnDetector` via `services.AddSmartTurnDetection()`. Package validation enabled with v2.0.0 baseline.
+- **v2.0.0** (2026-05-06) — **Full rebrand** from `Asterisk.Sdk.*` → `Verbara.Sdk.*` (ADR-0036). Breaking change: all namespaces, assemblies, and NuGet packages renamed. Pluggable turn detection: `ITurnDetector` interface + `SilenceTurnDetector` default + `FakeTurnDetector` in `Verbara.Sdk.VoiceAi.Testing`. 26 NuGet packages, 2,868 unit tests passing.
+
+For historical v1.x releases (Asterisk.Sdk era), see [`CHANGELOG.md`](CHANGELOG.md).
 
 API coverage (cumulative): 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%), 27/27 ARI models (100%), 278 AMI events covering Asterisk 18-23. Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` JSON control protocol both supported. Compatible with **Asterisk 18, 20, 22 LTS, and 23 Standard** — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for lifecycle and break-change risk areas.
 
-Architecture decisions: **35 ADRs** in [`docs/decisions/`](docs/decisions/) covering AOT-first design, source-generator-over-reflection policy, three-tier test strategy, push-bus design, cadence commitment, and resilience/cluster primitive split between MIT and Pro.
+Architecture decisions: **36 ADRs** in [`docs/decisions/`](docs/decisions/) covering AOT-first design, source-generator-over-reflection policy, three-tier test strategy, push-bus design, cadence commitment, resilience/cluster primitive split between MIT and Pro, and the rebrand to Verbara.
 
 ---
 
@@ -418,12 +420,31 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 | **Verbara.Sdk.Config** | Asterisk `.conf` and `extensions.conf` file parsers |
 | **Verbara.Sdk.Hosting** | DI extensions (`AddAsterisk`) and meta-package referencing all core packages |
 
+### Data Access
+
+| Package | Description |
+|---------|-------------|
+| **Verbara.Sdk.Data.Npgsql** | Reflection-free Postgres data-access facade — `NpgsqlExecutor` (Dapper-parity surface: `ExecuteAsync`, `QueryAsync<T>`, `QuerySingleAsync`, etc.) + name-based `NpgsqlDataReader` getters, hand-written `static Map(NpgsqlDataReader)` row mapping. AOT-clean replacement for Dapper (ADR-0022 Phase D). |
+
 ### Session Store Backends
 
 | Package | Description |
 |---------|-------------|
 | **Verbara.Sdk.Sessions.Redis** | `RedisSessionStore` + `UseRedis(...)` fluent builder (StackExchange.Redis, pipelined I/O, TTL-driven retention, AOT-safe) |
-| **Verbara.Sdk.Sessions.Postgres** | `PostgresSessionStore` + `UsePostgres(...)` fluent builder (Npgsql + Dapper + JSONB, UPSERT on `ON CONFLICT`, migration SQL shipped in the nupkg) |
+| **Verbara.Sdk.Sessions.Postgres** | `PostgresSessionStore` + `UsePostgres(...)` fluent builder (Npgsql + **Verbara.Sdk.Data.Npgsql** + JSONB, UPSERT on `ON CONFLICT`, migration SQL shipped in the nupkg). Dapper-free as of v2.2.0. |
+
+### Cluster Primitives
+
+| Package | Description |
+|---------|-------------|
+| **Verbara.Sdk.Cluster.Primitives** | `IClusterTransport`, `IDistributedLock`, `IMembershipProvider` contracts + in-memory reference implementations for single-node dev/test. |
+| **Verbara.Sdk.Cluster.Postgres** | Postgres-backed implementation of the cluster primitives. `PostgresDistributedLock` (advisory-lock-backed) + `MigrationRunner` + `AddPostgresClusterPrimitives(...)` DI helper. Built on `Verbara.Sdk.Data.Npgsql`. |
+
+### Resilience
+
+| Package | Description |
+|---------|-------------|
+| **Verbara.Sdk.Resilience** | Composable circuit breaker + retry + timeout primitives (`BackoffSchedule`, `RetryBudget`) shared by AMI/ARI/Webhook reconnect loops. |
 
 ### Observability & Integrations
 
@@ -440,12 +461,13 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 | Package | Description |
 |---------|-------------|
 | **Verbara.Sdk.Audio** | Polyphase FIR resampler, VAD, PCM16 processing — zero dependencies |
-| **Verbara.Sdk.VoiceAi** | Pipeline orchestration (`VoiceAiPipeline`), `ISessionHandler`, `IConversationHandler` |
+| **Verbara.Sdk.VoiceAi** | Pipeline orchestration (`VoiceAiPipeline`), `ISessionHandler`, `IConversationHandler`, `ITurnDetector` (pluggable turn detection) |
 | **Verbara.Sdk.VoiceAi.AudioSocket** | AudioSocket + `chan_websocket` (JSON control protocol) servers with `System.IO.Pipelines` bidirectional streaming |
-| **Verbara.Sdk.VoiceAi.Stt** | STT providers: Deepgram, Whisper, Azure Whisper, Google Speech, Cartesia (Ink-Whisper), AssemblyAI (Universal), Speechmatics |
-| **Verbara.Sdk.VoiceAi.Tts** | TTS providers: ElevenLabs, Azure, Cartesia (Sonic-3, 40-90ms TTFA), Speechmatics |
+| **Verbara.Sdk.VoiceAi.Stt** | STT providers: AssemblyAI, Cartesia (Ink-Whisper), Deepgram, Google Speech, Speechmatics, Whisper (cloud REST), Azure Whisper |
+| **Verbara.Sdk.VoiceAi.Tts** | TTS providers: ElevenLabs (Flash 2.5), Azure, Cartesia (Sonic-3, 40-90 ms TTFA), Speechmatics, Deepgram (Aura 2 WS), LMNT (WS+HTTP) |
 | **Verbara.Sdk.VoiceAi.OpenAiRealtime** | OpenAI Realtime API bridge (GPT-4o): dual-loop WebSocket, function calling, observability events |
-| **Verbara.Sdk.VoiceAi.Testing** | Fake STT/TTS/handler implementations for unit testing pipelines |
+| **Verbara.Sdk.VoiceAi.TurnDetection** | ML-based turn detector using the Pipecat smart-turn-v3.2 ONNX model (94.3% English accuracy, ~12 ms CPU). Replaces `SilenceTurnDetector` via `AddSmartTurnDetection()`. |
+| **Verbara.Sdk.VoiceAi.Testing** | Fake STT/TTS/handler/turn-detector implementations for unit testing pipelines |
 
 ---
 

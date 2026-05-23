@@ -120,7 +120,7 @@ See [High-Load Tuning Guide](high-load-tuning.md) for sizing recommendations.
 
 **Symptoms:** After AMI reconnect, channels/agents/queues are empty.
 
-**Expected behavior:** `AsteriskServer` clears and reloads all managers on reconnect via the `Reconnected` event. There may be a brief gap during reload.
+**Expected behavior:** `VerbaraServer` clears and reloads all managers on reconnect via the `Reconnected` event. There may be a brief gap during reload.
 
 ---
 
@@ -208,7 +208,7 @@ using Verbara.Sdk.Hosting;
 
 builder.Services
     .AddOpenTelemetry()
-    .WithTracing(t => t.AddSource([.. AsteriskTelemetry.ActivitySourceNames])
+    .WithTracing(t => t.AddSource([.. VerbaraTelemetry.ActivitySourceNames])
                        .AddOtlpExporter());  // or AddConsoleExporter()
 ```
 

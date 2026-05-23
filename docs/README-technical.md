@@ -57,7 +57,7 @@ dotnet add package Verbara.Sdk.VoiceAi.Testing
 ```csharp
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Services.AddAsterisk(options =>
+builder.Services.AddVerbara(options =>
 {
     options.Ami.Hostname = "192.168.1.100";
     options.Ami.Username = "admin";
@@ -71,7 +71,7 @@ await host.RunAsync();
 Or bind from `appsettings.json`:
 
 ```csharp
-builder.Services.AddAsterisk(builder.Configuration);
+builder.Services.AddVerbara(builder.Configuration);
 ```
 
 ```json
@@ -92,7 +92,7 @@ builder.Services.AddAsterisk(builder.Configuration);
 var mapping = new SimpleMappingStrategy();
 mapping.Add("hello", new HelloScript());
 
-builder.Services.AddAsterisk(options =>
+builder.Services.AddVerbara(options =>
 {
     options.Ami.Hostname = "192.168.1.100";
     options.Ami.Username = "admin";
@@ -111,7 +111,7 @@ exten => 100,1,AGI(agi://your-server:4573/hello)
 ### Live API + Sessions
 
 ```csharp
-builder.Services.AddAsterisk(options =>
+builder.Services.AddVerbara(options =>
 {
     options.Ami.Hostname = "192.168.1.100";
     options.Ami.Username = "admin";
@@ -120,8 +120,8 @@ builder.Services.AddAsterisk(options =>
 
 var host = builder.Build();
 
-// AsteriskServer auto-starts when AMI connects
-var server = host.Services.GetRequiredService<AsteriskServer>();
+// VerbaraServer auto-starts when AMI connects
+var server = host.Services.GetRequiredService<VerbaraServer>();
 
 // Real-time state
 int channels = server.Channels.ChannelCount;
@@ -193,21 +193,22 @@ public class MyConversationHandler : IConversationHandler
 | `Verbara.Sdk.Activities` | High-level telephony: Dial, Hold, Transfer, Park, Bridge, Conference |
 | `Verbara.Sdk.Sessions` | Session Engine: call correlation, state machines, domain events |
 | `Verbara.Sdk.Config` | Asterisk `.conf` and `extensions.conf` parsers |
-| `Verbara.Sdk.Hosting` | DI extensions (`AddAsterisk`) + meta-package |
+| `Verbara.Sdk.Hosting` | DI extensions (`AddVerbara`) + meta-package |
 
-### Voice AI (7 packages)
+### Voice AI (8 packages)
 
 | Package | Description |
 |---------|-------------|
 | `Verbara.Sdk.Audio` | Polyphase FIR resampler, VAD, PCM16 processing |
-| `Verbara.Sdk.VoiceAi` | Pipeline orchestration, `ISessionHandler`, `IConversationHandler`, `SpeechRecognizer`/`SpeechSynthesizer` base types with `ProviderName` (v1.10.0+) |
-| `Verbara.Sdk.VoiceAi.AudioSocket` | AudioSocket server/client with Pipelines streaming |
-| `Verbara.Sdk.VoiceAi.Stt` | STT providers: Deepgram, Whisper, Azure Whisper, Google Speech |
-| `Verbara.Sdk.VoiceAi.Tts` | TTS providers: ElevenLabs, Azure TTS |
+| `Verbara.Sdk.VoiceAi` | Pipeline orchestration, `ISessionHandler`, `IConversationHandler`, `ITurnDetector`, `SpeechRecognizer`/`SpeechSynthesizer` base types with `ProviderName` |
+| `Verbara.Sdk.VoiceAi.AudioSocket` | AudioSocket + `chan_websocket` servers with Pipelines streaming |
+| `Verbara.Sdk.VoiceAi.Stt` | STT providers: AssemblyAI, Cartesia, Deepgram, Google Speech, Speechmatics, Whisper (cloud REST), Azure Whisper |
+| `Verbara.Sdk.VoiceAi.Tts` | TTS providers: ElevenLabs (Flash 2.5), Azure, Cartesia, Speechmatics, Deepgram (Aura 2 WS), LMNT |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | OpenAI Realtime API bridge (GPT-4o voice-to-voice) |
-| `Verbara.Sdk.VoiceAi.Testing` | Fakes for unit testing Voice AI pipelines |
+| `Verbara.Sdk.VoiceAi.TurnDetection` | ML-based turn detector (Pipecat smart-turn-v3.2 ONNX) — drop-in replacement for `SilenceTurnDetector` |
+| `Verbara.Sdk.VoiceAi.Testing` | Fakes for unit testing Voice AI pipelines (STT/TTS/handler/turn-detector) |
 
-> All Voice AI packages expose a `Meter`, `ActivitySource` and `IHealthCheck` via the v1.9.0 telemetry stack — discoverable at runtime through `AsteriskTelemetry.ActivitySourceNames` and `AsteriskTelemetry.MeterNames` (see `Verbara.Sdk.Hosting`).
+> All Voice AI packages expose a `Meter`, `ActivitySource` and `IHealthCheck` — discoverable at runtime through `VerbaraTelemetry.ActivitySourceNames` and `VerbaraTelemetry.MeterNames` (see `Verbara.Sdk.Hosting`).
 
 ### Push (2 packages)
 
@@ -257,7 +258,7 @@ Verbara.Sdk (core: interfaces, attributes, enums, base types)
                             +--- VoiceAi.OpenAiRealtime   (-> VoiceAi + Audio + AudioSocket)
                             +--- VoiceAi.Testing          (-> VoiceAi)
 
-Hosting   (-> all core + Push; registers `AsteriskTelemetry` and all HealthChecks)
+Hosting   (-> all core + Push; registers `VerbaraTelemetry` and all HealthChecks)
 ```
 
 ### Design Decisions
@@ -283,7 +284,7 @@ Hosting   (-> all core + Push; registers `AsteriskTelemetry` and all HealthCheck
 
 **AMI authentication.** Supports both plaintext `Login` and MD5 challenge-response (`Challenge` + `Login` with key).
 
-**Multi-server federation.** `IAmiConnectionFactory` creates connections dynamically. `AsteriskServerPool` federates N servers with an agent routing table. `IAmiConnection.Reconnected` event triggers state reload.
+**Multi-server federation.** `IAmiConnectionFactory` creates connections dynamically. `VerbaraServerPool` federates N servers with an agent routing table. `IAmiConnection.Reconnected` event triggers state reload.
 
 **Observability.** `AmiMetrics` and `LiveMetrics` expose counters, histograms, and observable gauges via `System.Diagnostics.Metrics` (events received/dropped/dispatched, action roundtrip latency, reconnection count, channel/queue/agent gauges).
 
@@ -476,11 +477,11 @@ Verbara.Sdk/
 
 ## DI Registration Reference
 
-### Core -- `AddAsterisk`
+### Core -- `AddVerbara`
 
 ```csharp
 // Lambda configuration
-services.AddAsterisk(options =>
+services.AddVerbara(options =>
 {
     // AMI connection (required)
     options.Ami.Hostname = "pbx.local";
@@ -497,10 +498,10 @@ services.AddAsterisk(options =>
 });
 
 // Or from IConfiguration
-services.AddAsterisk(configuration);
+services.AddVerbara(configuration);
 ```
 
-Registers: `IAmiConnection`, `AsteriskServer`, `ChannelManager`, `QueueManager`, `AgentManager`, `ICallSessionManager`, `FastAgiServer` (if AGI port configured).
+Registers: `IAmiConnection`, `VerbaraServer`, `ChannelManager`, `QueueManager`, `AgentManager`, `ICallSessionManager`, `FastAgiServer` (if AGI port configured).
 
 ### Voice AI
 
@@ -534,11 +535,11 @@ services.AddOpenAiRealtimeBridge(o => { o.ApiKey = "..."; o.Model = "gpt-4o-real
 | `IAmiConnection` | `Verbara.Sdk.Ami` | Send actions, receive events/responses |
 | `AmiAction` | `Verbara.Sdk.Ami.Actions` | Base class for all 111 AMI actions |
 | `AmiEvent` | `Verbara.Sdk.Ami.Events` | Base class for all 215 AMI events |
-| `AsteriskServer` | `Verbara.Sdk.Live` | Top-level live model: channels, queues, agents |
+| `VerbaraServer` | `Verbara.Sdk.Live` | Top-level live model: channels, queues, agents |
 | `ChannelManager` | `Verbara.Sdk.Live` | Real-time channel tracking with secondary indices |
 | `QueueManager` | `Verbara.Sdk.Live` | Real-time queue tracking with member reverse index |
 | `AgentManager` | `Verbara.Sdk.Live` | Real-time agent state tracking |
-| `AsteriskServerPool` | `Verbara.Sdk.Live` | Multi-server federation with agent routing |
+| `VerbaraServerPool` | `Verbara.Sdk.Live` | Multi-server federation with agent routing |
 | `ICallSessionManager` | `Verbara.Sdk.Sessions` | Call session correlation and lifecycle |
 | `FastAgiServer` | `Verbara.Sdk.Agi` | FastAGI TCP server |
 | `AgiChannel` | `Verbara.Sdk.Agi` | Per-call AGI command interface |

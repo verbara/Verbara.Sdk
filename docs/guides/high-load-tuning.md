@@ -30,7 +30,7 @@ Both AMI (`AsyncEventPump`) and ARI (`AriEventPump`) use bounded `Channel<T>` bu
 ```
 
 ```csharp
-services.AddAsterisk(options =>
+services.AddVerbara(options =>
 {
     options.AmiConnection.EventPumpCapacity = 50_000;
 });
@@ -86,11 +86,11 @@ using Verbara.Sdk.Hosting;
 
 builder.Services
     .AddOpenTelemetry()
-    .WithTracing(t => t.AddSource([.. AsteriskTelemetry.ActivitySourceNames]))
-    .WithMetrics(m => m.AddMeter([.. AsteriskTelemetry.MeterNames]));
+    .WithTracing(t => t.AddSource([.. VerbaraTelemetry.ActivitySourceNames]))
+    .WithMetrics(m => m.AddMeter([.. VerbaraTelemetry.MeterNames]));
 ```
 
-`ActivitySourceNames` contains 9 sources, `MeterNames` contains 12 meters. Both lists grow automatically as new packages register; consumer code written today keeps working when future packages join the stack.
+`ActivitySourceNames` contains 9 sources, `MeterNames` contains 15 meters. Both lists grow automatically as new packages register; consumer code written today keeps working when future packages join the stack.
 
 ### Provider Identification on the Hot Path (v1.10.0+)
 
@@ -194,7 +194,7 @@ Both AMI and ARI support exponential backoff reconnection.
 | `AmiConnection.EventPumpCapacity` | 20,000 | Size to absorb 10s of peak event rate **plus** the expected reconcile burst |
 
 ```csharp
-services.AddAsterisk(options =>
+services.AddVerbara(options =>
 {
     options.AmiConnection.EventPumpCapacity = 100_000;
 });
@@ -229,10 +229,10 @@ services.AddSessionsCore(options =>
 
 ## Example: 100K Agent Configuration (Multi-Server)
 
-At 100K+ agents, use `AsteriskServerPool` to distribute load across multiple Asterisk servers:
+At 100K+ agents, use `VerbaraServerPool` to distribute load across multiple Asterisk servers:
 
 ```csharp
-services.AddAsterisk(options =>
+services.AddVerbara(options =>
 {
     options.AmiConnection.EventPumpCapacity = 200_000;
     options.AmiConnection.MaxReconnectAttempts = 20;
@@ -241,7 +241,7 @@ services.AddAsterisk(options =>
 ```
 
 Key considerations:
-- **Multi-server:** Use `AsteriskServerPool` to federate N servers with agent routing
+- **Multi-server:** Use `VerbaraServerPool` to federate N servers with agent routing
 - **Observer speed:** Keep event handlers fast (< 10ms). Offload heavy work to background queues
 - **VarSet filtering:** `VarSet` events can be 50%+ of total volume. Filter early in observers
 - **GC tuning:** Consider `ServerGC` and `gcServer=true` in `runtimeconfig.json`
