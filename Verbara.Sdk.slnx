@@ -89,6 +89,7 @@
     <Project Path="Tests/Verbara.Sdk.Push.AspNetCore.Tests/Verbara.Sdk.Push.AspNetCore.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.OpenTelemetry.Tests/Verbara.Sdk.OpenTelemetry.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Push.Webhooks.Tests/Verbara.Sdk.Push.Webhooks.Tests.csproj" />
+    <Project Path="Tests/Verbara.Sdk.Push.Webhooks.IntegrationTests/Verbara.Sdk.Push.Webhooks.IntegrationTests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Push.Nats.Tests/Verbara.Sdk.Push.Nats.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Push.Nats.IntegrationTests/Verbara.Sdk.Push.Nats.IntegrationTests.csproj" />
     <Project Path="Tests/Verbara.Sdk.VoiceAi.TurnDetection.Tests/Verbara.Sdk.VoiceAi.TurnDetection.Tests.csproj" />
