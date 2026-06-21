@@ -90,7 +90,7 @@ public static class DockerControl
                 // to asterisk -rx — required by the Asterisk CLI argument parser.
                 var result = await ExecInContainerAsync(containerName, "asterisk", "-rx", "core show uptime")
                     .ConfigureAwait(false);
-                if (string.IsNullOrWhiteSpace(result) || result.Contains("Unable to connect"))
+                if (string.IsNullOrWhiteSpace(result) || result.Contains("Unable to connect", StringComparison.Ordinal))
                 {
                     await Task.Delay(1000).ConfigureAwait(false);
                     continue;

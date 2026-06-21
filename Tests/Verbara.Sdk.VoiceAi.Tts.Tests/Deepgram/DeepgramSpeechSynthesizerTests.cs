@@ -86,7 +86,7 @@ public class DeepgramSpeechSynthesizerTests : IAsyncDisposable
         await synth.SynthesizeAsync("hola mundo", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
         _server.ReceivedJsonMessages.Should().NotBeEmpty();
-        var speakMsg = _server.ReceivedJsonMessages.FirstOrDefault(m => m.Contains("\"Speak\""));
+        var speakMsg = _server.ReceivedJsonMessages.FirstOrDefault(m => m.Contains("\"Speak\"", StringComparison.Ordinal));
         speakMsg.Should().NotBeNull();
         speakMsg.Should().Contain("\"text\":\"hola mundo\"");
     }
@@ -97,7 +97,7 @@ public class DeepgramSpeechSynthesizerTests : IAsyncDisposable
         var synth = BuildSynthesizer();
         await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
-        var flushMsg = _server.ReceivedJsonMessages.FirstOrDefault(m => m.Contains("\"Flush\""));
+        var flushMsg = _server.ReceivedJsonMessages.FirstOrDefault(m => m.Contains("\"Flush\"", StringComparison.Ordinal));
         flushMsg.Should().NotBeNull("client must send a Flush message to trigger audio generation");
     }
 
