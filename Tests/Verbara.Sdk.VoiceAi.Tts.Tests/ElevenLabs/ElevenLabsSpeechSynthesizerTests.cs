@@ -39,7 +39,7 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
         await synth.SynthesizeAsync("hola mundo", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
         _server.ReceivedJsonMessages.Should().NotBeEmpty();
-        _server.ReceivedJsonMessages.Any(m => m.Contains("hola mundo")).Should().BeTrue();
+        _server.ReceivedJsonMessages.Any(m => m.Contains("hola mundo", StringComparison.Ordinal)).Should().BeTrue();
     }
 
     [Fact]

@@ -65,7 +65,7 @@ public sealed class TransferTests : FunctionalTestBase
         await Task.Delay(TimeSpan.FromSeconds(2));
 
         // Find an active channel to redirect
-        var targetChannel = channelNames.FirstOrDefault(n => n.Contains("Local/"));
+        var targetChannel = channelNames.FirstOrDefault(n => n.Contains("Local/", StringComparison.Ordinal));
         if (targetChannel is null)
         {
             // No channel detected — skip gracefully
@@ -205,7 +205,7 @@ public sealed class TransferTests : FunctionalTestBase
         await Task.Delay(TimeSpan.FromSeconds(2));
 
         var channels = server.Channels.ActiveChannels.ToList();
-        var targetChannel = channels.FirstOrDefault(c => c.Name.Contains("Local/"));
+        var targetChannel = channels.FirstOrDefault(c => c.Name.Contains("Local/", StringComparison.Ordinal));
 
         if (targetChannel is null)
         {
@@ -269,7 +269,7 @@ public sealed class TransferTests : FunctionalTestBase
         await Task.Delay(TimeSpan.FromSeconds(2));
 
         var channels = server.Channels.ActiveChannels.ToList();
-        var targetChannel = channels.FirstOrDefault(c => c.Name.Contains("Local/"));
+        var targetChannel = channels.FirstOrDefault(c => c.Name.Contains("Local/", StringComparison.Ordinal));
 
         if (targetChannel is null)
         {

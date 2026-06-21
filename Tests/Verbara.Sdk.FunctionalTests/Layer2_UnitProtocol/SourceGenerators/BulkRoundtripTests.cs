@@ -29,7 +29,7 @@ public sealed class BulkRoundtripTests
                             && !t.IsAbstract
                             && t.IsAssignableTo(typeof(ManagerEvent))
                             && t.Namespace is not null
-                            && t.Namespace.Contains("Events"))
+                            && t.Namespace.Contains("Events", StringComparison.Ordinal))
                 .ToList();
 
             foreach (var type in eventTypes)
@@ -80,7 +80,7 @@ public sealed class BulkRoundtripTests
                             && !t.IsAbstract
                             && t.IsAssignableTo(typeof(ManagerAction))
                             && t.Namespace is not null
-                            && t.Namespace.Contains("Actions"))
+                            && t.Namespace.Contains("Actions", StringComparison.Ordinal))
                 .ToList();
 
             foreach (var type in actionTypes)
@@ -125,7 +125,7 @@ public sealed class BulkRoundtripTests
                             && !t.IsAbstract
                             && t.IsAssignableTo(typeof(ManagerResponse))
                             && t.Namespace is not null
-                            && t.Namespace.Contains("Responses"))
+                            && t.Namespace.Contains("Responses", StringComparison.Ordinal))
                 .ToList();
 
             foreach (var type in responseTypes)

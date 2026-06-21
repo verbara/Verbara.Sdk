@@ -120,7 +120,7 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
         // At least one message after init should contain the synthesized text.
         var textMessages = _server.ReceivedJsonMessages.Skip(1).ToList();
         textMessages.Should().NotBeEmpty();
-        textMessages.Any(m => m.Contains("hello lmnt")).Should().BeTrue();
+        textMessages.Any(m => m.Contains("hello lmnt", StringComparison.Ordinal)).Should().BeTrue();
     }
 
     [Fact]

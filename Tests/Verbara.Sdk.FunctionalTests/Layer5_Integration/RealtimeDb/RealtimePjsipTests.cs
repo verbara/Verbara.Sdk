@@ -166,7 +166,7 @@ public sealed class RealtimePjsipTests : FunctionalTestBase
                 new CommandAction { Command = $"pjsip show endpoint {endpointId}" });
 
             var afterOutput = GetOutput(after);
-            var isGone = string.IsNullOrEmpty(afterOutput) || afterOutput.Contains("Unable to find");
+            var isGone = string.IsNullOrEmpty(afterOutput) || afterOutput.Contains("Unable to find", StringComparison.Ordinal);
             isGone.Should().BeTrue(
                 "deleted PJSIP endpoint must not be visible after pjsip reload");
         }
