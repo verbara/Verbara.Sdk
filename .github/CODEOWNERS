@@ -1,0 +1,13 @@
+# CODEOWNERS — review routing for Verbara.Sdk
+# One owner today (solo dev). As the team grows, add reviewers per area
+# below; GitHub auto-requests the matching owner on each PR.
+
+# Default owner for everything
+*                       @Harol-Reina
+
+# Release-sensitive surfaces (CI, packaging, public API contract)
+/.github/               @Harol-Reina
+/Directory.Build.props  @Harol-Reina
+/CHANGELOG.md           @Harol-Reina
+/openspec/              @Harol-Reina
+/docs/decisions/        @Harol-Reina
