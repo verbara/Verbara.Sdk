@@ -42,7 +42,7 @@
 
   <!-- Redis (spike validation) -->
   <ItemGroup>
-    <PackageVersion Include="StackExchange.Redis" Version="3.0.0" />
+    <PackageVersion Include="StackExchange.Redis" Version="3.0.7" />
   </ItemGroup>
 
   <!-- NATS (Verbara.Sdk.Push.Nats bridge) -->
