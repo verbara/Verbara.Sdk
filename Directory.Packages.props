@@ -47,7 +47,7 @@
 
   <!-- NATS (Verbara.Sdk.Push.Nats bridge) -->
   <ItemGroup>
-    <PackageVersion Include="NATS.Client.Core" Version="2.8.1" />
+    <PackageVersion Include="NATS.Client.Core" Version="2.8.2" />
     <PackageVersion Include="NATS.Client.Hosting" Version="2.7.3" />
   </ItemGroup>
 
