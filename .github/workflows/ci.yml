@@ -149,3 +149,13 @@ jobs:
         # image matches the matrix target.
         run: dotnet test Verbara.Sdk.slnx --filter "Category=Functional|Category=Integration|Category=Realtime" --logger "console;verbosity=detailed" -- RunConfiguration.MaxCpuCount=1
         timeout-minutes: 30
+
+  # OpenSpec docs gate (2026-07-04 ecosystem audit): changes/specs are agent-edited
+  # markdown with a strict parser — validate them like code. Pinned CLI version.
+  openspec:
+    name: OpenSpec Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.0
+      - name: Validate specs and changes (strict)
+        run: npx -y @fission-ai/openspec@1.4.1 validate --all --strict --no-interactive
