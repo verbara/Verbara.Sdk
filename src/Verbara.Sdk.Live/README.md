@@ -39,4 +39,4 @@ var server = pool.GetServerForAgent("Agent/1001");
 
 ## Documentation
 
-- [High-Load Tuning Guide](../../docs/high-load-tuning.md)
+- [High-Load Tuning Guide](../../docs/guides/high-load-tuning.md)

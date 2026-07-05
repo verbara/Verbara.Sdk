@@ -7,8 +7,8 @@ Batteries-included OpenTelemetry wiring for `Verbara.Sdk`. One call enrolls ever
 ```csharp
 using Verbara.Sdk.OpenTelemetry;
 
-builder.Services.AddAsteriskOpenTelemetry(b => b
-    .WithAllSources()                                      // enlist the 9 ActivitySources + 12 Meters
+builder.Services.AddVerbaraOpenTelemetry(b => b
+    .WithAllSources()                                      // enlist the 9 ActivitySources + 15 Meters
     .WithPrometheusExporter()                              // /metrics for scraping
     .WithOtlpExporter(o => o.Endpoint = new("http://tempo:4317")));
 
@@ -19,7 +19,7 @@ app.UseOpenTelemetryPrometheusScrapingEndpoint();
 The package layers on top of the standard OpenTelemetry SDK (`OpenTelemetry.Extensions.Hosting`) — consumers who need extras (samplers, views, custom processors) can access the raw builders via `ConfigureTracing` / `ConfigureMetrics`:
 
 ```csharp
-builder.Services.AddAsteriskOpenTelemetry(b => b
+builder.Services.AddVerbaraOpenTelemetry(b => b
     .WithAllSources()
     .ConfigureTracing(t => t.SetSampler(new TraceIdRatioBasedSampler(0.1)))
     .ConfigureMetrics(m => m.AddView("sessions.wait_time", new ExplicitBucketHistogramConfiguration {

@@ -31,4 +31,4 @@ await server.StartAsync(cancellationToken);
 
 ## Documentation
 
-- [Asterisk Version Compatibility](../../docs/asterisk-version-compatibility.md)
+- [Asterisk Version Compatibility](../../docs/guides/asterisk-version-compatibility.md)
