@@ -31,4 +31,4 @@ dotnet run --project Examples/AriChannelControlExample/
 ## Key SDK Packages Used
 
 - `Verbara.Sdk.Ari` — `IAriClient`, channels and bridges resources
-- `Verbara.Sdk.Hosting` — DI registration (`AddAsterisk`)
+- `Verbara.Sdk.Hosting` — DI registration (`AddVerbara`)

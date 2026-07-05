@@ -61,11 +61,11 @@ public sealed class VerbaraOpenTelemetryBuilderTests
     }
 
     [Fact]
-    public void ServiceName_ShouldDefaultTo_AsteriskSdk()
+    public void ServiceName_ShouldDefaultTo_VerbaraSdk()
     {
         var builder = new VerbaraOpenTelemetryBuilder();
 
-        builder.ServiceName.Should().Be("asterisk-sdk");
+        builder.ServiceName.Should().Be("verbara-sdk");
     }
 
     [Fact]

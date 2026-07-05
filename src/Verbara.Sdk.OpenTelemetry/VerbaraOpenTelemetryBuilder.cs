@@ -17,9 +17,9 @@ public sealed class VerbaraOpenTelemetryBuilder
     private readonly List<string> _meters = [];
     private readonly List<Action<TracerProviderBuilder>> _tracingConfigurators = [];
     private readonly List<Action<MeterProviderBuilder>> _metricsConfigurators = [];
-    private string _serviceName = "asterisk-sdk";
+    private string _serviceName = "verbara-sdk";
 
-    /// <summary>The service.name that decorates exported telemetry. Defaults to "asterisk-sdk".</summary>
+    /// <summary>The service.name that decorates exported telemetry. Defaults to "verbara-sdk".</summary>
     public string ServiceName
     {
         get => _serviceName;
