@@ -39,6 +39,11 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
         AudioFormat format,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        // Deterministic cancellation contract (test-determinism fence): observe the token
+        // at iterator entry so a pre-cancelled token throws before any provider request is
+        // issued, independent of scheduling/mock latency.
+        ct.ThrowIfCancellationRequested();
+
         var wsUri = BuildUri();
         using var ws = new ClientWebSocket();
         ws.Options.KeepAliveInterval = TimeSpan.FromSeconds(_options.KeepAliveSeconds);
