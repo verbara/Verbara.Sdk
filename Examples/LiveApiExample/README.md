@@ -21,7 +21,7 @@ dotnet run --project Examples/LiveApiExample/
 
 ## What It Shows
 
-- Starting `AsteriskServer` to load initial PBX state and subscribe to events
+- Starting `VerbaraServer` to load initial PBX state and subscribe to events
 - Reading live counters: `ChannelCount`, `QueueCount`, `AgentCount`
 - Polling updated counts on a 5-second interval
 - Proper disposal of the live server before disconnecting from AMI
@@ -29,5 +29,5 @@ dotnet run --project Examples/LiveApiExample/
 ## Key SDK Packages Used
 
 - `Verbara.Sdk.Ami` — AMI connection
-- `Verbara.Sdk.Live` — `AsteriskServer`, `ChannelManager`, `QueueManager`, `AgentManager`
-- `Verbara.Sdk.Hosting` — DI registration (`AddAsterisk`)
+- `Verbara.Sdk.Live` — `VerbaraServer`, `ChannelManager`, `QueueManager`, `AgentManager`
+- `Verbara.Sdk.Hosting` — DI registration (`AddVerbara`)

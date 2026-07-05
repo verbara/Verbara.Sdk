@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **OpenTelemetry default `service.name` rebrand:** `VerbaraOpenTelemetryBuilder.ServiceName` now defaults to `"verbara-sdk"` instead of the pre-rebrand `"asterisk-sdk"`. Consumers who rely on the old default in dashboards, alerts, or exporter resource-matching rules should set `ServiceName = "asterisk-sdk"` explicitly via `AddVerbaraOpenTelemetry(o => o.ServiceName = "asterisk-sdk")` to keep the old value.
+
 ### Changed — STT cancellation contract (behavioral clarification)
 
 - STT streaming recognizers (`Deepgram`, `Whisper`, `AzureWhisper`, `Google`, `Speechmatics`, `AssemblyAI`, `Cartesia`) now observe the `CancellationToken` at `StreamAsync` iterator entry (`ct.ThrowIfCancellationRequested()` before any provider request is issued). A pre-cancelled token now deterministically throws `OperationCanceledException` before the first WebSocket/HTTP call, instead of racing scheduling/mock latency. No behavior change for non-cancelled tokens. Fixes a CI flake in `DeepgramSpeechRecognizerTests.StreamAsync_ShouldAbort_WhenCancelled` (verbara-meta/ADR-0004 adopt-on-touch — deterministic-test-fences program). ([#77](https://github.com/verbara/Verbara.Sdk/pull/77))

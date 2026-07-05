@@ -28,7 +28,7 @@ rules:
     - "Call out downstream impact: any public-API change cascades to Sdk.Pro and Platform. Mark breaking changes explicitly."
     - "Include an Architectural Risk section as an H2 heading ('## Architectural Risk', a sibling of the delta sections — NEVER a '###' header inside requirements: openspec archive rebuilds every '###' as a requirement and aborts): Level (LOW/MEDIUM/HIGH), Affected (areas/repos that can break), Mitigation. Keep SHALL/MUST on the first line of each '### Requirement:'."
   design:
-    - "Reference existing ADRs when relevant using the repo/ADR-NNNN format."
+    - "Reference existing ADRs when relevant using the repo/ADR-NNNN format. This applies to ANY doc in this repo (not just design/openspec artifacts): a cross-repo ADR citation MUST be repo-qualified (e.g. \"Pro/ADR-0011\", \"verbara-meta/ADR-0006\") — a bare \"ADR-NNNN\" refers only to this repo's own docs/decisions/."
     - "Honor the AOT + MIT-public constraints: no reflection, no Dapper, no closed-source concepts."
     - "Record any durable architectural decision as an ADR in docs/decisions/, not only in this design."
   tasks:

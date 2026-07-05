@@ -21,7 +21,7 @@ dotnet run --project Examples/BasicAmiExample/
 
 ## What It Shows
 
-- Registering Asterisk services with `AddAsterisk()` and `IServiceCollection`
+- Registering Asterisk services with `AddVerbara()` and `IServiceCollection`
 - Connecting to AMI with `IAmiConnection.ConnectAsync()`
 - Subscribing to the event stream via `IObserver<ManagerEvent>`
 - Sending a `PingAction` and reading the correlated response
@@ -30,4 +30,4 @@ dotnet run --project Examples/BasicAmiExample/
 ## Key SDK Packages Used
 
 - `Verbara.Sdk.Ami` — AMI connection and actions
-- `Verbara.Sdk.Hosting` — DI registration (`AddAsterisk`)
+- `Verbara.Sdk.Hosting` — DI registration (`AddVerbara`)

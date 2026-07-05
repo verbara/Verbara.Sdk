@@ -31,4 +31,4 @@ dotnet run --project Examples/AmiAdvancedExample/
 ## Key SDK Packages Used
 
 - `Verbara.Sdk.Ami` — AMI connection, actions, and events
-- `Verbara.Sdk.Hosting` — DI registration (`AddAsterisk`)
+- `Verbara.Sdk.Hosting` — DI registration (`AddVerbara`)
