@@ -41,11 +41,11 @@ Every VoiceAi provider ships as a hand-rolled implementation against the vendor'
 
 Shipping providers implementing this pattern:
 
-- [`src/Asterisk.Sdk.VoiceAi.Stt/Deepgram/DeepgramSpeechRecognizer.cs`](../../src/Asterisk.Sdk.VoiceAi.Stt/Deepgram/DeepgramSpeechRecognizer.cs) — streaming WebSocket (bidirectional, real-time partial transcripts).
-- [`src/Asterisk.Sdk.VoiceAi.Stt/Google/GoogleSpeechRecognizer.cs`](../../src/Asterisk.Sdk.VoiceAi.Stt/Google/GoogleSpeechRecognizer.cs) — REST streaming to Google Speech-to-Text v1.
-- [`src/Asterisk.Sdk.VoiceAi.Stt/Whisper/WhisperSpeechRecognizer.cs`](../../src/Asterisk.Sdk.VoiceAi.Stt/Whisper/WhisperSpeechRecognizer.cs) — REST batch to OpenAI Whisper.
-- [`src/Asterisk.Sdk.VoiceAi.Stt/Whisper/AzureWhisperSpeechRecognizer.cs`](../../src/Asterisk.Sdk.VoiceAi.Stt/Whisper/AzureWhisperSpeechRecognizer.cs) — REST batch to Azure OpenAI Whisper deployment.
-- [`src/Asterisk.Sdk.VoiceAi.Tts/ElevenLabs/ElevenLabsSpeechSynthesizer.cs`](../../src/Asterisk.Sdk.VoiceAi.Tts/ElevenLabs/ElevenLabsSpeechSynthesizer.cs) — WebSocket streaming (ultra-low-latency).
-- [`src/Asterisk.Sdk.VoiceAi.Tts/Azure/AzureTtsSpeechSynthesizer.cs`](../../src/Asterisk.Sdk.VoiceAi.Tts/Azure/AzureTtsSpeechSynthesizer.cs) — REST to Azure Cognitive Services TTS.
+- [`src/Verbara.Sdk.VoiceAi.Stt/Deepgram/DeepgramSpeechRecognizer.cs`](../../src/Verbara.Sdk.VoiceAi.Stt/Deepgram/DeepgramSpeechRecognizer.cs) — streaming WebSocket (bidirectional, real-time partial transcripts).
+- [`src/Verbara.Sdk.VoiceAi.Stt/Google/GoogleSpeechRecognizer.cs`](../../src/Verbara.Sdk.VoiceAi.Stt/Google/GoogleSpeechRecognizer.cs) — REST streaming to Google Speech-to-Text v1.
+- [`src/Verbara.Sdk.VoiceAi.Stt/Whisper/WhisperSpeechRecognizer.cs`](../../src/Verbara.Sdk.VoiceAi.Stt/Whisper/WhisperSpeechRecognizer.cs) — REST batch to OpenAI Whisper.
+- [`src/Verbara.Sdk.VoiceAi.Stt/Whisper/AzureWhisperSpeechRecognizer.cs`](../../src/Verbara.Sdk.VoiceAi.Stt/Whisper/AzureWhisperSpeechRecognizer.cs) — REST batch to Azure OpenAI Whisper deployment.
+- [`src/Verbara.Sdk.VoiceAi.Tts/ElevenLabs/ElevenLabsSpeechSynthesizer.cs`](../../src/Verbara.Sdk.VoiceAi.Tts/ElevenLabs/ElevenLabsSpeechSynthesizer.cs) — WebSocket streaming (ultra-low-latency).
+- [`src/Verbara.Sdk.VoiceAi.Tts/Azure/AzureTtsSpeechSynthesizer.cs`](../../src/Verbara.Sdk.VoiceAi.Tts/Azure/AzureTtsSpeechSynthesizer.cs) — REST to Azure Cognitive Services TTS.
 
 Source: product-alignment audit, `docs/research/2026-04-19-product-alignment-audit.md` §4 item #4.
