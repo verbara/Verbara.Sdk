@@ -125,13 +125,13 @@ The safe flow is local-only — the value never appears in the command line or s
 #    Expiration: 365 days (max)
 
 # 2. Pipe from clipboard or password manager directly to gh secret set:
-pbpaste | gh secret set NUGET_API_KEY --repo Harol-Reina/Verbara.Sdk              # macOS
-xclip -selection clipboard -o | gh secret set NUGET_API_KEY --repo Harol-Reina/Verbara.Sdk   # Linux X11
-wl-paste | gh secret set NUGET_API_KEY --repo Harol-Reina/Verbara.Sdk              # Linux Wayland
-pass show nuget/api-key | gh secret set NUGET_API_KEY --repo Harol-Reina/Verbara.Sdk         # pass(1)
+pbpaste | gh secret set NUGET_API_KEY --repo verbara/Verbara.Sdk              # macOS
+xclip -selection clipboard -o | gh secret set NUGET_API_KEY --repo verbara/Verbara.Sdk   # Linux X11
+wl-paste | gh secret set NUGET_API_KEY --repo verbara/Verbara.Sdk              # Linux Wayland
+pass show nuget/api-key | gh secret set NUGET_API_KEY --repo verbara/Verbara.Sdk         # pass(1)
 
 # 3. Verify the secret is registered (value stays encrypted):
-gh secret list --repo Harol-Reina/Verbara.Sdk
+gh secret list --repo verbara/Verbara.Sdk
 ```
 
 ### Cutting a release

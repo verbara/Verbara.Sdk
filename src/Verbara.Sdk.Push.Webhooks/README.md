@@ -55,4 +55,4 @@ Counters on `Verbara.Sdk.Push.Webhooks` meter:
 - `asterisk.push.webhooks.deliveries.retried`
 - `asterisk.push.webhooks.deliveries.dead_letter`
 
-Enroll via `Verbara.Sdk.OpenTelemetry` — `WithAllSources()` includes this meter automatically once the meter name is added to `AsteriskTelemetry.MeterNames`.
+Enroll via `Verbara.Sdk.OpenTelemetry` — `WithAllSources()` includes this meter automatically; it is already registered in `VerbaraTelemetry.MeterNames`.

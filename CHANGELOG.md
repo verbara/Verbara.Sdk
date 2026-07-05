@@ -6,7 +6,17 @@ All notable changes to this project will be documented in this file.
 
 ### Changed — STT cancellation contract (behavioral clarification)
 
-- STT streaming recognizers (`Deepgram`, `Whisper`, `AzureWhisper`, `Google`, `Speechmatics`, `AssemblyAI`, `Cartesia`) now observe the `CancellationToken` at `StreamAsync` iterator entry (`ct.ThrowIfCancellationRequested()` before any provider request is issued). A pre-cancelled token now deterministically throws `OperationCanceledException` before the first WebSocket/HTTP call, instead of racing scheduling/mock latency. No behavior change for non-cancelled tokens. Fixes a CI flake in `DeepgramSpeechRecognizerTests.StreamAsync_ShouldAbort_WhenCancelled` (verbara-meta/ADR-0004 adopt-on-touch — deterministic-test-fences program).
+- STT streaming recognizers (`Deepgram`, `Whisper`, `AzureWhisper`, `Google`, `Speechmatics`, `AssemblyAI`, `Cartesia`) now observe the `CancellationToken` at `StreamAsync` iterator entry (`ct.ThrowIfCancellationRequested()` before any provider request is issued). A pre-cancelled token now deterministically throws `OperationCanceledException` before the first WebSocket/HTTP call, instead of racing scheduling/mock latency. No behavior change for non-cancelled tokens. Fixes a CI flake in `DeepgramSpeechRecognizerTests.StreamAsync_ShouldAbort_WhenCancelled` (verbara-meta/ADR-0004 adopt-on-touch — deterministic-test-fences program). ([#77](https://github.com/verbara/Verbara.Sdk/pull/77))
+
+### Changed — CI / OpenSpec
+
+- Added an OpenSpec strict-validate CI gate (`openspec validate --all --strict`). ([#76](https://github.com/verbara/Verbara.Sdk/pull/76))
+- `openspec/config.yaml` gained public-content and release-bump authoring rules. ([#79](https://github.com/verbara/Verbara.Sdk/pull/79))
+
+### Docs
+
+- Fixed a stale package count and hardened OpenSpec authoring rules. ([#74](https://github.com/verbara/Verbara.Sdk/pull/74))
+- Opened, then archived on merge, the `stt-cancellation-test-fence` OpenSpec change tracking the fix above. ([#75](https://github.com/verbara/Verbara.Sdk/pull/75), [#78](https://github.com/verbara/Verbara.Sdk/pull/78))
 
 ## [2.2.1] - 2026-05-23
 

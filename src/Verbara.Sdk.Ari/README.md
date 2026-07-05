@@ -39,5 +39,5 @@ await client.Bridges.AddChannelAsync(bridge.Id!, channels[0].Id!);
 
 ## Documentation
 
-- [High-Load Tuning Guide](../../docs/high-load-tuning.md)
-- [Asterisk Version Compatibility](../../docs/asterisk-version-compatibility.md)
+- [High-Load Tuning Guide](../../docs/guides/high-load-tuning.md)
+- [Asterisk Version Compatibility](../../docs/guides/asterisk-version-compatibility.md)

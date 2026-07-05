@@ -45,7 +45,7 @@ Counters on the `Verbara.Sdk.Push.Nats` meter:
 - `asterisk.push.nats.events.published`
 - `asterisk.push.nats.events.failed`
 
-Enroll via `Verbara.Sdk.OpenTelemetry.WithAllSources()` once the meter name is added to `AsteriskTelemetry.MeterNames`.
+Enroll via `Verbara.Sdk.OpenTelemetry.WithAllSources()` — the meter name is already registered in `VerbaraTelemetry.MeterNames`.
 
 ## Roadmap
 

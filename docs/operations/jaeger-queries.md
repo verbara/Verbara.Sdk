@@ -1,10 +1,10 @@
 # Jaeger / Tempo query patterns — Asterisk SDK ActivitySources
 
-Example searches for the 9 SDK `ActivitySource`s. All tag keys use `AsteriskSemanticConventions` constants so queries stay stable across SDK versions. Replace `{VAR}` placeholders with concrete values.
+Example searches for the 9 SDK `ActivitySource`s. All tag keys use `VerbaraSemanticConventions` constants so queries stay stable across SDK versions. Replace `{VAR}` placeholders with concrete values.
 
 ## Source names
 
-The SDK publishes these source names (`Verbara.Sdk.Hosting.AsteriskTelemetry.SourceNames` is the canonical catalog):
+The SDK publishes these source names (`Verbara.Sdk.Hosting.VerbaraTelemetry.ActivitySourceNames` is the canonical catalog):
 
 | Source | Emitted by |
 |---|---|
@@ -66,7 +66,7 @@ Correlate with the `asterisk.push.webhooks.circuit.opened` counter to see which 
 service.name="your-app" span.name=~"voiceai.(stt|tts).turn" voiceai.latency.ttfb_ms > 500
 ```
 
-Uses the `voiceai.latency.ttfb_ms` tag (see `AsteriskSemanticConventions.VoiceAi.LatencyTtfbMs`) to surface turns where Time-To-First-Byte exceeded 500 ms. Group by `voiceai.provider` + `voiceai.model` to isolate provider regressions.
+Uses the `voiceai.latency.ttfb_ms` tag (see `VerbaraSemanticConventions.VoiceAi.LatencyTtfbMs`) to surface turns where Time-To-First-Byte exceeded 500 ms. Group by `voiceai.provider` + `voiceai.model` to isolate provider regressions.
 
 ### Cross-node push trace continuity
 

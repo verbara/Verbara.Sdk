@@ -66,7 +66,7 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(m => m.AddMeter("Verbara.Sdk.Resilience"));
 ```
 
-Or transparently via `AddAsteriskOpenTelemetry().WithAllSources()`.
+Or transparently via `AddVerbaraOpenTelemetry().WithAllSources()`.
 
 Instruments emitted:
 

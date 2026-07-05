@@ -71,7 +71,7 @@ If you don't override `ProviderName` the default falls back to `GetType().Name` 
 - **Metrics:** `VoiceAiMetrics` (sessions started/completed/failed, session duration), `SpeechRecognitionMetrics` (transcriptions started/completed/failed, latency), `SpeechSynthesisMetrics` (syntheses started/completed/failed, latency, characters).
 - **Tracing:** `VoiceAiActivitySource` — session / recognition / synthesis spans.
 - **Health:** `VoiceAiHealthCheck`, `SttHealthCheck`, `TtsHealthCheck` auto-registered by `AddVoiceAiPipeline<THandler>()`.
-- Discover names via `AsteriskTelemetry.ActivitySourceNames` / `MeterNames` from `Verbara.Sdk.Hosting`.
+- Discover names via `VerbaraTelemetry.ActivitySourceNames` / `MeterNames` from `Verbara.Sdk.Hosting`.
 
 ## Documentation
 
