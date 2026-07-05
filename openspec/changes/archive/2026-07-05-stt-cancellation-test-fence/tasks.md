@@ -34,4 +34,6 @@
       full `Verbara.Sdk.VoiceAi.Stt.Tests` suite (41 tests) green.
 - [x] 3.2 `dotnet test` + zero warnings; CHANGELOG entry
       — full solution build 0 warnings; full unit-test filter (`Category!=Functional&Category!=Integration`)
-      green across all projects. CI green / AOT trim + pack gates left unchecked (not run locally).
+      green across all projects. CI green on PR#77 (merged 2026-07-05): Unit Tests, AOT Trim Check,
+      Pack Warnings Gate, Coverage Ratchet, Functional Tests (Testcontainers), CodeQL, OpenSpec Validate
+      all SUCCESS.
