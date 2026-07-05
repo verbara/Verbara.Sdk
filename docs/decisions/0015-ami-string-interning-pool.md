@@ -9,7 +9,7 @@
 
 AMI event parsing is the hot path of the SDK. A contact center running Asterisk at 100K+ concurrent calls sees AMI event volumes in the 100K events/sec range, with every event carrying 5–15 headers. Without intervention, every header is a fresh `string` allocation: ~1–2 million allocations per second purely for event parsing, feeding Gen0 GC pressure that would dominate the SDK's cost envelope at scale.
 
-The [`AmiProtocolReader`](../../src/Asterisk.Sdk.Ami/Internal/AmiProtocolReader.cs) consumes UTF-8 bytes directly from `System.IO.Pipelines` and must turn every `Key: Value\r\n` line into two `string` instances before the source-generated event deserializer can dispatch. Two structural properties of the AMI protocol make this bearable:
+The [`AmiProtocolReader`](../../src/Verbara.Sdk.Ami/Internal/AmiProtocolReader.cs) consumes UTF-8 bytes directly from `System.IO.Pipelines` and must turn every `Key: Value\r\n` line into two `string` instances before the source-generated event deserializer can dispatch. Two structural properties of the AMI protocol make this bearable:
 
 - The **set of keys is bounded.** Across Asterisk 18–23 the SDK tracks 941 unique field names (all emitted by the 278 generated event types). New releases add a handful per year.
 - The **set of common values is small.** A large fraction of value occurrences collapse to ~35 high-frequency strings: response statuses (`"Success"`, `"Error"`), channel protocols (`"SIP"`, `"PJSIP"`), channel states (`"Up"`, `"Ringing"`, `"Hangup"`), severity levels, and similar enumerations.
@@ -18,7 +18,7 @@ Both properties are stable enough to pre-compute at static initialization and lo
 
 ## Decision
 
-Ship a static [`AmiStringPool`](../../src/Asterisk.Sdk.Ami/Internal/AmiStringPool.cs) with two lookup structures, both queried directly from `ReadOnlySpan<byte>`:
+Ship a static [`AmiStringPool`](../../src/Verbara.Sdk.Ami/Internal/AmiStringPool.cs) with two lookup structures, both queried directly from `ReadOnlySpan<byte>`:
 
 - **Key pool** — 2048-bucket array indexed by FNV-1a hash of the UTF-8 bytes. Each bucket holds a linear-scan list of `(byte[] Utf8, string Str)` pairs. All 941 known AMI field keys are pre-computed at static init. Average occupancy: 1.2 entries per bucket; maximum: 5.
 - **Value pool** — length-indexed array (up to length 24) of linear-scan buckets holding the same `(byte[] Utf8, string Str)` pair shape. 35 high-frequency values are pre-computed. Maximum 10 entries per length bucket.

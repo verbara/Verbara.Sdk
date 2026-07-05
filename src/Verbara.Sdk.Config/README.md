@@ -30,7 +30,7 @@ foreach (var context in dialplan.Contexts)
 
 ## Features
 
-- `ConfigFileReader` — general-purpose `.conf` parser: sections `[name]`, `key = value`, `#include`, `#exec`, template inheritance `[section](template)`
+- `ConfigFileReader` — general-purpose `.conf` parser: sections `[name]`, `key = value`, `#include`, `#exec`, template inheritance `[section]` `(template)`
 - `ExtensionsConfigFileReader` — specialized parser for `extensions.conf` dialplan files
 - `ConfigFile` / `ConfigCategory` / `ConfigVariable` — strongly-typed model with ordered variable access
 - Inline comment stripping (`;` outside quoted values)

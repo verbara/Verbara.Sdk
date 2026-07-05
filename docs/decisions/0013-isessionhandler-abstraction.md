@@ -13,7 +13,7 @@ A consumer building a contact center typically wants to start with the turn-base
 
 ## Decision
 
-Introduce [`ISessionHandler`](../../src/Asterisk.Sdk.VoiceAi/ISessionHandler.cs) — a single-method interface with `ValueTask HandleSessionAsync(AudioSocketSession session, CancellationToken ct = default)` — as the sole dispatch seam from the AudioSocket acceptor to the AI layer. Both patterns implement it: [`VoiceAiPipeline`](../../src/Asterisk.Sdk.VoiceAi/Pipeline/VoiceAiPipeline.cs) for turn-based STT+LLM+TTS, and [`OpenAiRealtimeBridge`](../../src/Asterisk.Sdk.VoiceAi.OpenAiRealtime/OpenAiRealtimeBridge.cs) for streaming. Consumers choose by DI registration alone — `AddVoiceAiPipeline(...)` or `AddOpenAiRealtimeBridge(...)` — and the acceptor resolves the registered `ISessionHandler` from the container with no compile-time branch in consumer code.
+Introduce [`ISessionHandler`](../../src/Verbara.Sdk.VoiceAi/ISessionHandler.cs) — a single-method interface with `ValueTask HandleSessionAsync(AudioSocketSession session, CancellationToken ct = default)` — as the sole dispatch seam from the AudioSocket acceptor to the AI layer. Both patterns implement it: [`VoiceAiPipeline`](../../src/Verbara.Sdk.VoiceAi/Pipeline/VoiceAiPipeline.cs) for turn-based STT+LLM+TTS, and [`OpenAiRealtimeBridge`](../../src/Verbara.Sdk.VoiceAi.OpenAiRealtime/OpenAiRealtimeBridge.cs) for streaming. Consumers choose by DI registration alone — `AddVoiceAiPipeline(...)` or `AddOpenAiRealtimeBridge(...)` — and the acceptor resolves the registered `ISessionHandler` from the container with no compile-time branch in consumer code.
 
 ## Consequences
 

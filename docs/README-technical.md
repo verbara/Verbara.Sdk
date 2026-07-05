@@ -572,7 +572,7 @@ services.AddOpenAiRealtimeBridge(o => { o.ApiKey = "..."; o.Model = "gpt-4o-real
 - [Repository overview](../README.md)
 - [For decision-makers](README-commercial.md)
 - [Pro (enterprise extension)](https://github.com/verbara/Verbara.Sdk.Pro)
-- [Architecture review (high-load)](architecture/architecture-review-high-load.md)
+- [Architecture review (high-load)](research/archived/architecture-review-high-load.md)
 
 ---
 
