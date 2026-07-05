@@ -4,7 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Changed — STT cancellation contract (behavioral clarification)
+
+- STT streaming recognizers (`Deepgram`, `Whisper`, `AzureWhisper`, `Google`, `Speechmatics`, `AssemblyAI`, `Cartesia`) now observe the `CancellationToken` at `StreamAsync` iterator entry (`ct.ThrowIfCancellationRequested()` before any provider request is issued). A pre-cancelled token now deterministically throws `OperationCanceledException` before the first WebSocket/HTTP call, instead of racing scheduling/mock latency. No behavior change for non-cancelled tokens. Fixes a CI flake in `DeepgramSpeechRecognizerTests.StreamAsync_ShouldAbort_WhenCancelled` (verbara-meta/ADR-0004 adopt-on-touch — deterministic-test-fences program).
 
 ## [2.2.1] - 2026-05-23
 

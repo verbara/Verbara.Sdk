@@ -30,6 +30,11 @@ public sealed class GoogleSpeechRecognizer : SpeechRecognizer
         AudioFormat format,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
+        // Deterministic cancellation contract (test-determinism fence): observe the token
+        // at iterator entry so a pre-cancelled token throws before any provider request is
+        // issued, independent of scheduling/mock latency.
+        ct.ThrowIfCancellationRequested();
+
         var pcmData = await DrainFramesAsync(audioFrames, ct).ConfigureAwait(false);
         var base64Audio = Convert.ToBase64String(pcmData);
 

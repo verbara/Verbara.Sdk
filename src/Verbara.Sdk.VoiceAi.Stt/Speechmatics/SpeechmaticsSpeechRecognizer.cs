@@ -41,6 +41,11 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
         AudioFormat format,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        // Deterministic cancellation contract (test-determinism fence): observe the token
+        // at iterator entry so a pre-cancelled token throws before any provider request is
+        // issued, independent of scheduling/mock latency.
+        ct.ThrowIfCancellationRequested();
+
         var wsUri = BuildUri();
         using var ws = new ClientWebSocket();
 
