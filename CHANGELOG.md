@@ -4,23 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-07-05
+
 ### Changed
 
-- **OpenTelemetry default `service.name` rebrand:** `VerbaraOpenTelemetryBuilder.ServiceName` now defaults to `"verbara-sdk"` instead of the pre-rebrand `"asterisk-sdk"`. Consumers who rely on the old default in dashboards, alerts, or exporter resource-matching rules should set `ServiceName = "asterisk-sdk"` explicitly via `AddVerbaraOpenTelemetry(o => o.ServiceName = "asterisk-sdk")` to keep the old value.
+- **OpenTelemetry default `service.name` rebrand:** `VerbaraOpenTelemetryBuilder.ServiceName` now defaults to `"verbara-sdk"` instead of the pre-rebrand `"asterisk-sdk"`. Consumers who rely on the old default in dashboards, alerts, or exporter resource-matching rules should set `ServiceName = "asterisk-sdk"` explicitly via `AddVerbaraOpenTelemetry(o => o.ServiceName = "asterisk-sdk")` to keep the old value. ([#82](https://github.com/verbara/Verbara.Sdk/pull/82))
 
 ### Changed — STT cancellation contract (behavioral clarification)
 
 - STT streaming recognizers (`Deepgram`, `Whisper`, `AzureWhisper`, `Google`, `Speechmatics`, `AssemblyAI`, `Cartesia`) now observe the `CancellationToken` at `StreamAsync` iterator entry (`ct.ThrowIfCancellationRequested()` before any provider request is issued). A pre-cancelled token now deterministically throws `OperationCanceledException` before the first WebSocket/HTTP call, instead of racing scheduling/mock latency. No behavior change for non-cancelled tokens. Fixes a CI flake in `DeepgramSpeechRecognizerTests.StreamAsync_ShouldAbort_WhenCancelled` (verbara-meta/ADR-0004 adopt-on-touch — deterministic-test-fences program). ([#77](https://github.com/verbara/Verbara.Sdk/pull/77))
 
+### Fixed
+
+- Repaired 13 dead relative doc links: a moved architecture-review doc, three ADRs (0013–0015) still pointing at pre-rebrand `src/Asterisk.Sdk.*` paths, and a false-positive markdown-link capture in `Verbara.Sdk.Config`'s README. ([#81](https://github.com/verbara/Verbara.Sdk/pull/81))
+
 ### Changed — CI / OpenSpec
 
 - Added an OpenSpec strict-validate CI gate (`openspec validate --all --strict`). ([#76](https://github.com/verbara/Verbara.Sdk/pull/76))
-- `openspec/config.yaml` gained public-content and release-bump authoring rules. ([#79](https://github.com/verbara/Verbara.Sdk/pull/79))
+- `openspec/config.yaml` gained public-content and release-bump authoring rules, later extended to cover cross-repo ADR citations in any doc. ([#79](https://github.com/verbara/Verbara.Sdk/pull/79), [#82](https://github.com/verbara/Verbara.Sdk/pull/82))
 
 ### Docs
 
 - Fixed a stale package count and hardened OpenSpec authoring rules. ([#74](https://github.com/verbara/Verbara.Sdk/pull/74))
 - Opened, then archived on merge, the `stt-cancellation-test-fence` OpenSpec change tracking the fix above. ([#75](https://github.com/verbara/Verbara.Sdk/pull/75), [#78](https://github.com/verbara/Verbara.Sdk/pull/78))
+- Fixed stale API names (`AddAsterisk*` → `AddVerbara*`, `AsteriskTelemetry` → `VerbaraTelemetry`, `AsteriskSemanticConventions` → `VerbaraSemanticConventions`), package/meter counts (29 packages, 9 ActivitySources, 15 Meters), and dead links across READMEs and operations docs. ([#80](https://github.com/verbara/Verbara.Sdk/pull/80))
 
 ## [2.2.1] - 2026-05-23
 
