@@ -156,30 +156,39 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
             Model = _options.Model,
         };
 
-        var initJson = JsonSerializer.Serialize(init, VoiceAiTtsJsonContext.Default.LmntInitMessage);
-        await ws.SendAsync(
-            Encoding.UTF8.GetBytes(initJson).AsMemory(),
-            WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+        // Init/text/flush/EOF are fire-and-forget request frames. If the server aborts
+        // mid-stream, these writes race a half-dead socket and surface a WebSocketException
+        // (inner Broken pipe). The receive loop owns session teardown, so a transport abort
+        // here is benign — swallow it exactly as the receive loop and half-close below do.
+        try
+        {
+            var initJson = JsonSerializer.Serialize(init, VoiceAiTtsJsonContext.Default.LmntInitMessage);
+            await ws.SendAsync(
+                Encoding.UTF8.GetBytes(initJson).AsMemory(),
+                WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
 
-        // Text message.
-        var textMsg = new LmntTextMessage { Text = text };
-        var textJson = JsonSerializer.Serialize(textMsg, VoiceAiTtsJsonContext.Default.LmntTextMessage);
-        await ws.SendAsync(
-            Encoding.UTF8.GetBytes(textJson).AsMemory(),
-            WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+            // Text message.
+            var textMsg = new LmntTextMessage { Text = text };
+            var textJson = JsonSerializer.Serialize(textMsg, VoiceAiTtsJsonContext.Default.LmntTextMessage);
+            await ws.SendAsync(
+                Encoding.UTF8.GetBytes(textJson).AsMemory(),
+                WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
 
-        // Flush command — signals end of current utterance, prompts server to emit buffered audio.
-        // Schema {"flush":true} matches LMNT Python SDK; verify against live API at integration test time.
-        var flushJson = JsonSerializer.Serialize(LmntFlushMessage.Instance, VoiceAiTtsJsonContext.Default.LmntFlushMessage);
-        await ws.SendAsync(
-            Encoding.UTF8.GetBytes(flushJson).AsMemory(),
-            WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+            // Flush command — signals end of current utterance, prompts server to emit buffered audio.
+            // Schema {"flush":true} matches LMNT Python SDK; verify against live API at integration test time.
+            var flushJson = JsonSerializer.Serialize(LmntFlushMessage.Instance, VoiceAiTtsJsonContext.Default.LmntFlushMessage);
+            await ws.SendAsync(
+                Encoding.UTF8.GetBytes(flushJson).AsMemory(),
+                WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
 
-        // EOF command — tells server no more input is coming; triggers final audio + close.
-        var eofJson = JsonSerializer.Serialize(LmntEofMessage.Instance, VoiceAiTtsJsonContext.Default.LmntEofMessage);
-        await ws.SendAsync(
-            Encoding.UTF8.GetBytes(eofJson).AsMemory(),
-            WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+            // EOF command — tells server no more input is coming; triggers final audio + close.
+            var eofJson = JsonSerializer.Serialize(LmntEofMessage.Instance, VoiceAiTtsJsonContext.Default.LmntEofMessage);
+            await ws.SendAsync(
+                Encoding.UTF8.GetBytes(eofJson).AsMemory(),
+                WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { return; /* receive loop cancelled the session: server is gone */ }
+        catch (WebSocketException) { return; /* peer aborted the connection mid-send */ }
 
         // Half-close: guarded timeout to avoid hanging when the server already closed.
         if (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)

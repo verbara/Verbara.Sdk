@@ -158,6 +158,28 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task SynthesizeAsync_ShouldComplete_WhenServerAbortsMidSend()
+    {
+        // Server crashes (RST) the instant it receives the client's first frame, so the
+        // client's remaining request sends (text/flush/EOF) write to a half-dead socket.
+        // The synthesizer must swallow the transport abort and end the stream gracefully.
+        // Looped: the send/abort interleaving is timing-sensitive, so a single clean pass
+        // proves nothing — but the fix makes every iteration deterministically non-throwing.
+        _server.AbortOnFirstReceive = true;
+
+        for (var i = 0; i < 50; i++)
+        {
+            var synth = BuildSynthesizer();
+
+            var act = async () => await synth
+                .SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz)
+                .ToListAsync();
+
+            await act.Should().NotThrowAsync();
+        }
+    }
+
+    [Fact]
     public async Task SynthesizeAsync_ShouldAbort_WhenCancelled()
     {
         // Strategy: server holds the socket open indefinitely (no frames, no finish, no close).

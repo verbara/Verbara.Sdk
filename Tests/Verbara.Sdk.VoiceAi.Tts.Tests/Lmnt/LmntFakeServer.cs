@@ -43,6 +43,15 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     /// </summary>
     public bool HoldOpenUntilDisposed { get; set; }
 
+    /// <summary>
+    /// Abort the socket abnormally the instant the first client frame arrives — i.e. while the
+    /// client is still writing the rest of its request (init recorded, then text/flush/EOF race
+    /// the RST). Reproduces a mid-send server crash: the client's next <c>SendAsync</c> writes to a
+    /// half-dead socket and throws <c>SocketException (32): Broken pipe</c>. No audio frames or
+    /// finish terminator are sent.
+    /// </summary>
+    public bool AbortOnFirstReceive { get; set; }
+
     public LmntWsFakeServer()
     {
         _server = new WebSocketTestServer(HandleSessionAsync);
@@ -58,6 +67,17 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     {
         var ws = session.WebSocket;
         var ct = session.ServerCancellationToken;
+
+        if (AbortOnFirstReceive)
+        {
+            // Read exactly one client frame (the init message), then abort abnormally
+            // while the client is still writing its remaining request frames.
+            var buf = new byte[65536];
+            try { await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false); }
+            catch { /* client may have already gone; abort regardless */ }
+            ws.Abort();
+            return;
+        }
 
         var receiveTask = Task.Run(() => RecordIncomingMessagesAsync(ws, ct), ct);
 
