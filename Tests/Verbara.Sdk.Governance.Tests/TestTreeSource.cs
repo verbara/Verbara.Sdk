@@ -19,14 +19,30 @@ internal static class TestTreeSource
     ];
 
     /// <summary>
-    /// Walks parent directories from <paramref name="callerPath"/> until it finds the repo root
-    /// (the directory containing <c>Verbara.Sdk.slnx</c>) and returns its <c>Tests/</c> folder.
-    /// Throws if the root cannot be located, so a path regression fails loudly instead of silently
-    /// scanning nothing.
+    /// Locates the repo root (the directory containing <c>Verbara.Sdk.slnx</c>) and returns its
+    /// <c>Tests/</c> folder. Walks up from <see cref="AppContext.BaseDirectory"/> first — a
+    /// RUNTIME path (<c>Tests/&lt;proj&gt;/bin/&lt;cfg&gt;/&lt;tfm&gt;</c>) that is immune to
+    /// deterministic-build path mapping — then falls back to this file's compile-time path.
+    /// (This repo sets <c>ContinuousIntegrationBuild=true</c> in CI, so <c>[CallerFilePath]</c>
+    /// is remapped to the non-existent <c>/_/…</c> there; Platform's caller-path-only original
+    /// does not survive that.) Throws if the root cannot be located, so a path regression fails
+    /// loudly instead of silently scanning nothing.
     /// </summary>
     public static string TestsRoot([CallerFilePath] string callerPath = "")
     {
-        var dir = Directory.GetParent(callerPath);
+        return TryWalkUp(AppContext.BaseDirectory)
+            ?? TryWalkUp(Path.GetDirectoryName(callerPath))
+            ?? throw new InvalidOperationException(
+                $"Could not locate '{SolutionFile}' walking up from '{AppContext.BaseDirectory}' " +
+                $"or '{callerPath}'. The governance guard cannot find the repo's Tests/ tree.");
+    }
+
+    private static string? TryWalkUp(string? start)
+    {
+        if (string.IsNullOrEmpty(start))
+            return null;
+
+        var dir = new DirectoryInfo(start);
         while (dir is not null)
         {
             if (File.Exists(Path.Combine(dir.FullName, SolutionFile)))
@@ -35,9 +51,7 @@ internal static class TestTreeSource
             dir = dir.Parent;
         }
 
-        throw new InvalidOperationException(
-            $"Could not locate '{SolutionFile}' walking up from '{callerPath}'. " +
-            "The governance guard cannot find the repo's Tests/ tree.");
+        return null;
     }
 
     /// <summary>
