@@ -84,6 +84,7 @@
     <Project Path="Tests/Verbara.Sdk.Sessions.Tests/Verbara.Sdk.Sessions.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Sessions.Redis.Tests/Verbara.Sdk.Sessions.Redis.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Sessions.Postgres.Tests/Verbara.Sdk.Sessions.Postgres.Tests.csproj" />
+    <Project Path="Tests/Verbara.Sdk.Governance.Tests/Verbara.Sdk.Governance.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Hosting.Tests/Verbara.Sdk.Hosting.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Push.Tests/Verbara.Sdk.Push.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Push.AspNetCore.Tests/Verbara.Sdk.Push.AspNetCore.Tests.csproj" />
