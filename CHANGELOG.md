@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **LMNT TTS: `SynthesizeAsync` no longer throws when the server aborts mid-send.** The LMNT WebSocket path sent its four request frames (init/text/flush/EOF) unguarded, so a transport abort during send surfaced a `WebSocketException` (`Broken pipe`) that propagated out of the async enumerator and threw instead of completing gracefully — violating the documented contract (LMNT's 4-frame handshake had 4× the exposure of single-frame Cartesia/Deepgram). Request sends are now wrapped in the same `OperationCanceledException` + `WebSocketException` catch the receive loop and half-close already use; the receive loop owns teardown, so a mid-send abort ends the stream cleanly. Deterministic regression test added (`SynthesizeAsync_ShouldComplete_WhenServerAbortsMidSend`). ([#84](https://github.com/verbara/Verbara.Sdk/pull/84))
+
 ## [2.3.0] - 2026-07-05
 
 ### Changed
