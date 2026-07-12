@@ -158,4 +158,4 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.0
       - name: Validate specs and changes (strict)
-        run: npx -y @fission-ai/openspec@1.4.1 validate --all --strict --no-interactive
+        run: npx -y @fission-ai/openspec@1.6.0 validate --all --strict --no-interactive
