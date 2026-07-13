@@ -13,7 +13,7 @@ dotnet add package Verbara.Sdk.Sessions.Postgres
 ## Configure
 
 ```csharp
-services.AddAsteriskSessionsBuilder()
+services.AddVerbaraSessionsBuilder()
         .UsePostgres(opts =>
         {
             opts.ConnectionString = "Host=localhost;Database=asterisk;Username=postgres;Password=secret";
@@ -26,7 +26,7 @@ Or pass a pre-built `NpgsqlDataSource` (recommended when you want to share pooli
 
 ```csharp
 var dataSource = NpgsqlDataSource.Create("Host=localhost;Database=asterisk;Username=postgres;Password=secret");
-services.AddAsteriskSessionsBuilder()
+services.AddVerbaraSessionsBuilder()
         .UsePostgres(dataSource);
 ```
 

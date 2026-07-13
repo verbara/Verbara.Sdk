@@ -27,7 +27,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 // 1) Register a default policy (or a no-op if configure is null).
 var services = new ServiceCollection();
-services.AddAsteriskResilience(b => b
+services.AddVerbaraResilience(b => b
     .WithCircuitBreaker(threshold: 5, openDuration: TimeSpan.FromSeconds(30))
     .WithRetry(maxAttempts: 3, baseDelay: TimeSpan.FromMilliseconds(100))
     .WithTimeout(TimeSpan.FromSeconds(5)));

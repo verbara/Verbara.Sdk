@@ -24,7 +24,7 @@ Session data is written to `sessions.jsonl` in the working directory.
 ## What It Shows
 
 - Subclassing `SessionStoreBase` to create a `FileSessionStore` that appends JSON lines
-- Registering a custom store with `AddSingleton<SessionStoreBase>` before `AddAsteriskSessions()`
+- Registering a custom store with `AddSingleton<SessionStoreBase>` before `AddVerbaraSessions()`
 - Observing the same typed domain events as `SessionExample`
 - Calling `fileStore.PrintSummary()` on shutdown to report all persisted sessions
 
@@ -32,4 +32,4 @@ Session data is written to `sessions.jsonl` in the working directory.
 
 - `Verbara.Sdk.Sessions` — `SessionStoreBase`, `ICallSessionManager`, session events
 - `Verbara.Sdk.Sessions.Extensions` — custom store extension point
-- `Verbara.Sdk.Hosting` — `AddAsterisk()`, `AddAsteriskSessions()`
+- `Verbara.Sdk.Hosting` — `AddVerbara()`, `AddVerbaraSessions()`

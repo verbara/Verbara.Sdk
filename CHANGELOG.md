@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Docs
+
+- Purged post-rebrand `Asterisk*` residue from 13 living package/example READMEs (`AddAsterisk*` DI-call identifiers → `AddVerbara*`, plus the bare `AsteriskOptions`/`AsteriskServer`/`AsteriskServerPool` types in `Verbara.Sdk.Hosting/README.md`), and rewrote the fictional multi-server snippet in `Verbara.Sdk.Hosting/README.md` against the real `AddVerbaraMultiServer()` + `VerbaraServerPool.AddServerAsync()` API. Runtime data values preserved byte-for-byte: the `asterisk.sdk.calls…` NATS subjects and the `"Asterisk"` config-section key. (verbara-meta/ADR-0007)
+
 ### Fixed
 
 - **LMNT TTS: `SynthesizeAsync` no longer throws when the server aborts mid-send.** The LMNT WebSocket path sent its four request frames (init/text/flush/EOF) unguarded, so a transport abort during send surfaced a `WebSocketException` (`Broken pipe`) that propagated out of the async enumerator and threw instead of completing gracefully — violating the documented contract (LMNT's 4-frame handshake had 4× the exposure of single-frame Cartesia/Deepgram). Request sends are now wrapped in the same `OperationCanceledException` + `WebSocketException` catch the receive loop and half-close already use; the receive loop owns teardown, so a mid-send abort ends the stream cleanly. Deterministic regression test added (`SynthesizeAsync_ShouldComplete_WhenServerAbortsMidSend`). ([#84](https://github.com/verbara/Verbara.Sdk/pull/84))

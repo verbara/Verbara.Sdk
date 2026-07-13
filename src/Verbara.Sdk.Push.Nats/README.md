@@ -10,7 +10,7 @@ This is the .NET answer to the Go-based `ari-proxy` pattern: keep the SDK's loca
 using Verbara.Sdk.Push.Hosting;
 using Verbara.Sdk.Push.Nats;
 
-builder.Services.AddAsteriskPush()
+builder.Services.AddVerbaraPush()
                 .AddPushNats(opts =>
                 {
                     opts.Url = "nats://nats.internal:4222";
