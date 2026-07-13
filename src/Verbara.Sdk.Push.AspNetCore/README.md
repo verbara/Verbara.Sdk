@@ -15,7 +15,7 @@ ASP.NET Core SSE delivery endpoints for Verbara.Sdk.Push. First SDK package with
 
 ```csharp
 // Register services
-builder.Services.AddAsteriskPushAspNetCore();
+builder.Services.AddVerbaraPushAspNetCore();
 
 // Map endpoint (default prefix: /api/v1/push)
 app.MapPushEndpoints();

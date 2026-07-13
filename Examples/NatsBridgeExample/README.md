@@ -35,7 +35,7 @@ Push.Nats bridge started → nats://127.0.0.1:4222 (prefix: asterisk.sdk)
 
 ## What It Shows
 
-- `AddAsteriskPush` + `AddPushNats` — two DI calls wire the in-process bus and the NATS bridge.
+- `AddVerbaraPush` + `AddPushNats` — two DI calls wire the in-process bus and the NATS bridge.
 - Subject translation — the SDK's `TopicPath` (`calls.inbound.started`) becomes the NATS subject `asterisk.sdk.calls.inbound.started`. `NatsSubjectTranslator` handles both `/` and `.` separators and sanitizes NATS-invalid characters.
 - Wildcard consumption — the inline subscriber listens on `asterisk.sdk.>` and receives every event.
 - Envelope shape — the payload is the same JSON envelope produced by `Verbara.Sdk.Push.Webhooks`, so consumers can treat both transports interchangeably.

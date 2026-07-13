@@ -5,7 +5,7 @@ Redis-backed `SessionStoreBase` implementation for `Verbara.Sdk.Sessions`. Enabl
 ## Usage
 
 ```csharp
-services.AddAsteriskSessionsBuilder()
+services.AddVerbaraSessionsBuilder()
         .UseRedis(opts =>
         {
             opts.ConfigurationString = "localhost:6379";
@@ -18,7 +18,7 @@ Or supply a pre-built `IConnectionMultiplexer` directly:
 
 ```csharp
 var redis = await ConnectionMultiplexer.ConnectAsync("localhost:6379");
-services.AddAsteriskSessionsBuilder()
+services.AddVerbaraSessionsBuilder()
         .UseRedis(redis, opts => opts.KeyPrefix = "myapp:");
 ```
 

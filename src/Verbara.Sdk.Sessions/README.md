@@ -14,8 +14,8 @@ Session Engine for the Verbara.Sdk ecosystem. Provides call session correlation,
 ## Quick Start
 
 ```csharp
-services.AddAsterisk(options => { /* AMI config */ });
-services.AddAsteriskSessions(options =>
+services.AddVerbara(options => { /* AMI config */ });
+services.AddVerbaraSessions(options =>
 {
     options.InboundContextPatterns = ["from-external"];
     options.OutboundContextPatterns = ["from-internal"];
@@ -35,5 +35,5 @@ public class PostgresSessionStore : SessionStoreBase
 }
 
 services.AddSingleton<SessionStoreBase, PostgresSessionStore>();
-services.AddAsteriskSessions();
+services.AddVerbaraSessions();
 ```

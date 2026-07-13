@@ -8,8 +8,8 @@ Outbound HTTP webhook delivery for `Verbara.Sdk.Push`. Consumes events from the 
 using Verbara.Sdk.Push.Topics;
 using Verbara.Sdk.Push.Webhooks;
 
-builder.Services.AddAsteriskPush()
-                .AddAsteriskPushWebhooks(opts =>
+builder.Services.AddVerbaraPush()
+                .AddVerbaraPushWebhooks(opts =>
                 {
                     opts.MaxRetries = 5;
                     opts.InitialDelay = TimeSpan.FromSeconds(1);
@@ -42,7 +42,7 @@ Extra per-subscription headers are appended from `WebhookSubscription.Headers`.
 
 ## Extension points
 
-- **Custom payload shape:** implement `IWebhookPayloadSerializer` and register as singleton before `AddAsteriskPushWebhooks`.
+- **Custom payload shape:** implement `IWebhookPayloadSerializer` and register as singleton before `AddVerbaraPushWebhooks`.
 - **Custom signature:** implement `IWebhookSigner` (e.g., JWT, asymmetric signatures) and register as singleton.
 - **Durable subscriptions:** implement `IWebhookSubscriptionStore` (SQL/Redis/Postgres) and register as singleton. The default `InMemoryWebhookSubscriptionStore` is process-local.
 

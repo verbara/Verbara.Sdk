@@ -21,7 +21,7 @@ dotnet run --project Examples/SessionExample/
 
 ## What It Shows
 
-- Registering sessions with `AddAsteriskSessions()` alongside `AddAsterisk()`
+- Registering sessions with `AddVerbaraSessions()` alongside `AddVerbara()`
 - Subscribing to `ICallSessionManager.Events` to receive typed domain events
 - Handling `CallStartedEvent`, `CallConnectedEvent`, `CallHeldEvent`, `CallResumedEvent`, `CallEndedEvent`, and `CallFailedEvent`
 - Displaying wait time, talk time, agent ID, and queue name from event data
@@ -30,4 +30,4 @@ dotnet run --project Examples/SessionExample/
 ## Key SDK Packages Used
 
 - `Verbara.Sdk.Sessions` — `ICallSessionManager`, session domain events
-- `Verbara.Sdk.Hosting` — `AddAsterisk()`, `AddAsteriskSessions()`
+- `Verbara.Sdk.Hosting` — `AddVerbara()`, `AddVerbaraSessions()`

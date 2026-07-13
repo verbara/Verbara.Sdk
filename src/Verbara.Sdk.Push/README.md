@@ -37,7 +37,7 @@ public sealed record ConversationAssigned : PushEvent
 // 2) Register services
 var services = new ServiceCollection();
 services.AddLogging();
-services.AddAsteriskPush(options =>
+services.AddVerbaraPush(options =>
 {
     options.BufferCapacity = 512;
     options.BackpressureStrategy = BackpressureStrategy.DropOldest;
