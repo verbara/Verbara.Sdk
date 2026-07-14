@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-07-14
+
 ### Docs
 
 - Purged post-rebrand `Asterisk*` residue from 13 living package/example READMEs (`AddAsterisk*` DI-call identifiers → `AddVerbara*`, plus the bare `AsteriskOptions`/`AsteriskServer`/`AsteriskServerPool` types in `Verbara.Sdk.Hosting/README.md`), and rewrote the fictional multi-server snippet in `Verbara.Sdk.Hosting/README.md` against the real `AddVerbaraMultiServer()` + `VerbaraServerPool.AddServerAsync()` API. Runtime data values preserved byte-for-byte: the `asterisk.sdk.calls…` NATS subjects and the `"Asterisk"` config-section key. (verbara-meta/ADR-0007)
