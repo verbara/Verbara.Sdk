@@ -54,12 +54,18 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
     [Fact]
     public async Task SynthesizeAsync_ShouldAbort_WhenCancelled()
     {
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        // Deterministic contract (test-determinism fence, ADR-0038): a pre-cancelled token
+        // throws OperationCanceledException at iterator entry, before any provider request is
+        // issued — independent of scheduling/mock latency. No wall-clock race against the fake
+        // server (mirrors the STT deflake, PR#77).
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
         var synth = BuildSynthesizer();
         var act = async () => await synth
             .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz, cts.Token)
             .ToListAsync(cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
+        _server.ReceivedJsonMessages.Should().BeEmpty();
     }
 
     [Fact]

@@ -13,6 +13,10 @@ jobs:
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
+    # Runs the unit subset once and collects coverage in the same execution
+    # (coverlet's collection overhead is small against the ~11 min saved by not
+    # re-building + re-running the suite in Coverage Ratchet). The raw cobertura
+    # results are uploaded as an artifact the Coverage Ratchet job consumes.
     steps:
       - uses: actions/checkout@v7.0.0
         with:
@@ -22,33 +26,44 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Build
         run: dotnet build Verbara.Sdk.slnx -c Release
-      - name: Run unit tests
-        run: dotnet test Verbara.Sdk.slnx --no-build -c Release --filter "Category!=Functional&Category!=Integration&Category!=Realtime&Category!=Spike" --logger "console;verbosity=normal"
-
-  coverage:
-    name: Coverage Ratchet
-    runs-on: ubuntu-latest
-    # Blocking line-coverage ratchet (mirrors the Platform pilot + Platform.Web).
-    # Same unit subset as unit-tests; coverlet.runsettings excludes test asms,
-    # generated code, migrations, and the container-only src assemblies
-    # (Cluster.Postgres / Sessions.Postgres / Sessions.Redis). Fails if the merged
-    # line-rate drops below coverage-floor.json (raised manually, no CI write-back).
-    # Baseline + rationale: docs/research/2026-06-14-sdk-coverage-baseline.md.
-    steps:
-      - uses: actions/checkout@v7.0.0
-        with:
-          lfs: true
-      - uses: actions/setup-dotnet@v5.4.0
-        with:
-          dotnet-version: '10.0.x'
-      - name: Build
-        run: dotnet build Verbara.Sdk.slnx -c Release
-      - name: Unit tests with coverage
+      - name: Run unit tests with coverage
         run: >-
           dotnet test Verbara.Sdk.slnx --no-build -c Release
           --filter "Category!=Functional&Category!=Integration&Category!=Realtime&Category!=Spike"
           --collect:"XPlat Code Coverage" --settings coverlet.runsettings
           --results-directory ${{ github.workspace }}/coverage
+          --logger "console;verbosity=normal"
+      - name: Upload raw coverage results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: coverage-raw-${{ github.sha }}
+          path: coverage/**/coverage.cobertura.xml
+          if-no-files-found: error
+
+  coverage:
+    name: Coverage Ratchet
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    # Fast consumer of the unit-tests coverage artifact — no build, no test run
+    # (that duplicate ~11 min run was removed; unit-tests now collects coverage
+    # in its single execution). Merges the raw cobertura results with
+    # reportgenerator and gates against coverage-floor.json. Mirrors the Platform
+    # pilot + Platform.Web ratchet; the floor, coverlet.runsettings exclusions
+    # (test asms, generated code, migrations, container-only src assemblies —
+    # Cluster.Postgres / Sessions.Postgres / Sessions.Redis) and manual-only
+    # ratchet semantics (no CI write-back) are unchanged (verbara-meta/ADR-0003).
+    # Baseline + rationale: docs/research/2026-06-14-sdk-coverage-baseline.md.
+    steps:
+      - uses: actions/checkout@v7.0.0
+      - uses: actions/setup-dotnet@v5.4.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Download raw coverage results
+        uses: actions/download-artifact@v7.0.1
+        with:
+          name: coverage-raw-${{ github.sha }}
+          path: coverage
       - name: Merge coverage report
         run: |
           dotnet tool restore
@@ -113,13 +128,17 @@ jobs:
     name: Functional Tests (Testcontainers)
     runs-on: ubuntu-latest
     needs: unit-tests
-    # Runs on both pull_request and merge_group so a regression that only surfaces
-    # in the merge result is caught before landing on main. Cost: ~19 min added to
-    # the queue critical path per matrix variant, parallel across runners.
+    # Representative matrix on pull_request ([23] — newest supported, fast
+    # feedback); full matrix in the merge queue ([22, 23]) so nothing lands on
+    # main without full-matrix validation. A 22-only regression is caught at
+    # queue time rather than PR time (accepted — rare; keeps ~20 min of
+    # full-matrix wall-clock out of every PR iteration). See ADR-0038 (D3) and
+    # verbara-meta/ADR-0003. Cost: ~19 min per matrix variant, parallel across
+    # runners.
     strategy:
       fail-fast: false
       matrix:
-        asterisk: [22, 23]
+        asterisk: ${{ github.event_name == 'merge_group' && fromJSON('[22, 23]') || fromJSON('[23]') }}
     env:
       ASTERISK_VERSION: ${{ matrix.asterisk }}
     steps:
