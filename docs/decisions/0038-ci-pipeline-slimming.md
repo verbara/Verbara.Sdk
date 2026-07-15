@@ -82,3 +82,25 @@ a context that will never report (the ADR-0003 documented failure mode).
 - **Drop the 22 variant entirely.** Cheapest. **Rejected:** 22 is still a supported target;
   dropping it removes real coverage rather than deferring it to the queue. The conditional matrix
   keeps full validation on the path that actually gates `main`.
+
+## Addendum (2026-07-15) — "queue-validated" is detection, not enforcement, under classic branch protection
+
+Landing `ci-pipeline-slimming` (PR #101) surfaced a precision worth recording. With **classic
+branch protection + a merge queue** (this repo's setup, not rulesets), dropping
+`Functional Tests (Testcontainers) (22)` from the *required* checks means the queue still
+**executes** (22) on the `merge_group` run but no longer **hard-blocks** on it: required checks
+gate queue *entry* (at the PR level) and the *final* mergeability signal, but a non-required check
+that runs inside `merge_group` is observed, not enforced as a gate. So D3's "queue-validated" is
+**detection** — a 22-only regression shows up as a visible red on `main`'s queue run and a human
+must act — rather than an automatic enforcement gate that refuses the merge. The delivered safety
+is that the failure is *seen at queue time on `main`'s own run*, not that the queue mechanically
+rejects it; a true hard gate would require making `... (22)` required again on the `merge_group`
+context (which would re-introduce the PR-level requirement this change removed) or moving to
+rulesets with event-scoped required checks.
+
+Verified empirically at landing: the GraphQL `enqueuePullRequest` mutation was **refused** with
+"Required status check ... (22) is expected" until `... (22)` was dropped from the required set —
+confirming required checks gate queue entry at the PR level. After the drop, the queue **drained
+cleanly** (the `merge_group` run 29385726367 ran (22)+(23) in parallel, both passed, PR #101
+merged as d4f86bb0). No change to the Decision above; this only sharpens what "queue-validated"
+buys under classic branch protection.
