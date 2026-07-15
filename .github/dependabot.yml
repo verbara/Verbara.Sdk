@@ -34,11 +34,17 @@ updates:
       - dependency-name: "Microsoft.NET.Test.Sdk"
         update-types: ["version-update:semver-major"]
     groups:
-      # Group all Microsoft.Extensions.* bumps into a single PR.
+      # Group Microsoft.Extensions.*/runtime bumps into a single PR — minor +
+      # patch only, so a major stays an individual review event (ADR-0039 D2,
+      # per GitHub's "optimizing PR creation for version updates" guidance).
       microsoft-extensions:
+        update-types:
+          - "minor"
+          - "patch"
         patterns:
           - "Microsoft.Extensions.*"
           - "Microsoft.CodeAnalysis.*"
+          - "System.*"
       # Group all xunit/test-stack bumps together.
       test-stack:
         patterns:
@@ -73,3 +79,13 @@ updates:
       prefix: "chore(ci)"
     cooldown:
       default-days: 7
+    groups:
+      # Group github-actions bumps into a single PR — minor + patch only, so a
+      # major action bump stays an individual review event (ADR-0039 D2, per
+      # GitHub's "optimizing PR creation for version updates" guidance).
+      github-actions:
+        update-types:
+          - "minor"
+          - "patch"
+        patterns:
+          - "*"
