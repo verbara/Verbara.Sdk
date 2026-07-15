@@ -108,3 +108,51 @@ groups are preserved unchanged.
   skipped=success and needs no branch-protection edit.
 - **Defer functional tests to release-only** and **move to self-hosted/ARC runners.** Both
   considered and set aside — see D3 (rejected / deferred with a named trigger).
+
+## Addendum (2026-07-15) — D1 correction: job-level → step-level guard
+
+**Status:** Accepted · **Supersedes the mechanism of D1, not its intent.**
+
+D1 shipped in PR #103 as a **job-level** `if:` on `functional-tests`. It failed in the field. D1's
+third bullet — "a job skipped by `if:` reports skipped=success and does not block a required check"
+— is true for a *plain* job name but **false for a matrix-named required context**, which is exactly
+what `main`'s classic branch protection requires here.
+
+### Observed failure
+
+- Branch protection on `main` requires the context `Functional Tests (Testcontainers) (23)` — with
+  the matrix suffix.
+- When the job-level `if:` evaluates false on a Dependabot `pull_request`, GitHub does **not** expand
+  the matrix. It collapses the job into a single check run named `Functional Tests (Testcontainers)`
+  (**no `(23)` suffix**) with conclusion SKIPPED.
+- The required context `Functional Tests (Testcontainers) (23)` therefore **never reports**. Every
+  other check is green and the merge queue is empty, but the PR sits `mergeStateStatus: BLOCKED` and
+  auto-merge never enqueues.
+- Verified live on Dependabot PRs **#104 and #105** (`gh pr view 104/105 --json statusCheckRollup`;
+  `gh api repos/verbara/Verbara.Sdk/branches/main/protection` confirmed the required suffix context).
+  This is the same never-reporting-context failure verbara-meta/ADR-0003 codifies — reached not by
+  whole-workflow filtering but by a job-level skip that changes the emitted check-run *name*.
+
+### Correction
+
+Move the bot skip from job level to **step level** in `.github/workflows/ci.yml`:
+
+- The `functional-tests` job now **always runs**, so the matrix expands and the `(23)` check-run name
+  materializes and reports **success** on bot PRs.
+- The two heavy steps — "Pre-pull Docker images and build Asterisk test image" and "Run functional +
+  integration tests" — each carry the **same** guard expression D1 used:
+
+  ```yaml
+  if: github.event_name == 'merge_group' || github.event.pull_request.user.login != 'dependabot[bot]'
+  ```
+
+  On a bot `pull_request` both heavy steps skip and the job completes SUCCESS in seconds; on human
+  PRs and on `merge_group` every step runs in full — behaviour byte-for-byte identical to D1's
+  intent. The three shape rules from D1 (`merge_group` term leads; key on
+  `github.event.pull_request.user.login`, not `github.actor`) are unchanged; only the placement moves
+  from job to step.
+
+**No branch-protection edit** — the fix stays entirely in the workflow. The D1 claim that a skip
+keeps required checks green still holds, but only once the job (and thus the matrix-suffixed
+check-run name) always materializes; the guard belongs on the steps, not the job. Change:
+`dependabot-ci-load` (openspec, tasks 3.1/3.2/3.3 updated).

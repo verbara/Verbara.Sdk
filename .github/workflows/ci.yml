@@ -128,17 +128,21 @@ jobs:
     name: Functional Tests (Testcontainers)
     runs-on: ubuntu-latest
     needs: unit-tests
-    # Bot-authored PRs skip the representative pull_request functional variant;
-    # merge_group always runs the full matrix and remains the landing gate (an
-    # automerged bot PR loses zero landing validation). The condition shape is
-    # load-bearing in ways the YAML can't show: the merge_group term MUST lead
-    # (the queue actor is the enqueuer, not the bot, so user.login isn't the bot
-    # on merge_group); it keys on github.event.pull_request.user.login, NOT
-    # github.actor (actor flips to the human on a re-run and would re-enable the
-    # matrix); and it's a job-level if: so the skip reports skipped=success and
-    # blocks no required check (whole-workflow filtering would leave it Pending
-    # forever). See ADR-0039.
-    if: github.event_name == 'merge_group' || github.event.pull_request.user.login != 'dependabot[bot]'
+    # Bot-authored PRs skip the *heavy work* of the representative pull_request
+    # functional variant; merge_group always runs the full matrix and remains the
+    # landing gate (an automerged bot PR loses zero landing validation). The guard
+    # is applied at STEP level, NOT job level (ADR-0039 addendum, 2026-07-15):
+    # a job-level if: that evaluates false collapses the matrix so GitHub reports
+    # a single check named "Functional Tests (Testcontainers)" (no matrix suffix,
+    # SKIPPED), and the required context "Functional Tests (Testcontainers) (23)"
+    # then NEVER reports — leaving bot PRs BLOCKED forever (observed on #104/#105).
+    # Keeping the job (and its matrix) always-run materializes the (23) check-run
+    # name and reports it success in seconds; only the Docker/Testcontainers steps
+    # are guarded. The guard shape is load-bearing in ways the YAML can't show:
+    # the merge_group term MUST lead (the queue actor is the enqueuer, not the bot,
+    # so user.login isn't the bot on merge_group); it keys on
+    # github.event.pull_request.user.login, NOT github.actor (actor flips to the
+    # human on a re-run and would re-enable the matrix). See ADR-0039 + addendum.
     # Representative matrix on pull_request ([23] — newest supported, fast
     # feedback); full matrix in the merge queue ([22, 23]) so nothing lands on
     # main without full-matrix validation. A 22-only regression is caught at
@@ -160,6 +164,9 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Pre-pull Docker images and build Asterisk test image
+        # Guarded (ADR-0039 addendum): bot-authored pull_request events skip this
+        # heavy step; merge_group and human PRs run it in full. See the job comment.
+        if: github.event_name == 'merge_group' || github.event.pull_request.user.login != 'dependabot[bot]'
         # Populate the Docker layer cache before tests run so container startups are fast.
         # The Asterisk image is rebuilt per-matrix because the FROM tag changes.
         run: |
@@ -172,6 +179,11 @@ jobs:
             --build-arg CODEC_OPUS_VERSION=${{ matrix.asterisk }}.0_1.3.0 \
             -t asterisk-sdk-test-cache:${{ matrix.asterisk }}
       - name: Run functional + integration tests
+        # Guarded (ADR-0039 addendum): bot-authored pull_request events skip the
+        # Testcontainers test execution; merge_group and human PRs run it in full.
+        # With this step and the pre-pull skipped, the job completes SUCCESS in
+        # seconds on bot PRs while the (23) check-run name still reports.
+        if: github.event_name == 'merge_group' || github.event.pull_request.user.login != 'dependabot[bot]'
         # MaxCpuCount=1 serializes test projects so FunctionalTests and IntegrationTests
         # do not start their Docker stacks concurrently (CI runner has limited resources).
         # ASTERISK_VERSION env reaches AsteriskContainer.CreateImageAsync via
