@@ -24,20 +24,32 @@
 ## 3. Verification
 
 - [ ] 3.1 On a real Dependabot PR, confirm `Functional Tests (Testcontainers) (23)` reports
-      **skipped** on `pull_request`, no required check is left Pending, and the PR lands through
-      the merge queue with the full `[22, 23]` matrix running on `merge_group`
-      _(PENDING OBSERVATION — cannot be verified by this PR; verified by the **next real
-      Dependabot PR** after this lands: watch its `pull_request` checks show `Functional Tests
-      (Testcontainers) (23)` = skipped with no required check Pending, then its `merge_group` run
-      show (22)+(23). Leave unchecked until then.)_
-- [ ] 3.2 On a human PR, confirm the representative `Functional Tests (Testcontainers) (23)`
+      **success** on `pull_request` (job runs, heavy steps skip), no required check is left Pending
+      or never-reporting, and the PR lands through the merge queue with the full `[22, 23]` matrix
+      running on `merge_group`
+      _(PENDING OBSERVATION — the **first** observation, 2026-07-15 on Dependabot PRs **#104/#105**,
+      FAILED: the job-level `if:` (PR #103) collapsed the matrix so the required suffix context
+      `Functional Tests (Testcontainers) (23)` never reported → both PRs `mergeStateStatus: BLOCKED`,
+      merge queue empty, auto-merge never enqueued. Root cause + fix: ADR-0039 addendum (guard moved
+      job → step level; the job now always runs so the `(23)` check-run name materializes and reports
+      success in seconds on bot PRs). Re-observation now waits on the **next real Dependabot PR**
+      after this step-level fix lands: watch its `pull_request` checks show `Functional Tests
+      (Testcontainers) (23)` = success (heavy steps skipped) with no required check Pending, then its
+      `merge_group` run show (22)+(23). Leave unchecked until then.)_
+- [x] 3.2 On a human PR, confirm the representative `Functional Tests (Testcontainers) (23)`
       variant **still runs** on `pull_request` (the skip applies only to bot-authored PRs)
-      _(PENDING OBSERVATION — verified by **this very PR's own CI**: this branch is human-authored,
-      so its `pull_request` run MUST show `Functional Tests (Testcontainers) (23)` **running**, not
-      skipped. Confirm on the PR's checks, then check this box in the archive step.)_
+      _(CONFIRMED: PR #103's own `pull_request` run — a human PR — shows `Functional Tests
+      (Testcontainers) (23)` COMPLETED SUCCESS with the heavy Testcontainers steps executing. The
+      step-level guard in this fix is byte-for-byte identical in effect on human PRs and on
+      `merge_group` (full run); only bot-authored `pull_request` events skip the heavy steps.)_
 - [x] 3.3 Scope note (CI-config only): **NO** version bump, **NO** CHANGELOG package entry (there
-      is no `src/` change), and **NO** branch-protection edit — a job skipped by `if:` reports
-      skipped=success, so required checks stay green (contrast ADR-0038, which had to reconcile a
-      required context). `openspec validate --all --strict` green before the PR.
-      _(Confirmed: no `src/` touched, no version/CHANGELOG package entry, no branch-protection edit;
-      `openspec validate --all --strict` → 5 passed, 0 failed.)_
+      is no `src/` change), and **NO** branch-protection edit — with the **step-level** guard the
+      job always runs, so the matrix expands and the required `(23)` check-run name reports
+      success (contrast ADR-0038, which had to reconcile a required context).
+      `openspec validate --all --strict` green before the PR.
+      _(Correction, 2026-07-15: the original "a job skipped by `if:` reports skipped=success, so
+      required checks stay green" assumption FAILED for a **matrix-named** required context — a
+      job-level skip collapses the matrix so the `(23)`-suffixed context never reports (PRs
+      #104/#105 BLOCKED). The fix moved the guard to STEP level so the job — and its matrix — always
+      run; still **NO** branch-protection edit. Confirmed: no `src/` touched, no version/CHANGELOG
+      package entry, no branch-protection edit; `openspec validate --all --strict` green.)_

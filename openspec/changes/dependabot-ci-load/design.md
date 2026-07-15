@@ -91,8 +91,41 @@ guidance.
   Mitigation: verification (tasks 3.1/3.2) lands a real Dependabot PR and a human PR and confirms
   the observed behaviour on both events before the change is trusted.
 
+## Field correction (2026-07-15) — D1's job-level `if:` collapsed the matrix name
+
+D1 shipped in PR #103 as a **job-level** `if:` on `functional-tests`. It failed in the field. The
+"skipped=success blocks no required check" reasoning was correct for a *plain* job name, but wrong
+for a **matrix-named** required context:
+
+- Classic branch protection on `main` requires the context `Functional Tests (Testcontainers) (23)`
+  — with the matrix suffix.
+- When the job-level `if:` evaluates false on a Dependabot PR, GitHub does **not** expand the matrix.
+  It collapses the job into a single check run named `Functional Tests (Testcontainers)` (no `(23)`
+  suffix) with conclusion SKIPPED.
+- The required context `Functional Tests (Testcontainers) (23)` therefore **never reports** on bot
+  PRs. The PR sits `mergeStateStatus: BLOCKED` with every other check green and the merge queue
+  empty; auto-merge never enqueues. Observed live on Dependabot PRs **#104 and #105**
+  (`gh pr view --json statusCheckRollup`; `gh api .../branches/main/protection` confirmed the
+  required suffix context).
+
+This is the same never-reporting-context failure verbara-meta/ADR-0003 codifies — reached here not
+by whole-workflow filtering but by a job-level skip that changes the emitted check-run *name*.
+
+### Correction — move the guard to STEP level (branch protection untouched)
+
+The `functional-tests` job now **always runs** (so the matrix expands and the `(23)` check-run name
+materializes and reports success on bot PRs). The bot skip moves to **step level**: the two heavy
+steps — "Pre-pull Docker images and build Asterisk test image" and "Run functional + integration
+tests" — each carry the *same* guard expression D1 used
+(`github.event_name == 'merge_group' || github.event.pull_request.user.login != 'dependabot[bot]'`).
+On a bot `pull_request` both heavy steps skip and the job completes SUCCESS in seconds; on human PRs
+and on `merge_group` every step runs in full — behaviour byte-for-byte identical to D1's intent.
+**No branch-protection edit** — the fix stays entirely in the workflow (ADR-0039 addendum,
+2026-07-15).
+
 ## Recorded decisions
 
-D1, D2, and D3 are durable CI policy → recorded as `Sdk/ADR-0039` (task 1.1). The `ci-gating` spec
-delta records the normative requirement (bot PRs MAY skip the representative matrix; the queue full
+D1, D2, and D3 are durable CI policy → recorded as `Sdk/ADR-0039` (task 1.1); the D1 job-level →
+step-level correction is the ADR-0039 **addendum** (2026-07-15). The `ci-gating` spec delta records
+the normative requirement (bot PRs MAY skip the representative matrix's heavy work; the queue full
 matrix remains the landing gate).
