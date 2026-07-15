@@ -7,15 +7,19 @@
 Bot-authored pull requests (currently `dependabot[bot]`) MAY skip the representative
 `pull_request` functional matrix. The `merge_group` full Asterisk support matrix SHALL still run
 for every PR — bot or human — and remains the authoritative landing gate: no change SHALL land on
-`main` without the full-matrix `merge_group` validation passing. Skipping the representative
-variant SHALL be expressed as a job-level condition so the skipped job reports skipped=success and
-does not leave any required check Pending.
+`main` without the full-matrix `merge_group` validation passing. The skip SHALL be expressed as a
+step-level condition on the heavy functional steps (not a job-level `if:`) so the
+`functional-tests` job always runs, its matrix expands, and the matrix-suffixed required check-run
+name (`Functional Tests (Testcontainers) (23)`) materializes and reports success — leaving no
+required check Pending or never-reporting. A job-level skip collapses the matrix into an unsuffixed
+`SKIPPED` check run, so the matrix-suffixed required context never reports and the PR sits
+`BLOCKED` (ADR-0039 addendum).
 
 #### Scenario: A Dependabot PR skips the representative functional variant
 
 - **GIVEN** a pull request authored by `dependabot[bot]` targeting `main`
 - **WHEN** CI runs on the `pull_request` event
-- **THEN** the representative functional job is skipped (reported as skipped=success, blocking no required check), and the PR is free to enter the merge queue
+- **THEN** the `functional-tests` job still runs and its matrix-suffixed check `Functional Tests (Testcontainers) (23)` reports success in seconds (the two heavy Testcontainers steps skipped), blocking no required check, and the PR is free to enter the merge queue
 
 #### Scenario: The full matrix still gates every bot landing
 
