@@ -23,19 +23,21 @@
 
 ## 3. Verification
 
-- [ ] 3.1 On a real Dependabot PR, confirm `Functional Tests (Testcontainers) (23)` reports
+- [x] 3.1 On a real Dependabot PR, confirm `Functional Tests (Testcontainers) (23)` reports
       **success** on `pull_request` (job runs, heavy steps skip), no required check is left Pending
       or never-reporting, and the PR lands through the merge queue with the full `[22, 23]` matrix
       running on `merge_group`
-      _(PENDING OBSERVATION — the **first** observation, 2026-07-15 on Dependabot PRs **#104/#105**,
-      FAILED: the job-level `if:` (PR #103) collapsed the matrix so the required suffix context
-      `Functional Tests (Testcontainers) (23)` never reported → both PRs `mergeStateStatus: BLOCKED`,
-      merge queue empty, auto-merge never enqueued. Root cause + fix: ADR-0039 addendum (guard moved
-      job → step level; the job now always runs so the `(23)` check-run name materializes and reports
-      success in seconds on bot PRs). Re-observation now waits on the **next real Dependabot PR**
-      after this step-level fix lands: watch its `pull_request` checks show `Functional Tests
-      (Testcontainers) (23)` = success (heavy steps skipped) with no required check Pending, then its
-      `merge_group` run show (22)+(23). Leave unchecked until then.)_
+      _(CONFIRMED 2026-07-15, after the step-level guard landed in PR #106 (merged
+      2026-07-15T13:46Z) and a `@dependabot rebase`. Dependabot PR **#104** (`chore(ci): Bump
+      actions/download-artifact from 7.0.0 to 8.0.1`): its `pull_request` run reported `Functional
+      Tests (Testcontainers) (23)` = COMPLETED SUCCESS (heavy Testcontainers steps skipped, the
+      matrix-suffixed check-run name materialized) with no required check left Pending. It
+      auto-enqueued and landed through the merge queue at 2026-07-15T14:28:06Z; the `merge_group`
+      CI run (run id **29421534165**) ran the FULL matrix — `Functional Tests (Testcontainers) (22)`
+      SUCCESS **and** `(23)` SUCCESS. Corroborated by sibling Dependabot PR **#105**, which showed
+      the identical `pull_request` pattern ((23) SUCCESS, heavy steps skipped). The first
+      observation (both PRs BLOCKED under the job-level `if:`) is preserved in the ADR-0039 addendum
+      as the root-cause record.)_
 - [x] 3.2 On a human PR, confirm the representative `Functional Tests (Testcontainers) (23)`
       variant **still runs** on `pull_request` (the skip applies only to bot-authored PRs)
       _(CONFIRMED: PR #103's own `pull_request` run — a human PR — shows `Functional Tests
