@@ -170,10 +170,12 @@ public class DeepgramSpeechSynthesizerTests : IAsyncDisposable
     [Fact]
     public async Task SynthesizeAsync_ShouldAbort_WhenCancelled()
     {
-        // Server keeps the connection open indefinitely so the synthesizer stays live.
-        _server.HangForever = true;
-
-        using var cts = new CancellationTokenSource(millisecondsDelay: 200);
+        // Deterministic contract (test-determinism fence, ADR-0038): a pre-cancelled token
+        // throws OperationCanceledException at iterator entry, before any provider request is
+        // issued — independent of scheduling/mock latency. No wall-clock race against the fake
+        // server (mirrors the STT deflake, PR#77).
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
         var synth = BuildSynthesizer();
 
         var act = async () => await synth
@@ -181,6 +183,7 @@ public class DeepgramSpeechSynthesizerTests : IAsyncDisposable
             .ToListAsync(cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
+        _server.ReceivedJsonMessages.Should().BeEmpty();
     }
 
     public async ValueTask DisposeAsync()

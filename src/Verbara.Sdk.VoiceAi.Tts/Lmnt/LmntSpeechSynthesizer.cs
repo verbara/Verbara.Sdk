@@ -77,6 +77,12 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
         AudioFormat outputFormat,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        // Deterministic cancellation contract (test-determinism fence): observe the token
+        // at iterator entry so a pre-cancelled token throws before any provider request is
+        // issued, independent of transport (WebSocket/HTTP) or mock latency. Mirrors the
+        // STT fence (ADR-0038).
+        ct.ThrowIfCancellationRequested();
+
         if (_options.Transport == LmntTransport.Http || _fakeHttpBaseUri is not null)
         {
             await foreach (var chunk in SynthesizeHttpAsync(text, outputFormat, ct).ConfigureAwait(false))

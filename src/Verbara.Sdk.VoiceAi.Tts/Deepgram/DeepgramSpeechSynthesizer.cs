@@ -57,6 +57,11 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
         AudioFormat outputFormat,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        // Deterministic cancellation contract (test-determinism fence): observe the token
+        // at iterator entry so a pre-cancelled token throws before any provider request is
+        // issued, independent of scheduling/mock latency. Mirrors the STT fence (ADR-0038).
+        ct.ThrowIfCancellationRequested();
+
         var uri = BuildUri(outputFormat);
         using var ws = new ClientWebSocket();
 

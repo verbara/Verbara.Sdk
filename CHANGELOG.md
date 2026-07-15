@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-07-14
+
+### Changed — TTS cancellation contract (behavioral clarification)
+
+- TTS speech synthesizers (`Deepgram`, `ElevenLabs`, `Lmnt`) now observe the `CancellationToken` at `SynthesizeAsync` iterator entry (`ct.ThrowIfCancellationRequested()` before any provider request is issued). A pre-cancelled token now deterministically throws `OperationCanceledException` before the first WebSocket/HTTP call, instead of racing scheduling/mock latency. No behavior change for non-cancelled tokens. Mirrors the STT fence shipped in v2.3.0 and de-flakes the queue-blocking cancellation tests (`DeepgramSpeechSynthesizerTests`/`ElevenLabsSpeechSynthesizerTests.SynthesizeAsync_ShouldAbort_WhenCancelled`), which switch from wall-clock timer races to the deterministic pre-cancelled-token pattern; verified with the 30× repeat-run protocol (zero flakes). Lmnt's causal-trigger test was audited and left as-is. (ADR-0038, verbara-meta/ADR-0004 adopt-on-touch)
+
+### Changed — CI
+
+- **Coverage is collected once per validation run.** The `Unit Tests` job now runs with coverage collection and uploads the raw cobertura results as an artifact; the `Coverage Ratchet` job (`needs: unit-tests`) consumes that artifact — `reportgenerator` merge + `check-coverage-floor.py` — instead of re-building and re-running the whole unit suite (~11 min removed). The committed floor and manual-ratchet semantics are unchanged. (ADR-0038 D2, verbara-meta/ADR-0003)
+- **Representative functional matrix on PRs, full matrix in the merge queue.** `functional-tests` now runs Asterisk `[23]` only on `pull_request` (fast feedback) and the full `[22, 23]` matrix on `merge_group`, so nothing lands on `main` without full-matrix validation. (ADR-0038 D3, verbara-meta/ADR-0003)
+
 ## [2.3.1] - 2026-07-14
 
 ### Docs
