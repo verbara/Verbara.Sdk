@@ -135,7 +135,7 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         while (!ct.IsCancellationRequested)
         {
             yield return new byte[320];
-            await Task.Delay(10, ct);
+            await Task.Delay(10, ct); // fence-allow: LOOP-DRIVER — paces the endless frame generator; never executes under a pre-cancelled token
         }
     }
 
