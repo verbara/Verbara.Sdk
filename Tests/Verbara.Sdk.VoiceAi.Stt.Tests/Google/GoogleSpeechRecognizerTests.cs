@@ -79,6 +79,27 @@ public class GoogleSpeechRecognizerTests
         results.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task StreamAsync_ShouldAbort_WhenCancelled()
+    {
+        // Deterministic contract (test-determinism fence): a pre-cancelled token throws
+        // OperationCanceledException at iterator entry, before any provider request is
+        // issued — independent of scheduling/mock latency. No wall-clock race.
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var mock = new MockHttpMessageHandler(GoogleJsonResponse);
+        var recognizer = new GoogleSpeechRecognizer(
+            Options.Create(new GoogleSpeechOptions { ApiKey = "gcp-key" }),
+            new HttpClient(mock));
+
+        var act = async () => await recognizer
+            .StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz, cts.Token)
+            .ToListAsync(cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        mock.Requests.Should().BeEmpty();
+    }
+
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()
     {
         yield return new byte[320];

@@ -75,10 +75,39 @@ public class CartesiaSpeechRecognizerTests : IAsyncDisposable
         await act.Should().NotThrowAsync();
     }
 
+    [Fact]
+    public async Task StreamAsync_ShouldAbort_WhenCancelled()
+    {
+        // Deterministic contract (test-determinism fence): a pre-cancelled token throws
+        // OperationCanceledException at iterator entry, before any provider request is
+        // issued — independent of scheduling/mock latency. No wall-clock race against the
+        // fake server (see openspec/changes/archive/2026-07-05-stt-cancellation-test-fence).
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var recognizer = BuildRecognizer();
+
+        var act = async () =>
+            await recognizer.StreamAsync(EndlessFrames(), AudioFormat.Slin16Mono8kHz, cts.Token)
+                .ToListAsync(cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        _server.ReceivedFrameCount.Should().Be(0);
+    }
+
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()
     {
         yield return new byte[320];
         await Task.CompletedTask;
+    }
+
+    private static async IAsyncEnumerable<ReadOnlyMemory<byte>> EndlessFrames(
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            yield return new byte[320];
+            await Task.Delay(10, ct); // fence-allow: LOOP-DRIVER — paces the endless frame generator; never executes under a pre-cancelled token
+        }
     }
 
     public async ValueTask DisposeAsync()
