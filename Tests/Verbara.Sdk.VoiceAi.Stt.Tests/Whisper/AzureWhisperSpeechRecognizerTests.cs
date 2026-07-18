@@ -57,6 +57,26 @@ public class AzureWhisperSpeechRecognizerTests
         results.Should().ContainSingle(r => r.Transcript == "prueba azure" && r.IsFinal);
     }
 
+    [Fact]
+    public async Task StreamAsync_ShouldAbort_WhenCancelled()
+    {
+        // Deterministic contract (test-determinism fence): a pre-cancelled token throws
+        // OperationCanceledException at iterator entry, before any provider request is
+        // issued — independent of scheduling/mock latency. No wall-clock race.
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var mock = new MockHttpMessageHandler(WhisperJsonResponse);
+        var recognizer = new AzureWhisperSpeechRecognizer(
+            Options.Create(ValidOptions), new HttpClient(mock));
+
+        var act = async () => await recognizer
+            .StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz, cts.Token)
+            .ToListAsync(cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        mock.Requests.Should().BeEmpty();
+    }
+
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()
     {
         yield return new byte[320];
