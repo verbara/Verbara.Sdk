@@ -1,0 +1,7 @@
+{
+  "_comment": "Denominator guard for coverage-gate-v2 (verbara-meta/ADR-0013, clause: close the shared blind spot). Net-new-only ratchet, mirroring sync-fence-baseline.json (Sdk/ADR-0004): counts [ExcludeFromCodeCoverage] markers across the source glob (build output excluded). Net-new occurrences FAIL the build; lower 'count' by hand only when you delete an exclusion. Stops the 'shrink the denominator to dodge both coverage gates' laundering vector. Baseline as of 2026-07-20: 0 markers over 863 production source files.",
+  "source_glob": "src/**/*.cs",
+  "exclude_globs": ["src/**/obj/**", "src/**/bin/**"],
+  "min_scanned_files": 500,
+  "count": 0
+}
