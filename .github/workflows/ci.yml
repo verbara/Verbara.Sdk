@@ -56,9 +56,20 @@ jobs:
     # Baseline + rationale: docs/research/2026-06-14-sdk-coverage-baseline.md.
     steps:
       - uses: actions/checkout@v7.0.0
+        with:
+          # fetch-depth: 0 is REQUIRED by coverage-gate-v2 (verbara-meta/ADR-0013):
+          # check-patch-coverage.py needs `git merge-base origin/main HEAD`, which
+          # a shallow clone cannot resolve. Works on both pull_request and
+          # merge_group refs. The script's liveness self-test fails loud if this
+          # is ever removed (an empty merge-base reads as a shallow clone).
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v5.4.0
         with:
           dotnet-version: '10.0.x'
+      - name: Install diff-cover (pinned)
+        # The only new supply-chain surface for the patch gate. Pinned exactly
+        # (ADR-0013). ubuntu runners ship python3 + pip.
+        run: pip install --disable-pip-version-check diff_cover==10.3.0
       - name: Download raw coverage results
         uses: actions/download-artifact@v8.0.1
         with:
@@ -71,14 +82,39 @@ jobs:
             -reports:"coverage/**/coverage.cobertura.xml" \
             -targetdir:"coverage/report" \
             -reporttypes:"Cobertura;TextSummary;HtmlInline_AzurePipelines"
-      - name: Enforce line-coverage floor (manual ratchet)
+      - name: Enforce coverage band (manual ratchet, two-sided)
+        # coverage-gate-v2 backstop (ADR-0013 clause b): fail below floor OR above
+        # floor+slack (stale floor), plus blocking branch floor + lines_valid_min.
         run: python3 scripts/check-coverage-floor.py coverage/report/Cobertura.xml coverage-floor.json
+      - name: Enforce patch coverage (diff-cover)
+        # coverage-gate-v2 primary gate (ADR-0013 clause a): coverage of the lines
+        # changed vs origin/main must be >= coverage-floor.json["patch"].
+        run: python3 scripts/check-patch-coverage.py coverage/report/Cobertura.xml coverage-floor.json
+      - name: Enforce coverage-exclusion baseline (denominator guard)
+        # coverage-gate-v2 denominator guard (ADR-0013): net-new
+        # [ExcludeFromCodeCoverage] markers fail the build (shrinking the
+        # denominator would game both coverage gates).
+        run: python3 scripts/check-exclusion-baseline.py coverage-exclusion-baseline.json .
       - name: Upload coverage report
         if: ${{ always() }}
         uses: actions/upload-artifact@v7.0.1
         with:
           name: coverage-${{ github.sha }}
           path: coverage/report
+
+  coverage-scripts:
+    name: Coverage Script Tests
+    runs-on: ubuntu-latest
+    # Cheap (~seconds, no .NET): unit-tests the three coverage-gate-v2 guard
+    # scripts (verbara-meta/ADR-0013). The SyncFence precedent requires the guard
+    # itself be tested. diff-cover is installed so the patch-coverage cases run
+    # (they self-skip when it is absent, but CI always has it).
+    steps:
+      - uses: actions/checkout@v7.0.0
+      - name: Install diff-cover (pinned)
+        run: pip install --disable-pip-version-check diff_cover==10.3.0
+      - name: Run coverage-script unit tests
+        run: python3 -m unittest discover scripts/tests
 
   aot-check:
     name: AOT Trim Check
