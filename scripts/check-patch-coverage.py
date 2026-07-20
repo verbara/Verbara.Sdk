@@ -27,10 +27,13 @@ up).
 Liveness self-tests (transplanted from the SyncFence `MinimumScannedFiles` defense,
 Sdk/ADR-0004) — a mis-wired report reads false-green without them:
   * empty / unresolved merge-base (a shallow clone) -> exit 1, loud.
-  * the diff touches executable source lines but diff-cover measured ZERO lines
+  * the diff ADDS an executable source line but diff-cover measured ZERO lines
     -> exit 1, loud (the report does not line up with the source tree).
-A clean diff that touches no measurable source (docs / config only) is NOT a
-liveness failure — there is legitimately nothing to measure; patch coverage passes.
+A clean diff that adds no measurable executable source is NOT a liveness failure —
+there is legitimately nothing to measure; patch coverage passes. This covers not
+only docs/config-only changes but also import-path refactors, pure renames, and
+comment/type-only or test-only edits: those touch source files yet add no line
+diff-cover can score, so a zero measurement is honest, not a mis-wiring.
 
 Exit codes: 0 = pass, 1 = fail (below floor OR a liveness trip OR a wiring error).
 """
@@ -93,17 +96,102 @@ def resolve_merge_base():
     return proc.stdout.strip() or None
 
 
-def diff_touches_source(merge_base, source_extensions):
-    """True if the PR diff (merge_base..HEAD) adds/changes a file whose extension
-    is a measurable source extension. Decides whether a zero-measured report is a
-    wiring failure or an honestly-empty (docs/config-only) diff."""
-    proc = run(["git", "diff", "--name-only", f"{merge_base}...HEAD"])
+# An added line matching any of these is never scored by diff-cover, so a diff made
+# up ONLY of them (an import-path refactor, a rename, a comment/type edit) yields a
+# legitimate zero measurement — not a mis-wired report. Conservative by design: any
+# added line that is NOT clearly non-executable counts as executable, so a real code
+# change still arms the liveness trip.
+_NON_EXECUTABLE_PREFIXES = (
+    "import ", "from ", "} from ", "export {", "export type ", "export * ",
+    "//", "/*", "*/", "* ",
+)
+_NON_EXECUTABLE_EXACT = {"*", "{", "}", "(", ")", "[", "]", "};", "),", ");", "],", "})"}
+
+
+def _is_test_path(path):
+    lower = path.lower()
+    return (".test." in lower or ".spec." in lower
+            or "/tests/" in lower or "/__tests__/" in lower)
+
+
+def report_source_files(report_path, fmt):
+    """The set of file paths the coverage report actually instruments. Used to
+    scope the liveness trip: a changed file that is NOT in the report (a config
+    file like eslint.config.js, a build script) can never be measured, so its
+    executable-looking lines are not a mis-wiring signal."""
+    files = set()
+    if fmt == "lcov":
+        with open(report_path, encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("SF:"):
+                    files.add(line[3:].strip())
+    else:  # cobertura
+        for cls in ET.parse(report_path).getroot().iter("class"):
+            filename = cls.get("filename")
+            if filename:
+                files.add(filename)
+    return files
+
+
+def instrumented_roots(report_path, fmt):
+    """The set of top-level directories the coverage report instruments (e.g.
+    {'src'}). Used to scope the liveness trip: a changed executable file UNDER an
+    instrumented root but absent/unmeasured is a mis-wiring signal; a change to a
+    file outside those roots (eslint.config.js, vite.config.ts, a build script) can
+    never be measured, so its executable-looking lines are not.
+
+    Cobertura paths are normalized to repo-relative before this runs; lcov `SF:`
+    paths are already repo-relative. If no root can be derived (a flat report),
+    returns None so the caller falls back to the original 'any source file' rule."""
+    roots = set()
+    for entry in report_source_files(report_path, fmt):
+        parts = _split_path(entry)
+        if len(parts) >= 2:
+            roots.add(parts[0])
+    return roots or None
+
+
+def _split_path(path):
+    """Normalized ('./src/x' and 'src\\x' -> ['src', 'x']) path segments."""
+    normalized = os.path.normpath(path.replace("\\", "/")).replace(os.sep, "/")
+    return normalized.lstrip("/").split("/")
+
+
+def _in_scope(changed_path, roots):
+    if roots is None:  # flat report: keep the original conservative behavior.
+        return True
+    parts = _split_path(changed_path)
+    return len(parts) >= 2 and parts[0] in roots
+
+
+def diff_adds_executable_source(merge_base, source_extensions, roots):
+    """True if the PR diff ADDS a plausibly-executable line in a NON-TEST source
+    file under an instrumented root. Tells a mis-wired report (real code changed but
+    0 measured) apart from a legitimately-unmeasurable diff (import-path refactor,
+    rename, comment/type-only, test-only, or a change confined to non-instrumented
+    config/tooling — none of which diff-cover scores). Only the former is a
+    false-green risk; the latter passes as 'nothing to gate'."""
+    proc = run(["git", "diff", "--unified=0", f"{merge_base}...HEAD"])
     if proc.returncode != 0:
         return False
-    for name in proc.stdout.splitlines():
-        name = name.strip()
-        if any(name.lower().endswith(ext) for ext in source_extensions):
-            return True
+    is_source = False
+    for line in proc.stdout.splitlines():
+        if line.startswith("+++ "):
+            path = line[4:].strip()
+            if path.startswith("b/"):
+                path = path[2:]
+            is_source = (any(path.lower().endswith(ext) for ext in source_extensions)
+                         and not _is_test_path(path)
+                         and _in_scope(path, roots))
+            continue
+        if not is_source or line.startswith("+++") or not line.startswith("+"):
+            continue
+        code = line[1:].strip()
+        if not code or code in _NON_EXECUTABLE_EXACT:
+            continue
+        if any(code.startswith(prefix) for prefix in _NON_EXECUTABLE_PREFIXES):
+            continue
+        return True
     return False
 
 
@@ -209,12 +297,16 @@ def main():
         measured_lines = int(result.get("total_num_lines", 0))
         changed_lines = int(result.get("num_changed_lines", 0))
 
-        # Liveness 2: the diff touched executable source but the report measured
-        # zero diff lines -> the report does not line up with the tree.
+        # Liveness 2: the diff ADDS an executable source line but the report
+        # measured zero diff lines -> the report does not line up with the tree.
+        # Import-only/rename/comment/test-only diffs add no executable line, so a
+        # zero measurement there is honest (handled by the measured_lines==0 branch).
         source_extensions = _SOURCE_EXTENSIONS[fmt]
-        if measured_lines == 0 and diff_touches_source(merge_base, source_extensions):
-            fail(f"the diff changes {fmt} source lines but diff-cover measured 0 "
-                 f"diff lines (changed lines seen: {changed_lines}). The coverage "
+        roots = instrumented_roots(report_for_diffcover, fmt)
+        if measured_lines == 0 and diff_adds_executable_source(
+                merge_base, source_extensions, roots):
+            fail(f"the diff adds executable {fmt} source lines but diff-cover measured "
+                 f"0 diff lines (changed lines seen: {changed_lines}). The coverage "
                  f"report is mis-wired against the source tree — refusing to read "
                  f"false-green.")
 
