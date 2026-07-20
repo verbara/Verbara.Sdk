@@ -151,6 +151,21 @@ class CheckPatchCoverageTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("mis-wired", result.stdout)
 
+    @unittest.skipUnless(_HAS_DIFF_COVER, "diff-cover not installed")
+    def test_ShouldPass_WhenExecutableChangeIsOutsideInstrumentedRoot(self):
+        # A .cs change under a non-instrumented root (tooling/, not the report's
+        # src/ root) adds an executable line but can never be measured -> n/a, NOT
+        # a mis-wiring trip. This is the config/tooling counterpart to the mis-wired
+        # case above (an import-path refactor or an eslint.config.js edit lands here).
+        _git(self.repo, "checkout", "-q", "-b", "feature")
+        self._write("tooling/Gen.cs", "class Gen { int F() { return 2; } }\n")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-qm", "tooling")
+        report = self._report([(2, 1)])  # covers src/calc.py -> instrumented root 'src'
+        result = self._run(report, self._floor())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("n/a, pass", result.stdout)
+
     def test_ShouldFail_WhenMergeBaseUnresolved(self):
         # A fresh repo with an unrelated orphan HEAD and NO origin/main ref: the
         # merge-base cannot resolve -> shallow-clone signature -> FAIL loud.
