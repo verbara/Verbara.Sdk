@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Backstop coverage gate: a two-sided band floor over merged aggregate coverage.
 
-Usage: check-coverage-floor.py <merged-cobertura.xml> <coverage-floor.json>
+Usage: check-coverage-floor.py <report> <coverage-floor.json>
+
+  <report>  the merged coverage report. Format is auto-detected by file name /
+            content:
+              *.xml                      -> ReportGenerator-merged Cobertura
+              *summary*.json / *.json    -> vitest v8 coverage-summary.json (Web)
 
 Coverage-gate-v2 backstop (verbara-meta/ADR-0013, clause b — the aggregate must
-not silently rot OR go stale). Reads the ReportGenerator-merged Cobertura
-`line-rate` / `branch-rate` (0..1) and `lines-valid`, compares to the committed
-floor (percent, 0..100), and fails on ANY of:
+not silently rot OR go stale). Reads line% / branch% / lines-valid from whichever
+report format is present, compares to the committed floor (percent, 0..100), and
+fails on ANY of:
 
   * line-band FLOOR breach   : line_pct < floor["line"]            (regression)
   * line-band CEILING breach : line_pct > floor["line"] + floor["slack"]
@@ -19,11 +24,15 @@ floor (percent, 0..100), and fails on ANY of:
                                (a shrunk measurement can't false-green)
 
 Dependency-free (stdlib only) by design, like the fail-below-only predecessor.
-This file is BYTE-IDENTICAL across all repos that adopt ADR-0013.
+The Cobertura reading path + the comparison core are BYTE-IDENTICAL to the .NET
+repos that adopt ADR-0013; Web ONLY adds a coverage-summary.json reader and a
+format dispatch in front of the shared core (so a later copy of this file back
+onto Sdk/Pro/Platform is a no-op on their behavior).
 Exit codes: 0 = pass (inside every bound), 1 = any breach or a malformed report.
 """
 import json
 import math
+import os
 import sys
 import xml.etree.ElementTree as ET
 
@@ -62,16 +71,100 @@ def _required(floor, key):
     return floor[key]
 
 
+def read_cobertura(report_path):
+    """The .NET path: parse ReportGenerator's merged Cobertura and return
+    (line_pct, branch_pct, lines_valid). BYTE-IDENTICAL to the shared reader —
+    a later re-sync of this file onto Sdk/Pro/Platform is a no-op here."""
+    try:
+        root = ET.parse(report_path).getroot()
+    except (OSError, ET.ParseError) as exc:
+        fail(f"cannot parse Cobertura report '{report_path}': {exc}")
+
+    line_pct = _pct(root, "line-rate")
+    branch_pct = _pct(root, "branch-rate")
+    lines_valid = _int(root, "lines-valid")
+    return line_pct, branch_pct, lines_valid
+
+
+def _summary_pct(total, group, report_path):
+    section = total.get(group)
+    if not isinstance(section, dict) or "pct" not in section:
+        fail(f"coverage-summary.json '{report_path}' total.{group}.pct is missing "
+             f"— the vitest report is empty or malformed. Refusing to read "
+             f"false-green.")
+    try:
+        return round(float(section["pct"]), 2)
+    except (TypeError, ValueError):
+        fail(f"coverage-summary.json total.{group}.pct='{section.get('pct')}' is "
+             f"not a number — malformed report.")
+
+
+def _summary_int(total, group, field, report_path):
+    section = total.get(group)
+    if not isinstance(section, dict) or field not in section:
+        fail(f"coverage-summary.json '{report_path}' total.{group}.{field} is "
+             f"missing — the vitest report is empty or malformed. Refusing to "
+             f"read false-green.")
+    try:
+        return int(section[field])
+    except (TypeError, ValueError):
+        fail(f"coverage-summary.json total.{group}.{field}="
+             f"'{section.get(field)}' is not an integer — malformed report.")
+
+
+def read_coverage_summary(report_path):
+    """The Web path: read vitest v8's coverage-summary.json and return
+    (line_pct, branch_pct, lines_valid). Maps total.lines.pct -> line%,
+    total.branches.pct -> branch%, total.lines.total -> lines_valid, then hands
+    those three numbers to the SAME comparison core the Cobertura path uses."""
+    try:
+        with open(report_path, encoding="utf-8") as handle:
+            doc = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        fail(f"cannot parse coverage-summary.json '{report_path}': {exc}")
+
+    total = doc.get("total")
+    if not isinstance(total, dict):
+        fail(f"coverage-summary.json '{report_path}' has no 'total' object — the "
+             f"vitest report is empty or malformed. Refusing to read false-green.")
+
+    line_pct = _summary_pct(total, "lines", report_path)
+    branch_pct = _summary_pct(total, "branches", report_path)
+    lines_valid = _summary_int(total, "lines", "total", report_path)
+    return line_pct, branch_pct, lines_valid
+
+
+def detect_format(report_path):
+    """Autodetect by file name, falling back to content sniffing. *.xml -> the
+    Cobertura path; *summary*.json / any *.json holding a 'total' object -> the
+    vitest coverage-summary path. Extend here; the comparison core is untouched."""
+    lower = os.path.basename(report_path).lower()
+    if lower.endswith(".xml"):
+        return "cobertura"
+    if lower.endswith(".json"):
+        return "coverage-summary"
+    # Content sniff for an unfamiliar extension: XML declaration -> Cobertura.
+    try:
+        with open(report_path, encoding="utf-8", errors="replace") as handle:
+            head = handle.read(4096).lstrip()
+    except OSError as exc:
+        fail(f"cannot read coverage report '{report_path}': {exc}")
+    if head.startswith("<"):
+        return "cobertura"
+    if head.startswith("{"):
+        return "coverage-summary"
+    fail(f"cannot autodetect coverage format from report '{report_path}' "
+         f"(expected a *.xml Cobertura or a *.json vitest coverage-summary).")
+
+
 def main():
     if len(sys.argv) != 3:
-        fail("usage: check-coverage-floor.py <merged-cobertura.xml> <coverage-floor.json>")
+        fail("usage: check-coverage-floor.py <report> <coverage-floor.json>")
 
-    cobertura, floor_file = sys.argv[1], sys.argv[2]
+    report_path, floor_file = sys.argv[1], sys.argv[2]
 
-    try:
-        root = ET.parse(cobertura).getroot()
-    except (OSError, ET.ParseError) as exc:
-        fail(f"cannot parse Cobertura report '{cobertura}': {exc}")
+    if not os.path.isfile(report_path):
+        fail(f"coverage report '{report_path}' not found.")
 
     try:
         with open(floor_file, encoding="utf-8") as handle:
@@ -85,9 +178,11 @@ def main():
     lines_valid_min = int(_required(floor, "lines_valid_min"))
     ceiling = line_floor + slack
 
-    line_pct = _pct(root, "line-rate")
-    branch_pct = _pct(root, "branch-rate")
-    lines_valid = _int(root, "lines-valid")
+    fmt = detect_format(report_path)
+    if fmt == "cobertura":
+        line_pct, branch_pct, lines_valid = read_cobertura(report_path)
+    else:
+        line_pct, branch_pct, lines_valid = read_coverage_summary(report_path)
 
     print(f"Line coverage:   {line_pct}%  (band [{line_floor}, {ceiling}])")
     print(f"Branch coverage: {branch_pct}%  (floor {branch_floor}%, blocking)")

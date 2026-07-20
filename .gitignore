@@ -66,3 +66,7 @@ CLAUDE.md
 
 ## Playwright MCP (browser automation logs/snapshots)
 .playwright-mcp/
+
+# Python bytecode (coverage-gate-v2 scripts, ADR-0013)
+__pycache__/
+*.pyc
