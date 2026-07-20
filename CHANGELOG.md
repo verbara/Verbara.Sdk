@@ -4,11 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed — CI
-
-- **Dependabot CI-load reduction (ADR-0039).** The representative functional matrix is skipped on Dependabot PRs and dependabot version bumps are consolidated into groups ([#103](https://github.com/verbara/Verbara.Sdk/pull/103)); a step-level dependabot guard keeps the required (23) status context reporting on bot PRs ([#106](https://github.com/verbara/Verbara.Sdk/pull/106), ADR-0039 addendum).
-
-## [2.3.2] - 2026-07-14
+## [2.3.2] - 2026-07-20
 
 ### Changed — TTS cancellation contract (behavioral clarification)
 
@@ -18,6 +14,7 @@ All notable changes to this project will be documented in this file.
 
 - **Coverage is collected once per validation run.** The `Unit Tests` job now runs with coverage collection and uploads the raw cobertura results as an artifact; the `Coverage Ratchet` job (`needs: unit-tests`) consumes that artifact — `reportgenerator` merge + `check-coverage-floor.py` — instead of re-building and re-running the whole unit suite (~11 min removed). The committed floor and manual-ratchet semantics are unchanged. (ADR-0038 D2, verbara-meta/ADR-0003) ([#101](https://github.com/verbara/Verbara.Sdk/pull/101))
 - **Representative functional matrix on PRs, full matrix in the merge queue.** `functional-tests` now runs Asterisk `[23]` only on `pull_request` (fast feedback) and the full `[22, 23]` matrix on `merge_group`, so nothing lands on `main` without full-matrix validation. (ADR-0038 D3, verbara-meta/ADR-0003) ([#101](https://github.com/verbara/Verbara.Sdk/pull/101))
+- **Dependabot CI-load reduction (ADR-0039).** The representative functional matrix is skipped on Dependabot PRs and dependabot version bumps are consolidated into groups ([#103](https://github.com/verbara/Verbara.Sdk/pull/103)); a step-level dependabot guard keeps the required (23) status context reporting on bot PRs ([#106](https://github.com/verbara/Verbara.Sdk/pull/106), ADR-0039 addendum).
 
 ## [2.3.1] - 2026-07-14
 
