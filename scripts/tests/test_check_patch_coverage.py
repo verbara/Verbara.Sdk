@@ -166,6 +166,60 @@ class CheckPatchCoverageTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("n/a, pass", result.stdout)
 
+    @unittest.skipUnless(_HAS_DIFF_COVER, "diff-cover not installed")
+    def test_ShouldPass_WhenExecutableChangeIsInProjectAbsentFromReport(self):
+        # A .cs change in a SECOND project the report does not instrument (a by-design
+        # coverage-excluded *.Storage.Postgres project, verified only by the
+        # integration-tests job) adds executable lines but can never be measured by THIS
+        # report -> n/a, NOT a mis-wiring trip. The multi-project counterpart to the
+        # outside-root case: the excluded project shares the 'src' top-level but is a
+        # different PROJECT root, so a project-scoped liveness trip must let it pass.
+        _git(self.repo, "checkout", "-q", "-b", "feature")
+        self._write("src/Acme.Storage.Postgres/Store.cs",
+                    "class Store { int F() { return 3; } }\n")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-qm", "pg")
+        # report instruments src/Acme.Core/... (project root 'src/Acme.Core'); the change
+        # landed in src/Acme.Storage.Postgres/... (a different, uninstrumented project).
+        text = _cobertura([(2, 1)], filename="src/Acme.Core/calc.py").replace(
+            "{ROOT}", self.repo)
+        report = os.path.join(self.repo, "Cobertura.xml")
+        with open(report, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        result = self._run(report, self._floor())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("n/a, pass", result.stdout)
+
+    @unittest.skipUnless(_HAS_DIFF_COVER, "diff-cover not installed")
+    def test_ShouldPass_WhenModifiedFileIsAbsentFromReport(self):
+        # Modifying an EXISTING file the report does not carry — a pure interface /
+        # declaration file (its added `Foo();` signature lines look executable but
+        # produce no coverage), or an integration-only class no unit test loads —
+        # measures nothing -> n/a, NOT a mis-wiring trip. A NEW file would still trip;
+        # only an already-existing, report-absent file is waved through.
+        self._write("src/Acme.Core/IThing.cs", "interface IThing { }\n")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-qm", "iface")
+        _git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        _git(self.repo, "checkout", "-q", "-b", "feature")
+        self._write(
+            "src/Acme.Core/IThing.cs",
+            "interface IThing {\n"
+            "    System.Threading.Tasks.Task<int> GetAsync(string id);\n"
+            "}\n")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-qm", "add signature")
+        # Report instruments a DIFFERENT file in the SAME project (so the project is
+        # instrumented) but NOT IThing.cs (interfaces produce no coverage class).
+        text = _cobertura([(2, 1)], filename="src/Acme.Core/Thing.cs").replace(
+            "{ROOT}", self.repo)
+        report = os.path.join(self.repo, "Cobertura.xml")
+        with open(report, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        result = self._run(report, self._floor())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("n/a, pass", result.stdout)
+
     def test_ShouldFail_WhenMergeBaseUnresolved(self):
         # A fresh repo with an unrelated orphan HEAD and NO origin/main ref: the
         # merge-base cannot resolve -> shallow-clone signature -> FAIL loud.

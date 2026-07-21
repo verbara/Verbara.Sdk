@@ -33,7 +33,13 @@ A clean diff that adds no measurable executable source is NOT a liveness failure
 there is legitimately nothing to measure; patch coverage passes. This covers not
 only docs/config-only changes but also import-path refactors, pure renames, and
 comment/type-only or test-only edits: those touch source files yet add no line
-diff-cover can score, so a zero measurement is honest, not a mis-wiring.
+diff-cover can score, so a zero measurement is honest, not a mis-wiring. It also
+covers a change confined to a coverage-EXCLUDED project — a multi-project repo may
+verify DB-bound code (e.g. a *.Storage.Postgres project) only in a separate
+integration-tests job and exclude it from the unit-coverage report by design; that
+project's changed lines are absent from this report, so the liveness trip scopes to
+the changed file's PROJECT (not just its top-level dir) to tell "excluded project"
+apart from "mis-wired report".
 
 Exit codes: 0 = pass, 1 = fail (below floor OR a liveness trip OR a wiring error).
 """
@@ -134,20 +140,25 @@ def report_source_files(report_path, fmt):
 
 
 def instrumented_roots(report_path, fmt):
-    """The set of top-level directories the coverage report instruments (e.g.
-    {'src'}). Used to scope the liveness trip: a changed executable file UNDER an
-    instrumented root but absent/unmeasured is a mis-wiring signal; a change to a
-    file outside those roots (eslint.config.js, vite.config.ts, a build script) can
-    never be measured, so its executable-looking lines are not.
+    """The set of project-level roots the coverage report instruments (e.g.
+    {'src/CoreLib', 'src/DataLayer'} for a multi-project repo, or {'src'} for a flat
+    one). Used to scope the liveness trip: a changed executable file whose PROJECT the
+    report instruments but leaves unmeasured is a mis-wiring signal; a change to a file
+    outside those projects can never be measured by this report, so its
+    executable-looking lines are not — this covers both a build/config file
+    (eslint.config.js, vite.config.ts) AND a by-design coverage-excluded project (a
+    *.Storage.Postgres project verified only by the integration-tests job). Scoping to
+    the top-level dir alone (e.g. 'src') would wrongly flag the latter, since the
+    excluded project still lives under 'src'.
 
     Cobertura paths are normalized to repo-relative before this runs; lcov `SF:`
     paths are already repo-relative. If no root can be derived (a flat report),
     returns None so the caller falls back to the original 'any source file' rule."""
     roots = set()
     for entry in report_source_files(report_path, fmt):
-        parts = _split_path(entry)
-        if len(parts) >= 2:
-            roots.add(parts[0])
+        root = _project_root(_split_path(entry))
+        if root:
+            roots.add(root)
     return roots or None
 
 
@@ -157,32 +168,59 @@ def _split_path(path):
     return normalized.lstrip("/").split("/")
 
 
+def _project_root(parts):
+    """The project-level prefix of a split path: 'src/Project' for a src/<project>/...
+    layout (>=3 segments), 'src' for a flat src/file layout (2 segments), None if too
+    shallow to place. This is the granularity at which coverage instrumentation is
+    decided: a repo with many build units excludes some projects from the unit-coverage
+    report by design (DB-bound integration-only code), so the liveness trip must scope
+    to the changed file's PROJECT, not just its shared top-level dir."""
+    if len(parts) >= 3:
+        return "/".join(parts[:2])
+    if len(parts) == 2:
+        return parts[0]
+    return None
+
+
 def _in_scope(changed_path, roots):
     if roots is None:  # flat report: keep the original conservative behavior.
         return True
-    parts = _split_path(changed_path)
-    return len(parts) >= 2 and parts[0] in roots
+    return _project_root(_split_path(changed_path)) in roots
 
 
-def diff_adds_executable_source(merge_base, source_extensions, roots):
-    """True if the PR diff ADDS a plausibly-executable line in a NON-TEST source
-    file under an instrumented root. Tells a mis-wired report (real code changed but
-    0 measured) apart from a legitimately-unmeasurable diff (import-path refactor,
-    rename, comment/type-only, test-only, or a change confined to non-instrumented
-    config/tooling — none of which diff-cover scores). Only the former is a
-    false-green risk; the latter passes as 'nothing to gate'."""
+def diff_adds_executable_source(merge_base, source_extensions, roots, report_files):
+    """True if the PR diff ADDS a plausibly-executable line to a NON-TEST source file
+    the report is SUPPOSED to measure — a NEW file in an instrumented project, or an
+    existing file already carried in the report. Only then is a zero measurement a
+    mis-wiring (real code changed but 0 measured). Everything else is legitimately
+    unmeasurable and passes as 'nothing to gate': an import-path refactor, rename,
+    comment/type-only or test-only edit (no scorable line at all); a change confined to
+    non-instrumented config/tooling or a coverage-excluded project (out of the
+    instrumented projects); and a modified file the report does not carry — a pure
+    interface/abstract declaration file (its new `Foo();` signature lines look
+    executable but produce no coverage), or an integration-only class no unit test
+    loads. A NEW file still trips (its executable code must be tested); only an
+    already-existing, report-absent file is waved through, so untested new code can
+    never hide."""
     proc = run(["git", "diff", "--unified=0", f"{merge_base}...HEAD"])
     if proc.returncode != 0:
         return False
     is_source = False
+    added_file = False
     for line in proc.stdout.splitlines():
+        if line.startswith("--- "):
+            # File header (`--- a/path` or `--- /dev/null`); /dev/null marks a new file.
+            added_file = line[4:].strip() == "/dev/null"
+            continue
         if line.startswith("+++ "):
             path = line[4:].strip()
             if path.startswith("b/"):
                 path = path[2:]
+            normalized = "/".join(_split_path(path))
             is_source = (any(path.lower().endswith(ext) for ext in source_extensions)
                          and not _is_test_path(path)
-                         and _in_scope(path, roots))
+                         and _in_scope(path, roots)
+                         and (added_file or normalized in report_files))
             continue
         if not is_source or line.startswith("+++") or not line.startswith("+"):
             continue
@@ -303,8 +341,12 @@ def main():
         # zero measurement there is honest (handled by the measured_lines==0 branch).
         source_extensions = _SOURCE_EXTENSIONS[fmt]
         roots = instrumented_roots(report_for_diffcover, fmt)
+        report_files = {
+            "/".join(_split_path(entry))
+            for entry in report_source_files(report_for_diffcover, fmt)
+        }
         if measured_lines == 0 and diff_adds_executable_source(
-                merge_base, source_extensions, roots):
+                merge_base, source_extensions, roots, report_files):
             fail(f"the diff adds executable {fmt} source lines but diff-cover measured "
                  f"0 diff lines (changed lines seen: {changed_lines}). The coverage "
                  f"report is mis-wired against the source tree — refusing to read "
