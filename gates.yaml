@@ -1,0 +1,88 @@
+# gates.yaml — ADR-0014 §2 Gate Contract manifest for Verbara.Sdk.
+# One entry per language-agnostic gate class (G1-G8). Cross-checkable by /xr:doctor.
+#   status: present | partial | na
+#   impl:          (present/partial) the CONCRETE CI job / script / guard that instantiates it — exists in this repo
+#   justification: (na) why the class genuinely does not apply to this repo's stack + chain role
+repo: Verbara.Sdk
+role: root
+visibility: public          # MIT open-core (the free, decompilable-by-design tier)
+charter: docs/specs/architecture.md
+decision_ref: verbara-meta/ADR-0014
+gates:
+  - id: G1
+    class: build-strictness
+    status: present
+    impl: >-
+      .github/workflows/ci.yml job "Unit Tests" (unit-tests) — dotnet build Verbara.Sdk.slnx -c Release
+      then the unit test subset; "OpenSpec Validate" (openspec) type-checks specs/changes strict.
+
+  - id: G2
+    class: warnings-as-errors+banned-deps
+    status: present
+    impl: >-
+      Directory.Build.props: TreatWarningsAsErrors=true + WarningLevel=9999 (repo-wide);
+      BanDapperPackageReferences MSBuild target fails the build on any Dapper/Dapper.AOT/
+      Verbara.Sdk.Dapper.Stubs reference (ADR-0022); Microsoft.CodeAnalysis.BannedApiAnalyzers +
+      BannedSymbols.txt ban reflection APIs and DateTime.Now; ci.yml "Pack Warnings Gate"
+      (pack-check) re-asserts -p:TreatWarningsAsErrors=true at pack time.
+
+  - id: G3
+    class: coverage
+    status: present
+    impl: >-
+      ci.yml "Coverage Ratchet" (coverage) runs the ADR-0013 triplet against coverage-floor.json —
+      scripts/check-coverage-floor.py (two-sided band), scripts/check-patch-coverage.py (diff-cover
+      patch floor, needs fetch-depth:0), scripts/check-exclusion-baseline.py (denominator guard vs
+      coverage-exclusion-baseline.json); ci.yml "Coverage Script Tests" (coverage-scripts) unit-tests
+      the guards themselves (scripts/tests/). Manual ratchet, no CI write-back (ADR-0003/ADR-0038).
+
+  - id: G4
+    class: architecture-layering
+    status: present
+    impl: >-
+      Tests/Verbara.Sdk.Governance.Tests (ordinary xunit, runs in the "Unit Tests" job):
+      LayeringGuardTests + ProjectGraph — no non-provider package may compile-time ProjectReference a
+      provider (.Postgres/.Redis/.Nats); ReflectionBanGuardTests + ReflectionBanScanner — zero-tolerance
+      Roslyn scan for AOT-breaking reflection in src/. Both carry liveness self-tests (≥20 projects /
+      ≥400 files) so a broken locator cannot false-green.
+
+  - id: G5
+    class: content-invariants
+    status: present
+    impl: >-
+      Three grep/Roslyn content guards no analyzer covers: SyncFenceRegressionGuardTests +
+      SyncFenceScanner (net-new-only wall-clock-barrier ratchet vs sync-fence-baseline.json, ADR-0004);
+      Tests/Verbara.Sdk.DocSnippets.Tests DocSnippetCompilationTests (every ```csharp doc block must
+      still compile against the real API); ci.yml "Audit Test Asserts" (audit-test-asserts) via
+      tools/audit-test-asserts.sh (no assertion-free [Fact]/[Theory]).
+
+  - id: G6
+    class: budgets
+    status: na
+    justification: >-
+      No natural LOC/bundle ceiling for a 29-package client library (no shipped app binary, no
+      web bundle). The nearest analogue — performance regression against README-cited BenchmarkDotNet
+      numbers — exists (.github/workflows/perf-regression.yml) but is a WEEKLY scheduled report, not a
+      per-PR budget gate (BenchmarkDotNet needs ~20-25 min for stable numbers; per-PR cost rejected).
+      A diff-vs-baseline.json gate is a documented follow-up, not a current gate.
+
+  - id: G7
+    class: publish-reality
+    status: present
+    impl: >-
+      ci.yml "AOT Trim Check" (aot-check) runs tools/verify-aot.sh — a trim-safe self-contained
+      dotnet publish of tools/AotCanary with /warnaserror + a smoke-run when host RID matches — proving
+      the ship-shape (Native AOT) invariant at PR time, not release time; standalone aot-validate.yml
+      mirrors it on push:[main]. Directory.Build.props EnablePackageValidation (baseline 2.1.0) +
+      PublicApiAnalyzers, surfaced by "Pack Warnings Gate" (pack-check), catch breaking API/package
+      drift before publish.yml (tag-triggered nuget.org push) ever runs.
+
+  - id: G8
+    class: supply-chain
+    status: present
+    impl: >-
+      codeql.yml (Analyze C#, security-extended, PR + merge_group + weekly); dependency-review.yml
+      (fail-on-severity high, denies GPL/AGPL/SSPL licenses); .github/dependabot.yml (daily nuget +
+      github-actions, release cooldown so freshly published packages settle before a bump PR opens);
+      dependabot-automerge.yml auto-merges only low-risk (non-major) analyzer/actions bumps through the
+      merge queue.
