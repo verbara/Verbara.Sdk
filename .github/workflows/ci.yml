@@ -18,7 +18,7 @@ jobs:
     # re-building + re-running the suite in Coverage Ratchet). The raw cobertura
     # results are uploaded as an artifact the Coverage Ratchet job consumes.
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           lfs: true
       - uses: actions/setup-dotnet@v5.4.0
@@ -55,7 +55,7 @@ jobs:
     # ratchet semantics (no CI write-back) are unchanged (verbara-meta/ADR-0003).
     # Baseline + rationale: docs/research/2026-06-14-sdk-coverage-baseline.md.
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           # fetch-depth: 0 is REQUIRED by coverage-gate-v2 (verbara-meta/ADR-0013):
           # check-patch-coverage.py needs `git merge-base origin/main HEAD`, which
@@ -110,7 +110,7 @@ jobs:
     # itself be tested. diff-cover is installed so the patch-coverage cases run
     # (they self-skip when it is absent, but CI always has it).
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
       - name: Install diff-cover (pinned)
         run: pip install --disable-pip-version-check diff_cover==10.3.0
       - name: Run coverage-script unit tests
@@ -120,7 +120,7 @@ jobs:
     name: AOT Trim Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           lfs: true
       - uses: actions/setup-dotnet@v5.4.0
@@ -133,7 +133,7 @@ jobs:
     name: Pack Warnings Gate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           lfs: true
       - uses: actions/setup-dotnet@v5.4.0
@@ -153,7 +153,7 @@ jobs:
     name: Audit Test Asserts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
       - name: Run assert audit
         # Walks Tests/**/*.cs for [Fact]/[Theory] declarations and fails the build
         # if any test body lacks an Assert./Should() expression. Catches the
@@ -193,7 +193,7 @@ jobs:
     env:
       ASTERISK_VERSION: ${{ matrix.asterisk }}
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           lfs: true
       - uses: actions/setup-dotnet@v5.4.0
@@ -234,6 +234,6 @@ jobs:
     name: OpenSpec Validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
       - name: Validate specs and changes (strict)
         run: npx -y @fission-ai/openspec@1.6.0 validate --all --strict --no-interactive
