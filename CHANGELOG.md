@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — Dependency bumps
+
+- Aligned the OpenTelemetry package family to **1.17.0**: `OpenTelemetry.Extensions.Hosting` and `OpenTelemetry.Exporter.OpenTelemetryProtocol` were lagging at 1.16.0 while `OpenTelemetry` (core) and `OpenTelemetry.Exporter.Console` were already at 1.17.0. OTel .NET ships the family in lockstep, so this removes the intra-family version drift. `OpenTelemetry.Exporter.Prometheus.AspNetCore` stays on its own prerelease cadence (`1.15.2-beta.1`).
+
 ## [2.3.2] - 2026-07-20
 
 ### Changed — TTS cancellation contract (behavioral clarification)
