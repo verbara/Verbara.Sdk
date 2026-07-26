@@ -4,9 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-07-26
+
 ### Changed — Dependency bumps
 
-- Aligned the OpenTelemetry package family to **1.17.0**: `OpenTelemetry.Extensions.Hosting` and `OpenTelemetry.Exporter.OpenTelemetryProtocol` were lagging at 1.16.0 while `OpenTelemetry` (core) and `OpenTelemetry.Exporter.Console` were already at 1.17.0. OTel .NET ships the family in lockstep, so this removes the intra-family version drift. `OpenTelemetry.Exporter.Prometheus.AspNetCore` stays on its own prerelease cadence (`1.15.2-beta.1`).
+- Bumped **`NATS.Client.Core` from 2.8.2 to 3.0.0** ([#126](https://github.com/verbara/Verbara.Sdk/pull/126)) — a **major** upgrade of a runtime dependency of the published packages. Consumers that resolve `NATS.Client.Core` transitively should review the NATS.Net 3.x breaking changes before upgrading. Verbara's own NATS usage is unaffected by the upgrade.
+- Aligned the OpenTelemetry package family to **1.17.0** ([#128](https://github.com/verbara/Verbara.Sdk/pull/128), [#131](https://github.com/verbara/Verbara.Sdk/pull/131)): `OpenTelemetry` (core) and `OpenTelemetry.Exporter.Console` were raised to 1.17.0, and the lagging `OpenTelemetry.Extensions.Hosting` + `OpenTelemetry.Exporter.OpenTelemetryProtocol` (1.16.0) were aligned to match. OTel .NET ships the family in lockstep, so this removes the intra-family version drift. `OpenTelemetry.Exporter.Prometheus.AspNetCore` stays on its own prerelease cadence (`1.15.2-beta.1`).
+- Bumped the **`Microsoft.Extensions.*` package group** (11 packages, [#115](https://github.com/verbara/Verbara.Sdk/pull/115)).
 
 ## [2.3.2] - 2026-07-20
 
