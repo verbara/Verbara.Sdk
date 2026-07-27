@@ -5,6 +5,21 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    # Docs/data-only fast-path §2 (verbara-meta/ADR-0016). SAFE here, and ONLY here: this
+    # workflow's job sets no `name:`, so its check-run is `aot-check` — NOT in main's required set
+    # (the required "AOT Trim Check" is ci.yml's job, verified 2026-07-27) — and it has NO
+    # merge_group trigger. Nothing to strand. On pull_request this job is a byte-for-byte duplicate
+    # of ci.yml's AOT Trim Check; push:[main] above is its only non-overlapping value and is
+    # deliberately left unfiltered so the default-branch AOT baseline stays fresh. Contrast
+    # codeql.yml — required AND merge_group-wired — which takes the §1 gate job instead.
+    # NOTE (verbara-meta/ADR-0016 §2): Verbara.Sdk.Pro ships a same-named aot-validate.yml whose
+    # `aot-check` IS a required classic-protection context. Do NOT copy this filter there.
+    # IF `aot-check` IS EVER PROMOTED TO A REQUIRED CONTEXT HERE, DELETE THIS FILTER FIRST.
+    paths-ignore:
+      - 'docs/**'
+      - 'openspec/**'
+      - '**/*.md'
+      - 'CHANGELOG.md'
 
 jobs:
   aot-check:
