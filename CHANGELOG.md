@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — CI
+
+- **Docs/data-only CI fast-path (gate job, verbara-meta/ADR-0016 wave 2).** `ci.yml` and `codeql.yml` each gain a lightweight `gate` job that classifies the PR / `merge_group` diff against the event's own base (`scripts/ci/classify-docs-only.sh`; fail-closed allowlist `docs/**`, `openspec/**`, `CHANGELOG.md`, top-level `*.md`, `**/README.md`, **minus** the six Markdown files `Verbara.Sdk.DocSnippets.Tests` Roslyn-compiles, whose only guard is the `Unit Tests` job). Six plain-named heavy required contexts — `Unit Tests`, `Coverage Ratchet`, `AOT Trim Check`, `Pack Warnings Gate`, `Audit Test Asserts`, `Analyze (C#)` — take `needs: gate` and a fail-closed **job-level** `if:`, reporting a satisfying `skipped` on a docs-only diff. The matrix-suffixed `Functional Tests (Testcontainers) (23)` keeps its job (and matrix) always-run and takes the guard at **step** level, so the suffixed check-run still materializes and reports green (ADR-0039 addendum, PRs #104/#105). `OpenSpec Validate` and `Coverage Script Tests` stay always-run; **`Coverage Script Tests` was promoted to a required context** so a mis-widened allowlist is merge-blocking rather than advisory. `codeql.yml` gets a gate rather than a `paths-ignore` because it is `merge_group`-wired and emits a required context; its classify step does not run on `push`/`schedule`, so the default-branch and weekly security baselines are never path-skipped. `aot-validate.yml` (non-required `aot-check`, no queue trigger) takes the §2 `paths-ignore` instead. The classifier ships with 31 bash unit tests plus a 6-assertion drift guard asserting its DocSnippets carve-out stays a superset of `DocSnippetCompilationTests.cs`. Measured cadence: 16 of the last 70 merged PRs are docs-only; 14 of them take the fast path.
+
 ## [2.4.0] - 2026-07-26
 
 ### Changed — Dependency bumps

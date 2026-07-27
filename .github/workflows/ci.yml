@@ -10,9 +10,58 @@ on:
   merge_group:
 
 jobs:
+  # Docs/data-only CI fast-path gate (verbara-meta/ADR-0016 §1). Classifies the PR / merge_group
+  # diff against the event's OWN base and exposes outputs.docs_only.
+  #
+  # Sdk is the ecosystem's FIRST classic-branch-protection + merge-queue repo: the 9 required
+  # contexts come from `gh api .../branches/main/protection` (strict:false); ruleset 16696290
+  # carries a merge_queue rule ONLY (ALLGREEN, SQUASH) and zero required checks.
+  #
+  # Guard level is chosen PER CONTEXT, not per repo (§1 precondition):
+  #  * FIVE plain-named heavy required contexts in this file — Unit Tests, Coverage Ratchet,
+  #    AOT Trim Check, Pack Warnings Gate, Audit Test Asserts — take the cheap JOB-level guard:
+  #    a job skipped by `if:` reports conclusion `skipped`, which satisfies a required context,
+  #    at zero runner cost.
+  #  * The SIXTH, "Functional Tests (Testcontainers) (23)", is MATRIX-SUFFIXED and takes the
+  #    STEP-level guard: a false job-level `if:` collapses the matrix into one unsuffixed
+  #    check-run, the (23) context never reports, and the PR is stranded forever (#104/#105,
+  #    ADR-0039 addendum — see that job's comment).
+  # Always-run (NO `needs: gate`): "OpenSpec Validate" (validates exactly the docs diff, §3.3)
+  # and "Coverage Script Tests", which hosts this classifier's unit tests and MUST run on the very
+  # PR that edits it (§3.4). The one required context NOT in this file, "Analyze (C#)", lives in
+  # codeql.yml, which is merge_group-wired — paths-ignore there is BANNED and `needs:` cannot cross
+  # workflow files, so codeql.yml carries its own gate job.
+  #
+  # Allowlist: docs/** openspec/** CHANGELOG.md, top-level *.md, **/README.md — MINUS the six
+  # Markdown files Verbara.Sdk.DocSnippets.Tests Roslyn-compiles inside the (gated) Unit Tests job.
+  gate:
+    name: Docs-only gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5        # bounds the new critical-path job (ruleset 16696290 waits 60 min)
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0          # base sha must be reachable for the diff
+      - id: classify
+        env:                      # §3.1 event-specific base — never hardcode origin/main
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        # Invoked via `bash` (not ./) so the committed file mode is never load-bearing, and the
+        # verdict is echoed to the LOG as well as to $GITHUB_OUTPUT — wave 1 sent 100% of stdout
+        # to the outputs file, leaving an empty step whenever a classification had to be debugged.
+        # Command substitution under the default `bash -e` shell preserves the classifier's exit
+        # status, so a crash FAILS this job => `needs.gate.result != 'success'` => heavy jobs RUN.
+        run: |
+          verdict="$(bash ./scripts/ci/classify-docs-only.sh "$BASE_SHA" "${{ github.sha }}")"
+          echo "classify-docs-only: $verdict"
+          echo "$verdict" >> "$GITHUB_OUTPUT"
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
+    needs: gate
+    if: ${{ !cancelled() && (needs.gate.result != 'success' || needs.gate.outputs.docs_only != 'true') }}
     # Runs the unit subset once and collects coverage in the same execution
     # (coverlet's collection overhead is small against the ~11 min saved by not
     # re-building + re-running the suite in Coverage Ratchet). The raw cobertura
@@ -44,7 +93,13 @@ jobs:
   coverage:
     name: Coverage Ratchet
     runs-on: ubuntu-latest
-    needs: unit-tests
+    needs: [unit-tests, gate]
+    # ADR-0016 §3.2 guard PLUS an explicit re-statement of the pre-existing `needs: unit-tests`
+    # SUCCESS edge, which `!cancelled()` would otherwise drop: this job downloads the artifact
+    # unit-tests produces, so it must stay skipped when unit-tests FAILS (today's implicit
+    # success()) as well as when the diff is docs-only (unit-tests skipped => no artifact).
+    # Bracket index syntax because the job id contains a hyphen.
+    if: ${{ !cancelled() && needs['unit-tests'].result == 'success' && (needs.gate.result != 'success' || needs.gate.outputs.docs_only != 'true') }}
     # Fast consumer of the unit-tests coverage artifact — no build, no test run
     # (that duplicate ~11 min run was removed; unit-tests now collects coverage
     # in its single execution). Merges the raw cobertura results with
@@ -115,10 +170,20 @@ jobs:
         run: pip install --disable-pip-version-check diff_cover==10.3.0
       - name: Run coverage-script unit tests
         run: python3 -m unittest discover scripts/tests
+      # Docs/data-only fast-path classifier unit tests (verbara-meta/ADR-0016 §3.4). This job
+      # carries NO `needs: gate` edge on purpose — it must run on the very PR that edits the
+      # classifier (and such a PR is never docs_only: scripts/ci/... is a nested non-doc path,
+      # asserted by one of the cases). Promoted to a REQUIRED context (2026-07-27) so a
+      # mis-widened allowlist is merge-BLOCKING, not advisory: this job is the only thing standing
+      # between a broken classifier and six silently-skipped required checks.
+      - name: Run docs-only classifier unit tests (ADR-0016)
+        run: bash scripts/tests/test_classify_docs_only.sh
 
   aot-check:
     name: AOT Trim Check
     runs-on: ubuntu-latest
+    needs: gate
+    if: ${{ !cancelled() && (needs.gate.result != 'success' || needs.gate.outputs.docs_only != 'true') }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -132,6 +197,8 @@ jobs:
   pack-check:
     name: Pack Warnings Gate
     runs-on: ubuntu-latest
+    needs: gate
+    if: ${{ !cancelled() && (needs.gate.result != 'success' || needs.gate.outputs.docs_only != 'true') }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -152,6 +219,8 @@ jobs:
   audit-test-asserts:
     name: Audit Test Asserts
     runs-on: ubuntu-latest
+    needs: gate
+    if: ${{ !cancelled() && (needs.gate.result != 'success' || needs.gate.outputs.docs_only != 'true') }}
     steps:
       - uses: actions/checkout@v7.0.1
       - name: Run assert audit
@@ -163,7 +232,14 @@ jobs:
   functional-tests:
     name: Functional Tests (Testcontainers)
     runs-on: ubuntu-latest
-    needs: unit-tests
+    needs: [unit-tests, gate]
+    # This job-level `if:` must NEVER evaluate false on a docs-only diff — a false job-level if:
+    # collapses the matrix and the required context "Functional Tests (Testcontainers) (23)" then
+    # never reports (#104/#105). Its ONLY purpose is to preserve the pre-existing `needs:
+    # unit-tests` edge that `!cancelled()` drops, while staying TRUE when unit-tests is SKIPPED
+    # (docs-only) so the matrix still expands. The docs-only guard itself lives on the two heavy
+    # STEPS below. Bracket index syntax because the job id contains a hyphen.
+    if: ${{ !cancelled() && needs['unit-tests'].result != 'failure' && needs['unit-tests'].result != 'cancelled' }}
     # Bot-authored PRs skip the *heavy work* of the representative pull_request
     # functional variant; merge_group always runs the full matrix and remains the
     # landing gate (an automerged bot PR loses zero landing validation). The guard
@@ -202,7 +278,15 @@ jobs:
       - name: Pre-pull Docker images and build Asterisk test image
         # Guarded (ADR-0039 addendum): bot-authored pull_request events skip this
         # heavy step; merge_group and human PRs run it in full. See the job comment.
-        if: github.event_name == 'merge_group' || github.event.pull_request.user.login != 'dependabot[bot]'
+        #
+        # ADR-0039 addendum bot skip (expression UNCHANGED and still LEADING — the merge_group
+        # term must lead) AND'ed with the ADR-0016 docs-only guard. Deliberately NO `!cancelled()`
+        # here: at STEP level any status function REMOVES the implicit success() over the preceding
+        # steps, so the expensive step would run after a failed checkout/setup-dotnet. Fail-closed
+        # is already guaranteed — gate=failure or gate=skipped makes the second term true => RUN.
+        if: >-
+          (github.event_name == 'merge_group' || github.event.pull_request.user.login != 'dependabot[bot]')
+          && (needs.gate.result != 'success' || needs.gate.outputs.docs_only != 'true')
         # Populate the Docker layer cache before tests run so container startups are fast.
         # The Asterisk image is rebuilt per-matrix because the FROM tag changes.
         run: |
@@ -219,7 +303,15 @@ jobs:
         # Testcontainers test execution; merge_group and human PRs run it in full.
         # With this step and the pre-pull skipped, the job completes SUCCESS in
         # seconds on bot PRs while the (23) check-run name still reports.
-        if: github.event_name == 'merge_group' || github.event.pull_request.user.login != 'dependabot[bot]'
+        #
+        # ADR-0039 addendum bot skip (expression UNCHANGED and still LEADING — the merge_group
+        # term must lead) AND'ed with the ADR-0016 docs-only guard. Deliberately NO `!cancelled()`
+        # here: at STEP level any status function REMOVES the implicit success() over the preceding
+        # steps, so the expensive step would run after a failed checkout/setup-dotnet. Fail-closed
+        # is already guaranteed — gate=failure or gate=skipped makes the second term true => RUN.
+        if: >-
+          (github.event_name == 'merge_group' || github.event.pull_request.user.login != 'dependabot[bot]')
+          && (needs.gate.result != 'success' || needs.gate.outputs.docs_only != 'true')
         # MaxCpuCount=1 serializes test projects so FunctionalTests and IntegrationTests
         # do not start their Docker stacks concurrently (CI runner has limited resources).
         # ASTERISK_VERSION env reaches AsteriskContainer.CreateImageAsync via

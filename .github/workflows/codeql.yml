@@ -18,10 +18,44 @@ permissions:
   security-events: write
 
 jobs:
+  # Docs/data-only CI fast-path gate (verbara-meta/ADR-0016 §1) — codeql.yml's OWN copy, because
+  # `needs:` cannot cross workflow files (same reason Sdk.Pro's aot-validate.yml carries one).
+  # "Analyze (C#)" IS a required context (classic branch protection) AND this workflow is
+  # merge_group-wired, so §2's workflow-level paths-ignore is BANNED here — it would strand
+  # "Analyze (C#)" in `Expected` forever, on both phases.
+  #
+  # push:[main] and the weekly schedule have NO base sha, so the CLASSIFY STEP (not the job) is
+  # event-guarded: on those events the step is skipped, outputs.docs_only is the empty string, and
+  # the guard below reads `'' != 'true'` => analyze RUNS. That is the SAME expression row wave 1
+  # exercises on every code PR (gate=success + docs_only!='true' => RUN) — deliberately NOT the
+  # never-exercised "gate=skipped" row, and no red gate check ever appears on main. The
+  # default-branch and scheduled security baselines are structurally never path-skipped.
+  gate:
+    name: Docs-only gate (CodeQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5        # bounds the new critical-path job (ruleset 16696290 waits 60 min)
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0          # base sha must be reachable for the diff
+      - id: classify
+        if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+        env:                      # §3.1 event-specific base — never hardcode origin/main
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          verdict="$(bash ./scripts/ci/classify-docs-only.sh "$BASE_SHA" "${{ github.sha }}")"
+          echo "classify-docs-only: $verdict"
+          echo "$verdict" >> "$GITHUB_OUTPUT"
+
   analyze:
     name: Analyze (C#)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    needs: gate
+    if: ${{ !cancelled() && (needs.gate.result != 'success' || needs.gate.outputs.docs_only != 'true') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
