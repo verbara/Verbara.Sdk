@@ -7,7 +7,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # `contents: write` (not `read`) so the final step can create the GitHub Release
+  # object for the tag. Single-job workflow, so a job-level override would scope
+  # nothing — the same job packs, pushes and releases.
+  contents: write
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -48,3 +51,76 @@ jobs:
           --source https://api.nuget.org/v3/index.json
           --api-key ${{ secrets.NUGET_API_KEY }}
           --skip-duplicate
+
+      - name: Create GitHub Release
+        # `publish.yml` pushed the packages but never created the Release object,
+        # so tags accumulated published-but-release-less — `v2.3.0` shipped that way
+        # and was backfilled by hand on 2026-07-12 after an `/xr:pending` fact-check.
+        # Mirrors Verbara.Platform.Web's `release.yml` (Web #246) and Sdk.Pro's
+        # in-workflow `gh release create`.
+        #
+        # Tag pushes only: this workflow also answers `workflow_dispatch`, where
+        # `github.ref` is a branch and there is no version to release.
+        #
+        # Runs AFTER the nuget push, so a Release object never advertises packages
+        # that failed to publish. Idempotent — an existing Release (e.g. the themed
+        # one `/xr:release` §H creates) is left untouched, never overwritten.
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::Release object for $TAG already exists — leaving it untouched."
+            exit 0
+          fi
+
+          VERSION="${TAG#v}"
+          NOTES_FILE="$(mktemp)"
+
+          # This version's own CHANGELOG section: everything between its heading
+          # (`## [2.4.0] - 2026-07-26`) and the next `## [` heading.
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { grab = 1; next }
+            grab && /^## \[/       { exit }
+            grab                   { print }
+          ' CHANGELOG.md > "$NOTES_FILE"
+
+          if [ ! -s "$NOTES_FILE" ]; then
+            echo "::warning::No CHANGELOG.md section found for [$VERSION] — falling back to a pointer body."
+            printf 'See [`CHANGELOG.md`](https://github.com/%s/blob/main/CHANGELOG.md) for this release.\n' \
+              "$GITHUB_REPOSITORY" > "$NOTES_FILE"
+          fi
+
+          # Drop trailing blank lines and any horizontal rule the section ended on,
+          # so the footer below contributes the only `---` in the body.
+          awk '{ line[NR] = $0 }
+               END { last = NR
+                     while (last > 0 && (line[last] ~ /^[[:space:]]*$/ || line[last] == "---")) last--
+                     for (i = 1; i <= last; i++) print line[i] }' "$NOTES_FILE" > "${NOTES_FILE}.trimmed"
+          mv "${NOTES_FILE}.trimmed" "$NOTES_FILE"
+
+          {
+            printf '\n---\n\n'
+            printf 'Packages published to [nuget.org](https://www.nuget.org/profiles/verbara) at version `%s`:\n\n' "$VERSION"
+            for f in ./artifacts/*.nupkg; do
+              [ -e "$f" ] || continue
+              base="$(basename "$f" .nupkg)"
+              printf -- '- `%s`\n' "${base%".$VERSION"}"
+            done
+          } >> "$NOTES_FILE"
+
+          # Claim the `Latest` badge only when this really is the highest version
+          # tag, so a patch cut on an older line cannot steal it from a newer minor.
+          # Tags come from the API — `actions/checkout` is shallow and carries none.
+          HIGHEST="$(gh api "repos/${GITHUB_REPOSITORY}/tags" --paginate -q '.[].name' | sort -V | tail -1)"
+          if [ "$HIGHEST" = "$TAG" ]; then LATEST=true; else LATEST=false; fi
+          echo "highest tag=$HIGHEST · this tag=$TAG · --latest=$LATEST"
+
+          gh release create "$TAG" \
+            --verify-tag \
+            --latest="$LATEST" \
+            --title "$TAG" \
+            --notes-file "$NOTES_FILE"
