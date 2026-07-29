@@ -60,7 +60,7 @@ public sealed class VerbaraServerPoolTests : IAsyncDisposable
         server.Should().NotBeNull();
         _sut.ServerCount.Should().Be(1);
         await _connectionFactory.Received(1).CreateAndConnectAsync(
-            Arg.Is<AmiConnectionOptions>(o => o.Hostname == "pbx1.local"),
+            Arg.Is<AmiConnectionOptions>(o => o!.Hostname == "pbx1.local"),
             Arg.Any<CancellationToken>());
     }
 
