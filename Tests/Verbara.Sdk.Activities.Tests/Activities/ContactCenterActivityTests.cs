@@ -33,7 +33,7 @@ public class ContactCenterActivityTests
 
         await _ami.Received(1).SendActionAsync(
             Arg.Is<AtxferAction>(a =>
-                a.Channel == "PJSIP/alice-00001"
+                a!.Channel == "PJSIP/alice-00001"
                 && a.Context == "internal"
                 && a.Exten == "2001"
                 && a.Priority == 1),
@@ -54,7 +54,7 @@ public class ContactCenterActivityTests
         await activity.StartAsync();
 
         await _ami.Received(1).SendActionAsync(
-            Arg.Is<AtxferAction>(a => a.Priority == 3),
+            Arg.Is<AtxferAction>(a => a!.Priority == 3),
             Arg.Any<CancellationToken>());
     }
 

@@ -21,7 +21,7 @@ public class ActivityTests
 
         await activity.StartAsync();
 
-        await _channel.Received(1).ExecAsync("Dial", Arg.Is<string>(s => s.Contains("PJSIP/2000")), Arg.Any<CancellationToken>());
+        await _channel.Received(1).ExecAsync("Dial", Arg.Is<string>(s => s!.Contains("PJSIP/2000")), Arg.Any<CancellationToken>());
         activity.Status.Should().Be(ActivityStatus.Completed);
     }
 
