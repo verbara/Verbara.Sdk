@@ -85,3 +85,6 @@ The decision, stated in one or two sentences.
 - [ADR-0035](0035-cos-deferred-customer-driven.md) — COS (Calling Permissions System) deferred: customer-driven trigger only.
 - [ADR-0036](0036-rebrand-to-verbara.md) — Rebrand product family from `Asterisk.Sdk` to **Verbara Sdk** for trademark safety (Sangoma owns "Asterisk" trademark). License unchanged (MIT). (Accepted, 2026-05-03)
 - [ADR-0037](0037-cross-repo-adr-reference-convention.md) — Cross-repo ADR reference convention: bare `ADR-NNNN` = this-repo, `Platform/ADR-NNNN` / `Pro/ADR-NNNN` / `Web/ADR-NNNN` for sister-repo references. Disambiguates the `Platform/ADR-0022` references in this repo's v2.2.x commit history. (Accepted, 2026-05-23)
+- [ADR-0038](0038-ci-pipeline-slimming.md) — CI pipeline slimming: single-collection coverage + representative PR matrix. (Accepted, 2026-07-15)
+- [ADR-0039](0039-dependabot-ci-load.md) — Dependabot CI load: bot PRs skip the representative functional matrix + dependency grouping. (Accepted, 2026-07-15)
+- [ADR-0040](0040-sdk-pin-cascade-own-train.md) — SDK pin cascades are their own train, never folded into a release train: publishing does not cascade, transitive floors move in the same commit as the pin (`NU1605` is fatal under ADR-0004). (Accepted, 2026-07-28)
