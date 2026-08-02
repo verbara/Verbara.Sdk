@@ -1,5 +1,6 @@
 using Verbara.Sdk.Audio;
 using Verbara.Sdk.VoiceAi.Stt.AssemblyAi;
+using Verbara.Sdk.VoiceAi.Stt.Tests.Helpers;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -105,7 +106,8 @@ public class AssemblyAiSpeechRecognizerTests : IAsyncDisposable
         var recognizer = BuildRecognizer();
 
         var act = async () =>
-            await recognizer.StreamAsync(EndlessFrames(), AudioFormat.Slin16Mono8kHz, cts.Token)
+            await recognizer.StreamAsync(
+                    SttFrameGenerators.EndlessFrames(), AudioFormat.Slin16Mono8kHz, cts.Token)
                 .ToListAsync(cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
@@ -116,16 +118,6 @@ public class AssemblyAiSpeechRecognizerTests : IAsyncDisposable
     {
         yield return new byte[320];
         await Task.CompletedTask;
-    }
-
-    private static async IAsyncEnumerable<ReadOnlyMemory<byte>> EndlessFrames(
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
-    {
-        while (!ct.IsCancellationRequested)
-        {
-            yield return new byte[320];
-            await Task.Delay(10, ct); // fence-allow: LOOP-DRIVER — paces the endless frame generator; never executes under a pre-cancelled token
-        }
     }
 
     public async ValueTask DisposeAsync()
