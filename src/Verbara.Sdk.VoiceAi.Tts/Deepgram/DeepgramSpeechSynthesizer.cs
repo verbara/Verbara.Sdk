@@ -217,7 +217,7 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
             $"&speed={_options.Speed.ToString("G", System.Globalization.CultureInfo.InvariantCulture)}";
 
         if (_fakeServerPort.HasValue)
-            return new Uri($"ws://localhost:{_fakeServerPort}/v1/speak{query}");
+            return new Uri($"ws://127.0.0.1:{_fakeServerPort}/v1/speak{query}");
 
         return new Uri($"{_options.BaseUri}{query}");
     }

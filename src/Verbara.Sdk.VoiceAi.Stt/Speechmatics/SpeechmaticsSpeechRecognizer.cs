@@ -190,7 +190,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
         // Speechmatics auth: JWT API key passed as a query parameter. URL-encode to be safe.
         var encodedKey = Uri.EscapeDataString(_options.ApiKey);
         if (_fakeServerPort.HasValue)
-            return new Uri($"ws://localhost:{_fakeServerPort}/v2/{_options.Language}?jwt={encodedKey}");
+            return new Uri($"ws://127.0.0.1:{_fakeServerPort}/v2/{_options.Language}?jwt={encodedKey}");
 
         return new Uri($"{_options.BaseUri}/{_options.Language}?jwt={encodedKey}");
     }

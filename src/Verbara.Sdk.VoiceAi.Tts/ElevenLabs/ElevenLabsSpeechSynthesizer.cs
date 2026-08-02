@@ -149,7 +149,7 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
             var outputFmt = ToOutputFormatString(_options.OutputFormat);
             var latency = (int)_options.LatencyOptimization;
             return new Uri(
-                $"ws://localhost:{_fakeServerPort}/v1/text-to-speech/test-voice/stream-input" +
+                $"ws://127.0.0.1:{_fakeServerPort}/v1/text-to-speech/test-voice/stream-input" +
                 $"?model_id={Uri.EscapeDataString(_options.ModelId)}" +
                 $"&output_format={outputFmt}" +
                 $"&optimize_streaming_latency={latency}");

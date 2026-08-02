@@ -33,7 +33,7 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
 
     public int Port { get; }
 
-    public string BaseUri => $"http://localhost:{Port}/generate";
+    public string BaseUri => $"http://127.0.0.1:{Port}/generate";
 
     public SpeechmaticsFakeServer()
     {
@@ -46,7 +46,7 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
             tcp.Stop();
 
             var listener = new HttpListener();
-            listener.Prefixes.Add($"http://localhost:{port}/");
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/");
             try
             {
                 listener.Start();

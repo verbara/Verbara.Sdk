@@ -130,7 +130,7 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
     private Uri BuildUri(AudioFormat format)
     {
         if (_fakeServerPort.HasValue)
-            return new Uri($"ws://localhost:{_fakeServerPort}/v1/listen" +
+            return new Uri($"ws://127.0.0.1:{_fakeServerPort}/v1/listen" +
                 $"?encoding=linear16&sample_rate={format.SampleRate}&channels=1" +
                 $"&interim_results={_options.InterimResults.ToString().ToLowerInvariant()}" +
                 $"&punctuate={_options.Punctuate.ToString().ToLowerInvariant()}");
