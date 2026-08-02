@@ -111,7 +111,7 @@ public sealed class FunctionCallTests
         });
         var registry = new RealtimeFunctionRegistry(handlers);
         var bridge = new OpenAiRealtimeBridge(options, registry, NullLogger<OpenAiRealtimeBridge>.Instance);
-        bridge.BaseUri = new Uri($"ws://localhost:{fakeOpenAi.Port}/");
+        bridge.BaseUri = new Uri($"ws://127.0.0.1:{fakeOpenAi.Port}/");
         return bridge;
     }
 

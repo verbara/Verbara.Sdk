@@ -176,7 +176,7 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
     private Uri BuildUri()
     {
         if (_fakeServerPort.HasValue)
-            return new Uri($"ws://localhost:{_fakeServerPort}/stt/websocket");
+            return new Uri($"ws://127.0.0.1:{_fakeServerPort}/stt/websocket");
 
         return new Uri(_options.BaseUri);
     }

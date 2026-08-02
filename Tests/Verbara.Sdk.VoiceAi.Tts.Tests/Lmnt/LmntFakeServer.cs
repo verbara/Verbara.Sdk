@@ -194,7 +194,7 @@ internal sealed class LmntHttpFakeServer : IAsyncDisposable
 
     public int Port { get; }
 
-    public string BaseUri => $"http://localhost:{Port}/v1/ai/speech/generate";
+    public string BaseUri => $"http://127.0.0.1:{Port}/v1/ai/speech/generate";
 
     public LmntHttpFakeServer()
     {
@@ -209,7 +209,7 @@ internal sealed class LmntHttpFakeServer : IAsyncDisposable
             tcp.Stop();
 
             var candidate = new HttpListener();
-            candidate.Prefixes.Add($"http://localhost:{port}/");
+            candidate.Prefixes.Add($"http://127.0.0.1:{port}/");
             try
             {
                 candidate.Start();

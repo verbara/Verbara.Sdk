@@ -260,7 +260,7 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
     private Uri BuildWsUri()
     {
         if (_fakeWsPort.HasValue)
-            return new Uri($"ws://localhost:{_fakeWsPort}/v1/ai/speech/stream");
+            return new Uri($"ws://127.0.0.1:{_fakeWsPort}/v1/ai/speech/stream");
 
         return new Uri("wss://api.lmnt.com/v1/ai/speech/stream");
     }

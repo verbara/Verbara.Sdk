@@ -27,7 +27,11 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
             tcp.Stop();
 
             var listener = new HttpListener();
-            listener.Prefixes.Add($"http://localhost:{port}/");
+            // IPv4 literal, not "localhost": localhost resolves ::1 first, and an IPv4-only
+            // listener does not own ::1 on its port — two fake servers could otherwise bind the
+            // same port number and cross-wire. The literal makes a lost race fail with
+            // EADDRINUSE into the retry loop above instead of silently answering the wrong client.
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/");
             try
             {
                 listener.Start();

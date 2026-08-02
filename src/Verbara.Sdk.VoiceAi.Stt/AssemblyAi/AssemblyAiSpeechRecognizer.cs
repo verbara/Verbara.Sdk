@@ -154,7 +154,7 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
             $"?sample_rate={_options.SampleRate}&format_turns={_options.FormatTurns}&end_of_turn_confidence_threshold={_options.EndOfTurnConfidenceThreshold}");
 
         if (_fakeServerPort.HasValue)
-            return new Uri($"ws://localhost:{_fakeServerPort}/v3/ws{query}");
+            return new Uri($"ws://127.0.0.1:{_fakeServerPort}/v3/ws{query}");
 
         return new Uri(_options.BaseUri + query);
     }
