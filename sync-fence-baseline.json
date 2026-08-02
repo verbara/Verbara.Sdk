@@ -71,7 +71,6 @@
     "Tests/Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests/Bridge/OpenAiRealtimeBridgeTests.cs": 2,
     "Tests/Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests/FunctionCalling/FunctionCallTests.cs": 3,
     "Tests/Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests/Internal/RealtimeFakeServer.cs": 3,
-    "Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Deepgram/DeepgramSpeechRecognizerTests.cs": 1,
     "Tests/Verbara.Sdk.VoiceAi.Tests/Pipeline/VoiceAiPipelineTests.cs": 8,
     "Tests/Verbara.Sdk.VoiceAi.Tests/Pipeline/VoiceAiPipelineTtfaTests.cs": 1,
     "Tests/Verbara.Sdk.VoiceAi.Tests/Pipeline/VoiceAiPipelineTurnDetectorTests.cs": 4,
