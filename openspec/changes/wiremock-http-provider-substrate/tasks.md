@@ -34,18 +34,39 @@ Phase C = §4 remaining providers + §6–§8 (batched).
       — **no collision.** Restore and build are clean (0 warnings). Every central pin is at or above
       what WireMock requests, so no downgrade is possible: `Microsoft.Extensions.*` 10.0.10 vs 10.0.0,
       `Microsoft.CodeAnalysis.CSharp` 5.6.0 vs 4.8.0, `OpenTelemetry` 1.17.0 vs 1.15.3. Unification
-      raises `Newtonsoft.Json` to 13.0.4. **Cost of record: 156 transitive packages.** Reachable from
-      the 4 projects that reference `TestInfrastructure` — the two target suites plus
-      `FunctionalTests`/`IntegrationTests`, which are already the Docker-bound slow lane.
+      raises `Newtonsoft.Json` to 13.0.4. **Cost of record: 156 transitive packages**, confined to
+      the two suites that reference `Verbara.Sdk.TestInfrastructure.Http` (`VoiceAi.Stt.Tests`,
+      `VoiceAi.Tts.Tests`). They are deliberately kept out of `FunctionalTests`/`IntegrationTests` —
+      see 2.1: reaching those projects breaks coverlet instrumentation, and that is a coverage-gate
+      failure, not a preference.
 
 ## 2. Shared substrate in `Tests/Verbara.Sdk.TestInfrastructure`
 
 - [x] 2.1 Add the WireMock `PackageReference` to `Tests/Verbara.Sdk.TestInfrastructure` only, and
       confirm `IsPackable=false` / `IsAotCompatible=false` already apply from `Directory.Build.props`
-      — added. Both flags are set explicitly in the project itself, so D7's confinement holds.
-      Reachability audited: exactly 4 projects reference `TestInfrastructure` — the two target suites
-      (`VoiceAi.Stt.Tests`, `VoiceAi.Tts.Tests`) plus `FunctionalTests` and `IntegrationTests`.
-      `dotnet build Verbara.Sdk.slnx` is green at 0 warnings.
+      — **the task text's placement is wrong and CI proved it.** WireMock lives in a new
+      `Tests/Verbara.Sdk.TestInfrastructure.Http` project referenced only by `VoiceAi.Stt.Tests` and
+      `VoiceAi.Tts.Tests`. Both flags are set explicitly there, so D7's confinement holds.
+
+      **Why the split is load-bearing, not cosmetic.** WireMock pulls ASP.NET Core dependencies, so
+      any project referencing it acquires a `FrameworkReference` to `Microsoft.AspNetCore.App`. From
+      that point ~30 `Microsoft.Extensions.*` assemblies become framework-provided and stop being
+      copied to the output directory (measured: `FunctionalTests` output went 85 → 122 DLLs, losing
+      all 29 `Microsoft.Extensions.*`). Coverlet's Mono.Cecil resolver only searches the module's own
+      directory, so it then throws `CecilAssemblyResolutionException` on
+      `Microsoft.Extensions.Logging.Abstractions` and **silently skips instrumenting** every module
+      that references it — emitted as a warning, with the test run still green.
+
+      Because `TestInfrastructure` is referenced by `FunctionalTests` and `IntegrationTests`, whose
+      output carries `Ami`/`Ari`/`Sessions`/`AudioSocket`, putting WireMock there cost those
+      assemblies their instrumentation: measured line coverage fell **80.42% → 61.96%** with all
+      3 020 tests still passing, and the `Coverage Ratchet` gate failed on PR #149. Bisected by
+      removing the package reference (`FunctionalTests` coverage returned to `Ami=5936, Live=114`)
+      and confirmed by the split (same `Ami=5936, Live=114` with WireMock still in the tree).
+
+      The split also confines the 156-package graph to the two suites that need it.
+      `[*.TestInfrastructure.Http]*` is added to `coverlet.runsettings`'s exclude list so the
+      fixture itself is not measured. `dotnet build Verbara.Sdk.slnx` is green at 0 warnings.
 - [x] 2.2 Add a shared `HttpProviderMockServer` fixture: loopback-bound, free-port allocation with
       retry (mirroring the existing fakes' port-conflict handling under parallel test execution),
       deterministic dispose

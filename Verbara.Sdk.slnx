@@ -74,6 +74,7 @@
     <Project Path="Tests/Verbara.Sdk.Live.Tests/Verbara.Sdk.Live.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Activities.Tests/Verbara.Sdk.Activities.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.TestInfrastructure/Verbara.Sdk.TestInfrastructure.csproj" />
+    <Project Path="Tests/Verbara.Sdk.TestInfrastructure.Http/Verbara.Sdk.TestInfrastructure.Http.csproj" />
     <Project Path="Tests/Verbara.Sdk.VoiceAi.AudioSocket.Tests/Verbara.Sdk.VoiceAi.AudioSocket.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.VoiceAi.Tests/Verbara.Sdk.VoiceAi.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Verbara.Sdk.VoiceAi.Stt.Tests.csproj" />

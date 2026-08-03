@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <!--
+    WireMock.Net lives here rather than in Verbara.Sdk.TestInfrastructure, and the split is
+    load-bearing for coverage, not cosmetic.
+
+    WireMock pulls ASP.NET Core dependencies, so any project referencing it acquires a
+    FrameworkReference to Microsoft.AspNetCore.App. From that point the ~30 Microsoft.Extensions.*
+    assemblies become framework-provided and stop being copied to the output directory. Coverlet's
+    Mono.Cecil resolver only searches the module's own directory, so it then fails with
+    CecilAssemblyResolutionException on Microsoft.Extensions.Logging.Abstractions and SKIPS
+    instrumenting every module that references it — silently, as a warning.
+
+    Verbara.Sdk.TestInfrastructure is referenced by Verbara.Sdk.FunctionalTests and
+    Verbara.Sdk.IntegrationTests, whose output carries Ami/Ari/Sessions/AudioSocket. Putting
+    WireMock there cost those assemblies their instrumentation and dropped measured line coverage
+    from 80.42% to 61.96% while every test still passed. Keeping it in a separate project that only
+    the two HTTP provider suites reference confines both the FrameworkReference and the 156-package
+    transitive graph to the suites that actually need them (ADR-0041 D7).
+  -->
+  <ItemGroup>
+    <PackageReference Include="WireMock.Net" />
+  </ItemGroup>
+
+</Project>
