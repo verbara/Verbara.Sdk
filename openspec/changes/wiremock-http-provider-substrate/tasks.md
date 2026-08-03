@@ -76,15 +76,21 @@ Phase C = §4 remaining providers + §6–§8 (batched).
       the 10 s default would cost 10 s per lost port race (measured). Cold start is ~80 ms.
       `BaseAddress` is built from the IPv4 literal — WireMock's own `Url` property reports the host
       as `localhost` (verified), which is exactly the ADR-0044 ambiguity, so it is never surfaced.
-      Dispose = `Stop()` + `Dispose()`. **Port release is not instantaneous, and that is an OS
-      property rather than a fixture defect** — established by measurement, not assumed: across 720
-      start/dispose/rebind cycles in 6 concurrent processes, ~5% of immediate rebinds were refused,
-      every one of them became bindable at the first re-check 25 ms later (never-recovered = 0), and
-      one refusal was a provable cross-process steal. So there is no port leak; Kestrel's dispose
-      returns before the kernel finishes releasing the listening socket. The acquire side already
-      absorbs the same latency via `PortAllocationAttempts`. The dispose test therefore asserts the
-      invariant the fixture actually owns — after dispose the server stops answering on its address —
-      instead of the port number being rebindable, which nothing can guarantee under parallel CI.
+      Dispose = `Stop()` + `Dispose()`, guarded by a `_disposed` flag so it is idempotent and the
+      mutating members throw `ObjectDisposedException` afterwards.
+
+      **Nothing reached through the port is assertable, and it took two CI failures to accept that.**
+      The dispose test went through three versions. (1) "the freed port is immediately rebindable" —
+      failed ~5% under multi-process load; measured over 720 cycles in 6 processes, every refused
+      rebind became bindable 25 ms later (never-recovered = 0) and one refusal was a provable
+      cross-process steal, so there is no leak — Kestrel's dispose returns before the kernel finishes
+      releasing the socket. (2) "a post-dispose request throws" — failed in `merge_group`: the
+      pre-dispose client reuses a drained keep-alive connection (1 in 900 measured), and a *fresh*
+      client still fails because `HttpClient` does not throw on 4xx, so a sibling fixture that grabs
+      the freed port and answers 404 is a valid response. (3) the shipped version asserts this
+      object's own state, with no network involved. The port is a shared OS resource — the
+      resource-identity lesson of ADR-0044 — and the acquire side already absorbs the same latency
+      via `PortAllocationAttempts`.
 - [x] 2.3 Make request matching strict by default — method + path + query + required headers — so a
       misrouted or unauthenticated request fails to match instead of receiving a canned response
       — `HttpProviderRequest`. Method + path use `ExactMatcher` (case-sensitive, no wildcards);

@@ -44,6 +44,7 @@ public sealed class HttpProviderMockServer : IAsyncDisposable
     private readonly WireMockServer _server;
     private readonly ProviderRecordings? _recordings;
     private int _sequenceCount;
+    private bool _disposed;
 
     private HttpProviderMockServer(WireMockServer server, int port, ProviderRecordings? recordings)
     {
@@ -110,11 +111,16 @@ public sealed class HttpProviderMockServer : IAsyncDisposable
     }
 
     /// <summary>An <see cref="HttpClient"/> already pointed at <see cref="BaseAddress"/>.</summary>
-    public HttpClient CreateClient() => new() { BaseAddress = BaseAddress };
+    public HttpClient CreateClient()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return new HttpClient { BaseAddress = BaseAddress };
+    }
 
     /// <summary>Answer <paramref name="request"/> with <paramref name="response"/>.</summary>
     public HttpProviderMockServer Stub(HttpProviderRequest request, HttpProviderResponse response)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(response);
 
@@ -130,6 +136,7 @@ public sealed class HttpProviderMockServer : IAsyncDisposable
     /// </summary>
     public HttpProviderMockServer StubSequence(HttpProviderRequest request, params HttpProviderResponse[] responses)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(responses);
 
@@ -175,6 +182,10 @@ public sealed class HttpProviderMockServer : IAsyncDisposable
     /// <summary>Stop the listener and release the port.</summary>
     public ValueTask DisposeAsync()
     {
+        if (_disposed)
+            return ValueTask.CompletedTask;
+
+        _disposed = true;
         _server.Stop();
         _server.Dispose();
         GC.SuppressFinalize(this);
