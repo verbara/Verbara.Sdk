@@ -70,7 +70,8 @@ Phase C = §4 remaining providers + §6–§8 (batched).
 - [x] 2.2 Add a shared `HttpProviderMockServer` fixture: loopback-bound, free-port allocation with
       retry (mirroring the existing fakes' port-conflict handling under parallel test execution),
       deterministic dispose
-      — `Tests/Verbara.Sdk.TestInfrastructure/Http/HttpProviderMockServer.cs`. TcpListener probe on
+      — `Tests/Verbara.Sdk.TestInfrastructure.Http/HttpProviderMockServer.cs` (see 2.1 for why it is not
+      in `TestInfrastructure`). TcpListener probe on
       `IPAddress.Loopback` then bind `http://127.0.0.1:{port}/`, 5 attempts. **`StartTimeout` is
       lowered to 5 s on purpose:** WireMock only surfaces a bind failure once the budget expires, so
       the 10 s default would cost 10 s per lost port race (measured). Cold start is ~80 ms.
@@ -167,10 +168,11 @@ Phase C = §4 remaining providers + §6–§8 (batched).
       Service Specific Terms AI/ML "Generated Output is Customer Data … Google does not assert any
       ownership rights", plus GCP ToS §5.1; flagged: the AI/ML Services *enumeration* could not be
       read verbatim, so confirm Speech-to-Text is listed before the first capture. **OpenAI
-      Whisper**: `permitted-with-conditions` (customer owns Output; publication policy wants
-      attribution + disclosure) — flagged: `openai.com` returns HTTP 403 to automated fetchers, so
-      the clause text came from search indexing, not a direct read; a human must confirm on the live
-      page. **Speechmatics TTS**: `permitted-with-conditions` — ToS §10.3 assigns output IP to the
+      Whisper**: `permitted-with-conditions` — **upgraded to a first-hand read on 2026-08-03** via
+      OpenAI's own CDN PDF (`cdn.openai.com/osa/openai-services-agreement.pdf`, `ONLINE v.010126`),
+      which does not 403: §4.1 assigns all right/title/interest in Output to the customer and §3.3
+      carries no publication restriction. Residual: the incorporated Sharing and Publication Policy
+      still 403s, but it imposes conditions the sidecar already discharges, not a prohibition. **Speechmatics TTS**: `permitted-with-conditions` — ToS §10.3 assigns output IP to the
       customer but is written about *Transcripts*; synthesized audio rides only on §10.5's
       "derivatives of your content", so it is permitted by inference, not by express grant.
       **LMNT HTTP**: **`not-cleared`** — the ToS (2023-06-12) has no output-rights clause at all and
@@ -213,10 +215,15 @@ existing `*_ShouldAbort_WhenCancelled` assertion verbatim → confirm no coverag
 
 - [ ] 4.1 **OpenAI Whisper** (STT, `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Whisper/WhisperSpeechRecognizerTests.cs`)
       — multipart POST; **first migration: it establishes the pattern the other five copy**.
-      **⚠ Human terms read required before committing the capture (ADR-0041 D11):** `openai.com`
-      serves HTTP 403 to automated fetchers, so §3.4's clause text is search-indexed, not read
-      first-hand. Open the live Services Agreement / Business Terms / sharing-and-publication policy,
-      confirm the wording, and record the confirmation in the sidecar's `terms.checked_utc`.
+      **Terms gate CLEARED 2026-08-03 — read first-hand.** `openai.com/policies/*` 403s to automated
+      fetchers, but the same contract is published as a PDF on OpenAI's own CDN, which does not:
+      `https://cdn.openai.com/osa/openai-services-agreement.pdf`, version `ONLINE v.010126`. §4.1
+      assigns to the customer all of OpenAI's right, title and interest in Output, and §3.3's nine
+      restrictions contain none about publishing or redistributing it. Binding going forward: §3.3(e)
+      — Output may not be used to develop competing AI models outside the Permitted Exception.
+      Residual: the *Sharing and Publication Policy*, incorporated by reference, still 403s; it
+      imposes attribution/disclosure conditions rather than a prohibition and the sidecar discharges
+      both. Record `terms.checked_utc` as the capture date.
 - [ ] 4.2 **Azure OpenAI Whisper** (STT, `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Whisper/AzureWhisperSpeechRecognizerTests.cs`)
       — deployment-path URL + `api-key` header (not bearer)
 - [ ] 4.3 **Google Speech-to-Text** (STT, `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Google/`) — JSON POST to

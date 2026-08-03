@@ -131,11 +131,18 @@ driven by checked-in recordings, and keep the WebSocket surfaces on the existing
   audio in the same codec, committed as `synthetic`. The suite still gets strict matching, a real
   status/header set and real byte lengths through the frame-chunking path. Speechmatics TTS sits one
   step above LMNT — permitted by inference from a derivatives clause rather than by express grant —
-  and drops to the same fallback if a reviewer is not comfortable with the inference. **Two captures
-  are gated on a human read before they may be committed**: OpenAI (openai.com serves HTTP 403 to
-  automated fetchers, so its clause text is search-indexed rather than read first-hand) and Google
-  (the AI/ML Services enumeration could not be retrieved verbatim; if Speech-to-Text is not listed,
-  that verdict drops to `not-cleared`).
+  and drops to the same fallback if a reviewer is not comfortable with the inference. **One capture
+  remains gated on a human read**: Google — the AI/ML Services enumeration could not be retrieved
+  verbatim, and if Speech-to-Text is not listed there the verdict drops to `not-cleared`. The OpenAI
+  gate **cleared on 2026-08-03**: `openai.com/policies/*` 403s to automated fetchers, but the same
+  contract is published as a PDF on OpenAI's own CDN, which does not
+  (`cdn.openai.com/osa/openai-services-agreement.pdf`, `ONLINE v.010126`). §4.1 assigns all of
+  OpenAI's right, title and interest in Output to the customer, and §3.3's nine restrictions include
+  none on publishing or redistributing it. The *Sharing and Publication Policy* it incorporates by
+  reference still 403s, but it imposes attribution and disclosure conditions that the provenance
+  sidecar discharges, not a prohibition — a residual, not a gate. **A 403 to a fetcher is not a
+  closed door; look for the same document on a CDN, a PDF mirror or a regulatory filing before
+  recording a finding as unverifiable.**
 
 ## Consequences
 

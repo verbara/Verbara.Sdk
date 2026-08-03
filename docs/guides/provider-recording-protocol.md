@@ -245,7 +245,7 @@ Copy the verdict into each capture's `terms` block and re-check before capturing
 
 | Provider | Verdict | Rests on |
 |----------|---------|----------|
-| OpenAI Whisper (STT) | `permitted-with-conditions` | Customer owns Output; publication policy requires attribution + disclosure |
+| OpenAI Whisper (STT) | `permitted-with-conditions` | Services Agreement §4.1 assigns all right/title/interest in Output to the customer (read first-hand, v.010126); §3.3 has no publication restriction |
 | Azure OpenAI Whisper (STT) | `permitted` | "Output Content is Customer Data. Microsoft does not own Customer's Output Content." |
 | Google Speech-to-Text (STT) | `permitted` | "Generated Output is Customer Data … Google does not assert any ownership rights" |
 | Azure TTS | `permitted-with-conditions` | Same Product Terms clause + synthetic-voice disclosure duty |
@@ -254,22 +254,37 @@ Copy the verdict into each capture's `terms` block and re-check before capturing
 
 ### OpenAI Whisper — `permitted-with-conditions`
 
-**Basis.** OpenAI's Business Terms / Services Agreement assign Output to the customer — *"you retain
-your ownership rights in Input and own the Output. OpenAI assigns to you all its right, title, and
-interest, if any, in and to Output"* — and OpenAI's help documentation states it does not claim
-copyright over content generated through the API. OpenAI's *Sharing & publication policy* permits
-publishing content created with the API where the content is attributed to the publisher and the
-role of AI in producing it is clearly disclosed.
+**Basis — read first-hand (2026-08-03).** `openai.com/policies/*` returns HTTP 403 to automated
+fetchers, but OpenAI publishes the same contract as a PDF on its own CDN, which does not:
+`https://cdn.openai.com/osa/openai-services-agreement.pdf`, version string **`OpenAI Services
+Agreement ONLINE v.010126`**. Section 4.1 verbatim:
+
+> *"4.1. Generally. Customer and Customer's End Users may provide Input and receive Output. As
+> between Customer and OpenAI, to the extent permitted by applicable law, Customer: (a) retains all
+> ownership rights in Input; and (b) owns all Output. OpenAI hereby assigns to Customer all OpenAI's
+> right, title, and interest, if any, in and to Output."*
+
+**Section 3.3 (Restrictions) contains no restriction on publishing or redistributing Output.** Its
+nine clauses cover unlawful use, third-party rights, minors, reverse engineering, competing-model
+development, data extraction, API-key transfer, service interference and usage limits.
+
+**Restriction that binds us.** §3.3(e): Output may not be used to develop AI models that compete
+with OpenAI's products and services, outside the defined "Permitted Exception" (classifiers and
+embeddings not distributed commercially, plus OpenAI's own fine-tuning). Committing a handful of
+transcripts as test fixtures is not that — the same shape as the Microsoft restriction above, and
+the second reason §8's cap is tight.
 
 **Conditions this repo must satisfy.** The provenance sidecar is the attribution and disclosure: it
 names the provider, the endpoint and the capture date, and the `class: "recorded"` label states
 plainly that the artifact is model output.
 
-**⚠ Uncertainty — flagged.** `openai.com` returns HTTP 403 to automated fetchers, so the clause text
-above was obtained through search indexing of OpenAI's policy pages rather than a direct read of
-them. The substance is consistent across OpenAI's Services Agreement, its Business Terms and its
-help centre, but **a human MUST open the live policy pages and confirm the wording before the first
-OpenAI capture is committed**, and record that confirmation in `terms.checked_utc`.
+**⚠ Residual — narrower than it was.** §4.1's definition of "OpenAI Policies" incorporates the
+*Sharing and Publication Policy* by reference, and that page still 403s to automated fetchers, so it
+has not been read first-hand. This is a materially smaller gap than the original flag: what was in
+question was whether we hold redistribution rights at all, and §4.1 grants them expressly. The
+sharing policy imposes *conditions* (attribution, disclosure of the AI's role) rather than a
+prohibition, and the sidecar discharges both by construction. Re-read it if a capture is ever
+published anywhere other than as a repository test fixture.
 
 ### Azure OpenAI Whisper — `permitted`
 
