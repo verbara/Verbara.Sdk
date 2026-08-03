@@ -1,1 +1,20 @@
 *.onnx filter=lfs diff=lfs merge=lfs -text
+
+# Provider recordings (ADR-0041 D6, docs/guides/provider-recording-protocol.md section 8).
+
+# Codec bytes must never be line-ending converted or textually diffed.
+**/Recordings/**/*.wav  binary
+**/Recordings/**/*.mp3  binary
+**/Recordings/**/*.opus binary
+**/Recordings/**/*.ogg  binary
+**/Recordings/**/*.raw  binary
+
+# JSON captures stay byte-identical across platforms -- a suite may assert content length.
+**/Recordings/**/*.json text eol=lf
+
+# Binary captures are ordinary Git blobs up to the 256 KiB per-file cap -- LFS is NOT
+# the default, because a clone or CI job that does not fetch LFS would receive a
+# pointer file instead of the fixture. Only the reviewed over-cap exception path,
+# .../Recordings/large/, is LFS-tracked. Last so it wins over the `binary` rules
+# above and keeps the canonical LFS attribute set.
+**/Recordings/large/** filter=lfs diff=lfs merge=lfs -text

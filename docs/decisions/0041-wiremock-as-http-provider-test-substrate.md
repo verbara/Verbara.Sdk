@@ -120,6 +120,22 @@ driven by checked-in recordings, and keep the WebSocket surfaces on the existing
   absorbed silently.
 - **D10 — The license gate is a precondition.** The pin lands only after WireMock.NET's license is
   confirmed clear of `dependency-review`'s deny-list (AGPL / GPL / SSPL).
+- **D11 — A provider whose terms do not clearly grant redistribution gets an envelope capture, not a
+  payload capture.** D4 asks every provider for at least one replay of a recorded real response. The
+  per-provider terms review (`docs/guides/provider-recording-protocol.md` §7) found that **LMNT does
+  not clear that bar**: its ToS (2023-06-12) contains no clause addressing rights in generated audio,
+  and its AUP (2023-08-28) restricts sharing synthesized speech outside the capturing entity. Rather
+  than infer a redistribution licence out of silence, D4 yields for such a provider: commit the
+  response **envelope** — status, headers, media type, content length, observed chunk boundaries — as
+  the `recorded` artifact, and pair it with a body built locally from public-domain or synthetic
+  audio in the same codec, committed as `synthetic`. The suite still gets strict matching, a real
+  status/header set and real byte lengths through the frame-chunking path. Speechmatics TTS sits one
+  step above LMNT — permitted by inference from a derivatives clause rather than by express grant —
+  and drops to the same fallback if a reviewer is not comfortable with the inference. **Two captures
+  are gated on a human read before they may be committed**: OpenAI (openai.com serves HTTP 403 to
+  automated fetchers, so its clause text is search-indexed rather than read first-hand) and Google
+  (the AI/ML Services enumeration could not be retrieved verbatim; if Speech-to-Text is not listed,
+  that verdict drops to `not-cleared`).
 
 ## Consequences
 

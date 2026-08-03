@@ -10,5 +10,6 @@ Practical how-to guides for working with Verbara Sdk.
 | [log-analysis-prompt.md](log-analysis-prompt.md) | Ready-to-use LLM prompt for analyzing Verbara.Sdk structured log files with extract, classify, and diagnose phases. |
 | [log-analysis-reference.md](log-analysis-reference.md) | Tag catalog for SDK structured logs -- lists every `[TAG]`, its domain, source classes, and emitted events. |
 | [manual-asterisk-realtime-setup.md](manual-asterisk-realtime-setup.md) | How to run Asterisk in Realtime mode with PostgreSQL so external tooling can manage PJSIP endpoints, queues, and voicemail via SQL. |
+| [provider-recording-protocol.md](provider-recording-protocol.md) | How a real speech-provider response is captured, redacted, documented with a provenance sidecar, and committed -- plus the per-provider terms-of-service findings, the binary size cap, and the redaction guard. |
 | [session-store-backends.md](session-store-backends.md) | Choosing and configuring a session store backend (InMemory, Redis, or Postgres) for `Verbara.Sdk.Sessions`. |
 | [troubleshooting.md](troubleshooting.md) | Common issues and fixes for AMI connections, ARI, AGI, and other SDK components. |
