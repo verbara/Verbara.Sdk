@@ -2,6 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.Stt\Verbara.Sdk.VoiceAi.Stt.csproj" />
     <ProjectReference Include="..\Verbara.Sdk.TestInfrastructure\Verbara.Sdk.TestInfrastructure.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.TestInfrastructure.Http\Verbara.Sdk.TestInfrastructure.Http.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

@@ -228,6 +228,19 @@ jobs:
         # if any test body lacks an Assert./Should() expression. Catches the
         # "smoke test that doesn't assert" anti-pattern at PR time.
         run: bash tools/audit-test-asserts.sh
+      - name: Enforce recording redaction rule (ADR-0041 D5)
+        # Scans every Tests/**/Recordings/ tree for credential-shaped content.
+        # Recordings of real provider traffic ship in a PUBLIC repo, so the rule
+        # is enforced, not merely documented. It rides in this job rather than a
+        # new one because this is already the required Tests/**-tree hygiene
+        # context: a new job would report as non-required and therefore
+        # non-blocking, which is the one thing a credential guard must not be.
+        # Cheap (stdlib python, no build). Its own unit tests run in the
+        # always-on "Coverage Script Tests" job via unittest discovery.
+        # NOTE: if an over-cap capture is ever added under .../Recordings/large/
+        # (Git-LFS, ADR-0041 D6), this job's checkout needs `lfs: true` — the
+        # script refuses to scan an unfetched pointer rather than false-greening.
+        run: python3 scripts/check-recording-redaction.py .
 
   functional-tests:
     name: Functional Tests (Testcontainers)

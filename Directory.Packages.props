@@ -107,6 +107,14 @@
     <PackageVersion Include="bunit" Version="2.0.66" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="Testcontainers" Version="4.13.0" />
+    <!-- Test-only HTTP substrate for the VoiceAi provider suites whose transport is HTTP
+         request/response (ADR-0041 D1/D7). Referenced ONLY from Tests/Verbara.Sdk.TestInfrastructure;
+         no src/** project references it and no produced .nupkg declares it. Apache-2.0 — clears
+         dependency-review's AGPL/GPL/SSPL deny-list. The full metapackage is deliberate over
+         WireMock.Net.Minimal: "Minimal" pulls OpenApiParser/NSwag and resolves Newtonsoft.Json 9.0.1
+         and System.Text.Encodings.Web 4.7.1, both carrying advisories that would trip
+         dependency-review's fail-on-severity: high. -->
+    <PackageVersion Include="WireMock.Net" Version="2.13.0" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.51.0" />
     <PackageVersion Include="System.Reflection.MetadataLoadContext" Version="10.0.0" />
   </ItemGroup>
