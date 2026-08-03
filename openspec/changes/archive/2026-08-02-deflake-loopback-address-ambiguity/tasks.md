@@ -45,4 +45,12 @@
       `localhost` fails the guard with `[LoopbackInterpolation]` naming the exact file and line;
       restoring it returns the suite to green
 - [x] 4.5 `openspec validate deflake-loopback-address-ambiguity --type change --strict` clean
-- [ ] 4.6 CI green on the PR, zero warnings
+- [x] 4.6 CI green on the PR, zero warnings → PR #146, all 14 required checks green, merged 2026-08-02.
+      Two queue ejections on the way in, neither caused by this change: first a `docs/decisions/README.md`
+      conflict with #145 (both appended to the ADR catalog; resolved by rebase, keeping 0041–0044 in
+      numeric order), then a pre-existing flake in
+      `Verbara.Sdk.Ari.Tests.Audio.WebSocketAudioSessionTests.ReadPump_ShouldTransitionToDisconnected_WhenCloseFrameReceived`
+      — a `Task.Delay(100)` barrier plus a cross-thread `List<T>` mutated during the assertion, which is
+      why it failed with `Expected collection {Connected, Disconnected} to contain Disconnected`. That
+      file already carries 3 grandfathered barriers in `sync-fence-baseline.json`; deflaking it is
+      unclaimed follow-up work, not part of this change
