@@ -55,7 +55,15 @@ Phase C = §4 remaining providers + §6–§8 (batched).
       the 10 s default would cost 10 s per lost port race (measured). Cold start is ~80 ms.
       `BaseAddress` is built from the IPv4 literal — WireMock's own `Url` property reports the host
       as `localhost` (verified), which is exactly the ADR-0044 ambiguity, so it is never surfaced.
-      Dispose = `Stop()` + `Dispose()`; the port is rebindable in ~7 ms (measured).
+      Dispose = `Stop()` + `Dispose()`. **Port release is not instantaneous, and that is an OS
+      property rather than a fixture defect** — established by measurement, not assumed: across 720
+      start/dispose/rebind cycles in 6 concurrent processes, ~5% of immediate rebinds were refused,
+      every one of them became bindable at the first re-check 25 ms later (never-recovered = 0), and
+      one refusal was a provable cross-process steal. So there is no port leak; Kestrel's dispose
+      returns before the kernel finishes releasing the listening socket. The acquire side already
+      absorbs the same latency via `PortAllocationAttempts`. The dispose test therefore asserts the
+      invariant the fixture actually owns — after dispose the server stops answering on its address —
+      instead of the port number being rebindable, which nothing can guarantee under parallel CI.
 - [x] 2.3 Make request matching strict by default — method + path + query + required headers — so a
       misrouted or unauthenticated request fails to match instead of receiving a canned response
       — `HttpProviderRequest`. Method + path use `ExactMatcher` (case-sensitive, no wildcards);
@@ -79,8 +87,23 @@ Phase C = §4 remaining providers + §6–§8 (batched).
       `HttpProviderResponse.ChunkedBytes(...)`. The chunked shape uses a custom `IResponseProvider`
       writing straight to the Kestrel response stream: WireMock's own streaming body (`WithSseBody`)
       is UTF-8 text and corrupts every byte above 0x7F (verified), which is fatal for codec bytes.
-- [ ] 2.6 Measure fixture setup/teardown cost against the socket-less `MockHttpMessageHandler`
+- [x] 2.6 Measure fixture setup/teardown cost against the socket-less `MockHttpMessageHandler`
       baseline and record the per-suite delta (ADR-0038 CI wall-clock budget)
+      — measured on an otherwise idle machine, 40 iterations after 5 warm-ups:
+
+      | Shape | `MockHttpMessageHandler` | `HttpProviderMockServer` | delta |
+      |---|---|---|---|
+      | construct + dispose | 0.000 ms | 0.610 ms | +0.610 ms |
+      | construct + 1 request + dispose | 0.001 ms | 1.325 ms | +1.324 ms |
+
+      **The ratio is meaningless and the absolute number is the answer.** The baseline never opens a
+      socket, so the multiplier is ~1000x against a denominator of one microsecond. What ADR-0038
+      budgets is wall-clock: at one fixture per test across the 23 tests on the six migrating
+      surfaces (Whisper 4, AzureWhisper 4, Google 6, Azure TTS 4, Speechmatics 3, LMNT HTTP 2),
+      **the projected total is +30 ms**. That is far below the noise floor of the unit lane, which
+      runs 3 020 tests. Caveat for honesty: this is the steady-state cost — the *first* fixture in an
+      assembly additionally pays WireMock/Kestrel init, ~80 ms once per assembly, and both suites
+      already pay it. The rollout stop-condition in D9 is not approached.
 
 ## 3. Recording capture and redaction protocol
 
