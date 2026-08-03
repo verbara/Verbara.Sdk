@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="Testcontainers" />
+    <PackageReference Include="WireMock.Net" />
   </ItemGroup>
 
 </Project>

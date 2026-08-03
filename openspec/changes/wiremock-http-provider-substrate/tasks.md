@@ -13,18 +13,39 @@ Phase C = §4 remaining providers + §6–§8 (batched).
 
 - [ ] 1.1 Land `docs/decisions/0041-wiremock-as-http-provider-test-substrate.md` and move it from
       `Proposed` to `Accepted` (or supersede it) before any suite migrates
-- [ ] 1.2 Confirm WireMock.NET's license clears the `dependency-review` deny-list
+- [x] 1.2 Confirm WireMock.NET's license clears the `dependency-review` deny-list
       (AGPL / GPL / SSPL, `.github/workflows/dependency-review.yml`) — a denied license kills the
       change here, not after six migrations
-- [ ] 1.3 Add the `PackageVersion` pin to `Directory.Packages.props` (ADR-0004: every version pinned
+      — **CLEARED.** `WireMock.Net` 2.13.0 declares SPDX `Apache-2.0`. No node in the resolved graph
+      is AGPL/GPL/SSPL. Non-SPDX outliers, none denied: `XPath2` 1.1.5 is MS-PL; `Fare`,
+      `SimMetrics.Net`, the `dotnet/corefx` shims and the ASP.NET Core 2.x packages carry a
+      `licenseUrl` rather than an expression, so `dependency-review` sees them as *unknown*, not
+      denied. `dotnet list package --vulnerable --include-transitive` reports **0 vulnerable
+      packages**, so `fail-on-severity: high` also passes.
+- [x] 1.3 Add the `PackageVersion` pin to `Directory.Packages.props` (ADR-0004: every version pinned
       centrally); do **not** add a `PackageReference` to any `src/**` project
-- [ ] 1.4 Verify the transitive graph WireMock.NET pulls in does not collide with existing pins
+      — pinned `WireMock.Net` 2.13.0 in the test-dependency group. **The full metapackage is
+      deliberate over `WireMock.Net.Minimal`:** "Minimal" is a misnomer — it pulls
+      OpenApiParser/NSwag/NJsonSchema/Scriban/TinyMapper (115 packages against the metapackage's 125
+      at lower bound) and resolves `Newtonsoft.Json` 9.0.1 + `System.Text.Encodings.Web` 4.7.1, which
+      carry 2 HIGH and 1 CRITICAL advisory respectively and would fail `dependency-review`.
+- [x] 1.4 Verify the transitive graph WireMock.NET pulls in does not collide with existing pins
       (`NU1605` is fatal here — `TreatWarningsAsErrors=true`, and `NU1605` is not in `NoWarn`)
+      — **no collision.** Restore and build are clean (0 warnings). Every central pin is at or above
+      what WireMock requests, so no downgrade is possible: `Microsoft.Extensions.*` 10.0.10 vs 10.0.0,
+      `Microsoft.CodeAnalysis.CSharp` 5.6.0 vs 4.8.0, `OpenTelemetry` 1.17.0 vs 1.15.3. Unification
+      raises `Newtonsoft.Json` to 13.0.4. **Cost of record: 156 transitive packages.** Reachable from
+      the 4 projects that reference `TestInfrastructure` — the two target suites plus
+      `FunctionalTests`/`IntegrationTests`, which are already the Docker-bound slow lane.
 
 ## 2. Shared substrate in `Tests/Verbara.Sdk.TestInfrastructure`
 
-- [ ] 2.1 Add the WireMock `PackageReference` to `Tests/Verbara.Sdk.TestInfrastructure` only, and
+- [x] 2.1 Add the WireMock `PackageReference` to `Tests/Verbara.Sdk.TestInfrastructure` only, and
       confirm `IsPackable=false` / `IsAotCompatible=false` already apply from `Directory.Build.props`
+      — added. Both flags are set explicitly in the project itself, so D7's confinement holds.
+      Reachability audited: exactly 4 projects reference `TestInfrastructure` — the two target suites
+      (`VoiceAi.Stt.Tests`, `VoiceAi.Tts.Tests`) plus `FunctionalTests` and `IntegrationTests`.
+      `dotnet build Verbara.Sdk.slnx` is green at 0 warnings.
 - [ ] 2.2 Add a shared `HttpProviderMockServer` fixture: loopback-bound, free-port allocation with
       retry (mirroring the existing fakes' port-conflict handling under parallel test execution),
       deterministic dispose
