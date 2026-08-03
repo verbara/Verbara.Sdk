@@ -214,7 +214,8 @@ Each item: capture → redact → commit recording → port the suite to the sha
 existing `*_ShouldAbort_WhenCancelled` assertion verbatim → confirm no coverage-floor regression.
 
 - [ ] 4.1 **OpenAI Whisper** (STT, `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Whisper/WhisperSpeechRecognizerTests.cs`)
-      — multipart POST; **first migration: it establishes the pattern the other five copy**.
+      — multipart POST. **No longer the first migration** — Azure TTS (4.4) took that role while
+      this provider's terms gate was open, and the pattern is established there.
       **Terms gate CLEARED 2026-08-03 — read first-hand.** `openai.com/policies/*` 403s to automated
       fetchers, but the same contract is published as a PDF on OpenAI's own CDN, which does not:
       `https://cdn.openai.com/osa/openai-services-agreement.pdf`, version `ONLINE v.010126`. §4.1
@@ -235,9 +236,30 @@ existing `*_ShouldAbort_WhenCancelled` assertion verbatim → confirm no coverag
       the verdict drops to `not-cleared` and D11's envelope fallback applies. Separately, never put
       comparative accuracy or latency numbers in a sidecar or `Recordings` README — that engages the
       Service Specific Terms §7 benchmarking clause.
-- [ ] 4.4 **Azure TTS** (`Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Azure/`) — SSML POST returning a real
+- [x] 4.4 **Azure TTS** (`Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Azure/`) — SSML POST returning a real
       audio stream; replaces `new byte[320]` zeros with recorded codec bytes, exercising the
       frame-chunking path for the first time
+      — **done, and this is the migration that establishes the pattern** (see 4.1: OpenAI was
+      originally slated for that role and was overtaken while its terms gate was open). Capture:
+      `Recordings/azure-tts/synthesize-short-es-co.raw`, 60 200 bytes of raw 8 kHz 16-bit mono PCM
+      (3.76 s) from the prebuilt `es-CO-SalomeNeural` voice over a fictional sentence, 23% of the
+      256 KiB cap, with a full provenance sidecar. Redaction guard green; the response carried no
+      account or correlation identifier to strip.
+
+      **Required a `src/**` seam — see the corrected Impact bullet in `proposal.md`.**
+      `AzureTtsSpeechSynthesizer` composed its URL from `Region`, so it ignored `HttpClient.
+      BaseAddress` entirely. Added the `internal` test-only `fakeOrigin` parameter following the
+      existing `SpeechmaticsSpeechSynthesizer` / `LmntSpeechSynthesizer` precedent, substituting the
+      **origin only** so the route stays in production code and the strict matcher asserts the real
+      path.
+
+      Suite went 4 tests → 6, adding the two shapes the canned handler could not express: an
+      unmatched request when the API-key header is wrong (strict matching, D1) and an error-status
+      response. **A wrong assertion was caught and removed in the process:** the first version
+      asserted the final frame was exactly `length % chunkSize`, which failed — frames are whatever
+      `Stream.ReadAsync` returns and a real chunked response does not align to the buffer. What is
+      assertable, and now asserted, is the byte-exact round trip plus the presence of a partial
+      frame, guaranteed because the capture's length is deliberately not chunk-aligned.
 - [ ] 4.5 **Speechmatics TTS** (`Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Speechmatics/`) — retires
       `SpeechmaticsFakeServer` (`HttpListener`)
 - [ ] 4.6 **LMNT HTTP path** (`Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Lmnt/`, `LmntTransport.Http`) —

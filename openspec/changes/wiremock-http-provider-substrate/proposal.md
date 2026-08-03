@@ -121,8 +121,17 @@ handling for binary TTS captures. `.gitattributes` currently tracks only `*.onnx
   retired once no suite references them.
 - New `Recordings/` fixture trees plus a `.gitattributes` LFS rule if binary captures exceed the
   size cap.
-- **No production code changes.** No `src/**` file is touched; no public API moves; nothing cascades
-  to Sdk.Pro or Platform.
+- ~~**No production code changes.** No `src/**` file is touched~~ — **this was wrong, corrected
+  2026-08-03 during the Azure TTS migration.** Two of the six providers build their request URL
+  themselves rather than reading a configurable endpoint, so they cannot be pointed at an in-process
+  server without a seam: **Azure TTS** composes the host from `Region`, and **Google STT** hardcodes
+  `https://speech.googleapis.com/...`. Both need the `internal`, test-only base-URI seam this repo
+  already uses for `SpeechmaticsSpeechSynthesizer` (`_fakeBaseUri`) and `LmntSpeechSynthesizer`
+  (`_fakeHttpBaseUri`). The seam substitutes the **origin only** — the route stays in production
+  code, so a strictly-matching test server is asserting the path the provider really builds. The
+  other four need nothing: Whisper and Azure OpenAI Whisper already read `Options.Endpoint`, and
+  Speechmatics and LMNT already carry the seam. **No public API moves and nothing cascades to
+  Sdk.Pro or Platform** — those halves of the original claim hold.
 - CI: a real loopback HTTP server per fixture is slower than the socket-less
   `MockHttpMessageHandler`. Against ADR-0038's wall-clock budget this must be measured, not assumed
   — the `HttpListener` fakes already pay this cost for two suites.

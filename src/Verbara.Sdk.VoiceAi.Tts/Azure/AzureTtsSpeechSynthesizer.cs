@@ -12,9 +12,13 @@ namespace Verbara.Sdk.VoiceAi.Tts.Azure;
 /// </summary>
 public sealed class AzureTtsSpeechSynthesizer : SpeechSynthesizer
 {
+    /// <summary>Route this provider posts to, appended to whichever origin is in effect.</summary>
+    private const string SynthesisPath = "/cognitiveservices/v1";
+
     private readonly AzureTtsOptions _options;
     private readonly HttpClient _http;
     private readonly int _chunkSize;
+    private readonly string? _fakeOrigin;
 
     /// <inheritdoc />
     public override string ProviderName => "Azure";
@@ -27,15 +31,29 @@ public sealed class AzureTtsSpeechSynthesizer : SpeechSynthesizer
         _chunkSize = 4096;
     }
 
-    /// <summary>Initializes a new instance for testing with a custom chunk size.</summary>
+    /// <summary>
+    /// Initializes a new instance for testing with a custom chunk size and, optionally, a fake
+    /// server origin.
+    /// </summary>
+    /// <param name="options">Provider options, as in the production constructor.</param>
+    /// <param name="http">Client the test owns and disposes.</param>
+    /// <param name="chunkSize">Frame size the response stream is sliced into.</param>
+    /// <param name="fakeOrigin">
+    /// Scheme, host and port of an in-process test server — the IPv4 loopback literal, never
+    /// <c>localhost</c> (ADR-0044). Only the <em>origin</em> is substituted: <see cref="SynthesisPath"/>
+    /// is still appended by this class, so a test server matching strictly on the path is asserting
+    /// the route this provider really builds rather than one the test handed it.
+    /// </param>
     internal AzureTtsSpeechSynthesizer(
         IOptions<AzureTtsOptions> options,
         HttpClient http,
-        int chunkSize)
+        int chunkSize,
+        string? fakeOrigin = null)
     {
         _options = options.Value;
         _http = http;
         _chunkSize = chunkSize;
+        _fakeOrigin = fakeOrigin;
     }
 
     /// <inheritdoc />
@@ -62,8 +80,9 @@ public sealed class AzureTtsSpeechSynthesizer : SpeechSynthesizer
             _ => _options.OutputFormat
         };
 
-        var uri = new Uri(
-            $"https://{_options.Region}.tts.speech.microsoft.com/cognitiveservices/v1");
+        var origin = _fakeOrigin
+            ?? $"https://{_options.Region}.tts.speech.microsoft.com";
+        var uri = new Uri(new Uri(origin), SynthesisPath);
 
         using var req = new HttpRequestMessage(HttpMethod.Post, uri);
         req.Headers.Add("Ocp-Apim-Subscription-Key", _options.ApiKey);
