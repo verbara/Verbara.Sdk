@@ -18,8 +18,17 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
 
     public int Port => _server.Port;
 
-    /// <summary>All JSON text frames received from the client (Speak, Flush, Close).</summary>
-    public List<string> ReceivedJsonMessages { get; } = [];
+    private readonly List<string> _receivedJsonMessages = [];
+
+    /// <summary>
+    /// All JSON text frames received from the client (Speak, Flush, Close) — a snapshot. The
+    /// receive loop runs on its own thread and may still be appending while a test reads this, so
+    /// handing out the live list would be a torn read of a collection under concurrent mutation.
+    /// </summary>
+    public IReadOnlyList<string> ReceivedJsonMessages
+    {
+        get { lock (_receivedJsonMessages) return _receivedJsonMessages.ToArray(); }
+    }
 
     /// <summary>Raw HTTP request-target captured from the WS upgrade (e.g. <c>/v1/speak?model=...&amp;encoding=...</c>).</summary>
     public string? CapturedRequestUri { get; private set; }
@@ -120,7 +129,8 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
                 }
 
                 if (result.MessageType == WebSocketMessageType.Text)
-                    ReceivedJsonMessages.Add(Encoding.UTF8.GetString(buf, 0, result.Count));
+                    lock (_receivedJsonMessages)
+                        _receivedJsonMessages.Add(Encoding.UTF8.GetString(buf, 0, result.Count));
                 else if (result.MessageType == WebSocketMessageType.Close)
                     break;
             }

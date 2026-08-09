@@ -194,8 +194,12 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
         // guaranteeing ReadAllAsync(ct) is blocked inside the channel reader.
         // Polling on an observable signal avoids wall-clock flakiness on slow CI runners
         // (mirrors the Deepgram STT deflake from issue #32).
+        //
+        // HoldOpenUntilDisposed is what actually enforces "no close" — the strategy above was, until
+        // now, only supplied by the fake's fixed 30 ms answer delay winning a race against the 5 ms
+        // cancel poll. That is not a guarantee; it is a coincidence that held on this machine.
         _server.AudioFramesToSend.Clear();
-        _server.SendFinishTerminator = false;
+        _server.HoldOpenUntilDisposed = true;
 
         using var cts = new CancellationTokenSource();
         var synth = BuildSynthesizer();

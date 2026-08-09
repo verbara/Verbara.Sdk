@@ -48,6 +48,30 @@ All notable changes to this project will be documented in this file.
   - Every `*_ShouldAbort_WhenCancelled` test carried over **verbatim** as the `test-determinism`
     tripwire for the swap, and re-verified under the 30× repeat-run protocol (0 failures).
 
+### Fixed — Tests
+
+- **Three timing and thread-safety defects in the WebSocket provider fakes.** All test-only; no
+  shipped code changed. They surfaced on this change's first CI run and predate it — the fakes were
+  byte-identical to `main` — but they matter beyond the one red build, because 30 green local
+  repeat-runs had not found them. The repeat-run protocol multiplies *runs*, not *machines*, and
+  each of these races was decided by a fixed 30 ms server timer against client-side work: a fast dev
+  box wins every round, a loaded CI runner does not.
+  - **`LmntWsFakeServer` answered on a timer instead of on the client's request.** It slept 30 ms,
+    sent audio, then called `CloseAsync` — which drains and discards peer frames to complete the
+    close handshake, so a request frame could vanish between `text` and `eof`. The session now waits
+    for the client's terminal `eof` frame (bounded at 2 s, so cancelled or aborted clients are still
+    answered), which is also what the real LMNT server does.
+  - **`HoldOpenUntilDisposed` did not hold the socket open.** It awaited the receive loop, and that
+    loop ends the instant the client half-closes (`CloseOutputAsync` after EOF) — so the session tore
+    down and completed the client's stream, the one thing a cancellation test must never observe. It
+    now holds until the fake is disposed, and `SynthesizeAsync_ShouldAbort_WhenCancelled`, which had
+    never set the flag despite documenting the strategy, sets it: the test had been passing on the
+    30 ms delay outlasting its own 5 ms cancel poll.
+  - **Five fakes handed tests the live `List<string>` their receive loop was still appending to** —
+    a torn read of a collection under concurrent mutation. LMNT, ElevenLabs, Deepgram TTS, Cartesia
+    TTS and Cartesia STT now expose an `IReadOnlyList<string>` snapshot taken under the same lock the
+    writer holds.
+
 ### Changed — CI
 
 - **`publish.yml` now creates the GitHub Release object itself.** The workflow packed and pushed

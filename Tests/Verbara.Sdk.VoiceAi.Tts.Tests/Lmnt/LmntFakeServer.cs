@@ -19,12 +19,28 @@ namespace Verbara.Sdk.VoiceAi.Tts.Tests.Lmnt;
 /// </remarks>
 internal sealed class LmntWsFakeServer : IAsyncDisposable
 {
+    /// <summary>
+    /// How long the session waits for the client's terminal EOF frame before answering anyway.
+    /// A client that was cancelled or aborted mid-send never sends one; the session must not hang.
+    /// </summary>
+    private static readonly TimeSpan RequestDrainTimeout = TimeSpan.FromSeconds(2);
+
     private readonly WebSocketTestServer _server;
+    private readonly List<string> _receivedJsonMessages = [];
+    private readonly TaskCompletionSource _requestComplete =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public int Port => _server.Port;
 
-    /// <summary>All text (JSON) messages received from the client, in order.</summary>
-    public List<string> ReceivedJsonMessages { get; } = [];
+    /// <summary>
+    /// All text (JSON) messages received from the client, in order — a snapshot, because the
+    /// session's receive loop runs on its own thread and may still be appending while a test reads
+    /// this. Returning the live list would be a torn read of a collection under concurrent mutation.
+    /// </summary>
+    public IReadOnlyList<string> ReceivedJsonMessages
+    {
+        get { lock (_receivedJsonMessages) return _receivedJsonMessages.ToArray(); }
+    }
 
     /// <summary>Binary audio frames to stream back to the client.</summary>
     public List<byte[]> AudioFramesToSend { get; } = [];
@@ -81,9 +97,31 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
 
         var receiveTask = Task.Run(() => RecordIncomingMessagesAsync(ws, ct), ct);
 
-        await Task.Delay(30, ct).ConfigureAwait(false);
+        // Answer only once the client's request is complete — EOF is its terminal frame, and a real
+        // LMNT server emits its final audio and closes in response to EOF rather than on a timer.
+        // The previous fixed 30 ms delay tore down the session while the client was still writing:
+        // CloseAsync drains and discards peer frames to finish the close handshake, so a request
+        // frame could vanish between `text` and `eof`, and the test read a list the receive loop was
+        // still appending to. That is what made
+        // SynthesizeAsync_WsInit_ShouldIncludeFlushAndEof_InSubsequentMessages flake in CI.
+        await WaitForRequestOrTimeoutAsync(ct).ConfigureAwait(false);
         await SendAudioFramesAsync(ws, ct).ConfigureAwait(false);
         await TearDownAsync(ws, receiveTask, ct).ConfigureAwait(false);
+    }
+
+    private async Task WaitForRequestOrTimeoutAsync(CancellationToken ct)
+    {
+        using var timeout = new CancellationTokenSource(RequestDrainTimeout);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+        try
+        {
+            await _requestComplete.Task.WaitAsync(linked.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // No EOF: the client was cancelled or aborted mid-send. Answer anyway — that is the
+            // behaviour the cancellation and abort tests depend on.
+        }
     }
 
     private async Task RecordIncomingMessagesAsync(System.Net.WebSockets.WebSocket ws, CancellationToken ct)
@@ -99,7 +137,15 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
             catch { break; }
 
             if (result.MessageType == WebSocketMessageType.Text)
-                ReceivedJsonMessages.Add(Encoding.UTF8.GetString(buf, 0, result.Count));
+            {
+                var json = Encoding.UTF8.GetString(buf, 0, result.Count);
+                lock (_receivedJsonMessages)
+                    _receivedJsonMessages.Add(json);
+
+                // EOF is the client's terminal request frame; releases HandleSessionAsync to answer.
+                if (json.Contains("\"eof\"", StringComparison.Ordinal))
+                    _requestComplete.TrySetResult();
+            }
             else if (result.MessageType == WebSocketMessageType.Close)
                 break;
         }
@@ -128,6 +174,13 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
             // Keep the socket alive until the server is disposed (server CT fires).
             // Tests that verify cancellation set this flag so the synthesizer's
             // channel-reader is blocked when the test CTS fires.
+            //
+            // Awaiting only the receive loop is not enough: the client half-closes
+            // (CloseOutputAsync) immediately after EOF, which ends that loop while the socket is
+            // still perfectly readable. Returning there would tear the session down and complete
+            // the client's stream — the one thing a cancellation test must never see.
+            try { await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false); }
+            catch (OperationCanceledException) { /* disposed: release the socket */ }
             try { await receiveTask.ConfigureAwait(false); } catch { }
             return;
         }

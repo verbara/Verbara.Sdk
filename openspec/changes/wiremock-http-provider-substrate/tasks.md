@@ -436,6 +436,34 @@ formality left the D8 parity gate unmeasured while three provider suites were be
       contract is unchanged by the substrate swap
       — **30 consecutive runs of both suites' cancellation filters (3 TTS + 7 STT tests), 0 failures**
       — 30× is this repo's established repeat-run protocol (CHANGELOG v2.3.2), not an arbitrary count.
+
+      > **Amendment (2026-08-09) — 30× green locally was not enough, and that is the finding.**
+      > CI still failed `LmntSpeechSynthesizerWsTests.SynthesizeAsync_WsInit_ShouldIncludeFlushAndEof_InSubsequentMessages`
+      > on the first PR run. The defect was **pre-existing** (`LmntFakeServer.cs` and `src/**/Lmnt/`
+      > were byte-identical to `main`), but it is worth recording here because it exposes a limit of
+      > the protocol itself: the repeat-run count multiplies *runs*, not *machines*. Both LMNT races
+      > were decided by a fixed 30 ms server timer versus client-side work, so a fast dev box wins
+      > all 30 rounds and a loaded CI runner does not. Repeat-runs cannot find that class of bug —
+      > only removing the timer can.
+      >
+      > Three defects, all in the fakes, none in shipped code:
+      > 1. **LMNT answered on a timer instead of on the client's request.** `Task.Delay(30)` → send
+      >    audio → `CloseAsync`. `CloseAsync` drains and discards peer frames to complete the close
+      >    handshake, so `flush` could vanish between `text` and `eof`. Now the session waits for the
+      >    client's terminal `eof` frame (2 s bounded, so cancelled/aborted clients still get answered)
+      >    — which is also what the real LMNT server does.
+      > 2. **`HoldOpenUntilDisposed` did not hold open.** It awaited the receive loop, and that loop
+      >    ends the moment the client half-closes (`CloseOutputAsync` after EOF) — so the session tore
+      >    down and completed the client's stream. `SynthesizeAsync_ShouldAbort_WhenCancelled` never
+      >    set the flag at all; it passed because the 30 ms delay happened to outlast the 5 ms cancel
+      >    poll. Both are fixed: the flag now holds until dispose, and the test sets it.
+      > 3. **Five fakes handed out the live `List<string>` the receive loop was appending to** — a torn
+      >    read under concurrent mutation. All five now expose an `IReadOnlyList<string>` snapshot
+      >    under the same lock the writer takes (LMNT, ElevenLabs, Deepgram TTS, Cartesia TTS,
+      >    Cartesia STT).
+      >
+      > Re-verified after the fix: **30 iterations × 2 suites = 60 runs, 0 failures**, and the full
+      > unit lane at 3 027 tests / 30 assemblies green.
 - [x] 8.6 Coverage floor holds (`scripts/check-coverage-floor.py`) — no provider loses coverage when
       its fake is deleted
       — **line 80.4% inside the band [78, 81]; branch 66.05% ≥ 64; 12 967 lines measured ≥ 12 315.**
