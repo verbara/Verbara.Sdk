@@ -1,6 +1,7 @@
 # ADR-0041: WireMock.NET as the HTTP provider test substrate; WebSocket providers stay in-process
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-08-09 — the D10 license gate, the D9 wall-clock measurement and the
+  first migrated surface all cleared before acceptance; see the acceptance note below)
 - **Date:** 2026-08-02
 - **Deciders:** Harol A. Reina H.
 - **Related:** ADR-0004 (central package management), ADR-0005 (Testcontainers is the
@@ -143,6 +144,41 @@ driven by checked-in recordings, and keep the WebSocket surfaces on the existing
   sidecar discharges, not a prohibition — a residual, not a gate. **A 403 to a fetcher is not a
   closed door; look for the same document on a CDN, a PDF mirror or a regulatory filing before
   recording a finding as unverifiable.**
+- **D12 — A provider that composes its own request URL gets an `internal` test-only origin seam, and
+  the seam substitutes the origin only.** A loopback server can only be reached through
+  `HttpClient.BaseAddress`; a provider that builds an absolute URL itself ignores it. Two of D1's six
+  do: **Azure TTS** composes the host from `Region`, **Google STT** hardcodes
+  `https://speech.googleapis.com/…`. Each takes the `internal` base-URI seam this repo already uses
+  for `SpeechmaticsSpeechSynthesizer` (`_fakeBaseUri`) and `LmntSpeechSynthesizer`
+  (`_fakeHttpBaseUri`) — precedent, not a new pattern. **The seam replaces the scheme/host/port and
+  nothing else:** the route stays in production code, so D1's strict matcher asserts the path the
+  provider really builds rather than one the test handed it. A seam that accepted a full URL would
+  delete the assertion it exists to enable. Nothing becomes public API; the four remaining providers
+  need no seam (Whisper and Azure OpenAI Whisper read `Options.Endpoint`; Speechmatics and LMNT
+  already carry one).
+
+## Acceptance note (2026-08-09)
+
+Accepted after Phase A (§1–§3 of the change) shipped in PR #149 and the first surface — Azure TTS,
+§4.4 — migrated. Three things are true at acceptance that were open at proposal:
+
+- **D10 cleared:** `WireMock.Net` 2.13.0 is Apache-2.0, no AGPL/GPL/SSPL node in the resolved graph,
+  0 vulnerable packages.
+- **D9 measured, not assumed:** +0.6 ms per fixture construct/dispose, +1.3 ms with one request;
+  projected **+30 ms** across the 23 tests on the six migrating surfaces, plus ~80 ms once per
+  assembly for WireMock/Kestrel init. Far under ADR-0038's budget; the D9 stop-condition is not
+  approached.
+- **D12 was learned, not designed.** It is written above as a decision because the *proposal* asserted
+  the opposite (no `src/**` change) and the first migration disproved it. Recorded here rather than
+  left in a commit message because it binds the Google STT migration that has not happened yet.
+
+One substrate placement in §2 also had to move for a reason worth carrying: WireMock lives in its own
+`Tests/Verbara.Sdk.TestInfrastructure.Http` project, not in `TestInfrastructure`. Referencing WireMock
+adds a `FrameworkReference` to `Microsoft.AspNetCore.App`, which stops ~30 `Microsoft.Extensions.*`
+assemblies being copied to the output directory; coverlet's Cecil resolver then fails to resolve them
+and **silently skips instrumenting** the modules that reference them. Measured cost when it landed in
+the shared project: line coverage 80.42% → 61.96% with all 3 020 tests still green — a green suite
+hiding a coverage-gate failure, caught only by the ratchet on PR #149.
 
 ## Consequences
 
@@ -171,8 +207,11 @@ driven by checked-in recordings, and keep the WebSocket surfaces on the existing
   drift would need live contract tests, which this ADR does not adopt.
 - Negative: committing third-party API responses to a public MIT repo is a standing compliance
   surface. D5 and D6 bound it; they do not remove it.
-- Neutral: no production code changes. No `src/**` file moves, no public API changes, nothing
-  cascades to Sdk.Pro or Platform (ADR-0040 is not engaged).
+- Neutral, with one exception: **two `src/**` files take an `internal` test-only seam** (D12). The
+  proposal claimed no production code would be touched at all; the Azure TTS migration disproved that
+  on 2026-08-03, before acceptance, and D12 records the corrected rule. The rest of the claim holds
+  and is the part that mattered: no public API moves, no behaviour changes on any production path, and
+  nothing cascades to Sdk.Pro or Platform (ADR-0040 is not engaged).
 - Neutral: the `test-determinism` capability is untouched. Cancellation assertions carry over verbatim
   and are the regression tripwire for the swap, not a thing the swap gets to redesign.
 

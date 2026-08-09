@@ -11,8 +11,18 @@ Phase C = §4 remaining providers + §6–§8 (batched).
 
 ## 1. Decision and dependency admission
 
-- [ ] 1.1 Land `docs/decisions/0041-wiremock-as-http-provider-test-substrate.md` and move it from
+- [x] 1.1 Land `docs/decisions/0041-wiremock-as-http-provider-test-substrate.md` and move it from
       `Proposed` to `Accepted` (or supersede it) before any suite migrates
+      — **Accepted 2026-08-09.** The ordering this task exists to enforce was violated: §4.4 migrated
+      on 2026-08-03 while the ADR was still `Proposed`. That turned out to be the useful accident —
+      the migration disproved the proposal's "no `src/**` change" claim, and because the ADR was still
+      editable, the correction landed **in** it as **D12** (a provider that builds its own URL takes an
+      `internal` origin-only seam) instead of needing a superseding ADR. Had 1.1 been done in order,
+      ADR-0041 would have frozen a false consequence. Also folded in before freezing: an acceptance
+      note recording D10 cleared, D9 measured at +30 ms projected, and the
+      `TestInfrastructure.Http` split with the coverlet 80.42% → 61.96% evidence. Index updated in
+      `docs/decisions/README.md`. **The lesson is the ordering rule, not an excuse to repeat it:**
+      §4.1–§4.6 now migrate under a frozen ADR, so any further correction costs a new ADR.
 - [x] 1.2 Confirm WireMock.NET's license clears the `dependency-review` deny-list
       (AGPL / GPL / SSPL, `.github/workflows/dependency-review.yml`) — a denied license kills the
       change here, not after six migrations
