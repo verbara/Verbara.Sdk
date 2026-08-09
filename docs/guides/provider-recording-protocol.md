@@ -50,6 +50,15 @@ Tests/<TestProject>/Recordings/
 
 ## 3. Capture procedure
 
+> **Steps 4–8 are automated for the Whisper surfaces** by
+> `scripts/capture-provider-recording.py` (`openai-whisper`, `azure-openai-whisper`). It issues
+> the same multipart request the SDK issues — file part without a `Content-Type`, text parts as
+> `text/plain; charset=utf-8` — then redacts, normalizes, writes the sidecar and enforces the cap.
+> Credentials are read from the environment and never written or echoed. Steps 1–3 and 9–10 are
+> still yours: a tool cannot re-read a terms page or revoke a key. Extending it to a new provider
+> means adding one `*_plan` function; doing the capture by hand instead means re-deriving the
+> request shape, which is the part that is easy to get subtly wrong.
+
 1. **Confirm the provider's terms still permit it.** Read §7 for the standing per-provider finding,
    then re-read the provider's live terms page. A finding recorded months ago is evidence, not
    permission — the `terms.checked_utc` field in the sidecar exists so the age of that check is
