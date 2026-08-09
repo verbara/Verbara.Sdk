@@ -121,7 +121,14 @@ driven by checked-in recordings, and keep the WebSocket surfaces on the existing
 - **D10 — The license gate is a precondition.** The pin lands only after WireMock.NET's license is
   confirmed clear of `dependency-review`'s deny-list (AGPL / GPL / SSPL).
 - **D11 — A provider whose terms do not clearly grant redistribution gets an envelope capture, not a
-  payload capture.** D4 asks every provider for at least one replay of a recorded real response. The
+  payload capture.** *(Scope note, 2026-08-03: when written, this addressed LMNT alone. The terms
+  review of the four WebSocket-only vendors — absent from the original §3.4, which covered the six
+  HTTP providers only — brought Deepgram (both directions), AssemblyAI and ElevenLabs under it as
+  well. **Five of the eight WebSocket surfaces now take an envelope capture rather than a payload
+  one**, so D11 is the common case for WebSocket providers, not the exception D4 assumes. Cartesia
+  clears on a commercial tier; Speechmatics STT clears outright. Where a vendor publishes its frame
+  schema, hand-authoring `synthetic` frames from that documentation is preferred over an envelope,
+  since it raises no terms question and is the authority a parser should be checked against.)* D4 asks every provider for at least one replay of a recorded real response. The
   per-provider terms review (`docs/guides/provider-recording-protocol.md` §7) found that **LMNT does
   not clear that bar**: its ToS (2023-06-12) contains no clause addressing rights in generated audio,
   and its AUP (2023-08-28) restricts sharing synthesized speech outside the capturing entity. Rather

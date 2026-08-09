@@ -231,8 +231,8 @@ a real person's statement.
 
 ## 7. Per-provider terms-of-service findings (ADR-0041 D5)
 
-Each of the six HTTP surfaces was checked against the provider's current published terms on
-**2026-08-02**. The verdict, the clause it rests on and the residual uncertainty are recorded below.
+The six HTTP surfaces were checked on **2026-08-02**, the four remaining WebSocket vendors on
+**2026-08-03**. The verdict, the clause it rests on and the residual uncertainty are recorded below.
 Copy the verdict into each capture's `terms` block and re-check before capturing.
 
 **How to read the verdicts:**
@@ -243,6 +243,29 @@ Copy the verdict into each capture's `terms` block and re-check before capturing
 | `permitted-with-conditions` | As above, plus a condition this repo must actively satisfy. |
 | `not-cleared` | The terms do not clearly grant it. The conservative fallback applies; do not commit the payload. |
 
+### How to read a provider's terms — the method, not just the answers
+
+Four of these findings turned on a document that was **not** the ownership clause. Read all three
+layers before recording a verdict, in this order:
+
+1. **The ownership / output-rights clause.** Necessary, never sufficient. Its absence is decisive;
+   its presence is not.
+2. **The acceptable-use or prohibited-use policy the grant is subordinated to.** ElevenLabs and
+   Cartesia carry a *word-for-word identical* grant — *"you are permitted to use such Output outside
+   of the Services but always subject to these Terms and our Acceptable Use Policy"* — and land on
+   opposite verdicts purely on what their AUPs say. A grant routed through an AUP is worth exactly
+   what the AUP allows.
+3. **Which contract actually binds the capture.** A favourable clause on paper we are not party to
+   grants nothing. Deepgram's Master Service Agreement has a clean Output grant that applies only
+   under an executed Order Form; the self-serve console terms that govern a throwaway API key have
+   no concept of Output at all.
+
+Two further habits earned their keep: **check the revision history** (AssemblyAI's customer
+ownership-of-Outputs clause was deleted between contract generations, which reverses the inference a
+reader of the current text alone would draw), and **check whether the vendor publishes conflicting
+documents** (Deepgram serves two live MSAs whose §8.2 clauses disagree on the single word that
+matters).
+
 | Provider | Verdict | Rests on |
 |----------|---------|----------|
 | OpenAI Whisper (STT) | `permitted-with-conditions` | Services Agreement §4.1 assigns all right/title/interest in Output to the customer (read first-hand, v.010126); §3.3 has no publication restriction |
@@ -251,6 +274,10 @@ Copy the verdict into each capture's `terms` block and re-check before capturing
 | Azure TTS | `permitted-with-conditions` | Same Product Terms clause + synthetic-voice disclosure duty |
 | Speechmatics TTS | `permitted-with-conditions` | ToS §10.3 assigns IP in outputs to the customer; §10.5 disclaims ownership of derivatives |
 | LMNT HTTP (TTS) | **`not-cleared`** | No output-rights clause exists; the AUP restricts sharing synthesized speech |
+| Cartesia STT + TTS (WS) | `permitted-with-conditions` | ToS §5.3 disclaims ownership of Outputs and §5.3(b) expressly permits use of Output outside the Services; AUP has no sharing restriction. Requires a commercial-use tier |
+| Deepgram STT + TTS (WS) | **`not-cleared`** | The only Output grant (MSA §8.2) binds solely via an executed Order Form; the self-serve console terms have no Output concept and reserve everything |
+| AssemblyAI STT (WS) | **`not-cleared`** | §4.4 "Output" grants nothing and §4.1 reserves all rights not expressly granted — the express customer-ownership-of-Outputs clause was **deleted** in the 2026-01-22 revision |
+| ElevenLabs TTS (WS) | **`not-cleared`** | ToS §4(c)(ii) grants Output rights but §4(a) subordinates them to the PUP, whose 9(n) bars terms "more permissive than" ElevenLabs' own (MIT is) and 9(l) bars Output as a dataset used for "testing" AI |
 
 ### OpenAI Whisper — `permitted-with-conditions`
 
@@ -385,6 +412,180 @@ LMNT's synthesized speech.
 **Revisit when** LMNT publishes API terms or a developer agreement that expressly grants
 redistribution of generated audio. Record the new finding here and raise the verdict then, not
 before.
+
+### Cartesia (STT + TTS, WebSocket) — `permitted-with-conditions`
+
+**Basis — read first-hand (2026-08-03).** Cartesia AI Terms of Service,
+`https://www.cartesia.ai/legal/terms`, *"Last Revised on June 14, 2024"*. One contract governs both
+directions and reaches the API, not merely the website: its scope sentence covers *"the website,
+cartesia.ai, and its subdomains and APIs"*, and the Data Protection Addendum confirms the public ToS
+*is* the Master Service Agreement absent a signed one.
+
+§5.3: *"Cartesia does not claim ownership of any of your Inputs to the Services … or any of the
+Outputs you create with the Services."* The clause the verdict actually rests on is §5.3(b):
+
+> *"We may enable you to download Your Outputs from some (but not all) of the Services; in such
+> cases, you are permitted to use such Output outside of the Services but always subject to these
+> Terms and our Acceptable Use Policy."*
+
+**The AUP is what makes this a `permitted`.** `https://www.cartesia.ai/legal/acceptable-use`
+(*"Last revised on July 23, 2025"*) contains **no restriction on sharing, publishing or redistributing
+synthesized speech** — its prohibitions are content-category ones. Its scope sentence even assumes
+out-of-service use: *"including use outside our website and the Services"*. This is precisely where
+LMNT failed and ElevenLabs failed.
+
+**Conditions this repo must satisfy.**
+
+1. **Capture on a commercial-use tier.** §4.1 permits *"personal, non-commercial use only (unless
+   commercial use is expressly permitted by your subscription tier)"*, and §5.3(b) reaches use *"for
+   or in connection with any commercial purposes"*. This SDK is the open-core base of a commercial
+   line; a Free-tier capture is `not-cleared` on its face. Record the tier in the sidecar's `notes`.
+2. **Stock/prebuilt library voices only** — never an instant or professional clone.
+3. **Smallest useful sample**, per §4.2's bar on using Output to develop competing products.
+
+**⚠ Residuals.** The commercial-use permission appears as a **pricing-page feature bullet**, not a
+contract clause, while §4.1 and §5.3(b) both defer to "your subscription tier" — thin footing that a
+written confirmation from Cartesia would firm up. Separately, Cartesia's library voices are built
+from real voice actors and no published statement describes the scope of their consent; §4.2 forbids
+making available *"any other person's voice without that person's express permission"*. Its defined
+term "Make Available" is scoped *"through the Services"*, which is a real mitigant but a definitional
+one. **The redistribution right is express; the voice-identity question rests on inference.** Finally,
+the ToS predates Cartesia's STT product, so transcripts ride the Output definition's catch-all
+(*"or other content or outputs based on such Inputs"*) rather than a product-specific clause.
+
+### Deepgram (STT + TTS, WebSocket) — `not-cleared`
+
+**This is not a finding that Deepgram forbids it.** It is a finding that Deepgram publishes no
+agreement granting a *self-serve* API customer the right to redistribute Output — and that the one
+agreement which does grant it is not the agreement a throwaway key is captured under.
+
+**The favourable clause is real, and on the wrong paper.** Master Service Agreement,
+`https://static.deepgram.com/business/MSA_20240315.pdf`, read first-hand. §8.2:
+
+> *"Customer owns and retains all right, title, and interest in and to the Content, Training Data,
+> and the Output…"*
+
+Its Software definition covers both directions (*"translating speech to text, text to speech, or text
+to text"*) and Output is deliberately excluded from §7.1's confidential-information list. On its own
+terms this would be a clean `permitted-with-conditions`. But the MSA opens:
+
+> *"This Master Service Agreement ("Agreement") is entered into as of the Effective Date of the Order
+> Form to which it is attached … by and between Deepgram and the customer named there ("Customer")."*
+
+Every right in it is granted under that Agreement, and §1 defines an Order Form as *"an ordering
+document to purchase a Subscription to the Software executed between"* the parties. **A throwaway
+console key — which §3 of this guide requires — is not an executed Order Form.**
+
+**What governs a console key is adverse.** `Business_TOS_Console.pdf` (*"Last Modified: [07-21-21]"*,
+still live) has **no concept of "Output" at all**; its only ownership clause is input-side (*"received,
+directly or indirectly, from you"*), which a generated transcript or audio frame is not, leaving it
+inside Deepgram's reserved Intellectual Property. `deepgram.com/terms` is a website Terms of Use that
+never mentions API output.
+
+**⚠ Deepgram serves two live MSAs whose §8.2 clauses disagree.**
+`https://static.deepgram.com/business/Business_TOS.pdf` (Feb 2024, at the more canonical URL) reads
+*"…in and to the Content and Training Data"* — **"and the Output" is absent** — and defines Output as
+*"a machine created audio to text transcript of Content and associated metadata"*, so synthesized
+audio is not Output on that paper at all. Verified by downloading both PDFs and diffing the clause.
+That is not a foundation for a permanent public artifact.
+
+**Restrictions that bind regardless**, since capturing means calling the API: MSA §2.2(a) bars use of
+Output *"for … competitive purposes"* — broader and vaguer than the competing-model clauses
+elsewhere in this section — and the console terms bar *"benchmarking or competitive analysis"*
+outright, a prohibition rather than Google's disclosure condition. §2.2(e) forbids representing that
+audio Output was human-created, which the sidecar's `class: "recorded"` discharges.
+
+**⚠ Residual.** A dated self-serve API terms document (control number `4142-6587-5017`, Last Modified
+2024-03-20) is consistently surfaced by search indexing but returns 404 at every URL tried, has no
+Wayback capture in its window, and could not be read. Indexing claims it lets Deepgram *"require you
+to cease using [Output] (and delete any copies of them)"* — which a permanent public Git history
+structurally cannot honour. Even taken at face value, the best-indexed reading of the likeliest
+governing document is worse for us than silence.
+
+**Revisit when** Deepgram republishes a dated self-serve API terms document containing an express
+Output-rights clause — read first-hand, not through indexing. The verdict also rises to
+`permitted-with-conditions` under an **executed Order Form incorporating the `MSA_20240315` form**;
+confirm the countersigned copy carries both the three-way Software definition and the *"and the
+Output"* wording, since the Feb-2024 form has neither.
+
+### AssemblyAI (STT, WebSocket) — `not-cleared`
+
+**The grant existed and was removed.** This is the strongest negative finding in this section,
+because the current silence is documented as deliberate rather than accidental.
+
+Terms of Service, `https://www.assemblyai.com/legal/terms-of-service`, *effective 2026-07-01*, read
+first-hand. §4.4 is **titled "Output"** and contains a disclaimer plus two restrictions — no
+ownership clause, no licence. §4.1 closes the gap silence might leave:
+
+> *"Subject to the limited rights expressly granted hereunder, AssemblyAI and its licensors reserve
+> all of their right, title and interest in and to the Services. No rights are granted to Customer
+> hereunder other than as expressly set forth herein."*
+
+The customer-rights clause that does exist (§4.3) covers *Customer Data*, defined in §1.7 as content
+*"submitted … by or on behalf of Customer"* — the input side. Output is generated by the Platform,
+so it falls outside.
+
+**Verified by diffing revisions.** The 2025-04-18 version carried §4.2 *"Customer's Property"*:
+
+> *"Customer exclusively owns all right, title and interest in and to the Customer Materials,
+> **Outputs**, Inputs, and Customer's Confidential Information, unless otherwise herein provided."*
+
+That clause is absent from the current text, while §4.3 for Customer Data was kept and two further
+ownership clauses in AssemblyAI's own favour were added. Reading a redistribution licence back into
+this document is not a stretch — it is a reversal. Corroborating practice: AssemblyAI's own MIT-
+licensed Node SDK commits audio **input** fixtures only, no recorded output.
+
+**Restrictions that bind regardless.** §2.4(f) bars *"competitive analysis or benchmarking"*
+outright — stricter than Google, which conditions only disclosure. §2.4(ii) makes the source-audio
+rule contractual: material provided *"for purpose of testing, evaluating, or benchmarking"* must have
+been *"independently created by the Customer"* or fully licensed; §6's synthetic-or-public-domain
+rule is what satisfies it.
+
+**⚠ Residual.** There is no express *prohibition* on publishing Output either — the true position is
+no grant and no ban. This guide's rule resolves that against us, and more firmly here than for LMNT,
+because a grant existed and was withdrawn. Treat `terms.checked_utc` as expiring quickly for this
+vendor.
+
+### ElevenLabs (TTS, WebSocket) — `not-cleared`
+
+**A grant that its own use policy takes back.** ToS §4(c)(ii) (`https://elevenlabs.io/terms-of-use`,
+Last Updated 2026-03-31, read first-hand) says *"you retain all rights in and to your Output"*, and
+§4(a) permits using Output outside the Services — *"but always subject to these Terms and our
+Prohibited Use Policy"*. That routing is decisive, because the PUP
+(`https://elevenlabs.io/use-policy`, Last Updated 2025-09-03) contains two clauses that describe this
+exact act, both verified verbatim against the live page:
+
+> **9(n)** *"Making any B2B2B …, B2B2C …, or other similar use of our Services or their Output
+> available to your end users on terms that are less restrictive or more permissive than the terms
+> under which our Services and their Output have been made available to you."*
+
+MIT grants downstream cloners rights *"without restriction … to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell"*. ElevenLabs' grant to us is *"limited, non-exclusive,
+non-transferable, non-sublicensable, revocable"*. MIT is categorically more permissive.
+
+> **9(l)** *"Using any part of our Services or their Output as part of a dataset that may be used for
+> training, fine-tuning, developing, **testing**, or improving any machine learning or artificial
+> intelligence technology."*
+
+A `Recordings/` tree is a dataset whose stated purpose is testing, in a Voice AI SDK. The word is in
+the prohibition verbatim. 9(j) separately bars Output used to develop anything competing with
+ElevenLabs, which sells conversational agents into contact-centre workloads.
+
+**Tier dependence is real and does not rescue it.** ToS §1(c) limits Free users to non-commercial
+use. A paid plan is a *precondition to reaching* the 9(n) problem, not a solution to it.
+
+**⚠ Residual.** 9(n) is drafted for reseller and bundling scenarios, and *"to your end users"* is a
+strained fit for anonymous repository cloners; 9(l)'s *"artificial intelligence technology"* is
+arguably not a WebSocket frame parser. A narrow reading might exclude us. But this guide's standard
+is an express grant, and what exists is an express grant expressly subordinated to two restrictions
+that describe our act.
+
+**Fallback fits unusually well.** ElevenLabs' TTS WebSocket returns JSON carrying base64 `audio`
+alongside `alignment` / `normalizedAlignment` objects. Commit the real frame envelope and alignment
+structure as `class: "recorded"`, with the audio payload replaced by locally-synthesized bytes of
+identical length as `class: "synthetic"`. Note for review that alignment data is still *derived from*
+Output. Use only default/premade voices — Voice Library voices are contributed by real people under
+a separate addendum and must never be captured.
 
 ---
 
