@@ -340,6 +340,34 @@ contract. These 8 surfaces keep `Verbara.Sdk.TestInfrastructure`'s `WebSocketTes
 per-provider protocol fakes. Only the **payloads** change: hand-authored minimal JSON is replaced by
 recorded provider frames.
 
+> **⚠ Terms review (2026-08-03) — 5 of these 8 surfaces cannot take a payload recording.** The four
+> WebSocket-only vendors had no finding when this change was written; §3.4 covered the six HTTP
+> providers only. They now do (`docs/guides/provider-recording-protocol.md` §7), and the result
+> reshapes this section:
+>
+> | Surface | Verdict | Consequence here |
+> |---|---|---|
+> | 5.1 Deepgram STT · 5.6 Deepgram TTS | `not-cleared` | envelope only (D11) |
+> | 5.2 AssemblyAI STT | `not-cleared` | envelope only (D11) |
+> | 5.3 Cartesia STT · 5.5 Cartesia TTS | `permitted-with-conditions` | full recording, commercial tier |
+> | 5.4 Speechmatics STT | `permitted` | full recording — the STT direction is the *better* covered one (§10.3 assigns IP in **Transcripts**) |
+> | 5.7 ElevenLabs TTS | `not-cleared` | envelope only (D11) |
+> | 5.8 LMNT WS | `not-cleared` | envelope only (D11), already known |
+>
+> **This is a real reduction in what §5 can deliver, and it should not be papered over.** ADR-0041
+> D4 asks every provider for at least one replay of a recorded real response; for five of these
+> eight, the honest artifact is a recorded *envelope* — frame type, order, byte length, control-frame
+> sequence — paired with a locally built `synthetic` body. That still closes part of the gap the
+> change exists for: frame sequencing, chunk boundaries and byte lengths are real, and for the STT
+> surfaces the *shape* of the schema is what a shared-misreading bug hides in, not the transcript
+> strings. It does not close the field-set half of the gap for those five. Say so plainly in the
+> capture's sidecar rather than implying a fidelity the artifact does not have.
+>
+> A second, cheaper source is legitimate and preferred where it exists: **frames hand-authored from
+> the vendor's own published protocol documentation**, labelled `class: "synthetic"`. That is the
+> vendor's published authority rather than its Output, so no terms question arises, and it is
+> precisely the authority a parser should be checked against.
+
 > **Inventory finding (2026-08-09) — there is a ninth WebSocket fake, and it is out of this change's
 > scope.** `Tests/Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests/Internal/RealtimeFakeServer.cs` hand-authors
 > its frames (`{"type":"session.created","session":{}}`), which is exactly the shape D4 exists to
@@ -348,7 +376,9 @@ recorded provider frames.
 > `VoiceAi.Stt` / `VoiceAi.Tts` provider surfaces this change enumerates, and widening the scope
 > mid-change to absorb it would make the delta unreviewable. Recorded so the omission is a decision
 > rather than an oversight; it needs its own proposal. Worth noting for whoever writes it: it is the
-> only WebSocket surface for which a capture credential is already on hand.
+> only WebSocket surface for which a capture credential is already on hand — and per the §8.5
+> follow-up sweep it carries all three fake-server defect classes at once, so that proposal has more
+> to fix than payloads.
 
 - [ ] 5.1 STT **Deepgram** (`Deepgram/`) — re-seed `DeepgramFakeServer` from a recorded `Results`
       frame carrying the full field set (`speech_final`, `channel_index`, `duration`, `start`,
