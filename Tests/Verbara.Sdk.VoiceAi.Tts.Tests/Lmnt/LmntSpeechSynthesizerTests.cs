@@ -71,6 +71,13 @@ public class LmntTtsOptionsTests
 // WebSocket transport tests
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// <summary>
+/// Transport: WebSocket (LMNT's default). Deliberately NOT migrated to the WireMock substrate —
+/// WireMock.NET matches HTTP/1.1 requests and cannot hold the duplex session these tests drive
+/// (ADR-0041 D2), so <c>LmntWsFakeServer</c> on <c>WebSocketTestServer</c> stays. LMNT ships both
+/// transports, and D3 splits the provider by transport rather than by suite: the HTTP class further
+/// down this file migrates (§4.6), this one does not. Fidelity here comes from recorded frames (D4).
+/// </summary>
 public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
 {
     private readonly LmntWsFakeServer _server;

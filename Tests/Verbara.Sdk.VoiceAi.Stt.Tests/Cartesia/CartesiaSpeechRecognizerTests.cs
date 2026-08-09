@@ -7,6 +7,12 @@ using Xunit;
 
 namespace Verbara.Sdk.VoiceAi.Stt.Tests.Cartesia;
 
+/// <summary>
+/// Transport: WebSocket. Deliberately NOT migrated to the WireMock substrate — WireMock.NET matches
+/// HTTP/1.1 requests and cannot hold the duplex session these tests drive (ADR-0041 D2), so
+/// <c>CartesiaFakeServer</c> on <c>WebSocketTestServer</c> stays. Fidelity here comes from recorded
+/// frames (D4), not from a different server.
+/// </summary>
 public class CartesiaSpeechRecognizerTests : IAsyncDisposable
 {
     private readonly CartesiaFakeServer _server;
