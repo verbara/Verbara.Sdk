@@ -464,6 +464,34 @@ formality left the D8 parity gate unmeasured while three provider suites were be
       >
       > Re-verified after the fix: **30 iterations × 2 suites = 60 runs, 0 failures**, and the full
       > unit lane at 3 027 tests / 30 assemblies green.
+      >
+      > **Follow-up sweep (2026-08-09) — the same defect classes, looked for rather than waited for.**
+      > Fixing LMNT only closes the instance CI happened to catch; the classes were then swept across
+      > every fake under `Tests/**` (three lenses — timer-based answering, hold-open flags,
+      > live-collection reads — each finding independently refuted before being accepted). One more
+      > real defect: **`DeepgramTtsFakeServer` had the identical Class A timer**, and a *wider*
+      > exposure than LMNT — `DeepgramSpeechSynthesizer` never sends a WebSocket close frame, so the
+      > fake's `CloseAsync` stayed pending, and draining peer frames, for the rest of the session.
+      > Confirmed by forcing the interleaving (delay → 0): `SynthesizeAsync_ShouldSendSpeakMessageWithText`
+      > and `SynthesizeAsync_ShouldComplete_WhenServerAbortsAfterSend` both fail. Fixed by waiting on
+      > the client's `Flush` frame — the last unconditional request frame (`Close` is guarded by
+      > `ws.State == Open`) and the one a real Deepgram server answers. Its orphaned `HangForever`
+      > flag carried the Class B defect with zero consumers; corrected rather than left as a trap.
+      >
+      > Cost of the fix: **none measurable.** A controlled A/B (5 runs each, same build) puts the TTS
+      > suite at 10 s with the fix and 9–10 s without it. Worth stating because the suite had appeared
+      > to jump 7 s → 10 s across the change — machine state, not the fix, and the same
+      > duration-is-a-noisy-signal lesson as §8.9's CI wall-clock measurement.
+      >
+      > Twelve further candidates were reported and **refuted** on the same standard used here — a
+      > defect must produce an observably wrong assertion in a test that exists today, not a
+      > theoretical race. Three are worth recording as *latent* hazards rather than defects, for
+      > whoever migrates these suites next (they need their own proposal, not this change):
+      > `RealtimeFakeServer` (the ninth WebSocket surface, already out of scope per §5) has all three
+      > classes at once; `WebSocketTestServer` never joins its session handlers, so dispose is not a
+      > barrier and a fake's own failure has no reporting channel; and no fake honours
+      > `result.EndOfMessage`, which is safe only because every payload in this tree is far below the
+      > 4 KiB internal receive buffer.
 - [x] 8.6 Coverage floor holds (`scripts/check-coverage-floor.py`) — no provider loses coverage when
       its fake is deleted
       — **line 80.4% inside the band [78, 81]; branch 66.05% ≥ 64; 12 967 lines measured ≥ 12 315.**
@@ -481,7 +509,43 @@ formality left the D8 parity gate unmeasured while three provider suites were be
 - [x] 8.8 `aot-validate` workflow green — the test-only substrate never enters an AOT publish graph
       — the workflow is a single `bash tools/verify-aot.sh`, so it runs locally: **0 trim warnings,
       AotCanary published and smoke-run for `linux-x64`.**
-- [ ] 8.9 CI green end to end (`pull_request` + `merge_group`), with the wall-clock delta versus the
+- [~] 8.9 CI green end to end (`pull_request` + `merge_group`), with the wall-clock delta versus the
       pre-change baseline recorded and judged acceptable under ADR-0038
       — **the only item that cannot be closed locally; it requires an open PR.**
+      — **`pull_request` green** on [#159](https://github.com/verbara/Verbara.Sdk/pull/159)
+      (run `31335450414`, 2026-08-09): 14 checks pass, 0 fail — AOT Trim Check, Analyze (C#), Audit
+      Test Asserts, CodeQL, **Coverage Ratchet**, Coverage Script Tests, Dependency Review, both
+      Docs-only gates, Functional Tests (Testcontainers) (23), OpenSpec Validate, Pack Warnings Gate,
+      **Unit Tests**, aot-check. The Coverage Ratchet result is the one that had never actually run
+      before — it was `skipped` on the previous attempt because `needs: unit-tests` failed (ADR-0038
+      D2), so §8.6's locally-computed floor is only now confirmed by CI itself.
+      — **`merge_group` still open by construction:** that trigger only fires on queue entry, so it
+      cannot be observed from an un-enqueued PR. Per ADR-0038 D3 the queue run adds the Asterisk 22
+      variant, which never reports on `pull_request`. This item closes on landing, not here.
+
+      **Wall-clock delta (D9 — measured, not assumed).** `Unit Tests` job duration, 29 successful CI
+      runs sampled across `pull_request` and `merge_group`, split at PR #149 (the first WireMock code
+      on `main`, 2026-08-03 11:44Z):
+
+      | | n | min | median | mean | max | spread |
+      |---|---|---|---|---|---|---|
+      | before WireMock | 15 | 382 s | 660.0 s | 607.4 s | 694 s | 312 s (**1.82×**) |
+      | with WireMock | 14 | 414 s | 629.0 s | 591.9 s | 686 s | 272 s (**1.66×**) |
+
+      Median **−31 s**, min **+32 s** — opposite signs, which is the finding. The pre-change window
+      alone spans 382 s → 694 s on *code that did not change*, so GitHub runner variance is ±150 s
+      and the WireMock signal is not resolvable at job granularity. It is not merely unresolved but
+      unresolvable **by construction**: ADR-0041 measured the substrate directly at **+0.6 ms** per
+      construct/dispose and **+1.3 ms** with one request served; the suites instantiate **32**
+      fixtures today, and even the absurd upper bound of every one of the 3 027 unit tests taking a
+      fixture would be ≈ 3.9 s — still ~40× under the noise floor. Full migration of all six HTTP
+      surfaces stays in the same order of magnitude.
+
+      **Judgment under ADR-0038: acceptable.** That ADR treats CI wall-clock as the scarce resource
+      and bought its headroom structurally (one functional variant on PR, coverage collected once).
+      This change spends none of that headroom: its cost is three orders of magnitude below the
+      measurement floor of the pipeline it runs in. The honest form of D9 is therefore that job
+      duration *cannot* answer the question and the per-fixture measurement is what carries the
+      verdict — recording the job numbers anyway is what makes that distinction checkable rather
+      than asserted.
 - [x] 8.10 `openspec validate --change wiremock-http-provider-substrate --strict` passes

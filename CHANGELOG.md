@@ -71,6 +71,15 @@ All notable changes to this project will be documented in this file.
     a torn read of a collection under concurrent mutation. LMNT, ElevenLabs, Deepgram TTS, Cartesia
     TTS and Cartesia STT now expose an `IReadOnlyList<string>` snapshot taken under the same lock the
     writer holds.
+  - **`DeepgramTtsFakeServer` carried the same timer defect and is fixed the same way.** Found by
+    sweeping every fake for the pattern once LMNT was understood, rather than waiting for it to go
+    red. It now answers on the client's `Flush` frame — the last request frame the synthesizer sends
+    unconditionally (`Close` is guarded by `ws.State == Open`), and the one a real Deepgram server
+    acts on. Its exposure was **wider** than LMNT's: the synthesizer never sends a WebSocket close
+    frame, so the fake's `CloseAsync` stayed pending — and draining — for the rest of the session.
+    Forcing the interleaving (delay → 0) failed `SynthesizeAsync_ShouldSendSpeakMessageWithText` and
+    `SynthesizeAsync_ShouldComplete_WhenServerAbortsAfterSend`. Its orphaned `HangForever` flag, which
+    had the hold-open defect too but no consumers, was corrected rather than left as a trap.
 
 ### Changed — CI
 
