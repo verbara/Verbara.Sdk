@@ -165,6 +165,20 @@ Phase C = §4 remaining providers + §6–§8 (batched).
       terms page or revoke a key. 36 unit tests, picked up by the existing
       `python3 -m unittest discover scripts/tests` CI step. Adding a provider is one `*_plan`
       function.
+
+      **Amended again 2026-08-09 — guide step §3.3 (the credential rule).** It read "use a throwaway
+      credential, revoked immediately afterwards", which is not what this repository does: captures
+      run against a standing capture-only account, and will keep doing so. A written rule nobody
+      follows protects nothing, so the step was rewritten to state the actual invariant — *capture
+      with a credential that has never seen production*, because a key with no access to production
+      data cannot leak production identifiers through a response body — and then to accept **two**
+      ways of meeting it: a throwaway key, or a standing capture-only account holding no production
+      or customer data. The standing account is now the recommended route when captures recur, on the
+      explicit grounds that per-capture create-and-revoke friction is what eventually tempts someone
+      to reach for a production key. Its obligations are spelled out (credentials in a local env file
+      outside the working tree, distinguishing variable prefix, rotate on suspected exposure) and §4
+      is restated as unchanged: redaction is what makes a capture safe to publish, whichever
+      credential produced it. The amendment names no path to any local secrets file (§7.3).
 - [x] 3.2 Fix the redaction rule: no API keys, bearer tokens or signed URLs; no account/tenant/
       project/billing identifiers; no request/session identifiers that correlate to a real account
       — guide §4. Adds the enforced part the rule needed: a placeholder table (`REDACTED-API-KEY`,
@@ -326,6 +340,16 @@ contract. These 8 surfaces keep `Verbara.Sdk.TestInfrastructure`'s `WebSocketTes
 per-provider protocol fakes. Only the **payloads** change: hand-authored minimal JSON is replaced by
 recorded provider frames.
 
+> **Inventory finding (2026-08-09) — there is a ninth WebSocket fake, and it is out of this change's
+> scope.** `Tests/Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests/Internal/RealtimeFakeServer.cs` hand-authors
+> its frames (`{"type":"session.created","session":{}}`), which is exactly the shape D4 exists to
+> retire — yet the word *realtime* appears nowhere in this change. It is **not** being folded in here:
+> `Verbara.Sdk.VoiceAi.OpenAiRealtime` is a separate package with its own suite, not one of the
+> `VoiceAi.Stt` / `VoiceAi.Tts` provider surfaces this change enumerates, and widening the scope
+> mid-change to absorb it would make the delta unreviewable. Recorded so the omission is a decision
+> rather than an oversight; it needs its own proposal. Worth noting for whoever writes it: it is the
+> only WebSocket surface for which a capture credential is already on hand.
+
 - [ ] 5.1 STT **Deepgram** (`Deepgram/`) — re-seed `DeepgramFakeServer` from a recorded `Results`
       frame carrying the full field set (`speech_final`, `channel_index`, `duration`, `start`,
       `metadata`, word arrays), replacing `BuildResultJson`'s five-field hand-authored object
@@ -341,42 +365,95 @@ recorded provider frames.
 - [ ] 5.8 TTS **LMNT WebSocket path** (`Lmnt/`, default `LmntTransport.WebSocket`) — `LmntWsFakeServer`
       stays; only its frames become recorded. The suite ends up **split across both substrates by
       transport**, in one file
-- [ ] 5.9 Record the not-migrated verdict per provider in the suite (a one-line comment naming the
+- [x] 5.9 Record the not-migrated verdict per provider in the suite (a one-line comment naming the
       transport) so the omission cannot later be read as an oversight
+      — **done.** A `<summary>` on each of the 8 test classes naming the transport, the D2 reason
+      (WireMock.NET cannot hold a duplex session) and the D4 remedy (fidelity comes from recorded
+      frames, not a different server). Additions only — 50 lines across 8 files, no behaviour touched.
+      Two carry an extra clause: Speechmatics STT points at its own HTTP-transport TTS sibling that
+      *does* migrate, and LMNT WS states the D3 split against the HTTP class further down the file.
 
 ## 6. Convergence and cleanup
 
 - [ ] 6.1 Delete `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Helpers/MockHttpMessageHandler.cs` once no STT
       suite references it
-- [ ] 6.2 Delete `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Helpers/MockHttpMessageHandler.cs` once no TTS
+- [x] 6.2 Delete `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Helpers/MockHttpMessageHandler.cs` once no TTS
       suite references it (it is a divergent second copy — different constructor signature)
+      — **done.** The Azure TTS migration was its last consumer; grep found no remaining reference
+      and no dangling `using`, and `Helpers/` was left empty and removed with it. Build stays at
+      0 warnings. §6.1's STT copy is **not** free yet — six `GoogleSpeechRecognizerTests` cases still
+      construct it, so it goes with §4.3.
 - [ ] 6.3 Delete the retired `HttpListener` HTTP fakes (`SpeechmaticsFakeServer`, `LmntHttpFakeServer`)
-- [ ] 6.4 Confirm `WebSocketTestServer` and every WebSocket protocol fake are untouched in behaviour
+- [x] 6.4 Confirm `WebSocketTestServer` and every WebSocket protocol fake are untouched in behaviour
+      — **confirmed by diff against `origin/main`: zero changes** to `WebSocketTestServer` or to any
+      of the ten `*FakeServer*.cs` files. Re-confirm at the end of the change; this holds as of the
+      §4.1/§4.2/§4.4 scope.
 
 ## 7. Documentation
 
-- [ ] 7.1 Update `docs/guides/` with the provider-suite testing convention: which substrate a new
+- [x] 7.1 Update `docs/guides/` with the provider-suite testing convention: which substrate a new
       provider uses, chosen by transport
-- [ ] 7.2 `CHANGELOG.md` entry under the test/tooling section (no `src/**` change, so no
+      — **done:** `docs/guides/provider-test-substrate.md`, indexed in `docs/guides/README.md`. Its
+      own guide rather than a section of the recording protocol, because "which substrate?" is the
+      question that comes *before* capturing anything. Covers the transport rule, the two-project
+      split and the coverlet reason for it, D3 dual-transport suites, strict matching (including
+      asserting the *unmatched* shape), the D12 origin seam with the check-for-an-existing-endpoint-
+      option-first caveat, a six-step checklist for adding a suite, and §5 naming the drift gap the
+      substrate does not close.
+      Also fixed while in there: the recording protocol's intro said "thirteen speech APIs" while its
+      own §1 table enumerates fourteen surfaces (6 HTTP + 8 WebSocket).
+- [x] 7.2 `CHANGELOG.md` entry under the test/tooling section (no `src/**` change, so no
       `Directory.Build.props` `PackageVersion` bump and no release task in this change)
-- [ ] 7.3 Confirm every artifact is free of absolute machine paths, credentials and private-repo
+      — **done**, as `### Changed — Tests & tooling` under `[Unreleased]`. Phase A (#149) had shipped
+      without one, so the entry is cumulative for the whole change to date. **The parenthetical above
+      is now wrong and the entry says so plainly:** there *is* one `src/**` change (the D12 seam). It
+      is `internal`, moves no public API and changes no production behaviour, so the conclusion —
+      no `PackageVersion` bump, no release task — still holds, but for a reason that had to be stated
+      rather than assumed.
+- [x] 7.3 Confirm every artifact is free of absolute machine paths, credentials and private-repo
       content before the PR (verbara-meta/ADR-0005)
+      — **done**, swept across all 31 files this branch adds or modifies: zero absolute machine paths,
+      zero private-repo references, zero credential-shaped strings, redaction guard green over 8
+      recording files in 2 trees. The §3.3 amendment was written to this standard too — it describes
+      the standing capture-account practice without naming the local file that holds it.
 
 ## 8. Verification
 
-- [ ] 8.1 `dotnet test Tests/Verbara.Sdk.VoiceAi.Stt.Tests` — green
-- [ ] 8.2 `dotnet test Tests/Verbara.Sdk.VoiceAi.Tts.Tests` — green
-- [ ] 8.3 `dotnet test Verbara.Sdk.slnx --filter "Category!=Functional&Category!=Integration"` — green,
-      **zero warnings** (`TreatWarningsAsErrors=true`, `WarningLevel=9999`)
-- [ ] 8.4 `dotnet build Verbara.Sdk.slnx` — zero warnings; the `BanDapperPackageReferences` guard and
+**This block is per-PR, not end-of-change.** Phase A already shipped as PR #149, so the change lands
+across several PRs and every one of them re-runs §8. The results recorded below were measured on
+2026-08-09 against the scope delivered so far (§4.1, §4.2, §4.4, §1–§3). **Nine of the ten items run
+locally** — only 8.9 needs a PR — which was worth discovering: treating §8 as an end-of-change
+formality left the D8 parity gate unmeasured while three provider suites were being rewritten.
+
+- [x] 8.1 `dotnet test Tests/Verbara.Sdk.VoiceAi.Stt.Tests` — green (covered by the 8.3 lane)
+- [x] 8.2 `dotnet test Tests/Verbara.Sdk.VoiceAi.Tts.Tests` — green (covered by the 8.3 lane)
+- [x] 8.3 `dotnet test Verbara.Sdk.slnx --filter "Category!=Functional&Category!=Integration"` — green,
+      **zero warnings** (`TreatWarningsAsErrors=true`, `WarningLevel=9999`) — 3 027 passed, 0 failed
+- [x] 8.4 `dotnet build Verbara.Sdk.slnx` — zero warnings; the `BanDapperPackageReferences` guard and
       the BannedApi analyzers still pass
-- [ ] 8.5 Every `StreamAsync_ShouldAbort_WhenCancelled` / `SynthesizeAsync_ShouldAbort_WhenCancelled`
+- [x] 8.5 Every `StreamAsync_ShouldAbort_WhenCancelled` / `SynthesizeAsync_ShouldAbort_WhenCancelled`
       test still green and still deterministic under the repeat-run protocol — the `test-determinism`
       contract is unchanged by the substrate swap
-- [ ] 8.6 Coverage floor holds (`scripts/check-coverage-floor.py`) — no provider loses coverage when
+      — **30 consecutive runs of both suites' cancellation filters (3 TTS + 7 STT tests), 0 failures**
+      — 30× is this repo's established repeat-run protocol (CHANGELOG v2.3.2), not an arbitrary count.
+- [x] 8.6 Coverage floor holds (`scripts/check-coverage-floor.py`) — no provider loses coverage when
       its fake is deleted
-- [ ] 8.7 `dotnet pack -c Release` — no produced `.nupkg` declares WireMock.NET as a dependency
-- [ ] 8.8 `aot-validate` workflow green — the test-only substrate never enters an AOT publish graph
+      — **line 80.4% inside the band [78, 81]; branch 66.05% ≥ 64; 12 967 lines measured ≥ 12 315.**
+      ⚠ **0.6 pp of headroom to the ceiling.** The band is two-sided: a migration that lifts line
+      coverage past 81.0% fails CI as a *stale floor* and must raise `line` to `floor(measured)` in
+      the same PR. The remaining migrations should expect to do that rather than be surprised by it.
+- [x] 8.6a **`scripts/check-patch-coverage.py`** — coverage-gate-v2's *primary* gate (ADR-0013 clause a),
+      missing from this list until 2026-08-09. **100% (6/6 changed executable lines), floor 85%.**
+      The denominator is one `src/**` file (`AzureTtsSpeechSynthesizer.cs`, the D12 seam), so a single
+      uncovered line would have sunk it — a sharp gate hiding behind a tiny diff.
+- [x] 8.6b **`scripts/check-exclusion-baseline.py`** — denominator guard (ADR-0013), also missing from
+      this list until 2026-08-09. 0 markers against a baseline of 0, 863 files scanned.
+- [x] 8.7 `dotnet pack -c Release` — no produced `.nupkg` declares WireMock.NET as a dependency
+      — **29 packages packed, zero `wiremock` / `TestInfrastructure` references in any `.nuspec`.**
+- [x] 8.8 `aot-validate` workflow green — the test-only substrate never enters an AOT publish graph
+      — the workflow is a single `bash tools/verify-aot.sh`, so it runs locally: **0 trim warnings,
+      AotCanary published and smoke-run for `linux-x64`.**
 - [ ] 8.9 CI green end to end (`pull_request` + `merge_group`), with the wall-clock delta versus the
       pre-change baseline recorded and judged acceptable under ADR-0038
-- [ ] 8.10 `openspec validate --change wiremock-http-provider-substrate --strict` passes
+      — **the only item that cannot be closed locally; it requires an open PR.**
+- [x] 8.10 `openspec validate --change wiremock-http-provider-substrate --strict` passes

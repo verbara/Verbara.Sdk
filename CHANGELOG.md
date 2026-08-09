@@ -4,6 +4,50 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — Tests & tooling
+
+- **Speech-provider HTTP suites now run against a real loopback server, driven by recorded vendor
+  responses** ([ADR-0041](docs/decisions/0041-wiremock-as-http-provider-test-substrate.md), Accepted
+  2026-08-09; Phase A in [#149](https://github.com/verbara/Verbara.Sdk/pull/149)). **No public API
+  changes and no behaviour change on any production path** — this is test infrastructure. Three of
+  the six HTTP surfaces have migrated so far: Azure TTS, OpenAI Whisper and Azure OpenAI Whisper.
+  - **`WireMock.NET` replaces `MockHttpMessageHandler` on the HTTP side.** The old handler returned
+    one canned response to *every* call, so a request sent to the wrong route or without the
+    provider's credential passed silently. Matching is now strict (method + exact path + exhaustive
+    query + auth header, `AllowPartialMapping = false`), so those requests 404 instead — a shape the
+    suites can now assert, and do. The substrate lives in its own
+    `Tests/Verbara.Sdk.TestInfrastructure.Http` project: referencing WireMock adds a
+    `FrameworkReference` to `Microsoft.AspNetCore.App`, which stops ~30 `Microsoft.Extensions.*`
+    assemblies reaching the output directory and makes coverlet **silently skip instrumentation**
+    (measured 80.42% → 61.96% line coverage with every test still green, caught by the ratchet).
+  - **Fixtures are recorded, not invented** (D4). Each migrated suite replays a real captured
+    response committed with a provenance sidecar (provider, endpoint, capture date, source-audio
+    origin, redaction applied, terms verdict), governed by a new
+    [provider recording protocol](docs/guides/provider-recording-protocol.md) with a per-provider
+    terms-of-service review, a redaction rule enforced by `scripts/check-recording-redaction.py`, a
+    source-audio rule (synthetic or public-domain only, never an identifiable person's voice) and a
+    256 KiB binary cap. The captures immediately earned their keep: OpenAI's transcription response
+    carries a `usage` object the SDK does not model, while Azure OpenAI — running the same Whisper
+    model — returns a bare `{"text": …}`. Both hand-authored fixtures had claimed the same shape.
+  - **The Azure TTS suite exercises real codec bytes** for the first time, replacing a `new byte[320]`
+    of zeros and putting a genuinely non-chunk-aligned payload through the frame-chunking path.
+  - **WebSocket providers are deliberately not migrated** (D2). WireMock.NET matches HTTP/1.1
+    requests and cannot hold a duplex session, so the eight WebSocket surfaces keep
+    `WebSocketTestServer` and their protocol fakes; each suite now carries a one-line comment naming
+    its transport so the omission reads as a decision. Which substrate a suite uses is documented in
+    the new [provider test substrate guide](docs/guides/provider-test-substrate.md).
+  - **One `internal`, test-only change under `src/`:** `AzureTtsSpeechSynthesizer` composed its URL
+    from `Region` and therefore ignored `HttpClient.BaseAddress`, so it takes an `internal` optional
+    origin parameter following the existing `SpeechmaticsSpeechSynthesizer` / `LmntSpeechSynthesizer`
+    precedent (D12). It substitutes scheme/host/port only — the route stays in production code so the
+    strict matcher asserts the path the provider really builds. Nothing becomes public API; the
+    production constructor and its behaviour are unchanged.
+  - **`scripts/capture-provider-recording.py`** (stdlib-only, 36 unit tests) automates capture steps
+    4–8 of the protocol, issuing the same multipart request the SDK issues so the fixture matches
+    production traffic. Credentials are read from the environment and never written or echoed.
+  - Every `*_ShouldAbort_WhenCancelled` test carried over **verbatim** as the `test-determinism`
+    tripwire for the swap, and re-verified under the 30× repeat-run protocol (0 failures).
+
 ### Changed — CI
 
 - **`publish.yml` now creates the GitHub Release object itself.** The workflow packed and pushed
