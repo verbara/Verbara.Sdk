@@ -1,0 +1,31 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "recorded",
+  "provider": "azure-openai-whisper",
+  "product": "Azure OpenAI Service — audio transcriptions (Whisper)",
+  "endpoint": "POST https://<resource>.openai.azure.com/openai/deployments/<deployment>/audio/transcriptions?api-version=2024-02-01",
+  "api_version": "2024-02-01",
+  "captured_utc": "2026-08-09",
+  "media_type": "application/json",
+  "bytes": 65,
+  "sha256": "df3b1a17df37de893ccd8349df1f0107e634e3e7c8865f01ec2d0322b8c83a8c",
+  "source_audio": {
+    "origin": "synthetic",
+    "description": "Synthetic speech, not a recording of any person: the committed Azure TTS capture Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/azure-tts/synthesize-short-es-co.raw (prebuilt neural voice es-CO-SalomeNeural, 8 kHz 16-bit mono PCM, 3.76 s) reading the fictional sentence 'El sistema registró la solicitud correctamente.', wrapped in a 44-byte canonical RIFF/WAVE header identical to the one WhisperSpeechRecognizer builds. Reusing that capture keeps one cleared, reviewed audio artifact in the repo instead of adding a second. It is submitted for a single transcription, which is inference, not training: neither Azure's bar on using Output Content as synthetic training data for a similar service nor OpenAI Services Agreement 3.3(e) on developing competing models is engaged.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [
+      "api-key request header",
+      "resource-scoped host segment",
+      "deployment name"
+    ],
+    "notes": "Body is the vendor's JSON, unmodified apart from pretty-printing to 2-space indent with a trailing newline (protocol §3.6); no field was removed. The credential rode in a request header and never appeared in the response. Observed response headers, values recorded only where they carry no account or correlation identifier: apim-request-id, azureml-model-session, connection, content-length, content-type: application/json, csp-billing-usage, date, strict-transport-security, x-content-type-options, x-ms-client-request-id, x-ms-deployment-name, x-ms-region, x-ratelimit-limit-requests, x-ratelimit-remaining-requests, x-request-id."
+  },
+  "terms": {
+    "verdict": "permitted",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 (Azure OpenAI Whisper)",
+    "checked_utc": "2026-08-09"
+  },
+  "notes": "Transcript: 'El sistema registró la solicitud correctamente.'. Captured by scripts/capture-provider-recording.py, which sends the same multipart shape the SDK sends (file part without Content-Type, text parts as text/plain; charset=utf-8) so the fixture matches production traffic."
+}

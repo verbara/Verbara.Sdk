@@ -156,6 +156,15 @@ Phase C = §4 remaining providers + §6–§8 (batched).
       front-matter, not a directory manifest) because a binary `.wav` cannot carry front-matter, and
       a manifest drifts from the files it lists. `class` is `recorded` | `synthetic`, which is where
       D4's synthetic labelling lands.
+
+      **Amended 2026-08-09 during §4.1/§4.2:** the guide described the procedure but nothing
+      executed it, so the Azure TTS capture was done by hand and the request shape had to be
+      re-derived. `scripts/capture-provider-recording.py` now performs steps 4–8 for the Whisper
+      surfaces — it issues the exact multipart the SDK issues, redacts, normalizes, writes the
+      sidecar and enforces the cap; steps 1–3 and 9–10 stay human, since no tool can re-read a
+      terms page or revoke a key. 36 unit tests, picked up by the existing
+      `python3 -m unittest discover scripts/tests` CI step. Adding a provider is one `*_plan`
+      function.
 - [x] 3.2 Fix the redaction rule: no API keys, bearer tokens or signed URLs; no account/tenant/
       project/billing identifiers; no request/session identifiers that correlate to a real account
       — guide §4. Adds the enforced part the rule needed: a placeholder table (`REDACTED-API-KEY`,
@@ -223,9 +232,18 @@ Phase C = §4 remaining providers + §6–§8 (batched).
 Each item: capture → redact → commit recording → port the suite to the shared fixture → keep the
 existing `*_ShouldAbort_WhenCancelled` assertion verbatim → confirm no coverage-floor regression.
 
-- [ ] 4.1 **OpenAI Whisper** (STT, `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Whisper/WhisperSpeechRecognizerTests.cs`)
+- [x] 4.1 **OpenAI Whisper** (STT, `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Whisper/WhisperSpeechRecognizerTests.cs`)
       — multipart POST. **No longer the first migration** — Azure TTS (4.4) took that role while
       this provider's terms gate was open, and the pattern is established there.
+      — **done.** Capture: `Recordings/openai-whisper/transcribe-short-es-co.json`, 124 bytes.
+      **The capture immediately paid for itself:** the real response is
+      `{"text": …, "usage": {"type": "duration", "seconds": 4}}` — the `usage` object is a field
+      the SDK does not model, and the hand-authored fixture was a bare `{"text":"hola mundo"}`.
+      A parser that threw on an unmodelled sibling passed before and fails now. No `src/**` seam
+      needed: `WhisperOptions.Endpoint` is the full request URI, exactly as D12 predicted.
+      Suite 4 tests → 7, adding the unmatched-request shape (wrong bearer token), an error-status
+      response, and an assertion that the multipart body really carries a RIFF/WAVE payload —
+      untestable before, because a canned handler never transports the body.
       **Terms gate CLEARED 2026-08-03 — read first-hand.** `openai.com/policies/*` 403s to automated
       fetchers, but the same contract is published as a PDF on OpenAI's own CDN, which does not:
       `https://cdn.openai.com/osa/openai-services-agreement.pdf`, version `ONLINE v.010126`. §4.1
@@ -235,8 +253,27 @@ existing `*_ShouldAbort_WhenCancelled` assertion verbatim → confirm no coverag
       Residual: the *Sharing and Publication Policy*, incorporated by reference, still 403s; it
       imposes attribution/disclosure conditions rather than a prohibition and the sidecar discharges
       both. Record `terms.checked_utc` as the capture date.
-- [ ] 4.2 **Azure OpenAI Whisper** (STT, `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Whisper/AzureWhisperSpeechRecognizerTests.cs`)
+- [x] 4.2 **Azure OpenAI Whisper** (STT, `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Whisper/AzureWhisperSpeechRecognizerTests.cs`)
       — deployment-path URL + `api-key` header (not bearer)
+      — **done.** Capture: `Recordings/azure-openai-whisper/transcribe-short-es-co.json`, 65 bytes
+      — a bare `{"text": …}` with **no `usage` object**, so the same model behind two vendors
+      returns two different envelopes. That divergence is now recorded rather than assumed away by
+      a shared hand-authored fixture, which is the D4 argument in one line. No `src/**` seam
+      needed. Suite 4 tests → 6: exhaustive query matching now asserts `api-version` (a dropped or
+      added parameter breaks the match instead of being answered anyway), plus the wrong-`api-key`
+      unmatched shape and an error-status response.
+
+      **Both captures share one source-audio artifact.** §6 bans an identifiable person's voice —
+      including the capturer's — and there is no offline TTS in this repo, so the STT input is the
+      already-committed Azure TTS capture (`azure-tts/synthesize-short-es-co.raw`, prebuilt neural
+      voice, fictional sentence) wrapped in a canonical RIFF header. One cleared audio artifact
+      instead of two. Both providers transcribed it back verbatim, accent included, which is also
+      a UTF-8 round-trip proof. A single transcription is inference, not training, so neither
+      Azure's synthetic-training-data bar nor OpenAI §3.3(e) is engaged; recorded in each sidecar.
+
+      **Neither test hard-codes the transcript** — each reads it from its own capture with
+      `JsonDocument`, so two independent readers must agree on the vendor's bytes and a re-capture
+      does not force a test edit.
 - [ ] 4.3 **Google Speech-to-Text** (STT, `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Google/`) — JSON POST to
       `speech:recognize`; the API key rides in the query string, so it MUST be placeholdered in both
       the stub and any recorded request metadata.
