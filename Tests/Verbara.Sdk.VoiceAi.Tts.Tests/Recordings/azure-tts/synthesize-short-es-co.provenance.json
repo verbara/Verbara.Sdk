@@ -1,0 +1,30 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "recorded",
+  "provider": "azure-tts",
+  "product": "Azure AI Speech — text to speech",
+  "endpoint": "POST https://<region>.tts.speech.microsoft.com/cognitiveservices/v1",
+  "api_version": "v1",
+  "captured_utc": "2026-08-03",
+  "media_type": "audio/basic",
+  "bytes": 60200,
+  "sha256": "0dab358c0b213700000691fbbc0956cf495ca37838b289b5567c32802e83153d",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "TTS input is a fixed Spanish sentence authored for this fixture ('El sistema registró la solicitud correctamente.') — no source recording exists, and the sentence names no real person, organisation or number. Rendered by the prebuilt neural voice es-CO-SalomeNeural; no custom or personal voice was used.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [
+      "ocp-apim-subscription-key request header",
+      "region-scoped host segment"
+    ],
+    "notes": "Body bytes are the vendor's, unmodified — raw 8 kHz 16-bit mono PCM exactly as returned. The response carried no account, request or correlation identifier to strip: the full observed header set was content-type, date, server, x-envoy-upstream-service-time and strict-transport-security."
+  },
+  "terms": {
+    "verdict": "permitted-with-conditions",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 (Azure TTS)",
+    "checked_utc": "2026-08-03"
+  },
+  "notes": "60200 bytes = 3.76 s at 8 kHz, 23% of the 256 KiB cap. The length is deliberately not a multiple of either chunk size (320 or 4096), which guarantees at least one partial frame reaches the consumer — something the previous new byte[320] and new byte[640] fixtures, exact multiples, could never produce. It does NOT follow that frames are uniformly chunk-sized: the provider yields whatever Stream.ReadAsync returns and real chunked responses do not align to the buffer, so only the byte-exact total and the presence of a partial frame are assertable. Measured content: amplitude -13338..+14757, RMS 2633, 23.7% zero samples from natural inter-word silence."
+}

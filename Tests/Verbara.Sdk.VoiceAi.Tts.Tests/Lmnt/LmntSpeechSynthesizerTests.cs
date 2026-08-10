@@ -71,6 +71,13 @@ public class LmntTtsOptionsTests
 // WebSocket transport tests
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// <summary>
+/// Transport: WebSocket (LMNT's default). Deliberately NOT migrated to the WireMock substrate —
+/// WireMock.NET matches HTTP/1.1 requests and cannot hold the duplex session these tests drive
+/// (ADR-0041 D2), so <c>LmntWsFakeServer</c> on <c>WebSocketTestServer</c> stays. LMNT ships both
+/// transports, and D3 splits the provider by transport rather than by suite: the HTTP class further
+/// down this file migrates (§4.6), this one does not. Fidelity here comes from recorded frames (D4).
+/// </summary>
 public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
 {
     private readonly LmntWsFakeServer _server;
@@ -187,8 +194,12 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
         // guaranteeing ReadAllAsync(ct) is blocked inside the channel reader.
         // Polling on an observable signal avoids wall-clock flakiness on slow CI runners
         // (mirrors the Deepgram STT deflake from issue #32).
+        //
+        // HoldOpenUntilDisposed is what actually enforces "no close" — the strategy above was, until
+        // now, only supplied by the fake's fixed 30 ms answer delay winning a race against the 5 ms
+        // cancel poll. That is not a guarantee; it is a coincidence that held on this machine.
         _server.AudioFramesToSend.Clear();
-        _server.SendFinishTerminator = false;
+        _server.HoldOpenUntilDisposed = true;
 
         using var cts = new CancellationTokenSource();
         var synth = BuildSynthesizer();

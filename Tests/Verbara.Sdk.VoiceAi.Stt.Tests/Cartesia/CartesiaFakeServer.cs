@@ -19,7 +19,19 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
     private int _receivedTextCount;
 
     public List<string> ResultMessages { get; } = [];
-    public List<string> ReceivedJsonMessages { get; } = [];
+
+    private readonly List<string> _receivedJsonMessages = [];
+
+    /// <summary>
+    /// Text frames received from the client — a snapshot, for the same reason the frame and text
+    /// counts next to it go through <see cref="Interlocked"/>: the receive loop runs on its own
+    /// thread and may still be appending while a test reads this.
+    /// </summary>
+    public IReadOnlyList<string> ReceivedJsonMessages
+    {
+        get { lock (_receivedJsonMessages) return _receivedJsonMessages.ToArray(); }
+    }
+
     public int ReceivedFrameCount => _receivedFrameCount;
     public int ReceivedTextCount => _receivedTextCount;
     public int Port => _server.Port;
@@ -75,7 +87,8 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
             else if (result.MessageType == WebSocketMessageType.Text)
             {
                 Interlocked.Increment(ref _receivedTextCount);
-                ReceivedJsonMessages.Add(Encoding.UTF8.GetString(buf, 0, result.Count));
+                lock (_receivedJsonMessages)
+                    _receivedJsonMessages.Add(Encoding.UTF8.GetString(buf, 0, result.Count));
             }
             else if (result.MessageType == WebSocketMessageType.Close)
             {

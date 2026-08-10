@@ -3,7 +3,8 @@
 > How a real third-party provider response is captured, redacted, documented and committed to this
 > repository — and the rules that make doing so safe in a public MIT repo.
 
-Verbara.Sdk owns wire-protocol parity for thirteen speech APIs it does not control. Hand-authored
+Verbara.Sdk owns wire-protocol parity for fourteen speech-provider surfaces it does not control (the
+§1 table enumerates them: 6 HTTP + 8 WebSocket). Hand-authored
 test fixtures assert what their author believed the vendor sends; a **recording** asserts what the
 vendor actually sent. [ADR-0041](../decisions/0041-wiremock-as-http-provider-test-substrate.md)
 makes recordings the fixture of record (D4) and bounds what may be committed (D5, D6). This guide is
@@ -50,15 +51,39 @@ Tests/<TestProject>/Recordings/
 
 ## 3. Capture procedure
 
+> **Steps 4–8 are automated for the Whisper surfaces** by
+> `scripts/capture-provider-recording.py` (`openai-whisper`, `azure-openai-whisper`). It issues
+> the same multipart request the SDK issues — file part without a `Content-Type`, text parts as
+> `text/plain; charset=utf-8` — then redacts, normalizes, writes the sidecar and enforces the cap.
+> Credentials are read from the environment and never written or echoed. Steps 1–3 and 9–10 are
+> still yours: a tool cannot re-read a terms page or revoke a key. Extending it to a new provider
+> means adding one `*_plan` function; doing the capture by hand instead means re-deriving the
+> request shape, which is the part that is easy to get subtly wrong.
+
 1. **Confirm the provider's terms still permit it.** Read §7 for the standing per-provider finding,
    then re-read the provider's live terms page. A finding recorded months ago is evidence, not
    permission — the `terms.checked_utc` field in the sidecar exists so the age of that check is
    visible.
 2. **Prepare source audio that satisfies §6** (STT captures, and any TTS capture whose input text is
    read aloud from a recording). Synthetic or public-domain only.
-3. **Use a throwaway credential.** Capture with a key created for the capture and revoked
-   immediately afterwards. A key that never had access to production data cannot leak production
-   identifiers through a response body.
+3. **Capture with a credential that has never seen production.** That is the invariant, and the
+   reason for it is narrow and specific: a key with no access to production data cannot leak
+   production identifiers through a response body, no matter what the vendor echoes back. Two ways
+   to satisfy it, both acceptable:
+
+   - **A throwaway key** — created for the capture, revoked immediately afterwards.
+   - **A standing capture-only account** — a provider account or resource that exists solely for
+     this, holds no production or customer data, and is never used by any deployed service. This is
+     the better fit when captures recur, and it is what this repository actually does: creating and
+     revoking a key per capture is friction that eventually tempts someone to reach for a production
+     key instead, which is the failure this rule exists to prevent.
+
+   A standing capture account carries obligations the throwaway does not: its credentials live in a
+   local environment file **outside the repository**, never in the working tree, never in a shell
+   history, and never pasted into a terminal whose output is transcribed; the variables carry a
+   distinguishing prefix so they cannot be confused with deployment secrets; and the key is rotated
+   on any suspected exposure rather than on a schedule. **Nothing here relaxes §4** — redaction is
+   what keeps a capture safe to publish, and it applies identically whichever credential produced it.
 4. **Capture the full exchange, not just the body.** Save the request line, the request headers you
    sent, the response status, the response headers and the response body. The request side is what
    the strict matcher (ADR-0041 D1) is configured from; the response side is the stub.

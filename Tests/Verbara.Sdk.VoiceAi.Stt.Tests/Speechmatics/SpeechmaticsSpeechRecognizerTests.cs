@@ -7,6 +7,13 @@ using Xunit;
 
 namespace Verbara.Sdk.VoiceAi.Stt.Tests.Speechmatics;
 
+/// <summary>
+/// Transport: WebSocket. Deliberately NOT migrated to the WireMock substrate — WireMock.NET matches
+/// HTTP/1.1 requests and cannot hold the duplex session these tests drive (ADR-0041 D2), so
+/// <c>SpeechmaticsFakeServer</c> on <c>WebSocketTestServer</c> stays. Fidelity here comes from
+/// recorded frames (D4), not from a different server. The Speechmatics <em>TTS</em> suite is a
+/// separate, HTTP-transport surface and does migrate (§4.5).
+/// </summary>
 public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
 {
     private readonly SpeechmaticsFakeServer _server;

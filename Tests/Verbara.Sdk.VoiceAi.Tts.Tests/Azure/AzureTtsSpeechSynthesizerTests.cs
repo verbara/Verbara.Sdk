@@ -1,71 +1,152 @@
+using System.Net;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.Http;
 using Verbara.Sdk.VoiceAi.Tts.Azure;
-using Verbara.Sdk.VoiceAi.Tts.Tests.Helpers;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Verbara.Sdk.VoiceAi.Tts.Tests.Azure;
 
+/// <summary>
+/// Azure TTS against the shared WireMock substrate (ADR-0041 D1), driven by a recorded real
+/// response. Matching is strict, so a request sent to the wrong route or without the provider's
+/// API-key header fails to match rather than receiving the canned body — which the previous
+/// <c>MockHttpMessageHandler</c> could not express.
+/// </summary>
 public class AzureTtsSpeechSynthesizerTests
 {
+    private const string SynthesisPath = "/cognitiveservices/v1";
+    private const string ApiKey = "azure-tts-key";
+
+    /// <summary>The recorded capture — see its provenance sidecar for origin and terms.</summary>
+    private const string RecordedResponse = "azure-tts/synthesize-short-es-co.raw";
+
     private static AzureTtsOptions ValidOptions => new()
     {
-        ApiKey = "azure-tts-key",
+        ApiKey = ApiKey,
         Region = "eastus",
         VoiceName = "es-CO-SalomeNeural",
         OutputFormat = AzureTtsOutputFormat.Raw8Khz16BitMonoPcm
     };
 
+    private static HttpProviderRequest SynthesisRequest() =>
+        HttpProviderRequest.Post(SynthesisPath).WithHeader("Ocp-Apim-Subscription-Key", ApiKey);
+
+    private static AzureTtsSpeechSynthesizer SynthesizerFor(
+        HttpProviderMockServer server, int chunkSize = 4096) =>
+        new(Options.Create(ValidOptions),
+            server.CreateClient(),
+            chunkSize,
+            server.BaseAddress.ToString().TrimEnd('/'));
+
     [Fact]
     public async Task SynthesizeAsync_ShouldPostSsmlXml()
     {
-        var mock = new MockHttpMessageHandler(new byte[320]);
-        var synth = new AzureTtsSpeechSynthesizer(
-            Options.Create(ValidOptions), new HttpClient(mock));
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest(), RecordedResponse, "audio/basic");
+        var synth = SynthesizerFor(server);
 
         await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
-        mock.LastRequest!.Content!.Headers.ContentType!.MediaType.Should().Be("application/ssml+xml");
+        var request = server.ReceivedRequests.Should().ContainSingle().Subject;
+        request.Header("Content-Type").Should().StartWith("application/ssml+xml");
     }
 
     [Fact]
     public async Task SynthesizeAsync_ShouldEscapeXmlInText()
     {
-        var mock = new MockHttpMessageHandler(new byte[320]);
-        var synth = new AzureTtsSpeechSynthesizer(
-            Options.Create(ValidOptions), new HttpClient(mock));
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest(), RecordedResponse, "audio/basic");
+        var synth = SynthesizerFor(server);
 
         await synth.SynthesizeAsync("<script>alert('xss')</script>", AudioFormat.Slin16Mono8kHz)
             .ToListAsync();
 
-        mock.LastRequestBody.Should().NotContain("<script>");
-        mock.LastRequestBody.Should().Contain("&lt;script&gt;");
-    }
-
-    [Fact]
-    public async Task SynthesizeAsync_ShouldYieldChunkedResponseAsFrames()
-    {
-        var mock = new MockHttpMessageHandler(new byte[640]);
-        var synth = new AzureTtsSpeechSynthesizer(
-            Options.Create(ValidOptions), new HttpClient(mock), chunkSize: 320);
-
-        var frames = await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
-
-        frames.Should().HaveCount(2);
+        var body = server.ReceivedRequests.Should().ContainSingle().Subject.BodyAsString;
+        body.Should().NotContain("<script>");
+        body.Should().Contain("&lt;script&gt;");
     }
 
     [Fact]
     public async Task SynthesizeAsync_ShouldUseApiKeyHeader()
     {
-        var mock = new MockHttpMessageHandler(new byte[320]);
-        var synth = new AzureTtsSpeechSynthesizer(
-            Options.Create(ValidOptions), new HttpClient(mock));
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest(), RecordedResponse, "audio/basic");
+        var synth = SynthesizerFor(server);
 
         await synth.SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
-        mock.LastRequest!.Headers.TryGetValues("Ocp-Apim-Subscription-Key", out var vals)
-            .Should().BeTrue();
-        vals!.Should().Contain("azure-tts-key");
+        server.ReceivedRequests.Should().ContainSingle().Subject
+            .Header("Ocp-Apim-Subscription-Key").Should().Be(ApiKey);
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldYieldRecordedAudioIntact_WhenChunked()
+    {
+        // The point of the recording: real codec bytes traverse the frame-chunking path, which
+        // 320 zero bytes could not exercise.
+        //
+        // Note what is NOT asserted. Frames are not all `chunkSize` long: the provider yields
+        // whatever `Stream.ReadAsync` returns, and over a real chunked response that does not
+        // align to the buffer. An earlier version of this test asserted the final frame was
+        // exactly `length % 320` and failed — it encoded an assumption about read alignment that
+        // neither the client nor the transport guarantees. What IS guaranteed is below: because
+        // the capture's length is deliberately not a multiple of the chunk size, at least one
+        // frame must be partial, which the previous new byte[320] / new byte[640] fixtures —
+        // exact multiples — could never produce.
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest(), RecordedResponse, "audio/basic");
+        var expected = ProviderRecordings.Locate().ReadBytes(RecordedResponse);
+        var synth = SynthesizerFor(server, chunkSize: 320);
+
+        var frames = await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        (expected.Length % 320).Should().NotBe(0, "the capture must not be chunk-aligned");
+        frames.Should().HaveCountGreaterThan(1, "the response must actually be chunked");
+        frames.Should().OnlyContain(f => f.Length > 0 && f.Length <= 320);
+        frames.Should().Contain(f => f.Length != 320, "a partial frame must reach the consumer");
+        frames.SelectMany(f => f.ToArray()).Should().Equal(expected,
+            "chunking must not alter a single byte of the vendor's audio");
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldNotMatch_WhenApiKeyHeaderIsWrong()
+    {
+        // Strict matching (ADR-0041 D1) turns a silent pass into a failure: the previous
+        // canned-handler substrate answered every request regardless of headers.
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest(), RecordedResponse, "audio/basic");
+        var synth = new AzureTtsSpeechSynthesizer(
+            Options.Create(new AzureTtsOptions
+            {
+                ApiKey = "wrong-key",
+                Region = "eastus",
+                VoiceName = "es-CO-SalomeNeural",
+                OutputFormat = AzureTtsOutputFormat.Raw8Khz16BitMonoPcm
+            }),
+            server.CreateClient(),
+            chunkSize: 4096,
+            server.BaseAddress.ToString().TrimEnd('/'));
+
+        var act = async () =>
+            await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+        server.UnmatchedRequests.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrow_WhenProviderReturnsError()
+    {
+        // A shape the canned handler could not express at all.
+        await using var server = HttpProviderMockServer.Start();
+        server.Stub(SynthesisRequest(), HttpProviderResponse.Status(HttpStatusCode.TooManyRequests));
+        var synth = SynthesizerFor(server);
+
+        var act = async () =>
+            await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        await act.Should().ThrowAsync<HttpRequestException>();
     }
 }

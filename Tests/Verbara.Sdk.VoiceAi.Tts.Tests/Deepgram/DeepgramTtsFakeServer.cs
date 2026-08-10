@@ -14,12 +14,37 @@ namespace Verbara.Sdk.VoiceAi.Tts.Tests.Deepgram;
 /// </remarks>
 internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
 {
+    /// <summary>
+    /// How long the session waits for the client's <c>Flush</c> frame before answering anyway.
+    /// A client that was cancelled or aborted mid-send never sends one; the session must not hang.
+    /// </summary>
+    private static readonly TimeSpan RequestDrainTimeout = TimeSpan.FromSeconds(2);
+
     private readonly WebSocketTestServer _server;
+
+    /// <summary>
+    /// Released by the client's <c>Flush</c> frame — the last request frame the synthesizer sends
+    /// unconditionally, and the one a real Deepgram server answers (it emits the buffered audio and
+    /// then <c>Flushed</c> in response to <c>Flush</c>, not on a clock). The trailing <c>Close</c>
+    /// frame is guarded by <c>ws.State == Open</c> on the client side, so it is not a sentinel this
+    /// session can wait on without risking a stall.
+    /// </summary>
+    private readonly TaskCompletionSource _requestComplete =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public int Port => _server.Port;
 
-    /// <summary>All JSON text frames received from the client (Speak, Flush, Close).</summary>
-    public List<string> ReceivedJsonMessages { get; } = [];
+    private readonly List<string> _receivedJsonMessages = [];
+
+    /// <summary>
+    /// All JSON text frames received from the client (Speak, Flush, Close) — a snapshot. The
+    /// receive loop runs on its own thread and may still be appending while a test reads this, so
+    /// handing out the live list would be a torn read of a collection under concurrent mutation.
+    /// </summary>
+    public IReadOnlyList<string> ReceivedJsonMessages
+    {
+        get { lock (_receivedJsonMessages) return _receivedJsonMessages.ToArray(); }
+    }
 
     /// <summary>Raw HTTP request-target captured from the WS upgrade (e.g. <c>/v1/speak?model=...&amp;encoding=...</c>).</summary>
     public string? CapturedRequestUri { get; private set; }
@@ -74,13 +99,25 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
 
         var receiveTask = StartReceiveLoopAsync(ws, ct);
 
-        // Small delay so the client has time to send Speak + Flush.
-        await Task.Delay(30, ct).ConfigureAwait(false);
+        // Answer only once the client's request is complete — Flush is the frame a real Deepgram
+        // server acts on. The previous fixed 30 ms delay raced the client's send: CloseGracefullyAsync
+        // ends in CloseAsync, which drains and discards peer frames to finish the close handshake, so
+        // Speak or Flush could vanish before the receive loop saw them. Reproduced by forcing the
+        // interleaving (delay 0 → SynthesizeAsync_ShouldSendSpeakMessageWithText and
+        // SynthesizeAsync_ShouldComplete_WhenServerAbortsAfterSend both fail); it is the same defect
+        // fixed in LmntWsFakeServer, and Deepgram's drain window is wider because the synthesizer
+        // never sends a WebSocket close frame, so the fake's CloseAsync stays pending — and draining
+        // — for the rest of the session.
+        await WaitForRequestOrTimeoutAsync(ct).ConfigureAwait(false);
 
         if (HangForever)
         {
-            // Hold the connection open until the server is disposed (ct fires).
-            await receiveTask.ConfigureAwait(false);
+            // Hold the connection open until the server is disposed (ct fires). Awaiting the receive
+            // loop is NOT enough: it exits as soon as the client half-closes, which would tear the
+            // session down and complete the client's stream — see LmntWsFakeServer.HoldOpenUntilDisposed.
+            try { await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false); }
+            catch (OperationCanceledException) { /* disposed: release the socket */ }
+            try { await receiveTask.ConfigureAwait(false); } catch (Exception) { /* already torn down */ }
             return;
         }
 
@@ -103,6 +140,21 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
+    private async Task WaitForRequestOrTimeoutAsync(CancellationToken ct)
+    {
+        using var timeout = new CancellationTokenSource(RequestDrainTimeout);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+        try
+        {
+            await _requestComplete.Task.WaitAsync(linked.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // No Flush: the client was cancelled or aborted mid-send. Answer anyway — that is the
+            // behaviour the cancellation and abort tests depend on.
+        }
+    }
+
     private Task StartReceiveLoopAsync(System.Net.WebSockets.WebSocket ws, CancellationToken ct)
         => Task.Run(async () =>
         {
@@ -120,7 +172,15 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
                 }
 
                 if (result.MessageType == WebSocketMessageType.Text)
-                    ReceivedJsonMessages.Add(Encoding.UTF8.GetString(buf, 0, result.Count));
+                {
+                    var json = Encoding.UTF8.GetString(buf, 0, result.Count);
+                    lock (_receivedJsonMessages)
+                        _receivedJsonMessages.Add(json);
+
+                    // Flush ends the client's request; releases HandleSessionAsync to answer.
+                    if (json.Contains("\"Flush\"", StringComparison.Ordinal))
+                        _requestComplete.TrySetResult();
+                }
                 else if (result.MessageType == WebSocketMessageType.Close)
                     break;
             }

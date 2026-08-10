@@ -17,7 +17,19 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
     private readonly WebSocketTestServer _server;
 
     public int Port => _server.Port;
-    public List<string> ReceivedJsonMessages { get; } = [];
+
+    private readonly List<string> _receivedJsonMessages = [];
+
+    /// <summary>
+    /// Text frames received from the client — a snapshot. The receive loop runs on its own thread
+    /// and may still be appending while a test reads this, so handing out the live list would be a
+    /// torn read of a collection under concurrent mutation.
+    /// </summary>
+    public IReadOnlyList<string> ReceivedJsonMessages
+    {
+        get { lock (_receivedJsonMessages) return _receivedJsonMessages.ToArray(); }
+    }
+
     public List<byte[]> AudioFramesToSend { get; } = [];
 
     /// <summary>Send an explicit <c>{"type":"done"}</c> text message after all audio frames.</summary>
@@ -55,7 +67,8 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
                 catch { break; }
 
                 if (result.MessageType == WebSocketMessageType.Text)
-                    ReceivedJsonMessages.Add(Encoding.UTF8.GetString(buf, 0, result.Count));
+                    lock (_receivedJsonMessages)
+                        _receivedJsonMessages.Add(Encoding.UTF8.GetString(buf, 0, result.Count));
                 else if (result.MessageType == WebSocketMessageType.Close)
                     break;
             }
