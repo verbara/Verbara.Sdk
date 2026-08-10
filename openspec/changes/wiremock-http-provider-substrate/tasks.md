@@ -539,7 +539,7 @@ formality left the D8 parity gate unmeasured while three provider suites were be
 - [x] 8.8 `aot-validate` workflow green — the test-only substrate never enters an AOT publish graph
       — the workflow is a single `bash tools/verify-aot.sh`, so it runs locally: **0 trim warnings,
       AotCanary published and smoke-run for `linux-x64`.**
-- [~] 8.9 CI green end to end (`pull_request` + `merge_group`), with the wall-clock delta versus the
+- [x] 8.9 CI green end to end (`pull_request` + `merge_group`), with the wall-clock delta versus the
       pre-change baseline recorded and judged acceptable under ADR-0038
       — **the only item that cannot be closed locally; it requires an open PR.**
       — **`pull_request` green** on [#159](https://github.com/verbara/Verbara.Sdk/pull/159)
@@ -549,9 +549,22 @@ formality left the D8 parity gate unmeasured while three provider suites were be
       **Unit Tests**, aot-check. The Coverage Ratchet result is the one that had never actually run
       before — it was `skipped` on the previous attempt because `needs: unit-tests` failed (ADR-0038
       D2), so §8.6's locally-computed floor is only now confirmed by CI itself.
-      — **`merge_group` still open by construction:** that trigger only fires on queue entry, so it
-      cannot be observed from an un-enqueued PR. Per ADR-0038 D3 the queue run adds the Asterisk 22
-      variant, which never reports on `pull_request`. This item closes on landing, not here.
+      — **`merge_group` green** (run `31347774014`, 2026-08-10; merged as `fac22bce`): all 10 jobs
+      pass, including **`Functional Tests (Testcontainers) (22)`** — the variant that per ADR-0038 D3
+      never reports on `pull_request` and therefore could not be observed before queue entry. Worth
+      being precise about what that buys: under this repo's classic branch protection the (22)
+      context is *observed, not enforced* (ADR-0038 addendum), so its green is evidence, not a gate
+      that would have refused the merge. It was watched deliberately for that reason.
+
+      **A trap this PR hit, worth recording because the symptom is misleading.** After the second
+      fix commit, CI reported *nothing at all* for ~45 min — no pending checks, no queued runs. The
+      cause was not an Actions outage or latency: five PRs (#151, #153, #154, #157, #158) had landed
+      on `main` in the interim and the PR had gone `CONFLICTING`. **With no computable merge ref,
+      GitHub creates zero check-suites** (`total_count: 0` on the head SHA), so "no checks reported"
+      is a *conflict* symptom that looks exactly like an infrastructure stall. Resolved by merging
+      `main` in rather than rebasing — the branch was already published, and the queue squashes
+      anyway. One real conflict, in this file: #154's WebSocket terms review landed on the same §5
+      anchor as the ninth-fake inventory finding; both kept.
 
       **Wall-clock delta (D9 — measured, not assumed).** `Unit Tests` job duration, 29 successful CI
       runs sampled across `pull_request` and `merge_group`, split at PR #149 (the first WireMock code
