@@ -2,6 +2,10 @@
 
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Lets a PackageVersion below govern a package we never reference directly, so a
+         vulnerable transitive can be lifted without adding a fake direct dependency to
+         every affected project. See the transitive-pin override block at the end. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
   <!-- Runtime dependencies -->
@@ -15,7 +19,7 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.10" />
@@ -128,6 +132,20 @@
   <!-- Benchmark dependencies -->
   <ItemGroup>
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+
+  <!-- Transitive-pin overrides (CentralPackageTransitivePinningEnabled=true).
+       Packages nothing here references directly, lifted off a vulnerable version. -->
+  <ItemGroup>
+    <!-- Testcontainers pulls SSH.NET transitively into all 8 container-backed test projects.
+         2025.1.0 carries GHSA-q939-rpr3-3284 — a HIGH (CVSS 7.1) arbitrary-file-write via
+         server-controlled filenames in ScpClient's recursive download. 2026.0.0 is the first
+         patched release. Testcontainers 4.13.0 (latest) still depends on 2025.1.0, so upgrading
+         it does not clear the advisory — the pin is the only fix. Real exposure is nil: SSH.NET
+         is loaded only for Testcontainers' host-port forwarding, which no suite here uses. But
+         NuGet audit (NU1903) correctly escalates it to a build error under TWAE. Advisory drift —
+         published 2026-08-12, after the last green main run; every .NET repo went red on it. -->
+    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
   </ItemGroup>
 
 </Project>
