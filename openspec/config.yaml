@@ -36,3 +36,21 @@ rules:
     - "Verification tasks MUST include `dotnet test` green and CI green, with zero warnings (TreatWarningsAsErrors)."
     - "A release task MUST bump Directory.Build.props PackageVersion and add a CHANGELOG entry — publishing to nuget.org triggers only on a `v*` tag push (or manual workflow_dispatch) via .github/workflows/publish.yml, so merging to main without bumping/tagging is a silent no-op."
     - "Use Subagent-Driven Development with FCM batching: Phase A foundation (batch) -> Phase B critical components (focused) -> Phase C integration (batch)."
+
+operations:
+  apply:
+    guidance:
+      - "Do not check off a verification task until it actually ran: `dotnet test` green and CI green, zero warnings."
+      - "Cross-repo edits: `dotnet pack -c Release -o <local-nuget-feed>` -> `rm -rf ~/.nuget/packages/verbara.sdk*/` -> `dotnet restore` in Pro AND Platform. Skipping the cache clear restores the stale package and the consumer builds against the old surface."
+      - "A version bump is not a publish: nuget.org publishes only on a `v*` tag push (or manual workflow_dispatch). Merging a bumped `Directory.Build.props` to `main` is a silent no-op."
+      - "Add the `CHANGELOG.md [Unreleased]` entry in this PR; leave its `(#N)` citation for close-out."
+      - "Conventional Commits (`feat:`/`fix:`/`docs:`/`refactor:`/`test:`/`chore:`), and never a `Co-Authored-By` trailer."
+      - "Anything deferred or discovered mid-apply goes into `tasks.md` or an open change — never only into the PR prose, which nothing reads at close-out."
+  archive:
+    guidance:
+      - "Close out with the CLI: `openspec archive <name> --yes`. Do NOT use `/opsx:archive`, `/opsx:bulk-archive` or `/opsx:sync` — the agent archive path never invokes the CLI, and its no-sync branch moves the change away with the main specs never updated (a later `validate --all --strict` still passes, because the deltas are gone)."
+      - "Add `--skip-specs` only if this change already went through a sync. On a change that never synced it silently drops the deltas."
+      - "Before archiving: reconcile the living spec, harvest every deferred AND incidentally discovered follow-up into an open change or an ADR addendum, and check off `tasks.md`."
+      - "Sweep referrers to the change path before the directory moves — `.github/workflows/`, `scripts/` and test fixtures, not only Markdown."
+      - "If archive aborts because this change removes a capability's LAST requirement, that is expected: add `retire_capabilities: true` to the change's `.openspec.yaml`. It DELETES the living spec — use it only for genuine retirement."
+      - "Land the close-out as its own `docs(openspec):` PR; `main` is protected. Backfill the feature PR's `(#N)` citation into `CHANGELOG.md [Unreleased]` here — the number did not exist at apply time."
