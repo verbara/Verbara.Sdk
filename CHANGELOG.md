@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- **`SSH.NET` pinned to `2026.0.0` to clear [GHSA-q939-rpr3-3284](https://github.com/advisories/GHSA-q939-rpr3-3284)**
+  — HIGH, CVSS 7.1, arbitrary file write via server-controlled filenames in `ScpClient`'s recursive
+  download (#167). **Advisory drift, not a change of ours**: it was published 2026-08-12, after this
+  repo's last green run, and under `TreatWarningsAsErrors` NuGet audit's `NU1903` is a build error —
+  so every restore failed across 11 projects here, with `Verbara.Sdk.Pro` and `Verbara.Platform`
+  going red on the same advisory the same night. **Real exposure is nil**: `SSH.NET` arrives
+  transitively via `Testcontainers` into 8 container-backed test projects and is loaded only for
+  host-port forwarding — `ExposeHostPorts` / `SshdContainer` / `PortForward` appear nowhere in this
+  repo, so the vulnerable path is never reached. **Upgrading `Testcontainers` does not fix it**:
+  `4.13.0`, the latest, still depends on `SSH.NET 2025.1.0`, so the transitive pin is the only
+  available remedy and `2026.0.0` is the first patched release.
+
+### Changed — Dependencies
+
+- **`CentralPackageTransitivePinningEnabled` enabled** to carry the pin above without adding a fake
+  direct dependency to every affected project (#167). Two measured consequences:
+  - **`Microsoft.Extensions.Hosting` aligned to `10.0.10`.** Enabling the flag raised `NU1109` across
+    35 projects: `Microsoft.Extensions.Hosting 10.0.10` demands `>= 10.0.10`, and this pin was the
+    **sole straggler** among 12 `Microsoft.Extensions.*` siblings already there. Aligning it is the
+    fix — this is not a cascade in the ADR-0040 sense.
+  - **28 lower duplicate resolutions collapse upward** into versions this file already declares
+    (`OpenTelemetry` ×5 `1.15.3` → `1.17.0`; `Microsoft.CodeAnalysis.*`
+    `3.3.4`/`3.11.0`/`4.8.0`/`4.14.0`/`5.3.0` → `5.6.0`; `Microsoft.Extensions.*`
+    `6.0.0`/`8.0.x`/`10.0.0` → `10.0.10`; `BouncyCastle.Cryptography` `2.6.2` → `2.7.0`, which comes
+    with `SSH.NET`). Every project's `project.assets.json` was diffed before and after: **309 → 281
+    resolved pairs, and no package disappears from the graph** — every removal is a lower duplicate
+    of a package still present at a higher version. The practical effect is that test and example
+    projects stop silently running against older assemblies than the ones declared centrally.
+  - Verified: `dotnet restore` exit 0 with **0** `NU1903` / `NU1109` / `NU1605`, `dotnet build -c
+    Release` **0 warnings 0 errors**, `dotnet test` under the CI filter **3027 passed, 0 failed**.
+
 ### Changed — Tests & tooling
 
 - **Speech-provider HTTP suites now run against a real loopback server, driven by recorded vendor
@@ -48,8 +81,44 @@ All notable changes to this project will be documented in this file.
   - Every `*_ShouldAbort_WhenCancelled` test carried over **verbatim** as the `test-determinism`
     tripwire for the swap, and re-verified under the 30× repeat-run protocol (0 failures).
 
+- **The STT cancellation frame generator is now one shared helper instead of four copies** (#144).
+  **Test-only — no shipped code changed.** `EndlessFrames`, which keeps an STT stream open until a
+  pre-cancelled token is observed at the iteration boundary, was duplicated verbatim across the four
+  WebSocket recognizer suites (Deepgram, AssemblyAI, Cartesia, Speechmatics); it moves to
+  `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Helpers/SttFrameGenerators.cs`, alongside the existing
+  `MockHttpMessageHandler`, so the seven-provider cancellation contract asserted by
+  `StreamAsync_ShouldAbort_WhenCancelled` rests on one non-duplicated generator. The `Task.Delay(10,
+  ct)` pacer keeps its `fence-allow: LOOP-DRIVER` annotation at the single shared site — one
+  annotated pacer instead of three copies plus one unannotated. **Discovered during apply:**
+  Deepgram's copy was that unannotated one, grandfathered in `sync-fence-baseline.json` at count 1;
+  deleting it takes that file's real unmarked-barrier count to **0**, so the entry is removed and the
+  ratchet moves down, which is the only direction its own rule permits. Per-class `SingleFrame` /
+  `ThreeFrames` are deliberately left as-is.
+
 ### Fixed — Tests
 
+- **Fake-server seams dial the IPv4 loopback literal `127.0.0.1`, never `localhost`**
+  ([ADR-0044](docs/decisions/0044-ipv4-loopback-literal-for-test-servers.md), #146). **Test-only —
+  the eight touched `src/` lines are the fake-server URL branch of the recognizers and synthesizers,
+  reached only when a test sets the fake port; no production endpoint or public API changes.** Two
+  tests flaked under parallel load (`DeepgramSpeechSynthesizerTests.SynthesizeAsync_ShouldSendRequestToCorrectPath`,
+  `LmntSpeechSynthesizerWsTests.SynthesizeAsync_ShouldSendTextMessage_WithCorrectText`) and **the
+  recorded diagnosis was wrong** — both had been filed as fake-server synchronization races, an
+  assertion reaching the capture state before the server wrote it. The real cause is an
+  address-family ambiguity, established by direct experiment: `localhost` resolves to `::1` **first**,
+  then `127.0.0.1`; `WebSocketTestServer` binds `TcpListener(IPAddress.Loopback, 0)` — IPv4 only, so
+  it does **not** own `::1` on its port; an `HttpListener` with prefix `http://localhost:{port}/`
+  therefore binds the **same port number** successfully while that listener holds it (different
+  address family, no `EADDRINUSE`); and a client dialling `ws://localhost:{port}` resolves `::1`
+  first, reaches the `HttpListener`, and gets HTTP **200** where the WebSocket handshake requires
+  **101**. Reproduced under CPU saturation (32 spinners on 24 cores). The convention is **enforced,
+  not remembered**: a `LoopbackSeamScanner` + `LoopbackSeamGuardTests` pair in
+  `Verbara.Sdk.Governance.Tests` Roslyn-parses every `src/` and `Tests/` source file and fails the
+  build on any reintroduced `localhost` fake-server seam — zero-tolerance like the reflection ban
+  rather than ratcheted, since the repo carries none today. It ships with a liveness self-test (the
+  scan must walk >700 files, defeating the found-zero-files false green) and detector unit tests
+  pinning both the true positives and the immunity of the real product defaults that legitimately
+  name `localhost` on a fixed port (ARI 8088, OTLP 4317, Toxiproxy 8474).
 - **Three timing and thread-safety defects in the WebSocket provider fakes.** All test-only; no
   shipped code changed. They surfaced on this change's first CI run and predate it — the fakes were
   byte-identical to `main` — but they matter beyond the one red build, because 30 green local
@@ -94,8 +163,6 @@ All notable changes to this project will be documented in this file.
   plus the list of packages actually packed; and it claims the `Latest` badge **only when the tag is
   the highest version**. Workflow `permissions` widened `contents: read` → `write` for this. Matches
   Verbara.Platform.Web `#246`, Verbara.Platform, and Sdk.Pro's in-workflow `gh release create`.
-
-### Changed — CI
 
 - **Docs/data-only CI fast-path (gate job, verbara-meta/ADR-0016 wave 2).** `ci.yml` and `codeql.yml` each gain a lightweight `gate` job that classifies the PR / `merge_group` diff against the event's own base (`scripts/ci/classify-docs-only.sh`; fail-closed allowlist `docs/**`, `openspec/**`, `CHANGELOG.md`, top-level `*.md`, `**/README.md`, **minus** the six Markdown files `Verbara.Sdk.DocSnippets.Tests` Roslyn-compiles, whose only guard is the `Unit Tests` job). Six plain-named heavy required contexts — `Unit Tests`, `Coverage Ratchet`, `AOT Trim Check`, `Pack Warnings Gate`, `Audit Test Asserts`, `Analyze (C#)` — take `needs: gate` and a fail-closed **job-level** `if:`, reporting a satisfying `skipped` on a docs-only diff. The matrix-suffixed `Functional Tests (Testcontainers) (23)` keeps its job (and matrix) always-run and takes the guard at **step** level, so the suffixed check-run still materializes and reports green (ADR-0039 addendum, PRs #104/#105). `OpenSpec Validate` and `Coverage Script Tests` stay always-run; **`Coverage Script Tests` was promoted to a required context** so a mis-widened allowlist is merge-blocking rather than advisory. `codeql.yml` gets a gate rather than a `paths-ignore` because it is `merge_group`-wired and emits a required context; its classify step does not run on `push`/`schedule`, so the default-branch and weekly security baselines are never path-skipped. `aot-validate.yml` (non-required `aot-check`, no queue trigger) takes the §2 `paths-ignore` instead. The classifier ships with 31 bash unit tests plus a 6-assertion drift guard asserting its DocSnippets carve-out stays a superset of `DocSnippetCompilationTests.cs`. Measured cadence: 16 of the last 70 merged PRs are docs-only; 14 of them take the fast path.
 
