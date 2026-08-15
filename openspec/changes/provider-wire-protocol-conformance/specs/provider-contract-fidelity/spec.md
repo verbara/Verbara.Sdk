@@ -141,13 +141,17 @@ correlating identifiers are never echoed.
 - **WHEN** it completes
 - **THEN** no synthesized audio, transcript or correlating identifier is written to disk or to the console, and the finding records only the shape of what arrived
 
-### Requirement: A provider that produced no audio does not report success
-A provider client SHALL NOT complete a synthesis normally when it produced nothing, and MUST make the
-empty outcome observable to the caller and counted. The motivating measurement is Cartesia: the
-synthesizer connects, sends its request, reads the vendor's frames, reaches the vendor's `done`
-terminator and completes **successfully** having yielded zero audio bytes, because every audio-carrying
-frame was a text frame it discarded. A loud failure is recoverable and a silent one is not; a caller
-that receives an empty stream from a successful call has no signal to act on.
+### Requirement: A provider that produced no output does not report success
+A provider client SHALL NOT complete normally when it produced nothing, and MUST make the empty
+outcome observable to the caller and counted. This binds **recognizers as well as synthesizers**
+(`Sdk/ADR-0049` D2). The motivating measurement is Cartesia: the synthesizer connects, sends its
+request, reads the vendor's frames, reaches the vendor's `done` terminator and completes
+**successfully** having yielded zero audio bytes, because every audio-carrying frame was a text frame
+it discarded. ElevenLabs was measured doing the same on 2026-08-15 — text-only frames, then close
+`1000` — so this is a shape, not one vendor's quirk. On the STT side Speechmatics and AssemblyAI reach
+the caller as streams that complete normally and empty when the vendor has **refused the session**.
+A loud failure is recoverable and a silent one is not; a caller that receives an empty stream from a
+successful call has no signal to act on.
 
 #### Scenario: A completed synthesis that yielded nothing is surfaced
 - **GIVEN** a synthesizer that reaches the vendor's terminator having emitted no audio bytes
@@ -164,21 +168,76 @@ that receives an empty stream from a successful call has no signal to act on.
 - **WHEN** the client completes
 - **THEN** that outcome is distinguishable from the failure above, so the requirement does not convert a valid empty result into a reported fault
 
+### Requirement: A receive loop does not silently discard a frame that carries a failure
+A provider receive loop SHALL surface any frame carrying a failure to the caller, and MUST NOT let
+unanticipated frame types fall into a discard branch by default (`Sdk/ADR-0049` D1). Filtering
+lifecycle frames the caller does not need stays legitimate — the Speechmatics `Info` frame is skipped
+deliberately and correctly. What is forbidden is filtering by an allow-list of *content* types, since
+every error a vendor defines then lands in the discard branch by construction. Three shipped clients
+have this shape: Speechmatics and AssemblyAI both `continue` past any message that is not a transcript,
+and ElevenLabs reads only binary frames while the vendor sends errors as text. In each case a session
+the vendor **refused** reaches the caller as a normal, empty completion.
+
+#### Scenario: An in-band rejection reaches the caller
+- **GIVEN** a vendor that accepts the WebSocket upgrade and then rejects the credential in a message
+- **WHEN** the client receives that message
+- **THEN** the failure is surfaced to the caller rather than skipped, so a refused session is distinguishable from a silent one
+
+#### Scenario: Deliberate lifecycle filtering remains legal
+- **GIVEN** a lifecycle frame the caller has no use for, such as a rate-limit or session-info notice
+- **WHEN** the receive loop processes it
+- **THEN** skipping it is permitted, because the discriminator is whether the frame carries a failure and not whether it appears on a content allow-list
+
+#### Scenario: The discard branch is audited rather than assumed clean
+- **GIVEN** the set of provider receive loops in the repository
+- **WHEN** the audit runs
+- **THEN** each surface records whether it has an allow-list discard branch, including the surfaces that do not, so an unexamined loop is never reported as a clean one
+
+### Requirement: Where a vendor validates a credential is measured, never inferred
+The recorded status of a surface SHALL state where its credential is validated — in the upgrade
+handshake or in-band after it — and that MUST be established by a probe using a deliberately invalid
+credential, not inferred from where the client places it (`Sdk/ADR-0049` D3, D4). Measured
+2026-08-15, three of the five credential-controlled WebSocket surfaces validate in-band: Speechmatics
+closes `4001`, ElevenLabs and AssemblyAI each return `101` and then an error frame, while both
+Cartesia surfaces answer `401` at the handshake. Deepgram carries no invalid-credential control and
+its validation point MUST therefore be recorded as **not established**, not inherited from its route
+probe. Credential placement predicts nothing either: five send it in a request header and
+Speechmatics sends it in the query string, yet Speechmatics is one of the in-band three. A wrong-path
+control demonstrates a probe can distinguish routes; only an invalid-credential control demonstrates
+it can distinguish credentials, and the two answer different questions.
+
+#### Scenario: An auth claim rests on a credential-shaped control
+- **GIVEN** a surface whose recorded status asserts that its credential is accepted
+- **WHEN** that status is established
+- **THEN** it carries the result of a probe run with a deliberately invalid credential on the same host, so a `101` that merely precedes a rejection is never recorded as a passing authentication
+
+#### Scenario: A handshake-only result is qualified by the validation point
+- **GIVEN** a surface probed only to the handshake
+- **WHEN** its status is recorded
+- **THEN** it counts as auth evidence only where the vendor was measured to validate in the upgrade headers, and otherwise records that the frames beyond the handshake were not exercised
+
 ### Requirement: Every provider surface carries a recorded wire-conformance status
 Each VoiceAi provider surface SHALL carry a recorded status covering both its route and its frame
 protocol, and an uncharacterised surface MUST be recorded as uncharacterised rather than omitted or
 presumed correct. Each row MUST state its evidence class — probed live with a negative control,
 probed without one, documentation-derived, or not characterised — and the date it was established,
 because these differ in strength and a table that flattens them misleads. Across the six TTS surfaces:
-two correct on both halves, two wrong by route, two wrong by frame format, none unknown — established
-on differing dates and by differing methods, one live controlled probe on 2026-08-15 and the rest by
-earlier probes or by vendor-documentation reads, so each row carries its own date and class and the
-set MUST NOT be presented under a single measurement date. Across the seven STT recognizers the record
-is deliberately uneven and MUST stay uneven: two WebSocket recognizers were probed the same way — one
-route-verified with a negative control, one found unable to authenticate at all — two more are not
-characterised because no credential for them exists in this environment, and the three HTTP batch
-recognizers each carry a live capture taken without a negative control, which is **uncontrolled** route
-evidence: neither not characterised, nor equivalent to a controlled probe.
+two correct on both halves, two wrong by route, two wrong by frame format — and **one frame half still
+uncharacterised**, because Cartesia TTS's 2026-08-15 probe established route and auth with both
+controls but sent a malformed synthesis request, so the vendor answered with an error frame rather
+than audio. Cartesia's frame finding continues to rest on the vendor-documentation read of
+2026-08-14 and MUST be recorded at that class. These rows were established on differing dates and by
+differing methods, so each carries its own date and class and the set MUST NOT be presented under a
+single measurement date. Across the seven STT recognizers the record
+is deliberately uneven and MUST stay uneven: **all four WebSocket recognizers are now characterised**
+— Deepgram route-verified with a negative control; Speechmatics found unable to authenticate at all;
+Cartesia and AssemblyAI probed 2026-08-15 with two controls once credentials were created, the latter
+yielding the swallow defect. Of the three HTTP batch recognizers, Google was promoted the same day to
+a controlled probe, while OpenAI Whisper and Azure OpenAI Whisper still carry only a live capture taken
+without a negative control, which is **uncontrolled** route evidence: neither not characterised, nor
+equivalent to a controlled probe. Frame halves lag route halves and MUST be recorded separately —
+Deepgram STT, Cartesia STT and Cartesia **TTS** all have verified routes whose frame inventories are
+not characterised.
 
 #### Scenario: An unprobed surface reads as unknown, not as working
 - **GIVEN** a provider surface for which no live probe has been run

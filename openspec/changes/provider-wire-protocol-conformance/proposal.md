@@ -23,23 +23,70 @@ modes, and collapsing them into a single green tick is the exact mistake this ch
 
 | Surface | Transport | Route | Frame / body format | Verdict | Evidence class | Date |
 |---|---|---|---|---|---|---|
-| Deepgram TTS | WebSocket | **OK** — `101 Switching Protocols` | **OK** — `Metadata` text → 37 binary frames → `Flushed` text | correct on both halves | live probe **with** negative control; frames captured | 2026-08-15 |
-| Deepgram STT | WebSocket | **OK** — `101 Switching Protocols` | **not exercised** | route correct; frames uncharacterised | live probe **with** negative control; route only | 2026-08-15 |
+| Deepgram TTS | WebSocket | **OK** — `101 Switching Protocols` | **OK** — `Metadata` text → 37 binary frames → `Flushed` text | correct on both halves; **auth validation point not established** | live probe with a **wrong-path** control; frames captured; **no invalid-credential control** | 2026-08-15 |
+| Deepgram STT | WebSocket | **OK** — `101 Switching Protocols` | **not exercised** | route correct; frames uncharacterised; **auth validation point not established** | live probe with a **wrong-path** control; route only; **no invalid-credential control** | 2026-08-15 |
 | Azure TTS | HTTP | **OK** | **OK** | previously proven | prior proof, never re-probed | before this change |
 | LMNT TTS (HTTP) | HTTP | **404** | blocked behind the route | broken | live probe | 2026-08-15 |
 | Speechmatics TTS | HTTP | **404** | blocked behind the route | broken | live probe | 2026-08-15 |
 | Cartesia TTS | WebSocket | **OK** | **BROKEN** — audio is base64 in a JSON **text** frame | broken, **silently** | vendor documentation read first-hand; no live frame capture | 2026-08-14 |
-| ElevenLabs TTS | WebSocket | **OK** | **BROKEN** — audio is base64 in a JSON **text** frame | broken | vendor documentation read first-hand; no live frame capture | 2026-08-14 |
+| ElevenLabs TTS | WebSocket | **OK** | **BROKEN** — audio is base64 in a JSON **text** frame | broken, **silently** | **live probe, two controls** (superseded the documentation read) | 2026-08-15 |
 | Speechmatics STT | WebSocket | `101`, then vendor **closes `4001 not_authorised`** | never reached | **unusable as shipped** | live probe, three-row controlled comparison | 2026-08-15 |
-| OpenAI Whisper STT · Azure OpenAI Whisper STT · Google STT | HTTP | a committed recording exists, taken live, **without a negative control** | — | route evidence of a weaker class | committed live capture (sidecar `class: recorded`) | per sidecar |
-| Cartesia STT · AssemblyAI STT | WebSocket | — | — | **not characterised** | none — no credential exists in this environment | — |
+| OpenAI Whisper STT · Azure OpenAI Whisper STT | HTTP | a committed recording exists, taken live, **without a negative control** | — | route evidence of a weaker class | committed live capture (sidecar `class: recorded`) | per sidecar |
+| Google STT | HTTP | **OK** — `400 RecognitionAudio not set`, i.e. past auth into argument validation | — | route + auth OK | **live probe, two controls** (promoted from an uncontrolled capture) | 2026-08-15 |
+| Cartesia STT | WebSocket | **OK** — `101` | not exercised | route + auth OK | **live probe, two controls** | 2026-08-15 |
+| AssemblyAI STT | WebSocket | **OK** — `101`, first frame `Begin` | **BROKEN** — non-`Turn` frames discarded, auth error included | broken, **silently** | **live probe, two controls** | 2026-08-15 |
 
-All six TTS surfaces are characterised; no unknowns remain in that family. On the STT side the two
-WebSocket recognizers we can authenticate against are now characterised too — one clean route, one
-provider that cannot open a session. The last two WebSocket recognizers are recorded as *not
-characterised* with the reason stated, which is a different and honest thing from recorded as good.
+All six TTS surfaces are characterised; no unknowns remain in that family. **On the STT side the
+`not characterised` rows are now closed** — see the amendment below: credentials for ElevenLabs,
+Cartesia, AssemblyAI and Google were created on 2026-08-15 and every one of those surfaces was
+probed with **two** controls. Nothing in the STT family is now unknown for want of a credential.
 
-### The six defects, with their sites
+### Amendment — second probe round, 2026-08-15 (`Sdk/ADR-0049`)
+
+Four credentials that did not exist when this proposal was first written — ElevenLabs, Cartesia,
+AssemblyAI, Google — were created the same day and every surface behind them was probed with **two**
+controls: a wrong path *and* a deliberately invalid credential, both on the same host. Three results
+change what is written above.
+
+**1. A seventh defect.** `AssemblyAiSpeechRecognizer.cs:137` reads
+`if (!string.Equals(msg.Type, "Turn", StringComparison.Ordinal)) continue;` — structurally identical
+to the Speechmatics swallow already recorded as part of A3. AssemblyAI signals in-band failure as a
+frame whose type is not `Turn`, so the recognizer discards it. A rejected session reaches the caller
+as a stream that completes normally and empty. This is **D-class: the failure is invisible**, and it
+is now a class rather than an incident — Speechmatics, AssemblyAI and ElevenLabs all have it.
+
+**2. In-band authentication is not the exception it was assumed to be.** Probed with an invalid
+credential, three of the five credential-controlled surfaces returned `101` and *then* rejected:
+Speechmatics (close `4001`), ElevenLabs (text frame, `error=invalid_api_key`), AssemblyAI (text
+frame, "Unauthorized Connection: Invalid API key"). Both Cartesia surfaces validate in the handshake
+(`401`). **Deepgram is the sixth and it has no credential control at all** — ADR-0048 probed its
+route, not its key — so its validation point is recorded as *not established* rather than assumed;
+the one row missing the second control is the one whose auth claim this change cannot make, which is
+D4 arguing for itself. Nor does credential *placement* predict anything: five of the six send it in a
+request header, `SpeechmaticsSpeechRecognizer.cs:195` puts it in the query string (`?jwt=`), and
+Speechmatics is an in-band validator either way. This is why a route-only negative control is not
+sufficient on its own, and why ADR-0049 D4 requires a second, credential-shaped control for any
+surface whose auth claim matters.
+
+**3. The ElevenLabs question this change left open is answered — and the answer is yes.** Probed
+live, ElevenLabs emits only text frames (`{alignment, audio, isFinal, normalizedAlignment}`, audio as
+base64) and then closes `1000` normal. The synthesizer reads only `Binary`, so it completes
+**successfully with zero bytes**, exactly as Cartesia does. §2.10a no longer has a question in it.
+Worse than recorded: because the auth error is *also* text, a bad ElevenLabs credential loses the
+audio and the reason for losing it in the same branch.
+
+One row moves the other way, and is recorded as such rather than quietly upgraded: **Cartesia TTS's
+frame inventory is still not characterised.** The probe reached `101` and then sent a malformed
+synthesis request, so the vendor replied with an error frame instead of audio. Route and auth are
+established with both controls; the frame shape is not, and Cartesia's Class B finding continues to
+rest on the vendor-documentation read of 2026-08-14.
+
+### The defects, with their sites
+
+The six below were established when this change was opened. A **seventh** — AssemblyAI STT, the same
+swallow as Speechmatics — was measured on 2026-08-15 and is described under *Amendment* rather than
+being back-fitted into this table, so the table keeps reading as the record of what the change was
+opened on.
 
 | # | Class | Surface | Site | Deltas | Symptom |
 |---|---|---|---|---|---|
@@ -303,9 +350,10 @@ Ordered by blast radius, largest first.
   existed because it could: no option, no constant, nothing for a reviewer to compare against a
   contract. The guard requires every provider route to be reachable from an options type, so the next
   wrong route is at least *visible* at review. It ships with an **enumerated allow-list**, each entry
-  carrying its own one-line reason, in the manner `SyncFenceRegressionGuardTests.cs` already uses —
-  not `LoopbackSeamGuardTests.cs`, whose scanner documents that it deliberately carries no ignore
-  list: four pre-existing inlined endpoints that no task in this change remediates —
+  carrying its own one-line reason. No existing Governance guard offers a shape to copy — grepped
+  2026-08-15, none ships an enumerated exemption list, and `LoopbackSeamScanner.cs:28` documents that
+  it deliberately carries no ignore list — so this scanner sets the precedent instead of inheriting
+  one. It covers four pre-existing inlined endpoints that no task in this change remediates —
   `ElevenLabsSpeechSynthesizer.cs:161`, `LmntSpeechSynthesizer.cs:265` (the untouched WebSocket path),
   `AzureTtsSpeechSynthesizer.cs:84` (region-interpolated, and `AzureTtsOptions` carries no endpoint
   property) and `DeepgramSpeechRecognizer.cs:138` — plus the test-only fake-server seams. A guard that
@@ -320,10 +368,10 @@ Ordered by blast radius, largest first.
 **Not in scope.** The STT family is now partly characterised, and the boundary is drawn by what a
 credential existed for, not by convenience. **In scope:** Speechmatics STT, because A3 makes the
 provider unusable and a defect of that severity is not deferrable to a follow-on; and C1 on the same
-recognizer. **Probed and recorded:** Deepgram STT, route only. **Not characterised, and recorded as
-such:** Cartesia STT and AssemblyAI STT — reason, no credential exists in this environment; not
-probed, and nothing claimed about them. **Weaker evidence, distinctly labelled:** the three HTTP batch
-recognizers — OpenAI Whisper, Azure OpenAI Whisper, Google STT — each carry a committed recording
+recognizer. **Probed and recorded:** Deepgram STT, route only; and, per the amendment above, Cartesia STT
+(route + auth, two controls) and AssemblyAI STT — the latter now **in scope**, because its swallow is
+the seventh defect and shares a remedy with A3's. **Weaker evidence, distinctly labelled:** the two
+remaining HTTP batch recognizers — OpenAI Whisper and Azure OpenAI Whisper — each carry a committed recording
 whose provenance sidecar says `class: recorded`, i.e. a live capture. That is real route evidence and
 must not be called unverified; it was taken **without a negative control**, so it is also not
 equivalent to a controlled probe, and it is not upgraded here. Parse robustness stays with
@@ -373,7 +421,10 @@ None.
   tests and a liveness self-test.
 - A trait-gated conformance-probe suite, excluded by the default unit filter exactly as
   `Category=Functional` and `Category=Integration` already are, and absent from the PR path.
-- `docs/decisions/`: ADR-0048 + its index row in `docs/decisions/README.md`.
+- `docs/decisions/`: ADR-0048 and ADR-0049 + their index rows in `docs/decisions/README.md`. ADR-0049
+  is the amendment's decision record: the silent-discard rule, zero-output extended to recognizers, and
+  the credential-shaped control. ADR-0048 is `Accepted` and is **not edited** — its `not characterised`
+  rows were true when written and are superseded by evidence, not rewritten.
   `docs/guides/provider-recording-protocol.md`: the controlled-comparison method and the
   negative-control requirement, the first-protocol-exchange rule, and the § 7 status of each surface
   as characterised or explicitly not characterised, alongside the existing § 4 redaction rules it
@@ -440,9 +491,9 @@ ElevenLabs — are `not-cleared` under the recording protocol's § 7 terms revie
 captured evidence of the fix may be checked in and the durable artifact is the probe transcript's
 verdict, not bytes a future reader can re-run; Speechmatics TTS and Cartesia are
 `permitted-with-conditions`, which is a different and weaker constraint. Third, the STT family is
-only **partly** characterised: nobody has probed the other STT surfaces with a negative control.
-Three of them — OpenAI Whisper, Azure OpenAI Whisper, Google STT — carry a live capture that was
-never treated as a route check, and two more, Cartesia STT and AssemblyAI STT, have no credential
-here and are recorded as not characterised. The base rate argues for finishing the job: six defects
-were found in the eight surfaces anyone actually looked at, and the newest of them was found only
-because a probe was pushed one exchange past the handshake.
+only **partly** characterised: two of them — OpenAI Whisper and Azure OpenAI Whisper — carry a live
+capture that was never treated as a route check, so their route evidence stays `uncontrolled`. The
+base rate argues for finishing the job, and the amendment above sharpened it rather than softening
+it: **seven** defects have now been found in the surfaces anyone actually looked at, and the two most
+recent were both found only because a probe was pushed past the handshake — first one exchange
+(Speechmatics), then with a credential-shaped control (AssemblyAI).
