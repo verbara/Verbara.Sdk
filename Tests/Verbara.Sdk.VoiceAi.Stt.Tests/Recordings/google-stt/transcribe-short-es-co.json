@@ -1,0 +1,16 @@
+{
+  "results": [
+    {
+      "alternatives": [
+        {
+          "transcript": "el sistema registro la solicitud correctamente",
+          "confidence": 0.90005827
+        }
+      ],
+      "resultEndTime": "3.720s",
+      "languageCode": "es-us"
+    }
+  ],
+  "totalBilledTime": "4s",
+  "requestId": "00000000-0000-0000-0000-000000000000"
+}

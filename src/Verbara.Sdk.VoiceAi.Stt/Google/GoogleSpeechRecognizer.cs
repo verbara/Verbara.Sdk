@@ -11,8 +11,15 @@ namespace Verbara.Sdk.VoiceAi.Stt.Google;
 /// </summary>
 public sealed class GoogleSpeechRecognizer : SpeechRecognizer
 {
+    /// <summary>Route this provider posts to, appended to whichever origin is in effect.</summary>
+    private const string RecognizePath = "/v1/speech:recognize";
+
+    /// <summary>Origin the provider dials in production.</summary>
+    private const string ProductionOrigin = "https://speech.googleapis.com";
+
     private readonly GoogleSpeechOptions _options;
     private readonly HttpClient _http;
+    private readonly string? _fakeOrigin;
 
     /// <inheritdoc />
     public override string ProviderName => "Google";
@@ -22,6 +29,26 @@ public sealed class GoogleSpeechRecognizer : SpeechRecognizer
     {
         _options = options.Value;
         _http = http;
+    }
+
+    /// <summary>Initializes a new instance for testing with a fake server origin.</summary>
+    /// <param name="options">Provider options, as in the production constructor.</param>
+    /// <param name="http">Client the test owns and disposes.</param>
+    /// <param name="fakeOrigin">
+    /// Scheme, host and port of an in-process test server — the IPv4 loopback literal, never
+    /// <c>localhost</c> (ADR-0044). Only the <em>origin</em> is substituted: <see cref="RecognizePath"/>
+    /// and the <c>key</c> query parameter are still appended by this class, so a test server matching
+    /// strictly on path and query is asserting the request this provider really builds rather than
+    /// one the test handed it.
+    /// </param>
+    internal GoogleSpeechRecognizer(
+        IOptions<GoogleSpeechOptions> options,
+        HttpClient http,
+        string fakeOrigin)
+    {
+        _options = options.Value;
+        _http = http;
+        _fakeOrigin = fakeOrigin;
     }
 
     /// <inheritdoc />
@@ -51,7 +78,8 @@ public sealed class GoogleSpeechRecognizer : SpeechRecognizer
         };
 
         var json = JsonSerializer.Serialize(request, VoiceAiSttJsonContext.Default.GoogleSpeechRequest);
-        var uri = new Uri($"https://speech.googleapis.com/v1/speech:recognize?key={_options.ApiKey}");
+        var origin = _fakeOrigin ?? ProductionOrigin;
+        var uri = new Uri($"{origin}{RecognizePath}?key={_options.ApiKey}");
 
         using var req = new HttpRequestMessage(HttpMethod.Post, uri);
         req.Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
