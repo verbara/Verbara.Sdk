@@ -1,26 +1,42 @@
 #!/usr/bin/env python3
-"""Capture a real STT provider response into a committed fixture (ADR-0041 D4).
+"""Capture a real speech-provider response into a committed fixture (ADR-0041 D4).
 
-Implements steps 3-8 of `docs/guides/provider-recording-protocol.md` §3 for the two Whisper
-surfaces, so a capture is reproducible instead of being a one-off ceremony performed by hand:
-it sends the same multipart request the SDK sends, redacts, normalizes, writes the provenance
-sidecar and enforces the size cap.
+Implements steps 3-8 of `docs/guides/provider-recording-protocol.md` §3 for five provider
+surfaces — three STT, two TTS — so a capture is reproducible instead of being a one-off ceremony
+performed by hand: it sends the same request the SDK sends, redacts, normalizes, writes the
+provenance sidecar and enforces the size cap.
 
     python3 scripts/capture-provider-recording.py openai-whisper
     python3 scripts/capture-provider-recording.py azure-openai-whisper
+    python3 scripts/capture-provider-recording.py google-speech
+    python3 scripts/capture-provider-recording.py speechmatics-tts
+    python3 scripts/capture-provider-recording.py lmnt-http
 
 Credentials come from the environment and are never written, echoed or stored:
 
     openai-whisper         OPENAI_API_KEY
     azure-openai-whisper   AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT,
                            AZURE_OPENAI_DEPLOYMENT, [AZURE_OPENAI_API_VERSION]
+    google-speech          GOOGLE_SPEECH_API_KEY *or* GOOGLE_ACCESS_TOKEN, exactly one —
+                           see google_speech_plan for why the choice exists at all
+    speechmatics-tts       SPEECHMATICS_API_KEY
+    lmnt-http              LMNT_API_KEY
 
 **Use a throwaway credential and revoke it afterwards** (protocol §3.3). A key that never had
 access to production data cannot leak production identifiers through a response body.
 
 Source audio (protocol §6): the committed Azure TTS capture — synthetic speech from a prebuilt
 neural voice over a fictional sentence. No microphone is involved and no identifiable person's
-voice is ever submitted. See SOURCE_AUDIO_DESCRIPTION for the terms note this carries.
+voice is ever submitted. See SOURCE_AUDIO_DESCRIPTION for the terms note this carries. The TTS
+surfaces submit *text*, not audio, and record `origin: "not-applicable"` instead.
+
+What reaches disk depends on the surface, because a TTS response is not a JSON document and one
+provider's audio may not be committed at all:
+
+    json      the vendor's JSON, redacted and pretty-printed   — both Whisper surfaces, Google
+    binary    the vendor's bytes verbatim, under the hard cap  — Speechmatics TTS
+    envelope  status, headers, media type, length and observed chunk boundaries, and never the
+              audio bytes (protocol §7's conservative fallback) — LMNT HTTP
 
 stdlib only, by the same rule as `scripts/check-*.py`: a fixture tool that needs `pip install`
 is a fixture tool that stops being run.
@@ -29,6 +45,7 @@ is a fixture tool that stops being run.
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime as _dt
 import hashlib
 import io
@@ -36,6 +53,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 import wave
@@ -45,8 +63,10 @@ from pathlib import Path
 
 SCHEMA = "verbara.recording-provenance/1"
 SCENARIO_SLUG = "transcribe-short-es-co"
+TTS_SCENARIO_SLUG = "synthesize-short-en-us"
 
 STT_RECORDINGS = Path("Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Recordings")
+TTS_RECORDINGS = Path("Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings")
 SOURCE_PCM = Path(
     "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/azure-tts/synthesize-short-es-co.raw"
 )
@@ -56,23 +76,136 @@ SOURCE_SAMPLE_RATE = 8000
 SOURCE_CHANNELS = 1
 SOURCE_SAMPLE_WIDTH = 2
 
+# What a TTS surface says. Fictional by protocol §6, which governs a capture's spoken text as
+# strictly as it governs submitted audio: no real name, number or booking reference. English
+# because both TTS surfaces here ship an English voice and language as their default, and a
+# capture taken against non-default options is a capture of a request production never sends.
+TTS_INPUT_TEXT = "The system recorded the request successfully."
+
 # Advisory ceiling for a text capture (protocol §8). The hard 256 KiB cap is for binary.
 TEXT_SIZE_SMELL_BYTES = 64 * 1024
 
+# The binary cap (protocol §8) is a limit, not a hint: every clone of this public repo carries
+# every version of every committed blob forever, and an oversized speech sample also erodes the
+# "these are test fixtures, not a voice corpus" reading the vendor terms in §7 rest on.
+BINARY_SIZE_CAP_BYTES = 256 * 1024
+
+# Both HTTP-streaming providers read their response through an 8 KiB buffer
+# (SpeechmaticsSpeechSynthesizer.ChunkSize, LmntSpeechSynthesizer.HttpChunkSize). Reading at the
+# same size is what makes the envelope's chunk boundaries an observation of what the SDK sees
+# rather than an artifact of this script's own buffer choice.
+READ_CHUNK_BYTES = 8192
+
+# The extension a capture takes, keyed by what the vendor said it sent (protocol §2 fixes the
+# vocabulary). Consulted only for binary captures: a response labelled audio/mpeg must not land
+# in a file called .wav just because the SDK's tests expect WAV.
+MEDIA_TYPE_EXTENSIONS = {
+    "application/json": "json",
+    "audio/basic": "raw",
+    "audio/l16": "raw",
+    "audio/mp3": "mp3",
+    "audio/mpeg": "mp3",
+    "audio/ogg": "ogg",
+    "audio/opus": "opus",
+    "audio/raw": "raw",
+    "audio/vnd.wave": "wav",
+    "audio/wav": "wav",
+    "audio/wave": "wav",
+    "audio/x-wav": "wav",
+    "text/plain": "txt",
+}
+
+ARTIFACT_MODES = ("json", "binary", "envelope")
+
+# Checked before the request goes out, not after: a plan missing a key would otherwise fail
+# somewhere past `send`, having already spent a capture — and the operator's answer to that is
+# usually to re-run it, spending another.
+REQUIRED_PLAN_KEYS = (
+    "product",
+    "url",
+    "endpoint_template",
+    "api_version",
+    "terms_verdict",
+    "terms_basis",
+    "secrets",
+    "redaction_applied",
+    "redaction_notes",
+    "notes",
+    "verify",
+    "request_summary",
+    "headers",
+    "body",
+)
+
 PLACEHOLDER_API_KEY = "REDACTED-API-KEY"
 
-SOURCE_AUDIO_DESCRIPTION = (
+# Protocol §4's placeholder for "any GUID-shaped request/session/trace ID". Google's requestId is
+# a 19-digit string rather than a GUID, but the placeholder table's purpose is a form a reviewer
+# recognizes and the guard's allowlist accepts — inventing a second numeric form for the same
+# meaning would weaken both.
+PLACEHOLDER_CORRELATION_ID = "00000000-0000-0000-0000-000000000000"
+
+# One source recording, but not one description: what a provider is *sent* differs by surface,
+# and a sidecar claiming a RIFF header where the SDK sent headerless PCM would misdescribe the
+# very request the capture exists to pin down. The halves that are true either way are shared.
+SOURCE_AUDIO_PREFIX = (
     "Synthetic speech, not a recording of any person: the committed Azure TTS capture "
     "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/azure-tts/synthesize-short-es-co.raw "
     "(prebuilt neural voice es-CO-SalomeNeural, 8 kHz 16-bit mono PCM, 3.76 s) reading the "
-    "fictional sentence 'El sistema registró la solicitud correctamente.', wrapped in a "
-    "44-byte canonical RIFF/WAVE header identical to the one WhisperSpeechRecognizer builds. "
-    "Reusing that capture keeps one cleared, reviewed audio artifact in the repo instead of "
+    "fictional sentence 'El sistema registró la solicitud correctamente.', "
+)
+
+SOURCE_AUDIO_REUSE = (
+    " Reusing that capture keeps one cleared, reviewed audio artifact in the repo instead of "
     "adding a second. It is submitted for a single transcription, which is inference, not "
-    "training: neither Azure's bar on using Output Content as synthetic training data for a "
+    "training: "
+)
+
+SOURCE_AUDIO_DESCRIPTION = (
+    SOURCE_AUDIO_PREFIX
+    + "wrapped in a 44-byte canonical RIFF/WAVE header identical to the one "
+    "WhisperSpeechRecognizer builds."
+    + SOURCE_AUDIO_REUSE
+    + "neither Azure's bar on using Output Content as synthetic training data for a "
     "similar service nor OpenAI Services Agreement 3.3(e) on developing competing models is "
     "engaged."
 )
+
+GOOGLE_SOURCE_AUDIO_DESCRIPTION = (
+    SOURCE_AUDIO_PREFIX
+    + "submitted as raw LINEAR16 with no container at all, base64-encoded into audio.content "
+    "exactly as GoogleSpeechRecognizer submits the frames it drained."
+    + SOURCE_AUDIO_REUSE
+    + "Google's restriction on using Generated Output to create or improve a similar model is "
+    "not engaged."
+)
+
+SOURCE_AUDIO_SYNTHETIC = {
+    "origin": "synthetic",
+    "description": SOURCE_AUDIO_DESCRIPTION,
+    "license": "n/a",
+}
+
+
+def tts_source_audio(voice: str) -> dict:
+    """The `source_audio` block for a surface whose input is text, not a recording.
+
+    Modelled on the one committed Azure TTS capture rather than invented: protocol §5 has no
+    field for "input text", so the direction is expressed as `origin: "not-applicable"` with the
+    sentence and the voice named in the description. The voice matters as much as the sentence —
+    §7's conditions turn on the capture having used a prebuilt catalogue voice and never one
+    built from a real person.
+    """
+    return {
+        "origin": "not-applicable",
+        "description": (
+            f"TTS input is a fixed English sentence authored for this fixture "
+            f"('{TTS_INPUT_TEXT}') — no source recording exists, and the sentence names no real "
+            f"person, organisation or number. Rendered by the prebuilt catalogue voice "
+            f"'{voice}'; no custom or cloned voice was used."
+        ),
+        "license": "n/a",
+    }
 
 # Headers whose *values* are safe to record in the sidecar. Everything else contributes its
 # name only: `openai-organization`, `x-request-id`, `azureml-model-session` and friends are
@@ -188,6 +321,68 @@ def assert_no_account_token_leak(body: str, account_tokens: dict[str, str]) -> N
             )
 
 
+def assert_no_secret_bytes(payload: bytes, values: list[str]) -> None:
+    """Fail if a credential or account name reached a payload whose bytes cannot be rewritten.
+
+    The text path can redact, because pretty-printed JSON survives a substring replacement. A
+    binary payload cannot: rewriting bytes inside a codec stream corrupts exactly the thing a
+    binary capture exists to preserve (protocol §3.6). So the tool stops and hands the decision
+    to a human, as it does for account tokens in a text body.
+    """
+    for value in values:
+        if value and value.encode("utf-8") in payload:
+            raise CaptureError(
+                "A credential or account name appears in the response bytes. A binary payload "
+                "cannot be redacted without corrupting the vendor's bytes the capture exists to "
+                "preserve, so nothing was written. Re-capture with a different credential, or "
+                "commit an envelope instead (protocol §7)."
+            )
+
+
+def response_media_type(headers: list[tuple[str, str]]) -> str | None:
+    """The media type the vendor declared, parameters stripped and lowercased."""
+    for name, value in headers:
+        if name.lower() == "content-type":
+            return value.split(";")[0].strip().lower() or None
+    return None
+
+
+def redact_correlation_fields(raw: str, fields: tuple[str, ...]) -> tuple[str, list[str]]:
+    """Replace correlation identifiers the vendor puts in its *body*, at any depth.
+
+    `redact()` can only remove values we already knew — the credential we sent. A request ID is
+    minted by the provider and is unknowable in advance, so it needs the opposite treatment:
+    name the *field*, replace whatever is in it. Protocol §4 bans these outright ("request IDs,
+    trace IDs, session IDs … tie a public artifact to a real, billed account"), and Google's
+    `requestId` is exactly one.
+
+    The field is kept and only its value replaced. That is deliberate: an unmodelled sibling is
+    precisely what these fixtures exist to hold a parser against, so deleting the key would
+    destroy the property the capture was taken for.
+    """
+    if not fields:
+        return raw, []
+
+    applied: list[str] = []
+
+    def walk(node: object) -> object:
+        if isinstance(node, dict):
+            scrubbed = {}
+            for key, value in node.items():
+                if key in fields:
+                    applied.append(key)
+                    scrubbed[key] = PLACEHOLDER_CORRELATION_ID
+                else:
+                    scrubbed[key] = walk(value)
+            return scrubbed
+        if isinstance(node, list):
+            return [walk(item) for item in node]
+        return node
+
+    scrubbed = walk(json.loads(raw))
+    return json.dumps(scrubbed, ensure_ascii=False), sorted(set(applied))
+
+
 def normalize_json(raw: str) -> str:
     """Pretty-print with 2-space indent, LF endings and a trailing newline (protocol §3.6).
 
@@ -211,6 +406,32 @@ def describe_headers(headers: list[tuple[str, str]]) -> str:
     return ", ".join(parts)
 
 
+def build_envelope(
+    *,
+    status: int,
+    headers: list[tuple[str, str]],
+    chunk_sizes: list[int],
+    body_omitted: str,
+) -> dict:
+    """Describe a response *without* recording its body (protocol §7, LMNT fallback).
+
+    Everything ADR-0041 wanted from an HTTP capture except the payload itself: a real status, a
+    real header set, a real content length and real chunk boundaries, so the strict matcher and
+    the frame-chunking path are still driven by something the vendor actually sent.
+
+    `content_length` is summed from the reads rather than copied from the header, because the
+    header is absent on a chunked response while the reads are what the SDK's own loop observes.
+    """
+    return {
+        "status": status,
+        "media_type": response_media_type(headers) or "unknown",
+        "content_length": sum(chunk_sizes),
+        "chunk_sizes": chunk_sizes,
+        "headers": describe_headers(headers),
+        "body_omitted": body_omitted,
+    }
+
+
 def build_sidecar(
     *,
     provider: str,
@@ -224,24 +445,31 @@ def build_sidecar(
     terms_verdict: str,
     terms_basis: str,
     notes: str,
+    media_type: str = "application/json",
+    capture_class: str = "recorded",
+    source_audio: dict | None = None,
 ) -> dict:
-    """Assemble the provenance sidecar (protocol §5)."""
+    """Assemble the provenance sidecar (protocol §5).
+
+    The last three arguments are what a non-STT-JSON capture varies: a TTS response is not
+    `application/json`, and a surface whose input is text carries a different `source_audio`
+    block. They default to the STT-JSON answers so the two Whisper surfaces keep emitting the
+    byte-identical sidecar they emitted before there was anything else to emit.
+    """
     return {
         "schema": SCHEMA,
-        "class": "recorded",
+        "class": capture_class,
         "provider": provider,
         "product": product,
         "endpoint": endpoint,
         "api_version": api_version,
         "captured_utc": captured_utc,
-        "media_type": "application/json",
+        "media_type": media_type,
         "bytes": len(payload),
         "sha256": hashlib.sha256(payload).hexdigest(),
-        "source_audio": {
-            "origin": "synthetic",
-            "description": SOURCE_AUDIO_DESCRIPTION,
-            "license": "n/a",
-        },
+        # Copied, not aliased: a sidecar the caller can mutate through is a fixture that changes
+        # between two captures in the same run.
+        "source_audio": dict(source_audio or SOURCE_AUDIO_SYNTHETIC),
         "redaction": {"applied": redaction_applied, "notes": redaction_notes},
         "terms": {
             "verdict": terms_verdict,
@@ -254,6 +482,44 @@ def build_sidecar(
 
 # --- Provider definitions -----------------------------------------------------------------
 
+# Every plan is merged over these, so a plan states only what its surface does differently. The
+# defaults are the STT-JSON answers this tool started with, which is also why adding the other
+# three surfaces changed no byte either Whisper surface writes.
+PLAN_DEFAULTS = {
+    "recordings_dir": STT_RECORDINGS,
+    "scenario_slug": SCENARIO_SLUG,
+    "artifact": "json",
+    "media_type": "application/json",
+    "extension": "json",
+    "capture_class": "recorded",
+    "source_audio": SOURCE_AUDIO_SYNTHETIC,
+    "account_tokens": {},
+    "correlation_fields": (),
+}
+
+# The surfaces that submit audio. The TTS ones submit text, so requiring the committed source
+# capture for them would fail a capture over a file it never reads.
+AUDIO_INPUT_PROVIDERS = frozenset({"openai-whisper", "azure-openai-whisper", "google-speech"})
+
+JSON_REDACTION_NOTES = (
+    "Body is the vendor's JSON, unmodified apart from pretty-printing to 2-space indent with a "
+    "trailing newline (protocol §3.6); no field was removed."
+)
+
+GOOGLE_REDACTION_NOTES = (
+    "Body is the vendor's JSON, pretty-printed to 2-space indent with a trailing newline "
+    "(protocol §3.6). No field was removed, but one value was replaced: Google returns a "
+    "`requestId` correlation identifier, which protocol §4 bans from a committed file. The key is "
+    "kept — an unmodelled sibling is exactly what this fixture holds the parser against — and only "
+    "its value carries the §4 placeholder."
+)
+
+MULTIPART_FIDELITY_NOTE = (
+    "Captured by scripts/capture-provider-recording.py, which sends the same multipart shape the "
+    "SDK sends (file part without Content-Type, text parts as text/plain; charset=utf-8) so the "
+    "fixture matches production traffic."
+)
+
 
 def _require_env(name: str) -> str:
     value = os.environ.get(name, "").strip()
@@ -265,13 +531,96 @@ def _require_env(name: str) -> str:
     return value
 
 
-def openai_whisper_plan(wav: bytes) -> dict:
+# --- Response verifiers -------------------------------------------------------------------
+#
+# One per response shape, not one per provider: what makes a capture meaningful differs by what
+# came back. Each raises when the response asserts nothing, and otherwise returns the sentence
+# the sidecar opens its `notes` with — so the check and the record of what was checked cannot
+# drift apart.
+
+
+def whisper_verify(body: str) -> str:
+    """OpenAI-shaped transcription response: `{"text": "…"}`."""
+    transcript = json.loads(body).get("text", "")
+    if not transcript.strip():
+        raise CaptureError(
+            "The provider returned an empty transcript. A capture that transcribes to nothing "
+            "asserts nothing — check the source audio reached the request intact."
+        )
+    return f"Transcript: {transcript!r}."
+
+
+def google_verify(body: str) -> str:
+    """Google-shaped response: `{"results":[{"alternatives":[{"transcript": "…"}]}]}`.
+
+    Reads the same path `GoogleSpeechRecognizer` reads — first result, first alternative — so a
+    response the SDK would surface as silence fails here too. Google answers `{}` when it
+    recognizes nothing, which is a 200 that proves the round trip and nothing else.
+    """
+    parsed = json.loads(body)
+    results = parsed.get("results") or []
+    alternatives = (results[0].get("alternatives") if results else None) or []
+    transcript = alternatives[0].get("transcript", "") if alternatives else ""
+    if not transcript.strip():
+        raise CaptureError(
+            "Google returned no transcript (an empty object is what speech:recognize sends when "
+            "it recognizes nothing). A capture that transcribes to nothing asserts nothing — "
+            "check the audio was submitted as raw LINEAR16 at the sample rate the config "
+            "declares."
+        )
+    return f"Transcript: {transcript!r}."
+
+
+def speechmatics_verify(payload: bytes) -> str:
+    """Synthesized audio: the check is that it is audio at all.
+
+    A vendor that answers 200 with a JSON error envelope, or with an empty body, would otherwise
+    be committed as a "recording" of silence — and a binary capture nobody can play is the one
+    kind of fixture no reviewer catches by reading the diff.
+    """
+    if not payload:
+        raise CaptureError(
+            "Speechmatics returned an empty body. A zero-byte capture drives no frame boundary "
+            "and asserts nothing."
+        )
+    if payload.lstrip()[:1] in (b"{", b"["):
+        raise CaptureError(
+            "Speechmatics returned JSON, not audio, under a success status. Read the body "
+            "manually before re-capturing — it is most likely an error envelope."
+        )
+    riff = payload[:4] == b"RIFF" and payload[8:12] == b"WAVE"
+    container = "a RIFF/WAVE container" if riff else "no RIFF/WAVE header"
+    return f"{len(payload)} bytes of synthesized audio with {container}."
+
+
+def lmnt_verify(envelope: dict) -> str:
+    """Envelope-only capture: verified against the envelope, because that *is* the capture."""
+    if envelope["status"] != 200:
+        raise CaptureError(
+            f"LMNT answered HTTP {envelope['status']}. Only a success envelope is worth "
+            "committing as the shape the SDK's happy path meets."
+        )
+    if not envelope["chunk_sizes"]:
+        raise CaptureError(
+            "LMNT returned no body bytes. An envelope with a zero content length records no "
+            "frame boundary, which is the one thing this capture exists to record."
+        )
+    return (
+        f"{envelope['content_length']} bytes of {envelope['media_type']} observed in "
+        f"{len(envelope['chunk_sizes'])} reads; the audio itself was discarded, not written."
+    )
+
+
+# --- Request plans ------------------------------------------------------------------------
+
+
+def openai_whisper_plan(source_pcm: bytes) -> dict:
     """Request plan for the OpenAI Whisper surface (§4.1)."""
     api_key = _require_env("OPENAI_API_KEY")
     boundary = uuid.uuid4().hex
+    wav = wav_from_pcm(source_pcm)
 
     return {
-        "provider": "openai-whisper",
         "product": "OpenAI — audio transcriptions (Whisper)",
         "url": "https://api.openai.com/v1/audio/transcriptions",
         "endpoint_template": "POST https://api.openai.com/v1/audio/transcriptions",
@@ -282,6 +631,13 @@ def openai_whisper_plan(wav: bytes) -> dict:
         # OpenAI's URL carries no account-scoped segment, unlike Azure's.
         "account_tokens": {},
         "redaction_applied": ["authorization bearer request header"],
+        "redaction_notes": (
+            f"{JSON_REDACTION_NOTES} The credential rode in a request header and never appeared "
+            "in the response."
+        ),
+        "notes": MULTIPART_FIDELITY_NOTE,
+        "verify": whisper_verify,
+        "request_summary": f"multipart, {len(wav)} bytes of WAV",
         "headers": {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": f"multipart/form-data; boundary={boundary}",
@@ -296,16 +652,16 @@ def openai_whisper_plan(wav: bytes) -> dict:
     }
 
 
-def azure_openai_whisper_plan(wav: bytes) -> dict:
+def azure_openai_whisper_plan(source_pcm: bytes) -> dict:
     """Request plan for the Azure OpenAI Whisper surface (§4.2)."""
     api_key = _require_env("AZURE_OPENAI_API_KEY")
     endpoint = deployments_base(_require_env("AZURE_OPENAI_ENDPOINT"))
     deployment = _require_env("AZURE_OPENAI_DEPLOYMENT")
     api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-01").strip()
     boundary = uuid.uuid4().hex
+    wav = wav_from_pcm(source_pcm)
 
     return {
-        "provider": "azure-openai-whisper",
         "product": "Azure OpenAI Service — audio transcriptions (Whisper)",
         "url": f"{endpoint}/{deployment}/audio/transcriptions?api-version={api_version}",
         "endpoint_template": (
@@ -330,6 +686,13 @@ def azure_openai_whisper_plan(wav: bytes) -> dict:
             "resource-scoped host segment",
             "deployment name",
         ],
+        "redaction_notes": (
+            f"{JSON_REDACTION_NOTES} The credential rode in a request header and never appeared "
+            "in the response."
+        ),
+        "notes": MULTIPART_FIDELITY_NOTE,
+        "verify": whisper_verify,
+        "request_summary": f"multipart, {len(wav)} bytes of WAV",
         "headers": {
             "api-key": api_key,
             "Content-Type": f"multipart/form-data; boundary={boundary}",
@@ -340,24 +703,347 @@ def azure_openai_whisper_plan(wav: bytes) -> dict:
     }
 
 
+# Google's REST reference for speech:recognize lists exactly one authorization requirement —
+# "Requires the following OAuth scope: https://www.googleapis.com/auth/cloud-platform" — and
+# documents no API-key support, so the `?key=` auth GoogleSpeechRecognizer sends is expected to
+# come back 401/403. That is a defect in shipped code, it is known, and fixing it is not this
+# script's job; capturing what the SDK actually sends is. Hence two credentials: the key path is
+# the default because it is the SDK's request, and the token path exists so a success-path body
+# is obtainable at all — at the cost, recorded in the sidecar, of a capture whose auth is not the
+# one production uses.
+GOOGLE_CREDENTIAL_RULE = (
+    "Set exactly one of GOOGLE_SPEECH_API_KEY or GOOGLE_ACCESS_TOKEN. The SDK authenticates with "
+    "?key=, which speech:recognize does not document as supported (its reference lists only the "
+    "cloud-platform OAuth scope), so the SDK-faithful request is expected to fail with 401/403; "
+    "GOOGLE_ACCESS_TOKEN captures the same request under Bearer auth so a success path can be "
+    "recorded at all, and the sidecar then says so."
+)
+
+GOOGLE_TERMS_UNCERTAINTY_NOTE = (
+    "Terms caveat carried from protocol §7: the Service Specific Terms' enumeration of which "
+    "products count as an \"AI/ML Service\" could not be read first-hand, and Speech-to-Text's "
+    "presence in it is expected rather than confirmed. If it is not enumerated, the output-"
+    "ownership clause this capture's `permitted` verdict rests on does not apply and the verdict "
+    "drops to not-cleared. Confirm the enumeration before relying on this fixture."
+)
+
+GOOGLE_BEARER_AUTH_NOTE = (
+    "Auth differs from production, deliberately: this capture was taken with an OAuth access "
+    "token (Authorization: Bearer) while GoogleSpeechRecognizer authenticates with the ?key= "
+    "query parameter, which the endpoint's reference does not document as supported and which "
+    "returns 401/403. The request line, body and response shape are the SDK's; only the "
+    "credential differs, and a fixture asserting the SDK's own auth mechanism cannot be captured "
+    "until that is fixed in src/."
+)
+
+
+def google_speech_plan(source_pcm: bytes) -> dict:
+    """Request plan for the Google Cloud Speech-to-Text v1 surface.
+
+    Reproduces `GoogleSpeechRecognizer.StreamAsync`: compact JSON, the DTO's own field order and
+    names, and **raw** LINEAR16 in `audio.content` — the recognizer base64-encodes the frames it
+    drained without adding a RIFF header, so wrapping the PCM the way the Whisper surfaces do
+    would decode 44 bytes of header as samples and capture a request production never sends.
+    """
+    api_key = os.environ.get("GOOGLE_SPEECH_API_KEY", "").strip()
+    access_token = os.environ.get("GOOGLE_ACCESS_TOKEN", "").strip()
+    if bool(api_key) == bool(access_token):
+        raise CaptureError(GOOGLE_CREDENTIAL_RULE)
+
+    body = json.dumps(
+        {
+            "config": {
+                "encoding": "LINEAR16",
+                "sampleRateHertz": SOURCE_SAMPLE_RATE,
+                "languageCode": "es-CO",
+                "model": "default",
+            },
+            "audio": {"content": base64.b64encode(source_pcm).decode("ascii")},
+        },
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+    # StringContent(json, Encoding.UTF8, "application/json") emits the charset parameter; a
+    # matcher configured from a capture taken without it would not match production.
+    headers = {"Content-Type": "application/json; charset=utf-8"}
+    notes = [
+        "Captured by scripts/capture-provider-recording.py, which sends the same compact JSON "
+        "body the SDK sends — the DTO's field names and order, and raw LINEAR16 in "
+        "audio.content with no RIFF header.",
+        GOOGLE_TERMS_UNCERTAINTY_NOTE,
+    ]
+
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+        url = "https://speech.googleapis.com/v1/speech:recognize"
+        endpoint_template = f"POST {url}"
+        redaction_applied = ["authorization bearer request header"]
+        redaction_notes = (
+            f"{GOOGLE_REDACTION_NOTES} The credential rode in a request header and never appeared "
+            "in the response."
+        )
+        notes.append(GOOGLE_BEARER_AUTH_NOTE)
+    else:
+        url = f"https://speech.googleapis.com/v1/speech:recognize?key={api_key}"
+        # The key rides in the query string, so the *endpoint* is a place it can leak. Protocol
+        # §4's placeholder table names this exact case; redact() only ever sees bodies.
+        endpoint_template = (
+            f"POST https://speech.googleapis.com/v1/speech:recognize?key={PLACEHOLDER_API_KEY}"
+        )
+        redaction_applied = ["api key query-string parameter"]
+        redaction_notes = (
+            f"{GOOGLE_REDACTION_NOTES} The credential rode in the request's query string and never "
+            f"appeared in the response; the recorded endpoint carries ?key={PLACEHOLDER_API_KEY} "
+            "in its place."
+        )
+
+    return {
+        # Protocol §2 fixes this tree's directory name as `google-stt`, while the CLI names the
+        # SDK surface being captured. They are allowed to differ; the sidecar follows §2.
+        "provider_slug": "google-stt",
+        "product": "Google Cloud Speech-to-Text — v1 speech:recognize",
+        # Google returns a 19-digit `requestId` in the response body. Protocol §4 bans committing
+        # request/trace identifiers outright, and no guard catches it: a bare number is not
+        # credential-shaped, so `check-recording-redaction.py` reads it as ordinary payload.
+        # Named here rather than detected, because only the vendor's own schema says which field
+        # is an identifier and which is data.
+        "correlation_fields": ("requestId",),
+        "source_audio": {
+            "origin": "synthetic",
+            "description": GOOGLE_SOURCE_AUDIO_DESCRIPTION,
+            "license": "n/a",
+        },
+        "url": url,
+        "endpoint_template": endpoint_template,
+        "api_version": "v1",
+        "terms_verdict": "permitted",
+        "terms_basis": (
+            "docs/guides/provider-recording-protocol.md section 7 (Google Speech-to-Text)"
+        ),
+        "secrets": [api_key or access_token],
+        "account_tokens": {},
+        "redaction_applied": redaction_applied,
+        "redaction_notes": redaction_notes,
+        # No accuracy or latency figure belongs in this file or any sidecar: protocol §7's
+        # Google row conditions public benchmark results on replication data and reciprocity.
+        "notes": " ".join(notes),
+        "verify": google_verify,
+        "request_summary": f"JSON, {len(source_pcm)} bytes of LINEAR16 PCM base64-encoded",
+        "headers": headers,
+        "body": body,
+    }
+
+
+def speechmatics_tts_plan(source_pcm: bytes) -> dict:
+    """Request plan for the Speechmatics preview TTS surface.
+
+    Reproduces `SpeechmaticsSpeechSynthesizer.SynthesizeAsync` at the shipped `SpeechmaticsOptions`
+    defaults — voice `eleanor`, language `en`, 16 kHz — because those are the values a caller who
+    configures nothing sends. `source_pcm` is ignored: this surface's input is text.
+    """
+    api_key = _require_env("SPEECHMATICS_API_KEY")
+
+    # Field names and order from SpeechmaticsTtsRequest; compact, as System.Text.Json writes it.
+    body = json.dumps(
+        {
+            "text": TTS_INPUT_TEXT,
+            "voice": "eleanor",
+            "language": "en",
+            "sample_rate": 16000,
+        },
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+    return {
+        "product": "Speechmatics — text to speech (preview)",
+        "url": "https://preview.tts.speechmatics.com/generate",
+        "endpoint_template": "POST https://preview.tts.speechmatics.com/generate",
+        "api_version": "preview",
+        "recordings_dir": TTS_RECORDINGS,
+        "scenario_slug": TTS_SCENARIO_SLUG,
+        "artifact": "binary",
+        # The expectation, not the finding: the media type actually written to the sidecar is the
+        # one the vendor declares on the response, and the extension follows it.
+        "media_type": "audio/wav",
+        "extension": "wav",
+        "source_audio": tts_source_audio("eleanor"),
+        "terms_verdict": "permitted-with-conditions",
+        "terms_basis": (
+            "docs/guides/provider-recording-protocol.md section 7 (Speechmatics TTS)"
+        ),
+        "secrets": [api_key],
+        "account_tokens": {},
+        "redaction_applied": ["authorization bearer request header"],
+        "redaction_notes": (
+            "Body bytes are the vendor's, unmodified — not transcoded, trimmed or re-encoded "
+            "(protocol §3.6). The credential rode in a request header."
+        ),
+        "notes": (
+            "Captured by scripts/capture-provider-recording.py, which sends the same compact "
+            "JSON body the SDK sends at its shipped defaults (voice eleanor, language en, 16 kHz "
+            "— SpeechmaticsTtsRequest's field names and order). One short sentence, per protocol "
+            "§7's condition that synthesized-audio captures stay minimal: §10.3's express IP "
+            "assignment is written about Transcripts, and the TTS direction rests on §10.5's "
+            "weaker derivatives language, so this fixture is permitted by inference rather than "
+            "by an express grant. Re-read §10 before re-capturing."
+        ),
+        "verify": speechmatics_verify,
+        "request_summary": "JSON",
+        "headers": {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json; charset=utf-8",
+        },
+        "body": body,
+    }
+
+
+LMNT_BODY_OMITTED = (
+    "LMNT's synthesized audio is deliberately not recorded here. Protocol §7 rates the LMNT HTTP "
+    "surface not-cleared — its ToS grants no rights in generated output and its AUP restricts "
+    "sharing synthesized speech — so the conservative fallback applies: commit the envelope, "
+    "never the bytes."
+)
+
+
+def lmnt_http_plan(source_pcm: bytes) -> dict:
+    """Request plan for the LMNT HTTP surface — envelope only (protocol §7).
+
+    Reproduces the form-encoded POST in `LmntSpeechSynthesizer.SynthesizeHttpAsync` at the
+    shipped `LmntTtsOptions` defaults, field order included. `Model` is left out because the
+    option defaults to null and the synthesizer only adds the field when it is set.
+    `source_pcm` is ignored: this surface's input is text.
+    """
+    api_key = _require_env("LMNT_API_KEY")
+
+    body = urllib.parse.urlencode(
+        {
+            "voice": "leah",
+            "text": TTS_INPUT_TEXT,
+            "format": "raw",
+            "sample_rate": "16000",
+            "language": "en",
+            "speed": "1.00",
+        }
+    ).encode("ascii")
+
+    return {
+        "product": "LMNT — text to speech (HTTP)",
+        "url": "https://api.lmnt.com/v1/ai/speech/generate",
+        "endpoint_template": "POST https://api.lmnt.com/v1/ai/speech/generate",
+        "api_version": "1.0",
+        "recordings_dir": TTS_RECORDINGS,
+        "scenario_slug": TTS_SCENARIO_SLUG,
+        "artifact": "envelope",
+        # The capture file is JSON describing an audio response; the audio's own media type is
+        # recorded inside the envelope, where it belongs.
+        "media_type": "application/json",
+        "extension": "json",
+        "source_audio": tts_source_audio("leah"),
+        "terms_verdict": "not-cleared",
+        "terms_basis": "docs/guides/provider-recording-protocol.md section 7 (LMNT HTTP)",
+        "secrets": [api_key],
+        "account_tokens": {},
+        "redaction_applied": ["x-api-key request header"],
+        "redaction_notes": (
+            "No vendor payload was recorded at all — only the response's status, header names, "
+            "media type, length and chunk boundaries. Header values are recorded solely where "
+            "they carry no account or correlation identifier. The credential rode in a request "
+            "header."
+        ),
+        "body_omitted": LMNT_BODY_OMITTED,
+        "notes": (
+            "LMNT's audio bytes are deliberately not committed: protocol §7 (LMNT HTTP) rates "
+            "the surface not-cleared and prescribes committing the response envelope instead. "
+            "This capture is that envelope. To finish the fixture pair §7 asks for, add a "
+            "same-codec body built from synthetic or public-domain audio as a separate "
+            "class: \"synthetic\" file — this script does not synthesize one. chunk_sizes are "
+            "the lengths successive 8 KiB reads returned, matching LmntSpeechSynthesizer's own "
+            "HttpChunkSize buffer; they are read boundaries, not TCP frames."
+        ),
+        "verify": lmnt_verify,
+        "request_summary": "form-encoded",
+        "headers": {
+            "X-API-Key": api_key,
+            "lmnt-version": "1.0",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        "body": body,
+    }
+
+
 PROVIDERS = {
     "openai-whisper": openai_whisper_plan,
     "azure-openai-whisper": azure_openai_whisper_plan,
+    "google-speech": google_speech_plan,
+    "speechmatics-tts": speechmatics_tts_plan,
+    "lmnt-http": lmnt_http_plan,
 }
+
+
+def build_plan(provider: str, repo_root: Path) -> dict:
+    """Load whatever the surface submits, build its plan, and fill in the shared defaults."""
+    source_pcm = b""
+    if provider in AUDIO_INPUT_PROVIDERS:
+        source = repo_root / SOURCE_PCM
+        if not source.is_file():
+            raise CaptureError(
+                f"Source audio {SOURCE_PCM} not found. It is the committed Azure TTS capture; "
+                "this script does not invent audio (protocol §6)."
+            )
+        source_pcm = source.read_bytes()
+
+    plan = {**PLAN_DEFAULTS, "provider_slug": provider, **PROVIDERS[provider](source_pcm)}
+    if plan["artifact"] not in ARTIFACT_MODES:
+        raise CaptureError(
+            f"Plan for {provider} declares artifact {plan['artifact']!r}; expected one of "
+            f"{', '.join(ARTIFACT_MODES)}."
+        )
+
+    required = REQUIRED_PLAN_KEYS + (("body_omitted",) if plan["artifact"] == "envelope" else ())
+    missing = [key for key in required if key not in plan]
+    if missing:
+        raise CaptureError(
+            f"Plan for {provider} is missing {', '.join(missing)}. Nothing was sent."
+        )
+    return plan
 
 
 # --- Capture ------------------------------------------------------------------------------
 
 
-def send(plan: dict, timeout: int) -> tuple[str, list[tuple[str, str]]]:
-    """Issue the capture request, returning the body and the observed response headers."""
+def send(
+    plan: dict, timeout: int, *, retain_body: bool = True
+) -> tuple[int, list[tuple[str, str]], bytes, list[int]]:
+    """Issue the capture request, returning status, headers, body and read boundaries.
+
+    The body is read in `READ_CHUNK_BYTES` reads whatever the artifact mode, so the chunk sizes
+    an envelope records are observations rather than arithmetic. `retain_body=False` is how the
+    envelope mode keeps its promise structurally: the audio is counted and dropped one read at a
+    time, so there is never a whole payload in memory for a later line of code to write out.
+    """
     request = urllib.request.Request(  # noqa: S310 - fixed https provider endpoints
         plan["url"], data=plan["body"], headers=plan["headers"], method="POST"
     )
 
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
-            return response.read().decode("utf-8"), list(response.headers.items())
+            buffered = bytearray()
+            chunk_sizes: list[int] = []
+            while True:
+                chunk = response.read(READ_CHUNK_BYTES)
+                if not chunk:
+                    break
+                chunk_sizes.append(len(chunk))
+                if retain_body:
+                    buffered += chunk
+            return (
+                response.status,
+                list(response.headers.items()),
+                bytes(buffered),
+                chunk_sizes,
+            )
     except urllib.error.HTTPError as error:
         detail = redact(error.read().decode("utf-8", "replace"), plan["secrets"])
         raise CaptureError(
@@ -367,76 +1053,132 @@ def send(plan: dict, timeout: int) -> tuple[str, list[tuple[str, str]]]:
         raise CaptureError(f"Could not reach the provider: {error.reason}") from error
 
 
-def capture(provider: str, repo_root: Path, force: bool, timeout: int) -> int:
-    source = repo_root / SOURCE_PCM
-    if not source.is_file():
+def refuse_overwrite(path: Path, repo_root: Path, force: bool) -> None:
+    """Stop before replacing a fixture a human already reviewed."""
+    if path.exists() and not force:
         raise CaptureError(
-            f"Source audio {SOURCE_PCM} not found. It is the committed Azure TTS capture; "
-            "this script does not invent audio (protocol §6)."
-        )
-
-    target_dir = repo_root / STT_RECORDINGS / provider
-    capture_path = target_dir / f"{SCENARIO_SLUG}.json"
-    sidecar_path = target_dir / f"{SCENARIO_SLUG}.provenance.json"
-
-    if capture_path.exists() and not force:
-        raise CaptureError(
-            f"{capture_path.relative_to(repo_root)} already exists. Re-capturing replaces a "
+            f"{path.relative_to(repo_root)} already exists. Re-capturing replaces a "
             "reviewed fixture — pass --force if that is what you mean."
         )
 
-    wav = wav_from_pcm(source.read_bytes())
-    plan = PROVIDERS[provider](wav)
 
-    print(f"POST {plan['endpoint_template'].split(' ', 1)[1]}")
-    print(f"  request body: {len(plan['body'])} bytes multipart ({len(wav)} bytes of WAV)")
-
-    raw_body, headers = send(plan, timeout)
-    body = normalize_json(redact(raw_body, plan["secrets"]))
-    assert_no_account_token_leak(body, plan.get("account_tokens", {}))
-    payload = body.encode("utf-8")
-
-    transcript = json.loads(body).get("text", "")
-    if not transcript.strip():
-        raise CaptureError(
-            "The provider returned an empty transcript. A capture that transcribes to nothing "
-            "asserts nothing — check the source audio reached the request intact."
-        )
-
-    if len(payload) > TEXT_SIZE_SMELL_BYTES:
+def warn_if_oversized_text(size: int) -> None:
+    """Advisory only (protocol §8) — a large JSON capture is a smell, not a violation."""
+    if size > TEXT_SIZE_SMELL_BYTES:
         print(
-            f"  WARNING: {len(payload)} bytes exceeds the {TEXT_SIZE_SMELL_BYTES}-byte advisory "
+            f"  WARNING: {size} bytes exceeds the {TEXT_SIZE_SMELL_BYTES}-byte advisory "
             "threshold for a text capture (protocol §8). Consider pruning unbounded arrays and "
             "recording the pruning in redaction.notes.",
             file=sys.stderr,
         )
 
+
+def capture(provider: str, repo_root: Path, force: bool, timeout: int) -> int:
+    plan = build_plan(provider, repo_root)
+    artifact = plan["artifact"]
+
+    target_dir = repo_root / plan["recordings_dir"] / plan["provider_slug"]
+    slug = plan["scenario_slug"]
+    capture_path = target_dir / f"{slug}.{plan['extension']}"
+    sidecar_path = target_dir / f"{slug}.provenance.json"
+
+    refuse_overwrite(capture_path, repo_root, force)
+
+    print(f"POST {plan['endpoint_template'].split(' ', 1)[1]}")
+    print(f"  request body: {len(plan['body'])} bytes — {plan['request_summary']}")
+
+    status, headers, raw_body, chunk_sizes = send(
+        plan, timeout, retain_body=artifact != "envelope"
+    )
+
+    media_type = plan["media_type"]
+    text: str | None = None
+    # Only the json branch can carry vendor-minted identifiers in a structure we parse; binary
+    # bytes and the envelope (which never holds the body) have nowhere to hide one. Initialized
+    # here because the sidecar below is shared by all three branches.
+    correlation_applied: list[str] = []
+
+    if artifact == "json":
+        scrubbed, correlation_applied = redact_correlation_fields(
+            redact(raw_body.decode("utf-8"), plan["secrets"]), plan["correlation_fields"]
+        )
+        text = normalize_json(scrubbed)
+        assert_no_account_token_leak(text, plan["account_tokens"])
+        payload = text.encode("utf-8")
+        description = plan["verify"](text)
+        warn_if_oversized_text(len(payload))
+        if correlation_applied:
+            print(
+                "  redacted correlation identifiers in the response body: "
+                + ", ".join(correlation_applied)
+            )
+
+    elif artifact == "binary":
+        payload = raw_body
+        assert_no_secret_bytes(payload, [*plan["secrets"], *plan["account_tokens"].values()])
+        description = plan["verify"](payload)
+        if len(payload) > BINARY_SIZE_CAP_BYTES:
+            raise CaptureError(
+                f"The response is {len(payload)} bytes, over the {BINARY_SIZE_CAP_BYTES}-byte "
+                "cap protocol §8 places on a binary capture, so nothing was written. Shorten the "
+                "input text and re-capture. The cap has an exception path — §8's three "
+                "conditions, Git-LFS included — but it is deliberately narrow, and a short "
+                "sentence proves the frame-chunking path exactly as well as a long one."
+            )
+        # The vendor's own declaration decides both, so a response that stops being WAV cannot
+        # land in a file that still claims to be one.
+        media_type = response_media_type(headers) or plan["media_type"]
+        extension = MEDIA_TYPE_EXTENSIONS.get(media_type, plan["extension"])
+        if extension != plan["extension"]:
+            print(
+                f"  WARNING: the response declared {media_type}, not the expected "
+                f"{plan['media_type']}. Writing .{extension} and recording the declared type; "
+                "check whether the SDK's expectations have gone stale.",
+                file=sys.stderr,
+            )
+            capture_path = target_dir / f"{slug}.{extension}"
+            refuse_overwrite(capture_path, repo_root, force)
+
+    else:  # envelope
+        envelope = build_envelope(
+            status=status,
+            headers=headers,
+            chunk_sizes=chunk_sizes,
+            body_omitted=plan["body_omitted"],
+        )
+        description = plan["verify"](envelope)
+        text = json.dumps(envelope, indent=2, ensure_ascii=False) + "\n"
+        payload = text.encode("utf-8")
+        warn_if_oversized_text(len(payload))
+
     sidecar = build_sidecar(
-        provider=provider,
+        provider=plan["provider_slug"],
         product=plan["product"],
         endpoint=plan["endpoint_template"],
         api_version=plan["api_version"],
         captured_utc=_dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d"),
         payload=payload,
-        redaction_applied=plan["redaction_applied"],
+        redaction_applied=[
+            *plan["redaction_applied"],
+            *(f"{field} correlation identifier (response body)" for field in correlation_applied),
+        ],
         redaction_notes=(
-            "Body is the vendor's JSON, unmodified apart from pretty-printing to 2-space indent "
-            "with a trailing newline (protocol §3.6); no field was removed. The credential rode "
-            "in a request header and never appeared in the response. Observed response headers, "
-            "values recorded only where they carry no account or correlation identifier: "
-            f"{describe_headers(headers)}."
+            f"{plan['redaction_notes']} Observed response headers, values recorded only where "
+            f"they carry no account or correlation identifier: {describe_headers(headers)}."
         ),
         terms_verdict=plan["terms_verdict"],
         terms_basis=plan["terms_basis"],
-        notes=(
-            f"Transcript: {transcript!r}. Captured by scripts/capture-provider-recording.py, "
-            "which sends the same multipart shape the SDK sends (file part without Content-Type, "
-            "text parts as text/plain; charset=utf-8) so the fixture matches production traffic."
-        ),
+        notes=f"{description} {plan['notes']}",
+        media_type=media_type,
+        capture_class=plan["capture_class"],
+        source_audio=plan["source_audio"],
     )
 
     target_dir.mkdir(parents=True, exist_ok=True)
-    capture_path.write_text(body, encoding="utf-8", newline="\n")
+    if text is None:
+        capture_path.write_bytes(payload)
+    else:
+        capture_path.write_text(text, encoding="utf-8", newline="\n")
     sidecar_path.write_text(
         json.dumps(sidecar, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
@@ -445,7 +1187,7 @@ def capture(provider: str, repo_root: Path, force: bool, timeout: int) -> int:
 
     print(f"  wrote {capture_path.relative_to(repo_root)} ({len(payload)} bytes)")
     print(f"  wrote {sidecar_path.relative_to(repo_root)}")
-    print(f"  transcript: {transcript!r}")
+    print(f"  {description}")
     print()
     print("Next: python3 scripts/check-recording-redaction.py .")
     print("Then REVOKE the credential you just used (protocol §3.3).")
@@ -454,8 +1196,14 @@ def capture(provider: str, repo_root: Path, force: bool, timeout: int) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Capture a real STT provider response into a committed fixture.",
-        epilog="Credentials come from the environment; see the module docstring.",
+        description=(
+            "Capture a real speech-provider response (STT or TTS) into a committed fixture."
+        ),
+        epilog=(
+            "Credentials come from the environment; see the module docstring. What lands on "
+            "disk depends on the surface: the vendor's JSON, the vendor's bytes, or — where the "
+            "terms do not permit committing the payload — a response envelope without it."
+        ),
     )
     parser.add_argument("provider", choices=sorted(PROVIDERS))
     parser.add_argument(

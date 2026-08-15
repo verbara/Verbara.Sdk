@@ -21,7 +21,7 @@ Read it before capturing anything. Every recording in this repository is world-r
 |------------|-------------------|
 | HTTP request/response captures replayed through the shared WireMock fixture (OpenAI Whisper, Azure OpenAI Whisper, Google Speech-to-Text, Azure TTS, Speechmatics TTS, LMNT HTTP) | Provider client code under `src/` |
 | WebSocket frame captures used to re-seed the in-process protocol fakes (Deepgram, AssemblyAI, Cartesia, Speechmatics STT; Cartesia, Deepgram, ElevenLabs, LMNT WS) | Anything outside a `Recordings/` tree |
-| Hand-authored fixtures that live in a `Recordings/` tree — these are legal, and MUST be labelled `synthetic` (ADR-0041 D4) | Audio assets used as *input* by a test that never leave the machine |
+| Hand-authored fixtures that live in a `Recordings/` tree — these are legal, and MUST be labelled `synthetic` (ADR-0041 D4). When authored from the vendor's published protocol documentation they also carry a `source_schema` block (§5) and `terms.verdict: "not-applicable"` (§7) | Audio assets used as *input* by a test that never leave the machine |
 
 ---
 
@@ -51,14 +51,18 @@ Tests/<TestProject>/Recordings/
 
 ## 3. Capture procedure
 
-> **Steps 4–8 are automated for the Whisper surfaces** by
-> `scripts/capture-provider-recording.py` (`openai-whisper`, `azure-openai-whisper`). It issues
-> the same multipart request the SDK issues — file part without a `Content-Type`, text parts as
-> `text/plain; charset=utf-8` — then redacts, normalizes, writes the sidecar and enforces the cap.
-> Credentials are read from the environment and never written or echoed. Steps 1–3 and 9–10 are
-> still yours: a tool cannot re-read a terms page or revoke a key. Extending it to a new provider
-> means adding one `*_plan` function; doing the capture by hand instead means re-deriving the
-> request shape, which is the part that is easy to get subtly wrong.
+> **Steps 4–8 are automated for five of the six HTTP surfaces** by
+> `scripts/capture-provider-recording.py` (`openai-whisper`, `azure-openai-whisper`,
+> `google-speech`, `speechmatics-tts`, `lmnt-http`). It issues the request each SDK client issues
+> — the multipart shape for the Whisper surfaces (file part without a `Content-Type`, text parts
+> as `text/plain; charset=utf-8`), the compact JSON with raw LINEAR16 for Google, the form
+> encoding for LMNT — then redacts, normalizes, writes the sidecar and enforces the cap. What it
+> commits follows the surface: the vendor's JSON, the vendor's bytes, or — for LMNT, whose
+> verdict is `not-cleared` — the §7 response envelope, with the audio counted and discarded
+> rather than written. Credentials are read from the environment and never written or echoed.
+> Steps 1–3 and 9–10 are still yours: a tool cannot re-read a terms page or revoke a key.
+> Extending it to a new provider means adding one `*_plan` function; doing the capture by hand
+> instead means re-deriving the request shape, which is the part that is easy to get subtly wrong.
 
 1. **Confirm the provider's terms still permit it.** Read §7 for the standing per-provider finding,
    then re-read the provider's live terms page. A finding recorded months ago is evidence, not
@@ -174,10 +178,25 @@ listing files it no longer describes.
 | `source_audio` | ✅ | Object — see below |
 | `redaction` | ✅ | `{ "applied": [ … ], "notes": "…" }`. `applied` lists what was stripped, by kind, never by value |
 | `terms` | ✅ | `{ "verdict": …, "basis": …, "checked_utc": … }` — see §7 |
+| `source_schema` | conditional | **Required when the fixture was authored from vendor documentation** (`class: "synthetic"`, `terms.verdict: "not-applicable"` — see §7). Object; see below |
 | `media_type` | ➖ | IANA media type of the capture |
 | `bytes` | ➖ | Size of the capture file |
 | `sha256` | ➖ | Hex digest of the capture file (use SHA-256, never MD5 — a 32-hex string is credential-shaped) |
 | `notes` | ➖ | Anything a reviewer needs |
+
+`source_schema` (§7, documentation-derived fixtures):
+
+| Key | Required | Meaning |
+|-----|----------|---------|
+| `url` | ✅ | The vendor documentation page the field set was taken from |
+| `revision` | ✅ | The page's own version/last-updated marker, verbatim, or `"undated"` if it publishes none |
+| `read_utc` | ✅ | `YYYY-MM-DD`, UTC — when that page was read. Decays exactly like `terms.checked_utc` |
+| `method` | ✅ | How the fixture was derived. States that the schema was conformed to and that no vendor example text was copied (§7) |
+
+**`revision: "undated"` is a finding, not a formality.** A vendor that publishes no revision marker
+on its protocol page gives a reader no way to tell a silent breaking edit from no edit at all, so a
+fixture built from it decays invisibly. Record it and move on — but it is the first thing to re-read
+when that provider's suite starts failing.
 
 `source_audio` (§6):
 
@@ -267,6 +286,7 @@ Copy the verdict into each capture's `terms` block and re-check before capturing
 | `permitted` | A clause grants the customer rights in the output that cover committing it here. |
 | `permitted-with-conditions` | As above, plus a condition this repo must actively satisfy. |
 | `not-cleared` | The terms do not clearly grant it. The conservative fallback applies; do not commit the payload. |
+| `not-applicable` | **No Output was captured at all** — the fixture is hand-authored to the vendor's *published protocol documentation*. Legal only with `class: "synthetic"` and a `source_schema` block (§5). See below. |
 
 ### How to read a provider's terms — the method, not just the answers
 
@@ -291,6 +311,37 @@ reader of the current text alone would draw), and **check whether the vendor pub
 documents** (Deepgram serves two live MSAs whose §8.2 clauses disagree on the single word that
 matters).
 
+### Documentation-derived fixtures — the route that needs no verdict
+
+Five of the eight WebSocket surfaces landed on `not-cleared`, which would leave their fakes seeded
+with the same hand-authored minimal JSON ADR-0041 D4 exists to retire. There is a second source of
+authority that sidesteps the terms question entirely, and where it exists it is **preferred over a
+capture**: the vendor's own **published protocol documentation**.
+
+**Why it is not a terms question.** Every verdict in this section is about redistributing a vendor's
+*Output* — the transcript or audio its model generated from our input. A fixture authored to a
+documented schema contains no Output. It carries the vendor's *interface*: message types, field
+names, nesting, cardinality, control-frame ordering. That is the vendor's published authority about
+its own wire format, and it is precisely the authority a parser should be checked against — closer to
+the thing under test than a single captured sample, which is one draw from the distribution.
+
+**Where the line is, and it matters.** Documentation is copyrighted prose; an interface is not.
+
+- **Do** author frames that carry the documented field set, nesting and types, with **fictional
+  values of our own** — the same fictional-content bar §6 sets for spoken text.
+- **Do not** paste a vendor's example payload, prose or field descriptions verbatim into the tree.
+  Copying their example blob is copying their expression; conforming to their schema is not.
+
+**What it costs, stated plainly.** A documented schema is what the vendor *says* it sends. A capture
+is what it actually sent on one day. Where the two disagree the capture wins, and this route cannot
+detect that disagreement — it closes the field-set and frame-ordering half of the D4 gap, not the
+does-the-vendor-honour-its-own-docs half. Say so in the sidecar's `notes` rather than implying a
+fidelity the artifact does not have.
+
+Such a fixture is `class: "synthetic"`, carries `terms.verdict: "not-applicable"`, and **must** carry
+the `source_schema` block from §5 so the authority it was built from is checkable and its decay is
+visible.
+
 | Provider | Verdict | Rests on |
 |----------|---------|----------|
 | OpenAI Whisper (STT) | `permitted-with-conditions` | Services Agreement §4.1 assigns all right/title/interest in Output to the customer (read first-hand, v.010126); §3.3 has no publication restriction |
@@ -300,6 +351,7 @@ matters).
 | Speechmatics TTS | `permitted-with-conditions` | ToS §10.3 assigns IP in outputs to the customer; §10.5 disclaims ownership of derivatives |
 | LMNT HTTP (TTS) | **`not-cleared`** | No output-rights clause exists; the AUP restricts sharing synthesized speech |
 | Cartesia STT + TTS (WS) | `permitted-with-conditions` | ToS §5.3 disclaims ownership of Outputs and §5.3(b) expressly permits use of Output outside the Services; AUP has no sharing restriction. Requires a commercial-use tier |
+| Speechmatics STT (WS) | `permitted` | Same ToS §10.3 as the TTS row, and this is the direction it was actually **written about** — it assigns IP in **Transcripts**. The TTS verdict is the weaker inference of the two, not this one. *(Row added 2026-08-14: the finding existed in the §5 prose and in `wiremock-http-provider-substrate`'s task list but had no row here.)* |
 | Deepgram STT + TTS (WS) | **`not-cleared`** | The only Output grant (MSA §8.2) binds solely via an executed Order Form; the self-serve console terms have no Output concept and reserve everything |
 | AssemblyAI STT (WS) | **`not-cleared`** | §4.4 "Output" grants nothing and §4.1 reserves all rights not expressly granted — the express customer-ownership-of-Outputs clause was **deleted** in the 2026-01-22 revision |
 | ElevenLabs TTS (WS) | **`not-cleared`** | ToS §4(c)(ii) grants Output rights but §4(a) subordinates them to the PUP, whose 9(n) bars terms "more permissive than" ElevenLabs' own (MIT is) and 9(l) bars Output as a dataset used for "testing" AI |
