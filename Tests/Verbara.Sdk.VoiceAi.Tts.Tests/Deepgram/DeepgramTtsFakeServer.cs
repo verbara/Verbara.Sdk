@@ -1,19 +1,67 @@
 using System.Net.WebSockets;
 using System.Text;
+using Verbara.Sdk.TestInfrastructure.Http;
 using Verbara.Sdk.TestInfrastructure.WebSocket;
 
 namespace Verbara.Sdk.VoiceAi.Tts.Tests.Deepgram;
 
 /// <summary>
 /// In-process WebSocket server that speaks the Deepgram TTS wire protocol
-/// (<c>wss://api.deepgram.com/v1/speak</c>).
+/// (<c>wss://api.deepgram.com/v1/speak</c>), seeded from the payloads in
+/// <c>Recordings/deepgram-tts/</c> rather than from <c>new byte[320]</c> and hand-authored control
+/// frames (ADR-0041 D4).
 /// </summary>
 /// <remarks>
+/// <para>
 /// Built on the shared <see cref="WebSocketTestServer"/> so that
 /// <c>AbortAfterSend</c> disposes cleanly — same pattern as <c>CartesiaFakeServer</c>.
+/// </para>
+/// <para>
+/// Only where the payloads come from changed. Accept, receive, answer and close sequencing is
+/// untouched (tasks.md §6.4) — this session still answers the client's <c>Flush</c> frame rather
+/// than a timer, which is the §8.5 fix and must stay that way.
+/// </para>
+/// <para>
+/// The <c>Metadata</c> frame carries the full documented field set, so <c>model_uuid</c> and
+/// <c>additional_model_uuids</c> — documented fields <c>DeepgramTtsServerMessage</c> does not model
+/// — reach the parser as unmodelled siblings. The audio is a locally generated tone, not
+/// Deepgram's: Deepgram is <c>not-cleared</c> for capturing Output
+/// (<c>docs/guides/provider-recording-protocol.md</c> §7). See the provenance sidecars.
+/// </para>
 /// </remarks>
 internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
 {
+    /// <summary>Locally generated PCM the session streams back — see its provenance sidecar.</summary>
+    public const string AudioChunk = "deepgram-tts/audio-linear16-16khz.raw";
+
+    /// <summary>Recorded <c>Metadata</c> control frame — informational, must be ignored.</summary>
+    public const string MetadataFrame = "deepgram-tts/metadata-frame.json";
+
+    /// <summary>Recorded <c>Warning</c> control frame — logged, must not break the stream.</summary>
+    public const string WarningFrame = "deepgram-tts/warning-frame.json";
+
+    /// <summary>Recorded <c>Flushed</c> control frame — the end-of-utterance terminator.</summary>
+    public const string FlushedFrame = "deepgram-tts/flushed-frame.json";
+
+    /// <summary>Size of each binary frame the session sends: 160 samples, 10 ms at 16 kHz.</summary>
+    public const int AudioFrameSize = 320;
+
+    // Generator parameters for AudioChunk, mirrored in its provenance sidecar. The regeneration
+    // fence test re-renders the file from exactly these three numbers.
+    public const int AudioSampleCount = 1204;
+    public const int AudioPeriodSamples = 32;
+    public const short AudioAmplitude = 10000;
+
+    // Resolved once per assembly: discovery walks the filesystem, and every payload in this suite
+    // comes out of the same tree.
+    private static readonly Lazy<ProviderRecordings> RecordingsTree = new(() => ProviderRecordings.Locate());
+
+    /// <summary>Read a recorded text payload.</summary>
+    public static string ReadFrame(string relativePath) => RecordingsTree.Value.ReadText(relativePath);
+
+    /// <summary>Read a recorded binary payload.</summary>
+    public static byte[] ReadFrameBytes(string relativePath) => RecordingsTree.Value.ReadBytes(relativePath);
+
     /// <summary>
     /// How long the session waits for the client's <c>Flush</c> frame before answering anyway.
     /// A client that was cancelled or aborted mid-send never sends one; the session must not hang.
@@ -53,20 +101,20 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
     public List<byte[]> AudioFramesToSend { get; } = [];
 
     /// <summary>
-    /// When <see langword="true"/>, the server emits a <c>{"type":"Flushed","sequence_id":1}</c>
-    /// text frame after all audio frames, signalling end-of-utterance. Defaults to <see langword="true"/>.
+    /// When <see langword="true"/>, the server emits the recorded <c>Flushed</c> frame after all
+    /// audio frames, signalling end-of-utterance. Defaults to <see langword="true"/>.
     /// </summary>
     public bool SendFlushedTerminator { get; set; } = true;
 
     /// <summary>
-    /// When <see langword="true"/>, a <c>{"type":"Warning","code":"W001","description":"test"}</c>
-    /// frame is sent before audio — verifies warning frames do not break the stream.
+    /// When <see langword="true"/>, the recorded <c>Warning</c> frame is sent before audio —
+    /// verifies warning frames do not break the stream.
     /// </summary>
     public bool SendWarningBeforeAudio { get; set; }
 
     /// <summary>
-    /// When <see langword="true"/>, a <c>{"type":"Metadata","request_id":"abc"}</c> frame is sent
-    /// after connect — verifies metadata frames are silently ignored.
+    /// When <see langword="true"/>, the recorded <c>Metadata</c> frame is sent after connect —
+    /// verifies metadata frames are silently ignored, unmodelled sibling fields included.
     /// </summary>
     public bool SendMetadataOnConnect { get; set; }
 
@@ -83,9 +131,10 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
     {
         _server = new WebSocketTestServer(HandleSessionAsync);
 
-        // Default: 2 audio frames of 320 bytes (20 ms of 8 kHz mono 16-bit PCM).
-        AudioFramesToSend.Add(new byte[320]);
-        AudioFramesToSend.Add(new byte[320]);
+        // Default seed: the recorded tone, split into 320-byte frames. Its length is deliberately
+        // not a multiple of AudioFrameSize, so the last frame is short and a partial final frame
+        // reaches the consumer — something two exact-multiple new byte[320] frames never produced.
+        AudioFramesToSend.AddRange(ReadFrameBytes(AudioChunk).Chunk(AudioFrameSize));
     }
 
     public void Start() => _server.Start();
@@ -189,14 +238,10 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
     private async Task SendOptionalPreambleAsync(System.Net.WebSockets.WebSocket ws, CancellationToken ct)
     {
         if (SendMetadataOnConnect)
-            await TrySendTextAsync(ws,
-                """{"type":"Metadata","request_id":"test-request-id","model_name":"aura-2-thalia-en","model_version":"1.0"}""",
-                ct).ConfigureAwait(false);
+            await TrySendTextAsync(ws, ReadFrame(MetadataFrame), ct).ConfigureAwait(false);
 
         if (SendWarningBeforeAudio)
-            await TrySendTextAsync(ws,
-                """{"type":"Warning","code":"W001","description":"test warning"}""",
-                ct).ConfigureAwait(false);
+            await TrySendTextAsync(ws, ReadFrame(WarningFrame), ct).ConfigureAwait(false);
     }
 
     private async Task SendAudioFramesAsync(System.Net.WebSockets.WebSocket ws, CancellationToken ct)
@@ -220,7 +265,7 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
     private async Task SendOptionalFlushedAsync(System.Net.WebSockets.WebSocket ws, CancellationToken ct)
     {
         if (SendFlushedTerminator)
-            await TrySendTextAsync(ws, """{"type":"Flushed","sequence_id":1}""", ct).ConfigureAwait(false);
+            await TrySendTextAsync(ws, ReadFrame(FlushedFrame), ct).ConfigureAwait(false);
     }
 
     private static async Task TrySendTextAsync(System.Net.WebSockets.WebSocket ws, string json, CancellationToken ct)

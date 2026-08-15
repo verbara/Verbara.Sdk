@@ -42,8 +42,10 @@ All notable changes to this project will be documented in this file.
 - **Speech-provider HTTP suites now run against a real loopback server, driven by recorded vendor
   responses** ([ADR-0041](docs/decisions/0041-wiremock-as-http-provider-test-substrate.md), Accepted
   2026-08-09; Phase A in [#149](https://github.com/verbara/Verbara.Sdk/pull/149)). **No public API
-  changes and no behaviour change on any production path** — this is test infrastructure. Three of
-  the six HTTP surfaces have migrated so far: Azure TTS, OpenAI Whisper and Azure OpenAI Whisper.
+  changes and no behaviour change on any production path** — this is test infrastructure. Four of
+  the six HTTP surfaces have migrated: Azure TTS, OpenAI Whisper, Azure OpenAI Whisper and Google
+  Speech-to-Text. **The remaining two cannot be migrated, for a reason worth reading below: they are
+  blocked on defects in shipped code, not on effort.**
   - **`WireMock.NET` replaces `MockHttpMessageHandler` on the HTTP side.** The old handler returned
     one canned response to *every* call, so a request sent to the wrong route or without the
     provider's credential passed silently. Matching is now strict (method + exact path + exhaustive
@@ -75,11 +77,78 @@ All notable changes to this project will be documented in this file.
     precedent (D12). It substitutes scheme/host/port only — the route stays in production code so the
     strict matcher asserts the path the provider really builds. Nothing becomes public API; the
     production constructor and its behaviour are unchanged.
-  - **`scripts/capture-provider-recording.py`** (stdlib-only, 36 unit tests) automates capture steps
-    4–8 of the protocol, issuing the same multipart request the SDK issues so the fixture matches
-    production traffic. Credentials are read from the environment and never written or echoed.
+  - **`scripts/capture-provider-recording.py`** (stdlib-only, **150 unit tests**) automates capture
+    steps 4–8 of the protocol for **five of the six HTTP surfaces**, issuing the same request each
+    SDK client issues so the fixture matches production traffic. Credentials are read from the
+    environment and never written or echoed. It now covers both directions and three commit shapes:
+    the vendor's JSON (Whisper ×2, Google), the vendor's audio bytes under a hard 256 KiB cap
+    (Speechmatics TTS), and — where the terms do not clear committing the payload — a **response
+    envelope** recording status, headers, media type, content length and observed chunk boundaries
+    (LMNT). The envelope route keeps its promise structurally rather than by discipline: the reader
+    is told not to retain the body, so the audio is counted and dropped one read at a time and no
+    whole payload ever exists in memory for a later line to write out.
+  - **The Google Speech-to-Text suite replays a real captured response**, and the capture paid for
+    itself the same way the Whisper pair did: Google's body carries four fields the SDK's DTOs do
+    not model (`results[].resultEndTime`, `results[].languageCode`, `totalBilledTime`, `requestId`),
+    now asserted as present so shrinking the fixture back to the hand-authored shape fails the
+    suite. `GoogleSpeechRecognizer` needed the same `internal` origin-only seam Azure TTS took (D12)
+    — it built one absolute URL and so ignored `HttpClient.BaseAddress`. Nothing becomes public API.
+  - **Two more shipped-code defects surfaced, both found by trying to capture and both confirmed
+    against the live vendor. Neither is fixed here** — this change's contract is a test substrate,
+    and a route fix is production behaviour.
+    - **`LmntSpeechSynthesizer`'s HTTP path cannot reach LMNT.** It POSTs form-encoded to
+      `/v1/ai/speech/generate`, which returns **404**. A controlled comparison with the same
+      credential seconds apart got **200 `audio/mpeg`** from the documented `/v1/ai/speech/bytes`
+      with a JSON body. Three deltas — path, body encoding, and response media type, since the
+      client assumes raw PCM it can chunk while LMNT returns MP3. Contained in practice:
+      `LmntTtsOptions.Transport` defaults to `WebSocket`, so only callers who opt into HTTP are
+      affected, and the WebSocket path is untouched by this finding.
+    - **`SpeechmaticsSpeechSynthesizer` cannot reach Speechmatics.** It POSTs to `/generate` with
+      the voice as a JSON body field; the API selects the voice by **path segment**, so
+      `/generate/{voice}` returns 200 `audio/wav` and `/generate` returns 404. Everything else the
+      client sends — bearer auth, content type, sample rate — is already right. A plausible second
+      hypothesis was checked and disproved rather than assumed: the shipped default voice
+      `eleanor` is absent from the vendor's published four-voice list, but it returns 200, so the
+      list is incomplete and the option default is fine.
   - Every `*_ShouldAbort_WhenCancelled` test carried over **verbatim** as the `test-determinism`
     tripwire for the swap, and re-verified under the 30× repeat-run protocol (0 failures).
+
+- **All eight WebSocket provider fakes now send frames authored to each vendor's published protocol
+  documentation, instead of hand-authored minimal JSON** (ADR-0041 D4). **Test-only — no shipped code
+  changed.** The eight WebSocket surfaces stay on their in-process fakes, because WireMock.NET cannot
+  hold a duplex session (D2); only their payloads change. Five of the eight vendors are `not-cleared`
+  for committing captured output and no capture credential exists for any of the eight, so the
+  fixtures take a second route the recording protocol now defines: **conform to the vendor's
+  documented field set, nesting and frame ordering, with our own fictional values** — `class:
+  "synthetic"`, a new `terms.verdict: "not-applicable"` (no vendor output is present, so the
+  redistribution question does not arise), and a new required `source_schema` block naming the page,
+  its revision marker and the date it was read. The boundary is explicit: conforming to a schema is
+  not copying a vendor's example payloads, and none are in the tree. **All eight vendor pages publish
+  no revision marker**, recorded as `"undated"` — which the guide now treats as a finding, since a
+  silent breaking edit there is indistinguishable from no edit at all.
+  - **Three shipped-code defects surfaced, none of them fixable inside a test-substrate change; each
+    is recorded with the assertion that pins it.** This is what ADR-0041 D4 was adopted to do —
+    `proposal.md` argued that a fixture written by the same person who wrote the parser cannot expose
+    a shared misreading of a vendor's schema, and no amount of coverage substitutes, because every
+    test passes against a fixture that shares the defect.
+    - **`CartesiaSpeechSynthesizer` and `ElevenLabsSpeechSynthesizer` cannot receive audio from
+      their vendors.** Both yield only `WebSocketMessageType.Binary` frames; both vendors deliver
+      audio as base64 inside JSON text frames (ElevenLabs `AudioOutput.audio`, Cartesia
+      `chunk.data`) and **neither documents a raw-binary mode at all** (read first-hand 2026-08-14).
+      Cartesia additionally reaches its `done` terminator, so it completes successfully having
+      produced zero audio.
+    - **`SpeechmaticsSpeechRecognizer` space-joins transcript tokens unconditionally**
+      (`SpeechmaticsSpeechRecognizer.cs:170`), ignoring the `word_delimiter` sent on
+      `RecognitionStarted`, the per-result `attaches_to` marker, and the already-assembled segment
+      the vendor publishes at `metadata.transcript`. A segment ending in punctuation comes out as
+      `"… correctamente ."`.
+  - **Fixture integrity is fenced, and the fences were mutation-tested rather than asserted.** Each
+    suite gains a test asserting its fixture still carries the unmodelled field names and its exact
+    byte length; shrinking a fixture back to the shape this work retires makes them fail. Binary TTS
+    payloads are locally generated by `SyntheticPcm.Triangle`, integer-only because `Math.Sin` is not
+    guaranteed bit-identical across platforms and the files are asserted byte-for-byte, with lengths
+    deliberately not chunk-aligned so a partial final frame is always exercised. Every audio fixture
+    is under 1.2% of the 256 KiB cap.
 
 - **The STT cancellation frame generator is now one shared helper instead of four copies** (#144).
   **Test-only — no shipped code changed.** `EndlessFrames`, which keeps an STT stream open until a

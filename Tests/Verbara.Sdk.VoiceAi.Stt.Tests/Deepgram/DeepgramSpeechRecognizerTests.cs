@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Verbara.Sdk.Audio;
 using Verbara.Sdk.VoiceAi.Stt.Deepgram;
 using Verbara.Sdk.VoiceAi.Stt.Tests.Helpers;
@@ -10,8 +11,12 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Deepgram;
 /// <summary>
 /// Transport: WebSocket. Deliberately NOT migrated to the WireMock substrate — WireMock.NET matches
 /// HTTP/1.1 requests and cannot hold the duplex session these tests drive (ADR-0041 D2), so
-/// <c>DeepgramFakeServer</c> on <c>WebSocketTestServer</c> stays. Fidelity here comes from recorded
-/// frames (D4), not from a different server.
+/// <c>DeepgramFakeServer</c> stays. Fidelity here comes from the frames in
+/// <c>Recordings/deepgram-stt/</c> (D4), not from a different server. Deepgram is <c>not-cleared</c>
+/// for capturing Output (<c>docs/guides/provider-recording-protocol.md</c> §7), so those frames take
+/// that section's documentation-derived route — authored to Deepgram's published streaming schema
+/// with fictional values, <c>class: "synthetic"</c>, <c>terms.verdict: "not-applicable"</c> — rather
+/// than being captured. That closes the field-set half of the D4 gap and not the drift half.
 /// </summary>
 public class DeepgramSpeechRecognizerTests : IAsyncDisposable
 {
@@ -32,9 +37,93 @@ public class DeepgramSpeechRecognizerTests : IAsyncDisposable
             fakeServerPort: _server.Port);
     }
 
+    /// <summary>
+    /// The transcript a recorded frame actually carries, read with <see cref="JsonDocument"/> rather
+    /// than hard-coded. Two independent readers — this one and the SDK's source-generated parser —
+    /// must agree on the frame's bytes; hard-coding the sentence would instead assert what the frame
+    /// was expected to say, and would have to be edited whenever it is re-authored.
+    /// </summary>
+    private static string RecordedTranscript(string frame)
+    {
+        using var document = JsonDocument.Parse(DeepgramFakeServer.ReadFrame(frame));
+        return document.RootElement
+            .GetProperty("channel").GetProperty("alternatives")[0]
+            .GetProperty("transcript").GetString()!;
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldYieldRecordedTranscripts_WhenReplayingDocumentedFrames()
+    {
+        // The default seed is the two recorded frames verbatim: interim then final.
+        var recognizer = BuildRecognizer();
+        var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var interim = RecordedTranscript(DeepgramFakeServer.InterimResultsFrame);
+        var final = RecordedTranscript(DeepgramFakeServer.FinalResultsFrame);
+        interim.Should().NotBeNullOrWhiteSpace("a frame that transcribes to nothing asserts nothing");
+        final.Should().NotBeNullOrWhiteSpace("a frame that transcribes to nothing asserts nothing");
+
+        results.Should().HaveCount(2);
+        results[0].IsFinal.Should().BeFalse();
+        results[0].Transcript.Should().Be(interim);
+        results[1].IsFinal.Should().BeTrue();
+        results[1].Transcript.Should().Be(final);
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldTolerateUnmodelledSiblingFields_WhenFrameCarriesFullDocumentedFieldSet()
+    {
+        // The point of the recording. DeepgramResultMessage models four values — type, is_final,
+        // and each alternative's transcript and confidence — out of everything Deepgram documents.
+        // The first block fences the fixture: reduce it back to a five-field object and this fails
+        // loudly instead of silently taking the assertion below with it.
+        using (var document = JsonDocument.Parse(DeepgramFakeServer.ReadFrame(DeepgramFakeServer.FinalResultsFrame)))
+        {
+            var root = document.RootElement;
+            foreach (var unmodelled in new[]
+                     { "channel_index", "duration", "start", "speech_final", "metadata", "from_finalize", "entities" })
+            {
+                root.TryGetProperty(unmodelled, out _)
+                    .Should().BeTrue("the recorded frame must carry '{0}', which the SDK does not model", unmodelled);
+            }
+
+            var alternative = root.GetProperty("channel").GetProperty("alternatives")[0];
+            alternative.TryGetProperty("words", out var words).Should().BeTrue();
+            words.GetArrayLength().Should().BeGreaterThan(0, "word-level detail is unmodelled sibling data too");
+            alternative.TryGetProperty("languages", out _).Should().BeTrue();
+        }
+
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(DeepgramFakeServer.ReadFrame(DeepgramFakeServer.FinalResultsFrame));
+
+        var recognizer = BuildRecognizer();
+        var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle()
+            .Which.Transcript.Should().Be(RecordedTranscript(DeepgramFakeServer.FinalResultsFrame));
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldIgnoreFrame_WhenTypeIsNotResults()
+    {
+        // Deepgram interleaves control frames with transcripts; the parser filters on
+        // type != "Results". Nothing asserted that until a recorded Metadata frame existed to send.
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(DeepgramFakeServer.ReadFrame(DeepgramFakeServer.MetadataFrame));
+        _server.ResultMessages.Add(DeepgramFakeServer.ReadFrame(DeepgramFakeServer.FinalResultsFrame));
+
+        var recognizer = BuildRecognizer();
+        var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle()
+            .Which.Transcript.Should().Be(RecordedTranscript(DeepgramFakeServer.FinalResultsFrame));
+    }
+
     [Fact]
     public async Task StreamAsync_ShouldYieldInterimResult()
     {
+        // BuildResultJson patches these three values into the recorded frame of the matching
+        // finality, so the suite still drives them while the rest of the schema survives.
         _server.ResultMessages.Clear();
         _server.ResultMessages.Add(DeepgramFakeServer.BuildResultJson("hola", 0.8f, isFinal: false));
         _server.ResultMessages.Add(DeepgramFakeServer.BuildResultJson("hola mundo", 0.99f, isFinal: true));

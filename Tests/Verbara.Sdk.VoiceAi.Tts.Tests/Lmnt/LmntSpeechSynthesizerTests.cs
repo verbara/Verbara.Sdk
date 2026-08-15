@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using Verbara.Sdk.Audio;
 using Verbara.Sdk.VoiceAi.Tts.DependencyInjection;
 using Verbara.Sdk.VoiceAi.Tts.Lmnt;
@@ -101,6 +102,9 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
         return new LmntSpeechSynthesizer(Options.Create(opts), fakeWsPort: _server.Port);
     }
 
+    /// <summary>The audio the fake replays, read from the same tree the fake reads.</summary>
+    private static byte[] RecordedAudio => LmntWsFakeServer.ReadFrameBytes(LmntWsFakeServer.AudioChunk);
+
     [Fact]
     public async Task SynthesizeAsync_ShouldSendInitMessage_WithApiKeyVoiceAndFormat()
     {
@@ -133,22 +137,68 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
     [Fact]
     public async Task SynthesizeAsync_ShouldYieldBinaryAudioFrames_WhenServerSendsFrames()
     {
+        // The point of the recording: a real waveform of a length that is NOT chunk-aligned
+        // traverses the frame path, so a partial final frame reaches the consumer. Two 320-byte
+        // arrays of zeros — exact multiples — could never produce one.
+        //
+        // Note what is NOT asserted: that the final frame is exactly `length % 320`. Frame count
+        // and boundaries are the transport's business, not the client's contract; what the client
+        // owes is every byte, in order, with nothing invented and nothing dropped.
+        var expected = RecordedAudio;
         var synth = BuildSynthesizer();
+
         var frames = await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono16kHz).ToListAsync();
 
-        frames.Should().HaveCount(2);
-        frames.All(f => f.Length == 320).Should().BeTrue();
+        (expected.Length % LmntWsFakeServer.AudioFrameSize).Should()
+            .NotBe(0, "the recording must not be chunk-aligned");
+        frames.Should().HaveCountGreaterThan(1, "the recording must actually be chunked");
+        frames.Should().OnlyContain(f => f.Length > 0 && f.Length <= LmntWsFakeServer.AudioFrameSize);
+        frames.Should().Contain(f => f.Length != LmntWsFakeServer.AudioFrameSize,
+            "a partial frame must reach the consumer");
+        frames.SelectMany(f => f.ToArray()).Should().Equal(expected,
+            "streaming must not alter a single byte of the recorded audio");
     }
 
     [Fact]
     public async Task SynthesizeAsync_ShouldTerminate_WhenServerSendsFinish()
     {
+        // Read lmnt-ws/finish-frame.provenance.json before trusting this: `finish` is documented as
+        // a CLIENT-to-server message, and LMNT's published server-message set (ready, timestamps,
+        // flush_complete, reset_complete, error) does not include it. The SDK terminates on it, so
+        // the fake must send it; the discrepancy is recorded in the sidecar rather than papered over.
         _server.SendFinishTerminator = true;
         var synth = BuildSynthesizer();
 
         var frames = await synth.SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz).ToListAsync();
 
-        frames.Should().HaveCount(2);
+        frames.SelectMany(f => f.ToArray()).Should().Equal(RecordedAudio);
+    }
+
+    [Fact]
+    public void RecordedFixtures_ShouldCarryDocumentedFieldsAndExactByteLength_WhenReadFromRecordingsTree()
+    {
+        // Fixture-integrity fence. The fake is only as good as what is on disk: swap the audio or
+        // re-save the JSON and the suite would keep passing while quietly testing something smaller.
+        var audio = RecordedAudio;
+        audio.Should().HaveCount(1808, "the sidecar records this exact length");
+        (audio.Length % LmntWsFakeServer.AudioFrameSize).Should().NotBe(0);
+
+        using var finish = JsonDocument.Parse(LmntWsFakeServer.ReadFrame(LmntWsFakeServer.FinishFrame));
+        finish.RootElement.GetProperty("type").GetString().Should().Be("finish",
+            "LmntSpeechSynthesizer terminates on exactly this value");
+    }
+
+    [Fact]
+    public void RecordedFixtures_ShouldMatchTheirDocumentedGeneratorParameters_WhenRegeneratedLocally()
+    {
+        // The "commit a small generator" half of the source-audio rule (protocol guide §6): the
+        // committed bytes are reproducible from three numbers in the sidecar, not magic.
+        var regenerated = SyntheticPcm.Triangle(
+            LmntWsFakeServer.AudioSampleCount,
+            LmntWsFakeServer.AudioPeriodSamples,
+            LmntWsFakeServer.AudioAmplitude);
+
+        regenerated.Should().Equal(RecordedAudio);
     }
 
     [Fact]

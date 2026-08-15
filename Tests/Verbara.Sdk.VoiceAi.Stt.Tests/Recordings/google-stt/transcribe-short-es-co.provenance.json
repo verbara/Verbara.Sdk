@@ -1,0 +1,30 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "recorded",
+  "provider": "google-stt",
+  "product": "Google Cloud Speech-to-Text — v1 speech:recognize",
+  "endpoint": "POST https://speech.googleapis.com/v1/speech:recognize?key=REDACTED-API-KEY",
+  "api_version": "v1",
+  "captured_utc": "2026-08-15",
+  "media_type": "application/json",
+  "bytes": 342,
+  "sha256": "a29a6e9d55a580697e4a6f3cfd45a30866304166aa828907df90336053fec4d1",
+  "source_audio": {
+    "origin": "synthetic",
+    "description": "Synthetic speech, not a recording of any person: the committed Azure TTS capture Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/azure-tts/synthesize-short-es-co.raw (prebuilt neural voice es-CO-SalomeNeural, 8 kHz 16-bit mono PCM, 3.76 s) reading the fictional sentence 'El sistema registró la solicitud correctamente.', submitted as raw LINEAR16 with no container at all, base64-encoded into audio.content exactly as GoogleSpeechRecognizer submits the frames it drained. Reusing that capture keeps one cleared, reviewed audio artifact in the repo instead of adding a second. It is submitted for a single transcription, which is inference, not training: Google's restriction on using Generated Output to create or improve a similar model is not engaged.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [
+      "api key query-string parameter",
+      "requestId correlation identifier (response body)"
+    ],
+    "notes": "Body is the vendor's JSON, pretty-printed to 2-space indent with a trailing newline (protocol §3.6). No field was removed, but one value was replaced: Google returns a `requestId` correlation identifier, which protocol §4 bans from a committed file. The key is kept — an unmodelled sibling is exactly what this fixture holds the parser against — and only its value carries the §4 placeholder. The credential rode in the request's query string and never appeared in the response; the recorded endpoint carries ?key=REDACTED-API-KEY in its place. Observed response headers, values recorded only where they carry no account or correlation identifier: accept-ranges, alt-svc, connection, content-type: application/json; charset=UTF-8, date, server, transfer-encoding, vary, vary, vary, x-content-type-options, x-frame-options, x-xss-protection."
+  },
+  "terms": {
+    "verdict": "permitted",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 (Google Speech-to-Text)",
+    "checked_utc": "2026-08-15"
+  },
+  "notes": "Transcript: 'el sistema registro la solicitud correctamente'. Captured by scripts/capture-provider-recording.py, which sends the same compact JSON body the SDK sends — the DTO's field names and order, and raw LINEAR16 in audio.content with no RIFF header. Terms caveat carried from protocol §7: the Service Specific Terms' enumeration of which products count as an \"AI/ML Service\" could not be read first-hand, and Speech-to-Text's presence in it is expected rather than confirmed. If it is not enumerated, the output-ownership clause this capture's `permitted` verdict rests on does not apply and the verdict drops to not-cleared. Confirm the enumeration before relying on this fixture."
+}

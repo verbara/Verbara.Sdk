@@ -1,0 +1,88 @@
+{
+  "message": "AddPartialTranscript",
+  "format": "2.1",
+  "metadata": {
+    "start_time": 0.0,
+    "end_time": 1.22,
+    "transcript": "El equipo revisó el"
+  },
+  "results": [
+    {
+      "type": "word",
+      "start_time": 0.06,
+      "end_time": 0.24,
+      "is_eos": false,
+      "volume": 47.2,
+      "alternatives": [
+        {
+          "content": "El",
+          "confidence": 0.61,
+          "language": "es",
+          "display": {
+            "direction": "ltr"
+          },
+          "speaker": "S1",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "type": "word",
+      "start_time": 0.24,
+      "end_time": 0.71,
+      "is_eos": false,
+      "volume": 51.8,
+      "alternatives": [
+        {
+          "content": "equipo",
+          "confidence": 0.58,
+          "language": "es",
+          "display": {
+            "direction": "ltr"
+          },
+          "speaker": "S1",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "type": "word",
+      "start_time": 0.71,
+      "end_time": 1.14,
+      "is_eos": false,
+      "volume": 49.6,
+      "alternatives": [
+        {
+          "content": "revisó",
+          "confidence": 0.54,
+          "language": "es",
+          "display": {
+            "direction": "ltr"
+          },
+          "speaker": "S1",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "type": "word",
+      "start_time": 1.14,
+      "end_time": 1.22,
+      "is_eos": false,
+      "volume": 44.1,
+      "alternatives": [
+        {
+          "content": "el",
+          "confidence": 0.6,
+          "language": "es",
+          "display": {
+            "direction": "ltr"
+          },
+          "speaker": "S1",
+          "tags": []
+        }
+      ]
+    }
+  ],
+  "forced": false
+}

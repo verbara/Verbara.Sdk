@@ -1,19 +1,24 @@
-"""Unit tests for capture-provider-recording.py (the STT fixture capture tool).
+"""Unit tests for capture-provider-recording.py (the provider fixture capture tool).
 
-Covers the pure helpers only -- request shaping, redaction, normalization and the provenance
-sidecar. The network path is deliberately untested: it needs a live provider credential, and a
-tool whose tests demand a secret is a tool nobody runs. Stdlib unittest only, matching the
-other script tests.
+Covers request shaping, redaction, normalization, the provenance sidecar and what each artifact
+mode writes. No test reaches the network: `send` is replaced by a stub wherever a whole capture
+is exercised, because a live provider credential is what a real request needs and a tool whose
+tests demand a secret is a tool nobody runs. Stdlib unittest only, matching the other script
+tests.
 
 The module name carries hyphens, so it is loaded by path rather than imported.
 """
+import base64
+import contextlib
 import hashlib
 import importlib.util
 import json
 import os
+import tempfile
 import unittest
 import wave
 import io
+from pathlib import Path
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SCRIPT = os.path.join(_HERE, os.pardir, "capture-provider-recording.py")
@@ -118,6 +123,81 @@ class RedactTests(unittest.TestCase):
 
         self.assertNotIn("KEY1", result)
         self.assertNotIn("DEPLOY", result)
+
+
+class RedactCorrelationFieldsTests(unittest.TestCase):
+    """The counterpart to redact(): the value is unknowable, so the *field* is named instead.
+
+    Motivated by a real capture — Google's first committed response carried
+    `"requestId": "8702164082194047156"`, which protocol §4 bans outright and which
+    check-recording-redaction.py let through because a bare number is not credential-shaped.
+    """
+
+    GOOGLE_SHAPE = json.dumps(
+        {
+            "results": [{"alternatives": [{"transcript": "hola", "confidence": 0.9}]}],
+            "totalBilledTime": "4s",
+            "requestId": "8702164082194047156",
+        }
+    )
+
+    def test_ShouldReplaceTheValueWithTheProtocolPlaceholder(self):
+        result, applied = capture.redact_correlation_fields(self.GOOGLE_SHAPE, ("requestId",))
+
+        self.assertNotIn("8702164082194047156", result)
+        self.assertEqual(
+            capture.PLACEHOLDER_CORRELATION_ID, json.loads(result)["requestId"]
+        )
+        self.assertEqual(["requestId"], applied)
+
+    def test_ShouldKeepTheKey_SoTheUnmodelledSiblingSurvives(self):
+        # The whole point of the fixture is that the SDK's DTO does not model requestId. Deleting
+        # the key would silently remove the property the capture was taken to hold the parser to.
+        result, _ = capture.redact_correlation_fields(self.GOOGLE_SHAPE, ("requestId",))
+
+        self.assertIn("requestId", json.loads(result))
+
+    def test_ShouldLeaveEveryOtherFieldByteIdentical(self):
+        result, _ = capture.redact_correlation_fields(self.GOOGLE_SHAPE, ("requestId",))
+        parsed = json.loads(result)
+
+        self.assertEqual("4s", parsed["totalBilledTime"])
+        self.assertEqual("hola", parsed["results"][0]["alternatives"][0]["transcript"])
+
+    def test_ShouldReachNestedOccurrences(self):
+        raw = json.dumps({"outer": {"inner": [{"traceId": "abc-123"}]}})
+
+        result, applied = capture.redact_correlation_fields(raw, ("traceId",))
+
+        self.assertNotIn("abc-123", result)
+        self.assertEqual(["traceId"], applied)
+
+    def test_ShouldReportEachFieldOnce_WhenItRecursThroughTheDocument(self):
+        raw = json.dumps({"a": {"reqId": "1"}, "b": {"reqId": "2"}})
+
+        result, applied = capture.redact_correlation_fields(raw, ("reqId",))
+
+        self.assertEqual(["reqId"], applied)
+        self.assertNotIn('"1"', result)
+        self.assertNotIn('"2"', result)
+
+    def test_ShouldReturnTheBodyUntouched_WhenNoFieldsAreNamed(self):
+        # The default for every provider that has no known correlation field. Returning the raw
+        # string rather than a re-serialized one keeps the two existing surfaces byte-identical.
+        result, applied = capture.redact_correlation_fields(self.GOOGLE_SHAPE, ())
+
+        self.assertEqual(self.GOOGLE_SHAPE, result)
+        self.assertEqual([], applied)
+
+    def test_ShouldNameTheFieldInTheSidecar_WhenGoogleIsCaptured(self):
+        os.environ.pop("GOOGLE_ACCESS_TOKEN", None)
+        os.environ["GOOGLE_SPEECH_API_KEY"] = "dummy-key"
+        try:
+            plan = capture.build_plan("google-speech", Path("."))
+        finally:
+            os.environ.pop("GOOGLE_SPEECH_API_KEY", None)
+
+        self.assertEqual(("requestId",), plan["correlation_fields"])
 
 
 class DeploymentsBaseTests(unittest.TestCase):
@@ -322,6 +402,726 @@ class ProviderPlanTests(unittest.TestCase):
         plan = capture.azure_openai_whisper_plan(b"wav")
 
         self.assertIn("/openai/deployments/whisper-dep/audio/transcriptions", plan["url"])
+
+
+class BuildSidecarShapeTests(unittest.TestCase):
+    """The sidecar grew three parameters; the surfaces that predate them must not notice."""
+
+    OLD_SHAPE_KEYS = ["schema", "class", "provider", "product", "endpoint", "api_version",
+                      "captured_utc", "media_type", "bytes", "sha256", "source_audio",
+                      "redaction", "terms", "notes"]
+
+    def _sidecar(self, **overrides):
+        kwargs = {
+            "provider": "openai-whisper",
+            "product": "OpenAI — audio transcriptions (Whisper)",
+            "endpoint": "POST https://api.openai.com/v1/audio/transcriptions",
+            "api_version": "n/a",
+            "captured_utc": "2026-08-09",
+            "payload": b'{"text":"hola"}\n',
+            "redaction_applied": ["authorization bearer request header"],
+            "redaction_notes": "notes",
+            "terms_verdict": "permitted-with-conditions",
+            "terms_basis": "section 7",
+            "notes": "n",
+        }
+        kwargs.update(overrides)
+        return capture.build_sidecar(**kwargs)
+
+    def test_ShouldEmitTheOldKeysInTheOldOrder_WhenTheNewParametersAreOmitted(self):
+        # Key order is the file's diff-stability: a reordered sidecar is a whole-file diff on
+        # every re-capture, which is how a review stops reading them.
+        self.assertEqual(self.OLD_SHAPE_KEYS, list(self._sidecar()))
+
+    def test_ShouldDefaultToTheSttJsonAnswers_WhenTheNewParametersAreOmitted(self):
+        sidecar = self._sidecar()
+
+        self.assertEqual("application/json", sidecar["media_type"])
+        self.assertEqual("recorded", sidecar["class"])
+        self.assertEqual("synthetic", sidecar["source_audio"]["origin"])
+        self.assertEqual(capture.SOURCE_AUDIO_DESCRIPTION, sidecar["source_audio"]["description"])
+
+    def test_ShouldCarryTheGivenMediaType_WhenTheCaptureIsNotJson(self):
+        self.assertEqual("audio/wav", self._sidecar(media_type="audio/wav")["media_type"])
+
+    def test_ShouldCarryTheGivenSourceAudio_WhenTheSurfaceSubmitsText(self):
+        block = capture.tts_source_audio("eleanor")
+
+        self.assertEqual(block, self._sidecar(source_audio=block)["source_audio"])
+
+    def test_ShouldCopyTheSourceAudio_SoTwoCapturesInOneRunCannotShareIt(self):
+        block = capture.tts_source_audio("leah")
+
+        sidecar = self._sidecar(source_audio=block)
+        sidecar["source_audio"]["origin"] = "mutated"
+
+        self.assertEqual("not-applicable", block["origin"])
+
+
+class TtsSourceAudioTests(unittest.TestCase):
+    def test_ShouldDeclareOriginNotApplicable(self):
+        # Protocol section 6 has no "input text" field; the azure-tts capture is the precedent.
+        self.assertEqual("not-applicable", capture.tts_source_audio("eleanor")["origin"])
+
+    def test_ShouldNameTheSentenceAndTheVoice(self):
+        block = capture.tts_source_audio("eleanor")
+
+        self.assertIn(capture.TTS_INPUT_TEXT, block["description"])
+        self.assertIn("'eleanor'", block["description"])
+        self.assertIn("no custom or cloned voice", block["description"])
+
+
+class AssertNoSecretBytesTests(unittest.TestCase):
+    def test_ShouldPass_WhenTheBytesCarryNoCredential(self):
+        capture.assert_no_secret_bytes(b"RIFF\x00\x01\x02", ["sk-live"])
+
+    def test_ShouldRaise_WhenACredentialAppearsInBytesThatCannotBeRewritten(self):
+        # Redacting inside a codec stream would corrupt the vendor bytes the capture preserves.
+        with self.assertRaises(capture.CaptureError) as caught:
+            capture.assert_no_secret_bytes(b"RIFF sk-live tail", ["sk-live"])
+
+        self.assertIn("cannot be redacted", str(caught.exception))
+
+    def test_ShouldIgnoreEmptyValues(self):
+        # Same guard as redact(): an empty needle matches everywhere.
+        capture.assert_no_secret_bytes(b"anything", [""])
+
+
+class ResponseMediaTypeTests(unittest.TestCase):
+    def test_ShouldStripParametersAndLowercase(self):
+        self.assertEqual(
+            "audio/wav",
+            capture.response_media_type([("Content-Type", "Audio/WAV; codecs=1")]))
+
+    def test_ShouldReturnNone_WhenTheResponseDeclaredNothing(self):
+        self.assertIsNone(capture.response_media_type([("Date", "today")]))
+
+
+class BuildEnvelopeTests(unittest.TestCase):
+    def _envelope(self, **overrides):
+        kwargs = {
+            "status": 200,
+            "headers": [("Content-Type", "audio/mpeg"), ("x-request-id", "req-secret")],
+            "chunk_sizes": [8192, 8192, 100],
+            "body_omitted": "because the terms do not permit it",
+        }
+        kwargs.update(overrides)
+        return capture.build_envelope(**kwargs)
+
+    def test_ShouldRecordEverythingSection7Asks(self):
+        envelope = self._envelope()
+
+        self.assertEqual(200, envelope["status"])
+        self.assertEqual("audio/mpeg", envelope["media_type"])
+        self.assertEqual(16484, envelope["content_length"])
+        self.assertEqual([8192, 8192, 100], envelope["chunk_sizes"])
+        self.assertIn("content-type: audio/mpeg", envelope["headers"])
+
+    def test_ShouldSumTheReads_RatherThanTrustTheContentLengthHeader(self):
+        # A chunked response carries no Content-Length at all, and the reads are what the SDK's
+        # own loop observes.
+        envelope = self._envelope(
+            headers=[("Content-Type", "audio/mpeg"), ("Content-Length", "999999")])
+
+        self.assertEqual(16484, envelope["content_length"])
+
+    def test_ShouldWithholdHeaderValuesThatCorrelateToAnAccount(self):
+        self.assertNotIn("req-secret", json.dumps(self._envelope()))
+
+    def test_ShouldSayWhyTheBodyIsAbsent(self):
+        self.assertEqual(
+            "because the terms do not permit it", self._envelope()["body_omitted"])
+
+    def test_ShouldReportUnknown_WhenTheVendorDeclaredNoMediaType(self):
+        self.assertEqual("unknown", self._envelope(headers=[("Date", "today")])["media_type"])
+
+
+class VerifyTests(unittest.TestCase):
+    """Each verifier decides whether a response is worth committing at all."""
+
+    def test_ShouldReturnTheTranscript_WhenWhisperAnswered(self):
+        self.assertEqual(
+            "Transcript: 'hola'.", capture.whisper_verify('{"text":"hola"}'))
+
+    def test_ShouldRaise_WhenWhisperTranscribedNothing(self):
+        with self.assertRaises(capture.CaptureError):
+            capture.whisper_verify('{"text":"   "}')
+
+    def test_ShouldReadGooglesOwnResponseShape(self):
+        body = json.dumps(
+            {"results": [{"alternatives": [{"transcript": "hola", "confidence": 0.9}]}]})
+
+        self.assertEqual("Transcript: 'hola'.", capture.google_verify(body))
+
+    def test_ShouldRaise_WhenGoogleRecognizedNothing(self):
+        # speech:recognize answers {} rather than an empty transcript field.
+        with self.assertRaises(capture.CaptureError) as caught:
+            capture.google_verify("{}")
+
+        self.assertIn("no transcript", str(caught.exception))
+
+    def test_ShouldNotAcceptTheOpenAiShape_WhenTheProviderIsGoogle(self):
+        with self.assertRaises(capture.CaptureError):
+            capture.google_verify('{"text":"hola"}')
+
+    def test_ShouldDescribeTheAudio_WhenSpeechmaticsReturnedAWavBody(self):
+        payload = b"RIFF\x00\x00\x00\x00WAVE" + b"\x01\x02" * 8
+
+        result = capture.speechmatics_verify(payload)
+
+        self.assertIn("RIFF/WAVE container", result)
+        self.assertIn(str(len(payload)), result)
+
+    def test_ShouldRaise_WhenSpeechmaticsReturnedAnEmptyBody(self):
+        with self.assertRaises(capture.CaptureError):
+            capture.speechmatics_verify(b"")
+
+    def test_ShouldRaise_WhenSpeechmaticsReturnedJsonUnderASuccessStatus(self):
+        with self.assertRaises(capture.CaptureError) as caught:
+            capture.speechmatics_verify(b'{"error":"quota"}')
+
+        self.assertIn("JSON, not audio", str(caught.exception))
+
+    def test_ShouldDescribeTheEnvelope_WhenLmntAnswered(self):
+        result = capture.lmnt_verify(
+            {"status": 200, "media_type": "audio/raw", "content_length": 300,
+             "chunk_sizes": [200, 100]})
+
+        self.assertIn("300 bytes of audio/raw", result)
+        self.assertIn("2 reads", result)
+        self.assertIn("discarded, not written", result)
+
+    def test_ShouldRaise_WhenLmntReturnedNoBytes(self):
+        with self.assertRaises(capture.CaptureError):
+            capture.lmnt_verify(
+                {"status": 200, "media_type": "audio/raw", "content_length": 0,
+                 "chunk_sizes": []})
+
+    def test_ShouldRaise_WhenLmntAnsweredANonSuccessStatus(self):
+        with self.assertRaises(capture.CaptureError):
+            capture.lmnt_verify(
+                {"status": 402, "media_type": "application/json", "content_length": 9,
+                 "chunk_sizes": [9]})
+
+
+class _EnvScopedTestCase(unittest.TestCase):
+    """Base for plan tests: credentials come from the environment, so each test owns its own.
+
+    A developer's real shell must neither leak into a test (a set GOOGLE_ACCESS_TOKEN would flip
+    the auth branch under them) nor survive one.
+    """
+
+    ENV_KEYS = ()
+
+    def setUp(self):
+        self._saved = {key: os.environ.get(key) for key in self.ENV_KEYS}
+        for key in self.ENV_KEYS:
+            os.environ.pop(key, None)
+
+    def tearDown(self):
+        for key, value in self._saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+class GoogleSpeechPlanTests(_EnvScopedTestCase):
+    ENV_KEYS = ("GOOGLE_SPEECH_API_KEY", "GOOGLE_ACCESS_TOKEN")
+
+    PCM = b"\x01\x02" * 40
+
+    def test_ShouldRaise_WhenNeitherCredentialIsSet(self):
+        with self.assertRaises(capture.CaptureError) as caught:
+            capture.google_speech_plan(self.PCM)
+
+        self.assertIn("GOOGLE_SPEECH_API_KEY", str(caught.exception))
+        self.assertIn("GOOGLE_ACCESS_TOKEN", str(caught.exception))
+
+    def test_ShouldRaise_WhenBothCredentialsAreSet(self):
+        # Which one is live decides the request that gets captured, so it cannot be implicit.
+        os.environ.update({"GOOGLE_SPEECH_API_KEY": "key", "GOOGLE_ACCESS_TOKEN": "token"})
+
+        with self.assertRaises(capture.CaptureError) as caught:
+            capture.google_speech_plan(self.PCM)
+
+        self.assertIn("exactly one", str(caught.exception))
+
+    def test_ShouldPutTheKeyInTheQueryString_WhenTheApiKeyIsSet(self):
+        # SDK fidelity: GoogleSpeechRecognizer authenticates with ?key=, defect and all.
+        os.environ["GOOGLE_SPEECH_API_KEY"] = "live-google-key"
+
+        plan = capture.google_speech_plan(self.PCM)
+
+        self.assertEqual(
+            "https://speech.googleapis.com/v1/speech:recognize?key=live-google-key", plan["url"])
+        self.assertNotIn("Authorization", plan["headers"])
+
+    def test_ShouldKeepTheLiveKeyOutOfTheRecordedEndpoint(self):
+        # The key rides in the URL, so the endpoint template is a place it can leak into a
+        # committed file; redact() only ever sees bodies.
+        os.environ["GOOGLE_SPEECH_API_KEY"] = "live-google-key"
+
+        plan = capture.google_speech_plan(self.PCM)
+
+        self.assertNotIn("live-google-key", plan["endpoint_template"])
+        self.assertIn("?key=REDACTED-API-KEY", plan["endpoint_template"])
+        self.assertEqual(["live-google-key"], plan["secrets"])
+
+    def test_ShouldSendBearerAuthorization_WhenAnAccessTokenIsSet(self):
+        os.environ["GOOGLE_ACCESS_TOKEN"] = "ya29-token"
+
+        plan = capture.google_speech_plan(self.PCM)
+
+        self.assertEqual("Bearer ya29-token", plan["headers"]["Authorization"])
+        self.assertNotIn("key=", plan["url"])
+        self.assertNotIn("ya29-token", plan["endpoint_template"])
+
+    def test_ShouldRecordThatAuthDiffersFromProduction_WhenCapturedWithAToken(self):
+        os.environ["GOOGLE_ACCESS_TOKEN"] = "ya29-token"
+
+        notes = capture.google_speech_plan(self.PCM)["notes"]
+
+        self.assertIn("Auth differs from production", notes)
+        self.assertIn("?key=", notes)
+
+    def test_ShouldNotClaimAnAuthDifference_WhenCapturedTheWayTheSdkAuthenticates(self):
+        os.environ["GOOGLE_SPEECH_API_KEY"] = "live-google-key"
+
+        self.assertNotIn(
+            "Auth differs from production", capture.google_speech_plan(self.PCM)["notes"])
+
+    def test_ShouldFlagTheOpenTermsUncertainty(self):
+        # Protocol section 7: the verdict drops to not-cleared if Speech-to-Text turns out not
+        # to be enumerated as an "AI/ML Service".
+        os.environ["GOOGLE_SPEECH_API_KEY"] = "live-google-key"
+
+        plan = capture.google_speech_plan(self.PCM)
+
+        self.assertEqual("permitted", plan["terms_verdict"])
+        self.assertIn("AI/ML Service", plan["notes"])
+        self.assertIn("not-cleared", plan["notes"])
+
+    def test_ShouldSendTheDtoFieldsCompactAndInDeclarationOrder(self):
+        os.environ["GOOGLE_SPEECH_API_KEY"] = "live-google-key"
+
+        plan = capture.google_speech_plan(self.PCM)
+
+        self.assertTrue(plan["body"].startswith(b'{"config":{"encoding":"LINEAR16"'))
+        self.assertEqual(
+            {"encoding": "LINEAR16", "sampleRateHertz": 8000,
+             "languageCode": "es-CO", "model": "default"},
+            json.loads(plan["body"])["config"])
+        self.assertEqual("application/json; charset=utf-8", plan["headers"]["Content-Type"])
+
+    def test_ShouldNotClaimAWavHeaderItNeverSent_WhenDescribingTheSourceAudio(self):
+        # The same .raw file, a different submission: a sidecar claiming a RIFF wrapper here
+        # would misdescribe the very request the capture exists to pin down.
+        os.environ["GOOGLE_SPEECH_API_KEY"] = "live-google-key"
+
+        source_audio = capture.google_speech_plan(self.PCM)["source_audio"]
+        description = source_audio["description"]
+
+        self.assertEqual("synthetic", source_audio["origin"])
+        self.assertNotIn("RIFF", description)
+        self.assertIn("raw LINEAR16 with no container", description)
+        self.assertIn("es-CO-SalomeNeural", description)
+
+    def test_ShouldSubmitRawLinear16_NotAWavWrappedPayload(self):
+        # The recognizer base64-encodes the drained frames; a RIFF header would decode as 44
+        # bytes of samples and capture a request production never sends.
+        os.environ["GOOGLE_SPEECH_API_KEY"] = "live-google-key"
+
+        content = json.loads(capture.google_speech_plan(self.PCM)["body"])["audio"]["content"]
+
+        self.assertEqual(self.PCM, base64.b64decode(content))
+
+    def test_ShouldWriteIntoTheSttTreeUnderTheProtocolSlug(self):
+        # The CLI names the SDK surface; protocol section 2 names the directory. The tree itself
+        # is the STT default, which this plan takes by not overriding it.
+        os.environ["GOOGLE_SPEECH_API_KEY"] = "live-google-key"
+
+        plan = capture.google_speech_plan(self.PCM)
+
+        self.assertEqual("google-stt", plan["provider_slug"])
+        self.assertNotIn("recordings_dir", plan)
+        self.assertEqual(capture.STT_RECORDINGS, capture.PLAN_DEFAULTS["recordings_dir"])
+        self.assertEqual(capture.SCENARIO_SLUG, capture.PLAN_DEFAULTS["scenario_slug"])
+        self.assertIs(capture.google_verify, plan["verify"])
+
+
+class SpeechmaticsTtsPlanTests(_EnvScopedTestCase):
+    ENV_KEYS = ("SPEECHMATICS_API_KEY",)
+
+    def test_ShouldRaise_WhenCredentialIsMissing(self):
+        with self.assertRaises(capture.CaptureError) as caught:
+            capture.speechmatics_tts_plan(b"")
+
+        self.assertIn("SPEECHMATICS_API_KEY", str(caught.exception))
+
+    def test_ShouldSendBearerAuthorization(self):
+        os.environ["SPEECHMATICS_API_KEY"] = "sm-key"
+
+        plan = capture.speechmatics_tts_plan(b"")
+
+        self.assertEqual("Bearer sm-key", plan["headers"]["Authorization"])
+        self.assertEqual("https://preview.tts.speechmatics.com/generate", plan["url"])
+
+    def test_ShouldPostTheShippedOptionDefaults(self):
+        # A capture taken at non-default options is a capture of a request production never sends.
+        os.environ["SPEECHMATICS_API_KEY"] = "sm-key"
+
+        plan = capture.speechmatics_tts_plan(b"")
+
+        self.assertTrue(plan["body"].startswith(b'{"text":'))
+        self.assertEqual(
+            {"text": capture.TTS_INPUT_TEXT, "voice": "eleanor",
+             "language": "en", "sample_rate": 16000},
+            json.loads(plan["body"]))
+
+    def test_ShouldCaptureTheVendorBytesIntoTheTtsTree(self):
+        os.environ["SPEECHMATICS_API_KEY"] = "sm-key"
+
+        plan = capture.speechmatics_tts_plan(b"")
+
+        self.assertEqual("binary", plan["artifact"])
+        self.assertEqual("wav", plan["extension"])
+        self.assertEqual("audio/wav", plan["media_type"])
+        self.assertEqual(capture.TTS_RECORDINGS, plan["recordings_dir"])
+        self.assertEqual("synthesize-short-en-us", plan["scenario_slug"])
+
+    def test_ShouldDeclareTheInputAsTextNotAsSourceAudio(self):
+        os.environ["SPEECHMATICS_API_KEY"] = "sm-key"
+
+        plan = capture.speechmatics_tts_plan(b"")
+
+        self.assertEqual("not-applicable", plan["source_audio"]["origin"])
+        self.assertIn("'eleanor'", plan["source_audio"]["description"])
+
+    def test_ShouldCarryTheSection7VerdictAndItsCondition(self):
+        os.environ["SPEECHMATICS_API_KEY"] = "sm-key"
+
+        plan = capture.speechmatics_tts_plan(b"")
+
+        self.assertEqual("permitted-with-conditions", plan["terms_verdict"])
+        self.assertIn("section 7 (Speechmatics TTS)", plan["terms_basis"])
+        self.assertIn("Transcripts", plan["notes"])
+
+
+class LmntHttpPlanTests(_EnvScopedTestCase):
+    ENV_KEYS = ("LMNT_API_KEY",)
+
+    def test_ShouldRaise_WhenCredentialIsMissing(self):
+        with self.assertRaises(capture.CaptureError) as caught:
+            capture.lmnt_http_plan(b"")
+
+        self.assertIn("LMNT_API_KEY", str(caught.exception))
+
+    def test_ShouldAuthenticateWithTheApiKeyHeader_NotBearer(self):
+        os.environ["LMNT_API_KEY"] = "lmnt-key"
+
+        plan = capture.lmnt_http_plan(b"")
+
+        self.assertEqual("lmnt-key", plan["headers"]["X-API-Key"])
+        self.assertEqual("1.0", plan["headers"]["lmnt-version"])
+        self.assertNotIn("Authorization", plan["headers"])
+
+    def test_ShouldFormEncodeTheShippedOptionDefaults(self):
+        os.environ["LMNT_API_KEY"] = "lmnt-key"
+
+        plan = capture.lmnt_http_plan(b"")
+
+        self.assertEqual(
+            "application/x-www-form-urlencoded", plan["headers"]["Content-Type"])
+        self.assertTrue(plan["body"].startswith(b"voice=leah&text="))
+        self.assertIn(b"&format=raw&sample_rate=16000&language=en&speed=1.00", plan["body"])
+
+    def test_ShouldOmitTheModelField_WhenTheSdkOptionLeavesItUnset(self):
+        # LmntTtsOptions.Model defaults to null and the synthesizer only adds it when set.
+        os.environ["LMNT_API_KEY"] = "lmnt-key"
+
+        self.assertNotIn(b"model=", capture.lmnt_http_plan(b"")["body"])
+
+    def test_ShouldCaptureAnEnvelopeInsteadOfTheAudio(self):
+        os.environ["LMNT_API_KEY"] = "lmnt-key"
+
+        plan = capture.lmnt_http_plan(b"")
+
+        self.assertEqual("envelope", plan["artifact"])
+        self.assertEqual("json", plan["extension"])
+        self.assertEqual("application/json", plan["media_type"])
+        self.assertEqual(capture.TTS_RECORDINGS, plan["recordings_dir"])
+
+    def test_ShouldSayPlainlyWhyTheAudioIsNotCommitted(self):
+        os.environ["LMNT_API_KEY"] = "lmnt-key"
+
+        plan = capture.lmnt_http_plan(b"")
+
+        self.assertEqual("not-cleared", plan["terms_verdict"])
+        self.assertIn("section 7 (LMNT HTTP)", plan["terms_basis"])
+        self.assertIn("deliberately not committed", plan["notes"])
+        self.assertIn("never the bytes", plan["body_omitted"])
+
+
+class BuildPlanTests(_EnvScopedTestCase):
+    ENV_KEYS = ("LMNT_API_KEY", "SPEECHMATICS_API_KEY", "OPENAI_API_KEY")
+
+    def test_ShouldFillTheSharedDefaults_WhenAPlanOmitsThem(self):
+        os.environ["SPEECHMATICS_API_KEY"] = "sm-key"
+
+        with tempfile.TemporaryDirectory() as root:
+            plan = capture.build_plan("speechmatics-tts", Path(root))
+
+        self.assertEqual("recorded", plan["capture_class"])
+        self.assertEqual({}, plan["account_tokens"])
+
+    def test_ShouldDefaultTheSlugToTheCliName_WhenThePlanDoesNotOverrideIt(self):
+        os.environ["LMNT_API_KEY"] = "lmnt-key"
+
+        with tempfile.TemporaryDirectory() as root:
+            plan = capture.build_plan("lmnt-http", Path(root))
+
+        self.assertEqual("lmnt-http", plan["provider_slug"])
+
+    def test_ShouldNotDemandSourceAudio_WhenTheSurfaceSubmitsText(self):
+        # The committed .raw is absent from this temp root; a TTS capture never reads it.
+        os.environ["LMNT_API_KEY"] = "lmnt-key"
+
+        with tempfile.TemporaryDirectory() as root:
+            capture.build_plan("lmnt-http", Path(root))
+
+    def test_ShouldRaise_WhenAPlanIsIncomplete(self):
+        # Caught before the request, because a plan that fails after `send` has already spent a
+        # capture — and the reflex when a run dies is to run it again.
+        capture.PROVIDERS["broken-for-test"] = lambda source_pcm: {"artifact": "json"}
+        self.addCleanup(capture.PROVIDERS.pop, "broken-for-test", None)
+
+        with tempfile.TemporaryDirectory() as root:
+            with self.assertRaises(capture.CaptureError) as caught:
+                capture.build_plan("broken-for-test", Path(root))
+
+        self.assertIn("Nothing was sent", str(caught.exception))
+        self.assertIn("verify", str(caught.exception))
+
+    def test_ShouldRaise_WhenAnEnvelopePlanCannotSayWhyTheBodyIsAbsent(self):
+        # An envelope whose capture file does not explain the missing payload reads, to the next
+        # person, like a truncated capture.
+        os.environ["LMNT_API_KEY"] = "lmnt-key"
+        incomplete = capture.lmnt_http_plan(b"")
+        incomplete.pop("body_omitted")
+        capture.PROVIDERS["envelope-for-test"] = lambda source_pcm: incomplete
+        self.addCleanup(capture.PROVIDERS.pop, "envelope-for-test", None)
+
+        with tempfile.TemporaryDirectory() as root:
+            with self.assertRaises(capture.CaptureError) as caught:
+                capture.build_plan("envelope-for-test", Path(root))
+
+        self.assertIn("body_omitted", str(caught.exception))
+
+    def test_ShouldRaise_WhenSourceAudioIsMissingForASurfaceThatSubmitsIt(self):
+        os.environ["OPENAI_API_KEY"] = "sk-test"
+
+        with tempfile.TemporaryDirectory() as root:
+            with self.assertRaises(capture.CaptureError) as caught:
+                capture.build_plan("openai-whisper", Path(root))
+
+        self.assertIn("does not invent audio", str(caught.exception))
+
+
+class _FakeHeaders:
+    def __init__(self, pairs):
+        self._pairs = pairs
+
+    def items(self):
+        return list(self._pairs)
+
+
+class _FakeResponse:
+    """Just enough of http.client.HTTPResponse for send() to read it."""
+
+    def __init__(self, body, headers, status=200):
+        self._stream = io.BytesIO(body)
+        self.headers = _FakeHeaders(headers)
+        self.status = status
+
+    def read(self, size=-1):
+        return self._stream.read(size)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+
+class SendTests(unittest.TestCase):
+    """The one place the tool touches the network — stubbed at urlopen, never dialled."""
+
+    PLAN = {
+        "url": "https://example.invalid/generate",
+        "body": b"x=1",
+        "headers": {"X-API-Key": "k"},
+        "secrets": ["k"],
+    }
+
+    def setUp(self):
+        self._saved = capture.urllib.request.urlopen
+        self._response = None
+        capture.urllib.request.urlopen = lambda request, timeout=None: self._response
+
+    def tearDown(self):
+        capture.urllib.request.urlopen = self._saved
+
+    def _send(self, body, **kwargs):
+        self._response = _FakeResponse(body, [("Content-Type", "audio/raw")])
+        return capture.send(self.PLAN, 5, **kwargs)
+
+    def test_ShouldReturnTheWholeBody_WhenRetainBodyIsTrue(self):
+        status, headers, body, sizes = self._send(b"abcdef")
+
+        self.assertEqual(200, status)
+        self.assertEqual([("Content-Type", "audio/raw")], headers)
+        self.assertEqual(b"abcdef", body)
+        self.assertEqual([6], sizes)
+
+    def test_ShouldDiscardTheBody_WhenRetainBodyIsFalse(self):
+        # Envelope mode's promise is structural: there is never a whole payload in memory for a
+        # later line of code to write out.
+        _, _, body, sizes = self._send(b"audio-bytes", retain_body=False)
+
+        self.assertEqual(b"", body)
+        self.assertEqual([11], sizes)
+
+    def test_ShouldReadAtTheSdksBufferSize_SoChunkBoundariesAreObserved(self):
+        payload = bytes(capture.READ_CHUNK_BYTES * 2 + 100)
+
+        _, _, _, sizes = self._send(payload, retain_body=False)
+
+        self.assertEqual(
+            [capture.READ_CHUNK_BYTES, capture.READ_CHUNK_BYTES, 100], sizes)
+
+
+class CaptureArtifactTests(_EnvScopedTestCase):
+    """What each artifact mode actually writes, driven end to end with `send` stubbed out."""
+
+    ENV_KEYS = ("SPEECHMATICS_API_KEY", "LMNT_API_KEY")
+
+    AUDIO_MARKER = b"\xde\xadLMNT-AUDIO-MARKER\xbe\xef"
+
+    def setUp(self):
+        super().setUp()
+        os.environ.update({"SPEECHMATICS_API_KEY": "sm-key", "LMNT_API_KEY": "lmnt-key"})
+        self._saved_send = capture.send
+        self.addCleanup(setattr, capture, "send", self._saved_send)
+
+    def _root(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        return Path(temporary.name)
+
+    def _stub_send(self, body, content_type, status=200):
+        # The stub hands back the body even when capture() asked for none: the envelope
+        # assertions are only worth something if the bytes were available to be written.
+        chunks = [len(body[i:i + 8192]) for i in range(0, len(body), 8192)]
+        capture.send = lambda plan, timeout, retain_body=True: (
+            status, [("Content-Type", content_type)], body, chunks)
+
+    def _run(self, provider, body, *, content_type="audio/wav", status=200):
+        self._stub_send(body, content_type, status)
+        root = self._root()
+
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            capture.capture(provider, root, False, 5)
+
+        return {
+            path.relative_to(root).as_posix(): path.read_bytes()
+            for path in root.rglob("*") if path.is_file()
+        }
+
+    def test_ShouldWriteTheVendorBytesVerbatim_WhenArtifactIsBinary(self):
+        audio = b"RIFF\x00\x00\x00\x00WAVE" + bytes(range(256)) * 4
+
+        written = self._run("speechmatics-tts", audio)
+
+        capture_file = (
+            "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/speechmatics-tts/"
+            "synthesize-short-en-us.wav")
+        self.assertEqual(audio, written[capture_file])
+
+    def test_ShouldRecordTheDeclaredMediaTypeAndDigest_WhenArtifactIsBinary(self):
+        audio = b"RIFF\x00\x00\x00\x00WAVE" + b"\x7f\x80" * 64
+
+        written = self._run("speechmatics-tts", audio)
+        sidecar = json.loads(written[
+            "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/speechmatics-tts/"
+            "synthesize-short-en-us.provenance.json"])
+
+        self.assertEqual("audio/wav", sidecar["media_type"])
+        self.assertEqual(len(audio), sidecar["bytes"])
+        self.assertEqual(hashlib.sha256(audio).hexdigest(), sidecar["sha256"])
+        self.assertEqual("not-applicable", sidecar["source_audio"]["origin"])
+
+    def test_ShouldFollowTheVendorsDeclaration_WhenTheMediaTypeIsNotTheExpectedOne(self):
+        # A response that stops being WAV must not land in a file that still claims to be one.
+        written = self._run("speechmatics-tts", b"ID3\x03\x00mp3-bytes", content_type="audio/mpeg")
+
+        self.assertIn(
+            "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/speechmatics-tts/"
+            "synthesize-short-en-us.mp3", written)
+
+    def test_ShouldRaise_WhenABinaryCaptureExceedsTheHardCap(self):
+        # Protocol section 8's 256 KiB is a cap, not the text path's advisory threshold.
+        oversized = b"RIFF\x00\x00\x00\x00WAVE" + bytes(capture.BINARY_SIZE_CAP_BYTES)
+
+        with self.assertRaises(capture.CaptureError) as caught:
+            self._run("speechmatics-tts", oversized)
+
+        self.assertIn(str(capture.BINARY_SIZE_CAP_BYTES), str(caught.exception))
+        self.assertIn("nothing was written", str(caught.exception))
+
+    def test_ShouldWriteNothing_WhenTheBinaryCapIsExceeded(self):
+        oversized = b"RIFF\x00\x00\x00\x00WAVE" + bytes(capture.BINARY_SIZE_CAP_BYTES)
+        self._stub_send(oversized, "audio/wav")
+        root = self._root()
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaises(capture.CaptureError):
+                capture.capture("speechmatics-tts", root, False, 5)
+
+        self.assertEqual([], [p for p in root.rglob("*") if p.is_file()])
+
+    def test_ShouldNeverWriteTheAudioBytes_WhenArtifactIsEnvelope(self):
+        written = self._run(
+            "lmnt-http", self.AUDIO_MARKER * 400, content_type="audio/raw")
+
+        self.assertTrue(written, "the capture wrote no files at all")
+        for name, content in written.items():
+            self.assertNotIn(self.AUDIO_MARKER, content, f"{name} carries LMNT audio")
+
+    def test_ShouldRecordTheObservedBoundaries_WhenArtifactIsEnvelope(self):
+        body = self.AUDIO_MARKER * 400  # 9200 bytes: one full 8 KiB read plus a partial
+
+        written = self._run("lmnt-http", body, content_type="audio/raw")
+        envelope = json.loads(written[
+            "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/lmnt-http/"
+            "synthesize-short-en-us.json"])
+
+        self.assertEqual(200, envelope["status"])
+        self.assertEqual("audio/raw", envelope["media_type"])
+        self.assertEqual(len(body), envelope["content_length"])
+        self.assertEqual([8192, len(body) - 8192], envelope["chunk_sizes"])
+        self.assertIn("not-cleared", envelope["body_omitted"])
+
+    def test_ShouldDescribeTheEnvelopeAsJsonInTheSidecar_WhenArtifactIsEnvelope(self):
+        written = self._run("lmnt-http", self.AUDIO_MARKER * 400, content_type="audio/raw")
+        sidecar = json.loads(written[
+            "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/lmnt-http/"
+            "synthesize-short-en-us.provenance.json"])
+
+        self.assertEqual("application/json", sidecar["media_type"])
+        self.assertEqual("recorded", sidecar["class"])
+        self.assertEqual("not-cleared", sidecar["terms"]["verdict"])
+        self.assertIn("deliberately not committed", sidecar["notes"])
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Verbara.Sdk.Audio;
 using Verbara.Sdk.VoiceAi.Tts.ElevenLabs;
 using FluentAssertions;
@@ -29,13 +30,32 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
             VoiceId = "test-voice"
         }), fakeServerPort: _server.Port);
 
+    /// <summary>The audio the fake replays, read from the same tree the fake reads.</summary>
+    private static byte[] RecordedAudio => ElevenLabsFakeServer.ReadFrameBytes(ElevenLabsFakeServer.AudioChunk);
+
     [Fact]
     public async Task SynthesizeAsync_ShouldYieldBinaryAudioFrames()
     {
+        // The point of the recording: a real waveform of a length that is NOT chunk-aligned
+        // traverses the frame path, so a partial final frame reaches the consumer. Two 320-byte
+        // arrays of zeros — exact multiples — could never produce one.
+        //
+        // Note what is NOT asserted: that the final frame is exactly `length % 320`. Frame count
+        // and boundaries are the transport's business, not the client's contract; what the client
+        // owes is every byte, in order, with nothing invented and nothing dropped.
+        var expected = RecordedAudio;
         var synth = BuildSynthesizer();
+
         var frames = await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
-        frames.Should().HaveCount(2);
-        frames.All(f => f.Length == 320).Should().BeTrue();
+
+        (expected.Length % ElevenLabsFakeServer.AudioFrameSize).Should()
+            .NotBe(0, "the recording must not be chunk-aligned");
+        frames.Should().HaveCountGreaterThan(1, "the recording must actually be chunked");
+        frames.Should().OnlyContain(f => f.Length > 0 && f.Length <= ElevenLabsFakeServer.AudioFrameSize);
+        frames.Should().Contain(f => f.Length != ElevenLabsFakeServer.AudioFrameSize,
+            "a partial frame must reach the consumer");
+        frames.SelectMany(f => f.ToArray()).Should().Equal(expected,
+            "streaming must not alter a single byte of the recorded audio");
     }
 
     [Fact]
@@ -51,10 +71,70 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
     [Fact]
     public async Task SynthesizeAsync_ShouldFilterAlignmentMessages_NotYieldThem()
     {
+        // The interleaved text frame is now ElevenLabs' documented AudioOutput message, alignment
+        // arrays and all — not the two-field {"message_type":"alignment","words":[]} literal it
+        // retires, whose field names appear nowhere in ElevenLabs' published protocol. Asserting the
+        // exact byte sequence, rather than a frame count, is what proves the text frames were
+        // dropped whole: a client that leaked one would append JSON bytes to the audio.
         _server.SendAlignmentMessages = true;
         var synth = BuildSynthesizer();
+
         var frames = await synth.SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz).ToListAsync();
-        frames.Should().HaveCount(2);
+
+        frames.SelectMany(f => f.ToArray()).Should().Equal(RecordedAudio);
+    }
+
+    [Fact]
+    public void RecordedFixtures_ShouldCarryDocumentedFieldsAndExactByteLength_WhenReadFromRecordingsTree()
+    {
+        // Fixture-integrity fence. The fake is only as good as what is on disk: trim a documented
+        // field, swap the audio or re-save the JSON and the suite would keep passing while quietly
+        // testing something smaller. This fails here, next to the sidecar that explains the file.
+        var audio = RecordedAudio;
+        audio.Should().HaveCount(2808, "the sidecar records this exact length");
+        (audio.Length % ElevenLabsFakeServer.AudioFrameSize).Should().NotBe(0);
+
+        using var frame = JsonDocument.Parse(
+            ElevenLabsFakeServer.ReadFrame(ElevenLabsFakeServer.AudioOutputFrame));
+        var root = frame.RootElement;
+
+        // ElevenLabs documents AudioOutput as `audio` (base64 of the selected output_format) plus
+        // optional `alignment` / `normalizedAlignment`, each three equal-length parallel arrays.
+        // ElevenLabsSpeechSynthesizer models NONE of them — it skips every text frame — so the whole
+        // structure below is unmodelled. That is the finding; see the sidecar.
+        Convert.FromBase64String(root.GetProperty("audio").GetString()!).Should()
+            .Equal(audio.Take(ElevenLabsFakeServer.AudioFrameSize),
+                "the frame's audio is the first chunk of the sibling recording, not a second waveform");
+
+        foreach (var name in new[] { "alignment", "normalizedAlignment" })
+        {
+            var alignment = root.GetProperty(name);
+            var starts = alignment.GetProperty("charStartTimesMs").EnumerateArray().Count();
+            var durations = alignment.GetProperty("charDurationsMs").EnumerateArray().Count();
+            var chars = alignment.GetProperty("chars").EnumerateArray().Count();
+
+            chars.Should().BeGreaterThan(0);
+            starts.Should().Be(chars, "the three arrays are parallel and equal-length");
+            durations.Should().Be(chars, "the three arrays are parallel and equal-length");
+        }
+
+        // normalizedAlignment is chunk-relative, alignment is utterance-relative — the offset is
+        // what makes them two distinct arrays rather than one duplicated twice.
+        root.GetProperty("alignment").GetProperty("charStartTimesMs")[0].GetInt32().Should()
+            .BeGreaterThan(root.GetProperty("normalizedAlignment").GetProperty("charStartTimesMs")[0].GetInt32());
+    }
+
+    [Fact]
+    public void RecordedFixtures_ShouldMatchTheirDocumentedGeneratorParameters_WhenRegeneratedLocally()
+    {
+        // The "commit a small generator" half of the source-audio rule (protocol guide §6): the
+        // committed bytes are reproducible from three numbers in the sidecar, not magic.
+        var regenerated = SyntheticPcm.Triangle(
+            ElevenLabsFakeServer.AudioSampleCount,
+            ElevenLabsFakeServer.AudioPeriodSamples,
+            ElevenLabsFakeServer.AudioAmplitude);
+
+        regenerated.Should().Equal(RecordedAudio);
     }
 
     [Fact]

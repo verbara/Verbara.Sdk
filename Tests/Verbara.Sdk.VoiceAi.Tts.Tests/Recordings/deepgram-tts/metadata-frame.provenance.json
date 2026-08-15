@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "deepgram-tts",
+  "product": "Deepgram — text to speech, streaming (Speak WebSocket)",
+  "endpoint": "GET wss://api.deepgram.com/v1/speak",
+  "api_version": "v1",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 283,
+  "sha256": "8e4efc139049e5988a6d84d495fa97937a6041f99ada036dfac15cf65b5a4347",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "No audio was submitted and no request was issued: this frame is authored to Deepgram's published Speak-streaming protocol documentation, not captured from the service. The Metadata message carries no audio and no synthesized text, so no spoken content is involved at all.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured. The three GUID-shaped fields the documented schema carries (request_id, model_uuid and the single entry of additional_model_uuids) hold the nil GUID — the placeholder form protocol section 4 prescribes for a correlating identifier — because no real request or model instance exists to name. model_name and model_version are our own fiction and deliberately do not name a real Deepgram voice."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — Deepgram is not-cleared for capturing Output, so this fixture takes the documentation-derived route, which contains no Output at all",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://developers.deepgram.com/reference/text-to-speech-api/speak-streaming",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documented field set, types and cardinality of the server-to-client Metadata message were read from the page above: type, request_id, model_name, model_version, model_uuid and additional_model_uuids (an array). The frame conforms to that schema. No vendor example payload, prose or field description was copied — only the documented field names and the literal message-type constant 'Metadata', which is interface, not expression. Every value is our own fiction."
+  },
+  "notes": "This is the fixture that carries the measured field-set finding for this surface. DeepgramTtsServerMessage models type, request_id, model_name, model_version, sequence_id, description and code — so `model_uuid` and `additional_model_uuids` are documented fields the SDK does NOT model, and they reach the parser here as unmodelled siblings. The hand-authored object this fixture retires carried neither. What this artifact is worth: a documented schema is what the vendor says it sends, whereas a capture is what it actually sent on one day. Re-read the source_schema URL first when this suite starts failing; the page publishes no revision marker, so a silent breaking edit is indistinguishable from no edit at all."
+}

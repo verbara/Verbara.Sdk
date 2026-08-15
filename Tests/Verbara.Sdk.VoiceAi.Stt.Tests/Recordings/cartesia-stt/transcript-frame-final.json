@@ -1,0 +1,45 @@
+{
+  "type": "transcript",
+  "request_id": "00000000-0000-0000-0000-000000000000",
+  "text": "La llamada quedó registrada en el sistema.",
+  "is_final": true,
+  "duration": 2.48,
+  "language": "es",
+  "words": [
+    {
+      "word": "La",
+      "start": 0.06,
+      "end": 0.22
+    },
+    {
+      "word": "llamada",
+      "start": 0.22,
+      "end": 0.74
+    },
+    {
+      "word": "quedó",
+      "start": 0.74,
+      "end": 1.1
+    },
+    {
+      "word": "registrada",
+      "start": 1.1,
+      "end": 1.62
+    },
+    {
+      "word": "en",
+      "start": 1.7,
+      "end": 1.84
+    },
+    {
+      "word": "el",
+      "start": 1.84,
+      "end": 1.98
+    },
+    {
+      "word": "sistema",
+      "start": 1.98,
+      "end": 2.48
+    }
+  ]
+}

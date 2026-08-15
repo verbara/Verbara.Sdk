@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "cartesia-stt",
+  "product": "Cartesia — speech to text, realtime (Ink WebSocket)",
+  "endpoint": "GET wss://api.cartesia.ai/stt/websocket",
+  "api_version": "n/a",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 103,
+  "sha256": "43d3a75ba070dc762371edc5430d442161911a7f7be12791fdd431006b7e221a",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "No audio was submitted and no request was issued: this frame is authored to Cartesia's published realtime speech-to-text protocol documentation, not captured from the service. The flush_done message carries no transcript, so no spoken or written content is involved at all.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured. request_id holds the nil GUID — the placeholder form protocol section 4 prescribes for a correlating identifier — because no real request exists to identify."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — no Output was captured at all; the fixture is authored to Cartesia's published protocol documentation. Cartesia's own verdict for a capture is permitted-with-conditions, and it is not what blocks one here (see notes)",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://docs.cartesia.ai/api-reference/stt/websocket",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documented field set of the realtime speech-to-text flush_done message was read from the page above: type, request_id and the documented-deprecated is_final. No vendor example payload, prose or field description was copied — only the documented field names and the literal message-type constant 'flush_done', which is interface, not expression. Every value is our own fiction."
+  },
+  "notes": "The non-transcript control frame, and the deprecated field on it is deliberate. CartesiaSpeechRecognizer deserializes EVERY text frame into its transcript DTO and only then filters on type != \"transcript\", so a control frame that also carries is_final true — as this documented-deprecated field does — is the case where a broken filter would leak an empty transcript through as a final result. Nothing in the suite could send that frame before this fixture existed. WHY THIS IS DOCUMENTATION-DERIVED RATHER THAN CAPTURED, and it is NOT a terms problem: section 7 of the protocol guide records Cartesia as permitted-with-conditions, so the terms would have permitted a real capture; the reason there is no capture is that NO CAPTURE CREDENTIAL EXISTS IN THIS ENVIRONMENT. A real capture is a known, cleared upgrade path here whenever a credential appears. What this artifact is worth, stated plainly: a documented schema is what the vendor says it sends, not what it sent on any given day, and this route cannot close the does-the-vendor-honour-its-own-docs half of the ADR-0041 D4 gap. The page publishes no revision marker, so a silent breaking edit there is indistinguishable from no edit at all."
+}

@@ -1,0 +1,35 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "elevenlabs-tts",
+  "product": "ElevenLabs — text to speech, streaming (stream-input WebSocket)",
+  "endpoint": "GET wss://api.elevenlabs.io/v1/text-to-speech/<voice-id>/stream-input",
+  "api_version": "v1",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 2602,
+  "sha256": "df33d62079762749c92f16139efd4c5702bdf833405c2a5006fddfca244630c3",
+  "source_audio": {
+    "origin": "synthetic",
+    "description": "The `audio` field carries base64 of the FIRST 320 BYTES of the sibling audio-pcm-16khz.raw fixture — the same locally generated triangle-wave tone (1404 samples, period 50, amplitude 9000, 16-bit signed little-endian mono at 16000 Hz), not provider output. The alignment arrays describe a fictional Spanish sentence authored for this repository, 'Su solicitud quedó registrada.', which names no real person, organisation, number or reference; no voice, synthetic or otherwise, was involved. The character timings are our own fiction: 46 ms per character, 23 ms per space, with normalizedAlignment starting at 0 (chunk-relative) and alignment offset by 250 ms (utterance-relative).",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [
+      "voice-id path segment in the endpoint template"
+    ],
+    "notes": "Nothing was redacted from the file because nothing was captured. The message type carries no identifier field at all in the documented schema, so there was no correlating id to placeholder."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — ElevenLabs is not-cleared for capturing Output, so this fixture takes the documentation-derived route, which contains no Output at all",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream-input",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documented server-to-client message set was read from the API reference page above and corroborated against https://elevenlabs.io/docs/eleven-api/guides/how-to/websockets/realtime-tts, which confirms `audio` and `isFinal` but does not publish the alignment sub-field names. The reference documents a union of two messages: AudioOutput, carrying `audio` (base64 of the selected output_format) plus optional `alignment` and `normalizedAlignment` objects, each with charStartTimesMs (integer array), charDurationsMs (integer array) and chars (string array) of equal length; and FinalOutput, carrying only `isFinal`. This fixture is an AudioOutput and conforms to that field set, nesting, types and cardinality. No vendor example payload, prose or field description was copied — only the documented field names, which are interface, not expression. Every value is our own fiction."
+  },
+  "notes": "Only AudioOutput is committed. The documented FinalOutput message is not modelled here because ElevenLabsFakeServer does not send one today, and adding a frame the fake never sent would change how it answers rather than where its payloads come from (tasks.md 6.4). THE FINDING THIS FIXTURE CARRIES, AND IT IS THE LARGE ONE FOR THIS SURFACE: ElevenLabs documents that stream-input delivers audio as base64 inside this JSON text message. ElevenLabsSpeechSynthesizer models no ElevenLabs server message at all — it yields WebSocket BINARY frames and skips every text frame unparsed — so of the documented field set (`audio`, `alignment.charStartTimesMs`, `alignment.charDurationsMs`, `alignment.chars`, the same three under `normalizedAlignment`, and `isFinal` on the sibling FinalOutput message) the SDK models exactly NONE. The frame this fixture retires, {\"message_type\":\"alignment\",\"words\":[]}, used two field names that appear nowhere in ElevenLabs' published protocol; it asserted the SDK ignores a text frame, which is true of any text frame. This one asserts the SDK ignores the REAL message — the one that actually carries the audio. The divergence is deliberately not fixed here: it needs an src change and its own proposal, and this task's contract is that a fake changes only in where its payloads come from. What this artifact is worth: a documented schema is what the vendor says it sends, whereas a capture is what it actually sent on one day. Re-read the source_schema URL first when this suite starts failing; the page publishes no revision marker, so a silent breaking edit is indistinguishable from no edit at all."
+}

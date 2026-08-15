@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "cartesia-tts",
+  "product": "Cartesia — text to speech, streaming (Sonic WebSocket)",
+  "endpoint": "GET wss://api.cartesia.ai/tts/websocket",
+  "api_version": "2024-11-13",
+  "captured_utc": "2026-08-14",
+  "media_type": "audio/L16",
+  "bytes": 2008,
+  "sha256": "9c8ec4980f00007cb59ef924b62ff59383dfdbd05eb16e30bce92ebf656f354b",
+  "source_audio": {
+    "origin": "synthetic",
+    "description": "Locally generated signal-generator tone — NOT provider output, and no provider was called. 1004 samples of a symmetric triangle wave, period 40 samples, peak amplitude 12000, written as 16-bit signed little-endian mono at 8000 Hz (pcm_s16le, container raw — the encoding CartesiaOptions requests by default and the sample rate AudioFormat.Slin16Mono8kHz asks for). Generated with integer arithmetic only, deliberately: Math.Sin is not guaranteed bit-identical across platforms and this file is asserted byte-for-byte. The generator is committed as SyntheticPcm.Triangle in this suite and RecordedFixtures_ShouldMatchTheirDocumentedGeneratorParameters_WhenRegeneratedLocally regenerates the file from these three numbers on every run, so the bytes are reproducible rather than magic. 2008 bytes is 0.77% of the 256 KiB cap and is deliberately NOT a multiple of the fake's 320-byte frame size (6 full frames + an 88-byte partial), so a partial final frame reaches the consumer.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured: these bytes were computed locally from three published parameters and carry no vendor speech, no voice and no spoken content of any kind."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — no Output was captured. Cartesia's own verdict is permitted-with-conditions and would have cleared a real capture; see this file's notes for why there is not one",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://docs.cartesia.ai/2024-11-13/api-reference/tts/tts",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documentation page pinned to the 2024-11-13 API version — the value CartesiaOptions.ApiVersion sends in the Cartesia-Version header — was read for the server-to-client message set, and corroborated against https://docs.cartesia.ai/api-reference/tts/websocket. This file is not a transcription of any documented payload: it is a locally computed waveform standing in for the audio payload, in the encoding, sample rate and container the request asks for. No vendor example payload, prose or field description was copied into this repository."
+  },
+  "notes": "WHY THERE IS NO REAL CAPTURE, STATED PRECISELY SO IT IS NOT MISREAD: Cartesia is the one provider in this suite whose terms WOULD have permitted committing real synthesized audio — protocol section 7 records permitted-with-conditions, resting on ToS 5.3(b) and an Acceptable Use Policy that places no restriction on sharing synthesized speech. The blocker is not the terms. It is that no Cartesia capture credential exists in this environment, and section 3.3 requires a credential that has never seen production plus (condition 1) a commercial-use subscription tier. A real capture on a commercial tier, with a stock library voice, is therefore a KNOWN CLEARED UPGRADE PATH for this fixture rather than something the terms forbid. DIVERGENCE FOUND WHILE AUTHORING THIS, and it is the substantive finding: Cartesia's published WebSocket protocol delivers audio as base64 in the `data` field of a JSON `chunk` text message — the docs describe no raw-binary frame mode at all, at either the pinned 2024-11-13 version or the current one — whereas CartesiaSpeechSynthesizer yields only WebSocket BINARY frames and drops every text frame that is not `done` or `error`. This fixture is seeded as binary frames because that is what the client under test consumes and because changing how the fake answers is out of scope here (tasks.md 6.4); the divergence needs its own change, not a silent fixture edit. What this artifact is worth: a documented schema is what the vendor says it sends, whereas a capture is what it actually sent on one day. This route closes the field-set and frame-ordering half of the ADR-0041 D4 gap and cannot close the does-the-vendor-honour-its-own-docs half."
+}

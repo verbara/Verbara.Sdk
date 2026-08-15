@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Verbara.Sdk.Audio;
 using Verbara.Sdk.VoiceAi.Tts.Deepgram;
 using FluentAssertions;
@@ -33,6 +34,9 @@ public class DeepgramSpeechSynthesizerTests : IAsyncDisposable
             Encoding = encoding,
             SampleRate = sampleRate,
         }), fakeServerPort: _server.Port);
+
+    /// <summary>The audio the fake replays, read from the same tree the fake reads.</summary>
+    private static byte[] RecordedAudio => DeepgramTtsFakeServer.ReadFrameBytes(DeepgramTtsFakeServer.AudioChunk);
 
     // ─── Options binding ─────────────────────────────────────────────────────
 
@@ -112,52 +116,127 @@ public class DeepgramSpeechSynthesizerTests : IAsyncDisposable
     [Fact]
     public async Task SynthesizeAsync_ShouldYieldBinaryAudioFrames()
     {
+        // The point of the recording: a real waveform of a length that is NOT chunk-aligned
+        // traverses the frame path, so a partial final frame reaches the consumer. Two 320-byte
+        // arrays of zeros — exact multiples — could never produce one.
+        //
+        // Note what is NOT asserted: that the final frame is exactly `length % 320`. Frame count
+        // and boundaries are the transport's business, not the client's contract; what the client
+        // owes is every byte, in order, with nothing invented and nothing dropped.
+        var expected = RecordedAudio;
         var synth = BuildSynthesizer();
+
         var frames = await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
-        frames.Should().HaveCount(2);
-        frames.All(f => f.Length == 320).Should().BeTrue();
+        (expected.Length % DeepgramTtsFakeServer.AudioFrameSize).Should()
+            .NotBe(0, "the recording must not be chunk-aligned");
+        frames.Should().HaveCountGreaterThan(1, "the recording must actually be chunked");
+        frames.Should().OnlyContain(f => f.Length > 0 && f.Length <= DeepgramTtsFakeServer.AudioFrameSize);
+        frames.Should().Contain(f => f.Length != DeepgramTtsFakeServer.AudioFrameSize,
+            "a partial frame must reach the consumer");
+        frames.SelectMany(f => f.ToArray()).Should().Equal(expected,
+            "streaming must not alter a single byte of the recorded audio");
     }
 
     [Fact]
     public async Task SynthesizeAsync_ShouldTerminate_WhenServerSendsFlushed()
     {
-        // Server sends 2 binary frames followed by {"type":"Flushed"}.
-        // The synthesizer must stop iterating as soon as Flushed arrives.
+        // Server sends the recorded audio as binary frames, then the recorded Flushed frame.
+        // The synthesizer must stop iterating as soon as Flushed arrives — with every audio byte
+        // delivered and nothing after it.
         _server.SendFlushedTerminator = true;
         var synth = BuildSynthesizer();
 
         var frames = await synth.SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
-        frames.Should().HaveCount(2);
+        frames.SelectMany(f => f.ToArray()).Should().Equal(RecordedAudio);
+    }
+
+    [Fact]
+    public void RecordedFixtures_ShouldCarryDocumentedFieldsAndExactByteLength_WhenReadFromRecordingsTree()
+    {
+        // Fixture-integrity fence. The fake is only as good as what is on disk: trim a documented
+        // field, swap the audio or re-save the JSON and the suite would keep passing while quietly
+        // testing something smaller. This fails here, next to the sidecar that explains the file.
+        var audio = RecordedAudio;
+        audio.Should().HaveCount(2408, "the sidecar records this exact length");
+        (audio.Length % DeepgramTtsFakeServer.AudioFrameSize).Should().NotBe(0);
+
+        using var metadata = JsonDocument.Parse(
+            DeepgramTtsFakeServer.ReadFrame(DeepgramTtsFakeServer.MetadataFrame));
+        var meta = metadata.RootElement;
+        meta.GetProperty("type").GetString().Should().Be("Metadata");
+        meta.GetProperty("request_id").GetString().Should().Be("00000000-0000-0000-0000-000000000000",
+            "a correlating identifier is placeholdered, never real (protocol guide §4)");
+        meta.GetProperty("model_name").ValueKind.Should().Be(JsonValueKind.String);
+        meta.GetProperty("model_version").ValueKind.Should().Be(JsonValueKind.String);
+
+        // The two documented fields DeepgramTtsServerMessage does NOT model. They reach the parser
+        // as unmodelled siblings, which the hand-authored four-field object never did.
+        meta.GetProperty("model_uuid").ValueKind.Should().Be(JsonValueKind.String);
+        meta.GetProperty("additional_model_uuids").EnumerateArray().Should().NotBeEmpty();
+
+        using var warning = JsonDocument.Parse(
+            DeepgramTtsFakeServer.ReadFrame(DeepgramTtsFakeServer.WarningFrame));
+        warning.RootElement.GetProperty("type").GetString().Should().Be("Warning");
+        warning.RootElement.GetProperty("description").ValueKind.Should().Be(JsonValueKind.String);
+        warning.RootElement.GetProperty("code").ValueKind.Should().Be(JsonValueKind.String);
+
+        using var flushed = JsonDocument.Parse(
+            DeepgramTtsFakeServer.ReadFrame(DeepgramTtsFakeServer.FlushedFrame));
+        flushed.RootElement.GetProperty("type").GetString().Should().Be("Flushed");
+        flushed.RootElement.GetProperty("sequence_id").ValueKind.Should().Be(JsonValueKind.Number);
+    }
+
+    [Fact]
+    public void RecordedFixtures_ShouldMatchTheirDocumentedGeneratorParameters_WhenRegeneratedLocally()
+    {
+        // The "commit a small generator" half of the source-audio rule (protocol guide §6): the
+        // committed bytes are reproducible from three numbers in the sidecar, not magic.
+        var regenerated = SyntheticPcm.Triangle(
+            DeepgramTtsFakeServer.AudioSampleCount,
+            DeepgramTtsFakeServer.AudioPeriodSamples,
+            DeepgramTtsFakeServer.AudioAmplitude);
+
+        regenerated.Should().Equal(RecordedAudio);
     }
 
     [Fact]
     public async Task SynthesizeAsync_ShouldNotThrow_WhenServerSendsWarningFrame()
     {
-        // Warning frames must be swallowed — do not throw or break the audio stream.
+        // Warning frames must be swallowed — do not throw or break the audio stream. The frame is
+        // now the recorded one, carrying every field Deepgram documents on this message type.
         _server.SendWarningBeforeAudio = true;
         var synth = BuildSynthesizer();
+        List<ReadOnlyMemory<byte>> frames = [];
 
-        var act = async () => await synth
+        var act = async () => frames = await synth
             .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
             .ToListAsync();
 
         await act.Should().NotThrowAsync();
+        frames.SelectMany(f => f.ToArray()).Should().Equal(RecordedAudio,
+            "a warning must not cost the caller a byte of audio");
     }
 
     [Fact]
     public async Task SynthesizeAsync_ShouldNotThrow_WhenServerSendsMetadataFrame()
     {
-        // Metadata frames are informational and must be silently ignored.
+        // Metadata frames are informational and must be silently ignored — including the two
+        // documented fields (model_uuid, additional_model_uuids) the SDK's DTO does not model. A
+        // parser that threw on an unmodelled sibling passed against the previous four-field literal
+        // and fails against this frame.
         _server.SendMetadataOnConnect = true;
         var synth = BuildSynthesizer();
+        List<ReadOnlyMemory<byte>> frames = [];
 
-        var act = async () => await synth
+        var act = async () => frames = await synth
             .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
             .ToListAsync();
 
         await act.Should().NotThrowAsync();
+        frames.SelectMany(f => f.ToArray()).Should().Equal(RecordedAudio,
+            "an unmodelled sibling field must not cost the caller a byte of audio");
     }
 
     [Fact]

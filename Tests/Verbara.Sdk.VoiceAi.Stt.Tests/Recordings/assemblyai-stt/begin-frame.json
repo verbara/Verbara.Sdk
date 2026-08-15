@@ -1,0 +1,15 @@
+{
+  "type": "Begin",
+  "id": "00000000-0000-0000-0000-000000000000",
+  "expires_at": 1786924800,
+  "configuration": {
+    "model": "fixture-universal",
+    "mode": null,
+    "api_version": "v3",
+    "speaker_labels": true,
+    "redact_pii": false,
+    "filter_profanity": false,
+    "domain": null,
+    "voice_focus": null
+  }
+}

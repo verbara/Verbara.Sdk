@@ -1,0 +1,164 @@
+{
+  "message": "AddTranscript",
+  "format": "2.1",
+  "metadata": {
+    "start_time": 0.0,
+    "end_time": 2.34,
+    "transcript": "El equipo revisó el informe esta mañana."
+  },
+  "results": [
+    {
+      "type": "word",
+      "start_time": 0.06,
+      "end_time": 0.24,
+      "is_eos": false,
+      "volume": 47.2,
+      "alternatives": [
+        {
+          "content": "El",
+          "confidence": 0.98,
+          "language": "es",
+          "display": {
+            "direction": "ltr"
+          },
+          "speaker": "S1",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "type": "word",
+      "start_time": 0.24,
+      "end_time": 0.71,
+      "is_eos": false,
+      "volume": 51.8,
+      "alternatives": [
+        {
+          "content": "equipo",
+          "confidence": 0.99,
+          "language": "es",
+          "display": {
+            "direction": "ltr"
+          },
+          "speaker": "S1",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "type": "word",
+      "start_time": 0.71,
+      "end_time": 1.14,
+      "is_eos": false,
+      "volume": 49.6,
+      "alternatives": [
+        {
+          "content": "revisó",
+          "confidence": 0.97,
+          "language": "es",
+          "display": {
+            "direction": "ltr"
+          },
+          "speaker": "S1",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "type": "word",
+      "start_time": 1.14,
+      "end_time": 1.22,
+      "is_eos": false,
+      "volume": 44.1,
+      "alternatives": [
+        {
+          "content": "el",
+          "confidence": 0.99,
+          "language": "es",
+          "display": {
+            "direction": "ltr"
+          },
+          "speaker": "S1",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "type": "word",
+      "start_time": 1.22,
+      "end_time": 1.68,
+      "is_eos": false,
+      "volume": 50.3,
+      "alternatives": [
+        {
+          "content": "informe",
+          "confidence": 0.96,
+          "language": "es",
+          "display": {
+            "direction": "ltr"
+          },
+          "speaker": "S1",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "type": "word",
+      "start_time": 1.74,
+      "end_time": 2.01,
+      "is_eos": false,
+      "volume": 46.9,
+      "alternatives": [
+        {
+          "content": "esta",
+          "confidence": 0.98,
+          "language": "es",
+          "display": {
+            "direction": "ltr"
+          },
+          "speaker": "S1",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "type": "word",
+      "start_time": 2.01,
+      "end_time": 2.34,
+      "is_eos": false,
+      "volume": 45.4,
+      "alternatives": [
+        {
+          "content": "mañana",
+          "confidence": 0.95,
+          "language": "es",
+          "display": {
+            "direction": "ltr"
+          },
+          "speaker": "S1",
+          "tags": []
+        }
+      ]
+    },
+    {
+      "type": "punctuation",
+      "start_time": 2.34,
+      "end_time": 2.34,
+      "attaches_to": "previous",
+      "is_eos": true,
+      "alternatives": [
+        {
+          "content": ".",
+          "confidence": 1.0,
+          "language": "es",
+          "display": {
+            "direction": "ltr"
+          },
+          "speaker": "S1",
+          "tags": []
+        }
+      ]
+    }
+  ],
+  "forced": false
+}

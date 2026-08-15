@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "cartesia-tts",
+  "product": "Cartesia — text to speech, streaming (Sonic WebSocket)",
+  "endpoint": "GET wss://api.cartesia.ai/tts/websocket",
+  "api_version": "2024-11-13",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 115,
+  "sha256": "bd365feaa318aced6a0f7986dbda4542089aa433bb1172647bb85479716b3479",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "No audio was submitted and no request was issued: this frame is authored to Cartesia's published WebSocket protocol documentation, not captured from the service. The done message carries no audio and no text, so no spoken or written content is involved at all.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured. context_id holds the nil GUID — the placeholder form protocol section 4 prescribes for a correlating session identifier — because no real session exists to name."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — no Output was captured. Cartesia's own verdict is permitted-with-conditions; the reason there is no real capture is the absence of a capture credential in this environment, not the terms (see the sibling audio fixture's notes)",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://docs.cartesia.ai/2024-11-13/api-reference/tts/tts",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documented field set of the server-to-client done message was read from the page pinned to the 2024-11-13 API version — the value CartesiaOptions.ApiVersion sends in the Cartesia-Version header — and corroborated against https://docs.cartesia.ai/api-reference/tts/websocket: type, done, status_code, context_id. The frame conforms to that field set, nesting and types. No vendor example payload, prose or field description was copied — only the documented field names and the literal message-type constant 'done', which is interface, not expression. Every value is our own fiction."
+  },
+  "notes": "The terminator CartesiaSpeechSynthesizer stops on. CartesiaTtsControlMessage models exactly ONE of the four documented fields — `type` — so `done`, `status_code` and `context_id` reach the parser as unmodelled siblings, which the hand-authored {\"type\":\"done\"} this fixture retires never did. A parser that threw on an unmodelled sibling passed against that object and fails against this one. `status_code` is 200 as our own fictional value; the documented type is an integer and nothing here asserts a particular one. What this artifact is worth: a documented schema is what the vendor says it sends, whereas a capture is what it actually sent on one day. Re-read the source_schema URL first when this suite starts failing; the page publishes no revision marker, so a silent breaking edit is indistinguishable from no edit at all."
+}

@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "deepgram-tts",
+  "product": "Deepgram — text to speech, streaming (Speak WebSocket)",
+  "endpoint": "GET wss://api.deepgram.com/v1/speak",
+  "api_version": "v1",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 129,
+  "sha256": "b1fac3ec24fa582e4397d93d6256e575f747944758ccc9d5b0d8e6ed3755470a",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "No audio was submitted and no request was issued: this frame is authored to Deepgram's published Speak-streaming protocol documentation, not captured from the service. The description string is a fictional Spanish sentence written for this repository; it names no real person, organisation, number or reference.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured. The warning code is our own fixture constant and deliberately does not reproduce a real Deepgram code."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — Deepgram is not-cleared for capturing Output, so this fixture takes the documentation-derived route, which contains no Output at all",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://developers.deepgram.com/reference/text-to-speech-api/speak-streaming",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documented field set of the server-to-client Warning message was read from the page above: type, description, code. The frame conforms to that schema. No vendor example payload, prose or field description was copied — only the documented field names and the literal message-type constant 'Warning', which is interface, not expression. Both values are our own fiction."
+  },
+  "notes": "DeepgramSpeechSynthesizer logs a Warning frame and keeps streaming rather than throwing; this fixture is what the suite sends to assert that. Every field the vendor documents on this message type is modelled by DeepgramTtsServerMessage, so unlike the Metadata frame it carries no unmodelled sibling — recorded here so a reader does not go looking for one. What this artifact is worth: a documented schema is what the vendor says it sends, whereas a capture is what it actually sent on one day. Re-read the source_schema URL first when this suite starts failing; the page publishes no revision marker."
+}

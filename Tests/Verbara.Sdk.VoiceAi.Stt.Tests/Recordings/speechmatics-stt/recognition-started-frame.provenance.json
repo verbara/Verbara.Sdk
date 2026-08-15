@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "speechmatics-stt",
+  "product": "Speechmatics — speech to text, Realtime (WebSocket v2)",
+  "endpoint": "GET wss://eu2.rt.speechmatics.com/v2/<language>",
+  "api_version": "v2",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 306,
+  "sha256": "e6d54d83a035aefb687b4d5b95d4f9cc66828e28c6cf6150655e9c26763ba183",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "No audio was submitted and no request was issued: this frame is authored to Speechmatics' published Realtime protocol documentation, not captured from the service. The RecognitionStarted message carries no transcript, so no spoken or written content is involved at all.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured. The session id holds the nil GUID — the placeholder form protocol section 4 prescribes for a correlating identifier — because no real session exists to name, and the orchestrator version is deliberately a fixture label rather than a real Speechmatics build number."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — no Output was captured at all; the fixture is authored to Speechmatics' published protocol documentation. Speechmatics STT's own verdict for a capture is permitted, and it is not what blocks one here (see notes)",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://docs.speechmatics.com/api-ref/realtime-transcription-websocket",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documented field set of the Realtime RecognitionStarted message was read from the page above: message, orchestrator_version, id and language_pack_info (language_description, word_delimiter, writing_direction, itn, adapted). The documented-optional channel_ids array is omitted because this fixture represents a single-channel session. No vendor example payload, prose or field description was copied — only the documented field names, the literal message-type constant 'RecognitionStarted' and the documented enum member 'left-to-right', which are interface, not expression. Every value is our own fiction."
+  },
+  "notes": "The session-greeting control frame, sent by the fake in answer to the client's StartRecognition message rather than on a timer, which is the sequencing the real service uses and the sequencing the fake already had. It replaces a two-field placeholder and carries the nested language_pack_info object the documentation describes, so the recognizer's lifecycle filter is now exercised against a frame with a genuinely different shape. Its word_delimiter field is worth a reader's attention: Speechmatics publishes the delimiter to join tokens with, and the SDK ignores it and hard-codes a single space — see the add-transcript sidecar for what that costs. WHY THIS IS DOCUMENTATION-DERIVED RATHER THAN CAPTURED, and it is NOT a terms problem: Speechmatics STT is recorded as permitted in section 7 of the protocol guide, so the terms would have permitted a capture; the reason there is no capture is that NO CAPTURE CREDENTIAL EXISTS IN THIS ENVIRONMENT, and a real capture is a known, cleared upgrade path whenever one appears. What this artifact is worth, stated plainly: a documented schema is what the vendor says it sends, not what it sent on any given day, and this route cannot close the does-the-vendor-honour-its-own-docs half of the ADR-0041 D4 gap. The page publishes no revision marker, so a silent breaking edit there is indistinguishable from no edit at all."
+}

@@ -1,12 +1,40 @@
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.Json.Nodes;
+using Verbara.Sdk.TestInfrastructure.Http;
 
 namespace Verbara.Sdk.VoiceAi.Stt.Tests.Deepgram;
 
-/// <summary>In-process WebSocket server that speaks the Deepgram wire protocol.</summary>
+/// <summary>
+/// In-process WebSocket server that speaks the Deepgram wire protocol, seeded from the frames in
+/// <c>Recordings/deepgram-stt/</c> rather than from hand-authored minimal JSON (ADR-0041 D4).
+/// </summary>
+/// <remarks>
+/// Deepgram is <c>not-cleared</c> for capturing Output
+/// (<c>docs/guides/provider-recording-protocol.md</c> §7), so the frames take that section's
+/// documentation-derived route: they conform to Deepgram's published streaming schema and carry
+/// fictional values, labelled <c>class: "synthetic"</c> with a <c>source_schema</c> block. They are
+/// therefore <em>full</em> frames — <c>speech_final</c>, <c>channel_index</c>, <c>duration</c>,
+/// <c>start</c>, <c>metadata</c>, word-level arrays — where the previous
+/// <c>BuildResultJson</c> emitted a five-field object. A parser that threw on an unmodelled sibling
+/// field passed against that object and fails against these.
+/// </remarks>
 internal sealed class DeepgramFakeServer : IAsyncDisposable
 {
+    /// <summary>Recorded interim <c>Results</c> frame — <c>is_final</c> and <c>speech_final</c> false.</summary>
+    public const string InterimResultsFrame = "deepgram-stt/results-frame-interim.json";
+
+    /// <summary>Recorded final <c>Results</c> frame — <c>is_final</c> and <c>speech_final</c> true.</summary>
+    public const string FinalResultsFrame = "deepgram-stt/results-frame-final.json";
+
+    /// <summary>Recorded <c>Metadata</c> control frame — the parser must ignore it.</summary>
+    public const string MetadataFrame = "deepgram-stt/metadata-frame.json";
+
+    // Resolved once per assembly: discovery walks the filesystem, and every frame in this suite
+    // comes out of the same tree.
+    private static readonly Lazy<ProviderRecordings> RecordingsTree = new(() => ProviderRecordings.Locate());
+
     private readonly HttpListener _listener = null!;
     private readonly CancellationTokenSource _cts = new();
     private Task? _acceptLoop;
@@ -48,8 +76,10 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
         if (_listener is null)
             throw new InvalidOperationException("Failed to allocate a port for the fake Deepgram server.");
 
-        ResultMessages.Add(BuildResultJson("hola mundo", 0.99f, isFinal: false));
-        ResultMessages.Add(BuildResultJson("hola mundo", 0.99f, isFinal: true));
+        // Default seed: the recorded frames verbatim, so a test that does not care about the
+        // transcript still exercises the full documented field set.
+        ResultMessages.Add(ReadFrame(InterimResultsFrame));
+        ResultMessages.Add(ReadFrame(FinalResultsFrame));
     }
 
     public void Start() => _acceptLoop = Task.Run(AcceptLoopAsync);
@@ -114,8 +144,31 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
         }
     }
 
+    /// <summary>Read a recorded frame verbatim from the suite's <c>Recordings/</c> tree.</summary>
+    public static string ReadFrame(string relativePath) => RecordingsTree.Value.ReadText(relativePath);
+
+    /// <summary>
+    /// A recorded <c>Results</c> frame with only the three values a test drives patched into it.
+    /// </summary>
+    /// <remarks>
+    /// Same signature as the string-interpolating version it replaces, so the suite keeps deciding
+    /// transcript, confidence and finality per test — but everything the vendor's schema carries
+    /// around those three values survives instead of being dropped. <paramref name="isFinal"/>
+    /// selects which recording is patched, so <c>speech_final</c>, <c>duration</c>, <c>start</c> and
+    /// the word array stay coherent with the finality being asserted rather than being flipped
+    /// underneath them.
+    /// </remarks>
     public static string BuildResultJson(string transcript, float confidence, bool isFinal)
-        => $$$"""{"type":"Results","is_final":{{{(isFinal ? "true" : "false")}}},"channel":{"alternatives":[{"transcript":"{{{transcript}}}","confidence":{{{confidence}}}}]}}""";
+    {
+        var frame = JsonNode.Parse(ReadFrame(isFinal ? FinalResultsFrame : InterimResultsFrame))!;
+        var alternative = frame["channel"]!["alternatives"]![0]!;
+
+        alternative["transcript"] = transcript;
+        alternative["confidence"] = confidence;
+        frame["is_final"] = isFinal;
+
+        return frame.ToJsonString();
+    }
 
     public async ValueTask DisposeAsync()
     {

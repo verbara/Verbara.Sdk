@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "deepgram-stt",
+  "product": "Deepgram — speech to text, streaming (Live Audio WebSocket)",
+  "endpoint": "GET wss://api.deepgram.com/v1/listen",
+  "api_version": "v1",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 274,
+  "sha256": "01f755baaa3bc0008fd9c7cc6069bb2dbeb1729c446bee2017dc0d2d506cc4af",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "No audio was submitted and no request was issued: this frame is authored to Deepgram's published streaming-protocol documentation, not captured from the service. The Metadata message carries no transcript, so no spoken or written content is involved at all.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured. request_id holds the nil GUID and the audio digest field holds an all-zero 64-hex fill — the placeholder forms protocol section 4 prescribes — because no real request or audio stream exists to identify."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — Deepgram is not-cleared for capturing Output, so this fixture takes the documentation-derived route, which contains no Output at all",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://developers.deepgram.com/reference/speech-to-text/listen-streaming",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documented field set of the streaming Metadata message was read from the page above: type, transaction_key, request_id, sha256, created, duration, channels. No vendor example payload, prose or field description was copied — only the documented field names, the literal message-type constant 'Metadata' and the documented transaction_key sentinel, both of which are interface constants rather than expression. Every other value is our own fiction."
+  },
+  "notes": "The non-Results control frame. DeepgramSpeechRecognizer filters on type != \"Results\" and this fixture is what makes that filter assertable: before it, no test in the suite ever sent the parser a frame it was supposed to ignore. What this artifact is worth, stated plainly: a documented schema is what the vendor says it sends, whereas a capture is what it actually sent on one day. This route closes the field-set and frame-ordering half of the ADR-0041 D4 gap and cannot close the does-the-vendor-honour-its-own-docs half. Re-read the source_schema URL first when this suite starts failing; the page publishes no revision marker, so a silent breaking edit is indistinguishable from no edit at all."
+}

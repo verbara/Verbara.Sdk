@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "speechmatics-stt",
+  "product": "Speechmatics — speech to text, Realtime (WebSocket v2)",
+  "endpoint": "GET wss://eu2.rt.speechmatics.com/v2/<language>",
+  "api_version": "v2",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 1740,
+  "sha256": "df57e1e182ca2c3cd4d298745c0d00058507bde7a6324bd74b651abb5e90c61c",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "No audio was submitted and no request was issued: this frame is authored to Speechmatics' published Realtime protocol documentation, not captured from the service. The transcript is a fictional Spanish sentence authored for this repository ('El equipo revisó el informe esta mañana.', shown here as the partial 'El equipo revisó el'); it names no real person, organisation, number, date or reference, and no voice — synthetic or otherwise — was involved.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured. Every value is fictional by construction, including the speaker label, which identifies no real person."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — no Output was captured at all; the fixture is authored to Speechmatics' published protocol documentation. Speechmatics STT's own verdict for a capture is permitted, and it is not what blocks one here (see notes)",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://docs.speechmatics.com/api-ref/realtime-transcription-websocket",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documented field set, nesting, types and cardinality of the Realtime AddPartialTranscript message were read from the page above, and the placement of the segment text was re-checked against the page's raw Markdown source at https://docs.speechmatics.com/api-ref/realtime-transcription-websocket.md because two readings of the rendered page disagreed on whether 'transcript' sits at the top level or inside 'metadata'. The raw source settles it: it is inside metadata. The documentation gives AddPartialTranscript and AddTranscript an identical structure, and this frame carries it: message, format, metadata (start_time, end_time, transcript), results[] (type, start_time, end_time, is_eos, volume, alternatives[]) and forced; each alternative carries content, confidence, language, display.direction, speaker and tags. The optional 'channel' field is omitted for the same reason as in the final sibling. No vendor example payload, prose or field description was copied into this repository — only the documented field names, the literal message-type constant 'AddPartialTranscript', the documented enum members and the documented output-format version string, all of which are interface rather than expression. Every value is our own fiction."
+  },
+  "notes": "The partial-transcript frame: a prefix of the final sibling's token stream, with no punctuation element yet because the segment has not closed. THE CONFIDENCE VALUES HERE ARE DELIBERATELY LOW, AND THAT IS A FINDING. Speechmatics documents that on AddPartialTranscript the alternatives' confidence field has no meaning and should not be relied on; SpeechmaticsSpeechRecognizer nonetheless averages it and surfaces it on the SpeechRecognitionResult exactly as it does for a final, so a consumer cannot tell a meaningful confidence from a meaningless one. Authoring implausible values here keeps that visible rather than papering over it with numbers that look trustworthy. WHY THIS IS DOCUMENTATION-DERIVED RATHER THAN CAPTURED, and it is NOT a terms problem: section 7 of the protocol guide records Speechmatics STT as permitted — ToS section 10.3 assigns the customer all IP in Transcripts — so the terms would have permitted a real capture. The reason there is no capture is simply that NO CAPTURE CREDENTIAL EXISTS IN THIS ENVIRONMENT, and a real capture is a known, cleared upgrade path here whenever one appears. What this artifact is worth, stated plainly: a documented schema is what the vendor says it sends, whereas a capture is what it actually sent on one day, and this route cannot close the does-the-vendor-honour-its-own-docs half of the ADR-0041 D4 gap. The page publishes no revision marker of its own — only the message-level 'format' version — so a silent breaking edit there is indistinguishable from no edit at all."
+}

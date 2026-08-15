@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "deepgram-tts",
+  "product": "Deepgram — text to speech, streaming (Speak WebSocket)",
+  "endpoint": "GET wss://api.deepgram.com/v1/speak",
+  "api_version": "v1",
+  "captured_utc": "2026-08-14",
+  "media_type": "audio/L16",
+  "bytes": 2408,
+  "sha256": "11a7a35af4a6afc863ace7264c1515173bd3b7780629928e957025de8bb45c8f",
+  "source_audio": {
+    "origin": "synthetic",
+    "description": "Locally generated signal-generator tone — NOT provider output, and no provider was called. 1204 samples of a symmetric triangle wave, period 32 samples, peak amplitude 10000, written as 16-bit signed little-endian mono at 16000 Hz (the linear16 encoding and sample rate DeepgramTtsOptions requests by default). Generated with integer arithmetic only, deliberately: Math.Sin is not guaranteed bit-identical across platforms and this file is asserted byte-for-byte. The generator is committed as SyntheticPcm.Triangle in this suite and RecordedFixtures_ShouldMatchTheirDocumentedGeneratorParameters_WhenRegeneratedLocally regenerates the file from these three numbers on every run, so the bytes are reproducible rather than magic. 2408 bytes is 0.92% of the 256 KiB cap and is deliberately NOT a multiple of the fake's 320-byte frame size (7 full frames + a 168-byte partial), so a partial final frame reaches the consumer.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured: these bytes were computed locally from three published parameters and carry no vendor speech, no voice and no spoken content of any kind."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — Deepgram is not-cleared for capturing Output, so this fixture takes the documentation-derived route, which contains no Output at all",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://developers.deepgram.com/reference/text-to-speech-api/speak-streaming",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The page above was read to confirm that Speak-streaming audio is delivered as raw BINARY WebSocket frames interleaved with the JSON control messages, which is what this fixture's bytes stand in for. It is not a transcription of any documented payload: it is a locally computed waveform in the encoding and sample rate the request asks for. No vendor example payload, prose or field description was copied into this repository."
+  },
+  "notes": "WHY THERE IS NO REAL CAPTURE: Deepgram is not-cleared (protocol section 7). Its only Output-rights clause, MSA 8.2, binds solely under an executed Order Form; the self-serve console terms that would govern an API key have no concept of Output at all and reserve everything. So the terms — not merely the absence of a credential — are the blocker for committing Deepgram's synthesized speech, and none is committed here. No capture credential exists in this environment either. What this artifact is worth: it makes the frame boundaries, byte lengths and partial-final-frame behaviour real, and it cannot make the audio real. That is the honest split, and it is the same one section 5 of tasks.md records for the whole documentation-derived route."
+}

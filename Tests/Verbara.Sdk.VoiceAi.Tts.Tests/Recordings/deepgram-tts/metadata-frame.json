@@ -1,0 +1,10 @@
+{
+  "type": "Metadata",
+  "request_id": "00000000-0000-0000-0000-000000000000",
+  "model_name": "fixture-voice",
+  "model_version": "0000-00-00.0",
+  "model_uuid": "00000000-0000-0000-0000-000000000000",
+  "additional_model_uuids": [
+    "00000000-0000-0000-0000-000000000000"
+  ]
+}
