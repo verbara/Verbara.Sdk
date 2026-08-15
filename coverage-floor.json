@@ -1,6 +1,6 @@
 {
-  "_comment": "Coverage-gate-v2 floor (verbara-meta/ADR-0013). Manual ratchet, no CI write-back (ADR-0003/ADR-0038 D2). Two-sided band on line: fail if measured < line OR measured > line + slack (stale floor -> raise 'line' to floor(measured) in the same PR). 'branch' and 'lines_valid_min' are hard lower bounds; 'patch' is the diff-coverage floor (check-patch-coverage.py). Values honest as of the 2026-07-20 baseline run: line 80.42%, branch 66.04%, lines-valid 12964.",
-  "line": 78,
+  "_comment": "Coverage-gate-v2 floor (verbara-meta/ADR-0013). Manual ratchet, no CI write-back (ADR-0003/ADR-0038 D2). Two-sided band on line: fail if measured < line OR measured > line + slack (stale floor -> raise 'line' to floor(measured) in the same PR). 'branch' and 'lines_valid_min' are hard lower bounds; 'patch' is the diff-coverage floor (check-patch-coverage.py). Values honest as of the 2026-08-15 run: line 80.44%, branch 66.17%, lines-valid 12976. 'branch' and 'lines_valid_min' are deliberately left below measured -- they are floors, not trackers, and pinning them at measured makes any removal of a covered line a red build.",
+  "line": 80,
   "slack": 3,
   "branch": 64,
   "lines_valid_min": 12315,
