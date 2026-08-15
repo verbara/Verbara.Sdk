@@ -86,6 +86,22 @@ bidirectional WebSocket framing is not its contract. Verified per provider again
 That is **6 of 14 transport surfaces on WireMock** (5 HTTP-only providers + LMNT's HTTP path) and
 **8 staying on `WebSocketTestServer`**. Any claim of a blanket substitution would be false.
 
+> **Correction (2026-08-14, during §5) — "8 staying on `WebSocketTestServer`" overstates the
+> substrate's reach, and the two tables above repeat the error in their Substrate column.** Two of
+> the eight WebSocket fakes never rode `WebSocketTestServer` at all: **Deepgram STT**
+> (`Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Deepgram/DeepgramFakeServer.cs`) and **ElevenLabs TTS**
+> (`Tests/Verbara.Sdk.VoiceAi.Tts.Tests/ElevenLabs/ElevenLabsFakeServer.cs`) each own an
+> `HttpListener` and their own port-retry loop. The other six do ride it (AssemblyAI STT, Cartesia
+> STT, Speechmatics STT, Cartesia TTS, Deepgram TTS, LMNT). Verified by grepping all ten
+> `*FakeServer*.cs` files, not by reading this table.
+>
+> **Nothing in the change's shape moves** — the transport split, the WireMock/WebSocket boundary and
+> the D2/D3 decisions are all unaffected, and §5 re-seeds payloads regardless of which server carries
+> them. What it costs is a claim: the fourth substrate in this repo is a *third* hand-rolled shape
+> nobody counted, so "three different substrates coexist" in the Why section is really four. That is
+> an argument **for** this change, not against it, but it should be true rather than convenient.
+> It also narrows §6.4's re-confirmation, which is restated in `tasks.md` on the same date.
+
 The WebSocket suites still get the half of this change that matters most to them: their fakes are
 re-seeded from **recorded** provider frames instead of hand-authored minimal JSON. The substrate is
 untouched; the payloads become real.

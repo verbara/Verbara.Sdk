@@ -246,6 +246,42 @@ Phase C = §4 remaining providers + §6–§8 (batched).
 Each item: capture → redact → commit recording → port the suite to the shared fixture → keep the
 existing `*_ShouldAbort_WhenCancelled` assertion verbatim → confirm no coverage-floor regression.
 
+**Tooling for the three remaining surfaces is ready (2026-08-14); only the credentials are not.**
+`scripts/capture-provider-recording.py` grew from the two Whisper surfaces to five, and the step
+that took the work was not the three request plans but generalizing a tool that was hard-wired for
+"STT → JSON" end to end: fixed recordings tree, fixed `.json` extension, one scenario slug,
+`normalize_json()` on every body, and `json.loads(body)["text"]` as the liveness check — which is
+OpenAI's response shape and wrong for all three new surfaces. It now carries an `artifact` mode
+(`json` | `binary` | `envelope`), a per-provider `verify` callable, and a parameterized sidecar.
+Suite: 81 → **150 tests**, with the two existing surfaces proven byte-identical against the prior
+script (capture file, sidecar, and request URL/headers/body) rather than merely re-run.
+
+Two properties worth naming because they are structural, not procedural:
+
+- **LMNT's envelope mode cannot leak audio by mistake.** `send(..., retain_body=False)` counts and
+  drops each read, so no whole payload ever exists in memory for a later line of code to write out.
+  D11 asks for a promise; this makes it a property of the control flow.
+- **The binary cap raises before any write**, so an oversized capture leaves nothing on disk to
+  half-review. (§8's 64 KiB text threshold stays advisory — the 256 KiB binary cap is not.)
+
+Google takes one of two credentials: `GOOGLE_SPEECH_API_KEY` sends the SDK-faithful `?key=`
+request, `GOOGLE_ACCESS_TOKEN` sends a bearer token and stamps the sidecar with the fact that the
+capture's auth differs from production. Setting both, or neither, is an error. The second path was
+added expecting the first to fail; it does not (see 4.3), so it is now an alternative rather than a
+workaround — kept because a token is what a service-account capture would use.
+
+**One more redaction gap the first real capture exposed.** Google's response carries
+`requestId: "8702164082194047156"`, which protocol §4 bans outright ("request IDs, trace IDs …
+tie a public artifact to a real, billed account") and which `check-recording-redaction.py` passed
+without complaint: a bare 19-digit number is not credential-shaped, so nothing flagged it.
+`redact()` could not have caught it either — it removes values known in advance, and a request ID
+is minted by the provider. Fixed with the opposite mechanism, `redact_correlation_fields`: name the
+*field*, replace whatever is in it, at any depth. The key is kept and only its value placeholdered,
+because an unmodelled sibling is precisely what this fixture holds the parser against.
+**The guard's blind spot is not closed** — it still cannot recognize an identifier it was not told
+about, and the per-provider field list is a human judgement about which field is data and which is
+an identifier. That belongs in a proposal of its own, not here.
+
 - [x] 4.1 **OpenAI Whisper** (STT, `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Whisper/WhisperSpeechRecognizerTests.cs`)
       — multipart POST. **No longer the first migration** — Azure TTS (4.4) took that role while
       this provider's terms gate was open, and the pattern is established there.
@@ -288,7 +324,7 @@ existing `*_ShouldAbort_WhenCancelled` assertion verbatim → confirm no coverag
       **Neither test hard-codes the transcript** — each reads it from its own capture with
       `JsonDocument`, so two independent readers must agree on the vendor's bytes and a re-capture
       does not force a test edit.
-- [ ] 4.3 **Google Speech-to-Text** (STT, `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Google/`) — JSON POST to
+- [x] 4.3 **Google Speech-to-Text** (STT, `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Google/`) — JSON POST to
       `speech:recognize`; the API key rides in the query string, so it MUST be placeholdered in both
       the stub and any recorded request metadata.
       **⚠ Verify one clause before committing the capture (ADR-0041 D11):** §3.4 read the AI/ML
@@ -297,6 +333,64 @@ existing `*_ShouldAbort_WhenCancelled` assertion verbatim → confirm no coverag
       the verdict drops to `not-cleared` and D11's envelope fallback applies. Separately, never put
       comparative accuracy or latency numbers in a sidecar or `Recordings` README — that engages the
       Service Specific Terms §7 benchmarking clause.
+
+      > **A predicted defect that turned out not to exist — recorded because the retraction is the
+      > useful part.** While scoping the capture (2026-08-14) the REST reference for
+      > `v1/speech:recognize` was read as documenting exactly one authorization mechanism —
+      > *"Requires the following OAuth scope: `https://www.googleapis.com/auth/cloud-platform`"* —
+      > with no mention of API keys anywhere on the page. Since `GoogleSpeechRecognizer.cs:54`
+      > builds `…/v1/speech:recognize?key={ApiKey}` and `GoogleSpeechOptions` exposes `ApiKey` as
+      > its only credential, this was written up as a fourth shipped defect: a client that cannot
+      > authenticate at all.
+      >
+      > **It authenticates fine.** The capture ran on 2026-08-15 with a plain API key against a
+      > fresh project and Google returned HTTP 200 with a real transcript. The documentation's
+      > silence on API keys is not a prohibition, and an absence in a reference page is not
+      > evidence of a behaviour.
+      >
+      > Worth keeping in the record for two reasons. First, the same reasoning style produced the
+      > Cartesia/ElevenLabs finding in §5, which *is* real — the difference is that there the docs
+      > made a positive statement (audio arrives base64-in-JSON) rather than merely omitting one.
+      > **A vendor asserting X is evidence; a vendor not mentioning Y is not.** Second, the design
+      > that settled it was right even though the prediction was wrong: the capture was built as
+      > the deciding experiment rather than as a confirmation of the write-up, so one command
+      > overturned it. `GOOGLE_ACCESS_TOKEN` survives as a documented alternative path, no longer
+      > as the workaround for a defect.
+
+      **Done 2026-08-15, and it is the only one of the three remaining §4 surfaces that was ever
+      completable** — the other two turned out to be blocked on shipped code, not on credentials.
+      Capture: `Recordings/google-stt/transcribe-short-es-co.json`, 342 bytes of Google's real
+      HTTP 200 body with a provenance sidecar. Suite 6 tests → 9; the STT assembly goes 77 → 80 and
+      the unit lane 3 048 → 3 051.
+
+      **The `src/**` seam, same shape as §4.4's.** `GoogleSpeechRecognizer` built one absolute URL,
+      so `HttpClient.BaseAddress` was dead and the client could not be pointed at a loopback stub.
+      It takes the `internal` `fakeOrigin` parameter following the existing
+      `SpeechmaticsSpeechSynthesizer` / `LmntSpeechSynthesizer` / `AzureTtsSpeechSynthesizer`
+      precedent (D12), with the route and the `key` query parameter left in production code so the
+      strict matcher asserts the request the provider really builds. Production output is
+      byte-identical to the old interpolation; `PublicAPI.*.txt` does not move.
+
+      **What the capture bought, asserted rather than noted.** The recorded body carries four
+      fields the DTOs do not model — `results[].resultEndTime`, `results[].languageCode`,
+      `totalBilledTime` and `requestId` — so
+      `StreamAsync_ShouldTolerateUnmodelledSiblingFields_WhenResponseCarriesFullVendorEnvelope`
+      asserts they are present *in the file* and that the recognizer still yields the recorded
+      transcript. Shrinking the fixture back to the hand-authored shape turns it red. Two more
+      shapes the canned handler could not express: a wrong `key` in the query string is now an
+      unmatched request rather than a silent pass (D1), and an error status (429) is exercised.
+
+      **Two things deliberately not claimed.** `es-CO` was requested and Google answered
+      `languageCode: "es-us"`, which is recorded but not asserted as a contract. And the transcript
+      comes back lowercase, unaccented and unpunctuated, so **this fixture does not demonstrate a
+      UTF-8 round trip** — a comment in the suite says so, to stop a later reader adding an
+      assertion the evidence does not support.
+
+      **The §5.1 mutation proof was not repeated here.** That fence was verified by temporarily
+      shrinking the fixture and watching the test fail; doing the same to a *captured* file
+      conflicts with the rule that a recording is never edited. Substituted a weaker,
+      non-destructive check: sha256 and byte count matched against the sidecar after all work.
+      Stated because it is a real difference in evidence strength, not an equivalent.
 - [x] 4.4 **Azure TTS** (`Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Azure/`) — SSML POST returning a real
       audio stream; replaces `new byte[320]` zeros with recorded codec bytes, exercising the
       frame-chunking path for the first time
@@ -323,6 +417,52 @@ existing `*_ShouldAbort_WhenCancelled` assertion verbatim → confirm no coverag
       frame, guaranteed because the capture's length is deliberately not chunk-aligned.
 - [ ] 4.5 **Speechmatics TTS** (`Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Speechmatics/`) — retires
       `SpeechmaticsFakeServer` (`HttpListener`)
+
+      > **⚠⚠ BLOCKED ON A `src/**` DEFECT, confirmed against the live API 2026-08-15 UTC — the same
+      > shape as §4.6, found the same way.** The capture at the shipped `SpeechmaticsOptions`
+      > defaults returned `HTTP 404 {"detail":"Not Found"}`. A three-way controlled comparison,
+      > same key, seconds apart, isolates route from voice:
+      >
+      > | request | result |
+      > |---|---|
+      > | `POST /generate`, voice in the JSON body — **what `SpeechmaticsSpeechSynthesizer` sends** | **404** |
+      > | `POST /generate/eleanor`, voice in the path, no voice field in the body | **200, `audio/wav`, 81 452 bytes** |
+      > | `POST /generate/sarah`, voice in the path, no voice field in the body | **200, `audio/wav`, 110 636 bytes** |
+      >
+      > **One delta, not three.** The credential (`Authorization: Bearer`), the request content
+      > type, the response media type (`audio/wav`) and the 16 kHz default are all what the client
+      > already assumes. What is wrong is solely *where the voice goes*: the API selects the voice
+      > by path segment, and `SpeechmaticsTtsRequest` carries it as a body field against a path
+      > that therefore does not exist.
+      >
+      > **The middle row exists to kill a plausible wrong answer.** Speechmatics' quickstart lists
+      > four voices — `sarah`, `theo`, `megan`, `jack` — and the SDK defaults to `eleanor`, which
+      > made "the default voice is stale" the obvious pre-capture hypothesis. It is false:
+      > `eleanor` returns 200. The published list is incomplete, not the option default. Absence
+      > from a vendor's enumeration is not evidence of absence — the same rule that retracted
+      > §4.3's finding, applied here *before* it could become a second wrong finding. Had the
+      > comparison run only rows one and three, route and voice would have moved together and the
+      > wrong one could have taken the blame.
+      >
+      > **Not established, and not to be assumed at fix time:** whether `/generate/{voice}` accepts
+      > the `language` and `sample_rate` body fields the client also sends. Rows two and three
+      > omitted them, so their acceptance is untested either way.
+      >
+      > **The fix is not a one-line edit**, which is why it does not belong in this change.
+      > `SpeechmaticsOptions.BaseUri` ships as the *complete* endpoint
+      > (`https://preview.tts.speechmatics.com/generate`) and is a public, caller-settable option;
+      > making the voice a path segment means either appending `/{voice}` to whatever a caller
+      > supplied — silently changing what an existing `BaseUri` value means — or redefining the
+      > option. That is a public-surface decision. Note also that the `<see href>` on
+      > `SpeechmaticsOptions.cs:23`, `https://docs.speechmatics.com/tts-api-ref`, is itself a dead
+      > link (404) — the shipped XML doc points at a page that no longer exists.
+      >
+      > **Consequence: §4.5 cannot be completed as a test-only migration**, for the reason §4.6
+      > gives verbatim — under strict matching (D1) a fixture pinning the current request would
+      > encode a 404, and one pinning the working request would not match what the client sends.
+      > Reclassified from credential-blocked to **`src/**`-blocked**. No artifact was written: the
+      > capture script raised before any file was created, so the working tree carries nothing from
+      > the 404, and nothing from rows two and three either — those were probes, not captures.
 - [ ] 4.6 **LMNT HTTP path** (`Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Lmnt/`, `LmntTransport.Http`) —
       retires `LmntHttpFakeServer` only; `LmntWsFakeServer` stays (see 5.4).
       **⚠ Envelope capture only — ADR-0041 D11.** The §3.4 terms review returned `not-cleared` for
@@ -332,6 +472,103 @@ existing `*_ShouldAbort_WhenCancelled` assertion verbatim → confirm no coverag
       `recorded` artifact and pair it with a locally built `synthetic` body in the same codec. The
       migration still lands — strict matching, real status/headers, real byte lengths through
       frame-chunking — it just does not redistribute LMNT's speech.
+
+      > **⚠⚠ BLOCKED ON A `src/**` DEFECT, confirmed against the live API 2026-08-15. The HTTP path
+      > this task migrates does not work at all.** The first capture attempt returned
+      > `HTTP 404 {"detail":"Not Found"}` — a route-level 404, not an auth failure. A controlled
+      > comparison with the same key, seconds apart, settles it:
+      >
+      > | request | result |
+      > |---|---|
+      > | `POST /v1/ai/speech/generate`, form-encoded — **what `LmntSpeechSynthesizer` sends** | **404** |
+      > | `POST /v1/ai/speech/bytes`, JSON — what `docs.lmnt.com` documents | **200, `audio/mpeg`, 31 104 bytes** |
+      >
+      > Three deltas, not one: the **path** (`/generate` → `/bytes`), the **body encoding**
+      > (`FormUrlEncodedContent` → JSON), and the **response media type** (the SDK's HTTP path
+      > assumes raw PCM it can chunk; LMNT returns MP3 by default). The `X-API-Key` header is the
+      > one thing that was right. Evidence is both documentary *and* behavioural, which is the
+      > distinction §4.3's retraction turned on — Google's docs merely omitted API keys, whereas
+      > here the vendor positively documents a different route and the SDK's route observably 404s.
+      >
+      > **The code left its own confession.** `LmntSpeechSynthesizer.cs:280` carries
+      > `// Field names verified from LMNT REST API docs (https://docs.lmnt.com); confirm at
+      > integration test time.` That confirmation never happened, and could not have: the only
+      > thing the HTTP path was ever exercised against is `LmntHttpFakeServer`, which answers
+      > whatever route it is handed. A fake cannot refuse a request the real server refuses — which
+      > is the entire argument of ADR-0041 D4, here as a comment written by someone who saw the gap
+      > and trusted a later step that the test substrate had already made impossible.
+      >
+      > **Consequence for this task: it cannot be completed as a test-only migration.** A fixture
+      > pinning the current request would encode a 404, and one pinning the documented request
+      > would not match what the client sends — strict matching (D1) makes that contradiction
+      > explicit rather than papering over it. §4.6 stays open and is **reclassified from
+      > credential-blocked to `src/**`-blocked**: fix the client, then capture. Note that the fix
+      > also moots the D11 envelope fallback in the paragraph above, because a JSON request
+      > returning `audio/mpeg` is a different capture shape than the one specified there — re-read
+      > §7 before capturing rather than reusing that plan.
+
+### Where the deferred defects go — decided 2026-08-15, so the deferrals point somewhere
+
+This change surfaced six defects it deliberately does not fix — two in §4 (the `LMNT` and
+`Speechmatics` TTS routes, above) and four in §5 (`Cartesia` and `ElevenLabs` TTS cannot receive
+audio, `Speechmatics` STT transcript assembly, and `Cartesia` TTS's missing cancellation test).
+Each was written up as "needs its own change", which is a deferral, not a destination. The
+destination is now decided: **one new change, `provider-wire-protocol-conformance`, under a new
+`decision_ref` `Sdk/ADR-0048`** — to be written after this change lands, with the two route fixes
+as its first tasks so §4.5, §4.6 and §6.3 unblock before the harder work starts.
+
+**The two open changes that looked like homes rule themselves out, in their own text.**
+`provider-dto-robustness-fences` (`Sdk/ADR-0046`) fences the **parse layer of the read path, on
+DTOs that exist**: its six ADDED requirements are receive-loop resilience, read-path nullability
+enforcement, `[JsonRequired]` placement, unknown-sibling tolerance, per-DTO mutation matrices and
+two governance guards. Walked defect by defect, none fires. The Cartesia and ElevenLabs frames
+never reach a DTO at all — `src/Verbara.Sdk.VoiceAi.Tts/ElevenLabs/` declares no server-response
+type, so the mutation matrix and the reachable-DTO guard have nothing to act on. The Speechmatics
+STT bug is post-parse string assembly over fields the SDK never modelled, and that change's fourth
+requirement **bans `UnmappedMemberHandling.Disallow`** — it enshrines ignoring exactly
+`attaches_to` and `word_delimiter`. The two route defects are request-side, which it excludes
+verbatim ("Not in scope. The 45 request-side members"). Attaching any of them would also falsify
+its Impact line, "nothing cascades to `Sdk.Pro` or `Platform`."
+`provider-schema-drift-train` (`Sdk/ADR-0047`) states "No `src/` change, no public API change" —
+categorical — and its instrument reaches none of these vendors anyway.
+
+**Two corrections to earlier notes in this file.** §6.2's suggestion that the Cartesia
+cancellation-test gap belongs to `websocket-fake-protocol-contract` does not survive that
+proposal's own Not-in-scope — "the other eight WebSocket surfaces … follow-up work, not this
+change", plus "No production code changes". And the gap is entangled with the Cartesia audio fix
+regardless: correcting the client rewrites `CartesiaFakeServer` onto the base64-JSON protocol, so
+a cancellation test authored elsewhere against today's binary protocol would be written twice and
+put two open changes in contention over one file.
+
+**Why one change and not two.** The five `src/**` defects share one root cause, which is this
+change's own thesis landing: the client does not speak the vendor's actual wire protocol, and the
+hand-authored fake agreed with the client, so no test could notice (ADR-0041 D4). Splitting the
+route fixes out would buy earlier approval of the easy half — except owner and approver are the
+same person here, and this repo already runs one change across many PRs, so per-provider task
+staging inside one proposal gives the same sequencing without a second proposal, a second ADR and
+a second risk section.
+
+**Why it needs its own ADR rather than riding one.** `SpeechmaticsOptions.BaseUri` is public and
+caller-settable and ships as the *complete* endpoint; making the voice a path segment either
+appends `/{voice}` to whatever a caller supplied — silently redefining an existing value — or
+redefines the option. That is a durable public-surface decision. Note the asymmetry with LMNT,
+whose route is hardcoded in `LmntSpeechSynthesizer` with no option exposed at all, and whose HTTP
+path is opt-in (`LmntTtsOptions.Transport` defaults to `WebSocket`): the LMNT half is contained,
+the Speechmatics half is not.
+
+**What would flip this.** If, at proposal time, the base64 + frame-chunking redesign for Cartesia
+and ElevenLabs turns out to need a public API change on the synthesizer surface, or to exceed a
+MEDIANO envelope, bundling stops paying: the route unblock would become hostage to a large design,
+and the right move is to extract the two route fixes into a small standalone change — still under
+`Sdk/ADR-0048` for the `BaseUri` decision.
+
+**One thing to verify before that proposal is written.** Four of the SDK's six TTS providers are
+now confirmed unable to deliver audio from their real vendor, and `Azure` is the only one
+positively demonstrated working. `Deepgram` TTS is the sixth and is untested against the live
+service — its receive loop has the same shape as Cartesia's and ElevenLabs' (binary frames are
+audio, text frames are control), and the reason to expect it is *correct* is a fact about
+Deepgram's published protocol rather than anything about this code. Given the class has hit four
+of six, confirm it rather than assume it.
 
 ## 5. WebSocket-transport providers — explicitly NOT migrated, recordings only
 
@@ -347,12 +584,27 @@ recorded provider frames.
 >
 > | Surface | Verdict | Consequence here |
 > |---|---|---|
-> | 5.1 Deepgram STT · 5.6 Deepgram TTS | `not-cleared` | envelope only (D11) |
-> | 5.2 AssemblyAI STT | `not-cleared` | envelope only (D11) |
+> | 5.1 Deepgram STT · 5.6 Deepgram TTS | `not-cleared` | documentation-derived (§7) |
+> | 5.2 AssemblyAI STT | `not-cleared` | documentation-derived (§7) |
 > | 5.3 Cartesia STT · 5.5 Cartesia TTS | `permitted-with-conditions` | full recording, commercial tier |
 > | 5.4 Speechmatics STT | `permitted` | full recording — the STT direction is the *better* covered one (§10.3 assigns IP in **Transcripts**) |
-> | 5.7 ElevenLabs TTS | `not-cleared` | envelope only (D11) |
-> | 5.8 LMNT WS | `not-cleared` | envelope only (D11), already known |
+> | 5.7 ElevenLabs TTS | `not-cleared` | documentation-derived (§7); §7's audio-payload-swap variant also works |
+> | 5.8 LMNT WS | `not-cleared` | documentation-derived (§7), already known |
+>
+> **Correction (2026-08-14, during §5.1) — the "envelope only (D11)" this column used to say was
+> wrong twice over.** First, *envelope* is an HTTP concept: for an HTTP response it means status,
+> headers and content length, with the body held back. A WebSocket STT text frame has no such
+> layer — the frame **is** its JSON body — so "envelope only" reduced to frame type, ordering and
+> byte length, which is close to nothing for the field-set gap D4 exists to close. Second, an
+> envelope is still *captured*, so it needs a credential and a permitted call, and for a
+> `not-cleared` vendor the call itself is the fraught part (Deepgram's console terms bar
+> benchmarking outright). The route actually taken is the one the paragraph below already
+> preferred and that `docs/guides/provider-recording-protocol.md` §7 now spells out:
+> **frames authored to the vendor's published protocol documentation**, `class: "synthetic"`,
+> `terms.verdict: "not-applicable"`, plus a `source_schema` block naming the page and its revision.
+> It carries no vendor Output, needs no credential, and is checked against the vendor's own stated
+> interface. Its cost is stated in each sidecar: it cannot detect a vendor that does not honour its
+> own docs.
 >
 > **This is a real reduction in what §5 can deliver, and it should not be papered over.** ADR-0041
 > D4 asks every provider for at least one replay of a recorded real response; for five of these
@@ -380,21 +632,252 @@ recorded provider frames.
 > follow-up sweep it carries all three fake-server defect classes at once, so that proposal has more
 > to fix than payloads.
 
-- [ ] 5.1 STT **Deepgram** (`Deepgram/`) — re-seed `DeepgramFakeServer` from a recorded `Results`
+- [x] 5.1 STT **Deepgram** (`Deepgram/`) — re-seed `DeepgramFakeServer` from a recorded `Results`
       frame carrying the full field set (`speech_final`, `channel_index`, `duration`, `start`,
       `metadata`, word arrays), replacing `BuildResultJson`'s five-field hand-authored object
-- [ ] 5.2 STT **AssemblyAI** (`AssemblyAi/`) — re-seed `AssemblyAiFakeServer` from recorded turn frames
-- [ ] 5.3 STT **Cartesia** (`Cartesia/`) — re-seed `CartesiaFakeServer` from recorded frames
-- [ ] 5.4 STT **Speechmatics** (`Speechmatics/`) — re-seed `SpeechmaticsFakeServer` from recorded
-      `AddPartialTranscript` / `AddTranscript` frames
-- [ ] 5.5 TTS **Cartesia** (`Cartesia/`) — re-seed `CartesiaFakeServer` with recorded binary frames
-- [ ] 5.6 TTS **Deepgram** (`Deepgram/`) — re-seed `DeepgramTtsFakeServer`, including the real
+      — **done, documentation-derived (§7), and this is the migration that establishes the §5
+      pattern.** Three fixtures under `Recordings/deepgram-stt/` with sidecars:
+      `results-frame-interim.json`, `results-frame-final.json` (adds `entities[]`, which the
+      reference documents as present only on `is_final` messages) and `metadata-frame.json`.
+      Source: `developers.deepgram.com/reference/speech-to-text/listen-streaming`, **`revision:
+      "undated"`** — the page publishes no revision marker, corroborated across two sibling doc
+      pages that publish none either. Recorded as the §5 finding it is: a silent breaking edit
+      there is indistinguishable from no edit at all, so that URL is the first thing to re-read
+      when this suite starts failing.
+
+      **The measured finding: `DeepgramResultMessage` models four values** — `type`, `is_final`,
+      and each alternative's `transcript` and `confidence`. Everything else Deepgram documents is
+      unmodelled: `channel_index[]`, `duration`, `start`, `speech_final`, `from_finalize`,
+      `entities[]`, `metadata.request_id`, `metadata.model_info.{name,version,arch}`,
+      `metadata.model_uuid`, `alternatives[].languages[]`, and the whole `words[]` array
+      (`word`, `start`, `end`, `confidence`, `language`, `punctuated_word`, `speaker`). The
+      five-field object this task retires never exercised one of them.
+
+      **The fence was mutation-tested, not asserted.** Shrinking `results-frame-final.json` back to
+      the old five-value shape fails
+      `StreamAsync_ShouldTolerateUnmodelledSiblingFields_WhenFrameCarriesFullDocumentedFieldSet`;
+      file restored and `sha256` re-verified against the sidecar. Without that fixture-integrity
+      test someone can quietly shrink a fixture and every test still passes — it belongs in every
+      sibling suite.
+
+      Shape the other seven copy: static `Lazy<ProviderRecordings>` + path constants + `ReadFrame`,
+      constructor seeded with the frames **verbatim**, and the existing `Build*Json(...)` helper kept
+      at its current signature but re-implemented as parse → patch the driven fields via `JsonNode`
+      → `ToJsonString()`. Zero call-site churn and the full field set survives every test that only
+      cares about a transcript. Suite 5 tests → 8; `StreamAsync_ShouldAbort_WhenCancelled` is
+      byte-identical (verified by diff). Build 0 warnings, unit lane 3 030 passed / 0 failed,
+      redaction guard green over 14 files in 2 trees.
+
+      **Inventory correction:** `DeepgramFakeServer` does **not** ride `WebSocketTestServer` — it
+      owns an `HttpListener` and its own port-retry loop. `proposal.md`'s substrate table and this
+      task's §5.9 `<summary>` both said otherwise. The `<summary>` was corrected in place; no
+      behaviour changed. See §6.4 for the consequence.
+
+      **Widened on re-check — it is two fakes, not one.** The finding above came from looking at the
+      STT suite only. Grepping all ten `*FakeServer*.cs` files instead shows **ElevenLabs TTS**
+      carries the same shape, so of the eight WebSocket surfaces six ride `WebSocketTestServer`
+      (AssemblyAI STT, Cartesia STT, Speechmatics STT, Cartesia TTS, Deepgram TTS, LMNT) and two do
+      not (Deepgram STT, ElevenLabs TTS). Recorded as a dated correction in `proposal.md`. The
+      general lesson is the cheap one: a claim about ten files is worth a grep over ten files, and
+      the first pass here inferred the other six from a sample of four.
+- [x] 5.2 STT **AssemblyAI** (`AssemblyAi/`) — re-seed `AssemblyAiFakeServer` from ~~recorded~~
+      **documentation-derived** turn frames (§7 route; AssemblyAI is `not-cleared`, so no capture is
+      available on any credential)
+      — **done.** `Recordings/assemblyai-stt/`: `begin-frame`, `turn-frame-interim`,
+      `turn-frame-final`, `termination-frame` (+ 4 sidecars). Doc:
+      `assemblyai.com/docs/api-reference/streaming-api/streaming-api`, `revision: "undated"`.
+      **Finding: `AssemblyAiTurnMessage` models 4 documented fields** (`type`, `transcript`,
+      `end_of_turn`, `turn_is_formatted`); unmodelled are `turn_order`, `end_of_turn_confidence`,
+      `utterance`, `language_code`, `language_confidence`, `speaker_label` and the whole `words[]`
+      array. `Begin` and `Termination` are not modelled at all, including `Begin`'s nested
+      `configuration` object carrying JSON nulls.
+      **Sub-finding worth keeping:** the SDK hard-codes `Confidence = 0f` with the comment *"v3 Turn
+      messages do not include a per-turn confidence scalar"*, while the documented schema carries
+      **two** (`end_of_turn_confidence`, `words[].confidence`). Neither is a transcript-accuracy
+      score, so `0f` stands — but the comment overstates the vendor's silence, and nothing in the
+      suite made that visible before. Pinned by
+      `StreamAsync_ShouldSurfaceZeroConfidence_WhenTurnCarriesOnlyEndOfTurnConfidence`.
+- [x] 5.3 STT **Cartesia** (`Cartesia/`) — re-seed `CartesiaFakeServer` from ~~recorded~~
+      **documentation-derived** frames (terms would have cleared a capture; the blocker is the
+      absence of a capture credential, not the terms — see the sidecars)
+      — **done.** `Recordings/cartesia-stt/`: `transcript-frame-interim`, `transcript-frame-final`,
+      `flush-done-frame` (+ 3 sidecars). Doc: `docs.cartesia.ai/api-reference/stt/websocket`,
+      `revision: "undated"`.
+      **Finding, and it runs the other way for once: the SDK models a field the vendor does not
+      document.** `CartesiaSttTranscriptMessage` carries `confidence`; Cartesia documents none on
+      the transcript message and none per word. The schema-faithful fixtures omit it, which makes
+      the `msg.Confidence ?? 0f` fallback reachable for the first time
+      (`StreamAsync_ShouldSurfaceZeroConfidence_WhenVendorSchemaCarriesNoConfidenceField`).
+      Unmodelled documented fields: `request_id`, `duration`, `language`, `words[]{word,start,end}`.
+      `BuildTranscriptJson`'s `confidence` argument therefore now *adds* an out-of-schema property
+      rather than patching one — said so in the helper's `<remarks>` so the fixture is not misread
+      as vendor-shaped.
+      Two doc-hygiene notes carried in the sidecars: `language` appears in Cartesia's response
+      *example* but not in that page's schema property list; and `flush_done`'s
+      documented-deprecated `is_final: true` is kept deliberately, because the recognizer
+      deserializes every text frame into the transcript DTO *before* filtering on `type` — that
+      frame is precisely what a broken filter would leak through as an empty final result.
+- [x] 5.4 STT **Speechmatics** (`Speechmatics/`) — re-seed `SpeechmaticsFakeServer` from ~~recorded~~
+      **documentation-derived** `AddPartialTranscript` / `AddTranscript` frames (terms are
+      `permitted` here; again the blocker is credential availability, not terms)
+      — **done.** `Recordings/speechmatics-stt/`: `recognition-started-frame`,
+      `add-partial-transcript-frame`, `add-transcript-frame`, `end-of-transcript-frame`
+      (+ 4 sidecars). Doc: `docs.speechmatics.com/api-ref/realtime-transcription-websocket`,
+      `revision: "undated"` (only a message-level `format`, e.g. `"2.1"`). Method note recorded in
+      `source_schema`: two readings of the rendered API-ref page disagreed on whether `transcript`
+      sits top-level or inside `metadata`; settled against the page's raw Markdown source (inside
+      `metadata`).
+      **This is the migration that paid for the whole §5 exercise — see the deferred defect below.**
+      `SpeechmaticsTranscriptMessage` models `message` + `results[].alternatives[].{content,
+      confidence}`. Unmodelled: `format`, the entire `metadata` object (`start_time`, `end_time`,
+      **`transcript`**), `results[].{type,start_time,end_time,attaches_to,is_eos,volume}`,
+      `alternatives[].{language,display.direction,speaker,tags}`, plus `channel` and `forced`.
+      Second finding: Speechmatics documents that `confidence` **has no meaning on
+      `AddPartialTranscript`**, yet the SDK averages and surfaces it identically to a final. The
+      partial fixture carries deliberately low values so that stays visible.
+
+      > **⚠ DEFERRED DEFECT IN SHIPPED CODE — `src/Verbara.Sdk.VoiceAi.Stt/Speechmatics/
+      > SpeechmaticsSpeechRecognizer.cs:170`. Not fixed here; it needs its own change.**
+      > The recognizer assembles the transcript by space-joining tokens
+      > (`if (sb.Length > 0 && !string.IsNullOrEmpty(alt.Content)) sb.Append(' ')`), unconditionally.
+      > Speechmatics publishes two things that say otherwise and the SDK reads neither: a
+      > **`word_delimiter`** on `RecognitionStarted`, and **`results[].attaches_to`**, which marks a
+      > punctuation token as belonging to the previous one. It also publishes the already-assembled
+      > segment at **`metadata.transcript`**. So a final segment ending in punctuation comes out as
+      > `"… correctamente ."` where the vendor's own text reads `"… correctamente."`.
+      >
+      > **Why it is deferred rather than fixed in this change.** This change's contract is a test
+      > substrate: `proposal.md` scopes it to `Tests/**` with one `internal` D12 seam as the sole
+      > `src/**` exception, and it declares `test-determinism` the only capability it may touch.
+      > Correcting transcript assembly changes shipped behaviour for every Speechmatics consumer,
+      > cascades to Sdk.Pro and Platform, and needs its own risk section and a version decision —
+      > folding it in here would make this delta unreviewable, which is the same argument §5 already
+      > used to keep the ninth WebSocket fake out.
+      >
+      > **It is asserted, not merely noted.**
+      > `StreamAsync_ShouldSpaceJoinTokens_WhenFrameCarriesPunctuationAttachedToPrevious` pins the
+      > divergence as *current* behaviour, so the fix will announce itself by turning that test red
+      > rather than by going unnoticed. The final fixture deliberately ends on an
+      > `attaches_to: "previous"` token so the case is always in the tree.
+      >
+      > **This is the D4 thesis landing.** `proposal.md` argues that a fixture hand-authored by the
+      > same person who wrote the parser cannot expose a shared misreading of a vendor's schema. The
+      > old fixture and the parser agreed that a transcript is a space-joined token list. The
+      > vendor's documentation says it is not. Nothing in this repository could have caught that
+      > until the fixture stopped being authored from the parser's assumptions — and note it took the
+      > *documentation-derived* route to do it, not a capture: a capture of this same segment would
+      > have shown the right text in `metadata.transcript` and still not told anyone the SDK ignores
+      > the field.
+> **⚠⚠ THE FINDING THIS CHANGE EXISTS FOR — two shipped TTS clients cannot receive audio from
+> their vendor at all (surfaced 2026-08-14 by §5.5 and §5.7). Not fixed here; each needs its own
+> change.**
+>
+> `CartesiaSpeechSynthesizer` and `ElevenLabsSpeechSynthesizer` both yield **only**
+> `WebSocketMessageType.Binary` frames as audio. ElevenLabs says so in a comment —
+> *"Only yield binary frames; skip text messages (alignment, metadata)"*
+> (`ElevenLabsSpeechSynthesizer.cs:134`) — and Cartesia treats a text frame purely as a `done`/`error`
+> terminator (`CartesiaSpeechSynthesizer.cs:155-167`).
+>
+> **Both vendors deliver audio as base64 inside JSON text frames, and neither publishes a raw-binary
+> mode at all.** Read first-hand 2026-08-14, not inferred:
+>
+> | Vendor | Audio arrives as | Binary mode? |
+> |---|---|---|
+> | ElevenLabs `…/v-1-text-to-speech-voice-id-stream-input` | `AudioOutput.audio` — *"a generated partial audio chunk, encoded using the selected `output_format`, by default MP3 encoded as a base64 string"*, alongside `alignment` / `normalizedAlignment`; `FinalOutput.isFinal` ends it | **none documented** |
+> | Cartesia `docs.cartesia.ai/api-reference/stt/websocket` (TTS WS) | `chunk.data` — base64-encoded audio, with `done` / `status_code` / `step_time` / `context_id` siblings | **none documented** |
+>
+> So against a real server both clients drain the socket and emit **nothing**. Cartesia additionally
+> reaches its `done` terminator correctly, which means it completes successfully having produced zero
+> audio — a silent empty success, the worst failure shape available.
+>
+> **Why the suites are green and always were.** The fakes send binary because they were hand-authored
+> to match the clients. `proposal.md`'s Why section predicted this exact failure in the abstract —
+> *"every fixture in the repo is hand-authored by the same person who wrote the parser it feeds; a
+> shared misreading of a vendor's schema is invisible"* — and D4 is the decision taken to expose it.
+> This is that prediction landing on two production clients at once. **No amount of coverage would
+> have found it**: every test passes, the branch is exercised, and the assertion is against a fixture
+> that shares the defect.
+>
+> **Why it is not fixed here.** The fix is not a patch: it needs new server DTOs registered in
+> `VoiceAiTtsJsonContext` (AOT source-gen, so no reflection fallback), a base64 decode on the receive
+> path, and a re-think of frame chunking, since a base64 JSON message is not a codec frame boundary.
+> That is shipped-behaviour change for every consumer, cascading to Sdk.Pro and Platform. This change
+> is scoped to `Tests/**` with one `internal` seam as its sole `src/**` exception.
+>
+> **What was deliberately NOT done, and why it is the uncomfortable call.** The most honest fake
+> would speak the documented protocol — base64 JSON — which would turn both suites **red** and prove
+> the defect. That cannot land on `main`. The fixtures therefore record the vendor-faithful frames
+> (`elevenlabs-tts/audio-output-frame.json`, `cartesia-tts/done-frame.json`) *and* keep the fakes
+> sending binary so the suite stays green, with each sidecar stating the divergence in full. **Anyone
+> reading those two suites should know the tests assert what the client does, not what the vendor
+> sends.** The follow-up change should start by flipping the fakes to the documented protocol and
+> watching them fail.
+
+- [x] 5.5 TTS **Cartesia** (`Cartesia/`) — re-seed `CartesiaFakeServer` with ~~recorded~~
+      **documentation-derived** binary frames (terms would clear a capture; the blocker is credential
+      availability)
+      — **done.** `Recordings/cartesia-tts/`: `audio-chunk-pcm-s16le-8khz.raw` (2 008 B) and
+      `done-frame.json` (+ sidecars). Doc: `docs.cartesia.ai/2024-11-13/api-reference/tts/tts`,
+      pinned to the `Cartesia-Version` value `CartesiaOptions` actually sends, `revision: "undated"`.
+      **Finding:** `CartesiaTtsControlMessage` models `type` and nothing else, so `done`,
+      `status_code` and `context_id` all arrive as unmodelled siblings. **See the base64 finding
+      above — this is the more serious half.**
+- [x] 5.6 TTS **Deepgram** (`Deepgram/`) — re-seed `DeepgramTtsFakeServer`, including the real
       `warning` / `metadata` / `flushed` control frames the suite already filters
-- [ ] 5.7 TTS **ElevenLabs** (`ElevenLabs/`) — re-seed `ElevenLabsFakeServer`, including real
+      — **done.** `Recordings/deepgram-tts/`: `audio-linear16-16khz.raw` (2 408 B),
+      `metadata-frame.json`, `warning-frame.json`, `flushed-frame.json` (+ sidecars). Doc:
+      `developers.deepgram.com/reference/text-to-speech-api/speak-streaming`, `revision: "undated"`.
+      **Finding:** on `Metadata`, `model_uuid` and `additional_model_uuids` are unmodelled;
+      `Warning` and `Flushed` are fully modelled. **Deepgram TTS is the one vendor of the four whose
+      documented WS protocol really is raw binary audio**, so the base64 finding above does not
+      touch it. The §8.5 `Flush`-triggered answer and `RequestDrainTimeout` are untouched.
+- [x] 5.7 TTS **ElevenLabs** (`ElevenLabs/`) — re-seed `ElevenLabsFakeServer`, including real
       alignment messages
-- [ ] 5.8 TTS **LMNT WebSocket path** (`Lmnt/`, default `LmntTransport.WebSocket`) — `LmntWsFakeServer`
+      — **done.** `Recordings/elevenlabs-tts/`: `audio-pcm-16khz.raw` (2 808 B) and
+      `audio-output-frame.json` (2 602 B, carrying base64 audio + both alignment objects) with
+      sidecars. Doc: `elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream-input`,
+      `revision: "undated"`. Alignment arrays describe the fictional sentence *"Su solicitud quedó
+      registrada."*
+      **Finding: the SDK models none of it.** There is no ElevenLabs *server* DTO in
+      `VoiceAiTtsJsonContext` at all — the client skips every text frame — so `audio`,
+      `alignment.{charStartTimesMs,charDurationsMs,chars}`, the same three under
+      `normalizedAlignment`, and `FinalOutput.isFinal` are all unmodelled. **This is the other half
+      of the base64 finding above.** §7's audio-payload-swap variant still needs a real capture and
+      remains the named upgrade path.
+- [x] 5.8 TTS **LMNT WebSocket path** (`Lmnt/`, default `LmntTransport.WebSocket`) — `LmntWsFakeServer`
       stays; only its frames become recorded. The suite ends up **split across both substrates by
       transport**, in one file
+      — **done.** `Recordings/lmnt-ws/`: `audio-raw-16khz.raw` (1 808 B) and `finish-frame.json`
+      (+ sidecars). `LmntHttpFakeServer` untouched (it is §4.6's to retire), confirmed by diff. Doc:
+      `docs.lmnt.com/api/speech-sessions/create`, `revision: "undated"`.
+      **Finding:** `LmntServerNotification` models `type`/`error`/`message`; of the documented server
+      messages (`ready`, `timestamps`, `flush_complete`, `reset_complete`, `error`) only `error`
+      overlaps, and `message` appears in **no** documented LMNT server payload. All `timestamps`
+      fields are unmodelled.
+      **Second finding, recorded rather than papered over:** `finish` is documented as a
+      *client→server* message, not a server one — yet `LmntSpeechSynthesizer` terminates on it and a
+      test asserts that. The fake still sends it, and `lmnt-ws/finish-frame.provenance.json` says
+      plainly that the frame has no documented server-side existence.
+
+> **Gap discovered, not closed — `CartesiaSpeechSynthesizerTests` has no
+> `SynthesizeAsync_ShouldAbort_WhenCancelled`.** The three that exist in this suite are ElevenLabs,
+> Deepgram and LMNT, which is why §8.5's repeat-run protocol reports "3 TTS" and always has. The
+> `test-determinism` capability is written as if the cancellation contract were fenced on every
+> streaming surface; on this one it is not, so §8.5's 30× green says nothing about Cartesia TTS.
+> Adding it is new scope and is deliberately not taken here — it belongs with
+> `websocket-fake-protocol-contract`, whose subject is exactly what every WebSocket fake must
+> answer. Recorded so the omission is a decision rather than an oversight, per the same rule §5.9
+> applies to the not-migrated verdicts.
+
+**Shared infrastructure for §5.5–5.8.** `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/SyntheticPcm.cs` —
+`Triangle(sampleCount, periodSamples, amplitude)`, **integer-only on purpose**: `Math.Sin` is not
+guaranteed bit-identical across platforms and these files are asserted byte-for-byte. Every provider
+gets two fence tests — one asserting the fixture still carries the documented field names and its
+exact byte length, one **regenerating** the `.raw` from the three generator parameters recorded in
+its sidecar and comparing. Every audio length is deliberately not chunk-aligned (2 008 = 6×320+88,
+2 408 = 7×320+168, 2 808 = 8×320+248, 1 808 = 5×320+208) so a partial final frame is always
+exercised, using §4.4's valid assertion shape rather than the `length % chunkSize` one that was
+disproved there. Largest fixture is 2 808 B — **1.1% of the 256 KiB cap**.
 - [x] 5.9 Record the not-migrated verdict per provider in the suite (a one-line comment naming the
       transport) so the omission cannot later be read as an oversight
       — **done.** A `<summary>` on each of the 8 test classes naming the transport, the D2 reason
@@ -405,8 +888,17 @@ recorded provider frames.
 
 ## 6. Convergence and cleanup
 
-- [ ] 6.1 Delete `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Helpers/MockHttpMessageHandler.cs` once no STT
+- [x] 6.1 Delete `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Helpers/MockHttpMessageHandler.cs` once no STT
       suite references it
+      — **done** with §4.3, its last consumer. Three mentions of the name survive and are correct:
+      all three are XML doc comments explaining what the substrate replaced
+      (`WhisperSpeechRecognizerTests`, `AzureTtsSpeechSynthesizerTests`, `HttpProviderMockServer`).
+      **§6.2's precedent does not transfer, and the difference matters:** the TTS copy left
+      `Helpers/` empty so the directory went with it, but the STT `Helpers/` still holds
+      `HttpProviderMockServerTests.cs` and `SttFrameGenerators.cs` — the latter is the shared
+      cancellation-frame generator four sibling suites consume (#144), so the directory stays and
+      every other suite keeps its `using`. Google's file dropped that import; no dangling `using`
+      anywhere, build stays at 0 warnings.
 - [x] 6.2 Delete `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Helpers/MockHttpMessageHandler.cs` once no TTS
       suite references it (it is a divergent second copy — different constructor signature)
       — **done.** The Azure TTS migration was its last consumer; grep found no remaining reference
@@ -418,6 +910,22 @@ recorded provider frames.
       — **confirmed by diff against `origin/main`: zero changes** to `WebSocketTestServer` or to any
       of the ten `*FakeServer*.cs` files. Re-confirm at the end of the change; this holds as of the
       §4.1/§4.2/§4.4 scope.
+
+      **Restated 2026-08-14, because the original wording cannot survive §5 and would have been
+      re-confirmed by rote.** "Zero changes to any of the ten `*FakeServer*.cs` files" was a valid
+      check while only §4 was in flight, but §5 is *defined* as editing exactly those files — so
+      read literally this task would fail the moment the change does what it exists to do. The
+      invariant it is actually protecting is narrower and still worth holding: **the fakes change
+      only in where their payloads come from, never in how they answer.** Concretely, what must
+      stay zero-diff through §5:
+
+      - `Tests/Verbara.Sdk.TestInfrastructure/WebSocket/WebSocketTestServer.cs` and
+        `WebSocketTestSession.cs` — literally untouched.
+      - Every fake's accept/receive/close sequencing, its hold-open flag semantics, and its
+        snapshot-under-lock accessors — i.e. none of the three §8.5 defect classes reintroduced.
+
+      What legitimately changes: the frames a fake sends, and the mechanics of loading them.
+      Re-confirm on that basis, per fake, not by diff-stat.
 
 ## 7. Documentation
 
@@ -440,6 +948,24 @@ recorded provider frames.
       is `internal`, moves no public API and changes no production behaviour, so the conclusion —
       no `PackageVersion` bump, no release task — still holds, but for a reason that had to be stated
       rather than assumed.
+      **Extended 2026-08-14 for §5** (the entry is cumulative, so §5 lands in the same bullet rather
+      than a second one): the eight documentation-derived WebSocket fixture sets, the
+      `not-applicable` verdict and `source_schema` block the protocol grew to allow them, the
+      `"undated"` finding that all eight vendor pages publish no revision marker, the fixture-integrity
+      fences and why `SyntheticPcm` is integer-only — and, as its own sub-list, **the three shipped
+      defects §5 surfaced and did not fix.** Two of those are user-facing (`Cartesia`/`ElevenLabs`
+      TTS cannot receive audio from their vendors at all), so they belong in a consumer-visible
+      changelog even though nothing about them is *changed* by this PR. Stating a defect this change
+      is choosing not to fix is the honest form of D4: the ADR was adopted to make exactly this
+      class of bug visible, and a fixture route that surfaces three defects and reports none would
+      have wasted its own evidence.
+      **Extended 2026-08-15 for §4.3** (still one cumulative bullet): the Google migration and its
+      four unmodelled sibling fields, the second D12 seam, the surface count going three → four —
+      and **two more shipped defects, both consumer-visible**, which is now five in this entry. The
+      LMNT and Speechmatics TTS HTTP routes are stated with the live evidence that settled them,
+      including the disproved `eleanor` hypothesis, because a changelog that reported only the
+      confirmed half would suggest the vendor's published voice list is authoritative when this
+      work showed it is not.
 - [x] 7.3 Confirm every artifact is free of absolute machine paths, credentials and private-repo
       content before the PR (verbara-meta/ADR-0005)
       — **done**, swept across all 31 files this branch adds or modifies: zero absolute machine paths,
@@ -454,6 +980,82 @@ across several PRs and every one of them re-runs §8. The results recorded below
 2026-08-09 against the scope delivered so far (§4.1, §4.2, §4.4, §1–§3). **Nine of the ten items run
 locally** — only 8.9 needs a PR — which was worth discovering: treating §8 as an end-of-change
 formality left the D8 parity gate unmeasured while three provider suites were being rewritten.
+
+**Re-run 2026-08-14 for the §5 scope (WebSocket recordings).** All nine local items green; 8.9 still
+open pending the PR. Deltas worth carrying forward rather than a bare "green":
+
+| item | 2026-08-09 | 2026-08-14 | note |
+|---|---|---|---|
+| 8.3 unit lane | 3 027 passed / 30 asm | **3 048 passed / 30 asm**, 0 failed, 0 warnings | +21 tests, all fixture-integrity fences |
+| 8.6 line | 80.4% | **80.41%** (band [78, 81]) | headroom to the stale-floor ceiling still **0.59 pp** |
+| 8.6 branch | 66.05% | **66.08%** (floor 64) | |
+| 8.6 lines measured | 12 967 | **12 967** (min 12 315) | unchanged — §5 touched no `src/**` |
+| 8.6a patch | 100% (6/6 lines) | **n/a — 0 measurable lines**, pass | the D12 seam merged with Phase A, so this phase's diff is test+docs only |
+| 8.6b exclusions | 0 / baseline 0 | **0 / baseline 0**, 863 files | |
+| 8.7 pack | 29 pkgs, 0 refs | **29 pkgs, 0 `wiremock`/`TestInfrastructure` refs in any `.nuspec`** | |
+| 8.8 AOT | 0 trim warnings | **0 trim warnings**, canary smoke-run `linux-x64` | |
+| redaction (D5) | 8 files / 2 trees | **56 files / 2 trees** | the §5 fixtures are the growth |
+| assert audit | — | **405 files, ~2 587 tests, 0 violations** | |
+
+**Re-run 2026-08-15 for the §4.3 scope (Google STT migration + §6.1).** All nine local items green;
+8.9 still open pending the PR.
+
+| item | 2026-08-14 | 2026-08-15 | note |
+|---|---|---|---|
+| 8.3 unit lane | 3 048 passed / 30 asm | **3 051 passed / 30 asm**, 0 failed, 0 warnings | Google suite 6 → 9 |
+| 8.6 line | 80.41% | **80.97%** (band [78, 81]) | **see the denominator finding below — this is not a gain this branch made** |
+| 8.6 branch | 66.08% | **65.99%** (floor 64) | |
+| 8.6 lines measured | 12 967 | **15 810** (min 12 315) | +2 843, and **+10 of them are this branch's** |
+| 8.6a patch | n/a — 0 measurable lines | **100% (11/11 lines)**, floor 85 | measurable again — see the note below on how it first read as `n/a` |
+| 8.6b exclusions | 0 / baseline 0 | **0 / baseline 0**, 863 files | |
+| redaction (D5) | 56 files / 2 trees | **58 files / 2 trees** | the Google capture + sidecar |
+| assert audit | 405 files, ~2 587 tests | **404 files, ~2 590 tests, 0 violations** | one file fewer: `MockHttpMessageHandler.cs` (§6.1) |
+
+> **⚠ The coverage denominator moved by 22% and it was not this change.** The prior two §8 runs
+> recorded 12 967 measurable lines, matching `coverage-floor.json`'s recorded 2026-07-20 baseline of
+> 12 964. This run measures **15 810** against the same 25 assemblies. That is far too large to come
+> from one `src/**` file gaining 29 lines, so it was measured rather than reasoned about: the same
+> command was run against a clean `origin/main` worktree.
+>
+> | | `origin/main` @ `1542002b` | this branch | delta |
+> |---|---|---|---|
+> | lines measurable | 15 800 | 15 810 | **+10** |
+> | lines covered | 12 792 | 12 802 | **+10** |
+> | line coverage | 80.96% | 80.97% | +0.01 pp |
+>
+> **The jump is already on `main` and this branch contributes ten lines, all of them covered.** The
+> likely mechanism is `#167`, which enabled `CentralPackageTransitivePinningEnabled` and collapsed
+> 28 lower duplicate resolutions — the same class of packaging change that Phase A already showed
+> can silently change what coverlet instruments (a `FrameworkReference` once cost ~19 pp with every
+> test still green). Recorded here rather than fixed, because attributing it firmly means bisecting
+> `main`, which is not this change's work.
+>
+> **The consequence is a live one:** the two-sided band's stale-floor ceiling is `line + slack` =
+> **81.0**, and `main` now sits at 80.96%. The **0.59 pp of headroom this file claimed on
+> 2026-08-14 is gone — the real figure is 0.03 pp**, and the next PR that improves coverage at all
+> will trip the backstop. That is the ratchet working as designed, and the prescribed remedy is in
+> `coverage-floor.json`'s own comment: raise `line` to `floor(measured)` = **80** in the same PR.
+> Not done here. Raising a gate is a deliberate act, this change's diff does not force it, and
+> doing it inside a test-substrate PR would bury a repo-wide gating decision in an unrelated
+> review. It needs its own PR.
+
+> **8.6a read `n/a` on the first attempt and that was a measurement error, not a result.**
+> `check-patch-coverage.py` drives `diff-cover` off `git merge-base origin/main HEAD`, which reads
+> **committed** history; the first run happened with the work still uncommitted, so it saw an empty
+> diff and reported "docs/config-only change — n/a, pass". Re-run after committing, it reports
+> **100% (11/11 changed executable lines)** against the floor of 85. Worth recording because the
+> previous phase's `n/a` was *genuine* (the D12 seam had merged with Phase A, leaving a test-only
+> diff), which makes this failure mode read as a repeat of a known-benign result — a gate that
+> passes for the wrong reason, in the exact place this change spent §8 arguing that a green run is
+> not the same as a verified one. **Run this gate after the commit, never before.**
+
+**Twenty-one new tests moved line coverage by 0.01 pp** (2026-08-14), and that is the expected
+shape, not an
+anticlimax: §5 added *tests over test fixtures*, and `coverlet.runsettings` excludes test assemblies
+from the denominator. A fixture-integrity fence cannot raise `src/**` coverage — it defends the
+*inputs* the existing tests run on. Recorded because the opposite reading ("21 tests bought us
+nothing") is the one a reviewer reaches for, and because it means §5 spends none of the 0.59 pp the
+remaining HTTP migrations will need.
 
 - [x] 8.1 `dotnet test Tests/Verbara.Sdk.VoiceAi.Stt.Tests` — green (covered by the 8.3 lane)
 - [x] 8.2 `dotnet test Tests/Verbara.Sdk.VoiceAi.Tts.Tests` — green (covered by the 8.3 lane)
