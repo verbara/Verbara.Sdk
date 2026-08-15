@@ -32,26 +32,43 @@ characterised* in §5.5.
       surface with its evidence class **and its own date — the dates differ and MUST NOT be flattened
       into one**. The six TTS rows: Deepgram route OK / frame OK; Azure route OK / frame OK; LMNT
       (HTTP) route `404`; Speechmatics route `404`; Cartesia route OK / frame BROKEN; ElevenLabs route
-      OK / frame BROKEN. Four of six broken — two by route, two by frame format, none unknown. Their
-      provenance is not uniform: **Deepgram** is a live probe of 2026-08-15 carrying a negative control
-      on the same host; **Cartesia** and **ElevenLabs** are vendor-documentation reads of 2026-08-14,
-      never probed; **Azure** was established in earlier work and was *not* re-probed in this pass;
+      OK / frame BROKEN. Four of six broken — two by route, two by frame format — and **one frame half
+      still uncharacterised**: Cartesia TTS's 2026-08-15 probe reached `101` and then sent a malformed
+      synthesis request, so the vendor answered with an error frame and the frame inventory was never
+      seen. Their provenance is not uniform: **Deepgram** is a live probe of 2026-08-15 carrying a
+      negative control on the same host; **ElevenLabs** was probed live on 2026-08-15 with both controls
+      and its frame finding is now measured, not documentation-derived; **Cartesia**'s frame finding
+      remains the vendor-documentation read of 2026-08-14 and MUST stay at that class even though its
+      route and auth were probed the next day; **Azure** was established in earlier work and was *not*
+      re-probed in this pass;
       **LMNT** and **Speechmatics** carry the dates of their own route probes. Put the real date on each
       row — a single header date would assert a live 2026-08-15 measurement for four surfaces that never
       got one, which is exactly the conflation §1.9 and the spec's evidence-class rule exist to prevent
-- [ ] 1.2 The four **WebSocket streaming recognizers** are no longer uniformly unknown: two were probed
-      2026-08-15 with the §5 method and two were not, and §1.3–§1.5 record which is which. Put all four
-      in the same table carrying their differing evidence classes and dates — the point of the table is
-      that the difference stays visible, not that the four are given one shared verdict
+- [ ] 1.2 The four **WebSocket streaming recognizers** are no longer unknown at all: all four were
+      probed on 2026-08-15 with the §5 method, and §1.3–§1.5a record what each returned. Their classes
+      still differ — Cartesia STT and AssemblyAI STT carry both controls, Deepgram STT carries a
+      wrong-path control but **no invalid-credential control**, so its validation point is *not
+      established* — and the table MUST keep that difference visible rather than giving the four one
+      shared verdict on the strength of having all been touched
 - [ ] 1.3 **Deepgram STT — route verified 2026-08-15 with a negative control; frames not exercised.**
       `wss://api.deepgram.com/v1/listen` with the SDK's exact shipped defaults (`encoding=linear16`,
       `sample_rate=16000`, `channels=1`, `model=nova-2`, `interim_results=true`, `punctuate=true`) and
-      the `Authorization: Token` header returned `101 Switching Protocols`; the negative control
-      `/v1/listen-does-not-exist` on the same host returned `404 Not Found`. Deepgram authenticates in
-      the **handshake header**, so on this surface the `101` does prove the credential was accepted
-      (§5.11). Frames were **not** exercised — Deepgram is `not-cleared` under
+      the `Authorization: Token` header returned `101 Switching Protocols`; the wrong-path control
+      `/v1/listen-does-not-exist` on the same host returned `404 Not Found`. **The `101` does not, on
+      its own, prove the credential was accepted** — that inference was made here and `Sdk/ADR-0049` D3
+      now forbids it. No invalid-credential control was ever run against Deepgram (ADR-0048 probed the
+      route, not the key), so its validation point is recorded **not established** and §1.3a closes the
+      gap. Frames were **not** exercised — Deepgram is `not-cleared` under
       `docs/guides/provider-recording-protocol.md` section 7 — and the row must say so, so a verified
       route is not read as a verified frame protocol
+- [ ] 1.3a **Run the missing invalid-credential control against Deepgram** — TTS and STT, same host,
+      deliberately malformed key, alongside the wrong-path control already taken. It is the one surface
+      in the scoreboard whose validation point rests on inference, and it is the surface every other
+      row's "handshake vs in-band" framing was originally reasoned from, so leaving it uncontrolled
+      leaves the weakest evidence under the most load. Two outcomes, both useful: a `401` at the
+      handshake confirms what was assumed and costs one probe, or a `101` followed by an error frame
+      makes it **four** in-band surfaces and puts `DeepgramSpeechRecognizer.cs:120` from §4.16 in the
+      live-symptom set rather than the latent one. Record whichever, with its date
 - [ ] 1.4 **Speechmatics STT — probed 2026-08-15 to the first protocol exchange, and it does not
       authenticate.** The route resolves and the upgrade completes; the credential is then rejected
       in-band with close code `4001 not_authorised`. That is the defect fixed in §4.1–§4.4 — in this
@@ -60,17 +77,32 @@ characterised* in §5.5.
       establish the remedy and no audio was streamed — so the frame inventory beyond those two message
       types stays **not characterised**, and the assembly finding from §4.7 onwards remains derived from
       the vendor's message set and the committed fixtures rather than from live transcript frames
-- [ ] 1.5 **Cartesia STT and AssemblyAI STT — not characterised, no credential.**
-      `src/Verbara.Sdk.VoiceAi.Stt/Cartesia/CartesiaSpeechRecognizer.cs` and
-      `.../AssemblyAi/AssemblyAiSpeechRecognizer.cs` were not probed. Record the reason and not a
-      verdict: no credential for either vendor exists in this environment. Not probed, not claimed
-- [ ] 1.6 The three **HTTP batch recognizers** — `.../Whisper/WhisperSpeechRecognizer.cs`,
-      `.../Whisper/AzureWhisperSpeechRecognizer.cs`, `.../Google/GoogleSpeechRecognizer.cs` — are a
+- [ ] 1.5 **Cartesia STT and AssemblyAI STT — credentials obtained 2026-08-15; both now probed with
+      two controls.** This supersedes the original *not characterised, no credential* entry, which was
+      true when written. `src/Verbara.Sdk.VoiceAi.Stt/Cartesia/CartesiaSpeechRecognizer.cs`: wrong path
+      `404`, invalid credential `401`, real `101` — route and auth OK, **frames not exercised**.
+      `.../AssemblyAi/AssemblyAiSpeechRecognizer.cs`: wrong path `404`, invalid credential **`101`
+      followed by an error frame** (in-band auth), real `101` with first frame `Begin`
+      `{configuration, expires_at, id, type}` — route OK, and the invalid-credential control is what
+      exposed §4.15. Record both with their controls; do not carry the frame halves further than the
+      evidence goes
+- [ ] 1.5a **Google STT — promoted from `uncontrolled` to a controlled probe, 2026-08-15.** Wrong path
+      `404`, invalid credential `400 API_KEY_INVALID`, real key `400 RecognitionAudio not set` — the
+      last of which is the vendor accepting the credential and rejecting the empty payload, i.e. past
+      auth into argument validation. Its row moves out of the shared HTTP-batch line in §1.6, which
+      now covers only the two Whisper recognizers. Note for the record that the SDK's `?key=` query
+      parameter **is** a supported mechanism on `speech:recognize`: Google's own auth page does not
+      list API keys, and reading that silence as a defect would have been wrong — the probe settled it
+- [ ] 1.6 The **two remaining HTTP batch recognizers** — `.../Whisper/WhisperSpeechRecognizer.cs` and
+      `.../Whisper/AzureWhisperSpeechRecognizer.cs` — are a
       different shape (request/response, no frame protocol), and each already carries a committed
       recording under `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Recordings/` whose provenance sidecar
       declares `"class": "recorded"` — a **live capture**, taken **without a negative control**. That is
       real route evidence of its own weaker class: do not call it unverified and do not put it in the
-      same column as §1.3. Either re-probe with a control or record the class as it stands
+      same column as §1.3. Either re-probe with a control or record the class as it stands.
+      `.../Google/GoogleSpeechRecognizer.cs` **left this group on 2026-08-15** — see §1.5a, where it was
+      re-probed with both controls — so this task covers two recognizers, not three, and the third is
+      the worked example of what "re-probe with a control" produces
 - [ ] 1.7 Azure TTS is recorded as previously proven working. That is a **weaker evidence class** than
       the 2026-08-15 Deepgram probe: it was not re-probed with a negative control. Either re-probe it
       or record the weaker class explicitly — do not promote it by placing it in the same column
@@ -141,22 +173,28 @@ characterised* in §5.5.
       observable to the caller **and counted**. Two things to decide and record: (a) the observable
       form — a throw at stream completion versus a typed empty-result signal — on an
       `IAsyncEnumerable` surface where the caller may already be enumerating; (b) where the count lives,
-      because `src/Verbara.Sdk.VoiceAi.Tts/Diagnostics/` holds only `TtsHealthCheck.cs` and the package
-      declares **no `Meter` at all** today, so this is a new instrument rather than a new counter on an
-      existing one. A request whose input legitimately warrants no audio must stay distinguishable —
+      because `src/Verbara.Sdk.VoiceAi.Tts/Diagnostics/` holds only `TtsHealthCheck.cs` — but the
+      instrument already exists one package over: `src/Verbara.Sdk.VoiceAi/Diagnostics/SpeechSynthesisMetrics.cs:13`
+      declares `Meter("Verbara.Sdk.VoiceAi.Tts", "1.0.0")` and already carries
+      `SynthesesCompleted` / `SynthesesFailed`. So this is a **new counter on an existing Meter**, and
+      the real decision is narrower and sharper than "where does the count live": a zero-byte synthesis
+      today increments `SynthesesCompleted`, and D2 says it must not. Decide whether it moves to
+      `SynthesesFailed` or gets its own counter, and note that changing which counter fires is an
+      observable change for anyone already listening on that Meter name. A request whose input legitimately warrants no audio must stay distinguishable —
       name the discriminator explicitly (frames arrived and were discarded, versus no frames arrived).
       This is the task the spec's zero-audio requirement is implemented by; without it the requirement
       has no code behind it
-- [ ] 2.10a The signal from 2.10 is **not Cartesia-only**. The spec requirement is written for any
-      provider that completes successfully having yielded zero audio bytes, so it needs code behind it
-      on both frame-path synthesizers or it is a requirement one provider happens to satisfy. Cartesia
-      is the *confirmed* instance — it reaches the vendor's `done` terminator with zero bytes written.
-      For `src/Verbara.Sdk.VoiceAi.Tts/ElevenLabs/ElevenLabsSpeechSynthesizer.cs`, establish whether its
-      completion path does the same before wiring the signal: it shares the read-only-Binary defect, but
-      whether it *terminates normally* on an all-text stream is a separate reading of its loop and has
-      not been checked. Record the answer either way — if it also completes silently, it gets the same
-      observable form and the same counter; if it faults instead, say so, and the requirement is then
-      satisfied for ElevenLabs by the existing behaviour rather than by new code
+- [ ] 2.10a The signal from 2.10 is **not Cartesia-only — measured, not assumed.** The open question
+      this task originally carried was answered by the 2026-08-15 probe: ElevenLabs emits only text
+      frames (`{alignment, audio, isFinal, normalizedAlignment}`, audio base64) and then closes
+      **`1000` normal**. `src/Verbara.Sdk.VoiceAi.Tts/ElevenLabs/ElevenLabsSpeechSynthesizer.cs` reads
+      only `WebSocketMessageType.Binary`, so it completes **successfully with zero bytes**, exactly as
+      Cartesia does. Both synthesizers get the same observable form and the same counter — there is no
+      longer a provider for which the spec's zero-audio requirement is satisfied by luck.
+      Additionally, and worse than first recorded: ElevenLabs sends its **auth error** as text too
+      (`{code, error, message}`), so a bad credential loses the audio and the reason in the same
+      branch. Fixing the frame type in §2.1 fixes both, but assert them as two separate tests — a
+      normal synthesis yields audio, and a rejected credential surfaces an error
 - [ ] 2.11 Cartesia and ElevenLabs land as **two separate commits**. Cartesia additionally reaches its
       `done` terminator and completes successfully with zero audio — call that out in its commit body,
       because it is the silent-failure case and it is the reason this section is first
@@ -339,6 +377,34 @@ commit.
       closure `provider-dto-robustness-fences` counts (its §1.2 figures) and inside its coverage guard
       (its §8.3). Flag it in this change's record so those numbers are re-derived; **do not edit that
       change's artifacts from here**
+- [ ] 4.15 **AssemblyAI STT — the seventh defect, and the one that makes the swallow a class.**
+      `src/Verbara.Sdk.VoiceAi.Stt/AssemblyAi/AssemblyAiSpeechRecognizer.cs:137` reads
+      `if (!string.Equals(msg.Type, "Turn", StringComparison.Ordinal)) continue;` — structurally the
+      same filter as the Speechmatics one in §4.6a, written by someone who believed they were skipping
+      lifecycle noise. AssemblyAI signals in-band failure as a frame whose type is not `Turn`, measured
+      2026-08-15 with an invalid-credential control: `101` upgrade, then `{error, error_code, type}`
+      carrying "Unauthorized Connection: Invalid API key". The recognizer discards it, so a rejected
+      session reaches the caller as a stream that completes normally and empty. Fix it the same way
+      §4.6a fixes Speechmatics and land them in the **same commit** — one remedy, one shape, so the
+      next reviewer sees a rule rather than two coincidences. `Termination` stays a legitimate skip;
+      the discriminator is whether the frame carries a failure, not whether it is on the content
+      allow-list (`Sdk/ADR-0049` D1)
+- [ ] 4.16 Audit **every** provider receive loop in `src/Verbara.Sdk.VoiceAi.Stt/` and
+      `src/Verbara.Sdk.VoiceAi.Tts/` for the allow-list filtering shape — a `continue` or a
+      message-type equality test that lets unanticipated frames fall into a discard branch. A first
+      pass already found **five** sites, not the three with a live symptom: beyond Speechmatics,
+      AssemblyAI and ElevenLabs-by-frame-type, `CartesiaSpeechRecognizer.cs:165` (`Type !=
+      "transcript"`) and `DeepgramSpeechRecognizer.cs:120` (`Type != "Results"`) are the same
+      construction. Those two are **latent, not clean** — their vendors validate credentials at the
+      handshake so no auth frame reaches the branch today, but every other error either vendor defines
+      does, and a vendor moving validation in-band converts them with no line changing. Finish the
+      sweep across the remaining surfaces and record the result per surface even where the answer is
+      "no such branch", because a clean loop is evidence and an unexamined one is not
+- [ ] 4.17 Remediate the two **latent** sites from §4.16 (`CartesiaSpeechRecognizer.cs:165`,
+      `DeepgramSpeechRecognizer.cs:120`) under the same D1 shape as §4.6a and §4.15. No measured defect
+      forces these — that is precisely the argument for doing them here rather than after one bites,
+      and `Sdk/ADR-0049` binds all five sites, not the three with symptoms. If they are deferred
+      instead, the deferral is recorded with that reasoning rather than left as silence
 
 ## 5. The conformance probe as a committed instrument
 
@@ -408,11 +474,11 @@ commit.
       that project, never regex over raw text; 1-based lines; both arguments null-guarded.
       It ships with an **explicit allow-list**, or it is red on arrival: four inlined-endpoint sites
       pre-date this change and **no task in it remediates them**. Enumerate them with a one-line reason
-      each, in the shape
-      `Tests/Verbara.Sdk.Governance.Tests/SyncFenceRegressionGuardTests.cs` already uses for its
-      exemptions — *not* `LoopbackSeamGuardTests.cs`, whose scanner states at
-      `LoopbackSeamScanner.cs:28` that it carries **no ignore list** and is therefore the wrong
-      precedent to copy —
+      each. **There is no in-repo precedent to copy for the allow-list shape** — grepped 2026-08-15, no
+      Governance guard currently ships an enumerated exemption list, and `LoopbackSeamScanner.cs:28`
+      states positively that it carries *no ignore list*. This scanner therefore establishes the shape
+      rather than following one, and that is a decision to make deliberately, not a detail to improvise
+      while writing it. The four sites are —
       `src/Verbara.Sdk.VoiceAi.Tts/ElevenLabs/ElevenLabsSpeechSynthesizer.cs:161` (URI assembled from
       voice id and model options; the type exposes no base-URI option and this change does not add one),
       `src/Verbara.Sdk.VoiceAi.Tts/Lmnt/LmntSpeechSynthesizer.cs:265` (the WebSocket route, recorded
@@ -449,7 +515,7 @@ commit.
       defects, because the bytes never arrive or arrive on the wrong frame type; and they are not drift,
       because they are static, present-day, and were wrong on the day the code was written. Related:
       ADR-0041 (recordings as the provider evidence class), ADR-0043 (evidence produced off the PR path)
-- [ ] 6.7 Add the ADR-0048 row to `docs/decisions/README.md` in numeric order, matching the existing row
+- [ ] 6.7 Add the ADR-0048 **and ADR-0049** rows to `docs/decisions/README.md` in numeric order, matching the existing row
       format (link, one-sentence summary, status and date)
 - [ ] 6.8 `docs/guides/provider-recording-protocol.md` — add the probe method as a named section: the
       controlled comparison, the mandatory negative control, and the governing epistemic rule *"a vendor
@@ -466,10 +532,13 @@ commit.
       with zero audio; Speechmatics TTS has never reached the vendor; LMNT affects only callers who set
       `Transport = Http`
 - [ ] 6.11 State the residue explicitly so no omission reads as an oversight, and state it at the
-      resolution §1 now supports: Cartesia STT and AssemblyAI STT — *not characterised, no credential*;
+      resolution §1 now supports: Cartesia STT — route and auth verified with two controls, **frames not
+      exercised**; Cartesia **TTS** — route and auth verified, **frame inventory still not characterised**
+      because the probe's synthesis request was malformed, so its Class B finding still rests on the
+      2026-08-14 documentation read; AssemblyAI STT — route verified, swallow defect §4.15 confirmed;
       Deepgram STT — route verified, **frames not exercised**; Speechmatics STT — authentication and the
       first two frame types now measured, the rest of the frame inventory **not characterised**; the
-      three HTTP batch recognizers — a live capture without a negative control, its own weaker class;
+      two remaining HTTP batch recognizers — a live capture without a negative control, its own weaker class;
       the LMNT WebSocket path; the Speechmatics TTS body fields; and Azure TTS's weaker evidence class.
       Each is a row in §5.5 with its own evidence class, not a silent gap and not a shared verdict
 
