@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "assemblyai-stt",
+  "product": "AssemblyAI — speech to text, Universal Streaming (WebSocket v3)",
+  "endpoint": "GET wss://streaming.assemblyai.com/v3/ws",
+  "api_version": "v3",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 329,
+  "sha256": "4207138e18167d4b45bb892dbe585a4061a75561e704be94b45d26b764f70ed8",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "No audio was submitted and no request was issued: this frame is authored to AssemblyAI's published Universal Streaming protocol documentation, not captured from the service. The Begin message carries no transcript, so no spoken or written content is involved at all.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured. The session id holds the nil GUID — the placeholder form protocol section 4 prescribes for a correlating identifier — because no real session exists to name, and the model name is deliberately a fixture label rather than a real AssemblyAI model."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — AssemblyAI is not-cleared for capturing Output, so this fixture takes the documentation-derived route, which contains no Output at all",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://www.assemblyai.com/docs/api-reference/streaming-api/streaming-api",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documented field set of the Universal Streaming Begin message was read from the page above: type, id, expires_at and the configuration object (model, mode, api_version, speaker_labels, redact_pii, filter_profanity, domain, voice_focus), with the documented nullable members carried as JSON null. No vendor example payload, prose or field description was copied — only the documented field names and the literal message-type constant 'Begin', which is interface, not expression. Every value is our own fiction."
+  },
+  "notes": "The session-greeting control frame. AssemblyAiSpeechRecognizer deserializes every text frame into its Turn DTO and then filters on type != \"Turn\"; this fixture is what makes that filter assertable against a frame with a genuinely different shape — a nested configuration object with JSON nulls — rather than against the two-field placeholder it replaces. WHY THIS IS DOCUMENTATION-DERIVED RATHER THAN CAPTURED: AssemblyAI's terms do not grant redistribution of Output (protocol guide section 7 — the express ownership clause was deleted in a later revision), so the verdict is not-cleared and a capture is not available to us on any credential; this is a terms blocker, not a missing-credential one. What this artifact is worth, stated plainly: a documented schema is what the vendor says it sends, whereas a capture is what it actually sent on one day. This route cannot close the does-the-vendor-honour-its-own-docs half of the ADR-0041 D4 gap. The page publishes no revision marker, so a silent breaking edit there is indistinguishable from no edit at all."
+}

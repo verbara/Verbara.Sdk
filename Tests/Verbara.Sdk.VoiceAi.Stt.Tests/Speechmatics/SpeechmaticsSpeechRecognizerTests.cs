@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Verbara.Sdk.Audio;
 using Verbara.Sdk.VoiceAi.Stt.Speechmatics;
 using Verbara.Sdk.VoiceAi.Stt.Tests.Helpers;
@@ -10,9 +11,15 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Speechmatics;
 /// <summary>
 /// Transport: WebSocket. Deliberately NOT migrated to the WireMock substrate — WireMock.NET matches
 /// HTTP/1.1 requests and cannot hold the duplex session these tests drive (ADR-0041 D2), so
-/// <c>SpeechmaticsFakeServer</c> on <c>WebSocketTestServer</c> stays. Fidelity here comes from
-/// recorded frames (D4), not from a different server. The Speechmatics <em>TTS</em> suite is a
-/// separate, HTTP-transport surface and does migrate (§4.5).
+/// <c>SpeechmaticsFakeServer</c> on <c>WebSocketTestServer</c> stays. Fidelity here comes from the
+/// frames in <c>Recordings/speechmatics-stt/</c> (D4), not from a different server. Speechmatics STT
+/// is <c>permitted</c> for capturing Output (<c>docs/guides/provider-recording-protocol.md</c> §7 —
+/// ToS §10.3 assigns the customer all IP in Transcripts), so — unlike Deepgram and AssemblyAI — its
+/// terms are not what stands between this suite and a real capture; no capture credential exists in
+/// this environment, and a capture stays a known, cleared upgrade path. Meanwhile the frames take
+/// §7's documentation-derived route, <c>class: "synthetic"</c> with a <c>source_schema</c> block.
+/// That closes the field-set half of the D4 gap and not the drift half. The Speechmatics <em>TTS</em>
+/// suite is a separate, HTTP-transport surface and does migrate (§4.5).
 /// </summary>
 public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
 {
@@ -29,6 +36,125 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         var opts = new SpeechmaticsOptions { ApiKey = "test-key" };
         configure?.Invoke(opts);
         return new SpeechmaticsSpeechRecognizer(Options.Create(opts), fakeServerPort: _server.Port);
+    }
+
+    /// <summary>
+    /// The transcript the SDK is expected to build out of a recorded frame: every result's first
+    /// alternative, joined with a single space, which is exactly what
+    /// <c>SpeechmaticsSpeechRecognizer</c> does. Derived from the recording rather than hard-coded,
+    /// so the two independent readers must agree on the frame's bytes.
+    /// </summary>
+    private static string RecordedJoinedTranscript(string frame)
+    {
+        using var document = JsonDocument.Parse(SpeechmaticsFakeServer.ReadFrame(frame));
+        var parts = document.RootElement.GetProperty("results").EnumerateArray()
+            .Select(result => result.GetProperty("alternatives")[0].GetProperty("content").GetString()!);
+        return string.Join(' ', parts);
+    }
+
+    /// <summary>The already-assembled segment text the vendor publishes at <c>metadata.transcript</c>.</summary>
+    private static string RecordedVendorTranscript(string frame)
+    {
+        using var document = JsonDocument.Parse(SpeechmaticsFakeServer.ReadFrame(frame));
+        return document.RootElement.GetProperty("metadata").GetProperty("transcript").GetString()!;
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldYieldRecordedTranscripts_WhenReplayingDocumentedFrames()
+    {
+        // The default seed is the two recorded frames verbatim: partial then final.
+        var recognizer = BuildRecognizer();
+        var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var partial = RecordedJoinedTranscript(SpeechmaticsFakeServer.PartialTranscriptFrame);
+        var final = RecordedJoinedTranscript(SpeechmaticsFakeServer.FinalTranscriptFrame);
+        partial.Should().NotBeNullOrWhiteSpace("a frame that transcribes to nothing asserts nothing");
+        final.Should().NotBeNullOrWhiteSpace("a frame that transcribes to nothing asserts nothing");
+
+        results.Should().HaveCount(2);
+        results[0].IsFinal.Should().BeFalse();
+        results[0].Transcript.Should().Be(partial);
+        results[1].IsFinal.Should().BeTrue();
+        results[1].Transcript.Should().Be(final);
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldTolerateUnmodelledSiblingFields_WhenFrameCarriesFullDocumentedFieldSet()
+    {
+        // The point of the recording. SpeechmaticsTranscriptMessage models three values — message,
+        // and each result's first alternative's content and confidence — out of everything
+        // Speechmatics documents. The first block fences the fixture: reduce it back to the old
+        // message + results[].alternatives[] shape and this fails loudly instead of silently taking
+        // the assertion below with it.
+        using (var document = JsonDocument.Parse(SpeechmaticsFakeServer.ReadFrame(SpeechmaticsFakeServer.FinalTranscriptFrame)))
+        {
+            var root = document.RootElement;
+            foreach (var unmodelled in new[] { "format", "metadata", "forced" })
+            {
+                root.TryGetProperty(unmodelled, out _)
+                    .Should().BeTrue("the recorded frame must carry '{0}', which the SDK does not model", unmodelled);
+            }
+
+            var metadata = root.GetProperty("metadata");
+            foreach (var metadataField in new[] { "start_time", "end_time", "transcript" })
+            {
+                metadata.TryGetProperty(metadataField, out _)
+                    .Should().BeTrue("metadata must carry '{0}' — the SDK reads none of it", metadataField);
+            }
+
+            var results = root.GetProperty("results");
+            results.GetArrayLength().Should().BeGreaterThan(1, "a single-token stream cannot expose the join behaviour");
+            foreach (var resultField in new[] { "type", "start_time", "end_time", "is_eos" })
+            {
+                results[0].TryGetProperty(resultField, out _)
+                    .Should().BeTrue("a recorded result must carry '{0}'", resultField);
+            }
+
+            var alternative = results[0].GetProperty("alternatives")[0];
+            foreach (var alternativeField in new[] { "language", "display", "speaker", "tags" })
+            {
+                alternative.TryGetProperty(alternativeField, out _)
+                    .Should().BeTrue("a recorded alternative must carry '{0}'", alternativeField);
+            }
+
+            // The punctuation token is load-bearing for the divergence test below.
+            var last = results[results.GetArrayLength() - 1];
+            last.GetProperty("type").GetString().Should().Be("punctuation");
+            last.TryGetProperty("attaches_to", out _).Should().BeTrue();
+        }
+
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(SpeechmaticsFakeServer.ReadFrame(SpeechmaticsFakeServer.FinalTranscriptFrame));
+
+        var recognizer = BuildRecognizer();
+        var yielded = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        yielded.Should().ContainSingle()
+            .Which.Transcript.Should().Be(RecordedJoinedTranscript(SpeechmaticsFakeServer.FinalTranscriptFrame));
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldSpaceJoinTokens_WhenFrameCarriesPunctuationAttachedToPrevious()
+    {
+        // The finding this migration surfaced, asserted as the behaviour it is rather than fixed
+        // here — no src/** file is in this change's scope. Speechmatics publishes the assembled
+        // segment at metadata.transcript, and publishes a word_delimiter on RecognitionStarted;
+        // SpeechmaticsSpeechRecognizer reads neither and space-joins the token stream, so a
+        // punctuation result with attaches_to "previous" gains a space the vendor's own text does
+        // not have. A single-token fake could never show this.
+        var vendorText = RecordedVendorTranscript(SpeechmaticsFakeServer.FinalTranscriptFrame);
+        var sdkText = RecordedJoinedTranscript(SpeechmaticsFakeServer.FinalTranscriptFrame);
+        sdkText.Should().NotBe(vendorText, "the recording must actually exercise the divergence");
+        sdkText.Replace(" ", string.Empty).Should().Be(vendorText.Replace(" ", string.Empty),
+            "the two differ only in whitespace — the tokens themselves agree");
+
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(SpeechmaticsFakeServer.ReadFrame(SpeechmaticsFakeServer.FinalTranscriptFrame));
+
+        var recognizer = BuildRecognizer();
+        var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().Be(sdkText);
     }
 
     [Fact]
@@ -92,7 +218,10 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
     public async Task StreamAsync_ShouldIgnoreLifecycleMessages_WhenEndOfTranscript()
     {
         // Server sends RecognitionStarted automatically. Add only EndOfTranscript — no
-        // AddPartialTranscript / AddTranscript — so we expect zero yielded results.
+        // AddPartialTranscript / AddTranscript — so we expect zero yielded results. Both lifecycle
+        // frames are now the recorded ones, so the message filter is exercised against the shapes
+        // Speechmatics documents — including RecognitionStarted's nested language_pack_info —
+        // rather than against two-field placeholders.
         _server.ResultMessages.Clear();
         _server.ResultMessages.Add(SpeechmaticsFakeServer.BuildEndOfTranscriptJson());
 

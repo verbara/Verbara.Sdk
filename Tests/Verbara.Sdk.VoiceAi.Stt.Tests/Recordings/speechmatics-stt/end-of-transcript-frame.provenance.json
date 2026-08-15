@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "speechmatics-stt",
+  "product": "Speechmatics — speech to text, Realtime (WebSocket v2)",
+  "endpoint": "GET wss://eu2.rt.speechmatics.com/v2/<language>",
+  "api_version": "v2",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 35,
+  "sha256": "69979039dca768832f02f2ad99ec4bea03acac4dc11bf5cf2e094427737e38ea",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "No audio was submitted and no request was issued: this frame is authored to Speechmatics' published Realtime protocol documentation, not captured from the service. The EndOfTranscript message carries no transcript, so no spoken or written content is involved at all.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured, and the message has exactly one documented field to begin with."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — no Output was captured at all; the fixture is authored to Speechmatics' published protocol documentation. Speechmatics STT's own verdict for a capture is permitted, and it is not what blocks one here (see notes)",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://docs.speechmatics.com/api-ref/realtime-transcription-websocket",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documented field set of the Realtime EndOfTranscript message was read from the page above: a single required 'message' field. No vendor example payload, prose or field description was copied — only that field name and the literal message-type constant 'EndOfTranscript', which is interface, not expression. Recorded verbatim as the one-field message the documentation describes: padding it out with fields the vendor does not document would be fabrication, not fidelity."
+  },
+  "notes": "The session-closing control frame, and the honest exception to this migration's field-set argument: the retired hand-authored string for this message was already identical to the documented schema, because there is only one field. It is committed anyway so that every frame this suite sends comes from one place with one provenance trail, rather than one message type quietly staying a string literal in the fake. WHY THIS IS DOCUMENTATION-DERIVED RATHER THAN CAPTURED, and it is NOT a terms problem: Speechmatics STT is recorded as permitted in section 7 of the protocol guide, so the terms would have permitted a capture; the reason there is no capture is that NO CAPTURE CREDENTIAL EXISTS IN THIS ENVIRONMENT, and a real capture is a known, cleared upgrade path whenever one appears. The page publishes no revision marker, so a silent breaking edit there is indistinguishable from no edit at all."
+}

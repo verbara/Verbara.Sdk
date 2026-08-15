@@ -1,0 +1,30 @@
+{
+  "type": "transcript",
+  "request_id": "00000000-0000-0000-0000-000000000000",
+  "text": "La llamada quedó registrada",
+  "is_final": false,
+  "duration": 1.62,
+  "language": "es",
+  "words": [
+    {
+      "word": "La",
+      "start": 0.06,
+      "end": 0.22
+    },
+    {
+      "word": "llamada",
+      "start": 0.22,
+      "end": 0.74
+    },
+    {
+      "word": "quedó",
+      "start": 0.74,
+      "end": 1.1
+    },
+    {
+      "word": "registrada",
+      "start": 1.1,
+      "end": 1.62
+    }
+  ]
+}

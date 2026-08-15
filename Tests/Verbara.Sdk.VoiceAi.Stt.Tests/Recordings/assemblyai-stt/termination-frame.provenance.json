@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "assemblyai-stt",
+  "product": "AssemblyAI — speech to text, Universal Streaming (WebSocket v3)",
+  "endpoint": "GET wss://streaming.assemblyai.com/v3/ws",
+  "api_version": "v3",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 92,
+  "sha256": "4451a571b27ced48c5c5b7560dba121d2f1d5e0b6b49680c84005d5d1cd9ad75",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "No audio was submitted and no request was issued: this frame is authored to AssemblyAI's published Universal Streaming protocol documentation, not captured from the service. The Termination message carries no transcript, so no spoken or written content is involved at all.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured. The two duration values are fictional and describe no real session."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — AssemblyAI is not-cleared for capturing Output, so this fixture takes the documentation-derived route, which contains no Output at all",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://www.assemblyai.com/docs/api-reference/streaming-api/streaming-api",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documented field set of the Universal Streaming Termination message was read from the page above: type, audio_duration_seconds and session_duration_seconds, both documented as integers and carried as integers here. No vendor example payload, prose or field description was copied — only the documented field names and the literal message-type constant 'Termination', which is interface, not expression. Both values are our own fiction."
+  },
+  "notes": "The session-closing control frame, and the one the suite's existing ignore-test sends. It is worth keeping distinct from the Begin fixture because the two exercise the type filter from opposite ends of a session and carry different shapes. WHY THIS IS DOCUMENTATION-DERIVED RATHER THAN CAPTURED: AssemblyAI's terms do not grant redistribution of Output (protocol guide section 7 — the express ownership clause was deleted in a later revision), so the verdict is not-cleared and a capture is not available to us on any credential; this is a terms blocker, not a missing-credential one. What this artifact is worth, stated plainly: a documented schema is what the vendor says it sends, not what it sent on any given day, and this route cannot close the does-the-vendor-honour-its-own-docs half of the ADR-0041 D4 gap. The page publishes no revision marker, so a silent breaking edit there is indistinguishable from no edit at all."
+}

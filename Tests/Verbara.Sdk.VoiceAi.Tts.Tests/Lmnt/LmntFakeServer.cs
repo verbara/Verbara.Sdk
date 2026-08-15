@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
+using Verbara.Sdk.TestInfrastructure.Http;
 using Verbara.Sdk.TestInfrastructure.WebSocket;
 
 namespace Verbara.Sdk.VoiceAi.Tts.Tests.Lmnt;
@@ -10,15 +11,56 @@ namespace Verbara.Sdk.VoiceAi.Tts.Tests.Lmnt;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
-/// In-process WebSocket server that speaks the LMNT TTS streaming wire protocol.
+/// In-process WebSocket server that speaks the LMNT TTS streaming wire protocol, seeded from the
+/// payloads in <c>Recordings/lmnt-ws/</c> rather than from <c>new byte[320]</c> and a hand-authored
+/// terminator (ADR-0041 D4).
 /// </summary>
 /// <remarks>
+/// <para>
 /// Records all text JSON messages received from the client (init message, text messages,
 /// flush, EOF) in <see cref="ReceivedJsonMessages"/> and replies with caller-configured
-/// binary audio frames followed by an optional <c>{"type":"finish"}</c> terminator.
+/// binary audio frames followed by an optional recorded <c>finish</c> terminator.
+/// </para>
+/// <para>
+/// Only where the payloads come from changed. Accept, receive, answer and close sequencing is
+/// untouched (tasks.md §6.4) — this session still answers the client's terminal <c>eof</c> frame
+/// rather than a timer, and <see cref="HoldOpenUntilDisposed"/> still holds until dispose. Both are
+/// §8.5 fixes and must stay that way.
+/// </para>
+/// <para>
+/// The audio is a locally generated tone, not LMNT's: LMNT is <c>not-cleared</c> for capturing
+/// Output (<c>docs/guides/provider-recording-protocol.md</c> §7). Read
+/// <c>lmnt-ws/finish-frame.provenance.json</c> before trusting the terminator — <c>finish</c> is not
+/// in LMNT's published server-message set, and the sidecar records the discrepancy.
+/// </para>
 /// </remarks>
 internal sealed class LmntWsFakeServer : IAsyncDisposable
 {
+    /// <summary>Locally generated PCM the session streams back — see its provenance sidecar.</summary>
+    public const string AudioChunk = "lmnt-ws/audio-raw-16khz.raw";
+
+    /// <summary>Recorded <c>finish</c> terminator — the frame the synthesizer stops on.</summary>
+    public const string FinishFrame = "lmnt-ws/finish-frame.json";
+
+    /// <summary>Size of each binary frame the session sends: 160 samples, 10 ms at 16 kHz.</summary>
+    public const int AudioFrameSize = 320;
+
+    // Generator parameters for AudioChunk, mirrored in its provenance sidecar. The regeneration
+    // fence test re-renders the file from exactly these three numbers.
+    public const int AudioSampleCount = 904;
+    public const int AudioPeriodSamples = 64;
+    public const short AudioAmplitude = 11000;
+
+    // Resolved once per assembly: discovery walks the filesystem, and every payload in this suite
+    // comes out of the same tree.
+    private static readonly Lazy<ProviderRecordings> RecordingsTree = new(() => ProviderRecordings.Locate());
+
+    /// <summary>Read a recorded text payload.</summary>
+    public static string ReadFrame(string relativePath) => RecordingsTree.Value.ReadText(relativePath);
+
+    /// <summary>Read a recorded binary payload.</summary>
+    public static byte[] ReadFrameBytes(string relativePath) => RecordingsTree.Value.ReadBytes(relativePath);
+
     /// <summary>
     /// How long the session waits for the client's terminal EOF frame before answering anyway.
     /// A client that was cancelled or aborted mid-send never sends one; the session must not hang.
@@ -45,7 +87,7 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     /// <summary>Binary audio frames to stream back to the client.</summary>
     public List<byte[]> AudioFramesToSend { get; } = [];
 
-    /// <summary>Send an explicit <c>{"type":"finish"}</c> text message after all audio frames.</summary>
+    /// <summary>Send the recorded <c>finish</c> control frame as a text message after all audio frames.</summary>
     public bool SendFinishTerminator { get; set; } = true;
 
     /// <summary>Abort the socket abnormally after sending all frames (simulates server crash).</summary>
@@ -72,9 +114,10 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     {
         _server = new WebSocketTestServer(HandleSessionAsync);
 
-        // Default: two 320-byte frames (20 ms × 16 kHz raw PCM each).
-        AudioFramesToSend.Add(new byte[320]);
-        AudioFramesToSend.Add(new byte[320]);
+        // Default seed: the recorded tone, split into 320-byte frames. Its length is deliberately
+        // not a multiple of AudioFrameSize, so the last frame is short and a partial final frame
+        // reaches the consumer — something two exact-multiple new byte[320] frames never produced.
+        AudioFramesToSend.AddRange(ReadFrameBytes(AudioChunk).Chunk(AudioFrameSize));
     }
 
     public void Start() => _server.Start();
@@ -193,7 +236,7 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     {
         if (SendFinishTerminator && ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
         {
-            var finish = Encoding.UTF8.GetBytes("""{"type":"finish"}""");
+            var finish = Encoding.UTF8.GetBytes(ReadFrame(FinishFrame));
             try { await ws.SendAsync(finish.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false); }
             catch { /* peer may have closed mid-send; swallow and proceed to close handshake */ }
         }

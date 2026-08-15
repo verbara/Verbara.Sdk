@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "lmnt-ws",
+  "product": "LMNT — text to speech, streaming speech session (WebSocket)",
+  "endpoint": "GET wss://api.lmnt.com/v1/ai/speech/stream",
+  "api_version": "v1",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 23,
+  "sha256": "b0398239dcf9cdf2ca9bfbbe2c3e100b9b1b035bd52494fc8a6f03832e79a8d9",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "No audio was submitted and no request was issued: this frame is authored locally, not captured from the service. It carries no audio and no text.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured. The frame carries no identifier of any kind."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — LMNT is not-cleared for capturing Output, so this fixture takes the documentation-derived route, which contains no Output at all",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://docs.lmnt.com/api/speech-sessions/create",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The server-to-client message set was read from the page above. It publishes these server messages: ready, timestamps, flush_complete, reset_complete and error; `finish` is published there as a CLIENT-to-server message, not a server one. This frame therefore does NOT conform to a documented server message — see notes. No vendor example payload, prose or field description was copied into this repository."
+  },
+  "notes": "REPORTED DRIFT, NOT SILENTLY WORKED AROUND. LmntSpeechSynthesizer terminates the stream on a server text frame whose `type` is `finish`, and SynthesizeAsync_ShouldTerminate_WhenServerSendsFinish asserts exactly that, so the fake must keep sending it. But `finish` does not appear in LMNT's published server-message enumeration (ready / timestamps / flush_complete / reset_complete / error); the docs list `finish` as a message the CLIENT sends to close its half. Either the SDK terminates on a message LMNT never sends — in which case the real stream ends only by close or timeout and this test proves nothing about the vendor — or LMNT echoes it undocumented. Only a capture can settle it, and LMNT is not-cleared, so this fixture records the frame the SDK actually needs and states the discrepancy here rather than papering over it. The alternative — adding the documented `ready` frame or replacing `finish` — was rejected because it would change how the fake answers rather than where its payload comes from (tasks.md 6.4). LmntServerNotification models `type`, `error` and `message`; of those the documented `error` message is the only overlap, and `message` appears in no documented LMNT server payload. What this artifact is worth: a documented schema is what the vendor says it sends, whereas a capture is what it actually sent on one day. Re-read the source_schema URL first when this suite starts failing; the page publishes no revision marker."
+}

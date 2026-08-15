@@ -1,0 +1,70 @@
+{
+  "type": "Results",
+  "channel_index": [
+    0,
+    1
+  ],
+  "duration": 1.34,
+  "start": 0.0,
+  "is_final": false,
+  "speech_final": false,
+  "channel": {
+    "alternatives": [
+      {
+        "transcript": "El sistema registró la",
+        "confidence": 0.9412,
+        "languages": [
+          "es"
+        ],
+        "words": [
+          {
+            "word": "el",
+            "start": 0.08,
+            "end": 0.24,
+            "confidence": 0.9331,
+            "language": "es",
+            "punctuated_word": "El",
+            "speaker": 0
+          },
+          {
+            "word": "sistema",
+            "start": 0.24,
+            "end": 0.78,
+            "confidence": 0.9648,
+            "language": "es",
+            "punctuated_word": "sistema",
+            "speaker": 0
+          },
+          {
+            "word": "registró",
+            "start": 0.78,
+            "end": 1.2,
+            "confidence": 0.9107,
+            "language": "es",
+            "punctuated_word": "registró",
+            "speaker": 0
+          },
+          {
+            "word": "la",
+            "start": 1.2,
+            "end": 1.34,
+            "confidence": 0.9024,
+            "language": "es",
+            "punctuated_word": "la",
+            "speaker": 0
+          }
+        ]
+      }
+    ]
+  },
+  "metadata": {
+    "request_id": "00000000-0000-0000-0000-000000000000",
+    "model_info": {
+      "name": "fixture-general",
+      "version": "0000-00-00.0",
+      "arch": "fixture"
+    },
+    "model_uuid": "00000000-0000-0000-0000-000000000000"
+  },
+  "from_finalize": false
+}

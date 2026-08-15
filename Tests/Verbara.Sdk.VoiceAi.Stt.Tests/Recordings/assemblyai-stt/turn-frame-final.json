@@ -1,0 +1,85 @@
+{
+  "type": "Turn",
+  "turn_order": 1,
+  "turn_is_formatted": true,
+  "end_of_turn": true,
+  "transcript": "El asesor confirmó la cita para el próximo martes.",
+  "end_of_turn_confidence": 0.9241,
+  "language_code": "es",
+  "language_confidence": 0.9887,
+  "speaker_label": "A",
+  "words": [
+    {
+      "text": "El",
+      "start": 160,
+      "end": 320,
+      "confidence": 0.9932,
+      "word_is_final": true,
+      "speaker": "A"
+    },
+    {
+      "text": "asesor",
+      "start": 320,
+      "end": 780,
+      "confidence": 0.9885,
+      "word_is_final": true,
+      "speaker": "A"
+    },
+    {
+      "text": "confirmó",
+      "start": 780,
+      "end": 1280,
+      "confidence": 0.9814,
+      "word_is_final": true,
+      "speaker": "A"
+    },
+    {
+      "text": "la",
+      "start": 1280,
+      "end": 1400,
+      "confidence": 0.9901,
+      "word_is_final": true,
+      "speaker": "A"
+    },
+    {
+      "text": "cita",
+      "start": 1400,
+      "end": 1760,
+      "confidence": 0.9873,
+      "word_is_final": true,
+      "speaker": "A"
+    },
+    {
+      "text": "para",
+      "start": 1840,
+      "end": 2080,
+      "confidence": 0.9846,
+      "word_is_final": true,
+      "speaker": "A"
+    },
+    {
+      "text": "el",
+      "start": 2080,
+      "end": 2200,
+      "confidence": 0.9917,
+      "word_is_final": true,
+      "speaker": "A"
+    },
+    {
+      "text": "próximo",
+      "start": 2200,
+      "end": 2660,
+      "confidence": 0.9758,
+      "word_is_final": true,
+      "speaker": "A"
+    },
+    {
+      "text": "martes.",
+      "start": 2660,
+      "end": 3120,
+      "confidence": 0.9689,
+      "word_is_final": true,
+      "speaker": "A"
+    }
+  ]
+}

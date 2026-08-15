@@ -1,0 +1,53 @@
+{
+  "type": "Turn",
+  "turn_order": 1,
+  "turn_is_formatted": false,
+  "end_of_turn": false,
+  "transcript": "el asesor confirmó la cita",
+  "end_of_turn_confidence": 0.1042,
+  "language_code": "es",
+  "language_confidence": 0.9631,
+  "speaker_label": "A",
+  "words": [
+    {
+      "text": "el",
+      "start": 160,
+      "end": 320,
+      "confidence": 0.9421,
+      "word_is_final": true,
+      "speaker": "A"
+    },
+    {
+      "text": "asesor",
+      "start": 320,
+      "end": 780,
+      "confidence": 0.9508,
+      "word_is_final": true,
+      "speaker": "A"
+    },
+    {
+      "text": "confirmó",
+      "start": 780,
+      "end": 1280,
+      "confidence": 0.9316,
+      "word_is_final": true,
+      "speaker": "A"
+    },
+    {
+      "text": "la",
+      "start": 1280,
+      "end": 1400,
+      "confidence": 0.9274,
+      "word_is_final": true,
+      "speaker": "A"
+    },
+    {
+      "text": "cita",
+      "start": 1400,
+      "end": 1760,
+      "confidence": 0.8933,
+      "word_is_final": false,
+      "speaker": "A"
+    }
+  ]
+}

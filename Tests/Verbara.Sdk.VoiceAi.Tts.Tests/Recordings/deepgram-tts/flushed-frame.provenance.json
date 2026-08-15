@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "deepgram-tts",
+  "product": "Deepgram — text to speech, streaming (Speak WebSocket)",
+  "endpoint": "GET wss://api.deepgram.com/v1/speak",
+  "api_version": "v1",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 44,
+  "sha256": "d6d50538450c4e3bc72681cb90464e62f1701146570ad67966b15f2d5edf0372",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "No audio was submitted and no request was issued: this frame is authored to Deepgram's published Speak-streaming protocol documentation, not captured from the service. The Flushed message carries no audio and no text at all.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured. The message carries no identifier of any kind; sequence_id is an ordinal within the session, not a correlating id."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — Deepgram is not-cleared for capturing Output, so this fixture takes the documentation-derived route, which contains no Output at all",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://developers.deepgram.com/reference/text-to-speech-api/speak-streaming",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documented field set of the server-to-client Flushed message was read from the page above: type and sequence_id, the same two-field shape the Cleared message carries. The frame conforms to it. No vendor example payload, prose or field description was copied — only the documented field names and the literal message-type constant 'Flushed', which is interface, not expression."
+  },
+  "notes": "The end-of-utterance terminator DeepgramSpeechSynthesizer stops on. Two documented fields, both modelled — this frame is small because the vendor's is, not because it was trimmed. Deliberately still a recording rather than an inline literal: it is the frame whose type value decides when the stream ends, so it is exactly the payload that should be reviewable next to its source_schema instead of buried in a fake server. What this artifact is worth: a documented schema is what the vendor says it sends, whereas a capture is what it actually sent on one day. Re-read the source_schema URL first when this suite starts failing; the page publishes no revision marker."
+}

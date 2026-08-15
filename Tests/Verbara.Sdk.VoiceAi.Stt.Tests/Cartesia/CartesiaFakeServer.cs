@@ -1,19 +1,53 @@
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.Json.Nodes;
+using Verbara.Sdk.TestInfrastructure.Http;
 using Verbara.Sdk.TestInfrastructure.WebSocket;
 
 namespace Verbara.Sdk.VoiceAi.Stt.Tests.Cartesia;
 
 /// <summary>
-/// In-process WebSocket server that speaks the Cartesia STT wire protocol.
+/// In-process WebSocket server that speaks the Cartesia STT wire protocol, seeded from the frames
+/// in <c>Recordings/cartesia-stt/</c> rather than from hand-authored minimal JSON (ADR-0041 D4).
 /// </summary>
 /// <remarks>
+/// <para>
 /// Uses the shared <see cref="WebSocketTestServer"/> (TcpListener + manual upgrade) so that the
 /// <c>AbortAfterSend</c> path disposes cleanly on Linux — the previous <c>HttpListener</c>-based
-/// implementation hung indefinitely after <c>ws.Abort()</c>.
+/// implementation hung indefinitely after <c>ws.Abort()</c>. None of that sequencing changed here —
+/// only where the payloads come from.
+/// </para>
+/// <para>
+/// Cartesia is <c>permitted-with-conditions</c> for capturing Output
+/// (<c>docs/guides/provider-recording-protocol.md</c> §7), so unlike Deepgram and AssemblyAI its
+/// terms are <em>not</em> the reason these frames are authored rather than captured — the reason is
+/// simply that no capture credential exists in this environment. A real capture stays a known,
+/// cleared upgrade path here. Until then the frames take §7's documentation-derived route: authored
+/// to Cartesia's published realtime schema with fictional values, <c>class: "synthetic"</c>,
+/// <c>terms.verdict: "not-applicable"</c>, plus a <c>source_schema</c> block.
+/// </para>
+/// <para>
+/// The consequence worth knowing before reading <see cref="BuildTranscriptJson"/>: Cartesia
+/// documents <b>no <c>confidence</c> field</b> on the transcript message, and no per-word
+/// confidence either, while <c>CartesiaSttTranscriptMessage</c> models one as a nullable float
+/// falling back to <c>0f</c>. The recordings are schema-faithful and omit it.
+/// </para>
 /// </remarks>
 internal sealed class CartesiaFakeServer : IAsyncDisposable
 {
+    /// <summary>Recorded interim <c>transcript</c> frame — <c>is_final</c> false.</summary>
+    public const string InterimTranscriptFrame = "cartesia-stt/transcript-frame-interim.json";
+
+    /// <summary>Recorded final <c>transcript</c> frame — <c>is_final</c> true.</summary>
+    public const string FinalTranscriptFrame = "cartesia-stt/transcript-frame-final.json";
+
+    /// <summary>Recorded <c>flush_done</c> control frame — the parser must ignore it.</summary>
+    public const string FlushDoneFrame = "cartesia-stt/flush-done-frame.json";
+
+    // Resolved once per assembly: discovery walks the filesystem, and every frame in this suite
+    // comes out of the same tree.
+    private static readonly Lazy<ProviderRecordings> RecordingsTree = new(() => ProviderRecordings.Locate());
+
     private readonly WebSocketTestServer _server;
     private int _receivedFrameCount;
     private int _receivedTextCount;
@@ -43,8 +77,11 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
     {
         _server = new WebSocketTestServer(HandleSessionAsync);
 
-        ResultMessages.Add(BuildTranscriptJson("hola", 0.80f, isFinal: false));
-        ResultMessages.Add(BuildTranscriptJson("hola mundo", 0.99f, isFinal: true));
+        // Default seed: the recorded frames verbatim, so a test that does not care about the
+        // transcript still exercises the full documented field set — and, because the recordings
+        // carry no confidence, the SDK's null-confidence fallback as well.
+        ResultMessages.Add(ReadFrame(InterimTranscriptFrame));
+        ResultMessages.Add(ReadFrame(FinalTranscriptFrame));
     }
 
     public void Start() => _server.Start();
@@ -107,8 +144,37 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
         }
     }
 
+    /// <summary>Read a recorded frame verbatim from the suite's <c>Recordings/</c> tree.</summary>
+    public static string ReadFrame(string relativePath) => RecordingsTree.Value.ReadText(relativePath);
+
+    /// <summary>
+    /// A recorded <c>transcript</c> frame with only the values a test drives patched into it.
+    /// </summary>
+    /// <remarks>
+    /// Same signature as the string-interpolating version it replaces, so the suite keeps deciding
+    /// text, confidence and finality per test — but everything the vendor's schema carries around
+    /// those values (<c>request_id</c>, <c>duration</c>, <c>language</c>, the word array) survives
+    /// instead of being dropped. <paramref name="isFinal"/> selects which recording is patched, so
+    /// <c>duration</c> and the word array stay coherent with the finality being asserted.
+    /// <para>
+    /// <b><paramref name="confidence"/> is an addition, not a patch, and deliberately so.</b>
+    /// Cartesia documents no <c>confidence</c> field on this message, so the recordings do not
+    /// carry one; writing it here <em>adds</em> a property the vendor's schema does not describe.
+    /// That is the honest way to keep the suite's existing confidence assertions running: they
+    /// exercise the SDK's nullable-confidence path against a value no real Cartesia frame would
+    /// supply, and the tests that assert the documented shape use the recordings verbatim instead.
+    /// </para>
+    /// </remarks>
     public static string BuildTranscriptJson(string text, float confidence, bool isFinal)
-        => $$$"""{"type":"transcript","text":"{{{text}}}","is_final":{{{(isFinal ? "true" : "false")}}},"confidence":{{{confidence}}}}""";
+    {
+        var frame = JsonNode.Parse(ReadFrame(isFinal ? FinalTranscriptFrame : InterimTranscriptFrame))!;
+
+        frame["text"] = text;
+        frame["is_final"] = isFinal;
+        frame["confidence"] = confidence;
+
+        return frame.ToJsonString();
+    }
 
     public async ValueTask DisposeAsync()
     {

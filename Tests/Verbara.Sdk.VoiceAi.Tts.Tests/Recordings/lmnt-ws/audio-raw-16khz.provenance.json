@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "lmnt-ws",
+  "product": "LMNT — text to speech, streaming speech session (WebSocket)",
+  "endpoint": "GET wss://api.lmnt.com/v1/ai/speech/stream",
+  "api_version": "v1",
+  "captured_utc": "2026-08-14",
+  "media_type": "audio/L16",
+  "bytes": 1808,
+  "sha256": "e57e8bac62605a72b77646bb82ea6a908b71c7c6aee63252db529ba183af2397",
+  "source_audio": {
+    "origin": "synthetic",
+    "description": "Locally generated signal-generator tone — NOT provider output, and no provider was called. 904 samples of a symmetric triangle wave, period 64 samples, peak amplitude 11000, written as 16-bit signed little-endian mono at 16000 Hz (the `raw` format and 16000 sample_rate LmntTtsOptions requests by default). Generated with integer arithmetic only, deliberately: Math.Sin is not guaranteed bit-identical across platforms and this file is asserted byte-for-byte. The generator is committed as SyntheticPcm.Triangle in this suite and RecordedFixtures_ShouldMatchTheirDocumentedGeneratorParameters_WhenRegeneratedLocally regenerates the file from these three numbers on every run, so the bytes are reproducible rather than magic. 1808 bytes is 0.69% of the 256 KiB cap and is deliberately NOT a multiple of the fake's 320-byte frame size (5 full frames + a 208-byte partial), so a partial final frame reaches the consumer.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured: these bytes were computed locally from three published parameters and carry no vendor speech, no voice and no spoken content of any kind."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — LMNT is not-cleared for capturing Output, so this fixture takes the documentation-derived route, which contains no Output at all",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://docs.lmnt.com/api/speech-sessions/create",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The page above was read to confirm that a streaming speech session delivers audio as raw BINARY WebSocket frames interleaved with JSON control messages, which is what this fixture's bytes stand in for. It is not a transcription of any documented payload: it is a locally computed waveform in the format and sample rate the request asks for. No vendor example payload, prose or field description was copied into this repository."
+  },
+  "notes": "WHY THERE IS NO REAL CAPTURE: LMNT is not-cleared (protocol section 7). Its ToS contains no clause at all on rights in generated audio, and its Acceptable Use Policy is the only provision on point and restricts sharing synthesized speech outside the capturing entity. So the terms — not merely the absence of a credential — are the blocker for committing LMNT's synthesized speech, and none is committed here. This is the same conservative fallback protocol section 7 specifies for the LMNT HTTP surface, applied to the WebSocket one: real frame boundaries, real byte lengths, a real partial final frame, and a body this repository built itself. What it cannot do is prove LMNT emits frames of these sizes; only a capture could."
+}

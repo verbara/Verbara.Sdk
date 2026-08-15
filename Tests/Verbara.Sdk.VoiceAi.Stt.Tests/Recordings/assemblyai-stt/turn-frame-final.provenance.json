@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "assemblyai-stt",
+  "product": "AssemblyAI — speech to text, Universal Streaming (WebSocket v3)",
+  "endpoint": "GET wss://streaming.assemblyai.com/v3/ws",
+  "api_version": "v3",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 1679,
+  "sha256": "784f31f9e27c3434a41872e0c7e274a13df3fc20f0615091b83626c77e6d1916",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "No audio was submitted and no request was issued: this frame is authored to AssemblyAI's published Universal Streaming protocol documentation, not captured from the service. The transcript is a fictional Spanish sentence authored for this repository ('El asesor confirmó la cita para el próximo martes.'), written in the same style as the Spanish fixtures already committed to this tree; it names no real person, organisation, number, date or reference, and no voice — synthetic or otherwise — was involved.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured. Every value is fictional by construction."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — AssemblyAI is not-cleared for capturing Output, so this fixture takes the documentation-derived route, which contains no Output at all",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://www.assemblyai.com/docs/api-reference/streaming-api/streaming-api",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documented field set, nesting, types and cardinality of the Universal Streaming Turn message were read from the page above and corroborated against https://www.assemblyai.com/docs/speech-to-text/universal-streaming, which enumerates the same fields. The frame conforms to that schema: type, turn_order, turn_is_formatted, end_of_turn, transcript, end_of_turn_confidence, language_code, language_confidence, speaker_label and words[] (text, start, end, confidence, word_is_final, speaker), with word timings in milliseconds as documented. The documented-optional 'utterance' field is deliberately omitted: its relationship to 'transcript' is not stated precisely enough on the page to author a value without inventing semantics, and inventing semantics is worse than omitting an optional field. No vendor example payload, prose or field description was copied into this repository — only the documented field names and the literal message-type constant 'Turn', which is interface, not expression. Every value is our own fiction."
+  },
+  "notes": "Final turn: end_of_turn true and turn_is_formatted true, the shape AssemblyAI sends once a turn has closed and formatting has been applied — so the transcript and the words[] text carry casing and punctuation, which the interim sibling deliberately does not. WHY THIS IS DOCUMENTATION-DERIVED RATHER THAN CAPTURED, stated exactly: AssemblyAI's terms do not grant redistribution of Output. Section 7 of the protocol guide records that the express customer-ownership-of-Outputs clause existed and was deleted in a later revision, and section 4.1 reserves all rights not expressly granted, so the verdict is not-cleared and a capture is not available to us on any credential — this is a terms blocker, not a missing-credential one. What this artifact is worth, stated plainly: a documented schema is what the vendor says it sends, whereas a capture is what it actually sent on one day. This route closes the field-set and frame-ordering half of the ADR-0041 D4 gap — a parser that threw on an unmodelled sibling now fails — and it cannot close the does-the-vendor-honour-its-own-docs half. Re-read the source_schema URL first when this suite starts failing; the page publishes no revision marker, so a silent breaking edit is indistinguishable from no edit at all."
+}

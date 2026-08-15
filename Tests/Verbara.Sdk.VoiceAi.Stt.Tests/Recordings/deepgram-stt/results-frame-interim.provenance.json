@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "deepgram-stt",
+  "product": "Deepgram — speech to text, streaming (Live Audio WebSocket)",
+  "endpoint": "GET wss://api.deepgram.com/v1/listen",
+  "api_version": "v1",
+  "captured_utc": "2026-08-14",
+  "media_type": "application/json",
+  "bytes": 1582,
+  "sha256": "e72a8241f373689d8a4d47e60d3878089ae92dc82d46b823feb558e82a58d3f0",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "No audio was submitted and no request was issued: this frame is authored to Deepgram's published streaming-protocol documentation, not captured from the service. The transcript is a fictional Spanish sentence authored for this repository ('El sistema registró la solicitud correctamente.', shown here as the partial 'El sistema registró la'); it names no real person, organisation, number or reference, and no voice — synthetic or otherwise — was involved.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured. Every value is fictional by construction. The two GUID-shaped fields the documented schema carries (metadata.request_id, metadata.model_uuid) hold the nil GUID — the placeholder form protocol section 4 prescribes for a correlating identifier — because no real request or model instance exists to name."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — Deepgram is not-cleared for capturing Output, so this fixture takes the documentation-derived route, which contains no Output at all",
+    "checked_utc": "2026-08-14"
+  },
+  "source_schema": {
+    "url": "https://developers.deepgram.com/reference/speech-to-text/listen-streaming",
+    "revision": "undated",
+    "read_utc": "2026-08-14",
+    "method": "The documented field set, nesting, types and cardinality of the streaming Results message were read from the page above and corroborated against https://developers.deepgram.com/docs/live-streaming-audio and https://developers.deepgram.com/docs/interim-results. The frame conforms to that schema: type, channel_index, duration, start, is_final, speech_final, channel.alternatives[] with transcript / confidence / languages[] / words[] (word, start, end, confidence, language, punctuated_word, speaker), metadata (request_id, model_info.name/version/arch, model_uuid) and from_finalize. No vendor example payload, prose or field description was copied into this repository — only the documented field names and the literal message-type constant 'Results', which is interface, not expression. Every value is our own fiction, including the model_info identifiers, which deliberately do not name a real Deepgram model."
+  },
+  "notes": "Interim frame: is_final false and speech_final false, the shape Deepgram sends while a segment is still being refined. What this artifact is worth, stated plainly: a documented schema is what the vendor says it sends, whereas a capture is what it actually sent on one day. This route closes the field-set and frame-ordering half of the ADR-0041 D4 gap — a parser that throws on an unmodelled sibling now fails — and it cannot close the does-the-vendor-honour-its-own-docs half. Re-read the source_schema URL first when this suite starts failing; the page publishes no revision marker, so a silent breaking edit is indistinguishable from no edit at all."
+}

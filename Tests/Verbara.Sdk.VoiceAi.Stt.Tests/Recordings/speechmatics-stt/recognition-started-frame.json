@@ -1,0 +1,12 @@
+{
+  "message": "RecognitionStarted",
+  "orchestrator_version": "0.0.0-fixture",
+  "id": "00000000-0000-0000-0000-000000000000",
+  "language_pack_info": {
+    "language_description": "Spanish",
+    "word_delimiter": " ",
+    "writing_direction": "left-to-right",
+    "itn": true,
+    "adapted": false
+  }
+}
