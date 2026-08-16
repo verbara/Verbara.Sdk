@@ -20,12 +20,16 @@ namespace Verbara.Sdk.TestInfrastructure.WebSocket;
 /// <para>
 /// Each accepted connection invokes a caller-supplied per-connection handler that receives a
 /// <see cref="WebSocketTestSession"/>. The session exposes the bound <see cref="System.Net.WebSockets.WebSocket"/>,
-/// a cancellation token tied to the server lifetime, and the captured request URI (raw path + query).
+/// a cancellation token tied to the server lifetime, the captured request URI (raw path + query) and
+/// the captured request headers.
 /// </para>
 /// </remarks>
 public sealed class WebSocketTestServer : IAsyncDisposable
 {
     private const string WebSocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+    private static readonly IReadOnlyDictionary<string, string> EmptyHeaders =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase).AsReadOnly();
 
     private readonly TcpListener _listener;
     private readonly CancellationTokenSource _cts = new();
@@ -74,7 +78,7 @@ public sealed class WebSocketTestServer : IAsyncDisposable
             client.NoDelay = true;
             var stream = client.GetStream();
 
-            var (wsKey, requestUri) = await ReadUpgradeRequestAsync(stream, _cts.Token).ConfigureAwait(false);
+            var (wsKey, requestUri, headers) = await ReadUpgradeRequestAsync(stream, _cts.Token).ConfigureAwait(false);
             if (wsKey is null)
             {
                 client.Dispose();
@@ -87,7 +91,7 @@ public sealed class WebSocketTestServer : IAsyncDisposable
                 stream,
                 new WebSocketCreationOptions { IsServer = true });
 
-            var session = new WebSocketTestSession(ws, requestUri, _cts.Token);
+            var session = new WebSocketTestSession(ws, requestUri, headers, _cts.Token);
             try
             {
                 await _onConnection(session).ConfigureAwait(false);
@@ -109,11 +113,18 @@ public sealed class WebSocketTestServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Read the HTTP/1.1 upgrade request, returning the <c>Sec-WebSocket-Key</c> header value
-    /// and the full request-target (path + query) for callers that need to assert on URL params.
+    /// Read the HTTP/1.1 upgrade request, returning the <c>Sec-WebSocket-Key</c> header value,
+    /// the full request-target (path + query) for callers that need to assert on URL params, and
+    /// every request header for callers that need to assert on the credential the client sent.
     /// </summary>
-    internal static async Task<(string? wsKey, string? requestUri)> ReadUpgradeRequestAsync(
-        Stream stream, CancellationToken ct)
+    /// <remarks>
+    /// The headers were previously read for <c>Sec-WebSocket-Key</c> alone and then discarded, so a
+    /// fake had no way to check whether the client authenticated — six of them accepted every
+    /// connection regardless (<c>provider-wire-protocol-conformance</c> §2.3c). Capturing the whole
+    /// set here is what lets a per-protocol fake assert on the credential rather than assume it.
+    /// </remarks>
+    internal static async Task<(string? wsKey, string? requestUri, IReadOnlyDictionary<string, string> headers)>
+        ReadUpgradeRequestAsync(Stream stream, CancellationToken ct)
     {
         var buffer = new byte[8192];
         var totalRead = 0;
@@ -121,7 +132,7 @@ public sealed class WebSocketTestServer : IAsyncDisposable
         while (totalRead < buffer.Length)
         {
             var bytesRead = await stream.ReadAsync(buffer.AsMemory(totalRead), ct).ConfigureAwait(false);
-            if (bytesRead == 0) return (null, null);
+            if (bytesRead == 0) return (null, null, EmptyHeaders);
             totalRead += bytesRead;
 
             if (Encoding.ASCII.GetString(buffer, 0, totalRead).Contains("\r\n\r\n", StringComparison.Ordinal))
@@ -130,24 +141,33 @@ public sealed class WebSocketTestServer : IAsyncDisposable
 
         var request = Encoding.ASCII.GetString(buffer, 0, totalRead);
         var lines = request.Split("\r\n");
-        if (lines.Length == 0) return (null, null);
+        if (lines.Length == 0) return (null, null, EmptyHeaders);
 
         // Request line: GET <request-target> HTTP/1.1 — preserve full target (path + query).
         var requestLine = lines[0].Split(' ');
-        if (requestLine.Length < 3) return (null, null);
+        if (requestLine.Length < 3) return (null, null, EmptyHeaders);
         var requestUri = requestLine[1];
 
-        string? wsKey = null;
-        foreach (var line in lines)
+        // Field names are case-insensitive (RFC 9110 §5.1); a repeated field is the comma-joined
+        // list of its values (§5.2), which is what a server would see.
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 1; i < lines.Length; i++)
         {
-            if (line.StartsWith("Sec-WebSocket-Key:", StringComparison.OrdinalIgnoreCase))
-            {
-                wsKey = line["Sec-WebSocket-Key:".Length..].Trim();
-                break;
-            }
+            var line = lines[i];
+            if (line.Length == 0) break; // end of the header block
+
+            var colon = line.IndexOf(':', StringComparison.Ordinal);
+            if (colon <= 0) continue;
+
+            var name = line[..colon].Trim();
+            var value = line[(colon + 1)..].Trim();
+            headers[name] = headers.TryGetValue(name, out var existing)
+                ? existing + ", " + value
+                : value;
         }
 
-        return (wsKey, requestUri);
+        headers.TryGetValue("Sec-WebSocket-Key", out var wsKey);
+        return (wsKey, requestUri, headers);
     }
 
     /// <summary>Send the HTTP 101 response with the RFC 6455 Sec-WebSocket-Accept hash.</summary>

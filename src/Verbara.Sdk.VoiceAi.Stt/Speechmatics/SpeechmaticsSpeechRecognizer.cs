@@ -19,21 +19,18 @@ namespace Verbara.Sdk.VoiceAi.Stt.Speechmatics;
 public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
 {
     private readonly SpeechmaticsOptions _options;
-    private readonly int? _fakeServerPort;
 
     /// <inheritdoc />
     public override string ProviderName => "Speechmatics";
 
-    /// <summary>Initializes a new instance for production use.</summary>
+    /// <summary>Initializes a new instance.</summary>
+    /// <remarks>
+    /// There is no second, test-only constructor. Tests reach a fake by configuring
+    /// <see cref="SpeechmaticsOptions.BaseUri"/>, which is the same seam an operator uses to reach a
+    /// regional endpoint — so the suite drives the production path rather than one built for it.
+    /// </remarks>
     public SpeechmaticsSpeechRecognizer(IOptions<SpeechmaticsOptions> options)
         => _options = options.Value;
-
-    /// <summary>Initializes a new instance for testing with a fake server.</summary>
-    internal SpeechmaticsSpeechRecognizer(IOptions<SpeechmaticsOptions> options, int fakeServerPort)
-    {
-        _options = options.Value;
-        _fakeServerPort = fakeServerPort;
-    }
 
     /// <inheritdoc />
     public override async IAsyncEnumerable<SpeechRecognitionResult> StreamAsync(
@@ -48,6 +45,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
 
         var wsUri = BuildUri();
         using var ws = new ClientWebSocket();
+        ApplyCredential(ws);
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
@@ -185,13 +183,56 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
         }
     }
 
-    private Uri BuildUri()
-    {
-        // Speechmatics auth: JWT API key passed as a query parameter. URL-encode to be safe.
-        var encodedKey = Uri.EscapeDataString(_options.ApiKey);
-        if (_fakeServerPort.HasValue)
-            return new Uri($"ws://127.0.0.1:{_fakeServerPort}/v2/{_options.Language}?jwt={encodedKey}");
+    /// <summary>
+    /// The session URI: the configured base with the language pack appended as a path segment.
+    /// </summary>
+    /// <remarks>
+    /// No credential goes in the URL — see <see cref="ApplyCredential"/>. There is deliberately no
+    /// "am I under test?" branch here: <see cref="SpeechmaticsOptions.BaseUri"/> admits
+    /// <c>ws://</c>, so the suite points it at its fake and every test then executes this line —
+    /// the same one production executes. A branch would have left the production expression
+    /// unexecuted by anything, which is how a URL can carry a credential no test can see.
+    /// </remarks>
+    private Uri BuildUri() => new($"{_options.BaseUri}/{_options.Language}");
 
-        return new Uri($"{_options.BaseUri}/{_options.Language}?jwt={encodedKey}");
-    }
+    /// <summary>
+    /// Authenticate the upgrade request with <c>Authorization: Bearer &lt;ApiKey&gt;</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This client previously sent the long-lived API key as a <c>?jwt=</c> query parameter, which
+    /// the service does not accept. The rejection is <b>in-band</b>: the upgrade succeeds with
+    /// <c>101</c> and the socket is then closed with code <c>4001 not_authorised</c>, so a handshake
+    /// status proves nothing here and no session ever opened. Measured 2026-08-15, one variable per
+    /// arm — same credential, same host, seconds apart:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description>
+    ///     <c>?jwt=&lt;long-lived API key&gt;</c>, what this client shipped → closed
+    ///     <c>4001 not_authorised</c>.
+    ///   </description></item>
+    ///   <item><description>
+    ///     <c>Authorization: Bearer &lt;same API key&gt;</c>, no query parameter → accepted, reached
+    ///     <c>RecognitionStarted</c>. This is what the code above does.
+    ///   </description></item>
+    ///   <item><description>
+    ///     <c>?jwt=&lt;temporary key&gt;</c> minted at the vendor's management endpoint → also
+    ///     accepted. Measured, and not chosen: it adds a request before every session, a key lifetime
+    ///     to manage, and an HTTP dependency to a type that has none.
+    ///   </description></item>
+    /// </list>
+    /// <para>
+    /// The third arm is what closes the competing hypothesis: the key was <em>not</em> missing a
+    /// realtime entitlement, since the same credential opened a session through two other channels.
+    /// The defect was the scheme, not the key.
+    /// </para>
+    /// <para>
+    /// This runs unconditionally. Gating a credential behind a "is this a test?" check is what
+    /// leaves a fake unable to see the thing it is supposed to be checking, and it is the shape this
+    /// change is removing elsewhere; the test seam that used to invite it here is gone with
+    /// <see cref="BuildUri"/>'s branch.
+    /// </para>
+    /// </remarks>
+    private void ApplyCredential(ClientWebSocket ws)
+        => ws.Options.SetRequestHeader("Authorization", $"Bearer {_options.ApiKey}");
 }

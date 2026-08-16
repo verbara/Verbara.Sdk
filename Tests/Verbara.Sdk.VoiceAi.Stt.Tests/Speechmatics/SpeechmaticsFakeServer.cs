@@ -23,9 +23,12 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Speechmatics;
 /// Speechmatics STT is <c>permitted</c> for capturing Output
 /// (<c>docs/guides/provider-recording-protocol.md</c> §7 — ToS §10.3 assigns the customer all IP in
 /// Transcripts, the better-covered of the two directions), so unlike Deepgram and AssemblyAI its
-/// terms are <em>not</em> the reason these frames are authored rather than captured — the reason is
-/// simply that no capture credential exists in this environment. A real capture stays a known,
-/// cleared upgrade path here. Until then the frames take §7's documentation-derived route:
+/// terms are <em>not</em> the reason these frames are authored rather than captured — and as of
+/// 2026-08-16 neither is a missing credential. A working one exists and has opened a live session
+/// against this surface; that session was opened to establish how the client must authenticate and
+/// streamed no audio, so no transcript frame was ever elicited and nothing of the vendor's output was
+/// stored. The reason is simply that no capture run has been made. A real capture is a demonstrably
+/// reachable upgrade path here. Until then the frames take §7's documentation-derived route:
 /// <c>class: "synthetic"</c>, <c>terms.verdict: "not-applicable"</c>, plus a <c>source_schema</c>
 /// block.
 /// </para>
@@ -69,6 +72,19 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
     /// <summary>Full request path + query captured on connection (for URL-assertion tests).</summary>
     public string? ReceivedRequestUri { get; private set; }
 
+    /// <summary>
+    /// The <c>Authorization</c> header the client sent on the upgrade, or <c>null</c> if it sent
+    /// none — the seam this fake had no way to see before.
+    /// </summary>
+    /// <remarks>
+    /// Capturing is as far as this goes: the fake still serves a session whatever arrives here.
+    /// Rejecting an unauthenticated connection the way the service does — <c>101</c>, then close
+    /// <c>4001 not_authorised</c> — belongs with §2.3c and §4.6a, because until the receive loop
+    /// surfaces an in-band failure a rejecting fake would only prove that the client completes
+    /// silently and empty, which is the defect rather than the contract.
+    /// </remarks>
+    public string? ReceivedAuthorizationHeader { get; private set; }
+
     /// <summary>Count of binary WebSocket frames received from the client.</summary>
     public int ReceivedFrameCount => _receivedFrameCount;
 
@@ -92,6 +108,8 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
     private async Task HandleSessionAsync(WebSocketTestSession session)
     {
         ReceivedRequestUri = session.RequestUri;
+        ReceivedAuthorizationHeader =
+            session.Headers.TryGetValue("Authorization", out var authorization) ? authorization : null;
 
         var ws = session.WebSocket;
         var ct = session.ServerCancellationToken;

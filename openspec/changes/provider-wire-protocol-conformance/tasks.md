@@ -605,7 +605,7 @@ ever opens**; §4.7–§4.14 are Class C — the frame is read but assembly-gove
 The second is only reachable once the first is fixed, which is why they share a section and not a
 commit.
 
-- [ ] 4.1 `src/Verbara.Sdk.VoiceAi.Stt/Speechmatics/SpeechmaticsSpeechRecognizer.cs` line 195 —
+- [x] 4.1 `src/Verbara.Sdk.VoiceAi.Stt/Speechmatics/SpeechmaticsSpeechRecognizer.cs` line 195 —
       `BuildUri()` puts the long-lived API key straight into the query string
       (`{BaseUri}/{Language}?jwt={encodedKey}`). Speechmatics accepts the WebSocket upgrade (`101`) and
       then **closes the socket with close code `4001 not_authorised`** — the rejection is at the
@@ -622,7 +622,7 @@ commit.
       live endpoint. Severity, stated plainly: unlike LMNT (contained behind `Transport`) and unlike
       Speechmatics TTS (a wrong but fixable route), this makes the **entire** Speechmatics realtime STT
       provider unusable as shipped. There is no containment
-- [ ] 4.2 Two remedies are **measured** (rows B and C), so the fix is an API-design choice with a
+- [x] 4.2 Two remedies are **measured** (rows B and C), so the fix is an API-design choice with a
       recorded basis and not a forced single move. This touches how every caller authenticates, so it
       gets its own decision note in the change record and a paragraph in §6.6. Enumerate at least:
       (a) **header auth** — `Authorization: Bearer`, `ApiKey`'s meaning unchanged, one connection,
@@ -633,17 +633,17 @@ commit.
       exposure of a long-lived key in a page), which is why header auth is the plausible server-side
       choice — but that sentence is documentation and the measurement is that both work. Mark which
       part of the rationale is measured and which is inferred
-- [ ] 4.3 The competing hypothesis is **closed** and must be recorded as closed so it is not reopened:
+- [x] 4.3 The competing hypothesis is **closed** and must be recorded as closed so it is not reopened:
       the failure is not a credential lacking realtime-STT entitlement, because the same credential
       opened a session through two different channels. Row B exists precisely to kill that explanation —
       the same role `eleanor` plays for Speechmatics TTS in §3.4. The defect is the SDK's auth scheme,
       not the key
-- [ ] 4.4 `src/Verbara.Sdk.VoiceAi.Stt/Speechmatics/SpeechmaticsOptions.cs` line 16 documents `ApiKey`
+- [x] 4.4 `src/Verbara.Sdk.VoiceAi.Stt/Speechmatics/SpeechmaticsOptions.cs` line 16 documents `ApiKey`
       as "Passed as the `jwt` query parameter" — the broken scheme, shipped to consumers in XML docs,
       the same shipped-defect rule as §3.5 and §3.9. Correct it to whatever §4.2 chooses, in the same
       commit. While there, check the `<see href="https://docs.speechmatics.com/rt-api-ref"/>` on line 12
       the way §3.5's TTS link was checked; it is **not** asserted dead here, only unchecked
-- [ ] 4.5 Record the **`Info` frame** — unmodelled, and first in every session. Every Speechmatics
+- [x] 4.5 Record the **`Info` frame** — unmodelled, and first in every session. Every Speechmatics
       realtime session opens with an `Info` message carrying sixteen fields: `message`, `type`,
       `reason`, `usage`, `quota`, `growth_rate_1m`, `growth_rate_1m_limit`, `growth_rate_avg_5m`,
       `growth_rate_avg_5m_limit`, `burst_rate`, `burst_limit`, `sustained_rate`, `sustained_limit`,
@@ -664,7 +664,7 @@ commit.
       the same question for `Warning`) so an in-band rejection reaches the caller. This is the STT
       counterpart of the TTS silent-completion signal in §2.10, and it binds to the same spec
       requirement — a provider that produced nothing does not report success
-- [ ] 4.6 Record that the live `RecognitionStarted` field set **confirms** the committed fixture: the
+- [x] 4.6 Record that the live `RecognitionStarted` field set **confirms** the committed fixture: the
       live top-level set is `{message, orchestrator_version, id, language_pack_info}` with
       `language_pack_info` an object, and
       `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Recordings/speechmatics-stt/recognition-started-frame.json`
@@ -736,6 +736,84 @@ commit.
       forces these — that is precisely the argument for doing them here rather than after one bites,
       and `Sdk/ADR-0049` binds all five sites, not the three with symptoms. If they are deferred
       instead, the deferral is recorded with that reasoning rather than left as silence
+
+- [x] 4.18 **The fake had no way to see the credential, and that is why it certified the defect.**
+      `SpeechmaticsFakeServer` captured the request URI and the `StartRecognition` body and nothing
+      else, so a suite could be entirely green while the client authenticated in a way the service
+      rejects. The shared substrate was the reason: `WebSocketTestServer.ReadUpgradeRequestAsync`
+      parsed the headers for `Sec-WebSocket-Key` alone and discarded the rest, so **no** fake on that
+      substrate could assert on a credential. It now returns the whole header set and
+      `WebSocketTestSession` exposes it, which is the seam §2.3c's **six** sites need — none of which
+      this task discharges. Speechmatics is not one of the six: it had no auth header to gate, its key
+      was in the URL on both paths, so all six remain open.
+      Capturing is as far as this task goes: making the fake **reject** an unauthenticated connection
+      the way the service does — `101`, then close `4001` — waits for §4.6a, because until the receive
+      loop surfaces an in-band failure a rejecting fake would assert that the client completes silently
+      and empty, which is the defect and not the contract
+- [x] 4.19 Non-vacuity by mutation, not by inspection. Three mutations against the 11 tests in
+      `SpeechmaticsSpeechRecognizerTests`, each reverted. Named tests, because a bare count is the kind
+      of claim this change exists to stop:
+
+      | Mutation | Failed | Which |
+      |---|---|---|
+      | (a) restore `?jwt=` and drop the header — the shipped defect | **3** | `…ShouldKeepTheCredentialOutOfTheUrl…`, `…ShouldAuthenticateWithABearerHeader…`, `…ShouldSendStartRecognition…` |
+      | (b) gate the header behind `_fakeServerPort is null` — the §2.3c shape, which is exactly how a credential becomes invisible to its own fake | **2** | `…ShouldKeepTheCredentialOutOfTheUrl…`, `…ShouldAuthenticateWithABearerHeader…` |
+      | (c) send the header **and** `?jwt=` | **2** | `…ShouldKeepTheCredentialOutOfTheUrl…`, `…ShouldSendStartRecognition…` |
+
+      Recorded as a correction, because the first pass through this task claimed "3 tests each" for
+      all three arms and a re-run gave 3, 2, 2. The overstatement was small and it was still an
+      overstatement — the same failure this change documents in vendors' own claims. The surviving
+      point about (c) is narrower than first written: a header-only assertion **would** pass it, which
+      is why the URL check is its own test, but (c) does not depend on that test to be caught — the
+      pre-existing `…ShouldSendStartRecognition…` assertion on the request-target catches it too
+- [x] 4.20 What this evidence **is and is not**, stated so it is not overread. The three arms were
+      measured against the live endpoint on 2026-08-15 with a probe; the **fixed client has never been
+      run live**. What ran was a request reproducing what it now sends — the same wire behaviour, but a
+      reconstruction of it, not the artifact. Closing §4.1 by its own stated bar ("a session opened by
+      the shipped code path reaches `RecognitionStarted` against the live endpoint") therefore still
+      wants one live run of the shipped path, which §5's probe suite is the place for. Also checked
+      under §4.4 rather than left unchecked: `https://docs.speechmatics.com/rt-api-ref` resolved `200`
+      with no redirect on 2026-08-16, and a nonexistent path on the same host answered `404` — the
+      control that makes the `200` the page rather than a soft-404. The link stays
+
+- [x] 4.21 **Three further corrections, found by reviewing this section's own prose against the tree
+      before it shipped** — recorded rather than quietly fixed, because a change about overclaiming
+      that overclaims is worth nothing:
+      (a) §4.18 first said this task served "the remaining five sites in §2.3c". §2.3c enumerates
+      **six**, Speechmatics is not one of them — it had no auth header to gate — and this task
+      discharges none, so all six stay open;
+      (b) the conformance record's Speechmatics STT row was dated 2026-08-16. No measurement of that
+      surface was taken on 08-16; the three arms are 08-15 and the only 08-16 event is a doc-link check
+      against a different host. The record's own rule is that a row's date is the date its own
+      measurement was taken, so the row is back to 2026-08-15 with the fix noted in its prose;
+      (c) four Speechmatics STT provenance sidecars and two test files explained their `synthetic`
+      class with "no capture credential exists in this environment". That sentence is now false for
+      this surface — a working credential opened a live session on 2026-08-15 — so all six say what is
+      actually true instead: no capture **run** has been made, because the sessions that opened
+      streamed no audio and elicited no transcript frame. The identically-worded Cartesia STT sidecars
+      are deliberately **left alone**: §7 records that provider as permitted *with a tier condition*,
+      so the sentence still holds there. A sentence is not stale everywhere just because it went stale
+      somewhere
+
+- [x] 4.22 **The patch-coverage gate found a fourth correction, and it was a real one.** CI reported
+      75% patch coverage (3 of 4 changed executable lines, floor 85%) on the first push of the fix.
+      The uncovered line was `BuildUri`'s production branch — `new Uri($"{BaseUri}/{Language}")` —
+      because the method opened with `if (_fakeServerPort.HasValue)` and every test took the other
+      branch. So the URI expression that **ships** was executed by nothing, and the assertions written
+      in §4.5 to prove the credential is not in the URL were proving it about a line only tests run.
+      That is §2.3c's shape in a second place: a test seam that takes over more of the request than it
+      should, leaving the replaced part unexercised. The remedy was to delete the seam rather than
+      cover it — the branch **and** the `internal` fake-port constructor are gone, and
+      `SpeechmaticsSpeechRecognizerTests` reaches its fake by setting `BaseUri` to
+      `ws://127.0.0.1:{port}/v2`, which the option's own validation already admits and which is the
+      same knob an operator turns to pick a region. All 11 tests now execute the shipped expression;
+      no assertion changed. Two consequences worth stating: mutation (b) of §4.19 is no longer
+      **expressible** in this file, which is a stronger result than its passing was — the shape cannot
+      be reintroduced without re-adding a seam — and §2.3c's six sites now have a cheaper prescription
+      available than the "substitute the origin only" one written there: where a client already
+      exposes a base-URI option, deleting the seam costs one line in a test helper. §2.3c stays open
+      and its site list is unchanged. Recorded here rather than folded silently into the fix, because
+      a gate catching what a review missed is evidence about the review
 
 ## 5. The conformance probe as a committed instrument
 

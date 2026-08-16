@@ -141,7 +141,7 @@ a wrong-path control has to be read, not pattern-matched.
 | Surface | Transport | Route | Frames | Validation point | Evidence | Date |
 |---|---|---|---|---|---|---|
 | Deepgram STT | `wss://api.deepgram.com/v1/listen` | OK | not exercised | `handshake` | `live + both controls` | 2026-08-15 |
-| Speechmatics STT | `wss://eu2.rt.speechmatics.com/v2` | OK | **auth defect, open** | `in-band` | `live + both controls` | 2026-08-15 |
+| Speechmatics STT | `wss://eu2.rt.speechmatics.com/v2` | OK | **1 fixed, 4 open** | `in-band` | `live + both controls` | 2026-08-15 |
 | Cartesia STT | `wss://api.cartesia.ai/stt/websocket` | OK | not exercised | `handshake` | `live + both controls` | 2026-08-15 |
 | AssemblyAI STT | `wss://streaming.assemblyai.com/v3/ws` | OK | first frame only | `in-band` | `live + both controls` | 2026-08-15 |
 | Google STT | `https://speech.googleapis.com` | OK | n/a (batch) | in the response | `live + both controls` | 2026-08-15 |
@@ -153,12 +153,47 @@ a wrong-path control has to be read, not pattern-matched.
 returned `101`; wrong path `404`; malformed key `401` at the upgrade. Frames were **not** exercised,
 and the row says so, so a verified route is not read as a verified frame protocol.
 
-**Speechmatics STT** — the route resolves, the upgrade completes, and the credential is then rejected
-in-band with close code `4001 not_authorised`. The session never authenticates. Observed live: the
-`Info` and `RecognitionStarted` frames. **Not** observed: any transcript frame — the sessions that
-authenticated were opened to establish the remedy and no audio was streamed — so the frame inventory
-beyond those two message types stays *not characterised*. This is the surface that produced the depth
-rule.
+**Speechmatics STT** — the route resolved, the upgrade completed, and the credential was then rejected
+in-band with close code `4001 not_authorised`: the session never authenticated, and the provider was
+unusable as shipped. This is the surface that produced the depth rule. **The credential channel is
+fixed** — the long-lived API key now travels as `Authorization: Bearer` on the upgrade and no longer
+as `?jwt=`. Three arms, same credential, same host, seconds apart:
+
+| Arm | Credential channel | Outcome |
+|---|---|---|
+| A | `?jwt=<long-lived API key>` — what the SDK shipped | upgrade `101`, then closed `4001 not_authorised` |
+| B | `Authorization: Bearer <same key>`, no query parameter | accepted, reached `RecognitionStarted` |
+| C | `?jwt=<temporary key>` minted at the vendor's management endpoint | accepted, reached `RecognitionStarted` |
+
+B is the remedy shipped; C was measured and **not** taken — it adds a request before every session, a
+key lifetime to manage, and an HTTP dependency to a type that has none. C's real value is what it
+**refutes**: the same credential opened a session through two channels, so the failure was never a key
+missing a realtime entitlement. The vendor frames temporary keys as a browser concern, which makes
+header auth the plausible server-side choice — but that sentence is *documentation*; what is *measured*
+is only that both channels work.
+
+As on the two TTS surfaces fixed the same week, the fixed client has not itself been run live — arm B
+is a reconstruction of what it now sends, not the artifact. The row's date stays **2026-08-15**, the
+day its arms were measured, even though the fix landed on 08-16: a row's date is the date of its own
+measurement, and advancing it for a code change would make the ledger claim a run that never happened.
+
+Observed live: the `Info` and `RecognitionStarted` frames. The session-opening `Info` frame carries
+**sixteen** fields (`message`, `type`, `reason`, `usage`, `quota`, the four growth-rate members,
+`burst_rate`, `burst_limit`, `sustained_rate`, `sustained_limit`, `rate_limiting_enabled`,
+`last_updated`, `region`) against a DTO that declares `{message, results}`. That is **not** a parse
+failure — the receive loop skips every non-transcript message by design — so it is recorded as a field
+inventory for whoever models it, and the modelling itself belongs to `provider-dto-robustness-fences`.
+`RecognitionStarted`'s live top-level set was exactly `{message, orchestrator_version, id,
+language_pack_info}` with `word_delimiter` nested **inside** `language_pack_info`, which is precisely
+what the committed fixture already held: the fixture was right, and its sidecar is upgraded from
+documentation-derived to confirmed for those names and that nesting — and for nothing else.
+
+**Not** observed: any transcript frame — the sessions that authenticated were opened to establish the
+remedy and no audio was streamed — so the frame inventory beyond those two message types stays *not
+characterised*, and with it the four defects still open on this surface: the swallowed `Error` frame
+(ADR-0049 D1, so a rejected session still reaches the caller as an empty stream) and the three
+assembly signals the client ignores — `word_delimiter`, `attaches_to`, and the vendor's
+already-assembled `metadata.transcript`.
 
 **Cartesia STT** — wrong path `404`, invalid credential `401`, real key `101`. Route and auth OK,
 frames not exercised.
