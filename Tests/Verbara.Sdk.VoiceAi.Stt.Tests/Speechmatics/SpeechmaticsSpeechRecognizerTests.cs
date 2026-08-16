@@ -33,11 +33,27 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         _server.Start();
     }
 
+    /// <summary>
+    /// Build a recognizer pointed at this test's fake server through <c>BaseUri</c> — the same
+    /// option an operator sets to pick a region — rather than through a test-only constructor.
+    /// </summary>
+    /// <remarks>
+    /// There used to be an <c>internal</c> constructor taking a fake port, and
+    /// <c>SpeechmaticsSpeechRecognizer.BuildUri</c> branched on it. The consequence was that the
+    /// production URI expression was executed by no test at all: every assertion about the session
+    /// URL — including "the credential is not in it" — was made against a line that only ever ran
+    /// under test. Configuring <c>BaseUri</c> costs nothing (its own validation admits <c>ws://</c>)
+    /// and makes these tests exercise the expression that ships.
+    /// </remarks>
     private SpeechmaticsSpeechRecognizer BuildRecognizer(Action<SpeechmaticsOptions>? configure = null)
     {
-        var opts = new SpeechmaticsOptions { ApiKey = "test-key" };
+        var opts = new SpeechmaticsOptions
+        {
+            ApiKey = "test-key",
+            BaseUri = $"ws://127.0.0.1:{_server.Port}/v2",
+        };
         configure?.Invoke(opts);
-        return new SpeechmaticsSpeechRecognizer(Options.Create(opts), fakeServerPort: _server.Port);
+        return new SpeechmaticsSpeechRecognizer(Options.Create(opts));
     }
 
     /// <summary>

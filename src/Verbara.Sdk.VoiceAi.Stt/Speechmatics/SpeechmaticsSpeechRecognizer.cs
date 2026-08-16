@@ -19,21 +19,18 @@ namespace Verbara.Sdk.VoiceAi.Stt.Speechmatics;
 public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
 {
     private readonly SpeechmaticsOptions _options;
-    private readonly int? _fakeServerPort;
 
     /// <inheritdoc />
     public override string ProviderName => "Speechmatics";
 
-    /// <summary>Initializes a new instance for production use.</summary>
+    /// <summary>Initializes a new instance.</summary>
+    /// <remarks>
+    /// There is no second, test-only constructor. Tests reach a fake by configuring
+    /// <see cref="SpeechmaticsOptions.BaseUri"/>, which is the same seam an operator uses to reach a
+    /// regional endpoint — so the suite drives the production path rather than one built for it.
+    /// </remarks>
     public SpeechmaticsSpeechRecognizer(IOptions<SpeechmaticsOptions> options)
         => _options = options.Value;
-
-    /// <summary>Initializes a new instance for testing with a fake server.</summary>
-    internal SpeechmaticsSpeechRecognizer(IOptions<SpeechmaticsOptions> options, int fakeServerPort)
-    {
-        _options = options.Value;
-        _fakeServerPort = fakeServerPort;
-    }
 
     /// <inheritdoc />
     public override async IAsyncEnumerable<SpeechRecognitionResult> StreamAsync(
@@ -186,14 +183,17 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
         }
     }
 
-    private Uri BuildUri()
-    {
-        // No credential in the URL — see ApplyCredential. The path segment is the language pack.
-        if (_fakeServerPort.HasValue)
-            return new Uri($"ws://127.0.0.1:{_fakeServerPort}/v2/{_options.Language}");
-
-        return new Uri($"{_options.BaseUri}/{_options.Language}");
-    }
+    /// <summary>
+    /// The session URI: the configured base with the language pack appended as a path segment.
+    /// </summary>
+    /// <remarks>
+    /// No credential goes in the URL — see <see cref="ApplyCredential"/>. There is deliberately no
+    /// "am I under test?" branch here: <see cref="SpeechmaticsOptions.BaseUri"/> admits
+    /// <c>ws://</c>, so the suite points it at its fake and every test then executes this line —
+    /// the same one production executes. A branch would have left the production expression
+    /// unexecuted by anything, which is how a URL can carry a credential no test can see.
+    /// </remarks>
+    private Uri BuildUri() => new($"{_options.BaseUri}/{_options.Language}");
 
     /// <summary>
     /// Authenticate the upgrade request with <c>Authorization: Bearer &lt;ApiKey&gt;</c>.
@@ -227,9 +227,10 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
     /// The defect was the scheme, not the key.
     /// </para>
     /// <para>
-    /// The header is set on the fake path too, deliberately. Gating a credential behind
-    /// <c>_fakeServerPort is null</c> is what leaves a fake unable to see the thing it is supposed to
-    /// be checking, and it is the shape this change is removing elsewhere.
+    /// This runs unconditionally. Gating a credential behind a "is this a test?" check is what
+    /// leaves a fake unable to see the thing it is supposed to be checking, and it is the shape this
+    /// change is removing elsewhere; the test seam that used to invite it here is gone with
+    /// <see cref="BuildUri"/>'s branch.
     /// </para>
     /// </remarks>
     private void ApplyCredential(ClientWebSocket ws)

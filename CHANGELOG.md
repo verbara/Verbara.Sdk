@@ -27,8 +27,14 @@ because `SpeechmaticsFakeServer` had no way to look at the credential.
   `jwt` query parameter". Corrected in the same commit, along with a note that this is a long-lived
   key and nothing here needs refreshing.
 
-- **The header is sent on the fake path too, deliberately.** Gating a credential behind a
-  "is this a test?" check is precisely what leaves a fake unable to see the thing it exists to check.
+- **The test-only seam is gone, not just ungated.** `SpeechmaticsSpeechRecognizer` had an
+  `internal` constructor taking a fake port and branched on it when building the session URI, so the
+  URI expression that ships was executed by no test at all — every assertion about the session URL,
+  "the credential is not in it" included, was made against a line that only ran under test. The
+  branch and the constructor are deleted; the suite reaches its fake through `BaseUri`, the same
+  option an operator sets to pick a region, and now drives the shipped expression. Gating anything
+  behind a "is this a test?" check is precisely what leaves a fake unable to see what it exists to
+  check, and the cheapest fix for that shape is usually to remove the check rather than widen it.
 
 - **The shared WebSocket test substrate could not assert on a credential at all.**
   `WebSocketTestServer.ReadUpgradeRequestAsync` parsed the upgrade headers for `Sec-WebSocket-Key`

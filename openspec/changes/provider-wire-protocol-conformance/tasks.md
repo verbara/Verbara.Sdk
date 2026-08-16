@@ -795,6 +795,26 @@ commit.
       so the sentence still holds there. A sentence is not stale everywhere just because it went stale
       somewhere
 
+- [x] 4.22 **The patch-coverage gate found a fourth correction, and it was a real one.** CI reported
+      75% patch coverage (3 of 4 changed executable lines, floor 85%) on the first push of the fix.
+      The uncovered line was `BuildUri`'s production branch — `new Uri($"{BaseUri}/{Language}")` —
+      because the method opened with `if (_fakeServerPort.HasValue)` and every test took the other
+      branch. So the URI expression that **ships** was executed by nothing, and the assertions written
+      in §4.5 to prove the credential is not in the URL were proving it about a line only tests run.
+      That is §2.3c's shape in a second place: a test seam that takes over more of the request than it
+      should, leaving the replaced part unexercised. The remedy was to delete the seam rather than
+      cover it — the branch **and** the `internal` fake-port constructor are gone, and
+      `SpeechmaticsSpeechRecognizerTests` reaches its fake by setting `BaseUri` to
+      `ws://127.0.0.1:{port}/v2`, which the option's own validation already admits and which is the
+      same knob an operator turns to pick a region. All 11 tests now execute the shipped expression;
+      no assertion changed. Two consequences worth stating: mutation (b) of §4.19 is no longer
+      **expressible** in this file, which is a stronger result than its passing was — the shape cannot
+      be reintroduced without re-adding a seam — and §2.3c's six sites now have a cheaper prescription
+      available than the "substitute the origin only" one written there: where a client already
+      exposes a base-URI option, deleting the seam costs one line in a test helper. §2.3c stays open
+      and its site list is unchanged. Recorded here rather than folded silently into the fix, because
+      a gate catching what a review missed is evidence about the review
+
 ## 5. The conformance probe as a committed instrument
 
 - [x] 5.1 Codify the method that produced every finding in this change: controlled comparison against
