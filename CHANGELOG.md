@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Speechmatics TTS has never worked
+
+- **`SpeechmaticsSpeechSynthesizer` now selects the voice by path segment, so the request succeeds.**
+  The shipped client POSTed to `/generate` with the voice as a JSON body field. The API has no
+  `/generate` route: it answers `404 Not Found`, identically to a route that does not exist —
+  because that is what it is. Every synthesis this provider ever attempted failed, for every caller,
+  since the surface shipped. Probed live 2026-08-16: `POST /generate/{voice}` returns
+  `200 audio/wav` (33 836 B, valid `RIFF`/`WAVE`), with a wrong-path control still `404` and an
+  invalid-credential control `401` on the same host (`Sdk/ADR-0048`, `Sdk/ADR-0049` D4).
+
+  The `voice` field is **removed from the request body** rather than left alongside the path
+  segment. Sending both returned identical output when the two agree, but which one wins when they
+  disagree was not measured, and an unmeasured precedence is not a thing to depend on.
+
+### Changed — BREAKING: `SpeechmaticsOptions.BaseUri` is now an origin
+
+- **`BaseUri` no longer carries a path.** Its default moves from
+  `https://preview.tts.speechmatics.com/generate` to `https://preview.tts.speechmatics.com`, and the
+  synthesizer appends `/generate/{Voice}` itself. Callers who never set the property are unaffected
+  and go from a guaranteed `404` to working audio.
+
+  **Callers who do set it must drop the `/generate` suffix**; a value that still carries it now
+  produces `/generate/generate/{voice}`. The property's signature is unchanged, so this is a
+  behavioural break the compiler cannot catch — hence this entry. Alternatives rejected: appending
+  the segment to whatever the caller supplies (leaves `BaseUri` meaning "the URL minus its last
+  segment", a rule nothing in the type communicates), and introducing a replacement option with
+  `[Obsolete]` on `BaseUri` (downstream repos run `TreatWarningsAsErrors`, so the warning breaks
+  their builds).
+
+### Fixed — the test fake certified the broken route
+
+- **`SpeechmaticsFakeServer` now matches on method and path**, returning `404` for anything but
+  `POST /generate/{voice}`. It previously never inspected `Request.Url` and answered any route, so
+  three fully green tests certified a client whose every production request `404`ed. A fake more
+  permissive than the vendor cannot fail on a wrong route — it can only bless one. Three regression
+  tests now pin the path segment, the absence of the body field, and URI escaping of the voice.
+
+- **`scripts/capture-provider-recording.py` no longer reproduces the defect.** The Speechmatics
+  capture plan built the same `/generate` request with the voice in the body, so the instrument
+  meant to establish what the vendor does could only ever have recorded the `404` — the defect one
+  level up from the client.
+
 ### Security
 
 - **`SSH.NET` pinned to `2026.0.0` to clear [GHSA-q939-rpr3-3284](https://github.com/advisories/GHSA-q939-rpr3-3284)**

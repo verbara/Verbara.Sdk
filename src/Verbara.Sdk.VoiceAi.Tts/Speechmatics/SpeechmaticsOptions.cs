@@ -18,13 +18,22 @@ public sealed class SpeechmaticsOptions
     public string ApiKey { get; set; } = string.Empty;
 
     /// <summary>
-    /// REST endpoint. Must begin with <c>https://</c> or <c>http://</c>. Defaults to the
-    /// public preview endpoint documented at
-    /// <see href="https://docs.speechmatics.com/tts-api-ref"/>.
+    /// REST <b>origin</b> — scheme and host only, with no path. Must begin with <c>https://</c>
+    /// or <c>http://</c>. The synthesizer appends <c>/generate/{Voice}</c>, because the API selects
+    /// the voice by path segment rather than by a body field.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Behavioural change.</b> Before 2.4.1 this property defaulted to
+    /// <c>https://preview.tts.speechmatics.com/generate</c> — the complete endpoint — and the voice
+    /// was sent as a JSON body field. That request returns <c>404 Not Found</c>: the API has no
+    /// <c>/generate</c> route. Callers who set this property must now supply the origin alone; a
+    /// value that still carries <c>/generate</c> produces <c>/generate/generate/{Voice}</c>.
+    /// </para>
+    /// </remarks>
     [Required]
     [RegularExpression(@"^https?://.+", ErrorMessage = "BaseUri must start with https:// or http://.")]
-    public string BaseUri { get; set; } = "https://preview.tts.speechmatics.com/generate";
+    public string BaseUri { get; set; } = "https://preview.tts.speechmatics.com";
 
     /// <summary>Voice identifier to use for synthesis.</summary>
     public string Voice { get; set; } = "eleanor";

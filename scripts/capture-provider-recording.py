@@ -844,11 +844,17 @@ def speechmatics_tts_plan(source_pcm: bytes) -> dict:
     """
     api_key = _require_env("SPEECHMATICS_API_KEY")
 
+    # The voice travels in the PATH, not the body: /generate/{voice} returns 200 audio/wav while
+    # /generate returns 404 (probed 2026-08-16 with a wrong-path control on the same host).
+    # This plan previously carried the body-field form, i.e. the capture instrument reproduced the
+    # very defect it existed to detect and could only ever have recorded a 404. Keep it matching
+    # what SpeechmaticsSpeechSynthesizer actually sends.
+    voice = "eleanor"
+
     # Field names and order from SpeechmaticsTtsRequest; compact, as System.Text.Json writes it.
     body = json.dumps(
         {
             "text": TTS_INPUT_TEXT,
-            "voice": "eleanor",
             "language": "en",
             "sample_rate": 16000,
         },
@@ -856,10 +862,15 @@ def speechmatics_tts_plan(source_pcm: bytes) -> dict:
         ensure_ascii=False,
     ).encode("utf-8")
 
+    url = (
+        "https://preview.tts.speechmatics.com/generate/"
+        + urllib.parse.quote(voice, safe="")
+    )
+
     return {
         "product": "Speechmatics — text to speech (preview)",
-        "url": "https://preview.tts.speechmatics.com/generate",
-        "endpoint_template": "POST https://preview.tts.speechmatics.com/generate",
+        "url": url,
+        "endpoint_template": "POST https://preview.tts.speechmatics.com/generate/{voice}",
         "api_version": "preview",
         "recordings_dir": TTS_RECORDINGS,
         "scenario_slug": TTS_SCENARIO_SLUG,
@@ -868,7 +879,7 @@ def speechmatics_tts_plan(source_pcm: bytes) -> dict:
         # one the vendor declares on the response, and the extension follows it.
         "media_type": "audio/wav",
         "extension": "wav",
-        "source_audio": tts_source_audio("eleanor"),
+        "source_audio": tts_source_audio(voice),
         "terms_verdict": "permitted-with-conditions",
         "terms_basis": (
             "docs/guides/provider-recording-protocol.md section 7 (Speechmatics TTS)"

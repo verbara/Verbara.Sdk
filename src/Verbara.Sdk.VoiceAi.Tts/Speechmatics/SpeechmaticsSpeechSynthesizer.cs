@@ -24,7 +24,7 @@ public sealed class SpeechmaticsSpeechSynthesizer : SpeechSynthesizer
 
     private readonly SpeechmaticsOptions _options;
     private readonly HttpClient _http;
-    private readonly string? _fakeBaseUri;
+    private readonly string? _fakeOrigin;
     private readonly bool _ownsHttpClient;
 
     /// <inheritdoc />
@@ -42,15 +42,19 @@ public sealed class SpeechmaticsSpeechSynthesizer : SpeechSynthesizer
         _ownsHttpClient = true;
     }
 
-    /// <summary>Initializes a new instance for testing with a fake server.</summary>
+    /// <summary>
+    /// Initializes a new instance for testing against a fake server. <paramref name="fakeOrigin"/>
+    /// is an <b>origin</b>, not a complete endpoint: the production path is appended to it exactly
+    /// as it is in production, so the fake sees the route the vendor sees.
+    /// </summary>
     internal SpeechmaticsSpeechSynthesizer(
         IOptions<SpeechmaticsOptions> options,
         HttpClient http,
-        string fakeBaseUri)
+        string fakeOrigin)
     {
         _options = options.Value;
         _http = http;
-        _fakeBaseUri = fakeBaseUri;
+        _fakeOrigin = fakeOrigin;
         _ownsHttpClient = false;
     }
 
@@ -64,14 +68,19 @@ public sealed class SpeechmaticsSpeechSynthesizer : SpeechSynthesizer
         var payload = new SpeechmaticsTtsRequest
         {
             Text = text,
-            Voice = _options.Voice,
             Language = _options.Language,
             SampleRate = sampleRate,
         };
 
         var json = JsonSerializer.Serialize(payload, VoiceAiTtsJsonContext.Default.SpeechmaticsTtsRequest);
 
-        var uri = _fakeBaseUri ?? _options.BaseUri;
+        // The API selects the voice by path segment: /generate/{voice} returns 200 audio/wav while
+        // /generate returns 404. The voice is deliberately NOT also sent in the body: a probe on
+        // 2026-08-16 showed the vendor returns identical output when both agree, but which one wins
+        // when they disagree was not measured, and an unmeasured precedence is not something to
+        // depend on.
+        var origin = (_fakeOrigin ?? _options.BaseUri).TrimEnd('/');
+        var uri = $"{origin}/generate/{Uri.EscapeDataString(_options.Voice)}";
         using var request = new HttpRequestMessage(HttpMethod.Post, uri)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json"),

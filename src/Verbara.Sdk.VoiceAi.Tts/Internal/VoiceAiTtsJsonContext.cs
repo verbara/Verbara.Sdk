@@ -47,8 +47,8 @@ internal sealed class CartesiaTtsControlMessage
 // --- Speechmatics TTS DTOs ---
 internal sealed class SpeechmaticsTtsRequest
 {
+    // No "voice" field: the API selects the voice by path segment (/generate/{voice}).
     [JsonPropertyName("text")] public string Text { get; set; } = string.Empty;
-    [JsonPropertyName("voice")] public string Voice { get; set; } = string.Empty;
     [JsonPropertyName("language")] public string Language { get; set; } = string.Empty;
     [JsonPropertyName("sample_rate")] public int SampleRate { get; set; }
 }

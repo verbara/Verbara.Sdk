@@ -201,13 +201,13 @@ characterised* in §5.5.
 
 ## 3. Class A — the request never reaches the vendor (LMNT HTTP, Speechmatics TTS)
 
-- [ ] 3.1 `src/Verbara.Sdk.VoiceAi.Tts/Speechmatics/SpeechmaticsSpeechSynthesizer.cs` — the request is
+- [x] 3.1 `src/Verbara.Sdk.VoiceAi.Tts/Speechmatics/SpeechmaticsSpeechSynthesizer.cs` — the request is
       built from `_options.BaseUri` with the voice carried in the JSON body
       (`SpeechmaticsTtsRequest.Voice`). The vendor selects the voice by **path segment**:
       `/generate/{voice}` returns `200 audio/wav`, `/generate` returns `404`. **Closes when** the
       corrected route returns a success status against the live endpoint with the negative control still
       `404` on the same host
-- [ ] 3.2 The public-API decision, taken explicitly and not smuggled in under a route fix:
+- [x] 3.2 The public-API decision, taken explicitly and not smuggled in under a route fix:
       `SpeechmaticsOptions.BaseUri` (`src/Verbara.Sdk.VoiceAi.Tts/Speechmatics/SpeechmaticsOptions.cs`
       line 27) is **public** and defaults to the whole URL including `/generate`, so appending a voice
       segment to a caller-supplied value changes what a shipped property means. Enumerate at least:
@@ -222,7 +222,7 @@ characterised* in §5.5.
       shipped default voice `eleanor` is absent from the vendor's published four-voice list **but
       returns 200**, so the published list is incomplete and `SpeechmaticsOptions.Voice` is fine. One
       delta, not three. Do not change the default
-- [ ] 3.5 `src/Verbara.Sdk.VoiceAi.Tts/Speechmatics/SpeechmaticsOptions.cs` line 23 — the
+- [x] 3.5 `src/Verbara.Sdk.VoiceAi.Tts/Speechmatics/SpeechmaticsOptions.cs` line 23 — the
       `<see href="https://docs.speechmatics.com/tts-api-ref"/>` is a **dead link (404)**. Replace it
       with a live URL or remove the `href`; XML docs ship to consumers of a public MIT package, so a
       dead reference is a shipped defect, not a cosmetic one
@@ -264,9 +264,12 @@ characterised* in §5.5.
       fakes must **match on method and path** so a misrouted request fails to match instead of being
       served anyway. Without that, this entire defect class stays invisible to the suite no matter how
       much coverage is added. This is the same property `wiremock-http-provider-substrate` requires of
-      its HTTP substrate; reuse it rather than reimplementing it
+      its HTTP substrate; reuse it rather than reimplementing it.
+      **Speechmatics half done** (2026-08-16): `SpeechmaticsFakeServer` now matches on method and
+      path and returns `404` otherwise, with three regression tests. `LmntFakeServer` lands in the
+      §3.6 commit under §3.13
 - [ ] 3.13 LMNT and Speechmatics TTS land as **two separate commits**
-- [ ] 3.14 **The capture instrument carries the same broken request as the client — fix it in the
+- [x] 3.14 **The capture instrument carries the same broken request as the client — fix it in the
       §3.1 commit, not after.** `scripts/capture-provider-recording.py` line 851 puts `"voice":
       "eleanor"` in the JSON body and line 861 targets `https://preview.tts.speechmatics.com/generate`,
       so the plan reproduces the 404 request byte for byte. This is the defect one level up: the tool
