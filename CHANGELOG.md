@@ -103,6 +103,11 @@ All notable changes to this project will be documented in this file.
   hardcoded the same `404` route and the `raw` format, so a capture run would have recorded a 404
   envelope as though it were the surface — the defect one level up from the client.
 
+  **And its own test suite had pinned both broken plans.** `scripts/tests/` was green against the
+  `/generate` route, the `voice` body field and `format=raw`; LMNT's route was not asserted by any
+  test at all, which is how it survived every run. The measured values are pinned now and the two
+  missing route assertions exist.
+
 ### Fixed — Speechmatics TTS has never worked
 
 - **`SpeechmaticsSpeechSynthesizer` now selects the voice by path segment, so the request succeeds.**

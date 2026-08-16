@@ -437,6 +437,18 @@ characterised* in §5.5.
       plan rather than leaving the capture to discover it again. **Closes when** the plan matches the
       corrected client request and its artifact is a success response, unblocking
       `wiremock-http-provider-substrate` §4.6
+- [x] 3.15a **The capture script has its own test suite, and it pinned the broken plans** —
+      `scripts/tests/test_capture_provider_recording.py`, 157 tests, green against both defects. Found
+      on 2026-08-16 by CI, not locally: the §3.14/§3.15 edits landed with a verification list that ran
+      the .NET suite and `openspec validate` and never ran this one. Three tests failed, and what they
+      asserted is the point: Speechmatics' route was pinned to `/generate` (the 404) and its `voice`
+      to a body field, and LMNT's format was pinned to `raw`. **LMNT's route was not pinned at all** —
+      no test in the suite asserted `plan["url"]`, which is how the 404 route stayed green through
+      every run. Fixed by pinning the measured values and adding the two missing route assertions
+      (`test_ShouldPostToTheBytesRoute_NotGenerate`,
+      `test_ShouldSelectTheVoiceByPathSegment_NotByBodyField`); 159 pass. This is the §3.12 property
+      at the instrument's own test layer — the same shape as the C# fakes and as §5.4's redactor,
+      making three levels at which a checker was more permissive than the thing it checked
 - [ ] 3.16 Neither §3.14 nor §3.15 was in this change when it was written — both were found by auditing
       `wiremock-http-provider-substrate`'s three blocked tasks on 2026-08-15, after this change had
       already been merged. Sweep `scripts/capture-provider-recording.py` for the **remaining** plans and

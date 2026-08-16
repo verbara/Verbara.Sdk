@@ -765,7 +765,17 @@ class SpeechmaticsTtsPlanTests(_EnvScopedTestCase):
         plan = capture.speechmatics_tts_plan(b"")
 
         self.assertEqual("Bearer sm-key", plan["headers"]["Authorization"])
-        self.assertEqual("https://preview.tts.speechmatics.com/generate", plan["url"])
+
+    def test_ShouldSelectTheVoiceByPathSegment_NotByBodyField(self):
+        # This assertion used to live inside the authorization test, pinned to `/generate` — the
+        # route the API answers 404 on. A capture run would have recorded that 404 as though it
+        # were the surface, which is the defect one level up from the client.
+        os.environ["SPEECHMATICS_API_KEY"] = "sm-key"
+
+        plan = capture.speechmatics_tts_plan(b"")
+
+        self.assertEqual(
+            "https://preview.tts.speechmatics.com/generate/eleanor", plan["url"])
 
     def test_ShouldPostTheShippedOptionDefaults(self):
         # A capture taken at non-default options is a capture of a request production never sends.
@@ -775,9 +785,9 @@ class SpeechmaticsTtsPlanTests(_EnvScopedTestCase):
 
         self.assertTrue(plan["body"].startswith(b'{"text":'))
         self.assertEqual(
-            {"text": capture.TTS_INPUT_TEXT, "voice": "eleanor",
-             "language": "en", "sample_rate": 16000},
+            {"text": capture.TTS_INPUT_TEXT, "language": "en", "sample_rate": 16000},
             json.loads(plan["body"]))
+        self.assertNotIn(b"voice", plan["body"])
 
     def test_ShouldCaptureTheVendorBytesIntoTheTtsTree(self):
         os.environ["SPEECHMATICS_API_KEY"] = "sm-key"
@@ -826,6 +836,14 @@ class LmntHttpPlanTests(_EnvScopedTestCase):
         self.assertEqual("1.0", plan["headers"]["lmnt-version"])
         self.assertNotIn("Authorization", plan["headers"])
 
+    def test_ShouldPostToTheBytesRoute_NotGenerate(self):
+        # No test asserted the route at all, which is how the plan kept `/v1/ai/speech/generate`
+        # — a route the API answers 404 on — through every green run of this suite.
+        os.environ["LMNT_API_KEY"] = "lmnt-key"
+
+        self.assertEqual(
+            "https://api.lmnt.com/v1/ai/speech/bytes", capture.lmnt_http_plan(b"")["url"])
+
     def test_ShouldFormEncodeTheShippedOptionDefaults(self):
         os.environ["LMNT_API_KEY"] = "lmnt-key"
 
@@ -834,7 +852,9 @@ class LmntHttpPlanTests(_EnvScopedTestCase):
         self.assertEqual(
             "application/x-www-form-urlencoded", plan["headers"]["Content-Type"])
         self.assertTrue(plan["body"].startswith(b"voice=leah&text="))
-        self.assertIn(b"&format=raw&sample_rate=16000&language=en&speed=1.00", plan["body"])
+        # pcm_s16le, not `raw`: over this transport `raw` is an MP3 frame stream (measured
+        # 2026-08-15), so a capture at `raw` would record MP3 under a Slin16 label.
+        self.assertIn(b"&format=pcm_s16le&sample_rate=16000&language=en&speed=1.00", plan["body"])
 
     def test_ShouldOmitTheModelField_WhenTheSdkOptionLeavesItUnset(self):
         # LmntTtsOptions.Model defaults to null and the synthesizer only adds it when set.
