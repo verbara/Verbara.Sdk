@@ -4,6 +4,73 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: ElevenLabs and Cartesia TTS never returned a byte of audio
+
+Two providers, five defects, and every one of them a total failure that a green test suite had been
+certifying as correct. Both clients connected, sent a request, completed without error and handed
+the caller an empty stream. Measured live 2026-08-16, each defect isolated as the only variable in
+its own arm.
+
+- **Neither client ever read the frame the audio arrives on.** ElevenLabs delivers base64 in
+  `audio` on a JSON text frame; Cartesia delivers base64 in `data` on a `type="chunk"` text frame.
+  Both receive loops yielded only `WebSocketMessageType.Binary` and skipped or barely parsed text.
+  **Zero binary bytes arrive on either surface** — so this was not a client preferring the wrong
+  branch, it was a client reading a branch that receives nothing. ElevenLabs now decodes through the
+  new `ElevenLabsAudioOutput`; Cartesia through `CartesiaTtsServerMessage`, which replaces
+  `CartesiaTtsControlMessage` (that type modelled `type` alone — enough to recognise the terminator,
+  blind to the frames carrying the audio, so the client that stopped correctly had never started).
+  Unmodelled siblings — the two alignment structures, `flush_id`, `step_time`, the echoed
+  `context_id` — are tolerated rather than modelled, because nothing here consumes them.
+
+- **Both clients half-closed the socket immediately after the request**, and either vendor reads
+  that Close frame as "abandon the request". With the half-close as the only variable: ElevenLabs
+  **0 B and close `1006`** against **86 193 B and close `1000`**; Cartesia **0 frames** against
+  **7 chunks, 32 694 B, 1.022 s**. In both cases the request itself was already the end-of-input
+  signal, so the half-close was a second, contradictory one. Third and second confirmed instances of
+  the class LMNT opened — see the entry below.
+
+- **Cartesia's request omitted `context_id`, which the endpoint requires.** It answers
+  `{"type":"error","status_code":400,"done":true,"error":"context_id is invalid: …"}` and sends no
+  audio. One fresh id per request; a constant would defeat the only thing the field does. A prior
+  hypothesis that `"continue": null` caused the rejection was **refuted** by an A/B — both forms
+  produced the identical error — so `CartesiaTtsRequest.Continue` is deliberately left as it was
+  rather than changed on a guess.
+
+- **Both loops now assemble until `EndOfMessage` before parsing, and without that the fix above
+  would have introduced a new defect.** No receive loop in `Verbara.Sdk.VoiceAi.Tts` or
+  `Verbara.Sdk.VoiceAi.Stt` read `result.EndOfMessage` at all. That was a harmless margin while
+  audio arrived as binary frames the client sized (Deepgram: 1920 B against a 64 KiB buffer). It
+  does not transfer to text frames the **vendor** sizes: ElevenLabs averaged ~29 KB of base64 per
+  frame, Cartesia carried 32 694 B across seven, and one frame past the 65 536-byte buffer arrives
+  fragmented — at which point a per-read parse hands JSON a truncated document. The failure is
+  length-dependent, which is why no short probe and no fixture in either suite had ever reached it.
+
+- **Both fakes were certifying the defects.** `CartesiaFakeServer` sent binary frames because that
+  is what the client read; `ElevenLabsFakeServer`'s alignment flag existed to prove the client
+  *skipped* the very message that carries the audio. Neither matched the endpoint, so a green suite
+  proved only that client and fake agreed with each other. Both now answer the measured way by
+  default, keep the binary path behind a `Transport` knob, gained a `TextFrameFragmentBytes` knob so
+  fragmentation is reachable without a 64 KB fixture, and record the client's Close frame instead of
+  tolerating it. New fixture `cartesia-tts/chunk-frame.json` holds the measured key set verbatim;
+  no vendor value was stored, so it stays `synthetic`.
+
+  Non-vacuity was checked by mutation, not by inspection: restoring either half-close fails a test,
+  ignoring `EndOfMessage` fails a test, reverting either loop to binary-only fails five, and an
+  empty `context_id` fails two.
+
+Controls, both surfaces, same run: Cartesia — wrong path `HTTP 404`, invalid credential `HTTP 401`,
+both at the handshake. ElevenLabs — wrong path `HTTP 403` (not the `404` every other surface
+answers; a wrong-path control has to be read, not pattern-matched), invalid credential in-band, then
+close `1008`.
+
+**Not fixed here, and named so it is not mistaken for done:** on both providers a vendor error frame
+still ends the stream silently, leaving the caller an empty result and no exception. That is
+`Sdk/ADR-0049` D1, it changes observable behaviour, and it belongs to the D1 remedy rather than to a
+frame-format fix.
+
+**BREAKING:** callers of `ElevenLabsSpeechSynthesizer.SynthesizeAsync` and
+`CartesiaSpeechSynthesizer.SynthesizeAsync` now receive audio. No API signature changed.
+
 ### Fixed — BREAKING: LMNT TTS has never worked either, on either transport
 
 - **`LmntSpeechSynthesizer` no longer sends `"model": null`, which the WebSocket endpoint rejects
@@ -68,14 +135,14 @@ All notable changes to this project will be documented in this file.
   behavioural change that belongs with the `Sdk/ADR-0049` D1 remedy rather than a route fix. The two
   fixes above remove the failures that were reaching it; they do not make the next one visible.
 
-### Known — the half-close is a class: three of three TTS sites measured, all total failures
+### Known — the half-close is a class: three of three TTS sites measured, all total failures, all now fixed
 
 - **The LMNT half-close above is a pattern, not a one-off.** `CloseOutputAsync` immediately after
   the request appears in `ElevenLabs` TTS, `Cartesia` TTS, and the Deepgram, Speechmatics, AssemblyAI
   and Cartesia speech recognizers. **Every TTS site measured so far returns zero bytes with it and
-  audio without it** — LMNT (fixed above, 0 B → 30 688 B), Cartesia TTS (0 frames → 7 chunks,
-  32 694 B), and now ElevenLabs (0 B, close `1006` → 86 193 B, close `1000`, measured 2026-08-16).
-  Three of three.
+  audio without it** — LMNT (0 B → 30 688 B), Cartesia TTS (0 frames → 7 chunks, 32 694 B), and
+  ElevenLabs (0 B, close `1006` → 86 193 B, close `1000`, measured 2026-08-16). Three of three, and
+  all three are fixed — LMNT above, the other two in the entry at the top of this release.
 
   **This supersedes the previous entry's ElevenLabs note, which said it was "probed on 2026-08-15 and
   found working".** That probe never reproduced the client's close sequence, so it certified the

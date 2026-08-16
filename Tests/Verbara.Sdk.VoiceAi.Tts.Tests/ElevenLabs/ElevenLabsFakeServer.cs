@@ -5,6 +5,16 @@ using Verbara.Sdk.TestInfrastructure.Http;
 
 namespace Verbara.Sdk.VoiceAi.Tts.Tests.ElevenLabs;
 
+/// <summary>How <see cref="ElevenLabsFakeServer"/> carries audio back to the client.</summary>
+internal enum ElevenLabsAudioTransport
+{
+    /// <summary>Base64 inside a JSON text frame — what the live endpoint was measured to send.</summary>
+    Text,
+
+    /// <summary>Raw binary frames — the branch the client keeps without evidence for it.</summary>
+    Binary
+}
+
 /// <summary>
 /// In-process WebSocket server that speaks the ElevenLabs wire protocol, seeded from the payloads in
 /// <c>Recordings/elevenlabs-tts/</c> rather than from <c>new byte[320]</c> and a hand-authored
@@ -74,10 +84,47 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
     public List<byte[]> AudioFramesToSend { get; } = [];
 
     /// <summary>
-    /// When <see langword="true"/>, the recorded <c>AudioOutput</c> text frame — alignment arrays
-    /// and all — follows each binary frame. The client must skip it and yield only audio.
+    /// When <see langword="true"/>, the session replays the recorded <c>AudioOutput</c> text frame —
+    /// alignment arrays and all — instead of the generated chunks. The client must decode its
+    /// <c>audio</c> member and tolerate the two alignment members it does not model.
     /// </summary>
-    public bool SendAlignmentMessages { get; set; }
+    /// <remarks>
+    /// This flag used to be called <c>SendAlignmentMessages</c> and meant the opposite: the frame
+    /// was interleaved to prove the client <em>skipped</em> it. It skipped it because the client
+    /// only read binary frames — and a live run of the shipped request received zero binary bytes
+    /// and all of its audio inside frames of exactly this shape. The fake was certifying the defect.
+    /// </remarks>
+    public bool SendRecordedAudioOutputFrame { get; set; }
+
+    /// <summary>
+    /// How the session carries audio back. Text is the vendor's measured behaviour and the default;
+    /// Binary exercises the branch the client keeps as tolerated-without-evidence.
+    /// </summary>
+    public ElevenLabsAudioTransport Transport { get; set; } = ElevenLabsAudioTransport.Text;
+
+    /// <summary>
+    /// When greater than zero, every text frame is sent in WebSocket fragments of this many bytes,
+    /// with <c>endOfMessage: false</c> on all but the last.
+    /// </summary>
+    /// <remarks>
+    /// The vendor sizes these frames — one measured run averaged ~29 KB of base64 per frame — so a
+    /// long enough input fragments them in production. No fake had ever produced a fragment, which
+    /// is why a receive loop that ignored <c>EndOfMessage</c> stayed green for the life of this
+    /// suite. This knob exists to make that failure reachable without a 64 KB fixture.
+    /// </remarks>
+    public int TextFrameFragmentBytes { get; set; }
+
+    /// <summary>
+    /// Whether the client sent a WebSocket Close frame before the session finished answering.
+    /// </summary>
+    /// <remarks>
+    /// Recorded rather than acted on. Reproducing the vendor's reaction — abandon the request, send
+    /// nothing, close 1006 — would race this session's own send loop, so the fake asserts on what
+    /// the client <em>did</em> instead. Reading it after <c>SynthesizeAsync</c> completes is ordered
+    /// by causality, not luck: the stream cannot complete before the server closes, the server
+    /// closes only after sending audio, and a client Close necessarily precedes that audio.
+    /// </remarks>
+    public bool ClientSentCloseFrame { get; private set; }
 
     /// <summary>Raw URL (path + query) of the most recent WebSocket upgrade request.</summary>
     public string? LastRequestUrl { get; private set; }
@@ -154,7 +201,12 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
                         lock (_receivedJsonMessages)
                             _receivedJsonMessages.Add(Encoding.UTF8.GetString(buf, 0, result.Count));
                     else if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        // Recorded, not tolerated: against the live endpoint this frame costs all
+                        // the audio and the connection ends 1006.
+                        ClientSentCloseFrame = true;
                         break;
+                    }
                 }
                 catch { break; }
             }
@@ -163,18 +215,30 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
         // Small delay to let client send first text message.
         await Task.Delay(30).ConfigureAwait(false);
 
-        // Take a snapshot of audio frames to avoid races.
-        var frames = AudioFramesToSend.ToList();
-        for (int i = 0; i < frames.Count; i++)
+        if (SendRecordedAudioOutputFrame)
         {
-            if (ws.State is not (WebSocketState.Open or WebSocketState.CloseReceived)) break;
-            await ws.SendAsync(frames[i].AsMemory(), WebSocketMessageType.Binary, true, _cts.Token)
-                .ConfigureAwait(false);
-
-            if (SendAlignmentMessages)
+            // The vendor's own message shape, replayed verbatim from the recordings tree.
+            await SendTextFrameAsync(ws, ReadFrame(AudioOutputFrame)).ConfigureAwait(false);
+        }
+        else
+        {
+            // Take a snapshot of audio frames to avoid races.
+            var frames = AudioFramesToSend.ToList();
+            for (int i = 0; i < frames.Count; i++)
             {
-                var align = Encoding.UTF8.GetBytes(ReadFrame(AudioOutputFrame));
-                await ws.SendAsync(align.AsMemory(), WebSocketMessageType.Text, true, _cts.Token)
+                if (ws.State is not (WebSocketState.Open or WebSocketState.CloseReceived)) break;
+
+                if (Transport == ElevenLabsAudioTransport.Binary)
+                {
+                    await ws.SendAsync(frames[i].AsMemory(), WebSocketMessageType.Binary, true, _cts.Token)
+                        .ConfigureAwait(false);
+                    continue;
+                }
+
+                // How the vendor actually answers: base64 audio on a text frame, isFinal on the last.
+                var isFinal = i == frames.Count - 1 ? "true" : "false";
+                await SendTextFrameAsync(
+                        ws, $"{{\"audio\":\"{Convert.ToBase64String(frames[i])}\",\"isFinal\":{isFinal}}}")
                     .ConfigureAwait(false);
             }
         }
@@ -196,6 +260,30 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
         catch { }
 
         try { await receiveTask.ConfigureAwait(false); } catch { }
+    }
+
+    /// <summary>
+    /// Sends one text message, fragmented when <see cref="TextFrameFragmentBytes"/> asks for it.
+    /// </summary>
+    private async Task SendTextFrameAsync(WebSocket ws, string json)
+    {
+        var bytes = Encoding.UTF8.GetBytes(json);
+
+        if (TextFrameFragmentBytes <= 0 || TextFrameFragmentBytes >= bytes.Length)
+        {
+            await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, _cts.Token)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        for (int offset = 0; offset < bytes.Length; offset += TextFrameFragmentBytes)
+        {
+            var length = Math.Min(TextFrameFragmentBytes, bytes.Length - offset);
+            var endOfMessage = offset + length >= bytes.Length;
+            await ws.SendAsync(
+                    bytes.AsMemory(offset, length), WebSocketMessageType.Text, endOfMessage, _cts.Token)
+                .ConfigureAwait(false);
+        }
     }
 
     public async ValueTask DisposeAsync()

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -10,12 +11,18 @@ using Microsoft.Extensions.Options;
 namespace Verbara.Sdk.VoiceAi.Tts.Cartesia;
 
 /// <summary>
-/// Cartesia Sonic-3 WebSocket streaming TTS provider. Sends a JSON
-/// synthesis request and receives raw PCM audio frames as binary messages
-/// until the server emits a <c>done</c> control message or closes the socket.
+/// Cartesia Sonic-3 WebSocket streaming TTS provider. Sends a JSON synthesis request and receives
+/// PCM audio as base64 inside <c>chunk</c> text frames, until the server emits <c>done</c> (or
+/// <c>error</c>) or closes the socket.
 /// </summary>
 public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
 {
+    /// <summary>
+    /// One WebSocket read. Frames larger than this arrive fragmented and are assembled before
+    /// parsing — see <see cref="ReceiveFramesAsync"/>.
+    /// </summary>
+    private const int ReceiveBufferSize = 65536;
+
     private readonly CartesiaOptions _options;
     private readonly int? _fakeServerPort;
 
@@ -59,10 +66,10 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         // SendAsync / CloseOutputAsync on the half-dead socket.
         using var sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        // Fire-and-forget: send the synthesis request, then half-close.
+        // Fire-and-forget: send the synthesis request. Nothing follows it — see SendRequestAsync.
         var sendTask = SendRequestAsync(ws, text, outputFormat, sessionCts.Token);
 
-        // Receive loop writes binary audio frames to channel, stops on `done` control msg.
+        // Receive loop writes decoded audio to the channel, stops on `done` / `error`.
         var receiveTask = Task.Run(async () =>
         {
             try
@@ -101,7 +108,12 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
                 SampleRate = outputFormat.SampleRate > 0 ? outputFormat.SampleRate : _options.OutputSampleRate
             },
             Language = _options.Language,
-            Transcript = text
+            Transcript = text,
+
+            // Required by the endpoint, not optional — see CartesiaTtsRequest.ContextId. One per
+            // request: it exists to correlate the frames of THIS synthesis, so reusing a value
+            // across requests would defeat the only thing it does.
+            ContextId = Guid.NewGuid().ToString()
         };
 
         var json = JsonSerializer.Serialize(request, VoiceAiTtsJsonContext.Default.CartesiaTtsRequest);
@@ -109,21 +121,18 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
             Encoding.UTF8.GetBytes(json).AsMemory(),
             WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
 
-        // Half-close so the server knows no more input is coming.
-        // Guarded timeout: CloseOutputAsync can hang if the server aborted the
-        // connection at the socket level before the client's FIN is processed.
-        if (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
-        {
-            using var closeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            closeCts.CancelAfter(TimeSpan.FromSeconds(2));
-            try
-            {
-                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", closeCts.Token)
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) { /* server is gone, give up */ }
-            catch (WebSocketException) { /* peer already closed abruptly */ }
-        }
+        // The request IS the end of input for a non-continued synthesis, and it is the last thing
+        // this method sends.
+        //
+        // No half-close follows, and that is the fix — not an omission. This method used to call
+        // CloseOutputAsync(NormalClosure) here, right after the request, behind a guarded 2 s
+        // timeout. Measured against the live endpoint with that call as the only variable: with it,
+        // 0 frames and 0 bytes arrive; without it, 7 chunk frames and a `done`, 32 694 B of audio in
+        // 1.022 s. The vendor reads the client's Close frame as "abandon the request", so the
+        // half-close destroyed the synthesis it was meant to finish.
+        //
+        // This is one of three TTS sites measured with the same defect — LMNT and ElevenLabs are the
+        // others — so treat a bare CloseOutputAsync after a request as suspect, not as hygiene.
     }
 
     private static async Task ReceiveFramesAsync(
@@ -131,7 +140,9 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         ChannelWriter<ReadOnlyMemory<byte>> writer,
         CancellationToken ct)
     {
-        var buf = new byte[65536];
+        var buf = new byte[ReceiveBufferSize];
+        var assembled = new ArrayBufferWriter<byte>(ReceiveBufferSize);
+
         while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
         {
             ValueWebSocketReceiveResult result;
@@ -144,27 +155,50 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
 
             if (result.MessageType == WebSocketMessageType.Close) break;
 
+            // Assemble until the message is whole. The vendor sizes these frames, not this client,
+            // and a loop that parsed each read as a complete message would hand JSON a truncated
+            // document once a frame outgrew this 64 KiB buffer. That failure is length-dependent,
+            // which is exactly why no short probe and no fake ever tripped it.
+            assembled.Write(buf.AsSpan(0, result.Count));
+            if (!result.EndOfMessage) continue;
+
             if (result.MessageType == WebSocketMessageType.Binary)
             {
-                var frame = new byte[result.Count];
-                buf.AsSpan(0, result.Count).CopyTo(frame);
-                await writer.WriteAsync(frame.AsMemory(), ct).ConfigureAwait(false);
+                // Tolerated without evidence, deliberately. A live run measured zero binary bytes on
+                // this surface — but a vendor not sending a mode on one day is not evidence the mode
+                // does not exist, and keeping the branch costs nothing. Removing it would be an
+                // unmeasured change.
+                await writer.WriteAsync(assembled.WrittenSpan.ToArray().AsMemory(), ct)
+                    .ConfigureAwait(false);
+                assembled.Clear();
                 continue;
             }
 
-            if (result.MessageType == WebSocketMessageType.Text)
+            var message = JsonSerializer.Deserialize(
+                assembled.WrittenSpan,
+                VoiceAiTtsJsonContext.Default.CartesiaTtsServerMessage);
+            assembled.Clear();
+
+            if (message is null) continue;
+
+            if (string.Equals(message.Type, "chunk", StringComparison.Ordinal) &&
+                message.Data is { Length: > 0 } base64)
             {
-                // A `done` (or `error`) text message terminates the stream.
-                var json = Encoding.UTF8.GetString(buf, 0, result.Count);
-                var control = JsonSerializer.Deserialize(
-                    json,
-                    VoiceAiTtsJsonContext.Default.CartesiaTtsControlMessage);
-                if (control is not null &&
-                    (string.Equals(control.Type, "done", StringComparison.Ordinal) ||
-                     string.Equals(control.Type, "error", StringComparison.Ordinal)))
-                {
-                    break;
-                }
+                await writer.WriteAsync(Convert.FromBase64String(base64).AsMemory(), ct)
+                    .ConfigureAwait(false);
+                continue;
+            }
+
+            // `done` ends the stream; so does `error` — silently, which is the defect underneath
+            // this one. An invalid credential, a rejected voice or a malformed request all arrive
+            // here as {"type":"error","error":…,"status_code":4xx} and leave the caller an empty
+            // stream and no exception. That is Sdk/ADR-0049 D1 on this surface. Surfacing it changes
+            // behaviour — a synthesis that silently yields nothing would start throwing — so it
+            // belongs to the D1 remedy and its own decision, not inside a frame-format fix.
+            if (string.Equals(message.Type, "done", StringComparison.Ordinal) ||
+                string.Equals(message.Type, "error", StringComparison.Ordinal))
+            {
+                break;
             }
         }
     }

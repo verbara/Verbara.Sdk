@@ -59,8 +59,8 @@ two by route, two by frame handling — and none of the four was detectable from
 | LMNT (HTTP) | `https://api.lmnt.com/v1/ai/speech/bytes` | **fixed** | n/a | in the response | `live + both controls` | 2026-08-15 |
 | LMNT (WebSocket) | `wss://api.lmnt.com/v1/ai/speech/stream` | OK | **2 fixed, 1 open** | `in-band` | `live + credential control` | 2026-08-15 |
 | Speechmatics TTS | `https://preview.tts.speechmatics.com/generate/{voice}` | **fixed** | n/a | in the response | `live + both controls` | 2026-08-16 |
-| Cartesia TTS | `wss://api.cartesia.ai/tts/websocket` | OK | **3 defects, open** | `handshake` | `live + both controls` | 2026-08-15 |
-| ElevenLabs TTS | `wss://api.elevenlabs.io/v1/text-to-speech/{voiceId}/stream-input` | OK | **2 defects, open** | `in-band` | `live + both controls` | 2026-08-16 |
+| Cartesia TTS | `wss://api.cartesia.ai/tts/websocket` | OK | **3 fixed, 1 open** | `handshake` | `live + both controls` | 2026-08-16 |
+| ElevenLabs TTS | `wss://api.elevenlabs.io/v1/text-to-speech/{voiceId}/stream-input` | OK | **2 fixed, 1 open** | `in-band` | `live + both controls` | 2026-08-16 |
 
 **Deepgram TTS** — the reference run, and the only TTS surface measured *not* to hide audio in a text
 frame. Shipped defaults (`model=aura-2-thalia-en`, `encoding=linear16`, `sample_rate=24000`) returned
@@ -103,11 +103,15 @@ returns `404` (identically to a route that does not exist, because that is what 
 claimed.
 
 **Cartesia TTS** — three defects, and the documented one was the least of them. The shipped request
-omits `context_id`, so the endpoint answers an error and sends no audio; the client half-closes after
-the request, which alone costs everything (a control differing only in that step received 7 chunks,
-32 694 B, in 1.022 s); and only then does the frame-type defect appear — audio arrives base64 in the
-`data` field of `type="chunk"` **text** frames, while the loop reads only binary. All three are open.
-Fixing only the frame type would still ship a provider that produces silence.
+omitted `context_id`, so the endpoint answered an error and sent no audio; the client half-closed
+after the request, which alone cost everything (a control differing only in that step received 7
+chunks, 32 694 B, in 1.022 s); and only then does the frame-type defect appear — audio arrives base64
+in the `data` field of `type="chunk"` **text** frames, while the loop read only binary. All three are
+*fixed*, in one commit, because fixing only the frame type would still have shipped a provider that
+produces silence. A fourth is *open*: an `error` frame ends the stream with no exception (ADR-0049
+D1). What this surface's row does **not** claim: the fixed client has not itself been run live. What
+ran was a probe reproducing the corrected request — the same wire behaviour the client now produces,
+but a reconstruction of it, not the artifact.
 
 **ElevenLabs TTS** — measured across five arms with one variable each:
 
@@ -121,7 +125,12 @@ Fixing only the frame type would still ship a provider that produces silence.
 
 Two defects, both total, and they fire in sequence: the half-close, then the frame type. **0 binary
 bytes** ever arrive, so the client's "only yield binary frames" comment is not a partial defect — the
-branch it prefers receives nothing at all. Arm C is worth its cost for what it **refuted**: the
+branch it prefers receives nothing at all. Both are *fixed*, in one commit, for the same reason
+Cartesia's are. A third is *open*: the invalid-credential frame from arm D has no `audio` member and
+is silently dropped, so a rejected key still reaches the caller as an empty stream and no exception
+(ADR-0049 D1). As with Cartesia, the fixed client has not itself been run live — arm B is a
+reconstruction of what it now sends, not the artifact. Arm C is worth its cost for what it
+**refuted**: the
 shipped frames carry `"flush": null` and `"voice_settings": null`, the exact shape that was a total
 outage on LMNT, and ElevenLabs tolerates them. The class does not generalise, which is why the arm
 was run instead of assumed. Note also that E answers `403` where every other surface answers `404` —
@@ -184,7 +193,10 @@ Named here rather than left as absence, because absence is what this file exists
 - **Azure TTS, both Whisper recognizers** — validation point, and route evidence at
   `live, uncontrolled`.
 - **Every surface** — behaviour on inputs long enough to fragment a frame across the 64 KiB receive
-  buffer. The probe sentence used throughout is far too short to reach it.
+  buffer. The probe sentence used throughout is far too short to reach it. The two Class B loops now
+  assemble until `EndOfMessage` and their fakes can split a frame on demand, so the *client* side is
+  handled and tested; what is still unmeasured is whether either **vendor** fragments in practice,
+  which no fake can answer.
 
 ## Two properties this record keeps having to restate
 
