@@ -28,7 +28,7 @@ characterised* in §5.5.
 
 ## 1. Characterise what is still unknown — probe before patch
 
-- [ ] 1.1 Commit the current scoreboard into this change directory as working evidence, one row per
+- [x] 1.1 Commit the current scoreboard into this change directory as working evidence, one row per
       surface with its evidence class **and its own date — the dates differ and MUST NOT be flattened
       into one**. The six TTS rows: Deepgram route OK / frame OK; Azure route OK / frame OK; LMNT
       (HTTP) route `404`; Speechmatics route `404`; Cartesia route OK / frame BROKEN; ElevenLabs route
@@ -43,14 +43,20 @@ characterised* in §5.5.
       re-probed in this pass;
       **LMNT** and **Speechmatics** carry the dates of their own route probes. Put the real date on each
       row — a single header date would assert a live 2026-08-15 measurement for four surfaces that never
-      got one, which is exactly the conflation §1.9 and the spec's evidence-class rule exist to prevent
-- [ ] 1.2 The four **WebSocket streaming recognizers** are no longer unknown at all: all four were
+      got one, which is exactly the conflation §1.9 and the spec's evidence-class rule exist to prevent.
+      **Done, and landed straight in `docs/guides/provider-wire-conformance.md` rather than here.**
+      A copy in this change directory would be archived with the change, and the one property this
+      table must have is that it **outlives** the change that produced it — a scoreboard that ships
+      into an archive folder is a scoreboard nobody consults. §5.5 was going to move it there anyway;
+      writing it there once removes the window in which two copies disagree. Every row carries its own
+      date, per the rule above
+- [x] 1.2 The four **WebSocket streaming recognizers** are no longer unknown at all: all four were
       probed on 2026-08-15 with the §5 method, and §1.3–§1.5a record what each returned. Their classes
       still differ — Cartesia STT and AssemblyAI STT carry both controls, Deepgram STT carries a
       wrong-path control but **no invalid-credential control**, so its validation point is *not
       established* — and the table MUST keep that difference visible rather than giving the four one
       shared verdict on the strength of having all been touched
-- [ ] 1.3 **Deepgram STT — route verified 2026-08-15 with a negative control; frames not exercised.**
+- [x] 1.3 **Deepgram STT — route verified 2026-08-15 with a negative control; frames not exercised.**
       `wss://api.deepgram.com/v1/listen` with the SDK's exact shipped defaults (`encoding=linear16`,
       `sample_rate=16000`, `channels=1`, `model=nova-2`, `interim_results=true`, `punctuate=true`) and
       the `Authorization: Token` header returned `101 Switching Protocols`; the wrong-path control
@@ -61,7 +67,7 @@ characterised* in §5.5.
       gap. Frames were **not** exercised — Deepgram is `not-cleared` under
       `docs/guides/provider-recording-protocol.md` section 7 — and the row must say so, so a verified
       route is not read as a verified frame protocol
-- [ ] 1.3a **Run the missing invalid-credential control against Deepgram** — TTS and STT, same host,
+- [x] 1.3a **Run the missing invalid-credential control against Deepgram** — TTS and STT, same host,
       deliberately malformed key, alongside the wrong-path control already taken. It is the one surface
       in the scoreboard whose validation point rests on inference, and it is the surface every other
       row's "handshake vs in-band" framing was originally reasoned from, so leaving it uncontrolled
@@ -77,7 +83,7 @@ characterised* in §5.5.
       recordable. Consequence: `DeepgramSpeechRecognizer.cs:120` stays **latent** (no in-band failure
       frame can reach it, because failures never get in-band), so §4.16 keeps it as a code defect
       without a live symptom rather than promoting it
-- [ ] 1.4 **Speechmatics STT — probed 2026-08-15 to the first protocol exchange, and it does not
+- [x] 1.4 **Speechmatics STT — probed 2026-08-15 to the first protocol exchange, and it does not
       authenticate.** The route resolves and the upgrade completes; the credential is then rejected
       in-band with close code `4001 not_authorised`. That is the defect fixed in §4.1–§4.4 — in this
       change, not a follow-on. Observed live: the `Info` frame (§4.5) and `RecognitionStarted` (§4.6).
@@ -85,7 +91,7 @@ characterised* in §5.5.
       establish the remedy and no audio was streamed — so the frame inventory beyond those two message
       types stays **not characterised**, and the assembly finding from §4.7 onwards remains derived from
       the vendor's message set and the committed fixtures rather than from live transcript frames
-- [ ] 1.5 **Cartesia STT and AssemblyAI STT — credentials obtained 2026-08-15; both now probed with
+- [x] 1.5 **Cartesia STT and AssemblyAI STT — credentials obtained 2026-08-15; both now probed with
       two controls.** This supersedes the original *not characterised, no credential* entry, which was
       true when written. `src/Verbara.Sdk.VoiceAi.Stt/Cartesia/CartesiaSpeechRecognizer.cs`: wrong path
       `404`, invalid credential `401`, real `101` — route and auth OK, **frames not exercised**.
@@ -94,14 +100,14 @@ characterised* in §5.5.
       `{configuration, expires_at, id, type}` — route OK, and the invalid-credential control is what
       exposed §4.15. Record both with their controls; do not carry the frame halves further than the
       evidence goes
-- [ ] 1.5a **Google STT — promoted from `uncontrolled` to a controlled probe, 2026-08-15.** Wrong path
+- [x] 1.5a **Google STT — promoted from `uncontrolled` to a controlled probe, 2026-08-15.** Wrong path
       `404`, invalid credential `400 API_KEY_INVALID`, real key `400 RecognitionAudio not set` — the
       last of which is the vendor accepting the credential and rejecting the empty payload, i.e. past
       auth into argument validation. Its row moves out of the shared HTTP-batch line in §1.6, which
       now covers only the two Whisper recognizers. Note for the record that the SDK's `?key=` query
       parameter **is** a supported mechanism on `speech:recognize`: Google's own auth page does not
       list API keys, and reading that silence as a defect would have been wrong — the probe settled it
-- [ ] 1.6 The **two remaining HTTP batch recognizers** — `.../Whisper/WhisperSpeechRecognizer.cs` and
+- [x] 1.6 The **two remaining HTTP batch recognizers** — `.../Whisper/WhisperSpeechRecognizer.cs` and
       `.../Whisper/AzureWhisperSpeechRecognizer.cs` — are a
       different shape (request/response, no frame protocol), and each already carries a committed
       recording under `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Recordings/` whose provenance sidecar
@@ -111,23 +117,36 @@ characterised* in §5.5.
       `.../Google/GoogleSpeechRecognizer.cs` **left this group on 2026-08-15** — see §1.5a, where it was
       re-probed with both controls — so this task covers two recognizers, not three, and the third is
       the worked example of what "re-probe with a control" produces
-- [ ] 1.7 Azure TTS is recorded as previously proven working. That is a **weaker evidence class** than
+- [x] 1.7 Azure TTS is recorded as previously proven working. That is a **weaker evidence class** than
       the 2026-08-15 Deepgram probe: it was not re-probed with a negative control. Either re-probe it
       or record the weaker class explicitly — do not promote it by placing it in the same column
-- [ ] 1.8 The LMNT **WebSocket** path is untouched by the HTTP finding and is **not verified**.
+- [x] 1.8 The LMNT **WebSocket** path is untouched by the HTTP finding and is **not verified**.
       `LmntSpeechSynthesizer.cs` builds `wss://api.lmnt.com/v1/ai/speech/stream` at line 265 with no
       option to override it. "Not affected by this finding" is not "checked"; say the second thing only
-      if it was done
-- [ ] 1.9 Where no capture credential exists for a surface, the answer is **not characterised — no
+      if it was done.
+      **Superseded by the checking: it was done, and this row was the reason it happened.** The task
+      said only that the surface was unverified; §3.6a/§3.6b/§3.6c then found **three** total-failure
+      defects on it — `"model": null`, the half-close, and the discarded error frame — two now fixed
+      and one open with the ADR-0049 D1 train. Its row in the conformance record reads route OK,
+      validation point `in-band` (measured), and carries the open item; the outstanding gap is that no
+      **wrong-path** control was ever run on this surface, which the record names rather than
+      smooths over. Worth keeping as the cleanest instance of this section's whole premise: refusing
+      to write "checked" was what produced the checking
+- [x] 1.9 Where no capture credential exists for a surface, the answer is **not characterised — no
       credential**, recorded as such. `docs/guides/provider-recording-protocol.md` section 7 already
       carries the per-provider terms verdicts; a `not-cleared` terms verdict blocks storing Output but
       does **not** block a route probe that stores nothing, and the two must not be conflated
-- [ ] 1.10 Every probe run in this section obeys `docs/guides/provider-recording-protocol.md` section 4:
+- [x] 1.10 Every probe run in this section obeys `docs/guides/provider-recording-protocol.md` section 4:
       no Output stored or printed, correlating identifiers never echoed. This is how the 2026-08-15
       Deepgram and Speechmatics runs were conducted and the instrument in §5 inherits it
-- [ ] 1.11 The output of this section is one table, committed, that §5.5 promotes into `docs/`. Every
+- [x] 1.11 The output of this section is one table, committed, that §5.5 promotes into `docs/`. Every
       TTS and STT surface gets a row with route status, frame status, evidence class and date. A surface
-      with no row is the failure mode this section exists to prevent
+      with no row is the failure mode this section exists to prevent.
+      **Done — `docs/guides/provider-wire-conformance.md`, 14 rows: seven TTS surfaces and seven STT.**
+      Seven TTS from six providers, because LMNT's HTTP and WebSocket paths are separate surfaces with
+      separate defects and separate evidence, and collapsing them onto one provider row is how the WS
+      path stayed unprobed until §1.8 forced it. The surfaces with nothing to report are the ones the
+      file exists for, so they get a named section rather than an omission
 
 ## 2. Class B — audio arrives on a text frame (Cartesia, ElevenLabs)
 
@@ -682,18 +701,46 @@ commit.
 
 ## 5. The conformance probe as a committed instrument
 
-- [ ] 5.1 Codify the method that produced every finding in this change: controlled comparison against
+- [x] 5.1 Codify the method that produced every finding in this change: controlled comparison against
       the live endpoint — same credential, same host, seconds apart — with a **negative control that is
-      known wrong**, so a pass is distinguishable from a probe that cannot fail. Nothing is stored
-- [ ] 5.2 Decide where it lives and record why. A probe needs live credentials and network egress, so it
+      known wrong**, so a pass is distinguishable from a probe that cannot fail. Nothing is stored.
+      **Done — `scripts/probe-provider-conformance.py`.** The module docstring states the three rules
+      it enforces structurally and why each is there: every one of them was broken by hand first. The
+      split it makes is deliberate — the parts of the method that can be wrong **without a network**
+      (what may be printed, which controls must be present, how deep a run must reach) are the parts
+      that actually failed in practice, so they are ordinary unit-tested code; the network calls sit
+      below them and stay thin. Nothing is stored: `render()` redacts, serializes and truncates, and
+      is the only sanctioned way to print a vendor payload
+- [x] 5.2 Decide where it lives and record why. A probe needs live credentials and network egress, so it
       cannot be a required PR check; ADR-0043 is the precedent for evidence produced off the PR path and
       read by a human. Candidates: a script under `tools/` plus a `Category`-gated test excluded by the
-      unit-lane filter, or a scheduled workflow. Name the rejected option
-- [ ] 5.3 The negative control is mandatory and is part of the recorded output, not a step someone
+      unit-lane filter, or a scheduled workflow. Name the rejected option.
+      **Decided: `scripts/probe-provider-conformance.py` + `scripts/tests/`.** The premise held — the
+      probe's *live* half cannot be a PR gate — but it turned out to be the smaller half. The rules
+      above the network are gated on every PR by the existing required check
+      (`python3 -m unittest discover scripts/tests`, the same lane as
+      `check-recording-redaction.py`), which is the strongest available placement for the part that
+      demonstrably broke. **Two options rejected by name.** (a) *A scheduled workflow* — it burns
+      live credentials unattended against paid endpoints, and ADR-0043's precedent is evidence
+      produced off the PR path and **read by a human**, not evidence produced on a timer and read by
+      nobody; a probe whose output nobody reads is a cost, not a control. (b) *A `Category`-gated C#
+      test under `Tests/`* — it would put live provider credentials inside the test host and inside
+      whatever a future `dotnet test` invocation inherits, and it would make the SDK's own test
+      assembly the thing that talks to a paid vendor. The Python placement keeps the credential in
+      one deliberately-run process. Consequence to accept: the live half has **no** automated gate
+      and is run by hand, per surface, with its result written into
+      `docs/guides/provider-wire-conformance.md` (§5.5)
+- [x] 5.3 The negative control is mandatory and is part of the recorded output, not a step someone
       remembers to run. Worked example to encode: `wss://api.deepgram.com/v1/speak` with the SDK's
       shipped defaults (`model=aura-2-thalia-en`, `encoding=linear16`, `sample_rate=24000`) returned
-      `101 Switching Protocols`; `/v1/speak-does-not-exist` on the same host returned `404 Not Found`
-- [ ] 5.4 The probe inherits `docs/guides/provider-recording-protocol.md` section 4 verbatim: no Output
+      `101 Switching Protocols`; `/v1/speak-does-not-exist` on the same host returned `404 Not Found`.
+      **Done — and made structural rather than procedural.** `ProbeSpec.__post_init__` raises unless
+      **both** control kinds are present, so a one-control probe cannot be constructed, let alone run;
+      the error message carries the reason (D4) so the next author meets the argument rather than the
+      rule. `Control.expected` holds the **measured** vendor answer, not an assumed one, so a control
+      that silently starts passing is loud. The Deepgram example above is encoded in `WORKED_EXAMPLES`
+      with both arms, and a test asserts every encoded example carries both kinds
+- [x] 5.4 The probe inherits `docs/guides/provider-recording-protocol.md` section 4 verbatim: no Output
       stored or printed, correlating identifiers (`request_id`, `model_uuid`) never echoed. This is how
       the 2026-08-15 run was conducted; the instrument must not be able to do otherwise.
       **A defect in that instrument, found by using it and recorded rather than quietly patched.**
@@ -703,26 +750,70 @@ commit.
       committed instrument MUST redact by key regardless of the JSON value's type, walking arrays and
       nested objects, and MUST have a test that feeds it an array-valued identifier field. This is the
       §3.12 property applied to the probe itself: the checker was more permissive than the rule it
-      was checking
-- [ ] 5.5 Promote §1's table into `docs/` as the per-surface conformance record: route status, frame
+      was checking.
+      **Done — `redact()` keys off the field name alone and walks dicts, lists and tuples at any
+      depth.** The headline regression test feeds it exactly the shape that leaked
+      (`{"additional_model_uuids": [...]}`), and a subtest sweep asserts the field is redacted for a
+      string, a list, a nested object, an int, `None` and `True` — a redactor keyed on the value's
+      type has one blind spot per type it forgot, and keying on the name has none. Key matching is
+      case-insensitive because header-style keys arrive in whatever case the vendor chose.
+      **Mutation-checked:** restoring the `isinstance(v, str)` gate fails 6 tests and the self-check
+      names the 2026-08-15 leak by date. Not a third instance of the defect:
+      `scripts/check-recording-redaction.py` is a regex-over-text scanner, so it never had a
+      value-type branch to get wrong — it is the *pattern* this instrument borrowed, not another
+      victim of it
+- [x] 5.5 Promote §1's table into `docs/` as the per-surface conformance record: route status, frame
       status, evidence class, date, negative control present. This is the artifact that makes *not
-      characterised* a visible state rather than a gap between rows
-- [ ] 5.6 Record the Deepgram TTS measurements as the instrument's worked example: `Metadata` text
+      characterised* a visible state rather than a gap between rows.
+      **Done — `docs/guides/provider-wire-conformance.md`**, indexed in `docs/guides/README.md` and
+      sited next to `provider-recording-protocol.md`, whose §4 it inherits and whose per-provider
+      terms verdicts it does not duplicate. Fourteen surfaces (seven TTS, seven STT), each with its
+      **own** date. Three decisions worth stating because each was a way to get it wrong: route and
+      frame status are **separate columns**, since four of six TTS providers were broken and no
+      column predicted the other; the evidence class is a five-value ladder where
+      `live + route control` and `live + both controls` are **different rows**, not the same row with
+      a footnote; and *Still not characterised* is a **section with names in it**, because a gap
+      between rows reads as coverage. Rejected: `docs/research/`, which is dated exploratory findings
+      — a ledger filed there lets a stale row read as current
+- [x] 5.6 Record the Deepgram TTS measurements as the instrument's worked example: `Metadata` text
       frame, then **37 binary frames of 1920 bytes** (71040 bytes, 1.48 s of linear16 @ 24 kHz), then a
       `Flushed` text frame — exactly what `DeepgramSpeechSynthesizer` expects, and explicitly **not**
       the Class B shape: no text frame carried a long string field, so there is no base64 audio hidden
-      in JSON on this surface
-- [ ] 5.7 Record one margin as a **margin, not a defect**: the receive loops ignore
+      in JSON on this surface.
+      **Done — encoded in `WORKED_EXAMPLES`, not left in prose.** Two tests hold it in place: one
+      asserts the frame shape survives in the record, and one asserts the string `Class B` is still
+      there, because the **negative** finding is the perishable half. A surface measured *not* to hide
+      base64 audio in JSON decays into silence the moment nobody restates it, and silence about a
+      surface is indistinguishable from never having looked
+- [x] 5.7 Record one margin as a **margin, not a defect**: the receive loops ignore
       `result.EndOfMessage`, so a text frame exceeding the 65536-byte receive buffer would throw an
       uncaught `JsonException` in the text handler. Largest binary frame measured 1920 bytes (34x
       headroom) and the `Metadata` frame 291 bytes — the vendor would have to grow that frame 225x to
       reach the buffer. State the numbers; do not file it as a bug and do not let a future reader mistake
-      the note for one
-- [ ] 5.8 Record that synthesis is **non-deterministic**: two runs with identical input produced 1.48 s
+      the note for one.
+      **Recorded — and now superseded in part by §2.3b, which is the whole point of writing the
+      numbers down.** This task was **correct for the surface it measured** and MUST stay on the
+      record as correct: against frames the *client* sizes — Deepgram's 1920-byte binary chunks, a
+      291-byte `Metadata` frame — 34× and 225× headroom is a margin and filing it as a bug would have
+      been wrong. What the margin rests on is the sizing party, and that is exactly what the Class B
+      fix changes: text frames are sized by the **vendor**, and ElevenLabs returned ~29 KB average
+      across 4 frames on a short probe sentence. The margin does not transfer, so §2.3b files the
+      text-frame case as a live defect without contradicting this one. **The transferable lesson is
+      the one this pair demonstrates:** a margin is a claim about a measured distribution, and it
+      expires the moment the fix changes who sets that distribution. State the condition alongside
+      the number, or the number outlives its own premise
+- [x] 5.8 Record that synthesis is **non-deterministic**: two runs with identical input produced 1.48 s
       and 1.20 s of audio. This retroactively justifies generating the `.raw` fixtures with
       `SyntheticPcm.Triangle` rather than capturing them — a captured audio fixture could not have been
-      asserted byte-for-byte, which is exactly what those fixtures do today
-- [ ] 5.9 Upgrade the evidence class of the Deepgram TTS sidecars —
+      asserted byte-for-byte, which is exactly what those fixtures do today.
+      **Recorded in `deepgram-tts/metadata-frame.provenance.json`**, next to the measurement that
+      produced it rather than in prose that outlives its context. Worth naming as a class, because it
+      inverts the usual preference: for a **schema** claim a capture beats a document, but for an
+      **audio** fixture a capture is strictly worse than a generator — it cannot be asserted
+      byte-for-byte, so it can only be checked loosely, and a loose assertion on a fixture is close to
+      no assertion. The right artifact depends on which property is under test, not on which is more
+      "real"
+- [x] 5.9 Upgrade the evidence class of the Deepgram TTS sidecars —
       `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/deepgram-tts/metadata-frame.provenance.json` and
       `flushed-frame.provenance.json`. The live field sets match the committed synthetic
       (documentation-derived) fixtures **exactly**: `Metadata` = `{type, request_id, model_name,
@@ -731,13 +822,29 @@ commit.
       place of "conforms to the docs"; the frame JSON and the `.raw` bytes are unchanged. Upgrade
       **those two sidecars only**: the probe observed exactly two frame types, so
       `warning-frame.provenance.json` and `audio-linear16-16khz.provenance.json` keep their current
-      class — the Warning frame and the error paths were never exercised
-- [ ] 5.10 The same measurement confirms `model_uuid` and `additional_model_uuids` are really sent and
+      class — the Warning frame and the error paths were never exercised.
+      **Done — `source_schema.method` on both sidecars now carries the confirmation, its date, and
+      both controls; `class` stays `synthetic` and the frame JSON, `bytes` and `sha256` are
+      untouched.** The distinction the edit preserves is the one that makes the upgrade meaningful:
+      what was promoted is the **schema** claim, not the payload. The values remain our own fiction
+      and nothing of the vendor's output was stored, so the protocol's no-storage rule holds while the
+      fixture stops resting on a page with no revision marker. The two-of-four scope is stated inside
+      the sidecars themselves, so a later reader cannot promote the other two by proximity
+- [x] 5.10 The same measurement confirms `model_uuid` and `additional_model_uuids` are really sent and
       really unmodelled by `DeepgramTtsServerMessage` — so the unmodelled-sibling test asserts a real
       condition rather than a hypothetical one. Note that where the test lives. Do **not** add
       `[JsonRequired]`: that instrument belongs to `provider-dto-robustness-fences` and its arity
-      condition is not met on a union DTO
-- [ ] 5.11 Encode the **depth** rule the Speechmatics run produced — it governs what a probe must *do*,
+      condition is not met on a union DTO.
+      **The test is `DeepgramSpeechSynthesizerTests.SynthesizeAsync_ShouldNotThrow_WhenServerSendsMetadataFrame`**
+      (`Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Deepgram/DeepgramSpeechSynthesizerTests.cs:223`), with the
+      field-set half asserted at `:156` by
+      `RecordedFixtures_ShouldCarryDocumentedFieldsAndExactByteLength_WhenReadFromRecordingsTree`.
+      What the probe changed is the test's **standing**, not its code: it was written against a
+      documented field set and now guards a measured one. Its comment already says the hand-authored
+      four-field literal it retired would have passed a parser that threw on an unmodelled sibling —
+      that is the assertion the live run promoted from plausible to real. No `[JsonRequired]` added,
+      per the boundary above
+- [x] 5.11 Encode the **depth** rule the Speechmatics run produced — it governs what a probe must *do*,
       not merely what it must compare against. A handshake-only probe is **sufficient** for a vendor
       that authenticates in the HTTP upgrade headers (Deepgram: the `101` proves the credential was
       accepted) and **insufficient** for a vendor that authenticates **in-band** (Speechmatics: the
@@ -745,7 +852,26 @@ commit.
       probe must therefore reach the vendor's first protocol exchange, not stop at the upgrade. Had this
       programme stopped at the handshake, Speechmatics STT would have been recorded as verified good
       while being entirely unusable — state that consequence in the instrument and in §6.6; it is the
-      strongest argument either has
+      strongest argument either has.
+      **Done in the instrument** — `ProbeSpec.verdict_allowed(reached_first_exchange=…)` returns
+      `(False, reason)` for a WebSocket run that stopped at the upgrade, and the reason names
+      Speechmatics and close code `4001` so the next author meets the case rather than the rule.
+      Three branches, each measured rather than assumed: HTTP always allows (the response **is** the
+      exchange); `handshake` allows a `101`-only run **because that surface's validation point was
+      itself measured**; `in-band` and `unmeasured` refuse. The last of those is the load-bearing one
+      — *unmeasured* is not *probably handshake*, and treating it as such is precisely the D3
+      inference. `UNMEASURED` is the dataclass **default**, so the refusal is what a new surface gets
+      for free. Mutation-checked: allowing a handshake-only verdict fails 3 tests and the self-check.
+      **§6.6's half stays open** — it owns the ADR text, and this task only owes it the instrument
+- [x] 5.12 **The instrument's own tests are the gate, and they are non-vacuous — checked by mutation,
+      not by inspection.** `scripts/tests/test_probe_provider_conformance.py` (178 tests in the
+      `scripts/tests` lane, all green) was run three times against a deliberately broken instrument,
+      once per rule: type-gating the redactor fails 6 tests; dropping the both-controls refusal fails
+      3; letting a handshake-only run count as a verdict fails 3. Each also fails
+      `--self-check`, which is the liveness fence borrowed from `check-recording-redaction.py` and
+      exists for the same reason — a rule edited into uselessness would otherwise let every run report
+      clean. This task is added rather than assumed because "the tests pass" is the claim this entire
+      change exists to distrust: every defect in §1–§4 shipped past a green suite
 
 ## 6. Governance, decision record and docs
 

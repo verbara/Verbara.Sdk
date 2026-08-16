@@ -68,16 +68,28 @@ All notable changes to this project will be documented in this file.
   behavioural change that belongs with the `Sdk/ADR-0049` D1 remedy rather than a route fix. The two
   fixes above remove the failures that were reaching it; they do not make the next one visible.
 
-### Known — six other clients half-close the same way, and none of them is measured
+### Known — the half-close is a class: three of three TTS sites measured, all total failures
 
 - **The LMNT half-close above is a pattern, not a one-off.** `CloseOutputAsync` immediately after
   the request appears in `ElevenLabs` TTS, `Cartesia` TTS, and the Deepgram, Speechmatics, AssemblyAI
-  and Cartesia speech recognizers. Two of these have now been measured against the live endpoint —
-  LMNT (fixed above) and Cartesia TTS — and **both returned zero bytes**, so the base rate is not
-  "occasionally harmful". The other six are *not characterised*: that describes the evidence, not a
-  prediction of breakage, and nothing here should be read as a claim that they are broken. ElevenLabs
-  is the one to watch, because it was probed on 2026-08-15 and found working — with a probe that,
-  like LMNT's, never reproduced the close sequence.
+  and Cartesia speech recognizers. **Every TTS site measured so far returns zero bytes with it and
+  audio without it** — LMNT (fixed above, 0 B → 30 688 B), Cartesia TTS (0 frames → 7 chunks,
+  32 694 B), and now ElevenLabs (0 B, close `1006` → 86 193 B, close `1000`, measured 2026-08-16).
+  Three of three.
+
+  **This supersedes the previous entry's ElevenLabs note, which said it was "probed on 2026-08-15 and
+  found working".** That probe never reproduced the client's close sequence, so it certified the
+  request and not the client — the same gap that nearly let the LMNT defect ship. Re-probed with the
+  close as the only variable, ElevenLabs fails exactly like the other two. The lesson is the entry
+  itself: *"the one to watch"* was the right instinct and an insufficient one, because the reason it
+  was worth watching was a known weakness in the evidence, and a known-weak measurement is not a
+  measurement.
+
+- **The four speech recognizers are still *not characterised*, and are a different experiment.** In
+  all four, the bare `CloseOutputAsync` is the **only** end-of-input signal the client sends — there
+  is no `eof` or terminator message beside it — so removing it does not reproduce the TTS A/B, it
+  produces a hang. Deciding these needs a three-arm design, not the two-arm one that settled TTS.
+  Nothing here should be read as a claim that they are broken.
 
 ### Fixed — the LMNT test fakes certified every one of these defects as correct behaviour
 
@@ -149,6 +161,39 @@ All notable changes to this project will be documented in this file.
   capture plan built the same `/generate` request with the voice in the body, so the instrument
   meant to establish what the vendor does could only ever have recorded the `404` — the defect one
   level up from the client.
+
+### Added — the conformance method is committed code now, not a procedure
+
+- **`scripts/probe-provider-conformance.py`** — the instrument that produced every finding above.
+  Every one of them came from the same method: send what the shipped client sends, to the real
+  endpoint, beside a control that is *known wrong*, and compare. Every one was also hidden the same
+  way — by a green suite whose fake was written by the same author as the client, so one misreading
+  of the vendor's contract passed on both sides.
+
+  It enforces three rules structurally, and each is there because it was broken by hand first.
+  **(1) Redaction is by field name, whatever the value's type.** The ad-hoc redactor used during the
+  live runs tested the value's type first, so an array-valued identifier field walked straight past
+  it and a raw identifier reached the operator's screen — the rule said "never echoed" and the code
+  said otherwise. **(2) A probe cannot be constructed without both controls.** A wrong-path control
+  proves it distinguishes routes; only an invalid-credential control proves it distinguishes
+  credentials. A run carrying one is not a weaker measurement — it is silent about the question it
+  did not ask. **(3) A handshake is not a measurement.** `101 Switching Protocols` proves the
+  credential for a vendor that authenticates in the upgrade headers and proves nothing for one that
+  authenticates in-band; Speechmatics STT answers `101` to a rejected key and closes `4001`
+  afterwards. Had this programme stopped at the handshake, that provider would have been recorded as
+  verified-good while being entirely unusable.
+
+  The parts that can be wrong **without a network** are the parts that actually failed, so they are
+  ordinary unit-tested code gated on every PR (`scripts/tests/`), with a `--self-check` liveness
+  fence for the rest. All three rules were mutation-checked: breaking each one fails tests, rather
+  than quietly producing a plausible report.
+
+- **`docs/guides/provider-wire-conformance.md`** — the per-surface record: fourteen surfaces, each
+  with route status, frame status, where the vendor validates the credential, the evidence class
+  behind the claim, and **its own date**. A single header date would have asserted a live measurement
+  for surfaces that never got one. It includes a named *Still not characterised* section, because a
+  gap between rows reads as coverage, and it keeps `live + route control` and `live + both controls`
+  as different rows rather than one row with a footnote.
 
 ### Security
 
