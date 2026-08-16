@@ -222,19 +222,22 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
         catch (OperationCanceledException) { return; /* receive loop cancelled the session: server is gone */ }
         catch (WebSocketException) { return; /* peer aborted the connection mid-send */ }
 
-        // Half-close: guarded timeout to avoid hanging when the server already closed.
-        if (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
-        {
-            using var closeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            closeCts.CancelAfter(TimeSpan.FromSeconds(2));
-            try
-            {
-                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", closeCts.Token)
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) { /* server is gone, give up */ }
-            catch (WebSocketException) { /* peer already closed abruptly */ }
-        }
+        // No half-close here, and that is the fix — not an omission.
+        //
+        // This method used to call CloseOutputAsync(NormalClosure) once eof was sent. Measured
+        // against the live endpoint on 2026-08-15, that produces **zero audio bytes**: the server
+        // treats the client's Close frame as the end of the session and tears it down before
+        // emitting anything, and the receive loop sees ConnectionClosedPrematurely. The identical
+        // sequence without the half-close returns 30 688 B — 0.959 s of 16 kHz PCM — and the server
+        // closes NormalClosure on its own once the audio is out. The controls were the two runs.
+        //
+        // `eof` already is the end-of-input signal at the application protocol level; the WebSocket
+        // half-close was a second, redundant one that the vendor reads as "abandon the request".
+        // The session now ends when the server closes, which is what the receive loop already
+        // waits for, and the caller's CancellationToken still bounds it.
+        //
+        // CartesiaSpeechSynthesizer has the same defect for the same reason — it is tracked
+        // separately because its fix belongs with that provider's frame-type work.
     }
 
     private static async Task ReceiveWsFramesAsync(

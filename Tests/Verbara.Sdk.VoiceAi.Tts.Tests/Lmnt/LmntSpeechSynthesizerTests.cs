@@ -154,6 +154,30 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task SynthesizeAsync_ShouldNotHalfCloseTheSocket_AfterSendingEof()
+    {
+        // Third total defect on the same transport, and the one the other two hid. After `eof` the
+        // synthesizer used to call CloseOutputAsync. Measured against the live endpoint on
+        // 2026-08-15, that yields **zero** audio bytes and ConnectionClosedPrematurely: the server
+        // reads the Close frame as "abandon the request". The control run differed in that single
+        // step and received 30 688 B — 0.959 s of 16 kHz PCM — then closed NormalClosure itself.
+        //
+        // `eof` is already the end-of-input signal; the half-close was a second, contradictory one.
+        //
+        // This asserts on what the client SENT rather than on how a server reacts, because this
+        // fake cannot reproduce the vendor's reaction without racing the send. Reading the flag
+        // after the stream completes is ordered by causality, not luck: the stream cannot complete
+        // until the server closes, the server closes only after sending audio, and a client Close
+        // would necessarily precede that audio.
+        var synth = BuildSynthesizer();
+        var audio = await synth.SynthesizeAsync("hello", AudioFormat.Slin16Mono16kHz).ToListAsync();
+
+        _server.ClientSentCloseFrame.Should().BeFalse(
+            "a Close frame after eof makes the live endpoint tear the session down with zero audio");
+        audio.Should().NotBeEmpty();
+    }
+
+    [Fact]
     public async Task SynthesizeAsync_ShouldSendTextMessage_WithCorrectText()
     {
         var synth = BuildSynthesizer();

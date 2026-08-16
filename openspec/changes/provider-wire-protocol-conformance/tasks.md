@@ -68,7 +68,15 @@ characterised* in §5.5.
       leaves the weakest evidence under the most load. Two outcomes, both useful: a `401` at the
       handshake confirms what was assumed and costs one probe, or a `101` followed by an error frame
       makes it **four** in-band surfaces and puts `DeepgramSpeechRecognizer.cs:120` from §4.16 in the
-      live-symptom set rather than the latent one. Record whichever, with its date
+      live-symptom set rather than the latent one. Record whichever, with its date.
+      **Ran 2026-08-15: the first outcome. Deepgram validates at the handshake.** A deliberately
+      malformed key returns `HTTP 401` at the WebSocket upgrade on **both** `/v1/listen` (STT) and
+      `/v1/speak` (TTS); the valid key returns `101` on both, on the same host, in the same run. The
+      §1.3 row's validation point moves from *inferred* to *measured* — the inference happened to be
+      right, which is not the same as having been justified, and D3 is what makes the difference
+      recordable. Consequence: `DeepgramSpeechRecognizer.cs:120` stays **latent** (no in-band failure
+      frame can reach it, because failures never get in-band), so §4.16 keeps it as a code defect
+      without a live symptom rather than promoting it
 - [ ] 1.4 **Speechmatics STT — probed 2026-08-15 to the first protocol exchange, and it does not
       authenticate.** The route resolves and the upgrade completes; the credential is then rejected
       in-band with close code `4001 not_authorised`. That is the defect fixed in §4.1–§4.4 — in this
@@ -132,6 +140,24 @@ characterised* in §5.5.
       sidecar closes **the task and not the verification**: documentation is what produced these defects
       and would not have caught any of the frame-type ones, so the surface stays *not characterised* in
       the §5.5 record and §7.7 applies
+- [x] 2.1a **Cartesia TTS frame inventory — measured live 2026-08-15, so §2.1 no longer closes on a
+      document.** The §1.1 row recorded the frame half as *uncharacterised* because the earlier probe
+      sent a malformed request. Three findings, and the frame type was the least of them.
+      **(a)** The shipped request omits `context_id`; the endpoint answers
+      `{"type":"error","status_code":400,"done":true,"error":"context_id is invalid: …"}` and sends no
+      audio. A prior hypothesis that `"continue": null` caused this was **refuted** by an A/B — both
+      forms produced the identical error. **(b)** `SendRequestAsync` calls `CloseOutputAsync`
+      immediately after the request; with it, **0 frames** arrive, and the control that differed only
+      in that step received 7 chunks + `done`, 32 694 B, in 1.022 s. This is the §3.6c class, second
+      confirmed instance. **(c)** Only then does the documented defect appear: audio arrives base64 in
+      field `data` on `type="chunk"` **text** frames (keys `context_id, data, done, flush_id,
+      status_code, step_time, type`; the terminator carries `context_id, done, status_code, type`),
+      and the loop reads only `Binary`. Controls: wrong path → `HTTP 404` at the handshake, invalid
+      credential → `HTTP 401` at the handshake, so Cartesia TTS is a **handshake**-validation surface
+      for the ADR-0049 scoreboard, measured per D3. **None of (a)–(c) is fixed here** — §2.1/§2.2 own
+      the fix and this task only replaces their evidence basis; (a) and (b) are new defects that were
+      not in this change's scope when it was written and MUST be added to §2.1's closing conditions,
+      because fixing only the frame type would still ship a provider that produces silence
 - [ ] 2.2 `src/Verbara.Sdk.VoiceAi.Tts/Internal/VoiceAiTtsJsonContext.cs` — `CartesiaTtsControlMessage`
       models only `type`. Add the audio-carrying member (or a separate chunk DTO), register it in the
       context, and keep the discriminator branch that already recognises `done` / `error`
@@ -261,6 +287,36 @@ characterised* in §5.5.
       surface. Fixing it changes behaviour — synthesis that silently yields nothing would start
       throwing — so it belongs with the ADR-0049 train and its D1 remedy, not inside a route fix.
       **Closes when** ADR-0049's D1 remedy covers this site, or a decision records why it does not
+- [x] 3.6c **A third total defect on the same transport, found only because the fix for the second one
+      was audited against the client instead of against the probe.** §3.6a was verified with a probe
+      that reproduced the init message but *not* the client's close sequence, so it proved the init
+      message was acceptable and nothing more. `grep CloseOutputAsync src/` then showed
+      `SendWsRequestAsync` half-closes the socket immediately after `eof` — a step the probe never
+      made. Re-probed with that step as the only variable, 2026-08-15: **A** (init/text/flush/eof +
+      `CloseOutputAsync`, exactly what shipped) → **0 binary bytes, 0 text frames**, receive loop ends
+      `ConnectionClosedPrematurely`; **B** (identical, half-close removed) → **30 688 B = 0.959 s of
+      16 kHz PCM**, server closes `NormalClosure` itself. The vendor reads the client's Close frame as
+      "abandon the request". `eof` is already the end-of-input signal; the half-close was a second,
+      contradictory one. Removed, with a regression guard and a mutation check (restoring the call
+      fails the guard). **Two consequences worth keeping.** (a) The verification rule tightens: a probe
+      that reproduces the *message* is not a probe of the *client* — it must reproduce the whole
+      sequence, close included, or it certifies only the part it copied. (b) The §3.12 property again,
+      and the fake could not carry it: `LmntWsFakeServer` cannot reproduce the vendor's reaction
+      without racing its own send, so it records `ClientSentCloseFrame` and the test asserts on what
+      the client *sent*. Reading it after the stream completes is ordered by causality, not luck —
+      the stream cannot complete until the server closes, the server closes only after sending audio,
+      and a client Close necessarily precedes that audio. **The same defect is measured on Cartesia
+      (§2) and unmeasured on ElevenLabs TTS and four STT clients — see §3.6d**
+- [ ] 3.6d **The half-close is a class, not an LMNT bug, and six sites are unmeasured.**
+      `grep -rn CloseOutputAsync src/Verbara.Sdk.VoiceAi.Tts src/Verbara.Sdk.VoiceAi.Stt` returns, besides
+      the two now measured (LMNT §3.6c fixed, Cartesia TTS §2 measured-not-fixed): `ElevenLabs`
+      TTS, `DeepgramSpeechRecognizer`, `SpeechmaticsSpeechRecognizer`, `AssemblyAiSpeechRecognizer`,
+      `CartesiaSpeechRecognizer`. Two of two measured sites were **total** — zero bytes, no exception —
+      so the base rate here is not "occasionally harmful". Every one of these is *not characterised*:
+      that is a statement about the evidence, not a prediction of breakage. ElevenLabs is the sharpest
+      case, because §1 records it as measured-good on 2026-08-15 — measured with a probe that, like
+      §3.6a's, did not reproduce the close sequence. **Closes when** each site has an A/B run with the
+      half-close as the only variable, or a decision records why a site is exempt
 - [x] 3.7 The media-type delta is the one with consumer-visible consequence: `SynthesizeHttpAsync`
       chunks the response body straight out as if it were raw PCM, and MP3 is not chunkable that way.
       `LmntTtsOptions.Format` defaults to `raw`, but whether sending `format: "raw"` on the JSON body
@@ -541,7 +597,15 @@ commit.
       `101 Switching Protocols`; `/v1/speak-does-not-exist` on the same host returned `404 Not Found`
 - [ ] 5.4 The probe inherits `docs/guides/provider-recording-protocol.md` section 4 verbatim: no Output
       stored or printed, correlating identifiers (`request_id`, `model_uuid`) never echoed. This is how
-      the 2026-08-15 run was conducted; the instrument must not be able to do otherwise
+      the 2026-08-15 run was conducted; the instrument must not be able to do otherwise.
+      **A defect in that instrument, found by using it and recorded rather than quietly patched.**
+      The ad-hoc redactor used during the 2026-08-15 runs matched only *string-valued* identifier
+      fields, so `additional_model_uuids` — an **array** of them — passed straight through and a raw
+      identifier reached tool output. "Never echoed" was true of the rule and false of the code. The
+      committed instrument MUST redact by key regardless of the JSON value's type, walking arrays and
+      nested objects, and MUST have a test that feeds it an array-valued identifier field. This is the
+      §3.12 property applied to the probe itself: the checker was more permissive than the rule it
+      was checking
 - [ ] 5.5 Promote §1's table into `docs/` as the per-surface conformance record: route status, frame
       status, evidence class, date, negative control present. This is the artifact that makes *not
       characterised* a visible state rather than a gap between rows

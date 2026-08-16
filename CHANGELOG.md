@@ -19,6 +19,20 @@ All notable changes to this project will be documented in this file.
   `WebSocket`". Probing the WebSocket surface showed the default path was independently broken.
   Both transports failed, for unrelated reasons, for everyone.
 
+- **`SendWsRequestAsync` no longer half-closes the socket after `eof`, which cost all the audio.**
+  The client sent its four request frames and then called `CloseOutputAsync(NormalClosure)`. The
+  endpoint reads that Close frame as "abandon the request": measured A/B on 2026-08-15 with the
+  half-close as the only variable, it returns **0 bytes** and the receive loop ends
+  `ConnectionClosedPrematurely`, while the identical sequence without it returns 30 688 B — 0.959 s
+  of 16 kHz PCM — and the server closes `NormalClosure` on its own. `eof` is already the
+  end-of-input signal; the half-close was a second, contradictory one.
+
+  **This is a third independent blocker on the default transport, and it was nearly missed.** The
+  `model: null` fix above was verified with a probe that reproduced the init message but not the
+  client's close sequence — so it proved the message was acceptable, and nothing more. Fixing only
+  those two would have shipped a WebSocket path that still produced silence. The rule that follows:
+  a probe that reproduces the *message* is not a probe of the *client*.
+
 - **The HTTP transport POSTs to `/v1/ai/speech/bytes`, not `/v1/ai/speech/generate`.** The shipped
   route answers `404 {"detail":"Not Found"}` — byte-identically to a path that does not exist,
   confirmed against a wrong-path control on the same host, with an invalid-credential control
@@ -54,7 +68,18 @@ All notable changes to this project will be documented in this file.
   behavioural change that belongs with the `Sdk/ADR-0049` D1 remedy rather than a route fix. The two
   fixes above remove the failures that were reaching it; they do not make the next one visible.
 
-### Fixed — the LMNT test fakes certified both defects
+### Known — six other clients half-close the same way, and none of them is measured
+
+- **The LMNT half-close above is a pattern, not a one-off.** `CloseOutputAsync` immediately after
+  the request appears in `ElevenLabs` TTS, `Cartesia` TTS, and the Deepgram, Speechmatics, AssemblyAI
+  and Cartesia speech recognizers. Two of these have now been measured against the live endpoint —
+  LMNT (fixed above) and Cartesia TTS — and **both returned zero bytes**, so the base rate is not
+  "occasionally harmful". The other six are *not characterised*: that describes the evidence, not a
+  prediction of breakage, and nothing here should be read as a claim that they are broken. ElevenLabs
+  is the one to watch, because it was probed on 2026-08-15 and found working — with a probe that,
+  like LMNT's, never reproduced the close sequence.
+
+### Fixed — the LMNT test fakes certified every one of these defects as correct behaviour
 
 - **`LmntHttpFakeServer` now matches on method and path**, serving only `POST /v1/ai/speech/bytes`
   and answering the live `404 {"detail":"Not Found"}` otherwise, with an unmatched-request counter
@@ -67,6 +92,12 @@ All notable changes to this project will be documented in this file.
   init message and then replies with audio regardless of what that message says, so the suite
   asserted the init was *sent*, never that it was *acceptable*. Two regression tests now pin the
   `model` field's absence when unset and its presence when set.
+
+  It also answered the client's Close frame with a full audio stream, where the live endpoint
+  answers with nothing. Reproducing that reaction faithfully would mean racing the fake's own send,
+  so the fake records `ClientSentCloseFrame` and the test asserts on what the client *sent* instead
+  — a check whose ordering is fixed by causality rather than timing. A mutation check confirms it:
+  restoring `CloseOutputAsync` fails the new guard.
 
 - **`scripts/capture-provider-recording.py` no longer reproduces the LMNT defect.** `lmnt_http_plan`
   hardcoded the same `404` route and the `raw` format, so a capture run would have recorded a 404

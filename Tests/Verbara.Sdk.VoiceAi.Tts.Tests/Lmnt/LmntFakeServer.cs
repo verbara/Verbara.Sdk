@@ -87,6 +87,20 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     /// <summary>Binary audio frames to stream back to the client.</summary>
     public List<byte[]> AudioFramesToSend { get; } = [];
 
+    /// <summary>
+    /// Whether the client ever sent a WebSocket Close frame. The live endpoint treats one as
+    /// "abandon the request" and tears the session down having emitted nothing, so a client that
+    /// sends it gets zero audio — measured 2026-08-15, against a control run that omitted only
+    /// this step and received 30 688 B. This fake cannot reproduce that reaction without a timing
+    /// race, so it records the client's behaviour instead and lets a test assert on it directly.
+    /// </summary>
+    /// <remarks>
+    /// Reading this after <c>SynthesizeAsync</c> completes is deterministic, not a race: the
+    /// client's stream cannot complete until the server closes, the server closes only after
+    /// sending audio, and any client Close precedes that audio. Causality orders it.
+    /// </remarks>
+    public bool ClientSentCloseFrame { get; private set; }
+
     /// <summary>Send the recorded <c>finish</c> control frame as a text message after all audio frames.</summary>
     public bool SendFinishTerminator { get; set; } = true;
 
@@ -190,7 +204,11 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
                     _requestComplete.TrySetResult();
             }
             else if (result.MessageType == WebSocketMessageType.Close)
+            {
+                // Recorded, not tolerated: against the live endpoint this frame costs all the audio.
+                ClientSentCloseFrame = true;
                 break;
+            }
         }
     }
 
@@ -218,10 +236,13 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
             // Tests that verify cancellation set this flag so the synthesizer's
             // channel-reader is blocked when the test CTS fires.
             //
-            // Awaiting only the receive loop is not enough: the client half-closes
-            // (CloseOutputAsync) immediately after EOF, which ends that loop while the socket is
-            // still perfectly readable. Returning there would tear the session down and complete
-            // the client's stream — the one thing a cancellation test must never see.
+            // Awaiting only the receive loop is not enough: it ends on any Close or read fault
+            // while the socket is still perfectly writable. Returning there would tear the session
+            // down and complete the client's stream — the one thing a cancellation test must never
+            // see. (It used to end because the client half-closed after EOF; that step was removed
+            // from the synthesizer once it was measured to cost all the audio. The delay must stay
+            // regardless — what this branch owes the test is a socket that never completes on its
+            // own, not a reaction to one particular client frame.)
             try { await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { /* disposed: release the socket */ }
             try { await receiveTask.ConfigureAwait(false); } catch { }
