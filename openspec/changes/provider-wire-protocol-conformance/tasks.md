@@ -226,40 +226,129 @@ characterised* in §5.5.
       `<see href="https://docs.speechmatics.com/tts-api-ref"/>` is a **dead link (404)**. Replace it
       with a live URL or remove the `href`; XML docs ship to consumers of a public MIT package, so a
       dead reference is a shipped defect, not a cosmetic one
-- [ ] 3.6 `src/Verbara.Sdk.VoiceAi.Tts/Lmnt/LmntSpeechSynthesizer.cs` line 294 hardcodes
+- [x] 3.6 `src/Verbara.Sdk.VoiceAi.Tts/Lmnt/LmntSpeechSynthesizer.cs` line 294 hardcodes
       `https://api.lmnt.com/v1/ai/speech/generate` — there is no option for it — and posts
       `FormUrlEncodedContent`. That returns `404`. A controlled comparison with the same credential
       seconds apart got `200 audio/mpeg` from the documented `/v1/ai/speech/bytes` with a **JSON** body.
       **Three deltas: path, body encoding, response media type.** Fix all three or state which was
-      deferred and why
-- [ ] 3.7 The media-type delta is the one with consumer-visible consequence: `SynthesizeHttpAsync`
+      deferred and why.
+      **Done 2026-08-15 — but "three deltas" was wrong, and the probe is what says so.** A form-encoded
+      body posted to `/v1/ai/speech/bytes` returns `200` with a payload byte-identical to the JSON one,
+      so **body encoding was never a delta**; it was inferred from the vendor documenting JSON, which is
+      evidence about the docs, not about the endpoint. Two real deltas: route and format (§3.7). The
+      route moved to `/v1/ai/speech/bytes`; the form encoding is **deliberately kept**, because swapping
+      it would be an unmeasured change riding along with a measured fix. §3.8 is closed as unnecessary
+      on that basis, not deferred
+- [x] 3.6a **The default transport is broken too, and nothing in this change predicted it.** §3.6–§3.11
+      were written on the premise that only the HTTP fallback was defective. Probing the WebSocket
+      surface — done only because §3.7 forced the question "what does `raw` mean *here*" — showed the
+      init message serializes `"model": null` whenever `LmntTtsOptions.Model` is unset, which is the
+      default. The endpoint validates `model` against a literal set, rejects an explicit null, and
+      closes `1002 protocol error` having sent **zero audio frames**. Fixed by
+      `[JsonIgnore(Condition = WhenWritingNull)]` on `LmntInitMessage.Model`, with two regression tests
+      (field absent when unset, present when set) and a mutation check confirming the guard fails
+      without the attribute. **How it hid:** `LmntWsFakeServer` records the init message and then
+      replies with audio regardless of what it says, so the suite asserted the message was *sent*, never
+      that it was *acceptable* — the §3.12 property, one level further in than §3.12 states it
+- [ ] 3.6b **The error frame that says why is thrown away — not fixed here, and it is `Sdk/ADR-0049`
+      D1 measured on a sixth surface.** `LmntSpeechSynthesizer.ReceiveWsFramesAsync` terminates on
+      `notification.Error == "error"`, comparing an error *message* against the literal string
+      `"error"`, which no real message equals. Both live failures — `{"error":"model: Input should be
+      'aurora', …"}` from §3.6a and `{"error":"Invalid API key"}` from the invalid-credential control —
+      therefore fall through, the socket then closes `1002`, `catch (WebSocketException) { break; }`
+      swallows it, and the caller gets an **empty stream and no exception**. That is D1 (silent discard
+      of a failure frame) and D2 (zero output as success) together, with a D4 control, on the LMNT WS
+      surface. Fixing it changes behaviour — synthesis that silently yields nothing would start
+      throwing — so it belongs with the ADR-0049 train and its D1 remedy, not inside a route fix.
+      **Closes when** ADR-0049's D1 remedy covers this site, or a decision records why it does not
+- [x] 3.7 The media-type delta is the one with consumer-visible consequence: `SynthesizeHttpAsync`
       chunks the response body straight out as if it were raw PCM, and MP3 is not chunkable that way.
       `LmntTtsOptions.Format` defaults to `raw`, but whether sending `format: "raw"` on the JSON body
       yields L16 rather than MP3 is **not verified**. Resolve that by probe before choosing between
-      decoding, rejecting, or documenting the format — it decides the shape of the fix
-- [ ] 3.8 A JSON body needs a request DTO: add it to
+      decoding, rejecting, or documenting the format — it decides the shape of the fix.
+      **Probed 2026-08-15. `raw` does not mean one thing — it means two, by transport.** Over HTTP
+      `/v1/ai/speech/bytes` it is an MP3 frame stream (MPEG-2 Layer III, 16 kHz, 96 kbps, mono; a frame
+      walk consumes 100% of the bytes) served under `Content-Type: application/vnd.lmnt.audio-fp32`, a
+      header that describes neither MP3 nor the payload. Over the WebSocket stream the same `raw`
+      **is** 16-bit PCM (15 344 samples at 16 kHz, peak 21 949, 99% non-zero). `format=pcm_s16le`
+      returns headerless int16 on **both** and is now the default — one value, correct everywhere,
+      no decoder added. Recorded as a vendor inconsistency in `LmntTtsOptions.Format` XML docs.
+      Two controls ran: `format=mp3` (confirms the classifier separates the two) and an
+      invalid-credential control (§3.7a). Also measured: the accepted format set is
+      `aac, mp3, raw, wav, ulaw, webm, pcm_s16le`, and `ulaw` arrives inside a RIFF/WAV container
+      rather than as bare G.711 — a second trap for a telephony caller, documented, not fixed here
+- [x] 3.7a **Invalid-credential control (D4), both LMNT surfaces, 2026-08-15.** HTTP `/v1/ai/speech/bytes`
+      answers `403 {"error":"Invalid API key"}` — an application-level JSON body, unlike Speechmatics
+      TTS's `401 text/html` from nginx at the edge. WebSocket answers a text frame
+      `{"error":"Invalid API key"}` then closes `1002`, i.e. **in-band**, making LMNT WS an in-band
+      validation surface for the ADR-0049 scoreboard — measured, not inferred from credential
+      placement, per D3. The WS control was run with `model` omitted so the credential was the only
+      variable; run with the shipped init it would have been masked by §3.6a's model error, which is
+      the control-hygiene point ADR-0049 D4 is about
+- [x] 3.7b **A correction about the instrument, recorded because the mistake is instructive.** The first
+      probe's magic-byte classifier reported the HTTP `raw` payload as MP3. That was then dismissed as a
+      false positive on the strength of the vendor's `Content-Type: application/vnd.lmnt.audio-fp32`
+      header, and a second probe was written to characterise it as fp32 — which refuted fp32 outright
+      (peak 3.4e38, only 58% of samples inside [-1,1]). A third probe walked the MP3 frame headers and
+      consumed 100% of the bytes: the **first reading was right and the vendor's header is wrong**. The
+      lesson is the change's own epistemic rule applied to a header instead of a doc — a vendor
+      asserting a media type is evidence about the assertion, not about the bytes. Only the frame walk,
+      with `format=mp3` as its control, settled it
+- [x] 3.8 A JSON body needs a request DTO: add it to
       `src/Verbara.Sdk.VoiceAi.Tts/Internal/VoiceAiTtsJsonContext.cs` and register it;
       `FormUrlEncodedContent` and its `Dictionary<string, string>` go away. The DTO is AOT-source-gen
-      only — no reflection, no anonymous objects
-- [ ] 3.9 The 3.5 rule — XML docs ship to consumers of a public MIT package, so a wrong reference in
+      only — no reflection, no anonymous objects.
+      **Closed 2026-08-15 as not needed.** This task existed only to serve the JSON body §3.6 assumed
+      was required; the probe showed form encoding returns `200` with an identical payload, so the DTO
+      would be new public-surface churn justified by nothing measured. `FormUrlEncodedContent` stays.
+      A different edit did land in `VoiceAiTtsJsonContext.cs` — see §3.6a — but for the WS init
+      message, not an HTTP request DTO
+- [x] 3.9 The 3.5 rule — XML docs ship to consumers of a public MIT package, so a wrong reference in
       them is a shipped defect — applied to LMNT, where it is the `404` route itself that is documented:
       `src/Verbara.Sdk.VoiceAi.Tts/Lmnt/LmntTtsOptions.cs` line 20 tells every consumer the HTTP
       transport "Uses `https://api.lmnt.com/v1/ai/speech/generate`", and
       `src/Verbara.Sdk.VoiceAi.Tts/Lmnt/LmntSpeechSynthesizer.cs` line 26 repeats it in the class-level
       `<remarks>`, adding "with form-encoded body fields". Correct both to `/v1/ai/speech/bytes` and a
       JSON body inside the 3.6 commit. A corrected route still documented as the broken one ships the
-      defect to every reader of the package
-- [ ] 3.10 Decide whether the HTTP base URI becomes an option — this change decides it, it is not
+      defect to every reader of the package.
+      **Done 2026-08-15**, with one departure: "and a JSON body" is not applied, because §3.6 measured
+      the form body to be correct. Both sites now name `/v1/ai/speech/bytes` and keep "form-encoded".
+      Two further XML-doc defects were fixed in the same pass, both of the same class — docs that
+      shipped an untrue statement to consumers of a public MIT package: `Format` advertised `raw` as
+      "raw PCM — telephony-friendly", which is false on the HTTP transport, and `Model` told the reader
+      to "verify available model identifiers at integration test time" when the API enumerates them on
+      rejection (`aurora`, `blizzard`, `blizzard-2.0`, `blizzard-2.1`, `blizzard-dialogue`, as of
+      2026-08-15)
+- [x] 3.10 Decide whether the HTTP base URI becomes an option — this change decides it, it is not
       pre-decided here. `LmntTtsOptions` has none today, and the WebSocket URI at line 265 is hardcoded
       for the same reason. Note the true baseline before arguing from consistency: only three TTS
       providers expose a `BaseUri` option at all — Cartesia, Deepgram TTS and Speechmatics TTS —
       so "like every other provider" is not an available argument. If the decision covers both LMNT
       URIs, say so and change both; otherwise change only the HTTP one and leave the WS path untouched,
-      since §1.8 records it as unverified rather than known-good
-- [ ] 3.11 Blast radius, stated honestly in the commit and the CHANGELOG: `LmntTtsOptions.Transport`
+      since §1.8 records it as unverified rather than known-good.
+      **Decided 2026-08-15: no. Neither URI becomes an option.** Rejected alternatives, by name:
+      (a) *a public `BaseUri` mirroring Speechmatics TTS* — Speechmatics' had to change because it was
+      already public and its default host was wrong; LMNT has no such obligation, and adding public
+      surface to a MIT package is a permanent commitment bought with nothing measured;
+      (b) *one option covering both URIs* — the WS path is now measured, but changing it is out of this
+      commit's scope and coupling the two would drag it in. What did change is the **shape** of the
+      existing internal test seam: it took a full URL, so the fake supplied the route and the client's
+      route was never exercised. It now takes an origin, and the client always appends `HttpRoute`.
+      That is the property that failed here, and it costs no public API. Consequence for callers:
+      none — nothing public was added, removed or renamed
+- [x] 3.11 Blast radius, stated honestly in the commit and the CHANGELOG: `LmntTtsOptions.Transport`
       defaults to `WebSocket`, so only callers who opt into HTTP are affected. Speechmatics TTS, by
-      contrast, has never worked for anyone
-- [ ] 3.12 `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Lmnt/LmntFakeServer.cs` and
+      contrast, has never worked for anyone.
+      **This is wrong, and the correction is the finding.** Probing the WebSocket surface — which no
+      task in this change asked for, because §3.6–§3.11 all assumed the default transport was fine —
+      showed the default is *also* completely broken, and for an unrelated reason. `LmntTtsOptions.Model`
+      defaults to `null`, `VoiceAiTtsJsonContext` declares no `JsonSourceGenerationOptions`, so the init
+      message serializes `"model": null`; the endpoint validates that field against a literal set,
+      rejects an explicit null, and closes `1002 protocol error` with **zero audio frames**. So LMNT TTS
+      has never worked for anyone either, on **either** transport, at shipped defaults. The honest
+      blast radius is: every LMNT caller. See §3.6a. Speechmatics TTS is no longer the only
+      never-worked provider in this change — it is one of two
+- [x] 3.12 `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Lmnt/LmntFakeServer.cs` and
       `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Speechmatics/SpeechmaticsFakeServer.cs` — the
       fakes must **match on method and path** so a misrouted request fails to match instead of being
       served anyway. Without that, this entire defect class stays invisible to the suite no matter how
@@ -267,8 +356,13 @@ characterised* in §5.5.
       its HTTP substrate; reuse it rather than reimplementing it.
       **Speechmatics half done** (2026-08-16): `SpeechmaticsFakeServer` now matches on method and
       path and returns `404` otherwise, with three regression tests. `LmntFakeServer` lands in the
-      §3.6 commit under §3.13
-- [ ] 3.13 LMNT and Speechmatics TTS land as **two separate commits**
+      §3.6 commit under §3.13.
+      **LMNT half done (2026-08-15).** `LmntHttpFakeServer` now records method and path, serves only
+      `POST /v1/ai/speech/bytes`, answers everything else the live `404 {"detail":"Not Found"}`, and
+      counts unmatched requests so a route assertion cannot pass on a stale recorded body. A mutation
+      test measured what the old fake was hiding: restoring the `/generate` route fails **five** of the
+      HTTP tests, not one — the whole HTTP suite had been green against an endpoint that returns 404
+- [x] 3.13 LMNT and Speechmatics TTS land as **two separate commits**
 - [x] 3.14 **The capture instrument carries the same broken request as the client — fix it in the
       §3.1 commit, not after.** `scripts/capture-provider-recording.py` line 851 puts `"voice":
       "eleanor"` in the JSON body and line 861 targets `https://preview.tts.speechmatics.com/generate`,
@@ -279,7 +373,7 @@ characterised* in §5.5.
       fixture `wiremock-http-provider-substrate` §4.5 is waiting on, pinning the defect into the
       substrate that exists to catch it. **Closes when** the plan's URL and body match the request
       §3.1 makes the client send, and a run produces a `200 audio/wav` artifact rather than a 404
-- [ ] 3.15 **Same for LMNT, inside the §3.6 commit.** `lmnt_http_plan`
+- [x] 3.15 **Same for LMNT, inside the §3.6 commit.** `lmnt_http_plan`
       (`scripts/capture-provider-recording.py` line 910) hardcodes the 404 route at lines 933–934
       (`url` and `endpoint_template`, both `https://api.lmnt.com/v1/ai/speech/generate`) and posts
       form-encoded fields, so it carries both halves of the §3.6 defect — wrong route *and* wrong body

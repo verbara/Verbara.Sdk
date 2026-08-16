@@ -4,6 +4,74 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: LMNT TTS has never worked either, on either transport
+
+- **`LmntSpeechSynthesizer` no longer sends `"model": null`, which the WebSocket endpoint rejects
+  outright.** `LmntTtsOptions.Model` defaults to `null` and the init message serialized it
+  explicitly; the API validates that field against a literal set, refuses an explicit null, and
+  closes `1002 protocol error` after sending **zero audio frames**. WebSocket is the default
+  transport, so this was every LMNT caller at stock configuration, since the provider shipped.
+  `LmntInitMessage.Model` now carries `[JsonIgnore(Condition = WhenWritingNull)]` and the field is
+  absent unless configured.
+
+  **This corrects an earlier, narrower reading.** The HTTP route defect below was scoped on the
+  premise that "only callers who opt into HTTP are affected, because `Transport` defaults to
+  `WebSocket`". Probing the WebSocket surface showed the default path was independently broken.
+  Both transports failed, for unrelated reasons, for everyone.
+
+- **The HTTP transport POSTs to `/v1/ai/speech/bytes`, not `/v1/ai/speech/generate`.** The shipped
+  route answers `404 {"detail":"Not Found"}` — byte-identically to a path that does not exist,
+  confirmed against a wrong-path control on the same host, with an invalid-credential control
+  returning `403 {"error":"Invalid API key"}` (`Sdk/ADR-0048`, `Sdk/ADR-0049` D4). Probed live
+  2026-08-15.
+
+  The form-encoded body is **kept**. The vendor documents JSON, and this fix was planned to switch,
+  but a form body posted to the corrected route returns `200` with a byte-identical payload — so the
+  encoding was never part of the defect, and changing it would have been an unmeasured edit riding
+  along with a measured one.
+
+### Changed — BREAKING: `LmntTtsOptions.Format` now defaults to `pcm_s16le`
+
+- **The default moves from `raw`, which does not mean raw PCM on every transport.** Measured
+  2026-08-15: over WebSocket, `format=raw` is 16-bit PCM as assumed; over
+  `POST /v1/ai/speech/bytes` the same value returns an **MP3 frame stream** (MPEG-2 Layer III,
+  16 kHz, 96 kbps, mono) under a `Content-Type: application/vnd.lmnt.audio-fp32` header that
+  describes neither. `SynthesizeHttpAsync` streams the body through unchanged, so HTTP callers were
+  handed MP3 bytes labelled `Slin16`. `pcm_s16le` returns headerless int16 PCM on **both**
+  transports — one value, correct everywhere, and no decoder added to the SDK.
+
+  Callers who set `Format` explicitly are unaffected. Callers relying on the default get working
+  PCM on HTTP and byte-equivalent audio on WebSocket. Also worth knowing before you reach for it:
+  `format=ulaw` arrives wrapped in a RIFF/WAV container, not as bare G.711.
+
+### Known — LMNT WebSocket discards the error frame that explains a failure
+
+- **A failed LMNT WebSocket synthesis still yields an empty stream and no exception.**
+  `ReceiveWsFramesAsync` terminates on `notification.Error == "error"`, comparing an error *message*
+  against the literal string `"error"` — which no real message equals. Both live failures observed
+  (`{"error":"model: Input should be …"}` and `{"error":"Invalid API key"}`) fall through, the
+  socket closes, and the transport exception is swallowed. Not fixed here: making it throw is a
+  behavioural change that belongs with the `Sdk/ADR-0049` D1 remedy rather than a route fix. The two
+  fixes above remove the failures that were reaching it; they do not make the next one visible.
+
+### Fixed — the LMNT test fakes certified both defects
+
+- **`LmntHttpFakeServer` now matches on method and path**, serving only `POST /v1/ai/speech/bytes`
+  and answering the live `404 {"detail":"Not Found"}` otherwise, with an unmatched-request counter
+  so a route assertion cannot pass on a stale body. It previously never inspected the path. A
+  mutation test measured the cost: restoring the old route fails **five** HTTP tests, so the entire
+  suite had been green against an endpoint that returns 404 — one test even named
+  `ShouldPostToGenerateEndpoint` while asserting nothing but a header.
+
+- **`LmntWsFakeServer`'s blind spot is now covered by tests rather than the fake.** It records the
+  init message and then replies with audio regardless of what that message says, so the suite
+  asserted the init was *sent*, never that it was *acceptable*. Two regression tests now pin the
+  `model` field's absence when unset and its presence when set.
+
+- **`scripts/capture-provider-recording.py` no longer reproduces the LMNT defect.** `lmnt_http_plan`
+  hardcoded the same `404` route and the `raw` format, so a capture run would have recorded a 404
+  envelope as though it were the surface — the defect one level up from the client.
+
 ### Fixed — Speechmatics TTS has never worked
 
 - **`SpeechmaticsSpeechSynthesizer` now selects the voice by path segment, so the request succeeds.**

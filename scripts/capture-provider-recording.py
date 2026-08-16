@@ -923,8 +923,13 @@ def lmnt_http_plan(source_pcm: bytes) -> dict:
 
     Reproduces the form-encoded POST in `LmntSpeechSynthesizer.SynthesizeHttpAsync` at the
     shipped `LmntTtsOptions` defaults, field order included. `Model` is left out because the
-    option defaults to null and the synthesizer only adds the field when it is set.
+    option defaults to null and the synthesizer omits the field entirely when it is unset —
+    the live endpoint rejects an explicit `"model": null`.
     `source_pcm` is ignored: this surface's input is text.
+
+    Mirroring the client is the whole contract here, and it cuts both ways: while the client
+    posted to `/v1/ai/speech/generate`, so did this plan, and a capture run would have recorded
+    a 404 envelope as though it were the surface. The route and format below track the fix.
     """
     api_key = _require_env("LMNT_API_KEY")
 
@@ -932,7 +937,7 @@ def lmnt_http_plan(source_pcm: bytes) -> dict:
         {
             "voice": "leah",
             "text": TTS_INPUT_TEXT,
-            "format": "raw",
+            "format": "pcm_s16le",
             "sample_rate": "16000",
             "language": "en",
             "speed": "1.00",
@@ -941,8 +946,8 @@ def lmnt_http_plan(source_pcm: bytes) -> dict:
 
     return {
         "product": "LMNT — text to speech (HTTP)",
-        "url": "https://api.lmnt.com/v1/ai/speech/generate",
-        "endpoint_template": "POST https://api.lmnt.com/v1/ai/speech/generate",
+        "url": "https://api.lmnt.com/v1/ai/speech/bytes",
+        "endpoint_template": "POST https://api.lmnt.com/v1/ai/speech/bytes",
         "api_version": "1.0",
         "recordings_dir": TTS_RECORDINGS,
         "scenario_slug": TTS_SCENARIO_SLUG,
