@@ -191,6 +191,36 @@ characterised* in §5.5.
       "error":"invalid_api_key","code":1008}` then close `1008`, so ElevenLabs is an **in-band**
       validation surface for the ADR-0049 scoreboard (measured, per D3); wrong path → **HTTP 403** at
       the handshake, which distinguishes routes but is not the `404` the other surfaces answer
+- [ ] 2.3b **The Class B fix converts an ignored margin into a live defect, and fixing §2.3/§2.1
+      without this ships a new one.** Verified 2026-08-16: **no receive loop in either
+      `Verbara.Sdk.VoiceAi.Tts` or `Verbara.Sdk.VoiceAi.Stt` reads `result.EndOfMessage`** — zero
+      occurrences. This is not an unknown pattern in the codebase: `AriClient.cs:165`,
+      `AriOutboundListener.cs:246`, `WebSocketAudioSession.cs:74` and `OpenAiRealtimeBridge.cs:204`
+      all loop `while (!result.EndOfMessage)` correctly. The VoiceAi packages are the inconsistent
+      ones. §5.7 recorded this as a *margin* — true while audio arrived as binary frames sized by the
+      client (Deepgram: 1920 B against a 64 KiB buffer, 34× headroom). **That margin does not transfer
+      to text frames.** ElevenLabs returned ~115 KB of base64 across 4 frames — ~29 KB average, sized
+      by the vendor, not by us — and one frame over the 65 536-byte buffer arrives fragmented, at
+      which point the loop parses a fragment as if it were whole JSON and the caller gets either a
+      `JsonException` or a silently dropped audio chunk. It is **length-dependent**, so the short
+      probe sentence used throughout this change cannot trip it and a green suite will not either.
+      **Closes when** both Class B loops assemble until `EndOfMessage` before parsing, with a fake
+      test that deliberately splits a text frame across two receives, plus one long-input live run per
+      Class B provider to observe whether the vendor fragments in practice. Must land **inside** the
+      §2.3/§2.1 commits — shipping the frame-type fix without it is shipping a new defect
+- [ ] 2.3c **The fake seam bypasses the credential entirely, at six sites — so no fake can catch an
+      auth defect.** Every WebSocket client gates its auth header behind `if (_fakeServerPort is
+      null)`, meaning under test the header is never set and the fake never sees one. Verified
+      2026-08-16, and it is not the two sites review first found — it is six:
+      `ElevenLabsSpeechSynthesizer.cs:49`, `CartesiaSpeechSynthesizer.cs:45`,
+      `DeepgramSpeechSynthesizer.cs:68`, `AssemblyAiSpeechRecognizer.cs:52`,
+      `CartesiaSpeechRecognizer.cs:51`, `DeepgramSpeechRecognizer.cs:46`. This is the same shape as
+      §3.10's LMNT finding — a seam that takes over more of the request than it should, so the part it
+      replaces is never exercised — and it is the structural reason Speechmatics STT could ship a
+      credential defect past a green suite (§4.1: "its fake never checked the credential at all").
+      **Fix:** reshape each seam to substitute the **origin only**, letting headers, query and route
+      flow through shipped code, and have each fake assert the auth header and scheme arrived.
+      **Closes when** all six are reshaped and each fake carries a credential assertion
 - [ ] 2.4 ElevenLabs has **no server-message DTO at all** — `VoiceAiTtsJsonContext.cs` declares only the
       outbound `ElevenLabsTextChunk` / `ElevenLabsVoiceSettings`. Add a server DTO for the audio field
       and register it. Alignment members are optional: model them or ignore them, but tolerate them —
@@ -352,9 +382,27 @@ characterised* in §5.5.
       unmeasured was the close sequence. The overstatement did not change the conclusion — the probe
       ran and found the defect — but the row it misquoted is the kind of thing this change exists to
       keep honest. **Closes when** each remaining site has an A/B run with the half-close as the only
-      variable, or a decision records why a site is exempt. Note one is not currently reachable:
-      Speechmatics STT cannot authenticate at all (§4.1), so its half-close cannot be measured until
-      that lands — record it as *blocked*, not as *pending*
+      variable, or a decision records why a site is exempt.
+      **Two corrections to this task, both found by review on 2026-08-16 and both changing what the
+      work is.** (i) *"Speechmatics is blocked until §4.1 lands"* — **false**. §4.1's row B already
+      measured that `Authorization: Bearer` reaches `RecognitionStarted` with the same credential, so
+      the close sequence is measurable **today** through that channel. What waits on the §4.1 code fix
+      is only the *shipped-path* close-out row (§7.5); record the result as measured-on-row-B and do
+      not let it stand as shipped-path evidence. (ii) **The A/B design named here is the wrong
+      experiment for STT, and would have produced a confident wrong answer.** In all three TTS sites
+      the vendor had an in-band end-of-input signal (LMNT `eof`, ElevenLabs empty-text chunk, Cartesia
+      the request itself) and the half-close was a redundant, contradictory *second* signal — which is
+      why removing it was the whole fix. In all four STT clients the bare `CloseOutputAsync` is the
+      **only** end-of-input signal (verified 2026-08-16: `DeepgramSpeechRecognizer.cs:92`,
+      `AssemblyAiSpeechRecognizer.cs:103`, `SpeechmaticsSpeechRecognizer.cs:122`,
+      `CartesiaSpeechRecognizer.cs:130` each stream binary audio and then close, with no `CloseStream`,
+      `Terminate`, `EndOfStream`+`last_seq_no` or `finalize` message anywhere). An arm that only
+      removes it leaves a session with no end signal at all and measures a **hang**, not the defect.
+      The experiment is therefore **three arms**: A = shipped (audio → bare half-close); B = audio →
+      the vendor's in-band terminator, no half-close; C = terminator + half-close. And the expected
+      failure mode is not silence: STT streams partials during the session, so what breaks is
+      **truncated or missing finals**. The 3-of-3 total-failure base rate from TTS **does not
+      transfer** — it must be measured, not carried over
 - [x] 3.7 The media-type delta is the one with consumer-visible consequence: `SynthesizeHttpAsync`
       chunks the response body straight out as if it were raw PCM, and MP3 is not chunkable that way.
       `LmntTtsOptions.Format` defaults to `raw`, but whether sending `format: "raw"` on the JSON body
