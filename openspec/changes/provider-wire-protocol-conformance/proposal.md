@@ -81,6 +81,23 @@ synthesis request, so the vendor replied with an error frame instead of audio. R
 established with both controls; the frame shape is not, and Cartesia's Class B finding continues to
 rest on the vendor-documentation read of 2026-08-14.
 
+### Amendment — the capture instrument carries the defect too (2026-08-15, post-merge)
+
+Auditing `wiremock-http-provider-substrate`'s three blocked tasks turned up a gap this change did not
+cover: `scripts/capture-provider-recording.py` builds the *same wrong requests the clients build*.
+The Speechmatics plan puts the voice in the JSON body (line 851) against `/generate` (line 861), and
+`lmnt_http_plan` hardcodes `/v1/ai/speech/generate` with form-encoded fields (lines 933–934). Both
+reproduce the 404 byte for byte.
+
+This is the change's own thesis one level up. The instrument built to establish what a vendor does
+was written from the same reading of the docs as the client, so it cannot contradict the client — it
+can only confirm it. Run it before the route fixes and it records a 404; run it after without
+updating it and it records a route the client no longer sends. Either artifact then becomes the
+fixture `wiremock-http-provider-substrate` §4.5/§4.6 are blocked on, pinning the defect into the
+substrate whose entire purpose is catching it. §3.14 and §3.15 tie each plan's correction to the same
+commit as its route fix; §3.16 sweeps the plans nobody has checked, because two-for-two wrong among
+the examined ones says nothing reassuring about the unexamined ones.
+
 ### The defects, with their sites
 
 The six below were established when this change was opened. A **seventh** — AssemblyAI STT, the same
