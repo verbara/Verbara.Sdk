@@ -164,7 +164,33 @@ characterised* in §5.5.
 - [ ] 2.3 `src/Verbara.Sdk.VoiceAi.Tts/ElevenLabs/ElevenLabsSpeechSynthesizer.cs` — the loop carries the
       defect as a comment: *"Only yield binary frames; skip text messages (alignment, metadata)."*
       Decode `AudioOutput.audio` from the text frame instead. **Closes when** the committed fixture in
-      2.6 round-trips through the synthesizer to the audio bytes it encodes
+      2.6 round-trips through the synthesizer to the audio bytes it encodes.
+      **Frame inventory measured live 2026-08-16, and §2.3 alone does not fix this provider.** A run
+      reproducing `SendTextAsync` frame for frame received **0 binary bytes** and 4 text frames whose
+      key set is `alignment, audio, isFinal, normalizedAlignment`; the base64 in `audio` decodes to
+      86 193 B — 2.694 s of 16 kHz PCM — and the server closed `1000`. So the comment quoted above is
+      not a partial defect: the binary branch it prefers receives nothing at all. **But the same run
+      also found a second, independent total defect** — the half-close (§2.3a) — and it fires first.
+      Fixing the frame type without it yields a provider that still produces silence, which is the
+      LMNT sequencing lesson (§3.6c) arriving before the fix instead of after it. Both must land in
+      the same commit, and this task's closing condition now includes a non-zero audio assertion with
+      the shipped close sequence in place
+- [x] 2.3a **ElevenLabs half-closes too, and it is total — 3 of 3 measured sites now.**
+      `ElevenLabsSpeechSynthesizer.cs:113` calls `CloseOutputAsync(NormalClosure)` right after the
+      empty-text chunk that is already the vendor's documented end-of-input signal — structurally
+      identical to LMNT's `eof` + half-close. Measured 2026-08-16 with that call as the only
+      variable: **A** (shipped sequence, half-close included) → **0 bytes, 0 text frames**, close
+      **1006** abnormal; **B** (identical, half-close removed) → 86 193 B of audio across 4 text
+      frames, close **1000**. **A third arm refuted a hypothesis worth recording:** `ElevenLabsTextChunk`
+      has `bool? Flush` and a nullable `VoiceSettings`, and `VoiceAiTtsJsonContext` declares no
+      `JsonSourceGenerationOptions`, so the shipped frames carry `"flush": null` and
+      `"voice_settings": null` — the exact shape that was a total outage on LMNT (§3.6a). Arm **C**
+      omitted both nulls and returned a **byte-identical** result to B: ElevenLabs tolerates them.
+      The class does not generalise, which is why the arm was run instead of assumed.
+      **Controls:** invalid credential → in-band text frame `{"message":"Invalid API key",
+      "error":"invalid_api_key","code":1008}` then close `1008`, so ElevenLabs is an **in-band**
+      validation surface for the ADR-0049 scoreboard (measured, per D3); wrong path → **HTTP 403** at
+      the handshake, which distinguishes routes but is not the `404` the other surfaces answer
 - [ ] 2.4 ElevenLabs has **no server-message DTO at all** — `VoiceAiTtsJsonContext.cs` declares only the
       outbound `ElevenLabsTextChunk` / `ElevenLabsVoiceSettings`. Add a server DTO for the audio field
       and register it. Alignment members are optional: model them or ignore them, but tolerate them —
@@ -173,7 +199,14 @@ characterised* in §5.5.
 - [ ] 2.5 Decide, and record, whether the binary branch stays. Neither vendor documents a raw-binary
       mode (both read first-hand 2026-08-14), but a vendor not mentioning a mode is not evidence the
       mode does not exist — so keeping the branch as *tolerated without evidence* costs nothing and
-      removing it could break an undocumented path. State which was chosen and on what basis
+      removing it could break an undocumented path. State which was chosen and on what basis.
+      **Evidence added 2026-08-16, and it does not settle the question — it sharpens it.** Both
+      providers were measured emitting **zero** binary frames on a successful synthesis (ElevenLabs
+      §2.3a: 0 B binary / 4 text frames; Cartesia §2.1a: 7 text chunks + `done`, no binary). That
+      confirms the branch is dead on the default configuration; it is still not evidence that no
+      configuration reaches it, which is the same *absence-of-mention* trap this task was written to
+      avoid. Recommendation unchanged: keep the branch, and record it as tolerated-without-evidence
+      rather than justified — now with the measurement attached
 - [ ] 2.6 `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/elevenlabs-tts/audio-output-frame.json`
       **already carries** the base64 `audio` field plus the `alignment` / `normalizedAlignment`
       structure. It is committed evidence of a shape the shipped client cannot consume. Wire it into the
@@ -309,14 +342,19 @@ characterised* in §5.5.
       (§2) and unmeasured on ElevenLabs TTS and four STT clients — see §3.6d**
 - [ ] 3.6d **The half-close is a class, not an LMNT bug, and six sites are unmeasured.**
       `grep -rn CloseOutputAsync src/Verbara.Sdk.VoiceAi.Tts src/Verbara.Sdk.VoiceAi.Stt` returns, besides
-      the two now measured (LMNT §3.6c fixed, Cartesia TTS §2 measured-not-fixed): `ElevenLabs`
-      TTS, `DeepgramSpeechRecognizer`, `SpeechmaticsSpeechRecognizer`, `AssemblyAiSpeechRecognizer`,
-      `CartesiaSpeechRecognizer`. Two of two measured sites were **total** — zero bytes, no exception —
-      so the base rate here is not "occasionally harmful". Every one of these is *not characterised*:
-      that is a statement about the evidence, not a prediction of breakage. ElevenLabs is the sharpest
-      case, because §1 records it as measured-good on 2026-08-15 — measured with a probe that, like
-      §3.6a's, did not reproduce the close sequence. **Closes when** each site has an A/B run with the
-      half-close as the only variable, or a decision records why a site is exempt
+      the three now measured (LMNT §3.6c **fixed**, Cartesia TTS §2.1a and ElevenLabs §2.3a
+      measured-not-fixed): `DeepgramSpeechRecognizer`, `SpeechmaticsSpeechRecognizer`,
+      `AssemblyAiSpeechRecognizer`, `CartesiaSpeechRecognizer`. **Three of three measured sites were
+      total** — zero bytes, no exception — so the base rate here is not "occasionally harmful". The
+      four remaining are *not characterised*: that is a statement about the evidence, not a prediction
+      of breakage. **A correction to this task's own first draft:** it said §1 recorded ElevenLabs as
+      *measured-good*. §1 records its **route** as good and its **frame** as broken; what was
+      unmeasured was the close sequence. The overstatement did not change the conclusion — the probe
+      ran and found the defect — but the row it misquoted is the kind of thing this change exists to
+      keep honest. **Closes when** each remaining site has an A/B run with the half-close as the only
+      variable, or a decision records why a site is exempt. Note one is not currently reachable:
+      Speechmatics STT cannot authenticate at all (§4.1), so its half-close cannot be measured until
+      that lands — record it as *blocked*, not as *pending*
 - [x] 3.7 The media-type delta is the one with consumer-visible consequence: `SynthesizeHttpAsync`
       chunks the response body straight out as if it were raw PCM, and MP3 is not chunkable that way.
       `LmntTtsOptions.Format` defaults to `raw`, but whether sending `format: "raw"` on the JSON body
