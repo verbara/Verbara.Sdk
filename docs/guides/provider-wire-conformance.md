@@ -140,10 +140,10 @@ a wrong-path control has to be read, not pattern-matched.
 
 | Surface | Transport | Route | Frames | Validation point | Evidence | Date |
 |---|---|---|---|---|---|---|
-| Deepgram STT | `wss://api.deepgram.com/v1/listen` | OK | not exercised | `handshake` | `live + both controls` | 2026-08-15 |
-| Speechmatics STT | `wss://eu2.rt.speechmatics.com/v2` | OK | **1 fixed, 4 open** | `in-band` | `live + both controls` | 2026-08-15 |
-| Cartesia STT | `wss://api.cartesia.ai/stt/websocket` | OK | not exercised | `handshake` | `live + both controls` | 2026-08-15 |
-| AssemblyAI STT | `wss://streaming.assemblyai.com/v3/ws` | OK | first frame only | `in-band` | `live + both controls` | 2026-08-15 |
+| Deepgram STT | `wss://api.deepgram.com/v1/listen` | OK | OK | `handshake` | `live + both controls` | 2026-08-16 |
+| Speechmatics STT | `wss://eu2.rt.speechmatics.com/v2` | OK | **1 fixed, 5 open** | `in-band` | `live + both controls` | 2026-08-16 |
+| Cartesia STT | `wss://api.cartesia.ai/stt/websocket` | **broken** | **broken** | `handshake` (credential) | `live + both controls` | 2026-08-16 |
+| AssemblyAI STT | `wss://streaming.assemblyai.com/v3/ws` | not controllable | **2 open** | `in-band` | `live + credential control` | 2026-08-16 |
 | Google STT | `https://speech.googleapis.com` | OK | n/a (batch) | in the response | `live + both controls` | 2026-08-15 |
 | OpenAI Whisper | `https://api.openai.com/v1/audio/transcriptions` | OK | n/a (batch) | not measured | `live, uncontrolled` | 2026-08-09 |
 | Azure OpenAI Whisper | Azure OpenAI deployment endpoint | OK | n/a (batch) | not measured | `live, uncontrolled` | 2026-08-09 |
@@ -188,19 +188,49 @@ language_pack_info}` with `word_delimiter` nested **inside** `language_pack_info
 what the committed fixture already held: the fixture was right, and its sidecar is upgraded from
 documentation-derived to confirmed for those names and that nesting — and for nothing else.
 
-**Not** observed: any transcript frame — the sessions that authenticated were opened to establish the
-remedy and no audio was streamed — so the frame inventory beyond those two message types stays *not
-characterised*, and with it the four defects still open on this surface: the swallowed `Error` frame
-(ADR-0049 D1, so a rejected session still reaches the caller as an empty stream) and the three
-assembly signals the client ignores — `word_delimiter`, `attaches_to`, and the vendor's
-already-assembled `metadata.transcript`.
+On 2026-08-15 no transcript frame was observed — those sessions were opened to establish the remedy and
+streamed no audio. The half-close runs of 2026-08-16 streamed audio and did observe one, which is why
+this row now carries the later date; the credential arms above remain 08-15 measurements and are not
+redated by it. **Five** defects stay open on this surface: the swallowed `Error` frame (ADR-0049 D1,
+so a rejected session still reaches the caller as an empty stream), the three assembly signals the
+client ignores — `word_delimiter`, `attaches_to`, and the vendor's already-assembled
+`metadata.transcript` — and now the half-close, which costs the caller every final transcript.
 
-**Cartesia STT** — wrong path `404`, invalid credential `401`, real key `101`. Route and auth OK,
-frames not exercised.
+**Cartesia STT — the session cannot open at all, and the row that said otherwise is corrected here.**
+Wrong path `404` and invalid credential `401` still hold: credential validation is at the handshake.
+But the previous row read "route and auth OK, frames not exercised", and the route half of that was an
+artifact of stopping at `101`. Streamed against, the shipped request is **rejected in-band**: the
+client connects to `wss://api.cartesia.ai/stt/websocket` with **no query string at all** and the vendor
+closes `1008 Missing sample_rate`. Twelve runs on 2026-08-16, twelve rejections, no exceptions. Adding
+`?model=…&language=…&encoding=pcm_s16le&sample_rate=16000` — the parameters the vendor's own rejection
+names — opens a working session with the same key on the same host, which is the control that isolates
+the defect to the missing query rather than to the account.
 
-**AssemblyAI STT** — wrong path `404`; invalid credential **`101` followed by an error frame**, which
-is what exposed the in-band validation point and a matching client defect; real key `101` with first
-frame `Begin` (`configuration`, `expires_at`, `id`, `type`).
+A second defect appeared inside that working session: the client's opening JSON frame is not a message
+this vendor has. It answers
+
+> `Invalid client message: Unrecognized text message "{…}". Expected one of: "finalize", "done", "close".`
+
+So `CartesiaSttInitMessage` — `model`, `language`, `encoding`, `sample_rate` — is dead on the wire even
+when the socket survives; those values belong in the query string, and the type exists to be ignored.
+This is the same shape as Speechmatics TTS §4.5 (a configuration sent in a channel the vendor does not
+read) and it is exactly what a `101`-deep probe cannot see.
+
+**AssemblyAI STT** — invalid credential **`101` followed by an error frame**, which is what exposed the
+in-band validation point and a matching client defect; real key `101` with first frame `Begin`
+(`configuration`, `expires_at`, `id`, `type`). Two corrections to this row on 2026-08-16:
+
+- **The wrong-path control does not discriminate on this host.** `wss://streaming.assemblyai.com/v3/ws-does-not-exist`
+  upgraded `101` and served a normal session. A route control that cannot fail proves nothing, so this
+  surface's evidence class drops to `live + credential control` and its Route column reads *not
+  controllable* — not "OK". The earlier `404` recorded here was taken against a different host.
+- **The vendor rejects any message shorter than 50 ms**, with
+  `3007 Input Duration Violation: 20.0 ms. Expected between 50 and 1000 ms`. The client does not batch
+  — `AssemblyAiSpeechRecognizer` sends one WebSocket message per frame the caller yields — so a caller
+  feeding 20 ms frames, which is what an Asterisk AudioSocket source produces, fails every session.
+  Silently: the receive loop filters to transcript messages, so the error is dropped on the floor
+  (§4.15). Sessions here were driven at 100 ms to measure anything else at all, and that deviation is
+  part of the result.
 
 **Google STT** — wrong path `404`, invalid credential `400 API_KEY_INVALID`, real key
 `400 RecognitionAudio not set` — the last being the vendor accepting the credential and rejecting the
@@ -213,13 +243,79 @@ documentation could not have.
 sidecar declares `"class": "recorded"` — a live capture, taken without a negative control. Real route
 evidence of its own weaker class. Not unverified, and not in the same column as Deepgram.
 
+### The half-close is not a flush signal — measured on all four STT surfaces, 2026-08-16
+
+Every streaming STT client in this SDK ends its input the same way: it streams binary audio and then
+calls `CloseOutputAsync`. The comment above one of them states the belief the others share — *"signal
+end-of-audio (half-close) so the server flushes any pending transcript"*. That belief was never
+measured. It is false on three surfaces out of four, and on two of them it does not merely fail to
+flush — it **destroys the transcript**.
+
+One utterance, "one. two. three. … ten.", synthesized once and replayed byte-identically into every
+arm, streamed in real time. The metric is how many of the ten spoken numbers survive into the
+**final** transcripts, because a countable tail makes truncation measurable instead of impressionistic.
+Three repetitions per arm; every cell below was identical across all three.
+
+| Arm | What the client does after the last audio frame |
+|---|---|
+| **A** | bare half-close — **what every client ships** |
+| **B** | the vendor's in-band terminator (`CloseStream` / `EndOfStream` / `Terminate` / `done`), no half-close |
+| **C** | terminator, then half-close |
+| **Z** | *control, known wrong*: transport aborted, no terminator, no close frame |
+
+| Surface | A (shipped) | B (terminator) | C (both) | Z (control) |
+|---|---|---|---|---|
+| Deepgram STT | **10/10** | 10/10 | 10/10 | 8/10 |
+| Speechmatics STT | **0/10** — zero finals | 10/10 | **0/10** | 0/10 |
+| AssemblyAI STT | **0/10** — zero finals | 10/10 | **0/10** | 0/10 |
+| Cartesia STT † | **5/10** | 7/10 | 7/10 | 5/10 |
+
+† through the corrected query-string URL; the shipped URL never opens a session at all.
+
+Four things this measured that reading the code could not:
+
+1. **Two surfaces lose everything.** Speechmatics and AssemblyAI emit partials throughout the session
+   and then, on the close frame, end it with **no final transcript at all** — 20 partials and zero
+   `AddTranscript`, no `EndOfTranscript`. With the terminator instead, the same audio yields the
+   complete final. A caller consuming only finals, which is the normal way to consume this API, gets
+   nothing from either provider today.
+2. **Arm C fails.** The obvious remedy — keep the half-close, add the terminator — was measured and
+   it is wrong on both broken surfaces: `C ≡ A`. The half-close is not a redundant extra signal to be
+   supplemented; it is the thing that has to go. Only on Cartesia is `C ≡ B`.
+3. **Deepgram is exempt**, and that is a result rather than an untested assumption: `A ≡ B ≡ C`, with
+   the control at 8/10 proving the instrument does detect a lost tail. Without arm Z, Deepgram's three
+   identical rows would be indistinguishable from a probe that cannot see truncation.
+4. **The 3-of-3 total-failure base rate from the TTS half-close sites did not transfer.** It ranges
+   from no effect, through a 2-number truncation, to total loss. The task that opened this experiment
+   said that rate must be measured rather than carried over; carrying it over would have produced a
+   confident wrong answer about Deepgram.
+
+Two properties of the instrument, recorded because both were nearly wrong:
+
+- **The probe's own metric was defective at first.** It matched digit *words*, and Speechmatics applies
+  inverse text normalization — it returns `"123456789 ten."` — so a **complete** transcript scored
+  1/10. The numbers above come from a metric that counts numerals and words alike. A measuring
+  instrument that scores the vendor's formatting instead of the vendor's behaviour is the same defect
+  this record documents in clients, one level up.
+- **Arm A was re-run as A2**, sending the identical close frame without awaiting the peer's close, so
+  the reader kept consuming to the end. `A2 ≡ A` on both broken surfaces, 3 of 3. That rules out the
+  competing explanation that the probe's client library discarded a queued final, and leaves the
+  finding where it belongs: with the vendor's handling of a close frame.
+
 ## Still not characterised
 
 Named here rather than left as absence, because absence is what this file exists to make visible:
 
-- **Cartesia STT, Deepgram STT** — frame inventories. Route and auth measured, frames never exercised.
-- **Speechmatics STT** — everything past `RecognitionStarted`. No transcript frame has been observed
-  live; the assembly logic rests on the vendor's message set and the committed fixtures.
+- **Cartesia STT, Deepgram STT** — full frame inventories. The 2026-08-16 half-close runs exercised
+  transcript frames on both and the error path on Cartesia, so these are no longer *never exercised*;
+  what remains uncharacterised is the complete field set of each message type, which those runs
+  recorded only to the depth the experiment needed (`is_final`/`text` on Cartesia, `is_final` and the
+  alternatives array on Deepgram).
+- **Speechmatics STT** — the field set of `AddTranscript`. A transcript frame **has** now been observed
+  live (2026-08-16): `metadata.transcript` arrives already assembled, alongside a `results` array, on
+  the terminator path only. What stays uncharacterised is the rest of that message's fields, and every
+  message type outside `{Info, RecognitionStarted, AddPartialTranscript, AddTranscript, EndOfTranscript,
+  AudioAdded, Error}`.
 - **Speechmatics TTS** — whether the `language` and `sample_rate` body fields are accepted as sent.
   The route was isolated; the body fields rode along unmeasured.
 - **LMNT (WebSocket)** — no wrong-path control recorded on this surface. Its credential control was
