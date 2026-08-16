@@ -493,7 +493,7 @@ characterised* in §5.5.
       formatting, not its behaviour; and arm A was re-run as **A2**, sending the identical close frame
       without awaiting the peer's close so the reader kept consuming, giving `A2 ≡ A` 3-of-3 on both
       broken surfaces and ruling out "the probe's client library dropped a queued final"
-- [ ] 3.6e **Remediate the half-close across the four STT clients — and the shape of the fix is what
+- [x] 3.6e **Remediate the half-close across the four STT clients — and the shape of the fix is what
       §3.6d measured, not what it predicted.** Each of `DeepgramSpeechRecognizer.cs:92`,
       `AssemblyAiSpeechRecognizer.cs:103`, `SpeechmaticsSpeechRecognizer.cs:120` and
       `CartesiaSpeechRecognizer.cs:130` ends input with a bare `CloseOutputAsync`. Replace it with the
@@ -506,7 +506,48 @@ characterised* in §5.5.
       four are remediated, each with a fake asserting the terminator is sent and the half-close is
       not, and a re-probe of the shipped path showing the finals arrive. Note the ordering
       constraint: on Speechmatics and AssemblyAI this cannot be verified by any fake alone, because a
-      fake that ends the session on a close frame is asserting the current defect as the contract
+      fake that ends the session on a close frame is asserting the current defect as the contract.
+      **Done 2026-08-16.** All four now send the terminator as a text frame and leave the output side
+      open — arm B exactly, nothing added that no arm measured (a drain deadline, breaking on the
+      vendor's end-of-session message, and a closing handshake were each considered and left out).
+      Deepgram is remediated with the rest rather than kept as the one measured-equivalent site whose
+      difference a later reader would have to re-derive. **The predicted second change to the receive
+      loops was not needed**: all four already looped while the socket was `Open` *or* `CloseSent`, so
+      the loops never were the reason a final arrived too late; only the meaning of the unchanged
+      close-frame `break` changed, and the comments say so. Cartesia's `CloseOutputAsync` timeout is
+      gone with the call it guarded. Eight fakes-backed tests (two per provider: the terminator is
+      sent, no close frame follows) — and the **first version of them was blind**: the fakes stopped
+      reading at the terminator, so a client that half-closed still passed. Fixed with a
+      `WebSocketTestServer.SessionCompleted` join point plus `or CloseSent` in the fake receive loops,
+      then re-verified by injecting arm A and arm C into all four clients: 8 destructive arms, 8
+      detections (A → 2 failures per provider, C → 1). Suite 3080 tests green. **Live re-probe of the
+      shipped clients**, same digits utterance re-synthesized, 100 ms chunks, real-time paced, with
+      arm A restored in the same source files through the same harness minutes later as the control:
+      Speechmatics 0/10 → **10/10** (zero finals → one), AssemblyAI 0/10 → **10/10** (zero finals →
+      one), Deepgram 10/10 unchanged as §3.6d predicted. **Cartesia's live verification is deferred to
+      §3.17** — the shipped client cannot open a session at all, so there is no wire to measure the fix
+      on; its half-close fix rests on the fake alone until then, and the way it fails (zero output,
+      `error=none`, dead in 0.5 s) is the D1 silent-failure class seen end-to-end through a shipped
+      client for the first time rather than through a probe
+- [ ] 3.6f **The terminator path has no bound, and §3.6e is what removed the one it had.** With the
+      half-close gone, no client under `src/Verbara.Sdk.VoiceAi.Stt/` sends a close frame at all, and
+      each `ReceiveLoopAsync` exits only on the vendor's close frame, a `WebSocketException`, or the
+      caller's token — so a vendor that acknowledges the terminator and keeps the session open wedges
+      `StreamAsync` indefinitely. Measured A/B against a fake that answers the terminator and never
+      closes: at `a2a925f8^` `StreamAsync` returned in 29 ms because the half-close obliged the peer
+      to echo a close; at `a2a925f8` it never returned. The wait itself is not new — the old code also
+      sat in `ReceiveAsync` waiting on a peer that might never answer — but its backing is weaker:
+      RFC 6455 §5.5.1 *obliges* the close echo, nothing obliges a vendor to end a session. Three of
+      the four surfaces were measured ending it (the re-probe returned in 8–13 s); **Cartesia was
+      not**, and Cartesia is precisely where a sibling command exists — `finalize` — whose purpose is
+      to flush *without* ending the session. The exposure is not degradation: `VoiceAiPipeline` awaits
+      one STT session per utterance under the pipeline-lifetime token, so a stalled session leaves the
+      call stuck in recognition. Deliberately **not** fixed by inventing a timeout in §3.6e — a
+      deadline chosen ahead of the measurement that would set it is the machinery this change argues
+      against everywhere else. **Closes when** either §3.17's live Cartesia run shows the vendor
+      closing after `done` (recording that all four are measured and the bound is unnecessary), or a
+      surface is measured acknowledging without closing and a drain deadline lands with the arm that
+      justified its value — not a round number
 - [ ] 3.17 **Cartesia STT cannot open a session at all — Class A, measured 2026-08-16, twelve runs.**
       `CartesiaSpeechRecognizer.BuildUri()` returns `_options.BaseUri` verbatim —
       `wss://api.cartesia.ai/stt/websocket`, with **no query string** — and the vendor closes the
@@ -522,7 +563,12 @@ characterised* in §5.5.
       belong in the query string. Same shape as §4.5 — a configuration sent through a channel the
       vendor does not read. **Closes when** the query carries the four parameters, the init frame is
       deleted rather than left as an ignored message, the fake asserts the query rather than the body,
-      and a live run reaches a transcript through the shipped path
+      and a live run reaches a transcript through the shipped path. **This task also blocks §3.6e's
+      Cartesia arm**: with no session there is no wire to measure the half-close remediation on, so
+      that re-probe has to happen as part of closing this one rather than leave the only one of the
+      four resting on a fake. Re-probing the shipped client on 2026-08-16 also produced the first
+      end-to-end observation of the D1 silent-failure class through a shipped client rather than a
+      probe: zero results, dead in 0.5 s, `error=none`
 - [ ] 3.18 **AssemblyAI rejects every message shorter than 50 ms, and the client cannot produce longer
       ones.** Measured 2026-08-16: a 20 ms message is answered
       `3007 Input Duration Violation: 20.0 ms. Expected between 50 and 1000 ms`, three of three, and

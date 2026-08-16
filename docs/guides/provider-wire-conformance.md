@@ -141,17 +141,19 @@ a wrong-path control has to be read, not pattern-matched.
 | Surface | Transport | Route | Frames | Validation point | Evidence | Date |
 |---|---|---|---|---|---|---|
 | Deepgram STT | `wss://api.deepgram.com/v1/listen` | OK | OK | `handshake` | `live + both controls` | 2026-08-16 |
-| Speechmatics STT | `wss://eu2.rt.speechmatics.com/v2` | OK | **1 fixed, 5 open** | `in-band` | `live + both controls` | 2026-08-16 |
-| Cartesia STT | `wss://api.cartesia.ai/stt/websocket` | **broken** | **broken** | `handshake` (credential) | `live + both controls` | 2026-08-16 |
-| AssemblyAI STT | `wss://streaming.assemblyai.com/v3/ws` | not controllable | **2 open** | `in-band` | `live + credential control` | 2026-08-16 |
+| Speechmatics STT | `wss://eu2.rt.speechmatics.com/v2` | OK | **2 fixed, 4 open** | `in-band` | `live + both controls` | 2026-08-16 |
+| Cartesia STT | `wss://api.cartesia.ai/stt/websocket` | **broken** | **1 fixed, broken** | `handshake` (credential) | `live + both controls` | 2026-08-16 |
+| AssemblyAI STT | `wss://streaming.assemblyai.com/v3/ws` | not controllable | **1 fixed, 1 open** | `in-band` | `live + credential control` | 2026-08-16 |
 | Google STT | `https://speech.googleapis.com` | OK | n/a (batch) | in the response | `live + both controls` | 2026-08-15 |
 | OpenAI Whisper | `https://api.openai.com/v1/audio/transcriptions` | OK | n/a (batch) | not measured | `live, uncontrolled` | 2026-08-09 |
 | Azure OpenAI Whisper | Azure OpenAI deployment endpoint | OK | n/a (batch) | not measured | `live, uncontrolled` | 2026-08-09 |
 
 **Deepgram STT** — shipped defaults (`encoding=linear16`, `sample_rate=16000`, `channels=1`,
 `model=nova-2`, `interim_results=true`, `punctuate=true`) with the `Authorization: Token` header
-returned `101`; wrong path `404`; malformed key `401` at the upgrade. Frames were **not** exercised,
-and the row says so, so a verified route is not read as a verified frame protocol.
+returned `101`; wrong path `404`; malformed key `401` at the upgrade. Frames went unexercised until the
+half-close runs of 2026-08-16, which streamed audio through this surface in four arms and recovered the
+full transcript in three of them — that, and not the route evidence, is what the Frames column rests on.
+The uncharacterised part is now the field set of each message type, not whether frames work at all.
 
 **Speechmatics STT** — the route resolved, the upgrade completed, and the credential was then rejected
 in-band with close code `4001 not_authorised`: the session never authenticated, and the provider was
@@ -172,10 +174,14 @@ missing a realtime entitlement. The vendor frames temporary keys as a browser co
 header auth the plausible server-side choice — but that sentence is *documentation*; what is *measured*
 is only that both channels work.
 
-As on the two TTS surfaces fixed the same week, the fixed client has not itself been run live — arm B
-is a reconstruction of what it now sends, not the artifact. The row's date stays **2026-08-15**, the
-day its arms were measured, even though the fix landed on 08-16: a row's date is the date of its own
-measurement, and advancing it for a code change would make the ledger claim a run that never happened.
+When this was first written the fixed client had not itself been run live — arm B was a reconstruction
+of what it now sends, not the artifact — and it said so, as the two TTS surfaces fixed the same week
+still do. **That caveat is now retired**: the half-close re-probe below drove the *shipped*
+`SpeechmaticsSpeechRecognizer` to a full transcript on 2026-08-16, which it could not have reached
+without the `Authorization: Bearer` channel authenticating. The credential fix is verified through the
+artifact, and leaving the caveat standing would have under-claimed a run that happened — the same
+discipline that forbids upgrading a class without a run forbids withholding one after it. The row's
+date is the date of a measurement either way, never the date a fix landed.
 
 Observed live: the `Info` and `RecognitionStarted` frames. The session-opening `Info` frame carries
 **sixteen** fields (`message`, `type`, `reason`, `usage`, `quota`, the four growth-rate members,
@@ -191,10 +197,11 @@ documentation-derived to confirmed for those names and that nesting — and for 
 On 2026-08-15 no transcript frame was observed — those sessions were opened to establish the remedy and
 streamed no audio. The half-close runs of 2026-08-16 streamed audio and did observe one, which is why
 this row now carries the later date; the credential arms above remain 08-15 measurements and are not
-redated by it. **Five** defects stay open on this surface: the swallowed `Error` frame (ADR-0049 D1,
-so a rejected session still reaches the caller as an empty stream), the three assembly signals the
-client ignores — `word_delimiter`, `attaches_to`, and the vendor's already-assembled
-`metadata.transcript` — and now the half-close, which costs the caller every final transcript.
+redated by it. The half-close — which cost the caller every final transcript — **is fixed**, and the
+run that measured the fix through the shipped client is the same one that retired the credential fix's
+caveat above (see the remediation section below). **Four** defects stay open on this surface: the swallowed `Error` frame (ADR-0049 D1, so a
+rejected session still reaches the caller as an empty stream) and the three assembly signals the client
+ignores — `word_delimiter`, `attaches_to`, and the vendor's already-assembled `metadata.transcript`.
 
 **Cartesia STT — the session cannot open at all, and the row that said otherwise is corrected here.**
 Wrong path `404` and invalid credential `401` still hold: credential validation is at the handshake.
@@ -301,6 +308,71 @@ Two properties of the instrument, recorded because both were nearly wrong:
   the reader kept consuming to the end. `A2 ≡ A` on both broken surfaces, 3 of 3. That rules out the
   competing explanation that the probe's client library discarded a queued final, and leaves the
   finding where it belongs: with the vendor's handling of a close frame.
+
+### The remediation, and what re-probing the shipped client measured — 2026-08-16
+
+All four clients now do the same thing at end of input: send the vendor's in-band terminator as a text
+frame — `{"type":"CloseStream"}`, `{"message":"EndOfStream","last_seq_no":N}`, `{"type":"Terminate"}`,
+`done` — and leave the output side open, letting the vendor end the session. This is arm B exactly, no
+more; the timeout Cartesia's `CloseOutputAsync` needed is gone with the call it was guarding, and
+nothing was added that arm B did not have. A drain deadline, breaking on the vendor's end-of-session
+message, and a polite closing handshake were all considered and left out — each would have been
+machinery no arm measured.
+
+**Deepgram is remediated too**, though `A ≡ B ≡ C` there. Leaving the one measured-equivalent site
+alone would have preserved a difference that means nothing and cost the next reader a re-derivation
+before they dared touch it.
+
+**The receive loops needed no change**, and that is worth recording because the plan said they would.
+All four already looped while the socket was `Open` *or* `CloseSent`, so they were never the reason a
+final arrived too late. What changed there is only the meaning of an unchanged line: the close frame
+that ends the loop is now the vendor deciding the session is over, not the vendor answering a close we
+sent before it had finished.
+
+The re-probe drives the **shipped C# clients** — not a Python probe reconstructing what they send — over
+the same utterance of ten spoken digits, re-synthesized for this run (7.20 s, 16 kHz, 100 ms chunks,
+real-time paced), two repetitions per surface. The control arm restores the half-close in the same
+source files and runs through the same harness minutes later:
+
+| Surface | remediated | half-close restored (arm A), same harness, minutes later |
+|---|---|---|
+| Deepgram STT | 10/10, 10 finals | not re-run — §3.6d measured `A ≡ B` here across three repetitions |
+| Speechmatics STT | **10/10**, 1 final, 17 partials | **0/10**, **zero finals**, 17 partials |
+| AssemblyAI STT | **10/10**, 1 final, 10–14 partials | **0/10**, **zero finals**, 8–9 partials |
+| Cartesia STT | **not verifiable — see below** | — |
+
+Three things this run establishes that the §3.6d probe could not:
+
+1. **The improvement is attributable to the diff.** §3.6d compared arms inside one probe; this compares
+   two builds of the shipped client. Because the control ran the same day through the same harness, a
+   vendor-side difference between the two probe dates cannot explain the result. Without that arm this
+   would have measured the day, not the change.
+2. **Cartesia's remediation cannot be verified live at all, and how it fails is itself the finding.**
+   The shipped client never opens a session (the missing query string, above): zero partials, zero
+   finals, dead in 0.5 s — and it reports `error=none`. That is the ADR-0049 D1 silent-failure class
+   observed end-to-end through the shipped client for the first time rather than through a probe. Its
+   half-close fix is asserted by a fake and stands unmeasured on the wire until the query string is
+   fixed.
+3. **The remediated Speechmatics path takes about five seconds longer** for the same audio (13.4 s vs
+   8.2 s wall). Those seconds are the client waiting for the vendor to finalize instead of cutting it
+   off — which is to say they are the transcript.
+
+The four fakes assert the terminator is sent and that no close frame follows it. That assertion is only
+meaningful because the fakes keep reading after the terminator: the first version of these tests
+stopped there, and passed against a client that half-closed.
+
+**What this trades, stated rather than left to be discovered.** With the half-close gone, no client in
+this package sends a close frame at all, and each session now ends only when the **vendor** closes it.
+The unbounded wait is not new — the old code also sat in `ReceiveAsync` waiting for a peer that might
+never answer — but what backs it is weaker: RFC 6455 §5.5.1 *obliges* a peer to echo a close frame,
+whereas nothing obliges a vendor to end a session after a terminator. Measured, three of the four do
+(that is why the re-probe returned at all, in 8–13 s). Cartesia is the one that could not be measured,
+and Cartesia is also where a sibling command exists — `finalize` — whose whole purpose is to flush
+without ending the session. So a bound belongs here eventually; what is missing is the measurement that
+would set it, and a timeout invented ahead of that measurement is the machinery this record exists to
+argue against. It is tracked as its own task rather than shipped as a guess, and the exposure is
+concrete: `VoiceAiPipeline` awaits one STT session per utterance, so a vendor that acknowledges the
+terminator without closing would leave a call stuck in recognition rather than degrade it.
 
 ## Still not characterised
 

@@ -113,6 +113,18 @@ internal sealed class SpeechmaticsTranscriptionConfig
     [JsonPropertyName("max_delay")] public double MaxDelay { get; set; }
 }
 
+/// <summary>
+/// The end-of-input terminator. <c>last_seq_no</c> is the number of audio chunks sent on the
+/// session — the service uses it to know how much audio it is still expected to account for, which
+/// is why the send loop counts binary frames rather than sending a constant frame the way the other
+/// three clients can.
+/// </summary>
+internal sealed class SpeechmaticsEndOfStreamMessage
+{
+    [JsonPropertyName("message")] public string Message { get; set; } = "EndOfStream";
+    [JsonPropertyName("last_seq_no")] public int LastSeqNo { get; set; }
+}
+
 internal sealed class SpeechmaticsTranscriptMessage
 {
     [JsonPropertyName("message")] public string Message { get; set; } = string.Empty;
@@ -144,6 +156,7 @@ internal sealed class SpeechmaticsAlternative
 [JsonSerializable(typeof(SpeechmaticsStartRecognitionMessage))]
 [JsonSerializable(typeof(SpeechmaticsAudioFormat))]
 [JsonSerializable(typeof(SpeechmaticsTranscriptionConfig))]
+[JsonSerializable(typeof(SpeechmaticsEndOfStreamMessage))]
 [JsonSerializable(typeof(SpeechmaticsTranscriptMessage))]
 [JsonSerializable(typeof(SpeechmaticsResult))]
 [JsonSerializable(typeof(SpeechmaticsAlternative))]

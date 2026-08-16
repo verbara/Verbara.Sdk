@@ -18,6 +18,12 @@ namespace Verbara.Sdk.VoiceAi.Stt.AssemblyAi;
 /// </summary>
 public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
 {
+    /// <summary>
+    /// AssemblyAI's in-band end-of-input terminator, sent as a text frame when the audio source is
+    /// exhausted. It replaces the half-close that stood there before — see <see cref="SendLoopAsync"/>.
+    /// </summary>
+    private static readonly byte[] TerminateFrame = """{"type":"Terminate"}"""u8.ToArray();
+
     private readonly AssemblyAiOptions _options;
     private readonly int? _fakeServerPort;
 
@@ -98,9 +104,15 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
                 await ws.SendAsync(frame, WebSocketMessageType.Binary, true, ct).ConfigureAwait(false);
             }
 
-            // Signal end-of-audio (half-close) so the server flushes any pending transcript.
+            // End of input: the terminator goes in band and the output side stays open.
+            // A bare half-close stood here, with a comment claiming it made the server flush.
+            // Measured live on 2026-08-16 against one utterance of ten spoken digits (§3.6d), it
+            // does the opposite: half-close alone returned 0/10 digits and not a single
+            // end-of-turn message, the terminator alone returned 10/10, and doing both returned
+            // 0/10 again. So the half-close is not supplemented here, it is removed — a client
+            // that sends it loses the transcript it was waiting for.
             if (ws.State == WebSocketState.Open)
-                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
+                await ws.SendAsync(TerminateFrame, WebSocketMessageType.Text, true, ct)
                     .ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
@@ -123,6 +135,9 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
             catch (OperationCanceledException) { break; }
             catch (WebSocketException) { break; }
 
+            // Unchanged line, changed meaning: with the half-close gone from the send loop, the
+            // close frame that ends this loop is the vendor deciding the session is over, not the
+            // vendor answering a close we sent before it had finished transcribing.
             if (result.MessageType == WebSocketMessageType.Close) break;
             if (result.MessageType != WebSocketMessageType.Text) continue;
 

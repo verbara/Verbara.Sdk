@@ -68,6 +68,26 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
 
     public int ReceivedFrameCount => _receivedFrameCount;
     public int ReceivedTextCount => _receivedTextCount;
+
+    /// <summary>
+    /// The client's in-band end-of-input terminator, or <c>null</c> if it never sent one. Kept
+    /// apart from <see cref="ReceivedJsonMessages"/> because on this surface the terminator is a
+    /// bare word rather than JSON — the service rejects JSON here with
+    /// <c>Expected one of: "finalize", "done", "close"</c>.
+    /// </summary>
+    public string? ReceivedTerminatorText { get; private set; }
+
+    /// <summary>
+    /// True if the client ever sent a close frame. A remediated client sends none at all: it ends
+    /// input with <see cref="ReceivedTerminatorText"/> and lets the service close the session, so
+    /// any close frame reaching here is the half-close §3.6d measured as recovering 5/10 digits
+    /// where the terminator recovered 7/10.
+    /// </summary>
+    public bool ReceivedClientCloseFrame { get; private set; }
+
+    /// <summary>Completes when the session handler returns — the join point for the assertions.</summary>
+    public Task SessionCompleted => _server.SessionCompleted;
+
     public int Port => _server.Port;
 
     /// <summary>If true, abort the WebSocket abnormally after sending messages.</summary>
@@ -106,9 +126,13 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
             return;
         }
 
-        // Receive frames until client closes.
+        // Receive frames until the client signals end of input — and then keep reading. CloseSent
+        // is in the loop condition on purpose: a client that half-closes sends that frame
+        // immediately behind the terminator, so a fake that stopped at the terminator would report
+        // every client as clean. Not hypothetical — it is what the first version of this loop did,
+        // and the half-close test below passed against a client that half-closed.
         var buf = new byte[65536];
-        while (ws.State == WebSocketState.Open)
+        while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
         {
             ValueWebSocketReceiveResult result;
             try
@@ -123,12 +147,34 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
             }
             else if (result.MessageType == WebSocketMessageType.Text)
             {
+                var text = Encoding.UTF8.GetString(buf, 0, result.Count);
+                if (string.Equals(text, "done", StringComparison.Ordinal))
+                {
+                    // End of input, and the one text frame on this socket that is not JSON. A fake
+                    // that ended the session on the client's close frame instead would be
+                    // asserting the half-close as the contract — which is what §3.6d measured as
+                    // the weaker of the two. This fake closes without an acknowledgement frame:
+                    // the other three answer their terminator from a recording, and there is no
+                    // recording of Cartesia's reply to `done`. Authoring one would put a frame in
+                    // the tree that nothing has ever observed, which is the failure mode the
+                    // recordings exist to prevent.
+                    ReceivedTerminatorText = text;
+                    try
+                    {
+                        await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
+                            .ConfigureAwait(false);
+                    }
+                    catch { break; }
+                    continue;
+                }
+
                 Interlocked.Increment(ref _receivedTextCount);
                 lock (_receivedJsonMessages)
-                    _receivedJsonMessages.Add(Encoding.UTF8.GetString(buf, 0, result.Count));
+                    _receivedJsonMessages.Add(text);
             }
             else if (result.MessageType == WebSocketMessageType.Close)
             {
+                ReceivedClientCloseFrame = true;
                 break;
             }
         }

@@ -109,16 +109,33 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
     {
         try
         {
+            // Speechmatics numbers audio chunks; the terminator has to name the last one, so the
+            // count is kept here rather than reconstructed.
+            var lastSeqNo = 0;
             await foreach (var frame in frames.WithCancellation(ct).ConfigureAwait(false))
             {
                 if (ws.State != WebSocketState.Open) break;
                 await ws.SendAsync(frame, WebSocketMessageType.Binary, true, ct).ConfigureAwait(false);
+                lastSeqNo++;
             }
 
-            // Signal end-of-audio (half-close) so the server flushes any pending transcript.
+            // End of input: the terminator goes in band and the output side stays open.
+            // A bare half-close stood here, with a comment claiming it made the server flush.
+            // Measured live on 2026-08-16 against one utterance of ten spoken digits (§3.6d), it
+            // does the opposite: half-close alone returned 0/10 digits — twenty
+            // AddPartialTranscript messages, not one AddTranscript, and no EndOfTranscript — the
+            // terminator alone returned 10/10, and doing both returned 0/10 again. So the
+            // half-close is not supplemented here, it is removed.
             if (ws.State == WebSocketState.Open)
-                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
-                    .ConfigureAwait(false);
+            {
+                var endOfStream = new SpeechmaticsEndOfStreamMessage { LastSeqNo = lastSeqNo };
+                var endOfStreamJson = JsonSerializer.Serialize(
+                    endOfStream,
+                    VoiceAiSttJsonContext.Default.SpeechmaticsEndOfStreamMessage);
+                await ws.SendAsync(
+                    Encoding.UTF8.GetBytes(endOfStreamJson).AsMemory(),
+                    WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) { }
         catch (WebSocketException) { }
@@ -140,6 +157,10 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
             catch (OperationCanceledException) { break; }
             catch (WebSocketException) { break; }
 
+            // Unchanged line, changed meaning: with the half-close gone from the send loop, the
+            // close frame that ends this loop is the vendor deciding the session is over — after
+            // its EndOfTranscript — not the vendor answering a close we sent before it had
+            // finished transcribing.
             if (result.MessageType == WebSocketMessageType.Close) break;
             if (result.MessageType != WebSocketMessageType.Text) continue;
 

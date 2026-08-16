@@ -37,11 +37,34 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
 
     private readonly HttpListener _listener = null!;
     private readonly CancellationTokenSource _cts = new();
+    private readonly TaskCompletionSource _sessionCompleted =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? _acceptLoop;
     private int _receivedFrameCount;
 
     public List<string> ResultMessages { get; } = [];
     public int ReceivedFrameCount => _receivedFrameCount;
+
+    /// <summary>
+    /// The client's in-band end-of-input terminator, or <c>null</c> if it never sent one.
+    /// </summary>
+    public string? ReceivedTerminatorText { get; private set; }
+
+    /// <summary>
+    /// True if the client ever sent a close frame. A remediated client sends none at all: it ends
+    /// input with <see cref="ReceivedTerminatorText"/> and lets the service close the session, so
+    /// any close frame reaching here is the half-close §3.6d measured as costing the transcript on
+    /// two of the four STT surfaces — this one not among them.
+    /// </summary>
+    public bool ReceivedClientCloseFrame { get; private set; }
+
+    /// <summary>
+    /// Completes when the session handler returns — the join point for the assertions. Same role as
+    /// <c>WebSocketTestServer.SessionCompleted</c>, kept locally because this fake predates that
+    /// server and still runs on <see cref="HttpListener"/>.
+    /// </summary>
+    public Task SessionCompleted => _sessionCompleted.Task;
+
     public int Port { get; }
 
     public DeepgramFakeServer()
@@ -103,6 +126,18 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
 
     private async Task HandleWebSocketAsync(HttpListenerContext ctx)
     {
+        try
+        {
+            await RunSessionAsync(ctx).ConfigureAwait(false);
+        }
+        finally
+        {
+            _sessionCompleted.TrySetResult();
+        }
+    }
+
+    private async Task RunSessionAsync(HttpListenerContext ctx)
+    {
         var wsCtx = await ctx.AcceptWebSocketAsync(null).ConfigureAwait(false);
         var ws = wsCtx.WebSocket;
 
@@ -117,17 +152,39 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
                 .ConfigureAwait(false);
         }
 
-        // Receive frames until client closes.
+        // Receive frames until the client signals end of input — and then keep reading. CloseSent
+        // is in the loop condition on purpose: a client that half-closes sends that frame
+        // immediately behind the terminator, so a fake that stopped at the terminator would report
+        // every client as clean. Not hypothetical — it is what the first version of this loop did,
+        // and the half-close test below passed against a client that half-closed.
         var buf = new byte[65536];
-        while (ws.State == WebSocketState.Open)
+        while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
         {
             try
             {
                 var result = await ws.ReceiveAsync(buf.AsMemory(), _cts.Token).ConfigureAwait(false);
                 if (result.MessageType == WebSocketMessageType.Binary)
+                {
                     Interlocked.Increment(ref _receivedFrameCount);
+                }
+                else if (result.MessageType == WebSocketMessageType.Text)
+                {
+                    // End of input. The service answers the terminator with its Metadata summary
+                    // and then closes the session itself — a fake that ended the session on the
+                    // client's close frame instead would be asserting the half-close as the
+                    // contract, which is the defect §3.6d measured on the other two surfaces.
+                    ReceivedTerminatorText = Encoding.UTF8.GetString(buf, 0, result.Count);
+                    var metadata = Encoding.UTF8.GetBytes(ReadFrame(MetadataFrame));
+                    await ws.SendAsync(metadata.AsMemory(), WebSocketMessageType.Text, true, _cts.Token)
+                        .ConfigureAwait(false);
+                    await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", _cts.Token)
+                        .ConfigureAwait(false);
+                }
                 else if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    ReceivedClientCloseFrame = true;
                     break;
+                }
             }
             catch { break; }
         }

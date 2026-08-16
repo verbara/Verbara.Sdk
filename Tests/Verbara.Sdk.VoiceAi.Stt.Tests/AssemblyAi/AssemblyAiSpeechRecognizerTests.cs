@@ -238,6 +238,42 @@ public class AssemblyAiSpeechRecognizerTests : IAsyncDisposable
         _server.ReceivedFrameCount.Should().Be(0);
     }
 
+    [Fact]
+    public async Task StreamAsync_ShouldSendTheTerminateTerminator_WhenInputEnds()
+    {
+        var recognizer = BuildRecognizer();
+        await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await SessionEndedAsync();
+
+        _server.ReceivedTerminatorText.Should().Be("""{"type":"Terminate"}""");
+    }
+
+    /// <summary>
+    /// The load-bearing half of the pair. §3.6d streamed one utterance of ten spoken digits into
+    /// this surface three ways: half-close alone returned 0/10 digits and not one end-of-turn
+    /// message, the terminator alone returned 10/10, and sending both returned 0/10 — so the
+    /// half-close is not merely redundant here, it destroys the result even when the terminator
+    /// precedes it. This test fails the moment a client sends it again.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldNotHalfCloseTheOutputSide_WhenInputEnds()
+    {
+        var recognizer = BuildRecognizer();
+        await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await SessionEndedAsync();
+
+        _server.ReceivedClientCloseFrame.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Wait for the fake's session handler to return before asserting on what the client sent last.
+    /// <c>StreamAsync</c> returns as soon as the server closes, which can be before the server has
+    /// read the frames the client sent just before that — so without this join point a half-close
+    /// assertion is a race the defect wins. The bound is a liveness guard, not a synchronisation
+    /// delay: it is never reached on a passing run.
+    /// </summary>
+    private Task SessionEndedAsync() => _server.SessionCompleted.WaitAsync(TimeSpan.FromSeconds(10));
+
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()
     {
         yield return new byte[320];

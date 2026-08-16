@@ -216,6 +216,42 @@ public class CartesiaSpeechRecognizerTests : IAsyncDisposable
         _server.ReceivedFrameCount.Should().Be(0);
     }
 
+    /// <summary>
+    /// The terminator is a bare word, not JSON — the service answers JSON on this socket with
+    /// <c>Expected one of: "finalize", "done", "close"</c>, which is how the accepted set was
+    /// established. Asserting the exact bytes is the point: a well-meaning refactor that wrapped it
+    /// in an object the way the other three clients do would be rejected by the vendor and pass
+    /// against any fake that only checked "a text frame arrived".
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldSendTheDoneTerminator_WhenInputEnds()
+    {
+        var recognizer = BuildRecognizer();
+        await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await SessionEndedAsync();
+
+        _server.ReceivedTerminatorText.Should().Be("done");
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldNotHalfCloseTheOutputSide_WhenInputEnds()
+    {
+        var recognizer = BuildRecognizer();
+        await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await SessionEndedAsync();
+
+        _server.ReceivedClientCloseFrame.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Wait for the fake's session handler to return before asserting on what the client sent last.
+    /// <c>StreamAsync</c> returns as soon as the server closes, which can be before the server has
+    /// read the frames the client sent just before that — so without this join point a half-close
+    /// assertion is a race the defect wins. The bound is a liveness guard, not a synchronisation
+    /// delay: it is never reached on a passing run.
+    /// </summary>
+    private Task SessionEndedAsync() => _server.SessionCompleted.WaitAsync(TimeSpan.FromSeconds(10));
+
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()
     {
         yield return new byte[320];
