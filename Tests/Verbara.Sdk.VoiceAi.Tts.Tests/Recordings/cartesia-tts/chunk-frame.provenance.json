@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "cartesia-tts",
+  "product": "Cartesia — text to speech, streaming (Sonic WebSocket)",
+  "endpoint": "GET wss://api.cartesia.ai/tts/websocket",
+  "api_version": "2024-11-13",
+  "captured_utc": "2026-08-16",
+  "media_type": "application/json",
+  "bytes": 597,
+  "sha256": "6d870e8942e084114722639041baea4036cd4dda148d27fc77995f27ef6e2181",
+  "source_audio": {
+    "origin": "synthetic",
+    "description": "The `data` field carries base64 of the FIRST 320 BYTES of the sibling audio-chunk-pcm-s16le-8khz.raw fixture — the same locally generated triangle-wave tone (1004 samples, period 40, amplitude 12000, 16-bit signed little-endian mono at 8000 Hz), not provider output. No text was submitted and no voice, synthetic or otherwise, was involved.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured. context_id holds the nil GUID — the placeholder form protocol section 4 prescribes for a correlating session identifier — because no real session exists to name."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — no Output was captured. Cartesia's own verdict is permitted-with-conditions; the reason there is no real capture is the absence of a capture credential in this environment, not the terms (see the sibling audio fixture's notes)",
+    "checked_utc": "2026-08-16"
+  },
+  "source_schema": {
+    "url": "https://docs.cartesia.ai/2024-11-13/api-reference/tts/tts",
+    "revision": "undated",
+    "read_utc": "2026-08-16",
+    "method": "MEASURED, not read. A controlled probe reproducing the shipped request — corrected only by adding the required context_id and dropping the client's half-close — was run against the live endpoint on 2026-08-16 beside a wrong-path control (HTTP 404 at the handshake) and an invalid-credential control (HTTP 401 at the handshake). It received SEVEN text frames and ZERO binary bytes, each keyed exactly `context_id, data, done, flush_id, status_code, step_time, type`, the base64 in `data` summing to 32 694 B of PCM, followed by a terminator keyed `context_id, done, status_code, type` — the field set the sibling done-frame fixture already carries. This fixture conforms to the measured key set, nesting and types. NO VALUE FROM THE SERVICE WAS STORED: `data` is base64 of our own local tone, `context_id` is the nil placeholder, and `status_code` 206, `step_time` 12.5 and `flush_id` 0 are our own fiction — the measurement fixes which fields arrive, not what they contained. The class therefore stays `synthetic`."
+  },
+  "notes": "THE FINDING THIS FIXTURE CARRIES: Cartesia delivers audio as base64 inside this text frame, and CartesiaSpeechSynthesizer used to yield WebSocket BINARY frames and parse text only far enough to recognise `done` or `error`. Of the seven measured fields it modelled exactly one — `type` — and it modelled it on the terminator, so the client that stopped correctly never started. Combined with the half-close it also sent (see CartesiaSpeechSynthesizer.SendRequestAsync), the shipped client received nothing at all: the two defects are independent, and fixing either alone still yields silence. Both are fixed in the same commit for that reason. The client now decodes `data` from `type=\"chunk\"` frames via CartesiaTtsServerMessage and tolerates `flush_id`, `step_time` and the echoed `context_id` as unmapped members rather than modelling a shape it does not consume. This fixture is what the fake replays to prove it. What this artifact is worth: the key set is a measurement of one day's behaviour on one endpoint, and the vendor publishes no revision marker, so a silent breaking edit is indistinguishable from no edit at all — re-probe rather than re-read when this suite starts failing."
+}

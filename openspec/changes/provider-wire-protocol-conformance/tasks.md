@@ -150,7 +150,7 @@ characterised* in §5.5.
 
 ## 2. Class B — audio arrives on a text frame (Cartesia, ElevenLabs)
 
-- [ ] 2.1 `src/Verbara.Sdk.VoiceAi.Tts/Cartesia/CartesiaSpeechSynthesizer.cs` — the receive loop yields
+- [x] 2.1 `src/Verbara.Sdk.VoiceAi.Tts/Cartesia/CartesiaSpeechSynthesizer.cs` — the receive loop yields
       only `WebSocketMessageType.Binary` frames and treats every text frame as a control message,
       breaking only on `done` / `error`. Decode the vendor's base64 audio field from the JSON text frame
       and write those bytes to the channel. **Closes when** a synthesis over the documented text-frame
@@ -177,10 +177,10 @@ characterised* in §5.5.
       the fix and this task only replaces their evidence basis; (a) and (b) are new defects that were
       not in this change's scope when it was written and MUST be added to §2.1's closing conditions,
       because fixing only the frame type would still ship a provider that produces silence
-- [ ] 2.2 `src/Verbara.Sdk.VoiceAi.Tts/Internal/VoiceAiTtsJsonContext.cs` — `CartesiaTtsControlMessage`
+- [x] 2.2 `src/Verbara.Sdk.VoiceAi.Tts/Internal/VoiceAiTtsJsonContext.cs` — `CartesiaTtsControlMessage`
       models only `type`. Add the audio-carrying member (or a separate chunk DTO), register it in the
       context, and keep the discriminator branch that already recognises `done` / `error`
-- [ ] 2.3 `src/Verbara.Sdk.VoiceAi.Tts/ElevenLabs/ElevenLabsSpeechSynthesizer.cs` — the loop carries the
+- [x] 2.3 `src/Verbara.Sdk.VoiceAi.Tts/ElevenLabs/ElevenLabsSpeechSynthesizer.cs` — the loop carries the
       defect as a comment: *"Only yield binary frames; skip text messages (alignment, metadata)."*
       Decode `AudioOutput.audio` from the text frame instead. **Closes when** the committed fixture in
       2.6 round-trips through the synthesizer to the audio bytes it encodes.
@@ -226,7 +226,14 @@ characterised* in §5.5.
       **Closes when** both Class B loops assemble until `EndOfMessage` before parsing, with a fake
       test that deliberately splits a text frame across two receives, plus one long-input live run per
       Class B provider to observe whether the vendor fragments in practice. Must land **inside** the
-      §2.3/§2.1 commits — shipping the frame-type fix without it is shipping a new defect
+      §2.3/§2.1 commits — shipping the frame-type fix without it is shipping a new defect.
+      **Half done, and the halves are named so neither is claimed by the other.** Landed in the
+      §2.3 and §2.1 commits: both Class B loops now assemble with `ArrayBufferWriter<byte>` until
+      `EndOfMessage`, and both fakes gained a `TextFrameFragmentBytes` knob with a test that splits a
+      text frame across reads at 16 bytes — a mutation check confirms each guard fails when the
+      assembly is removed (§2.12, §2.13). **Still open:** the long-input live run per provider. That
+      conjunct asks whether the vendor fragments *in practice*, which no fake can answer, so this
+      task stays unticked until it is run
 - [ ] 2.3c **The fake seam bypasses the credential entirely, at six sites — so no fake can catch an
       auth defect.** Every WebSocket client gates its auth header behind `if (_fakeServerPort is
       null)`, meaning under test the header is never set and the fake never sees one. Verified
@@ -240,12 +247,12 @@ characterised* in §5.5.
       **Fix:** reshape each seam to substitute the **origin only**, letting headers, query and route
       flow through shipped code, and have each fake assert the auth header and scheme arrived.
       **Closes when** all six are reshaped and each fake carries a credential assertion
-- [ ] 2.4 ElevenLabs has **no server-message DTO at all** — `VoiceAiTtsJsonContext.cs` declares only the
+- [x] 2.4 ElevenLabs has **no server-message DTO at all** — `VoiceAiTtsJsonContext.cs` declares only the
       outbound `ElevenLabsTextChunk` / `ElevenLabsVoiceSettings`. Add a server DTO for the audio field
       and register it. Alignment members are optional: model them or ignore them, but tolerate them —
       the unmapped-member tolerance rule belongs to `provider-dto-robustness-fences` and must not be
       contradicted here
-- [ ] 2.5 Decide, and record, whether the binary branch stays. Neither vendor documents a raw-binary
+- [x] 2.5 Decide, and record, whether the binary branch stays. Neither vendor documents a raw-binary
       mode (both read first-hand 2026-08-14), but a vendor not mentioning a mode is not evidence the
       mode does not exist — so keeping the branch as *tolerated without evidence* costs nothing and
       removing it could break an undocumented path. State which was chosen and on what basis.
@@ -256,23 +263,23 @@ characterised* in §5.5.
       configuration reaches it, which is the same *absence-of-mention* trap this task was written to
       avoid. Recommendation unchanged: keep the branch, and record it as tolerated-without-evidence
       rather than justified — now with the measurement attached
-- [ ] 2.6 `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/elevenlabs-tts/audio-output-frame.json`
+- [x] 2.6 `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/elevenlabs-tts/audio-output-frame.json`
       **already carries** the base64 `audio` field plus the `alignment` / `normalizedAlignment`
       structure. It is committed evidence of a shape the shipped client cannot consume. Wire it into the
       test rather than authoring a new fixture — a fixture that already exists and is already unusable
       is the strongest available proof of the defect
-- [ ] 2.7 `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/cartesia-tts/audio-chunk-pcm-s16le-8khz.provenance.json`
+- [x] 2.7 `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/cartesia-tts/audio-chunk-pcm-s16le-8khz.provenance.json`
       records the divergence in its own notes and defers it: *"this fixture is seeded as binary frames
       because that is what the client under test consumes … the divergence needs its own change, not a
       silent fixture edit."* **This is that change.** Re-seed the fixture to the documented text-frame
       shape and update the sidecar's `notes` and `source_schema.method` to say so; the `.raw` bytes
       stay `SyntheticPcm.Triangle`-generated and byte-asserted
-- [ ] 2.8 `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Cartesia/CartesiaFakeServer.cs` and
+- [x] 2.8 `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Cartesia/CartesiaFakeServer.cs` and
       `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/ElevenLabs/ElevenLabsFakeServer.cs` must send what the vendor
       documents, not what the client currently reads. Scope discipline: `websocket-fake-protocol-contract`
       owns the fake-protocol contract in general and forbids production changes — the fake edits here
       are only those the production fix in 2.1 / 2.3 requires. Do not widen into that change's scope
-- [ ] 2.9 A regression test per provider, `Method_ShouldExpected_WhenCondition`: a normal synthesis
+- [x] 2.9 A regression test per provider, `Method_ShouldExpected_WhenCondition`: a normal synthesis
       yields non-zero audio. This is the assertion the current suites do not make, which is why a
       synthesizer that produces nothing passes today
 - [ ] 2.10 The silent-completion **signal**, which does not fall out of the frame-type fix in 2.1 and is
@@ -303,9 +310,40 @@ characterised* in §5.5.
       (`{code, error, message}`), so a bad credential loses the audio and the reason in the same
       branch. Fixing the frame type in §2.1 fixes both, but assert them as two separate tests — a
       normal synthesis yields audio, and a rejected credential surfaces an error
-- [ ] 2.11 Cartesia and ElevenLabs land as **two separate commits**. Cartesia additionally reaches its
+- [x] 2.11 Cartesia and ElevenLabs land as **two separate commits**. Cartesia additionally reaches its
       `done` terminator and completes successfully with zero audio — call that out in its commit body,
       because it is the silent-failure case and it is the reason this section is first
+- [x] 2.12 **Assemble to `EndOfMessage` before parsing — on both providers, and not optional.** Neither
+      receive loop did: each parsed one `ReceiveAsync` result as if it were a whole message. The
+      vendor sizes these frames, not the client — ElevenLabs' measured run averaged ~29 KB of base64
+      per frame against a 64 KiB buffer, and Cartesia's carried 32 694 B across seven — so a long
+      enough input fragments and the parser is handed a truncated document. Length-dependent, which is
+      why no fixture in either suite ever reached it. Fixing only the frame type would have *created*
+      this defect where none was reachable before, so it lands in the same commits. Both fakes gained
+      a `TextFrameFragmentBytes` knob so the failure is reachable without a 64 KB fixture
+- [x] 2.13 **Non-vacuity, by mutation rather than inspection.** Cartesia: restoring the half-close
+      fails 1 test; ignoring `EndOfMessage` fails 1; removing the `chunk` decode fails 5; sending an
+      empty `context_id` fails 2. ElevenLabs: restoring the half-close fails 1; ignoring
+      `EndOfMessage` fails 1; reverting to binary-only receive fails 5. Every mutation reverted and
+      both suites green afterwards — 91/91 in `Verbara.Sdk.VoiceAi.Tts.Tests`
+- [x] 2.14 **What §2.1's closing evidence is, and what it is not.** Its two conjuncts are met: a
+      synthesis over the measured text-frame shape yields non-zero audio (the fake replays
+      `chunk-frame.json` verbatim, unmodelled fields included), and the live frame inventory from
+      §2.1a matches what the loop now consumes. **Not** done, and deliberately not claimed: the
+      shipped client itself was never run against the live endpoint after the fix. What ran live was
+      a probe reproducing the corrected request — `context_id` added, half-close dropped — which is
+      the same wire behaviour this client now produces, but it is a reconstruction and not the
+      artifact. §5.5 records Cartesia TTS accordingly and §7.7 applies
+- [ ] 2.15 **Drift caused into a neighbouring open change — recorded here, not fixed here.**
+      `openspec/changes/provider-dto-robustness-fences/proposal.md` counts response members by name
+      and states *"Tts contributes exactly one response member (`CartesiaTtsControlMessage.Type`)"*.
+      That type no longer exists: §2.2 replaced it with `CartesiaTtsServerMessage`, which contributes
+      one non-nullable response member and four nullable ones, and §2.4 added
+      `ElevenLabsAudioOutput` with two more. Its **24** is now wrong in both the name and the
+      number. Editing another change's proposal from this one is the scope-widening §2.8 forbids, so
+      the correction belongs to whoever next picks that change up — it must **re-run its inventory**
+      rather than adjust the figure by hand, because this commit is unlikely to be the only source
+      of drift since it was counted
 
 ## 3. Class A — the request never reaches the vendor (LMNT HTTP, Speechmatics TTS)
 
