@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -15,6 +16,12 @@ namespace Verbara.Sdk.VoiceAi.Tts.ElevenLabs;
 /// </summary>
 public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
 {
+    /// <summary>
+    /// One WebSocket read. Frames larger than this arrive fragmented and are assembled before
+    /// parsing — see <see cref="ReceiveFramesAsync"/>.
+    /// </summary>
+    private const int ReceiveBufferSize = 65536;
+
     private readonly ElevenLabsOptions _options;
     private readonly int? _fakeServerPort;
 
@@ -56,7 +63,7 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
         // Fire-and-forget: send text chunks to the server.
         var sendTask = SendTextAsync(ws, text, ct);
 
-        // Receive loop writes binary frames to channel, then completes the writer.
+        // Receive loop decodes audio frames to the channel, then completes the writer.
         var receiveTask = Task.Run(async () =>
         {
             try
@@ -101,16 +108,24 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
             Encoding.UTF8.GetBytes(flushJson).AsMemory(),
             WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
 
-        // Send empty-text close signal (ElevenLabs convention).
+        // Send empty-text close signal (ElevenLabs convention). This IS the end-of-input signal, and
+        // it is the last thing this method sends.
+        //
+        // No half-close follows, and that is the fix — not an omission. This method used to call
+        // CloseOutputAsync(NormalClosure) here, right after the empty chunk. Measured against the
+        // live endpoint with that call as the only variable: with it, 0 bytes and 0 text frames
+        // arrive and the server closes 1006 abnormal; without it, 86 193 B of audio across 4 text
+        // frames and a clean 1000. The vendor reads the client's Close frame as "abandon the
+        // request", so the half-close was a second end-of-input signal that contradicted the first.
+        // Restoring it costs every caller all of their audio.
+        //
+        // This is the third of three TTS sites measured with the same defect — LMNT and Cartesia are
+        // the others — so treat a bare CloseOutputAsync after a request as suspect, not as hygiene.
         var closeSignal = new ElevenLabsTextChunk { Text = string.Empty };
         var closeJson = JsonSerializer.Serialize(closeSignal, VoiceAiTtsJsonContext.Default.ElevenLabsTextChunk);
         await ws.SendAsync(
             Encoding.UTF8.GetBytes(closeJson).AsMemory(),
             WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
-
-        // Initiate the WebSocket closing handshake so the server knows we are done.
-        if (ws.State == WebSocketState.Open)
-            await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct).ConfigureAwait(false);
     }
 
     private static async Task ReceiveFramesAsync(
@@ -118,7 +133,9 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
         ChannelWriter<ReadOnlyMemory<byte>> writer,
         CancellationToken ct)
     {
-        var buf = new byte[65536];
+        var buf = new byte[ReceiveBufferSize];
+        var assembled = new ArrayBufferWriter<byte>(ReceiveBufferSize);
+
         while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
         {
             ValueWebSocketReceiveResult result;
@@ -131,14 +148,45 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
 
             if (result.MessageType == WebSocketMessageType.Close) break;
 
-            // Only yield binary frames; skip text messages (alignment, metadata).
-            if (result.MessageType == WebSocketMessageType.Binary)
-            {
-                var frame = new byte[result.Count];
-                buf.AsSpan(0, result.Count).CopyTo(frame);
-                await writer.WriteAsync(frame.AsMemory(), ct).ConfigureAwait(false);
-            }
+            // Assemble until the message is whole. The vendor sizes these frames, not this client:
+            // one measured run returned ~29 KB of base64 per frame against this 64 KiB buffer, so a
+            // longer input fragments and a loop that parsed each read as if it were a complete
+            // message would hand JSON a truncated document. That failure is length-dependent, which
+            // is exactly why no short probe and no fake ever tripped it.
+            assembled.Write(buf.AsSpan(0, result.Count));
+            if (!result.EndOfMessage) continue;
+
+            var audio = result.MessageType == WebSocketMessageType.Binary
+                // Tolerated without evidence, deliberately. A live run measured zero binary bytes on
+                // this surface and the vendor documents no raw-binary mode — but a vendor not
+                // mentioning a mode is not evidence the mode does not exist, and keeping the branch
+                // costs nothing. Removing it would be an unmeasured change.
+                ? assembled.WrittenSpan.ToArray()
+                : DecodeAudioFrame(assembled.WrittenSpan);
+
+            assembled.Clear();
+
+            if (audio is { Length: > 0 })
+                await writer.WriteAsync(audio.AsMemory(), ct).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Decodes the audio carried by a server text frame, or <see langword="null"/> for a frame that
+    /// carries none.
+    /// </summary>
+    /// <remarks>
+    /// The frame this skips is not always harmless: an invalid credential arrives here as
+    /// <c>{"message":…,"error":"invalid_api_key","code":1008}</c>, which has no <c>audio</c> member
+    /// and is therefore dropped, leaving the caller an empty stream and no exception. That is
+    /// <c>Sdk/ADR-0049</c> D1 on this surface. Surfacing it changes behaviour — a synthesis that
+    /// silently yields nothing would start throwing — so it belongs to the D1 remedy and its own
+    /// decision, not inside a frame-format fix.
+    /// </remarks>
+    private static byte[]? DecodeAudioFrame(ReadOnlySpan<byte> utf8Json)
+    {
+        var frame = JsonSerializer.Deserialize(utf8Json, VoiceAiTtsJsonContext.Default.ElevenLabsAudioOutput);
+        return frame?.Audio is { Length: > 0 } base64 ? Convert.FromBase64String(base64) : null;
     }
 
     private Uri BuildUri()

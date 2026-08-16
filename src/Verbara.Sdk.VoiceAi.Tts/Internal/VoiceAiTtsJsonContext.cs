@@ -15,6 +15,27 @@ internal sealed class ElevenLabsVoiceSettings
     [JsonPropertyName("similarity_boost")] public float SimilarityBoost { get; set; }
 }
 
+/// <summary>
+/// Server → client text frame from the ElevenLabs streaming endpoint. This is where the audio is:
+/// a live run of the shipped request received <b>zero</b> binary bytes and four text frames keyed
+/// <c>alignment, audio, isFinal, normalizedAlignment</c>, the base64 in <c>audio</c> decoding to
+/// 86 193 B of 16 kHz PCM.
+/// </summary>
+/// <remarks>
+/// The two alignment members are deliberately <b>not</b> modelled. They are optional metadata the
+/// synthesizer has no use for, and <c>System.Text.Json</c> skips unmapped members by default — so
+/// tolerating them costs nothing and modelling them would pin a shape this SDK does not consume.
+/// Adding required-member fences is <c>provider-dto-robustness-fences</c>' business, not this type's.
+/// </remarks>
+internal sealed class ElevenLabsAudioOutput
+{
+    /// <summary>Base64 of the audio in the requested <c>output_format</c>. Absent on other frames.</summary>
+    [JsonPropertyName("audio")] public string? Audio { get; set; }
+
+    /// <summary>Set on the vendor's last frame of an utterance.</summary>
+    [JsonPropertyName("isFinal")] public bool? IsFinal { get; set; }
+}
+
 // --- Cartesia TTS DTOs ---
 internal sealed class CartesiaTtsRequest
 {
@@ -163,6 +184,7 @@ internal sealed class LmntServerNotification
 
 [JsonSerializable(typeof(ElevenLabsTextChunk))]
 [JsonSerializable(typeof(ElevenLabsVoiceSettings))]
+[JsonSerializable(typeof(ElevenLabsAudioOutput))]
 [JsonSerializable(typeof(CartesiaTtsRequest))]
 [JsonSerializable(typeof(CartesiaTtsVoice))]
 [JsonSerializable(typeof(CartesiaTtsOutputFormat))]

@@ -34,8 +34,81 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
     private static byte[] RecordedAudio => ElevenLabsFakeServer.ReadFrameBytes(ElevenLabsFakeServer.AudioChunk);
 
     [Fact]
+    public async Task SynthesizeAsync_ShouldYieldTheAudioInsideTheTextFrame_WhenTheServerAnswersLikeTheVendor()
+    {
+        // The headline regression. A live run of the shipped request received ZERO binary bytes and
+        // four text frames keyed alignment/audio/isFinal/normalizedAlignment, so the retired
+        // "only yield binary frames; skip text messages" loop was not a partial defect — the branch
+        // it preferred received nothing at all, and every caller got silence.
+        var expected = RecordedAudio;
+        var synth = BuildSynthesizer();
+
+        var frames = await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        frames.Should().NotBeEmpty("audio arrives base64 on a text frame, and it must be decoded");
+        frames.SelectMany(f => f.ToArray()).Should().Equal(expected,
+            "decoding must not alter a single byte of the audio the vendor sent");
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldNotHalfCloseTheSocket_AfterTheEmptyTextChunk()
+    {
+        // Measured against the live endpoint with CloseOutputAsync as the only variable: with it,
+        // 0 bytes and close 1006; without it, 86 193 B and a clean 1000. The empty text chunk is
+        // already the vendor's end-of-input signal, so the half-close was a second one that
+        // contradicted the first. The fake cannot reproduce the vendor's reaction without racing its
+        // own send loop, so it records what the client sent and this asserts on that.
+        var synth = BuildSynthesizer();
+
+        var audio = await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        _server.ClientSentCloseFrame.Should().BeFalse(
+            "a client Close frame after the request costs every caller all of their audio");
+        audio.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldAssembleTheWholeMessage_WhenATextFrameArrivesFragmented()
+    {
+        // The defect the Class B fix would otherwise have introduced. The vendor sizes these frames
+        // — one measured run averaged ~29 KB of base64 — so a frame past the 64 KiB receive buffer
+        // arrives in fragments, and a loop that parsed each read as a whole message would hand JSON
+        // a truncated document. It is length-dependent, so a short probe cannot trip it: this
+        // fragments deliberately instead of waiting for a big enough fixture.
+        _server.TextFrameFragmentBytes = 16;
+        var synth = BuildSynthesizer();
+
+        var frames = await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        frames.SelectMany(f => f.ToArray()).Should().Equal(RecordedAudio,
+            "fragments must be assembled until EndOfMessage before the frame is parsed");
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldYieldTheAudio_WhenTheFrameAlsoCarriesUnmodelledAlignment()
+    {
+        // The recorded AudioOutput frame, replayed verbatim: audio plus the two alignment structures
+        // the synthesizer deliberately does not model. Tolerating an unmapped member must not cost
+        // the caller the member that matters.
+        _server.SendRecordedAudioOutputFrame = true;
+        var expected = Convert.FromBase64String(
+            JsonDocument.Parse(ElevenLabsFakeServer.ReadFrame(ElevenLabsFakeServer.AudioOutputFrame))
+                .RootElement.GetProperty("audio").GetString()!);
+        var synth = BuildSynthesizer();
+
+        var frames = await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        frames.SelectMany(f => f.ToArray()).Should().Equal(expected);
+    }
+
+    [Fact]
     public async Task SynthesizeAsync_ShouldYieldBinaryAudioFrames()
     {
+        // The tolerated-without-evidence branch. No binary frame has ever been observed on this
+        // surface and the vendor documents no raw-binary mode — but a vendor not mentioning a mode
+        // is not evidence the mode does not exist, so the branch stays and this holds it honest.
+        _server.Transport = ElevenLabsAudioTransport.Binary;
+
         // The point of the recording: a real waveform of a length that is NOT chunk-aligned
         // traverses the frame path, so a partial final frame reaches the consumer. Two 320-byte
         // arrays of zeros — exact multiples — could never produce one.
@@ -69,19 +142,20 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task SynthesizeAsync_ShouldFilterAlignmentMessages_NotYieldThem()
+    public async Task SynthesizeAsync_ShouldNotLeakJsonBytesIntoTheAudio_WhenDecodingATextFrame()
     {
-        // The interleaved text frame is now ElevenLabs' documented AudioOutput message, alignment
-        // arrays and all — not the two-field {"message_type":"alignment","words":[]} literal it
-        // retires, whose field names appear nowhere in ElevenLabs' published protocol. Asserting the
-        // exact byte sequence, rather than a frame count, is what proves the text frames were
-        // dropped whole: a client that leaked one would append JSON bytes to the audio.
-        _server.SendAlignmentMessages = true;
+        // What the retired SynthesizeAsync_ShouldFilterAlignmentMessages_NotYieldThem test was
+        // really worth: asserting the exact byte sequence rather than a frame count. It proved text
+        // frames were dropped whole; it now proves the decoded audio carries no envelope. The
+        // assertion survives the inversion because it was about bytes, not about behaviour.
         var synth = BuildSynthesizer();
 
         var frames = await synth.SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
-        frames.SelectMany(f => f.ToArray()).Should().Equal(RecordedAudio);
+        var yielded = frames.SelectMany(f => f.ToArray()).ToArray();
+        yielded.Should().Equal(RecordedAudio);
+        System.Text.Encoding.UTF8.GetString(yielded).Should().NotContain("audio",
+            "a client that leaked the envelope would append JSON bytes to the waveform");
     }
 
     [Fact]
@@ -98,10 +172,13 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
             ElevenLabsFakeServer.ReadFrame(ElevenLabsFakeServer.AudioOutputFrame));
         var root = frame.RootElement;
 
-        // ElevenLabs documents AudioOutput as `audio` (base64 of the selected output_format) plus
-        // optional `alignment` / `normalizedAlignment`, each three equal-length parallel arrays.
-        // ElevenLabsSpeechSynthesizer models NONE of them — it skips every text frame — so the whole
-        // structure below is unmodelled. That is the finding; see the sidecar.
+        // ElevenLabs documents AudioOutput as `audio` (base64 of the selected output_format) and
+        // `isFinal`, plus optional `alignment` / `normalizedAlignment`, each three equal-length
+        // parallel arrays. A live run measured exactly this key set and zero binary bytes. The
+        // synthesizer models `audio` and `isFinal` and deliberately leaves the two alignment
+        // structures unmapped — tolerated, not consumed; see the sidecar.
+        root.TryGetProperty("isFinal", out _).Should()
+            .BeTrue("the measured frames carry isFinal, so the fixture must too");
         Convert.FromBase64String(root.GetProperty("audio").GetString()!).Should()
             .Equal(audio.Take(ElevenLabsFakeServer.AudioFrameSize),
                 "the frame's audio is the first chunk of the sibling recording, not a second waveform");
