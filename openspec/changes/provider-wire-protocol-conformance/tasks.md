@@ -266,6 +266,29 @@ characterised* in §5.5.
       much coverage is added. This is the same property `wiremock-http-provider-substrate` requires of
       its HTTP substrate; reuse it rather than reimplementing it
 - [ ] 3.13 LMNT and Speechmatics TTS land as **two separate commits**
+- [ ] 3.14 **The capture instrument carries the same broken request as the client — fix it in the
+      §3.1 commit, not after.** `scripts/capture-provider-recording.py` line 851 puts `"voice":
+      "eleanor"` in the JSON body and line 861 targets `https://preview.tts.speechmatics.com/generate`,
+      so the plan reproduces the 404 request byte for byte. This is the defect one level up: the tool
+      built to establish what the vendor does encodes the same assumption the client got wrong, so it
+      cannot contradict it. Run it before the fix and it records a 404; run it after the fix without
+      updating it and it records the route the client no longer sends — and either artifact becomes the
+      fixture `wiremock-http-provider-substrate` §4.5 is waiting on, pinning the defect into the
+      substrate that exists to catch it. **Closes when** the plan's URL and body match the request
+      §3.1 makes the client send, and a run produces a `200 audio/wav` artifact rather than a 404
+- [ ] 3.15 **Same for LMNT, inside the §3.6 commit.** `lmnt_http_plan`
+      (`scripts/capture-provider-recording.py` line 910) hardcodes the 404 route at lines 933–934
+      (`url` and `endpoint_template`, both `https://api.lmnt.com/v1/ai/speech/generate`) and posts
+      form-encoded fields, so it carries both halves of the §3.6 defect — wrong route *and* wrong body
+      encoding. Update both with the route fix, and record §3.7's response-media-type finding in the
+      plan rather than leaving the capture to discover it again. **Closes when** the plan matches the
+      corrected client request and its artifact is a success response, unblocking
+      `wiremock-http-provider-substrate` §4.6
+- [ ] 3.16 Neither §3.14 nor §3.15 was in this change when it was written — both were found by auditing
+      `wiremock-http-provider-substrate`'s three blocked tasks on 2026-08-15, after this change had
+      already been merged. Sweep `scripts/capture-provider-recording.py` for the **remaining** plans and
+      record, per plan, whether its request matches what the shipped client sends. Two were wrong out of
+      the two that were checked; the rest are unexamined, which is not the same as correct
 
 ## 4. Speechmatics STT — the session never authenticates, and the assembly ignores vendor fields
 
