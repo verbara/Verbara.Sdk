@@ -15,8 +15,10 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Speechmatics;
 /// frames in <c>Recordings/speechmatics-stt/</c> (D4), not from a different server. Speechmatics STT
 /// is <c>permitted</c> for capturing Output (<c>docs/guides/provider-recording-protocol.md</c> §7 —
 /// ToS §10.3 assigns the customer all IP in Transcripts), so — unlike Deepgram and AssemblyAI — its
-/// terms are not what stands between this suite and a real capture; no capture credential exists in
-/// this environment, and a capture stays a known, cleared upgrade path. Meanwhile the frames take
+/// terms are not what stands between this suite and a real capture, and as of 2026-08-16 neither is a
+/// missing credential: a working one exists and has opened a live session against this surface, which
+/// streamed no audio and so elicited no transcript frame. What is missing is a capture run, which
+/// makes a real capture a demonstrably reachable upgrade path. Meanwhile the frames take
 /// §7's documentation-derived route, <c>class: "synthetic"</c> with a <c>source_schema</c> block.
 /// That closes the field-set half of the D4 gap and not the drift half. The Speechmatics <em>TTS</em>
 /// suite is a separate, HTTP-transport surface and does migrate (§4.5).
@@ -179,9 +181,41 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         json.Should().Contain("\"language\":\"es\"");
         json.Should().Contain("\"operating_point\":\"enhanced\"");
         json.Should().Contain("\"enable_partials\":true");
-        // URL should carry the jwt query parameter.
+        // The request-target is the language pack and nothing else — the credential is a header now.
         _server.ReceivedRequestUri.Should().NotBeNullOrEmpty();
-        _server.ReceivedRequestUri!.Should().Contain("jwt=test-key");
+        _server.ReceivedRequestUri!.Should().EndWith("/v2/es");
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldAuthenticateWithABearerHeader_WhenOpeningTheSession()
+    {
+        // The defect this replaces: the key travelled as ?jwt=, which the service answers by
+        // upgrading (101) and then closing 4001 not_authorised — so the whole provider was unusable
+        // and this suite was green anyway, because the fake never looked at the credential.
+        // Measured 2026-08-15: the same key in this header reached RecognitionStarted.
+        _server.ResultMessages.Clear();
+        var recognizer = BuildRecognizer();
+
+        await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        _server.ReceivedAuthorizationHeader.Should().Be("Bearer test-key");
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldKeepTheCredentialOutOfTheUrl_WhenOpeningTheSession()
+    {
+        // Separate from the header assertion on purpose: sending the header while still sending
+        // ?jwt= would satisfy that one and leave the long-lived key in a request-target that lands
+        // in every proxy and access log along the way.
+        _server.ResultMessages.Clear();
+        var recognizer = BuildRecognizer(o => o.ApiKey = "sk-not-a-real-key");
+
+        await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        _server.ReceivedRequestUri.Should().NotBeNullOrEmpty();
+        _server.ReceivedRequestUri!.Should().NotContain("jwt");
+        _server.ReceivedRequestUri!.Should().NotContain("sk-not-a-real-key");
+        _server.ReceivedAuthorizationHeader.Should().Be("Bearer sk-not-a-real-key");
     }
 
     [Fact]

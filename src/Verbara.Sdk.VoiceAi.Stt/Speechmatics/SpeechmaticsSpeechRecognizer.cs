@@ -48,6 +48,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
 
         var wsUri = BuildUri();
         using var ws = new ClientWebSocket();
+        ApplyCredential(ws);
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
@@ -187,11 +188,50 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
 
     private Uri BuildUri()
     {
-        // Speechmatics auth: JWT API key passed as a query parameter. URL-encode to be safe.
-        var encodedKey = Uri.EscapeDataString(_options.ApiKey);
+        // No credential in the URL — see ApplyCredential. The path segment is the language pack.
         if (_fakeServerPort.HasValue)
-            return new Uri($"ws://127.0.0.1:{_fakeServerPort}/v2/{_options.Language}?jwt={encodedKey}");
+            return new Uri($"ws://127.0.0.1:{_fakeServerPort}/v2/{_options.Language}");
 
-        return new Uri($"{_options.BaseUri}/{_options.Language}?jwt={encodedKey}");
+        return new Uri($"{_options.BaseUri}/{_options.Language}");
     }
+
+    /// <summary>
+    /// Authenticate the upgrade request with <c>Authorization: Bearer &lt;ApiKey&gt;</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This client previously sent the long-lived API key as a <c>?jwt=</c> query parameter, which
+    /// the service does not accept. The rejection is <b>in-band</b>: the upgrade succeeds with
+    /// <c>101</c> and the socket is then closed with code <c>4001 not_authorised</c>, so a handshake
+    /// status proves nothing here and no session ever opened. Measured 2026-08-15, one variable per
+    /// arm — same credential, same host, seconds apart:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description>
+    ///     <c>?jwt=&lt;long-lived API key&gt;</c>, what this client shipped → closed
+    ///     <c>4001 not_authorised</c>.
+    ///   </description></item>
+    ///   <item><description>
+    ///     <c>Authorization: Bearer &lt;same API key&gt;</c>, no query parameter → accepted, reached
+    ///     <c>RecognitionStarted</c>. This is what the code above does.
+    ///   </description></item>
+    ///   <item><description>
+    ///     <c>?jwt=&lt;temporary key&gt;</c> minted at the vendor's management endpoint → also
+    ///     accepted. Measured, and not chosen: it adds a request before every session, a key lifetime
+    ///     to manage, and an HTTP dependency to a type that has none.
+    ///   </description></item>
+    /// </list>
+    /// <para>
+    /// The third arm is what closes the competing hypothesis: the key was <em>not</em> missing a
+    /// realtime entitlement, since the same credential opened a session through two other channels.
+    /// The defect was the scheme, not the key.
+    /// </para>
+    /// <para>
+    /// The header is set on the fake path too, deliberately. Gating a credential behind
+    /// <c>_fakeServerPort is null</c> is what leaves a fake unable to see the thing it is supposed to
+    /// be checking, and it is the shape this change is removing elsewhere.
+    /// </para>
+    /// </remarks>
+    private void ApplyCredential(ClientWebSocket ws)
+        => ws.Options.SetRequestHeader("Authorization", $"Bearer {_options.ApiKey}");
 }

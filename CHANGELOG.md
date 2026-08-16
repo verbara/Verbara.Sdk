@@ -4,6 +4,51 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: Speechmatics realtime STT could not open a session at all
+
+The long-lived API key travelled as a `?jwt=` query parameter, which the service does not accept.
+The rejection is **in-band** and that is what made it invisible: the upgrade succeeds with `101` and
+the socket is then closed `4001 not_authorised`, so nothing about the handshake looked wrong, the
+client surfaced no exception, and the caller received an `IAsyncEnumerable` that completed normally
+and empty. The provider was unusable as shipped, with no containment — and its suite was green,
+because `SpeechmaticsFakeServer` had no way to look at the credential.
+
+- **`SpeechmaticsSpeechRecognizer` now authenticates with `Authorization: Bearer <ApiKey>`** on the
+  upgrade request, and the credential is gone from the URL. Measured live 2026-08-15, three arms,
+  same credential, same host, seconds apart: `?jwt=<API key>` (what shipped) → closed
+  `4001 not_authorised`; `Authorization: Bearer <same key>` → accepted, reached
+  `RecognitionStarted`; `?jwt=<temporary key minted at the vendor's management endpoint>` → also
+  accepted. The third arm was measured and **not** taken — it adds a request before every session, a
+  key lifetime to manage, and an HTTP dependency to a type that has none — but it is what **refutes**
+  the competing explanation: the same credential opened a session through two channels, so the key
+  was never missing a realtime entitlement. The defect was the scheme.
+
+- **`SpeechmaticsOptions.ApiKey`'s XML doc shipped the broken scheme to consumers** — "Passed as the
+  `jwt` query parameter". Corrected in the same commit, along with a note that this is a long-lived
+  key and nothing here needs refreshing.
+
+- **The header is sent on the fake path too, deliberately.** Gating a credential behind a
+  "is this a test?" check is precisely what leaves a fake unable to see the thing it exists to check.
+
+- **The shared WebSocket test substrate could not assert on a credential at all.**
+  `WebSocketTestServer.ReadUpgradeRequestAsync` parsed the upgrade headers for `Sec-WebSocket-Key`
+  and discarded the rest, so no fake built on it could tell an authenticated connection from an
+  anonymous one. It now returns the full header set and `WebSocketTestSession` exposes it.
+
+- **Confirmed rather than assumed:** the live `RecognitionStarted` top-level field set is exactly
+  `{message, orchestrator_version, id, language_pack_info}`, with `word_delimiter` nested *inside*
+  `language_pack_info` — which is what the committed fixture already held. The fixture was right and
+  nothing in it changes; its provenance sidecar moves from documentation-derived to confirmed, for
+  those names and that nesting and for nothing else. Also recorded, and **not** a defect: every
+  session opens with an `Info` frame carrying sixteen fields against a DTO that declares two. The
+  receive loop skips it by design; modelling it is `provider-dto-robustness-fences`' question.
+
+Named so it is not mistaken for done: the swallowed `Error` frame on this same loop is untouched
+(`Sdk/ADR-0049` D1 — it is what makes an in-band rejection silent), as are the three assembly signals
+the client ignores (`word_delimiter`, `attaches_to`, `metadata.transcript`). And the **fixed client
+has not itself been run live** — the three arms were a probe reproducing what it now sends, which is
+the same wire behaviour but a reconstruction of it, not the artifact.
+
 ### Fixed — BREAKING: ElevenLabs and Cartesia TTS never returned a byte of audio
 
 Two providers, five defects, and every one of them a total failure that a green test suite had been
