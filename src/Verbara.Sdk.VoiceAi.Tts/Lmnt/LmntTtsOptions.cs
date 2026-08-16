@@ -17,7 +17,7 @@ public enum LmntTransport
     WebSocket = 0,
 
     /// <summary>
-    /// HTTP POST fallback. Uses <c>https://api.lmnt.com/v1/ai/speech/generate</c>.
+    /// HTTP POST fallback. Uses <c>https://api.lmnt.com/v1/ai/speech/bytes</c>.
     /// Higher latency than WebSocket; use when outbound WS is blocked on the host network.
     /// </summary>
     Http = 1,
@@ -38,14 +38,28 @@ public sealed class LmntTtsOptions
     public string Voice { get; set; } = LmntVoices.Leah;
 
     /// <summary>
-    /// Audio format. Supported values: <c>mp3</c>, <c>raw</c> (raw PCM), <c>wav</c>.
-    /// Defaults to <c>raw</c> (raw PCM — telephony-friendly, zero container overhead).
+    /// Audio format. Defaults to <c>pcm_s16le</c> — headerless 16-bit signed little-endian PCM,
+    /// the only value measured to satisfy this SDK's <see cref="Verbara.Sdk.Audio.AudioFormat"/> contract on
+    /// <em>both</em> transports.
     /// </summary>
     /// <remarks>
-    /// When using WebSocket transport LMNT streams audio in the requested format as binary frames.
-    /// For telephony pipelines prefer <c>raw</c> (16-bit signed PCM) to avoid MP3 decode overhead.
+    /// <para>
+    /// The synthesizer streams the provider's bytes through unchanged, so the configured format
+    /// must already be the PCM the caller asked for. Only <c>pcm_s16le</c> is that on every
+    /// transport; every other value needs decoding the SDK does not do.
+    /// </para>
+    /// <para>
+    /// <strong>Do not assume <c>raw</c> means raw PCM.</strong> Measured against the live API on
+    /// 2026-08-15, <c>raw</c> is transport-dependent: on the WebSocket stream it is 16-bit PCM, but
+    /// on <c>POST /v1/ai/speech/bytes</c> it is an MP3 frame stream (MPEG-2 Layer III, 96 kbps) served
+    /// under a <c>Content-Type: application/vnd.lmnt.audio-fp32</c> header that describes neither.
+    /// The previous default was <c>raw</c>, so HTTP callers were handed MP3 bytes labelled as
+    /// <c>Slin16</c>. Values the API accepted on that date: <c>aac</c>, <c>mp3</c>, <c>raw</c>,
+    /// <c>wav</c>, <c>ulaw</c>, <c>webm</c>, <c>pcm_s16le</c> — note <c>ulaw</c> arrives wrapped in a
+    /// RIFF/WAV container, not as bare G.711.
+    /// </para>
     /// </remarks>
-    public string Format { get; set; } = "raw";
+    public string Format { get; set; } = "pcm_s16le";
 
     /// <summary>
     /// Output sample rate in Hz. Supported values: 8000, 16000 (default), 24000.
@@ -65,12 +79,23 @@ public sealed class LmntTtsOptions
     public LmntTransport Transport { get; set; } = LmntTransport.WebSocket;
 
     /// <summary>
-    /// Optional LMNT model identifier (e.g. <c>aurora</c>, <c>blizzard</c>).
-    /// When <see langword="null"/> LMNT selects the default model for the requested voice.
+    /// Optional LMNT model identifier. When <see langword="null"/> the field is omitted from the
+    /// request entirely and LMNT selects the default model for the requested voice.
     /// </summary>
     /// <remarks>
-    /// Verify available model identifiers against the live LMNT API at integration test time.
-    /// Use the LMNT account dashboard or <see href="https://docs.lmnt.com"/> to enumerate supported models.
+    /// <para>
+    /// Identifiers the API enumerated on 2026-08-15 when rejecting an invalid one: <c>aurora</c>,
+    /// <c>blizzard</c>, <c>blizzard-2.0</c>, <c>blizzard-2.1</c>, <c>blizzard-dialogue</c>. That set
+    /// is the vendor's, not this SDK's — treat it as a snapshot and re-check against
+    /// <see href="https://docs.lmnt.com"/> rather than as a validated contract.
+    /// </para>
+    /// <para>
+    /// The field must be <em>absent</em> rather than explicitly null: the WebSocket endpoint rejects
+    /// <c>"model": null</c> outright, closing with <c>1002 protocol error</c> and zero audio frames.
+    /// <c>LmntInitMessage.Model</c> therefore carries
+    /// <c>[JsonIgnore(Condition = WhenWritingNull)]</c>; removing it silently breaks every default
+    /// configuration.
+    /// </para>
     /// </remarks>
     public string? Model { get; set; }
 

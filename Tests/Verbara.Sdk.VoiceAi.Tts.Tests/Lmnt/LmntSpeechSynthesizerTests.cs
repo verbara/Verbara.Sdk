@@ -31,10 +31,13 @@ public class LmntTtsOptionsTests
     }
 
     [Fact]
-    public void LmntTtsOptions_ShouldDefaultFormatToRaw()
+    public void LmntTtsOptions_ShouldDefaultFormatToPcmS16Le()
     {
+        // Not "raw". Measured 2026-08-15: `raw` is 16-bit PCM over WebSocket but an MP3 frame
+        // stream over HTTP, so the old default handed HTTP callers MP3 bytes labelled Slin16.
+        // pcm_s16le is the only value that is int16 PCM on both transports.
         var opts = new LmntTtsOptions();
-        opts.Format.Should().Be("raw");
+        opts.Format.Should().Be("pcm_s16le");
     }
 
     [Fact]
@@ -95,9 +98,9 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
         {
             ApiKey = "test-lmnt-key",
             Voice = LmntVoices.Leah,
-            Format = "raw",
             Transport = LmntTransport.WebSocket,
         };
+        // Format is deliberately left at its default so the suite exercises what ships.
         configure?.Invoke(opts);
         return new LmntSpeechSynthesizer(Options.Create(opts), fakeWsPort: _server.Port);
     }
@@ -120,6 +123,58 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
         init.Should().Contain("\"voice\"");
         init.Should().Contain(LmntVoices.Leah);
         init.Should().Contain("\"format\"");
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldOmitModelField_WhenModelIsNotConfigured()
+    {
+        // The defect this guards is total, not cosmetic. Model is null by default, and the init
+        // message used to serialize it as `"model": null`. The live endpoint validates that field
+        // against a literal set, rejects an explicit null with 1002 protocol error, and sends zero
+        // audio frames — so LMNT's DEFAULT transport, in its DEFAULT configuration, never produced
+        // a single byte. No fake caught it because this one replies with audio regardless of what
+        // the init message says.
+        var synth = BuildSynthesizer();
+        await synth.SynthesizeAsync("hello", AudioFormat.Slin16Mono16kHz).ToListAsync();
+
+        var init = _server.ReceivedJsonMessages[0];
+        init.Should().NotContain("\"model\"");
+        init.Should().NotContain("null");
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldSendModelField_WhenModelIsConfigured()
+    {
+        // The other half: omitting null must not degrade into omitting the field altogether.
+        var synth = BuildSynthesizer(o => o.Model = "blizzard");
+        await synth.SynthesizeAsync("hello", AudioFormat.Slin16Mono16kHz).ToListAsync();
+
+        var init = _server.ReceivedJsonMessages[0];
+        init.Should().Contain("\"model\":\"blizzard\"");
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldNotHalfCloseTheSocket_AfterSendingEof()
+    {
+        // Third total defect on the same transport, and the one the other two hid. After `eof` the
+        // synthesizer used to call CloseOutputAsync. Measured against the live endpoint on
+        // 2026-08-15, that yields **zero** audio bytes and ConnectionClosedPrematurely: the server
+        // reads the Close frame as "abandon the request". The control run differed in that single
+        // step and received 30 688 B — 0.959 s of 16 kHz PCM — then closed NormalClosure itself.
+        //
+        // `eof` is already the end-of-input signal; the half-close was a second, contradictory one.
+        //
+        // This asserts on what the client SENT rather than on how a server reacts, because this
+        // fake cannot reproduce the vendor's reaction without racing the send. Reading the flag
+        // after the stream completes is ordered by causality, not luck: the stream cannot complete
+        // until the server closes, the server closes only after sending audio, and a client Close
+        // would necessarily precede that audio.
+        var synth = BuildSynthesizer();
+        var audio = await synth.SynthesizeAsync("hello", AudioFormat.Slin16Mono16kHz).ToListAsync();
+
+        _server.ClientSentCloseFrame.Should().BeFalse(
+            "a Close frame after eof makes the live endpoint tear the session down with zero audio");
+        audio.Should().NotBeEmpty();
     }
 
     [Fact]
@@ -322,16 +377,55 @@ public class LmntSpeechSynthesizerHttpTests : IAsyncDisposable
             Transport = LmntTransport.Http,
         };
         configure?.Invoke(opts);
-        return new LmntSpeechSynthesizer(Options.Create(opts), _http, _server.BaseUri);
+        return new LmntSpeechSynthesizer(Options.Create(opts), _http, _server.Origin);
     }
 
     [Fact]
-    public async Task SynthesizeAsync_Http_ShouldPostToGenerateEndpoint_WithApiKeyHeader()
+    public async Task SynthesizeAsync_Http_ShouldSendApiKeyHeader()
     {
         var synth = BuildSynthesizer();
         await synth.SynthesizeAsync("hello http", AudioFormat.Slin16Mono16kHz).ToListAsync();
 
         _server.ReceivedApiKey.Should().Be("test-lmnt-key");
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_Http_ShouldPostToBytesRoute_NotGenerate()
+    {
+        // Regression guard for the shipped defect. Every HTTP synthesis this client ever made went
+        // to /v1/ai/speech/generate, which the live API answers 404 {"detail":"Not Found"} —
+        // byte-identically to a path that does not exist. The old fake answered 200 on any path, so
+        // the suite certified a route that had never once worked.
+        var synth = BuildSynthesizer();
+
+        await synth.SynthesizeAsync("hello http", AudioFormat.Slin16Mono16kHz).ToListAsync();
+
+        _server.ReceivedMethod.Should().Be("POST");
+        _server.ReceivedPath.Should().Be(LmntHttpFakeServer.SynthesisPath);
+        _server.ReceivedPath.Should().NotBe("/v1/ai/speech/generate");
+        _server.UnmatchedRequestCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_Http_ShouldThrow_WhenClientPostsToAnUnknownRoute()
+    {
+        // Proves the guard above can actually fail: point the client at an origin carrying a path
+        // and the fake refuses it exactly as the live API does. Without this, a fake that silently
+        // stopped matching would make the route assertions vacuous again.
+        var opts = new LmntTtsOptions
+        {
+            ApiKey = "test-lmnt-key",
+            Transport = LmntTransport.Http,
+        };
+        var synth = new LmntSpeechSynthesizer(
+            Options.Create(opts), _http, _server.Origin + "/wrong-prefix");
+
+        var act = async () => await synth
+            .SynthesizeAsync("hello", AudioFormat.Slin16Mono16kHz)
+            .ToListAsync();
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+        _server.UnmatchedRequestCount.Should().Be(1);
     }
 
     [Fact]

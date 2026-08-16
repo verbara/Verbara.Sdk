@@ -4,6 +4,152 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: LMNT TTS has never worked either, on either transport
+
+- **`LmntSpeechSynthesizer` no longer sends `"model": null`, which the WebSocket endpoint rejects
+  outright.** `LmntTtsOptions.Model` defaults to `null` and the init message serialized it
+  explicitly; the API validates that field against a literal set, refuses an explicit null, and
+  closes `1002 protocol error` after sending **zero audio frames**. WebSocket is the default
+  transport, so this was every LMNT caller at stock configuration, since the provider shipped.
+  `LmntInitMessage.Model` now carries `[JsonIgnore(Condition = WhenWritingNull)]` and the field is
+  absent unless configured.
+
+  **This corrects an earlier, narrower reading.** The HTTP route defect below was scoped on the
+  premise that "only callers who opt into HTTP are affected, because `Transport` defaults to
+  `WebSocket`". Probing the WebSocket surface showed the default path was independently broken.
+  Both transports failed, for unrelated reasons, for everyone.
+
+- **`SendWsRequestAsync` no longer half-closes the socket after `eof`, which cost all the audio.**
+  The client sent its four request frames and then called `CloseOutputAsync(NormalClosure)`. The
+  endpoint reads that Close frame as "abandon the request": measured A/B on 2026-08-15 with the
+  half-close as the only variable, it returns **0 bytes** and the receive loop ends
+  `ConnectionClosedPrematurely`, while the identical sequence without it returns 30 688 B — 0.959 s
+  of 16 kHz PCM — and the server closes `NormalClosure` on its own. `eof` is already the
+  end-of-input signal; the half-close was a second, contradictory one.
+
+  **This is a third independent blocker on the default transport, and it was nearly missed.** The
+  `model: null` fix above was verified with a probe that reproduced the init message but not the
+  client's close sequence — so it proved the message was acceptable, and nothing more. Fixing only
+  those two would have shipped a WebSocket path that still produced silence. The rule that follows:
+  a probe that reproduces the *message* is not a probe of the *client*.
+
+- **The HTTP transport POSTs to `/v1/ai/speech/bytes`, not `/v1/ai/speech/generate`.** The shipped
+  route answers `404 {"detail":"Not Found"}` — byte-identically to a path that does not exist,
+  confirmed against a wrong-path control on the same host, with an invalid-credential control
+  returning `403 {"error":"Invalid API key"}` (`Sdk/ADR-0048`, `Sdk/ADR-0049` D4). Probed live
+  2026-08-15.
+
+  The form-encoded body is **kept**. The vendor documents JSON, and this fix was planned to switch,
+  but a form body posted to the corrected route returns `200` with a byte-identical payload — so the
+  encoding was never part of the defect, and changing it would have been an unmeasured edit riding
+  along with a measured one.
+
+### Changed — BREAKING: `LmntTtsOptions.Format` now defaults to `pcm_s16le`
+
+- **The default moves from `raw`, which does not mean raw PCM on every transport.** Measured
+  2026-08-15: over WebSocket, `format=raw` is 16-bit PCM as assumed; over
+  `POST /v1/ai/speech/bytes` the same value returns an **MP3 frame stream** (MPEG-2 Layer III,
+  16 kHz, 96 kbps, mono) under a `Content-Type: application/vnd.lmnt.audio-fp32` header that
+  describes neither. `SynthesizeHttpAsync` streams the body through unchanged, so HTTP callers were
+  handed MP3 bytes labelled `Slin16`. `pcm_s16le` returns headerless int16 PCM on **both**
+  transports — one value, correct everywhere, and no decoder added to the SDK.
+
+  Callers who set `Format` explicitly are unaffected. Callers relying on the default get working
+  PCM on HTTP and byte-equivalent audio on WebSocket. Also worth knowing before you reach for it:
+  `format=ulaw` arrives wrapped in a RIFF/WAV container, not as bare G.711.
+
+### Known — LMNT WebSocket discards the error frame that explains a failure
+
+- **A failed LMNT WebSocket synthesis still yields an empty stream and no exception.**
+  `ReceiveWsFramesAsync` terminates on `notification.Error == "error"`, comparing an error *message*
+  against the literal string `"error"` — which no real message equals. Both live failures observed
+  (`{"error":"model: Input should be …"}` and `{"error":"Invalid API key"}`) fall through, the
+  socket closes, and the transport exception is swallowed. Not fixed here: making it throw is a
+  behavioural change that belongs with the `Sdk/ADR-0049` D1 remedy rather than a route fix. The two
+  fixes above remove the failures that were reaching it; they do not make the next one visible.
+
+### Known — six other clients half-close the same way, and none of them is measured
+
+- **The LMNT half-close above is a pattern, not a one-off.** `CloseOutputAsync` immediately after
+  the request appears in `ElevenLabs` TTS, `Cartesia` TTS, and the Deepgram, Speechmatics, AssemblyAI
+  and Cartesia speech recognizers. Two of these have now been measured against the live endpoint —
+  LMNT (fixed above) and Cartesia TTS — and **both returned zero bytes**, so the base rate is not
+  "occasionally harmful". The other six are *not characterised*: that describes the evidence, not a
+  prediction of breakage, and nothing here should be read as a claim that they are broken. ElevenLabs
+  is the one to watch, because it was probed on 2026-08-15 and found working — with a probe that,
+  like LMNT's, never reproduced the close sequence.
+
+### Fixed — the LMNT test fakes certified every one of these defects as correct behaviour
+
+- **`LmntHttpFakeServer` now matches on method and path**, serving only `POST /v1/ai/speech/bytes`
+  and answering the live `404 {"detail":"Not Found"}` otherwise, with an unmatched-request counter
+  so a route assertion cannot pass on a stale body. It previously never inspected the path. A
+  mutation test measured the cost: restoring the old route fails **five** HTTP tests, so the entire
+  suite had been green against an endpoint that returns 404 — one test even named
+  `ShouldPostToGenerateEndpoint` while asserting nothing but a header.
+
+- **`LmntWsFakeServer`'s blind spot is now covered by tests rather than the fake.** It records the
+  init message and then replies with audio regardless of what that message says, so the suite
+  asserted the init was *sent*, never that it was *acceptable*. Two regression tests now pin the
+  `model` field's absence when unset and its presence when set.
+
+  It also answered the client's Close frame with a full audio stream, where the live endpoint
+  answers with nothing. Reproducing that reaction faithfully would mean racing the fake's own send,
+  so the fake records `ClientSentCloseFrame` and the test asserts on what the client *sent* instead
+  — a check whose ordering is fixed by causality rather than timing. A mutation check confirms it:
+  restoring `CloseOutputAsync` fails the new guard.
+
+- **`scripts/capture-provider-recording.py` no longer reproduces the LMNT defect.** `lmnt_http_plan`
+  hardcoded the same `404` route and the `raw` format, so a capture run would have recorded a 404
+  envelope as though it were the surface — the defect one level up from the client.
+
+  **And its own test suite had pinned both broken plans.** `scripts/tests/` was green against the
+  `/generate` route, the `voice` body field and `format=raw`; LMNT's route was not asserted by any
+  test at all, which is how it survived every run. The measured values are pinned now and the two
+  missing route assertions exist.
+
+### Fixed — Speechmatics TTS has never worked
+
+- **`SpeechmaticsSpeechSynthesizer` now selects the voice by path segment, so the request succeeds.**
+  The shipped client POSTed to `/generate` with the voice as a JSON body field. The API has no
+  `/generate` route: it answers `404 Not Found`, identically to a route that does not exist —
+  because that is what it is. Every synthesis this provider ever attempted failed, for every caller,
+  since the surface shipped. Probed live 2026-08-16: `POST /generate/{voice}` returns
+  `200 audio/wav` (33 836 B, valid `RIFF`/`WAVE`), with a wrong-path control still `404` and an
+  invalid-credential control `401` on the same host (`Sdk/ADR-0048`, `Sdk/ADR-0049` D4).
+
+  The `voice` field is **removed from the request body** rather than left alongside the path
+  segment. Sending both returned identical output when the two agree, but which one wins when they
+  disagree was not measured, and an unmeasured precedence is not a thing to depend on.
+
+### Changed — BREAKING: `SpeechmaticsOptions.BaseUri` is now an origin
+
+- **`BaseUri` no longer carries a path.** Its default moves from
+  `https://preview.tts.speechmatics.com/generate` to `https://preview.tts.speechmatics.com`, and the
+  synthesizer appends `/generate/{Voice}` itself. Callers who never set the property are unaffected
+  and go from a guaranteed `404` to working audio.
+
+  **Callers who do set it must drop the `/generate` suffix**; a value that still carries it now
+  produces `/generate/generate/{voice}`. The property's signature is unchanged, so this is a
+  behavioural break the compiler cannot catch — hence this entry. Alternatives rejected: appending
+  the segment to whatever the caller supplies (leaves `BaseUri` meaning "the URL minus its last
+  segment", a rule nothing in the type communicates), and introducing a replacement option with
+  `[Obsolete]` on `BaseUri` (downstream repos run `TreatWarningsAsErrors`, so the warning breaks
+  their builds).
+
+### Fixed — the test fake certified the broken route
+
+- **`SpeechmaticsFakeServer` now matches on method and path**, returning `404` for anything but
+  `POST /generate/{voice}`. It previously never inspected `Request.Url` and answered any route, so
+  three fully green tests certified a client whose every production request `404`ed. A fake more
+  permissive than the vendor cannot fail on a wrong route — it can only bless one. Three regression
+  tests now pin the path segment, the absence of the body field, and URI escaping of the voice.
+
+- **`scripts/capture-provider-recording.py` no longer reproduces the defect.** The Speechmatics
+  capture plan built the same `/generate` request with the voice in the body, so the instrument
+  meant to establish what the vendor does could only ever have recorded the `404` — the defect one
+  level up from the client.
+
 ### Security
 
 - **`SSH.NET` pinned to `2026.0.0` to clear [GHSA-q939-rpr3-3284](https://github.com/advisories/GHSA-q939-rpr3-3284)**

@@ -23,18 +23,35 @@ namespace Verbara.Sdk.VoiceAi.Tts.Lmnt;
 /// notification messages.
 /// </para>
 /// <para>
-/// <strong>HTTP path:</strong> POSTs to <c>https://api.lmnt.com/v1/ai/speech/generate</c>
+/// <strong>HTTP path:</strong> POSTs to <c>https://api.lmnt.com/v1/ai/speech/bytes</c>
 /// with form-encoded body fields. Authentication via the <c>X-API-Key</c> header.
 /// The response body is streamed in chunks to keep memory bounded.
+/// </para>
+/// <para>
+/// <strong>The two transports do not agree on what a format name means.</strong> Measured against
+/// the live API on 2026-08-15, <c>format=raw</c> yields 16-bit PCM over WebSocket but an MP3 frame
+/// stream over HTTP. Both paths stream provider bytes through untouched, so the format is the
+/// caller's contract with the provider, not something this class can reconcile — see
+/// <see cref="LmntTtsOptions.Format"/>, which defaults to the one value measured correct on both.
 /// </para>
 /// </remarks>
 public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
 {
     private const int HttpChunkSize = 8192;
 
+    /// <summary>Production origin for the HTTP transport. The route is appended, never replaced.</summary>
+    private const string HttpOrigin = "https://api.lmnt.com";
+
+    /// <summary>
+    /// The synthesis route. <c>/v1/ai/speech/generate</c> — what this client posted to until
+    /// 2026-08-15 — does not exist: the live API answers it <c>404 {"detail":"Not Found"}</c>,
+    /// byte-identically to a nonexistent path, so no LMNT HTTP synthesis ever succeeded.
+    /// </summary>
+    private const string HttpRoute = "/v1/ai/speech/bytes";
+
     private readonly LmntTtsOptions _options;
     private readonly int? _fakeWsPort;
-    private readonly string? _fakeHttpBaseUri;
+    private readonly string? _fakeHttpOrigin;
     private readonly HttpClient? _httpClient;
     private readonly bool _ownsHttpClient;
 
@@ -62,12 +79,21 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
         _fakeWsPort = fakeWsPort;
     }
 
-    /// <summary>Initializes a new instance for testing with a fake HTTP server.</summary>
-    internal LmntSpeechSynthesizer(IOptions<LmntTtsOptions> options, HttpClient httpClient, string fakeHttpBaseUri)
+    /// <summary>
+    /// Initializes a new instance for testing with a fake HTTP server.
+    /// </summary>
+    /// <param name="options">Provider options.</param>
+    /// <param name="httpClient">Test-owned client; this instance does not dispose it.</param>
+    /// <param name="fakeHttpOrigin">
+    /// Scheme and authority only (e.g. <c>http://127.0.0.1:5051</c>). The seam deliberately does not
+    /// accept a full URL: when it did, the fake's origin supplied the route too, so the route the
+    /// client builds was never exercised and a 404 endpoint stayed green for the fake's whole life.
+    /// </param>
+    internal LmntSpeechSynthesizer(IOptions<LmntTtsOptions> options, HttpClient httpClient, string fakeHttpOrigin)
     {
         _options = options.Value;
         _httpClient = httpClient;
-        _fakeHttpBaseUri = fakeHttpBaseUri;
+        _fakeHttpOrigin = fakeHttpOrigin;
         _ownsHttpClient = false;
     }
 
@@ -83,7 +109,7 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
         // STT fence (ADR-0038).
         ct.ThrowIfCancellationRequested();
 
-        if (_options.Transport == LmntTransport.Http || _fakeHttpBaseUri is not null)
+        if (_options.Transport == LmntTransport.Http || _fakeHttpOrigin is not null)
         {
             await foreach (var chunk in SynthesizeHttpAsync(text, outputFormat, ct).ConfigureAwait(false))
                 yield return chunk;
@@ -196,19 +222,22 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
         catch (OperationCanceledException) { return; /* receive loop cancelled the session: server is gone */ }
         catch (WebSocketException) { return; /* peer aborted the connection mid-send */ }
 
-        // Half-close: guarded timeout to avoid hanging when the server already closed.
-        if (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
-        {
-            using var closeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            closeCts.CancelAfter(TimeSpan.FromSeconds(2));
-            try
-            {
-                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", closeCts.Token)
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) { /* server is gone, give up */ }
-            catch (WebSocketException) { /* peer already closed abruptly */ }
-        }
+        // No half-close here, and that is the fix — not an omission.
+        //
+        // This method used to call CloseOutputAsync(NormalClosure) once eof was sent. Measured
+        // against the live endpoint on 2026-08-15, that produces **zero audio bytes**: the server
+        // treats the client's Close frame as the end of the session and tears it down before
+        // emitting anything, and the receive loop sees ConnectionClosedPrematurely. The identical
+        // sequence without the half-close returns 30 688 B — 0.959 s of 16 kHz PCM — and the server
+        // closes NormalClosure on its own once the audio is out. The controls were the two runs.
+        //
+        // `eof` already is the end-of-input signal at the application protocol level; the WebSocket
+        // half-close was a second, redundant one that the vendor reads as "abandon the request".
+        // The session now ends when the server closes, which is what the receive loop already
+        // waits for, and the caller's CancellationToken still bounds it.
+        //
+        // CartesiaSpeechSynthesizer has the same defect for the same reason — it is tracked
+        // separately because its fix belongs with that provider's frame-type work.
     }
 
     private static async Task ReceiveWsFramesAsync(
@@ -276,8 +305,10 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
     {
         var sampleRate = outputFormat.SampleRate > 0 ? outputFormat.SampleRate : _options.SampleRate;
 
-        // LMNT HTTP POST accepts application/x-www-form-urlencoded body fields.
-        // Field names verified from LMNT REST API docs (https://docs.lmnt.com); confirm at integration test time.
+        // Form encoding is kept deliberately. The vendor documents JSON, but the route was measured
+        // on 2026-08-15 to answer 200 to a form-encoded body with a byte-identical payload — so the
+        // encoding was never part of the defect, and swapping it would be an unmeasured change
+        // riding along with a measured fix.
         var formValues = new Dictionary<string, string>
         {
             ["voice"] = _options.Voice,
@@ -291,7 +322,7 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
         if (_options.Model is not null)
             formValues["model"] = _options.Model;
 
-        var uri = _fakeHttpBaseUri ?? "https://api.lmnt.com/v1/ai/speech/generate";
+        var uri = (_fakeHttpOrigin ?? HttpOrigin).TrimEnd('/') + HttpRoute;
         using var request = new HttpRequestMessage(HttpMethod.Post, uri)
         {
             Content = new FormUrlEncodedContent(formValues),

@@ -47,8 +47,8 @@ internal sealed class CartesiaTtsControlMessage
 // --- Speechmatics TTS DTOs ---
 internal sealed class SpeechmaticsTtsRequest
 {
+    // No "voice" field: the API selects the voice by path segment (/generate/{voice}).
     [JsonPropertyName("text")] public string Text { get; set; } = string.Empty;
-    [JsonPropertyName("voice")] public string Voice { get; set; } = string.Empty;
     [JsonPropertyName("language")] public string Language { get; set; } = string.Empty;
     [JsonPropertyName("sample_rate")] public int SampleRate { get; set; }
 }
@@ -108,7 +108,14 @@ internal sealed class LmntInitMessage
     [JsonPropertyName("sample_rate")] public int SampleRate { get; set; }
     [JsonPropertyName("language")] public string Language { get; set; } = string.Empty;
     [JsonPropertyName("speed")] public double Speed { get; set; } = 1.0;
-    [JsonPropertyName("model")] public string? Model { get; set; }
+
+    // Omitted when null rather than sent as `"model": null`. LMNT's WS endpoint validates the field
+    // against a literal set that does not include null, and answers an explicit null with
+    // `1002 protocol error` + zero audio — which is the default configuration of this client.
+    // Serializing null here is not a cosmetic difference; it is a total outage.
+    [JsonPropertyName("model")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Model { get; set; }
 }
 
 /// <summary>Text input message sent to the LMNT WebSocket endpoint after the init message.</summary>

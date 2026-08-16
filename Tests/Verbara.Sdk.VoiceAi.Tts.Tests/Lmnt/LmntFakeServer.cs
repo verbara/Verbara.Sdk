@@ -87,6 +87,20 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     /// <summary>Binary audio frames to stream back to the client.</summary>
     public List<byte[]> AudioFramesToSend { get; } = [];
 
+    /// <summary>
+    /// Whether the client ever sent a WebSocket Close frame. The live endpoint treats one as
+    /// "abandon the request" and tears the session down having emitted nothing, so a client that
+    /// sends it gets zero audio — measured 2026-08-15, against a control run that omitted only
+    /// this step and received 30 688 B. This fake cannot reproduce that reaction without a timing
+    /// race, so it records the client's behaviour instead and lets a test assert on it directly.
+    /// </summary>
+    /// <remarks>
+    /// Reading this after <c>SynthesizeAsync</c> completes is deterministic, not a race: the
+    /// client's stream cannot complete until the server closes, the server closes only after
+    /// sending audio, and any client Close precedes that audio. Causality orders it.
+    /// </remarks>
+    public bool ClientSentCloseFrame { get; private set; }
+
     /// <summary>Send the recorded <c>finish</c> control frame as a text message after all audio frames.</summary>
     public bool SendFinishTerminator { get; set; } = true;
 
@@ -190,7 +204,11 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
                     _requestComplete.TrySetResult();
             }
             else if (result.MessageType == WebSocketMessageType.Close)
+            {
+                // Recorded, not tolerated: against the live endpoint this frame costs all the audio.
+                ClientSentCloseFrame = true;
                 break;
+            }
         }
     }
 
@@ -218,10 +236,13 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
             // Tests that verify cancellation set this flag so the synthesizer's
             // channel-reader is blocked when the test CTS fires.
             //
-            // Awaiting only the receive loop is not enough: the client half-closes
-            // (CloseOutputAsync) immediately after EOF, which ends that loop while the socket is
-            // still perfectly readable. Returning there would tear the session down and complete
-            // the client's stream — the one thing a cancellation test must never see.
+            // Awaiting only the receive loop is not enough: it ends on any Close or read fault
+            // while the socket is still perfectly writable. Returning there would tear the session
+            // down and complete the client's stream — the one thing a cancellation test must never
+            // see. (It used to end because the client half-closed after EOF; that step was removed
+            // from the synthesizer once it was measured to cost all the audio. The delay must stay
+            // regardless — what this branch owes the test is a socket that never completes on its
+            // own, not a reaction to one particular client frame.)
             try { await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { /* disposed: release the socket */ }
             try { await receiveTask.ConfigureAwait(false); } catch { }
@@ -264,17 +285,43 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
 /// In-process HTTP server that speaks the LMNT TTS REST wire protocol.
 /// </summary>
 /// <remarks>
-/// Accepts <c>POST /v1/ai/speech/generate</c>, records the form body and all
-/// notable headers, and replies with the caller-configured status code and audio body.
+/// <para>
+/// Accepts <c>POST /v1/ai/speech/bytes</c> only, records the form body, the path, the method and
+/// all notable headers, and replies with the caller-configured status code and audio body.
+/// Anything else gets the live API's <c>404 {"detail":"Not Found"}</c>.
+/// </para>
+/// <para>
+/// That refusal is the point. This fake used to answer 200 to any request on any path, so the
+/// client's route was never a tested property — it posted to <c>/v1/ai/speech/generate</c>, which
+/// the live API answers 404, and five green tests said otherwise for the fake's whole life. One of
+/// them was even named <c>ShouldPostToGenerateEndpoint</c> while asserting only a header. A fake
+/// more permissive than the vendor does not test a client; it certifies whatever the client does.
+/// </para>
 /// </remarks>
 internal sealed class LmntHttpFakeServer : IAsyncDisposable
 {
+    /// <summary>The only route the live API serves — see <c>LmntSpeechSynthesizer.HttpRoute</c>.</summary>
+    public const string SynthesisPath = "/v1/ai/speech/bytes";
+
     private readonly HttpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private Task? _acceptLoop;
 
     /// <summary>The raw request body received from the client.</summary>
     public string? ReceivedRequestBody { get; private set; }
+
+    /// <summary>Absolute path of the last request — the property the old fake never looked at.</summary>
+    public string? ReceivedPath { get; private set; }
+
+    /// <summary>HTTP method of the last request.</summary>
+    public string? ReceivedMethod { get; private set; }
+
+    /// <summary>
+    /// Requests that did not match <see cref="SynthesisPath"/>. A test asserting a route must assert
+    /// this is zero: without it, a client that posts somewhere else still "passes" on the recorded
+    /// body of an earlier matched request.
+    /// </summary>
+    public int UnmatchedRequestCount { get; private set; }
 
     /// <summary>The <c>X-API-Key</c> header value received from the client.</summary>
     public string? ReceivedApiKey { get; private set; }
@@ -290,7 +337,11 @@ internal sealed class LmntHttpFakeServer : IAsyncDisposable
 
     public int Port { get; }
 
-    public string BaseUri => $"http://127.0.0.1:{Port}/v1/ai/speech/generate";
+    /// <summary>
+    /// Scheme and authority only. It stops at the authority on purpose: the client must build the
+    /// route itself, or the route is not under test.
+    /// </summary>
+    public string Origin => $"http://127.0.0.1:{Port}";
 
     public LmntHttpFakeServer()
     {
@@ -343,6 +394,25 @@ internal sealed class LmntHttpFakeServer : IAsyncDisposable
     {
         try
         {
+            ReceivedMethod = ctx.Request.HttpMethod;
+            ReceivedPath = ctx.Request.Url?.AbsolutePath;
+
+            if (!string.Equals(ReceivedMethod, "POST", StringComparison.Ordinal) ||
+                !string.Equals(ReceivedPath, SynthesisPath, StringComparison.Ordinal))
+            {
+                // What the live API answers a wrong route — verbatim, so a client that misses the
+                // route fails here exactly as it fails in production.
+                UnmatchedRequestCount++;
+                var notFound = Encoding.UTF8.GetBytes("{\"detail\":\"Not Found\"}");
+                ctx.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                ctx.Response.ContentType = "application/json";
+                ctx.Response.ContentLength64 = notFound.Length;
+                await ctx.Response.OutputStream.WriteAsync(notFound.AsMemory(), _cts.Token)
+                    .ConfigureAwait(false);
+                ctx.Response.Close();
+                return;
+            }
+
             ReceivedApiKey = ctx.Request.Headers["X-API-Key"];
             ReceivedLmntVersion = ctx.Request.Headers["lmnt-version"];
 
@@ -352,7 +422,9 @@ internal sealed class LmntHttpFakeServer : IAsyncDisposable
             ctx.Response.StatusCode = (int)ResponseStatus;
             if (ResponseStatus == HttpStatusCode.OK)
             {
-                ctx.Response.ContentType = "audio/raw";
+                // What the live API returns for format=pcm_s16le (measured 2026-08-15), not the
+                // invented "audio/raw" that no LMNT response has ever carried.
+                ctx.Response.ContentType = "application/vnd.lmnt.audio-int16";
                 ctx.Response.ContentLength64 = ResponseAudio.Length;
                 await ctx.Response.OutputStream.WriteAsync(ResponseAudio.AsMemory(), _cts.Token)
                     .ConfigureAwait(false);
