@@ -771,11 +771,40 @@ characterised* in §5.5.
       `test_ShouldSelectTheVoiceByPathSegment_NotByBodyField`); 159 pass. This is the §3.12 property
       at the instrument's own test layer — the same shape as the C# fakes and as §5.4's redactor,
       making three levels at which a checker was more permissive than the thing it checked
-- [ ] 3.16 Neither §3.14 nor §3.15 was in this change when it was written — both were found by auditing
+- [x] 3.16 Neither §3.14 nor §3.15 was in this change when it was written — both were found by auditing
       `wiremock-http-provider-substrate`'s three blocked tasks on 2026-08-15, after this change had
       already been merged. Sweep `scripts/capture-provider-recording.py` for the **remaining** plans and
       record, per plan, whether its request matches what the shipped client sends. Two were wrong out of
-      the two that were checked; the rest are unexamined, which is not the same as correct
+      the two that were checked; the rest are unexamined, which is not the same as correct.
+      **Closed 2026-08-17. `PROVIDERS` holds exactly five plans; §3.14 and §3.15 took the two that were
+      wrong, and the remaining three all match** — field by field, not by inspection of the docstring:
+
+      | Plan | Compared against | Verdict |
+      |---|---|---|
+      | `openai-whisper` | `WhisperSpeechRecognizer` | **matches.** URL equals `WhisperOptions.Endpoint`'s default; part order `file`, `model`, `language` identical; file part carries no `Content-Type` (`ByteArrayContent`), text parts `text/plain; charset=utf-8` (`StringContent`); `whisper-1` and `es` are the option defaults; `Bearer` header |
+      | `azure-openai-whisper` | `AzureWhisperSpeechRecognizer` | **matches.** `{base}/{deployment}/audio/transcriptions?api-version=` built the same way; `api-key` header, not `Authorization`; **only** `file` + `model`, and `model` is hardcoded `whisper-1` on both sides — the client sends no `language` part and the plan sends none |
+      | `google-speech` | `GoogleSpeechRecognizer` | **matches.** Origin + `/v1/speech:recognize?key=` identical to `ProductionOrigin` + `RecognizePath`; body key order `config{encoding, sampleRateHertz, languageCode, model}`, `audio{content}` is the DTO's own declaration order; compact separators; `application/json; charset=utf-8`; raw LINEAR16 base64 with **no** RIFF header, which is what the recognizer sends |
+
+      Two divergences found, both recorded because neither is a client defect and both would otherwise
+      read as oversights. **(i)** `deployments_base()` normalizes a resource-root Azure endpoint to
+      `…/openai/deployments`, so the plan is *more forgiving* than the client:
+      `AzureWhisperOptions.Endpoint` has no default (`default!`) and is documented as already carrying
+      that segment, so a client configured with the bare resource root builds a URL missing it and 404s
+      while the plan silently corrects the same input. The capture cannot detect that misconfiguration —
+      the one place the instrument is deliberately not the client. **(ii)** the Google plan serializes
+      with `ensure_ascii=False`; `VoiceAiSttJsonContext` declares no `JsonSourceGenerationOptions`, so
+      `System.Text.Json` escapes non-ASCII to `\uXXXX`. No divergence today — every value in that body is
+      ASCII (`LINEAR16`, `es-CO`, `default`, base64) — and latent the moment a non-ASCII value enters it.
+      The Google plan is also the one that faithfully reproduces a request already **known** to fail: the
+      `?key=` auth the recognizer sends is undocumented for `speech:recognize`, which the plan states and
+      offers a `Bearer` path around, recording in the sidecar that the captured auth is not production's.
+      **Bounded on purpose:** this is a static comparison of each plan against the shipped
+      request-building code. It establishes that instrument and client agree; it cannot establish that
+      either is what the vendor wants — that is §7.5's live re-probe. Residual gap, and it is not
+      "correct": **`azure-tts` has no plan at all.** It is the sixth HTTP surface, its committed
+      recording under `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/azure-tts/` was produced by hand,
+      and so its provenance cannot cite the canonical script — the same class of gap as §3.17a, one
+      surface over
 
 ## 4. Speechmatics STT — the session never authenticates, and the assembly ignores vendor fields
 
