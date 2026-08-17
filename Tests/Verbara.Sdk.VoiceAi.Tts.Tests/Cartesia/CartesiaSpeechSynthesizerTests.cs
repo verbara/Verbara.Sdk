@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Tts.Cartesia;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
@@ -279,6 +280,36 @@ public class CartesiaSpeechSynthesizerTests : IAsyncDisposable
         // never discarded.
         failure.Code.Should().BeNull();
         failure.InnerException.Should().BeOfType<WebSocketException>();
+    }
+
+    /// <summary>
+    /// The fourth door, and the one no receive-loop test can reach: a session that never opens.
+    /// <c>ADR-0050</c> E7 wraps the bare <see cref="WebSocketException"/> so the caller reads one type
+    /// whether this vendor validates at the upgrade or in band. A refused connection carries no HTTP
+    /// answer, hence no code; the answered-with-a-status branch is asserted on the factory itself
+    /// (<c>SpeechProviderFailureExceptionTests</c>) because no fake in this suite can reject an upgrade
+    /// yet. Built inline rather than through <c>BuildSynthesizer</c> because the point of this test is
+    /// that it never reaches the fake.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
+    {
+        var synth = new CartesiaSpeechSynthesizer(Options.Create(new CartesiaOptions
+        {
+            ApiKey = TestApiKey,
+            VoiceId = "test-voice",
+            BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/tts/websocket"
+        }));
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Handshake);
+        failure.Provider.Should().Be("Cartesia");
+        failure.Code.Should().BeNull("a refused connection produced no HTTP answer to report");
+        failure.InnerException.Should().BeAssignableTo<WebSocketException>();
     }
 
     /// <summary>

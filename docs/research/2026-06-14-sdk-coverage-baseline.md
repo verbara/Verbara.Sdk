@@ -39,3 +39,34 @@ and does **not** double-run (unlike Platform/Pro/Web, which used `push:[main]`).
 
 Same recipe as the Platform baseline doc. Raise `coverage-floor.json` manually in a normal
 PR when coverage improves, keeping ~2 points of slack.
+
+## Measured 2026-08-17 — two assemblies are silently not measured
+
+`Verbara.Sdk.VoiceAi.Stt.Tests` and `Verbara.Sdk.VoiceAi.Tts.Tests` do not measure the
+`Verbara.Sdk.VoiceAi` assembly at all. Coverlet reports an instrumentation **failure**, not an
+exclusion (an excluded module logs `Excluded module:` instead):
+
+```
+[coverlet]Unable to instrument module: …/Tests/Verbara.Sdk.VoiceAi.Stt.Tests/bin/Release/net10.0/Verbara.Sdk.VoiceAi.dll
+[coverlet]Unable to instrument module: …/Tests/Verbara.Sdk.VoiceAi.Stt.Tests/bin/Release/net10.0/Verbara.Sdk.VoiceAi.AudioSocket.dll
+```
+
+Both are ordinary `ProjectReference` dependencies with their PDBs sitting next to them, and the same
+`Verbara.Sdk.VoiceAi.dll` instruments cleanly under `Verbara.Sdk.VoiceAi.Tests` and
+`Verbara.Sdk.VoiceAi.TurnDetection.Tests` — so this is per-consumer, not per-module. Reproducible on
+a single-project run:
+
+```sh
+dotnet test Tests/Verbara.Sdk.VoiceAi.Stt.Tests/ \
+  --collect:"XPlat Code Coverage" --settings coverlet.runsettings
+```
+
+The resulting Cobertura lists only `Verbara.Sdk.Audio` and `Verbara.Sdk.VoiceAi.Stt`. Read the
+warning with `--diag`; the console output says nothing.
+
+**Consequence for the gates.** Any type in `Verbara.Sdk.VoiceAi` whose only exercisers live in those
+two suites reads as 0% covered however thoroughly it is tested. Not theoretical: it failed the patch
+gate once, on a change whose new exception type is thrown by all eight WebSocket provider clients and
+asserted on by more than twenty of their tests. The work-around is to assert such a type's behaviour
+from a suite that does instrument the assembly (`Verbara.Sdk.VoiceAi.Tests`). The fix — finding out
+why the instrumenter refuses those two modules under those two consumers — is not yet diagnosed.

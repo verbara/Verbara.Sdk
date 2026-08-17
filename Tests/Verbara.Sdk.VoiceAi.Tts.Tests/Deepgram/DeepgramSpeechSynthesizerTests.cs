@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Tts.Deepgram;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
@@ -265,6 +266,37 @@ public class DeepgramSpeechSynthesizerTests : IAsyncDisposable
         failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
         failure.Code.Should().BeNull("a dead socket carries no vendor code");
         failure.InnerException.Should().BeOfType<WebSocketException>();
+    }
+
+    /// <summary>
+    /// The fourth door, and on this surface the one that matters most: §1.3a measured this vendor
+    /// rejecting a bad credential with <c>HTTP 401</c> at the upgrade, on both its surfaces, which is
+    /// exactly the failure <c>ADR-0050</c> E7 wraps. This test drives the no-HTTP-answer half — a
+    /// refused connection, hence no code — because no fake in this suite can answer an upgrade with a
+    /// status yet; the <c>401</c> mapping itself is asserted on the factory
+    /// (<c>SpeechProviderFailureExceptionTests</c>). Built inline rather than through
+    /// <c>BuildSynthesizer</c> because the point of this test is that it never reaches the fake.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
+    {
+        var synth = new DeepgramSpeechSynthesizer(Options.Create(new DeepgramTtsOptions
+        {
+            ApiKey = TestApiKey,
+            Model = DeepgramVoices.Thalia,
+            Encoding = "linear16",
+            SampleRate = 16000,
+            BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/v1/speak",
+        }));
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Handshake);
+        failure.Code.Should().BeNull("a refused connection produced no HTTP answer to report");
+        failure.InnerException.Should().BeAssignableTo<WebSocketException>();
     }
 
     /// <summary>

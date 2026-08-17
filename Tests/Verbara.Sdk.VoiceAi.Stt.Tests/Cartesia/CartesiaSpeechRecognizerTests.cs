@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Stt.Cartesia;
 using Verbara.Sdk.VoiceAi.Stt.Tests.Helpers;
 using FluentAssertions;
@@ -243,6 +244,30 @@ public class CartesiaSpeechRecognizerTests : IAsyncDisposable
         failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
         failure.Code.Should().BeNull("a dead socket carries no vendor code");
         failure.InnerException.Should().BeOfType<WebSocketException>();
+    }
+
+    /// <summary>
+    /// The fourth door, and the one no receive-loop test can reach: a session that never opens.
+    /// <c>ADR-0050</c> E7 wraps the bare <see cref="WebSocketException"/> so the caller reads one type
+    /// whether this vendor validates at the upgrade or in band — measured here as <c>401</c> for an
+    /// invalid credential and <c>404</c> for a wrong path. A refused connection carries no HTTP answer,
+    /// hence no code; the answered-with-a-status branch is asserted on the factory itself
+    /// (<c>SpeechProviderFailureExceptionTests</c>) because no fake in this suite can reject an upgrade
+    /// yet.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
+    {
+        var recognizer = BuildRecognizer(
+            o => o.BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/stt/websocket");
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Handshake);
+        failure.Code.Should().BeNull("a refused connection produced no HTTP answer to report");
+        failure.InnerException.Should().BeAssignableTo<WebSocketException>();
     }
 
     /// <summary>

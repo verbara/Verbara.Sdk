@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Stt.Deepgram;
 using Verbara.Sdk.VoiceAi.Stt.Tests.Helpers;
 using FluentAssertions;
@@ -197,6 +198,29 @@ public class DeepgramSpeechRecognizerTests : IAsyncDisposable
         var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
         failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
         failure.InnerException.Should().BeOfType<WebSocketException>();
+    }
+
+    /// <summary>
+    /// The fourth door, and on this surface the one that matters most: §1.3a measured this vendor
+    /// rejecting a bad credential with <c>HTTP 401</c> at the upgrade, on both its surfaces, which is
+    /// exactly the failure <c>ADR-0050</c> E7 wraps. This test drives the no-HTTP-answer half — a
+    /// refused connection, hence no code — because no fake in this suite can answer an upgrade with a
+    /// status yet; the <c>401</c> mapping itself is asserted on the factory
+    /// (<c>SpeechProviderFailureExceptionTests</c>).
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
+    {
+        var recognizer = BuildRecognizer(
+            o => o.BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/v1/listen");
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Handshake);
+        failure.Code.Should().BeNull("a refused connection produced no HTTP answer to report");
+        failure.InnerException.Should().BeAssignableTo<WebSocketException>();
     }
 
     /// <summary>

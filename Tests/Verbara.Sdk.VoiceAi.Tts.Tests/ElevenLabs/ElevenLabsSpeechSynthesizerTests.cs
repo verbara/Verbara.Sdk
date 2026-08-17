@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Tts.ElevenLabs;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
@@ -336,6 +337,29 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
         failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
         failure.Code.Should().BeNull();
         failure.InnerException.Should().BeOfType<WebSocketException>();
+    }
+
+    /// <summary>
+    /// The fourth door, and the one no receive-loop test can reach: a session that never opens. This
+    /// vendor was measured validating <em>in band</em> (a <c>1008</c> failure frame), so its handshake
+    /// normally succeeds — which is the whole point of <c>ADR-0050</c> E7: where a vendor validates is
+    /// the vendor's choice, and a caller should not have to catch a different type when it changes.
+    /// A refused connection carries no HTTP answer, hence no code.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
+    {
+        var synth = BuildSynthesizer(
+            o => o.BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/v1/text-to-speech");
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Handshake);
+        failure.Code.Should().BeNull("a refused connection produced no HTTP answer to report");
+        failure.InnerException.Should().BeAssignableTo<WebSocketException>();
     }
 
     /// <summary>

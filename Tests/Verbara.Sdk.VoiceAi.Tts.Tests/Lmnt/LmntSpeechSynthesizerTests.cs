@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Tts.DependencyInjection;
 using Verbara.Sdk.VoiceAi.Tts.Lmnt;
 using FluentAssertions;
@@ -278,6 +279,37 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
         failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
         failure.Code.Should().BeNull("a dead socket carries no vendor code");
         failure.InnerException.Should().BeOfType<WebSocketException>();
+    }
+
+    /// <summary>
+    /// The fourth door, and the one no receive-loop test can reach: a session that never opens.
+    /// <c>ADR-0050</c> E7 wraps the bare <see cref="WebSocketException"/> so the caller reads one type
+    /// whether this vendor validates at the upgrade or in band — this one embeds the credential in the
+    /// first message rather than in a header, so its upgrade cannot reject a bad key at all and the
+    /// failure necessarily arrives later. A refused connection carries no HTTP answer, hence no code.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
+    {
+        // The port is the seam on this surface (there is no BaseUri option), so it is passed directly
+        // rather than through BuildSynthesizer — the point of this test is that it never reaches the fake.
+        var synth = new LmntSpeechSynthesizer(
+            Options.Create(new LmntTtsOptions
+            {
+                ApiKey = "test-lmnt-key",
+                Voice = LmntVoices.Leah,
+                Transport = LmntTransport.WebSocket,
+            }),
+            fakeWsPort: ClosedPort.Reserve());
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Handshake);
+        failure.Code.Should().BeNull("a refused connection produced no HTTP answer to report");
+        failure.InnerException.Should().BeAssignableTo<WebSocketException>();
     }
 
     /// <summary>

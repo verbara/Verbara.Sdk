@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Stt.Speechmatics;
 using Verbara.Sdk.VoiceAi.Stt.Tests.Helpers;
 using FluentAssertions;
@@ -309,6 +310,27 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
         failure.Code.Should().BeNull("a dead socket carries no vendor code");
         failure.InnerException.Should().BeOfType<WebSocketException>();
+    }
+
+    /// <summary>
+    /// The fourth door, and the one this vendor makes the case for: it was measured accepting the
+    /// upgrade with <c>101</c> and only then rejecting the credential with close <c>4001
+    /// not_authorised</c> — so on this surface the handshake succeeds and the close code carries the
+    /// failure. <c>ADR-0050</c> E7 exists so a caller does not have to know which of the two a vendor
+    /// picked. Here the upgrade is refused outright: no HTTP answer, hence no code.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
+    {
+        var recognizer = BuildRecognizer(o => o.BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/v2");
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Handshake);
+        failure.Code.Should().BeNull("a refused connection produced no HTTP answer to report");
+        failure.InnerException.Should().BeAssignableTo<WebSocketException>();
     }
 
     /// <summary>
