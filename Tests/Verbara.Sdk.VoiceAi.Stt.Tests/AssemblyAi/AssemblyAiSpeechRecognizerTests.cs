@@ -22,6 +22,17 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.AssemblyAi;
 /// </summary>
 public class AssemblyAiSpeechRecognizerTests : IAsyncDisposable
 {
+    /// <summary>
+    /// The vendor's stated floor and ceiling in bytes of the audio this suite streams, derived through
+    /// the same conversion the client uses rather than written out — the one test that cares pins them
+    /// to 800 and 16000 so the derivation itself is anchored to real units.
+    /// </summary>
+    private static readonly int FloorBytes =
+        AudioFormat.Slin16Mono8kHz.BytesPerFrame(TimeSpan.FromMilliseconds(50));
+
+    private static readonly int CeilingBytes =
+        AudioFormat.Slin16Mono8kHz.BytesPerFrame(TimeSpan.FromSeconds(1));
+
     private readonly AssemblyAiFakeServer _server;
 
     public AssemblyAiSpeechRecognizerTests()
@@ -146,6 +157,12 @@ public class AssemblyAiSpeechRecognizerTests : IAsyncDisposable
         results.Should().ContainSingle().Which.Confidence.Should().Be(0f);
     }
 
+    /// <summary>
+    /// The sample-rate expectation here used to read <c>sample_rate=16000</c> while the audio being
+    /// streamed was <see cref="AudioFormat.Slin16Mono8kHz"/> — the assertion encoded the defect. The
+    /// option is set to 16000 deliberately, so that what this now proves is the caller's format
+    /// overriding it rather than the two happening to agree.
+    /// </summary>
     [Fact]
     public async Task StreamAsync_ShouldConnect_WithCorrectQueryString_WhenStarted()
     {
@@ -160,9 +177,137 @@ public class AssemblyAiSpeechRecognizerTests : IAsyncDisposable
         await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
 
         _server.ReceivedRequestUri.Should().NotBeNullOrEmpty();
-        _server.ReceivedRequestUri!.Should().Contain("sample_rate=16000");
+        _server.ReceivedRequestUri!.Should().Contain(
+            "sample_rate=8000",
+            "the service derives each audio message's duration from the declared rate, so it has to be the rate of the audio actually sent");
+        _server.ReceivedRequestUri.Should().NotContain("sample_rate=16000");
         _server.ReceivedRequestUri.Should().Contain("format_turns=1");
         _server.ReceivedRequestUri.Should().Contain("end_of_turn_confidence_threshold=800");
+    }
+
+    /// <summary>
+    /// The other half of the rate contract, and the only path on which the option is still read: a
+    /// format that states no rate cannot override anything. It is also the sharpest available test of
+    /// the coupling that matters — the floor is computed from whatever rate ends up declared, so
+    /// falling back to a 16 kHz option moves the floor to 1600 bytes for the very same audio. A client
+    /// that declared one rate and sized by another is what the vendor answers
+    /// <c>3007 Input Duration Violation: 25.0 ms</c> (measured 2026-08-17), and that divergence cannot
+    /// be expressed here.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldDeclareTheOptionSampleRate_WhenTheCallerFormatCarriesNone()
+    {
+        _server.ResultMessages.Clear();
+        var recognizer = BuildRecognizer(o => o.SampleRate = 16000);
+
+        await recognizer.StreamAsync(
+            Frames(count: 1, bytesEach: 320),
+            new AudioFormat(0, 1, 16, AudioEncoding.LinearPcm)).ToListAsync();
+        await SessionEndedAsync();
+
+        var fallbackFloor = AudioFormat.Slin16Mono16kHz.BytesPerFrame(TimeSpan.FromMilliseconds(50));
+        fallbackFloor.Should().Be(2 * FloorBytes, "the same 50 ms costs twice the bytes at twice the rate");
+
+        _server.ReceivedRequestUri!.Should().Contain("sample_rate=16000");
+        _server.AudioMessageByteCounts.Should().Equal([fallbackFloor]);
+    }
+
+    /// <summary>
+    /// The degenerate branch, stated rather than left implicit. A format with no sample width cannot be
+    /// converted into a duration at all, so there is no threshold to coalesce against and frames pass
+    /// through one per message — the shape this fix replaces, kept deliberately over throwing, since
+    /// nothing in this repo produces such a format and inventing a sample width would be guessing at
+    /// the caller's wire format.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldPassFramesThrough_WhenTheFormatCarriesNoSampleWidth()
+    {
+        _server.ResultMessages.Clear();
+        var recognizer = BuildRecognizer();
+
+        await recognizer.StreamAsync(
+            Frames(count: 2, bytesEach: 320),
+            new AudioFormat(8000, 1, 0, AudioEncoding.LinearPcm)).ToListAsync();
+        await SessionEndedAsync();
+
+        _server.AudioMessageByteCounts.Should().Equal([320, 320]);
+    }
+
+    /// <summary>
+    /// The closing test for §3.18, and the assertion is on what left the client. AssemblyAI answers any
+    /// audio message shorter than 50 ms with
+    /// <c>3007 Input Duration Violation … Expected between 50 and 1000 ms</c> and ends the session;
+    /// this client sent one message per caller frame, and an Asterisk AudioSocket source yields 20 ms
+    /// frames, so every such session died — invisibly, since the receive loop drops the error frame
+    /// (§4.15). A fake that merely counted frames could not fail that client, which is how it shipped.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldCoalesceAboveTheVendorFloor_WhenCallerYields20MsFrames()
+    {
+        // Anchor the derived thresholds to the vendor's stated numbers in real units once, so the rest
+        // of the suite can compute them without hard-coding byte counts that would drift.
+        FloorBytes.Should().Be(800, "50 ms of 8 kHz 16-bit mono PCM");
+        CeilingBytes.Should().Be(16000, "1000 ms of the same");
+
+        _server.ResultMessages.Clear();
+        var recognizer = BuildRecognizer();
+
+        // Eight 20 ms frames: 160 ms of audio that the shipped client turned into eight rejections.
+        await recognizer.StreamAsync(
+            Frames(count: 8, bytesEach: 320), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await SessionEndedAsync();
+
+        var messages = _server.AudioMessageByteCounts;
+        messages.Should().NotBeEmpty();
+        messages.Should().OnlyContain(bytes => bytes >= FloorBytes, "the vendor rejects anything shorter");
+        messages.Should().OnlyContain(bytes => bytes <= CeilingBytes, "and anything longer");
+        messages.Count.Should().BeLessThan(8, "coalescing is the point; one message per frame is the defect");
+        messages.Sum().Should().BeGreaterThanOrEqualTo(8 * 320, "no caller audio may be dropped on the way out");
+        messages.Sum().Should().BeLessThan(
+            8 * 320 + FloorBytes,
+            "only the trailing remainder may be padded, and only up to the floor — a client that padded every message would satisfy the bound above");
+    }
+
+    /// <summary>
+    /// The single-frame case is not an edge here — it is the exact input the rest of this suite has
+    /// always used, and the shape the shipped client turned into one 20 ms message. The remainder is
+    /// padded with silence to the floor rather than sent short: sending it as-is was measured working
+    /// three runs of three on 2026-08-17, and rejected anyway because three consecutive sub-floor
+    /// messages drew <c>3007</c> with zero finals — a thin, unstated tolerance that costs the whole
+    /// transcript when it breaks.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldPadTheTrailingRemainderToTheFloor_WhenInputEndsBelowIt()
+    {
+        _server.ResultMessages.Clear();
+        var recognizer = BuildRecognizer();
+
+        await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await SessionEndedAsync();
+
+        _server.AudioMessageByteCounts.Should().Equal([FloorBytes]);
+    }
+
+    /// <summary>
+    /// The window is two-sided and both ends were measured: a single 2000 ms message draws the same
+    /// <c>3007</c> as a 20 ms one. This is reachable from one caller frame rather than from
+    /// accumulation — the AudioSocket codec's 3-byte length field admits payloads far larger than
+    /// anything this repo emits today — so the split is not defensive padding.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldSplitAtTheVendorCeiling_WhenOneCallerFrameExceedsIt()
+    {
+        _server.ResultMessages.Clear();
+        var recognizer = BuildRecognizer();
+
+        // One frame carrying 2000 ms of audio — twice the ceiling, and rejected whole.
+        await recognizer.StreamAsync(
+            Frames(count: 1, bytesEach: 2 * CeilingBytes), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await SessionEndedAsync();
+
+        var messages = _server.AudioMessageByteCounts;
+        messages.Should().OnlyContain(bytes => bytes <= CeilingBytes && bytes >= FloorBytes);
+        messages.Sum().Should().Be(2 * CeilingBytes, "splitting must not lose or invent audio");
     }
 
     [Fact]
@@ -274,9 +419,22 @@ public class AssemblyAiSpeechRecognizerTests : IAsyncDisposable
     /// </summary>
     private Task SessionEndedAsync() => _server.SessionCompleted.WaitAsync(TimeSpan.FromSeconds(10));
 
+    /// <summary>
+    /// One 20 ms frame at 8 kHz — what an Asterisk AudioSocket source yields, and what the shipped
+    /// client turned into one 20 ms message the vendor rejects.
+    /// </summary>
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()
     {
         yield return new byte[320];
+        await Task.CompletedTask;
+    }
+
+    /// <summary>Silence, in frames of a size the test chooses. Only the byte counts are asserted on.</summary>
+    private static async IAsyncEnumerable<ReadOnlyMemory<byte>> Frames(int count, int bytesEach)
+    {
+        for (var i = 0; i < count; i++)
+            yield return new byte[bytesEach];
+
         await Task.CompletedTask;
     }
 

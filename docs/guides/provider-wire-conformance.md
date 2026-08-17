@@ -143,7 +143,7 @@ a wrong-path control has to be read, not pattern-matched.
 | Deepgram STT | `wss://api.deepgram.com/v1/listen` | OK | OK | `handshake` | `live + both controls` | 2026-08-16 |
 | Speechmatics STT | `wss://eu2.rt.speechmatics.com/v2` | OK | **2 fixed, 4 open** | `in-band` | `live + both controls` | 2026-08-16 |
 | Cartesia STT | `wss://api.cartesia.ai/stt/websocket` | **fixed** | **2 fixed** | `handshake` (credential) + `in-band` (session) | `live + both controls` | 2026-08-16 |
-| AssemblyAI STT | `wss://streaming.assemblyai.com/v3/ws` | not controllable | **1 fixed, 1 open** | `in-band` | `live + credential control` | 2026-08-16 |
+| AssemblyAI STT | `wss://streaming.assemblyai.com/v3/ws` | not controllable | **2 fixed** | `in-band` | `live + credential control` | 2026-08-17 |
 | Google STT | `https://speech.googleapis.com` | OK | n/a (batch) | in the response | `live + both controls` | 2026-08-15 |
 | OpenAI Whisper | `https://api.openai.com/v1/audio/transcriptions` | OK | n/a (batch) | not measured | `live, uncontrolled` | 2026-08-09 |
 | Azure OpenAI Whisper | Azure OpenAI deployment endpoint | OK | n/a (batch) | not measured | `live, uncontrolled` | 2026-08-09 |
@@ -258,12 +258,14 @@ in-band validation point and a matching client defect; real key `101` with first
   surface's evidence class drops to `live + credential control` and its Route column reads *not
   controllable* — not "OK". The earlier `404` recorded here was taken against a different host.
 - **The vendor rejects any message shorter than 50 ms**, with
-  `3007 Input Duration Violation: 20.0 ms. Expected between 50 and 1000 ms`. The client does not batch
-  — `AssemblyAiSpeechRecognizer` sends one WebSocket message per frame the caller yields — so a caller
-  feeding 20 ms frames, which is what an Asterisk AudioSocket source produces, fails every session.
+  `3007 Input Duration Violation: 20.0 ms. Expected between 50 and 1000 ms`. The client did not batch
+  — `AssemblyAiSpeechRecognizer` sent one WebSocket message per frame the caller yields — so a caller
+  feeding 20 ms frames, which is what an Asterisk AudioSocket source produces, failed every session.
   Silently: the receive loop filters to transcript messages, so the error is dropped on the floor
   (§4.15). Sessions here were driven at 100 ms to measure anything else at all, and that deviation is
-  part of the result.
+  part of the result. **Fixed 2026-08-17** — the client now coalesces into the vendor's window; the
+  measurement that fixed it, including which end of the window the *declared sample rate* is enforced
+  on, is below.
 
 **Google STT** — wrong path `404`, invalid credential `400 API_KEY_INVALID`, real key
 `400 RecognitionAudio not set` — the last being the vendor accepting the credential and rejecting the
@@ -412,6 +414,69 @@ against.** A timeout picked without one would be the machinery this record exist
 exposure it would cover is concrete — `VoiceAiPipeline` awaits one STT session per utterance, so a
 vendor that acknowledged without closing would leave a call stuck in recognition rather than degrade it
 — and the trigger to build it is the first surface measured doing that, not a calendar date.
+
+### AssemblyAI's message window is two-sided, and it is enforced on the *declared* sample rate — 2026-08-17
+
+The 50 ms floor above is only half of a constraint, and fixing it required measuring which number the
+vendor does its arithmetic on. Same ten-digit utterance, same key, same host, arms minutes apart. The
+8 kHz file is the 16 kHz one downsampled, so the two carry identical speech at 3155 ms.
+
+| Arm | Audio | `sample_rate` declared | Message | Vendor reads it as | Result |
+|---|---|---|---|---|---|
+| J control | 16 kHz | 16000 | 1600 B | 50 ms | **10/10**, close `1000` |
+| H truth | 8 kHz | **8000** | 800 B | 50 ms | **10/10**, close `1000` |
+| I mismatch | 8 kHz | 16000 | 1600 B | 50 ms | **10/10**, close `1000` |
+| K entangled | 8 kHz | 16000 | 800 B | **25 ms** | **`3007`**, 8/64 messages accepted, **0/10** |
+| E ceiling | 16 kHz | 16000 | 64000 B | 2000 ms | **`3007`** — `Expected between 50 and 1000 ms` |
+
+Read in order, those arms say four things the vendor's page does not:
+
+1. **The window is enforced at both ends.** E rules out reading "between 50 and 1000 ms" as a floor
+   with a decorative upper bound, so the client splits at the ceiling as well as coalescing to the
+   floor. That split is reachable from a single caller frame, not only from accumulation: the
+   AudioSocket codec's 3-byte length field admits payloads far larger than anything this repo emits.
+2. **`8000` is accepted.** `AssemblyAiOptions.SampleRate` documented that the service "expects 16000",
+   which was stronger than the evidence — H transcribes a telephony-rate session perfectly. The summary
+   has been corrected to what was measured.
+3. **K against H is the control that fixed the design.** Identical bytes of identical audio; the only
+   difference is the declared rate, and one of them dies. So the duration the window is enforced on is
+   computed from the *declaration*, not from the audio — which means a client that coalesced to 50 ms of
+   the audio it was handed while still declaring 16000 would send what the vendor reads as 25 ms and
+   lose every session. The remediated client derives the declared rate and the coalescing thresholds
+   from one value, so that divergence is no longer expressible rather than merely corrected.
+4. **The mismatch itself is harmless, and saying so bounds the claim.** Arm I declares 16000 over 8 kHz
+   audio — the shipped defect — and still returns 10/10. The reconnaissance for this fix predicted a
+   damaged transcript there; the measurement refused it. What was wrong with the shipped declaration is
+   the arithmetic in point 3, not audio quality, and the fix is worth having for that reason alone.
+
+**The trailing remainder is padded with silence, and as-is was measured working first.** A stream whose
+length is not a multiple of the message size ends with less than a floor's worth of audio. Sending it
+as-is worked three runs of three; a lone sub-floor message at the end of a stream is tolerated. It was
+rejected anyway, because three consecutive sub-floor messages drew `3007` with **zero** finals — the
+tolerance is real, thin, and nowhere stated, and when it breaks it costs the whole transcript rather
+than the tail. This is the §3.6f trade again in the other direction: a measured tolerance is weaker
+ground than a stated contract, since nothing obliges the vendor to keep being lenient. Zeros are silence
+in signed 16-bit PCM, so padding cannot invent a word where dropping the remainder could clip one.
+
+**Verified through the shipped client, with the before arm run the same day.** Not a probe
+reconstructing what the client sends — the SDK's own `AssemblyAiSpeechRecognizer`, fed 20 ms frames of
+8 kHz audio the way `VoiceAiPipeline` feeds it, with `AssemblyAiOptions.SampleRate` left at its 16000
+default on purpose so that the caller's format having to win is part of what passes:
+
+| Client | Result |
+|---|---|
+| remediated | **10/10**, 1 final, 2 partials |
+| pre-fix, same harness, minutes later | **0/10** — zero finals, zero partials, **and no exception** |
+
+That second row is the ADR-0049 D1 silent-failure class in its production form: 3.2 seconds of speech
+in, an empty transcript out, and nothing raised to say why. It is also why the suite's assertions are on
+the *bytes the client sent*. The fake previously discarded `result.Count` on the binary branch and kept
+only a frame counter, and no test in this repo asserted on the size of audio sent to any provider — a
+fake that cannot fail a client sending 20 ms messages is what let this ship. Reverting each half of the
+fix in turn fails a non-empty set of tests, and the two halves are covered independently: restoring the
+option as the declared rate fails exactly 1 test and nothing else, removing the coalescing fails 4 while
+that rate assertion still passes, and sending the tail short fails 3 — a strict subset of those 4, since
+padding only concerns the last message. The pre-fix client fails 5, the union of the first two.
 
 ## Still not characterised
 

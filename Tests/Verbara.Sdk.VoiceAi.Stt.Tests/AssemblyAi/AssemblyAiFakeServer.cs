@@ -52,12 +52,33 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
 
     private readonly WebSocketTestServer _server;
     private int _receivedFrameCount;
+    private int _pendingAudioMessageBytes;
+
+    private readonly List<int> _audioMessageByteCounts = [];
 
     /// <summary>Messages the server emits after the <c>Begin</c> handshake.</summary>
     public List<string> ResultMessages { get; } = [];
 
-    /// <summary>Count of binary WebSocket frames received from the client.</summary>
+    /// <summary>Count of complete binary (audio) WebSocket messages received from the client.</summary>
     public int ReceivedFrameCount => _receivedFrameCount;
+
+    /// <summary>
+    /// Byte length of every complete binary audio message the client sent, in order — a snapshot, for
+    /// the same reason the count beside it goes through <see cref="Interlocked"/>: the receive loop
+    /// runs on its own thread and may still be appending while a test reads this.
+    /// </summary>
+    /// <remarks>
+    /// This fake used to discard <c>result.Count</c> on the binary branch and keep only a counter, and
+    /// no test in this repo asserted on the size of audio sent to any provider. That is precisely how
+    /// a client that sent one 20 ms message per caller frame — rejected by the real service with
+    /// <c>3007 Input Duration Violation</c>, every session — shipped against a green suite. A fake
+    /// that cannot fail such a client is not testing the wire, so the sizes are recorded here and the
+    /// assertions are on what the client <em>sent</em>.
+    /// </remarks>
+    public IReadOnlyList<int> AudioMessageByteCounts
+    {
+        get { lock (_audioMessageByteCounts) return _audioMessageByteCounts.ToArray(); }
+    }
 
     /// <summary>Full request path + query captured on connection (for URL assertion tests).</summary>
     public string? ReceivedRequestUri { get; private set; }
@@ -138,6 +159,17 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
 
             if (result.MessageType == WebSocketMessageType.Binary)
             {
+                // Accumulate until EndOfMessage before recording a length. A WebSocket message can
+                // arrive over several reads, and a recorder that counted reads would report one 60 ms
+                // message as two short ones — reading a compliant client as a violating one. No other
+                // fake in this suite looks at EndOfMessage, because none of them measures sizes.
+                _pendingAudioMessageBytes += result.Count;
+                if (!result.EndOfMessage) continue;
+
+                lock (_audioMessageByteCounts)
+                    _audioMessageByteCounts.Add(_pendingAudioMessageBytes);
+
+                _pendingAudioMessageBytes = 0;
                 Interlocked.Increment(ref _receivedFrameCount);
             }
             else if (result.MessageType == WebSocketMessageType.Text)
