@@ -4,10 +4,18 @@ Provider wire-format fixtures, replayed by this suite so that a parser bug cause
 misreading of a vendor's wire format becomes visible. Every file here is world-readable, permanent in
 Git history, and redistributed with every clone.
 
-Two replay paths and two fixture classes coexist here, and the sidecar says which is which:
+Two replay paths and three fixture shapes coexist here, and the sidecar says which is which:
 
-- **HTTP-transport providers** (`azure-tts`, …) are replayed through the shared WireMock fixture.
-  Their captures are real provider responses — `class: "recorded"`.
+- **HTTP-transport providers** (`azure-tts`, `speechmatics-tts`, `lmnt-http`) are replayed through the
+  shared WireMock fixture. `azure-tts` and `speechmatics-tts` are real provider responses, bytes
+  included — `class: "recorded"`.
+- **`lmnt-http` is a pair, and only one half is the vendor's.** LMNT is `not-cleared`, so
+  `synthesize-short-en-us.json` is the response **envelope** — real status, real header names, the
+  vendor's own declared media type, real content length, real read boundaries — with the audio counted
+  and discarded rather than written (`class: "recorded"`). The body served under it,
+  `body-pcm-s16le-16khz.raw`, is a locally computed tone (`class: "synthetic"`). The stub takes its
+  status and media type from the envelope, so the client meets the declaration it meets in production;
+  what the pair cannot prove is anything about the content of LMNT's speech.
 - **WebSocket-transport providers** (`cartesia-tts`, `deepgram-tts`, `elevenlabs-tts`, `lmnt-ws`) are
   replayed by their in-process protocol fake, because WireMock.NET cannot hold a duplex session
   (ADR-0041 D2). None of them has a capture credential in this environment, and three of the four
@@ -16,13 +24,14 @@ Two replay paths and two fixture classes coexist here, and the sidecar says whic
   `terms.verdict: "not-applicable"`, plus a `source_schema` block naming the page they conform to.
   That route carries no vendor Output at all; see §7 of the guide.
 
-**The `.raw` files under the WebSocket providers are not anyone's speech.** They are signal-generator
-tones this repository computes for itself — a triangle wave rendered by `SyntheticPcm.Triangle` from
-three parameters recorded in each sidecar's `source_audio.description`, so the bytes are reproducible
-rather than magic. Each provider's
-`RecordedFixtures_ShouldMatchTheirDocumentedGeneratorParameters_WhenRegeneratedLocally` regenerates
-its file and compares byte-for-byte. Their lengths are deliberately **not** multiples of the fakes'
-320-byte frame size, so a partial final frame reaches the consumer.
+**The `.raw` files whose sidecar says `class: "synthetic"` are not anyone's speech.** They are
+signal-generator tones this repository computes for itself — a triangle wave rendered by
+`SyntheticPcm.Triangle` from three parameters recorded in each sidecar's `source_audio.description`, so
+the bytes are reproducible rather than magic. Each provider's
+`…ShouldMatchTheirDocumentedGeneratorParameters_WhenRegeneratedLocally` test regenerates its file and
+compares byte-for-byte. Their lengths are deliberately **not** multiples of the buffer that will read
+them — the WebSocket fakes' 320-byte frame size, or `LmntSpeechSynthesizer`'s 8192-byte HTTP read for
+`lmnt-http` — so a partial final chunk reaches the consumer.
 
 **Do not add, edit or re-capture anything here without reading
 [`docs/guides/provider-recording-protocol.md`](../../../docs/guides/provider-recording-protocol.md)**

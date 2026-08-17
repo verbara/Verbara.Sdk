@@ -672,10 +672,12 @@ frame-format fix.
 - **Speech-provider HTTP suites now run against a real loopback server, driven by recorded vendor
   responses** ([ADR-0041](docs/decisions/0041-wiremock-as-http-provider-test-substrate.md), Accepted
   2026-08-09; Phase A in [#149](https://github.com/verbara/Verbara.Sdk/pull/149)). **No public API
-  changes and no behaviour change on any production path** — this is test infrastructure. Four of
-  the six HTTP surfaces have migrated: Azure TTS, OpenAI Whisper, Azure OpenAI Whisper and Google
-  Speech-to-Text. **The remaining two cannot be migrated, for a reason worth reading below: they are
-  blocked on defects in shipped code, not on effort.**
+  changes and no behaviour change on any production path** — this is test infrastructure. **All six
+  HTTP surfaces have now migrated**: Azure TTS, OpenAI Whisper, Azure OpenAI Whisper, Google
+  Speech-to-Text, and — once the route defects below were fixed under
+  [ADR-0048](docs/decisions/0048-wire-conformance-by-live-probe-with-negative-control.md) —
+  Speechmatics TTS and the LMNT HTTP fallback. The last two are worth reading about: they were blocked on defects in shipped
+  code rather than on effort, which is why they landed last rather than being faked green.
   - **`WireMock.NET` replaces `MockHttpMessageHandler` on the HTTP side.** The old handler returned
     one canned response to *every* call, so a request sent to the wrong route or without the
     provider's credential passed silently. Matching is now strict (method + exact path + exhaustive
@@ -740,6 +742,40 @@ frame-format fix.
       hypothesis was checked and disproved rather than assumed: the shipped default voice
       `eleanor` is absent from the vendor's published four-voice list, but it returns 200, so the
       list is incomplete and the option default is fine.
+  - **Both of those routes are now fixed (ADR-0048) and both suites have migrated — and two of the
+    deltas reported above turned out not to exist.** Each correction came from a measurement, not a
+    re-reading.
+    - **LMNT's body encoding was never a delta.** A form-encoded body posted to the corrected
+      `/v1/ai/speech/bytes` returns 200 with a payload byte-identical to the JSON one, so the form
+      encoding is deliberately kept rather than swapped: changing it would have been an unmeasured
+      change riding along with a measured fix. **And the response is not MP3** at the format this SDK
+      ships. `audio/mpeg` is what the route returns at the *vendor's* default; `LmntTtsOptions.Format`
+      defaults to `pcm_s16le`, which is headerless int16 on both transports and arrives declared as
+      `application/vnd.lmnt.audio-int16`. The one real delta was the route.
+    - **Speechmatics `/generate/{voice}` accepts the rest of the body as sent.** The capture posts
+      `text`, `language` and `sample_rate` together and returns 200 `audio/wav`, which the earlier
+      note had correctly declined to assume in either direction.
+  - **The LMNT fixture is a pair, and only one half is the vendor's.** LMNT's terms do not clear
+    committing generated audio, so the recorded artifact is the response **envelope** — status,
+    header names, declared media type, content length and observed read boundaries — and the body
+    served under it is a locally computed tone in the same codec. The envelope is load-bearing rather
+    than decorative: every success-path stub takes its status and media type from the capture, and a
+    fence requires the recorded length to equal the sum of the recorded read boundaries, so a
+    hand-edited envelope fails the suite. What the pair cannot prove is anything about the content of
+    LMNT's speech, and its provenance sidecar says so.
+  - **One fidelity loss, recorded rather than papered over.** The retired `HttpListener` fakes read
+    `Uri.AbsolutePath`, which keeps `%2F` escaped, so they could prove an escaped slash stayed inside
+    a single path segment. This substrate cannot, and measuring the limit rather than assuming it
+    made it larger than one reserved character: the request target is decoded **twice** before the
+    matcher sees it, so the escaped `/generate/a%20b%2Fc`, the unescaped `/generate/a%20b/c` and the
+    double-escaped `/generate/a%2520b%252Fc` all arrive as `/generate/a b/c` and all three match.
+    Escaping is not observable here at any level. The affected test was renamed to what it can still
+    prove — the voice's characters reach the route intact, so truncating or substituting them fails —
+    and its remarks now carry the measurement; the segment-boundary property belongs with
+    wire-conformance work against the live vendor, not with a fake taught to agree.
+  - **The two retired `HttpListener` fakes are deleted**, which is what the migrations were for. The
+    LMNT WebSocket fake shared a file with the HTTP one and is now in `LmntWsFakeServer.cs`, a name
+    that says which transport it serves; its behaviour is unchanged.
   - Every `*_ShouldAbort_WhenCancelled` test carried over **verbatim** as the `test-determinism`
     tripwire for the swap, and re-verified under the 30× repeat-run protocol (0 failures).
 

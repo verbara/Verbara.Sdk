@@ -415,9 +415,48 @@ an identifier. That belongs in a proposal of its own, not here.
       `Stream.ReadAsync` returns and a real chunked response does not align to the buffer. What is
       assertable, and now asserted, is the byte-exact round trip plus the presence of a partial
       frame, guaranteed because the capture's length is deliberately not chunk-aligned.
-- [ ] 4.5 **Speechmatics TTS** (`Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Speechmatics/`) — retires
+- [x] 4.5 **Speechmatics TTS** (`Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Speechmatics/`) — retires
       `SpeechmaticsFakeServer` (`HttpListener`)
 
+      > **✅ UNBLOCKED AND CLOSED 2026-08-17.** The `src/**` fix landed as
+      > `provider-wire-protocol-conformance` §3.1–§3.2 under `Sdk/ADR-0048`, exactly where the
+      > deferral below said it would go: `SpeechmaticsSpeechSynthesizer` now builds
+      > `{origin}/generate/{Uri.EscapeDataString(Voice)}` and `SpeechmaticsOptions.BaseUri` ships as the
+      > bare origin. With the client and the vendor finally agreeing on a route, a fixture can pin both
+      > at once and the migration is a test-only change again.
+      >
+      > **The question this task recorded as open is now measured, not assumed.** The capture on
+      > 2026-08-17 sent the shipped defaults' full body — `text`, `language` *and* `sample_rate` — to
+      > `/generate/eleanor` and received **200, `audio/wav`, 72 236 bytes**. So `/generate/{voice}`
+      > accepts the two body fields the client still sends; the paragraph below correctly refused to
+      > assume that either way. Committed as
+      > `Recordings/speechmatics-tts/synthesize-short-en-us.wav` with its provenance sidecar
+      > (`class: "recorded"`, verdict `permitted-with-conditions`, terms re-read the same day per §3.1
+      > — see the guide's Speechmatics section for the two citation corrections that re-read produced).
+      >
+      > **Migrated onto `HttpProviderMockServer` with strict matching.** Nine tests: the JSON body's
+      > three fields, the bearer token, the voice-as-path-segment property (asserted by *matching*, so
+      > a voice sent as a body field lands in `UnmatchedRequests`), a route guard that offers only the
+      > dead `/generate` and requires the client to fail against it, the wrong-token guard, an error
+      > status, the recorded audio surviving the 8 KiB read loop byte-for-byte with a partial final
+      > chunk, and a fixture-integrity fence on the capture's length and its `RIFF`/`WAVE` magic.
+      >
+      > **One fidelity loss, stated rather than papered over — and it is wider than the first pass
+      > claimed.** The retired fake read `Uri.AbsolutePath`, which keeps `%2F` escaped, so it could
+      > prove an escaped slash stayed inside one path segment. This substrate cannot. The first draft of
+      > this note said Kestrel decodes the target once, and inferred from that that dropped, doubled or
+      > truncated escaping would all still fail to match. **Two of those three arms are false**, which
+      > only became visible on measuring instead of reasoning: the target is decoded **twice** before the
+      > matcher sees it, so the escaped `/generate/a%20b%2Fc`, the unescaped `/generate/a%20b/c` and the
+      > double-escaped `/generate/a%2520b%252Fc` all arrive as `/generate/a b/c` and **all three return
+      > 200 with an empty `UnmatchedRequests`**. Escaping is not observable on this substrate at any
+      > level. The test keeps its renamed subject — the voice's characters reach the route intact, so
+      > truncating or substituting them fails — and its remarks now carry the measurement rather than
+      > the inference. The segment property is a client property and a route-level vendor question; it
+      > belongs with the wire-conformance work, not with a fake taught to agree.
+      >
+      > **The original blocker, kept for the evidence trail:**
+      >
       > **⚠⚠ BLOCKED ON A `src/**` DEFECT, confirmed against the live API 2026-08-15 UTC — the same
       > shape as §4.6, found the same way.** The capture at the shipped `SpeechmaticsOptions`
       > defaults returned `HTTP 404 {"detail":"Not Found"}`. A three-way controlled comparison,
@@ -463,7 +502,7 @@ an identifier. That belongs in a proposal of its own, not here.
       > Reclassified from credential-blocked to **`src/**`-blocked**. No artifact was written: the
       > capture script raised before any file was created, so the working tree carries nothing from
       > the 404, and nothing from rows two and three either — those were probes, not captures.
-- [ ] 4.6 **LMNT HTTP path** (`Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Lmnt/`, `LmntTransport.Http`) —
+- [x] 4.6 **LMNT HTTP path** (`Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Lmnt/`, `LmntTransport.Http`) —
       retires `LmntHttpFakeServer` only; `LmntWsFakeServer` stays (see 5.4).
       **⚠ Envelope capture only — ADR-0041 D11.** The §3.4 terms review returned `not-cleared` for
       LMNT: its ToS has no clause on rights in generated audio and its AUP restricts sharing
@@ -473,6 +512,55 @@ an identifier. That belongs in a proposal of its own, not here.
       migration still lands — strict matching, real status/headers, real byte lengths through
       frame-chunking — it just does not redistribute LMNT's speech.
 
+      > **✅ UNBLOCKED AND CLOSED 2026-08-17.** The route fix landed as
+      > `provider-wire-protocol-conformance` §3.6–§3.7 under `Sdk/ADR-0048`:
+      > `LmntSpeechSynthesizer.HttpRoute` is now `/v1/ai/speech/bytes`. Only **one** of the three
+      > deltas listed below was actually a defect. The form encoding was **kept, by measurement** —
+      > the fix recorded that `/bytes` answered 200 to a form-encoded body with a byte-identical
+      > payload on 2026-08-15, so switching to JSON would have been an unmeasured change riding along
+      > with a measured one. And the third delta, the media type, dissolved: see the next paragraph.
+      >
+      > **The re-read of §7 this task demanded produced a finding, and it is the opposite of the
+      > worry.** The `audio/mpeg` in the table below is what the route returns at the *vendor's*
+      > default format. `LmntTtsOptions.Format` ships as `pcm_s16le`, which is int16 PCM on both
+      > transports, so the capture shape is not the MP3 one that note feared, and the D11 plan written
+      > directly above applies unchanged after all — real byte lengths through the chunking path,
+      > synthetic body in the same codec. Measured 2026-08-17: **200**,
+      > `application/vnd.lmnt.audio-int16` (a vendor-specific type, neither `audio/mpeg` nor
+      > `audio/L16`), 80 608 bytes over ten reads.
+      >
+      > **What landed, as a pair — one half the vendor's, one half ours.** LMNT is still
+      > `not-cleared` (ToS re-read the same day: still *Last Updated: June 12, 2023*, still no clause
+      > on rights in generated audio, verdict unmoved), so no LMNT audio byte is in the tree.
+      > `Recordings/lmnt-http/synthesize-short-en-us.json` is the response **envelope** — status,
+      > header *names*, the vendor's declared media type, the real content length and the real read
+      > boundaries — with the audio counted and discarded rather than written (`class: "recorded"`).
+      > `Recordings/lmnt-http/body-pcm-s16le-16khz.raw` is a locally computed triangle wave, 20 002
+      > bytes, `class: "synthetic"`, `terms.verdict: "not-applicable"`, with a `source_schema` block
+      > naming the docs page it conforms to. Its sidecar's `notes` says plainly what the pair cannot
+      > prove: anything about the content of LMNT's speech.
+      >
+      > **The envelope is load-bearing, not decorative.** Every success-path stub reads its status
+      > and media type out of the capture, so the client meets in the suite the declaration it meets
+      > in production. Two fences keep the numbers honest: `content_length` must equal
+      > `sum(chunk_sizes)` — hand-edit either and the suite fails — and the read boundaries must be
+      > full 8192-byte reads plus a short final one, which is the property a body chosen to be
+      > buffer-aligned would silently lose. Thirteen tests — eleven behavioural plus those two fences —
+      > including a route guard that offers only the retired `/v1/ai/speech/generate` and requires the
+      > client to fail against it.
+      >
+      > **`content_length` is an observation, not a header.** The response is chunked and carries no
+      > `Content-Length`; the number is the sum of what the reads returned. Recorded here so a later
+      > reader does not mistake it for something the vendor sent.
+      >
+      > **One drift observed and deliberately not fixed:** the SDK sends `lmnt-version: 1.0` while the
+      > vendor's own docs page shows `1.2`. Logged as an observation on
+      > `provider-wire-protocol-conformance`, which owns vendor-contract drift — nothing measured
+      > today depends on it, and changing a version header on a route that answers 200 would be an
+      > unmeasured change of exactly the kind the route fix declined to make.
+      >
+      > **The original blocker, kept for the evidence trail:**
+      >
       > **⚠⚠ BLOCKED ON A `src/**` DEFECT, confirmed against the live API 2026-08-15. The HTTP path
       > this task migrates does not work at all.** The first capture attempt returned
       > `HTTP 404 {"detail":"Not Found"}` — a route-level 404, not an auth failure. A controlled
@@ -905,7 +993,28 @@ disproved there. Largest fixture is 2 808 B — **1.1% of the 256 KiB cap**.
       and no dangling `using`, and `Helpers/` was left empty and removed with it. Build stays at
       0 warnings. §6.1's STT copy is **not** free yet — six `GoogleSpeechRecognizerTests` cases still
       construct it, so it goes with §4.3.
-- [ ] 6.3 Delete the retired `HttpListener` HTTP fakes (`SpeechmaticsFakeServer`, `LmntHttpFakeServer`)
+- [x] 6.3 Delete the retired `HttpListener` HTTP fakes (`SpeechmaticsFakeServer`, `LmntHttpFakeServer`)
+      — **done 2026-08-17, once §4.5 and §4.6 left them with no consumers.** `SpeechmaticsFakeServer.cs`
+      is `git rm`'d outright. `LmntHttpFakeServer` shared a file with the WebSocket fake, so the class
+      was cut out of `Lmnt/LmntFakeServer.cs` and the remainder `git mv`'d to `Lmnt/LmntWsFakeServer.cs`
+      — the name now says which transport it serves, which the old shared name could not. The
+      now-unused `using System.Net;` and the section dividers went with it. `LmntWsFakeServer` itself is
+      unchanged in behaviour, so §6.4's invariant holds: a rename and a deletion, not an edit to how a
+      fake answers. Build stays at 0 warnings and the Tts suite is 124/124 green, which is the check
+      that the deletions left nothing dangling.
+      **The rename had a governance consequence, and it was resolved downward rather than sideways.**
+      `sync-fence-baseline.json` keys on file path, so `SyncFenceRegressionGuard` read the renamed
+      file's pre-existing barrier as a **new** one (`baseline=0, current=1`) — a red build caught by
+      the full lane, not by the Tts suite. The tempting fix is to move the old key's grandfathered `1`
+      onto the new path, which is not a raise and would have passed. It was **annotated instead**, so
+      the entry lands at **0**: the flagged call is `Task.Delay(Timeout.Infinite, ct)`, which the
+      scanner can only see syntactically — being infinite, the timed arm can never win, and the server
+      CT is the only thing that completes the wait. That is the same construct `CartesiaFakeServer` and
+      `ElevenLabsFakeServer` already carry as `// fence-allow: GUARD-TIMEOUT`, and both of those sit at
+      0. A comment is not behaviour, so §6.4's invariant still holds. **One detail worth writing down
+      because it cost a red run:** the marker only excuses a call on its own line or the single line
+      immediately above it, so a marker followed by a continuation comment does not count — the
+      annotation must be the *last* comment line before the call.
 - [x] 6.4 Confirm `WebSocketTestServer` and every WebSocket protocol fake are untouched in behaviour
       — **confirmed by diff against `origin/main`: zero changes** to `WebSocketTestServer` or to any
       of the ten `*FakeServer*.cs` files. Re-confirm at the end of the change; this holds as of the
@@ -966,6 +1075,29 @@ disproved there. Largest fixture is 2 808 B — **1.1% of the 256 KiB cap**.
       including the disproved `eleanor` hypothesis, because a changelog that reported only the
       confirmed half would suggest the vendor's published voice list is authoritative when this
       work showed it is not.
+      **Extended 2026-08-17 for §4.5/§4.6/§6.3, and it has retractions to make.** The entry said four
+      of six surfaces had migrated and that the other two "cannot be migrated"; that is now six of six,
+      so the sentence had to change rather than accumulate. Two of the five defects it reports also
+      turned out to be **overstated**, and both corrections are stated in the entry itself: LMNT's body
+      encoding was never a delta (form-encoded to the corrected route returns a byte-identical
+      payload), and the MP3 response is the vendor's default rather than what this SDK receives at its
+      shipped `pcm_s16le`. Leaving those standing would have left consumers reading a changelog that
+      named three LMNT deltas when one was real. Also added: the envelope/synthetic pair and why the
+      envelope is load-bearing, the deletion of both `HttpListener` fakes, and — the item easiest to
+      omit — the **path-decoding fidelity loss**, since a migration entry that lists only what the new
+      substrate proves better would be advertising, not a changelog.
+      **A third retraction, from reviewing this branch before pushing it (2026-08-17).** The fidelity
+      note itself over-claimed: it said Kestrel decodes the target once and *inferred* that dropped,
+      doubled or truncated escaping would all still fail to match. Measuring instead of reasoning
+      refuted two of those three arms — the target is decoded **twice**, so escaped, unescaped and
+      double-escaped voices all match — and the entry now says that. A note written to be honest about
+      one limitation had quietly asserted three unmeasured properties two sentences later, which is the
+      failure mode this change keeps finding in its own prose and not only in the code's.
+      **And one `src/**` defect the review surfaced, logged rather than smuggled in:** five of six
+      synthesizers honour the empty-result and whitespace promises `SpeechSynthesizer.SynthesizeAsync`
+      declares; Speechmatics TTS honours neither. It is shipped-code behaviour, so it does not ride
+      along on a test-only change — it is `provider-wire-protocol-conformance` §3.7d, and this change
+      still closes at 50/50 because fixing it was never in its scope.
 - [x] 7.3 Confirm every artifact is free of absolute machine paths, credentials and private-repo
       content before the PR (verbara-meta/ADR-0005)
       — **done**, swept across all 31 files this branch adds or modifies: zero absolute machine paths,

@@ -1,5 +1,7 @@
 using System.Net;
+using System.Text;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.Http;
 using Verbara.Sdk.VoiceAi.Tts.Speechmatics;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
@@ -7,118 +9,226 @@ using Xunit;
 
 namespace Verbara.Sdk.VoiceAi.Tts.Tests.Speechmatics;
 
-public class SpeechmaticsSpeechSynthesizerTests : IAsyncDisposable
+/// <summary>
+/// Speechmatics TTS against the shared WireMock substrate (ADR-0041 D1), driven by a recorded real
+/// response. Matching is strict, so a request sent to the wrong route or without the vendor's bearer
+/// token fails to match rather than receiving the canned body — which the retired
+/// <c>SpeechmaticsFakeServer</c> could only approximate, and which the fake before it could not
+/// express at all.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The capture beside this file is what unblocked the migration. Until 2026-08-15 the client posted
+/// to <c>/generate</c> with the voice as a body field and the live API answered <c>404</c>, so no
+/// fixture could pin both the client's request and a working response at once: strict matching makes
+/// that contradiction a failure instead of papering over it. The route fix landed first
+/// (<c>Sdk/ADR-0048</c>), and the capture on 2026-08-17 settled the question that fix deliberately
+/// left open — whether <c>/generate/{voice}</c> also accepts the <c>language</c> and
+/// <c>sample_rate</c> body fields the client still sends. It does: the recorded response is the
+/// answer to a request carrying all three.
+/// </para>
+/// </remarks>
+public class SpeechmaticsSpeechSynthesizerTests
 {
-    private readonly SpeechmaticsFakeServer _server;
-    private readonly HttpClient _http;
+    private const string ApiKey = "test-key";
+    private const string Voice = "eleanor";
 
-    public SpeechmaticsSpeechSynthesizerTests()
-    {
-        _server = new SpeechmaticsFakeServer();
-        _server.Start();
-        _http = new HttpClient();
-    }
+    /// <summary>The route the vendor actually serves — the voice is a path segment, not a body field.</summary>
+    private const string SynthesisPath = "/generate/" + Voice;
 
-    private SpeechmaticsSpeechSynthesizer BuildSynthesizer(Action<SpeechmaticsOptions>? configure = null)
+    /// <summary>The recorded capture — see its provenance sidecar for origin and terms.</summary>
+    private const string RecordedResponse = "speechmatics-tts/synthesize-short-en-us.wav";
+
+    /// <summary>The media type the vendor declared on that capture.</summary>
+    private const string RecordedMediaType = "audio/wav";
+
+    /// <summary>Length of the capture, as its sidecar records it.</summary>
+    private const int RecordedLength = 72236;
+
+    /// <summary>The synthesizer's own read buffer — <c>SpeechmaticsSpeechSynthesizer.ChunkSize</c>.</summary>
+    private const int ChunkSize = 8192;
+
+    private static SpeechmaticsOptions ValidOptions => new()
     {
-        var opts = new SpeechmaticsOptions
-        {
-            ApiKey = "test-key",
-            Voice = "eleanor",
-            Language = "en",
-            SampleRate = 16000,
-        };
+        ApiKey = ApiKey,
+        Voice = Voice,
+        Language = "en",
+        SampleRate = 16000,
+    };
+
+    private static HttpProviderRequest SynthesisRequest(string path = SynthesisPath) =>
+        HttpProviderRequest.Post(path).WithBearerToken(ApiKey);
+
+    private static SpeechmaticsSpeechSynthesizer SynthesizerFor(
+        HttpProviderMockServer server,
+        Action<SpeechmaticsOptions>? configure = null)
+    {
+        var opts = ValidOptions;
         configure?.Invoke(opts);
-        return new SpeechmaticsSpeechSynthesizer(Options.Create(opts), _http, _server.Origin);
+        return new SpeechmaticsSpeechSynthesizer(
+            Options.Create(opts),
+            server.CreateClient(),
+            server.BaseAddress.ToString().TrimEnd('/'));
     }
 
     [Fact]
-    public async Task SynthesizeAsync_ShouldPostJson_WithTextLanguageAndAuth()
+    public async Task SynthesizeAsync_ShouldPostJson_WithTextLanguageAndSampleRate()
     {
-        var synth = BuildSynthesizer(o =>
-        {
-            o.Voice = "eleanor";
-            o.Language = "es";
-        });
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest(), RecordedResponse, RecordedMediaType);
+        var synth = SynthesizerFor(server, o => o.Language = "es");
 
         await synth.SynthesizeAsync("hola mundo", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
-        _server.ReceivedRequestJson.Should().NotBeNullOrEmpty();
-        var json = _server.ReceivedRequestJson!;
-        json.Should().Contain("\"text\":\"hola mundo\"");
-        json.Should().Contain("\"language\":\"es\"");
-        json.Should().Contain("\"sample_rate\":8000"); // AudioFormat.Slin16Mono8kHz → 8000 Hz
-        _server.ReceivedAuthorization.Should().Be("Bearer test-key");
+        var request = server.ReceivedRequests.Should().ContainSingle().Subject;
+        request.BodyAsString.Should().Contain("\"text\":\"hola mundo\"");
+        request.BodyAsString.Should().Contain("\"language\":\"es\"");
+        // AudioFormat.Slin16Mono8kHz → 8000 Hz; the option's 16000 is the fallback, not the winner.
+        request.BodyAsString.Should().Contain("\"sample_rate\":8000");
+        request.Header("Content-Type").Should().StartWith("application/json");
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldSendBearerToken_WhenCredentialIsConfigured()
+    {
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest(), RecordedResponse, RecordedMediaType);
+        var synth = SynthesizerFor(server);
+
+        await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        server.ReceivedRequests.Should().ContainSingle().Subject
+            .Header("Authorization").Should().Be("Bearer " + ApiKey);
     }
 
     [Fact]
     public async Task SynthesizeAsync_ShouldSelectVoiceByPathSegment_NotByBodyField()
     {
-        var synth = BuildSynthesizer(o => o.Voice = "eleanor");
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest(), RecordedResponse, RecordedMediaType);
+        var synth = SynthesizerFor(server);
 
         await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
-        // The vendor selects the voice by path segment; /generate answers 404. Asserting the
-        // segment is what makes the route a tested property rather than an assumption.
-        _server.ReceivedMethod.Should().Be("POST");
-        _server.ReceivedPath.Should().Be("/generate/eleanor");
-        _server.ReceivedVoice.Should().Be("eleanor");
-        _server.UnmatchedRequestCount.Should().Be(0);
+        // Matching is the assertion: the stub declares POST /generate/eleanor and nothing else, so a
+        // request that put the voice anywhere but the path would land in UnmatchedRequests.
+        var request = server.ReceivedRequests.Should().ContainSingle().Subject;
+        request.Method.Should().Be("POST");
+        request.Path.Should().Be(SynthesisPath);
+        server.UnmatchedRequests.Should().BeEmpty();
 
         // And it is NOT also sent in the body: which one wins when they disagree was never measured.
-        _server.ReceivedRequestJson.Should().NotContain("\"voice\"");
+        request.BodyAsString.Should().NotContain("\"voice\"");
     }
 
     [Fact]
-    public async Task SynthesizeAsync_ShouldNotPostToBareGenerate_WhenVoiceIsConfigured()
+    public async Task SynthesizeAsync_ShouldNotMatch_WhenTheOnlyRouteOfferedIsBareGenerate()
     {
-        // Regression guard for the shipped defect: every request the client made went to
-        // /generate with the voice in the body, which the live API answers 404. The old fake
-        // never inspected the path, so three green tests certified a route that never worked.
-        var synth = BuildSynthesizer(o => o.Voice = "eleanor");
-
-        await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
-
-        _server.ReceivedPath.Should().NotBe("/generate");
-    }
-
-    [Fact]
-    public async Task SynthesizeAsync_ShouldEscapeVoice_WhenItContainsUriReservedCharacters()
-    {
-        var synth = BuildSynthesizer(o => o.Voice = "a b/c");
+        // Regression guard for the shipped defect, inverted so it can actually fail. Every request
+        // this client made until 2026-08-15 went to /generate with the voice in the body, which the
+        // live API answers 404 — and the fake of the day inspected no path, so three green tests
+        // certified a route that had never once worked. Here the substrate offers ONLY that broken
+        // route: a client that reverts to it would match and this test would go red.
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest("/generate"), RecordedResponse, RecordedMediaType);
+        var synth = SynthesizerFor(server);
 
         var act = async () => await synth
             .SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz)
             .ToListAsync();
 
-        // Escaped, the slash stays inside one segment and the route still matches.
+        await act.Should().ThrowAsync<HttpRequestException>();
+        server.UnmatchedRequests.Should().ContainSingle().Subject.Path.Should().Be(SynthesisPath);
+    }
+
+    /// <summary>
+    /// A voice carrying URI-reserved characters must reach the vendor intact rather than being dropped
+    /// or double-escaped.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>State the fidelity this substrate does not have, and state it at full width.</strong>
+    /// The retired <c>HttpListener</c> fake read <c>Uri.AbsolutePath</c>, which keeps <c>%2F</c>
+    /// escaped, so it could prove the escaped slash stayed inside one path segment. This substrate
+    /// cannot, and the loss is larger than one reserved character: measured 2026-08-17, the request
+    /// target is decoded <em>twice</em> before the matcher sees it, so the escaped
+    /// <c>/generate/a%20b%2Fc</c>, the unescaped <c>/generate/a%20b/c</c> and the double-escaped
+    /// <c>/generate/a%2520b%252Fc</c> all arrive as <c>/generate/a b/c</c> — and all three match.
+    /// Escaping is not observable here at any level: not the reserved slash, and not how many times it
+    /// was encoded. That property is a client property (<c>Uri.EscapeDataString</c> in
+    /// <c>SpeechmaticsSpeechSynthesizer</c>) and a route-level vendor question, and it belongs with the
+    /// wire-conformance work rather than being faked green.
+    /// </para>
+    /// <para>
+    /// What the assertion below still pins is therefore narrower than its first draft claimed: the
+    /// voice's characters reach the route intact. A client that truncated the voice at the reserved
+    /// character, dropped part of it or substituted something else would produce a different decoded
+    /// path and fail to match. A client that stopped escaping would <em>not</em> — that arm was
+    /// asserted here until the measurement above refuted it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldCarryTheVoiceIntact_WhenItContainsUriReservedCharacters()
+    {
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(
+            SynthesisRequest("/generate/a b/c"), RecordedResponse, RecordedMediaType);
+        var synth = SynthesizerFor(server, o => o.Voice = "a b/c");
+
+        var act = async () => await synth
+            .SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
         await act.Should().NotThrowAsync();
-        _server.ReceivedVoice.Should().Be("a b/c");
-        _server.UnmatchedRequestCount.Should().Be(0);
+        server.UnmatchedRequests.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task SynthesizeAsync_ShouldYieldAudioBytes_WhenResponseIsSuccess()
+    public async Task SynthesizeAsync_ShouldYieldRecordedAudioIntact_WhenChunked()
     {
-        // 10 KB payload forces at least 2 chunks (ChunkSize = 8192).
-        _server.ResponseAudio = new byte[10_000];
-        for (var i = 0; i < _server.ResponseAudio.Length; i++)
-            _server.ResponseAudio[i] = (byte)(i & 0xFF);
+        // The point of the recording: real WAV bytes from the vendor traverse the read loop, which
+        // 10 000 bytes of a counting pattern could not exercise. Frame boundaries are deliberately
+        // not asserted — the client yields whatever Stream.ReadAsync returned, and over a chunked
+        // response that does not align to the buffer. What IS asserted is that the capture's length
+        // is not buffer-aligned, so at least one partial chunk must reach the consumer.
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest(), RecordedResponse, RecordedMediaType);
+        var expected = ProviderRecordings.Locate().ReadBytes(RecordedResponse);
+        var synth = SynthesizerFor(server);
 
-        var synth = BuildSynthesizer();
         var chunks = await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
-        chunks.Should().NotBeEmpty();
-        var totalBytes = chunks.Sum(c => c.Length);
-        totalBytes.Should().Be(10_000);
+        (expected.Length % ChunkSize).Should().NotBe(0, "the capture must not be chunk-aligned");
+        chunks.Should().HaveCountGreaterThan(1, "the response must actually be chunked");
+        chunks.Should().OnlyContain(c => c.Length > 0 && c.Length <= ChunkSize);
+        chunks.Should().Contain(c => c.Length != ChunkSize, "a partial chunk must reach the consumer");
+        chunks.SelectMany(c => c.ToArray()).Should().Equal(expected,
+            "chunking must not alter a single byte of the vendor's audio");
     }
 
     [Fact]
-    public async Task SynthesizeAsync_ShouldThrow_WhenResponseIsErrorStatus()
+    public async Task SynthesizeAsync_ShouldNotMatch_WhenBearerTokenIsWrong()
     {
-        _server.ResponseStatus = HttpStatusCode.Unauthorized;
+        // Strict matching (ADR-0041 D1) turns a silent pass into a failure: the retired fake read the
+        // Authorization header but answered 200 whatever it said.
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest(), RecordedResponse, RecordedMediaType);
+        var synth = SynthesizerFor(server, o => o.ApiKey = "wrong-key");
 
-        var synth = BuildSynthesizer();
+        var act = async () => await synth
+            .SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+        server.UnmatchedRequests.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrow_WhenProviderReturnsError()
+    {
+        await using var server = HttpProviderMockServer.Start();
+        server.Stub(SynthesisRequest(), HttpProviderResponse.Status(HttpStatusCode.Unauthorized));
+        var synth = SynthesizerFor(server);
 
         var act = async () => await synth
             .SynthesizeAsync("fail", AudioFormat.Slin16Mono8kHz)
@@ -127,10 +237,18 @@ public class SpeechmaticsSpeechSynthesizerTests : IAsyncDisposable
         await act.Should().ThrowAsync<HttpRequestException>();
     }
 
-    public async ValueTask DisposeAsync()
+    [Fact]
+    public void RecordedCapture_ShouldBeTheWavItsSidecarDescribes_WhenReadFromRecordingsTree()
     {
-        GC.SuppressFinalize(this);
-        _http.Dispose();
-        await _server.DisposeAsync();
+        // Fixture-integrity fence. The stub is only as good as what is on disk: re-save the capture
+        // or swap it for something smaller and the suite would keep passing while quietly testing
+        // less. Both numbers below are the sidecar's.
+        var audio = ProviderRecordings.Locate().ReadBytes(RecordedResponse);
+
+        audio.Should().HaveCount(RecordedLength, "the sidecar records this exact length");
+        (audio.Length % ChunkSize).Should().NotBe(0);
+        Encoding.ASCII.GetString(audio, 0, 4).Should().Be("RIFF");
+        Encoding.ASCII.GetString(audio, 8, 4).Should().Be("WAVE",
+            "the vendor declared audio/wav and the bytes must actually be one");
     }
 }
