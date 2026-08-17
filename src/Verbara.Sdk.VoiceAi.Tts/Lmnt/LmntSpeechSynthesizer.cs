@@ -109,6 +109,11 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
         // STT fence (ADR-0038).
         ct.ThrowIfCancellationRequested();
 
+        // Nothing is asked of the provider for text that carries no speech, so the zero audio that
+        // follows is not a provider failure and must not be reported as one (ADR-0050 E5). Checked
+        // before the transport split so both paths answer the same way.
+        if (string.IsNullOrWhiteSpace(text)) yield break;
+
         if (_options.Transport == LmntTransport.Http || _fakeHttpOrigin is not null)
         {
             await foreach (var chunk in SynthesizeHttpAsync(text, outputFormat, ct).ConfigureAwait(false))
@@ -133,13 +138,27 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
         var uri = BuildWsUri();
         using var ws = new ClientWebSocket();
 
+        // So a rejected upgrade can report the vendor's own status rather than "the upgrade failed".
+        ws.Options.CollectHttpResponseDetails = true;
+
         // NOTE: LMNT auth is NOT sent in HTTP upgrade headers — the X-API-Key field
         // is sent as part of the first JSON message body (see LmntInitMessage).
         // No request headers are set on ws.Options; auth is embedded in the first JSON frame.
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
-        await ws.ConnectAsync(uri, connectCts.Token).ConfigureAwait(false);
+        try
+        {
+            await ws.ConnectAsync(uri, connectCts.Token).ConfigureAwait(false);
+        }
+        catch (WebSocketException ex)
+        {
+            // ADR-0050 E7. This vendor cannot reject a credential here — auth travels in the first
+            // JSON frame, not in the upgrade — but the wrap is not about credentials: it is about the
+            // caller catching one type whatever the vendor rejects the upgrade for, today or after a
+            // vendor-side change no line of this repository would witness.
+            throw SpeechProviderFailureException.FromHandshake(ProviderName, ws.HttpStatusCode, ex);
+        }
 
         var channel = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
 
@@ -152,19 +171,39 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
         {
             try
             {
-                await ReceiveWsFramesAsync(ws, channel.Writer, sessionCts.Token).ConfigureAwait(false);
+                await ReceiveWsFramesAsync(ws, channel.Writer, ProviderName, sessionCts.Token)
+                    .ConfigureAwait(false);
+                channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                // Completing the writer *with* the exception is what carries a provider failure out
+                // of this background task and into the caller's MoveNextAsync (ADR-0050 E1).
+                channel.Writer.TryComplete(ex);
             }
             finally
             {
-                channel.Writer.TryComplete();
                 await sessionCts.CancelAsync().ConfigureAwait(false);
             }
         }, ct);
 
+        var yieldedAudio = false;
         await foreach (var frame in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+        {
+            if (frame.Length > 0) yieldedAudio = true;
             yield return frame;
+        }
 
         await Task.WhenAll(sendTask, receiveTask).ConfigureAwait(false);
+
+        // ADR-0050 E5, the synthesis rule. Unreachable when the loop threw (the reader raises that
+        // first) and unreachable under cancellation (ReadAllAsync raises OperationCanceledException).
+        if (!yieldedAudio)
+        {
+            throw new SpeechProviderEmptyResultException(
+                ProviderName,
+                $"{ProviderName} ended the session without producing any audio and without reporting a failure.");
+        }
     }
 
     private async Task SendWsRequestAsync(
@@ -243,6 +282,7 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
     private static async Task ReceiveWsFramesAsync(
         ClientWebSocket ws,
         ChannelWriter<ReadOnlyMemory<byte>> writer,
+        string provider,
         CancellationToken ct)
     {
         var buf = new byte[65536];
@@ -253,10 +293,28 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
             {
                 result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
             }
+            // Cancellation is the caller's own instruction and never a provider failure
+            // (ADR-0050 E6).
             catch (OperationCanceledException) { break; }
-            catch (WebSocketException) { break; }
+            catch (WebSocketException ex)
+            {
+                // Door 3 (ADR-0050 E2c). This was `break`, which ended the stream normally — so a
+                // session the peer killed after 12 of 30 KB of audio was indistinguishable from a
+                // complete one, and the caller played truncated speech believing it whole.
+                throw SpeechProviderFailureException.FromTransport(provider, ex);
+            }
 
-            if (result.MessageType == WebSocketMessageType.Close) break;
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                // Door 2 (ADR-0050 E2b). The close code was discarded here, and it is this vendor's
+                // clean end-of-session signal on the happy path — NormalClosure once the audio is
+                // out — so it is precisely the signal that has to be read, not ignored, for anything
+                // else to be recognisable as a failure.
+                var closeFailure = SpeechProviderFailureException.FromCloseStatus(
+                    provider, ws.CloseStatus, ws.CloseStatusDescription);
+                if (closeFailure is not null) throw closeFailure;
+                break;
+            }
 
             if (result.MessageType == WebSocketMessageType.Binary)
             {
@@ -269,19 +327,31 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
             if (result.MessageType == WebSocketMessageType.Text)
             {
                 // LMNT may send JSON notifications (e.g. buffer_empty, error).
-                // A buffer_empty or finish notification terminates the stream.
                 var json = Encoding.UTF8.GetString(buf, 0, result.Count);
                 var notification = JsonSerializer.Deserialize(
                     json,
                     VoiceAiTtsJsonContext.Default.LmntServerNotification);
-                if (notification is not null &&
-                    (string.Equals(notification.Type, "finish", StringComparison.Ordinal) ||
-                     string.Equals(notification.Error, "error", StringComparison.Ordinal) ||
-                     string.Equals(notification.Type, "error", StringComparison.Ordinal)))
-                {
-                    break;
-                }
-                // buffer_empty: server flushed buffered audio; continue receiving.
+
+                if (notification is null) continue;
+
+                // Door 1 (ADR-0049 D1, remedied under ADR-0050 E1). Both spellings the vendor uses —
+                // an `error` member carrying the reason, or `type: "error"` — end the session, and
+                // until now both ended it the same way `finish` does: a `break` that reported success.
+                //
+                // The `error` test was `Equals(notification.Error, "error")`, comparing the member's
+                // *value* against the literal, so it matched only the one frame that says
+                // {"error":"error"} and every real reason string fell through. Any non-empty `error`
+                // is a failure.
+                if (notification.Error is { Length: > 0 } error)
+                    throw SpeechProviderFailureException.FromErrorFrame(provider, null, error);
+
+                if (string.Equals(notification.Type, "error", StringComparison.Ordinal))
+                    throw SpeechProviderFailureException.FromErrorFrame(provider, null, notification.Message);
+
+                // finish: the vendor's end-of-stream notification, and a success.
+                if (string.Equals(notification.Type, "finish", StringComparison.Ordinal)) break;
+
+                // buffer_empty and anything else: server flushed buffered audio; continue receiving.
             }
         }
     }
@@ -336,10 +406,16 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
             HttpCompletionOption.ResponseHeadersRead,
             ct).ConfigureAwait(false);
 
+        // Left as HttpRequestException deliberately. ADR-0050 wraps the WebSocket handshake because a
+        // rejected upgrade otherwise arrives as a bare WebSocketException that names no status; this
+        // already throws, already carries the status, and is not one of the three silent doors — so
+        // wrapping it would be an unmeasured behaviour change riding along, and it would reverse the
+        // two tests that assert this type.
         response.EnsureSuccessStatusCode();
 
         using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         var buf = new byte[HttpChunkSize];
+        var yieldedAudio = false;
         while (true)
         {
             int read;
@@ -347,10 +423,26 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
             {
                 read = await stream.ReadAsync(buf.AsMemory(), ct).ConfigureAwait(false);
             }
+            // Cancellation is the caller's own instruction, so it must not be reported as an empty
+            // result (ADR-0050 E6).
             catch (OperationCanceledException) { yield break; }
 
-            if (read == 0) yield break;
+            if (read == 0)
+            {
+                // ADR-0050 E5 on this transport too: the contract is declared on
+                // SpeechSynthesizer.SynthesizeAsync, so it cannot hold over WebSocket and not over
+                // HTTP. A 200 with an empty body is exactly the silent zero-audio result E5 names.
+                if (!yieldedAudio)
+                {
+                    throw new SpeechProviderEmptyResultException(
+                        ProviderName,
+                        $"{ProviderName} answered the synthesis request with no audio and no error status.");
+                }
 
+                yield break;
+            }
+
+            yieldedAudio = true;
             var chunk = new byte[read];
             buf.AsSpan(0, read).CopyTo(chunk);
             yield return chunk.AsMemory();

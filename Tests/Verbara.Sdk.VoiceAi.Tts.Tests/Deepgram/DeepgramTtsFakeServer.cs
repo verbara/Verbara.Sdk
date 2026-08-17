@@ -139,6 +139,31 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
     /// </summary>
     public bool HangForever { get; set; }
 
+    /// <summary>
+    /// When set, the session answers with this one text frame — no audio, no <c>Flushed</c> — and then
+    /// closes <em>normally</em>. The normal close is the point: it leaves the frame as the only failure
+    /// signal in the session, so a test that sees an exception has isolated door 1 (<c>ADR-0050</c>
+    /// E2a) rather than the close code.
+    /// </summary>
+    /// <remarks>
+    /// Unlike every other surface in this suite, the shape sent here is <em>not</em> measured: this
+    /// vendor rejects a credential at the handshake, so no live run has produced an in-band failure
+    /// frame on it. The knob and the client branch behind it exist because the cost is one branch and
+    /// the alternative is assuming this vendor never sends one.
+    /// </remarks>
+    public string? ErrorFrameJson { get; set; }
+
+    /// <summary>
+    /// The code the session closes with, or <see langword="null"/> for
+    /// <see cref="WebSocketCloseStatus.NormalClosure"/>. Setting it with no
+    /// <see cref="ErrorFrameJson"/> isolates door 2 (<c>ADR-0050</c> E2b) — the vendor ends the session
+    /// with a code and says nothing else.
+    /// </summary>
+    public WebSocketCloseStatus? CloseStatus { get; set; }
+
+    /// <summary>The reason phrase sent with <see cref="CloseStatus"/>.</summary>
+    public string CloseStatusDescription { get; set; } = "done";
+
     public DeepgramTtsFakeServer()
     {
         _server = new WebSocketTestServer(HandleSessionAsync);
@@ -184,6 +209,15 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
             return;
         }
 
+        if (ErrorFrameJson is { } errorFrame)
+        {
+            await TrySendTextAsync(ws, errorFrame, ct).ConfigureAwait(false);
+            await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+            try { await receiveTask.ConfigureAwait(false); }
+            catch (Exception) { /* connection may already be closed */ }
+            return;
+        }
+
         await SendOptionalPreambleAsync(ws, ct).ConfigureAwait(false);
         await SendAudioFramesAsync(ws, ct).ConfigureAwait(false);
 
@@ -196,7 +230,7 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
         }
 
         await SendOptionalFlushedAsync(ws, ct).ConfigureAwait(false);
-        await CloseGracefullyAsync(ws).ConfigureAwait(false);
+        await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
         try { await receiveTask.ConfigureAwait(false); }
         catch (Exception) { /* connection may already be closed */ }
     }
@@ -297,15 +331,21 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
         }
     }
 
-    private static async Task CloseGracefullyAsync(System.Net.WebSockets.WebSocket ws)
+    /// <summary>
+    /// Closes the server side with <see cref="CloseStatus"/> — normal closure unless a test asked for
+    /// another code.
+    /// </summary>
+    private async Task CloseWithConfiguredStatusAsync(System.Net.WebSockets.WebSocket ws)
     {
+        var status = CloseStatus ?? WebSocketCloseStatus.NormalClosure;
+
         try
         {
             if (ws.State == WebSocketState.Open)
-                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
+                await ws.CloseAsync(status, CloseStatusDescription, CancellationToken.None)
                     .ConfigureAwait(false);
             else if (ws.State == WebSocketState.CloseReceived)
-                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
+                await ws.CloseOutputAsync(status, CloseStatusDescription, CancellationToken.None)
                     .ConfigureAwait(false);
         }
         catch (Exception)

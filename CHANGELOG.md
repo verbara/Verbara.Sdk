@@ -4,6 +4,64 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: a provider failure now reaches the caller instead of an empty stream
+
+Eight WebSocket speech clients — Cartesia TTS, ElevenLabs TTS, LMNT TTS (WebSocket), Deepgram TTS,
+and Deepgram, Speechmatics, AssemblyAI and Cartesia STT — ended a failed session by completing
+normally with nothing in it. **This ships in a minor and never in a patch**: code that compiles
+unchanged behaves differently, because a call that used to go quiet now throws. That is the point of
+the change (`Sdk/ADR-0050`).
+
+- **Three separate doors let a failure out silently, and every one of the eight had all three open.**
+  (1) The frame allow-list: a receive loop keeping only the message types it wanted dropped the
+  vendor's error frame into the same discard branch as lifecycle noise. (2) **The close code was read
+  and thrown away** at all eight — a session the vendor ended `1002`, `1008` or `4001` was
+  indistinguishable from one that finished. (3) `catch (WebSocketException) { break; }` turned a
+  socket dying mid-stream into normal completion. A surface with a clean allow-list was still silent
+  through the other two, which is why the audit widened from the five sites first found to eight.
+
+- **Two new exception types, both rooted at `System.Exception`.** `SpeechProviderFailureException`
+  means *the vendor reported a failure*, and carries a `Signal` — `ErrorFrame`, `CloseCode`,
+  `Handshake` or `Transport` — plus the vendor's own code and text where the wire supplied them.
+  `SpeechProviderEmptyResultException` means *the session ended clean and empty*. Both derive from
+  `SpeechProviderException`, which exposes `Provider`. The two types are **evidence about what
+  happened, not a retry policy**: nothing in this SDK decides for a caller which of them is worth
+  retrying.
+
+- **Cancellation is never a failure.** A caller cancelling its own token, or a barge-in cancelling
+  synthesis, ends the stream as it always did. Neither type is raised.
+
+- **Recognition and synthesis are deliberately asymmetric on "empty".** A synthesis that yields no
+  audio has failed. A *recognition* that yields no transcript has not — turn detection flushes on any
+  trigger, so noise with no speech is a session that correctly produced nothing. The STT rule
+  therefore fires only when the vendor sent **no message of any kind**, not when it sent lifecycle
+  messages and no words. Each STT surface carries both tests, so the distinction cannot rot.
+
+- **New counter, additive: `tts.syntheses.silent`** on the existing `Verbara.Sdk.VoiceAi.Tts` meter,
+  tagged `voiceai.provider`. It counts a synthesis that completed with zero audio chunks, was not
+  cancelled and raised nothing — which the eight clients above can no longer do, so what it actually
+  reports is the residual they cannot reach: an HTTP-backed synthesizer, or any third-party subclass
+  of the public `SpeechSynthesizer` base, returning silence in silence. **`tts.syntheses.failed`
+  changes meaning** for anyone already listening: it now absorbs provider failures that used to be
+  counted as completed syntheses. That is a correction, not a regression — those sessions had failed.
+
+- **Two branches are closed without a measured frame behind them, and say so in the code.** Deepgram
+  validates a credential with `HTTP 401` at the WebSocket upgrade on both its surfaces, so no live
+  session has ever produced an in-band failure frame there; those two error-frame branches are written
+  from the vendor's published schema and are labelled as such rather than left looking like captures.
+  Every other frame and close code under test is one a live probe recorded.
+
+- **Unchanged on purpose: LMNT's HTTP transport still surfaces a non-2xx status as
+  `HttpRequestException`.** No measured defect stands behind retyping it, and doing so would be a
+  second behavioural break riding along with this one.
+
+- **Two test fakes were rebuilt to make the socket-death case testable at all.** `HttpListener` plus
+  `ws.Abort()` hangs on Linux — measured here as a single ElevenLabs test taking **9 m 49 s** against
+  753 ms for an already-migrated class — so the ElevenLabs TTS and Deepgram STT fakes moved onto the
+  shared `TcpListener`-based test server. The ElevenLabs suite now runs in 673 ms. Deepgram STT had no
+  abort test before this: not one asserting the wrong thing, none at all, because its fake could not
+  abort without hanging.
+
 ### Fixed — BREAKING: AssemblyAI realtime STT rejected every session a telephony caller could start
 
 `AssemblyAiSpeechRecognizer` sent **one WebSocket message per frame the caller yielded**. AssemblyAI
@@ -445,6 +503,9 @@ frame-format fix.
   socket closes, and the transport exception is swallowed. Not fixed here: making it throw is a
   behavioural change that belongs with the `Sdk/ADR-0049` D1 remedy rather than a route fix. The two
   fixes above remove the failures that were reaching it; they do not make the next one visible.
+  **Now fixed in this same unreleased version** — see the typed-provider-failure entry at the top,
+  which is that remedy. This entry stays because it records how the defect was found and why the fix
+  waited for a decision.
 
 ### Known — the half-close is a class: three of three TTS sites measured, all total failures, all now fixed
 

@@ -1,5 +1,7 @@
+using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Stt.Deepgram;
 using Verbara.Sdk.VoiceAi.Stt.Tests.Helpers;
 using FluentAssertions;
@@ -176,6 +178,142 @@ public class DeepgramSpeechRecognizerTests : IAsyncDisposable
         var act = async () =>
             await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
         await act.Should().NotThrowAsync();
+    }
+
+    /// <summary>
+    /// Door 3 (<c>ADR-0050</c> E2c). This surface had <b>no</b> abort test at all — not one that asserted
+    /// the wrong thing, one that did not exist, because the fake could not abort without hanging until it
+    /// was ported off <c>HttpListener</c> above. A socket killed mid-session was therefore the least
+    /// examined of the three doors here.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowTransportFailure_WhenServerAbortsMidSession()
+    {
+        _server.AbortAfterSend = true;
+        var recognizer = BuildRecognizer();
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
+        failure.InnerException.Should().BeOfType<WebSocketException>();
+    }
+
+    /// <summary>
+    /// The fourth door, and on this surface the one that matters most: §1.3a measured this vendor
+    /// rejecting a bad credential with <c>HTTP 401</c> at the upgrade, on both its surfaces, which is
+    /// exactly the failure <c>ADR-0050</c> E7 wraps. This test drives the no-HTTP-answer half — a
+    /// refused connection, hence no code — because no fake in this suite can answer an upgrade with a
+    /// status yet; the <c>401</c> mapping itself is asserted on the factory
+    /// (<c>SpeechProviderFailureExceptionTests</c>).
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
+    {
+        var recognizer = BuildRecognizer(
+            o => o.BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/v1/listen");
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Handshake);
+        failure.Code.Should().BeNull("a refused connection produced no HTTP answer to report");
+        failure.InnerException.Should().BeAssignableTo<WebSocketException>();
+    }
+
+    /// <summary>
+    /// Door 1 (<c>ADR-0050</c> E2a), driving the one branch of this change that rests on documentation
+    /// rather than measurement — see <c>DeepgramFakeServer.ErrorFrameJson</c> for why: §1.3a measured this
+    /// vendor rejecting a bad credential with <c>HTTP 401</c> at the upgrade on both its surfaces, so no
+    /// live session has ever produced an in-band failure frame to copy. The frame below conforms to the
+    /// published streaming schema. <see cref="SpeechProviderFailureException.Code"/> is asserted null on
+    /// purpose: the client reads only the description here, because a <c>code</c> member is exactly the
+    /// kind of detail no run has confirmed.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowErrorFrameFailure_WhenTheServerSendsAnErrorFrame()
+    {
+        _server.ErrorFrameJson =
+            """{"type":"Error","description":"DATA-0000: deepgram did not receive audio data","message":"NET-0001"}""";
+        var recognizer = BuildRecognizer();
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
+        failure.Code.Should().BeNull("this surface's frame shape is documented, not measured");
+        failure.Message.Should().Contain("did not receive audio data");
+    }
+
+    /// <summary>
+    /// Door 2 (<c>ADR-0050</c> E2b): the close code was discarded here as it was at all eight clients, so
+    /// a session the vendor ended abnormally looked exactly like one that finished transcribing.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowCloseCodeFailure_WhenServerClosesAbnormally()
+    {
+        _server.EndSessionSilently = true;
+        _server.CloseStatus = WebSocketCloseStatus.PolicyViolation;   // 1008
+        _server.CloseStatusDescription = "DATA-0000";
+        var recognizer = BuildRecognizer();
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.CloseCode);
+        failure.Code.Should().Be("1008");
+        failure.Message.Should().Contain("DATA-0000");
+    }
+
+    /// <summary>
+    /// D2 (<c>ADR-0050</c> E5) on the recognition side: the vendor accepted the upgrade, sent no message of
+    /// any kind — not even its <c>Metadata</c> summary — and closed normally.
+    /// </summary>
+    /// <remarks>
+    /// The asserted value is <c>"Deepgram"</c>, and it is worth pinning rather than skipping because this
+    /// vendor's two surfaces label themselves differently: the synthesizer reports <c>"DeepgramTts"</c>,
+    /// this recognizer the bare vendor name. Whoever reads a `"Deepgram"` failure in a log is reading the
+    /// STT half. That asymmetry is this vendor's alone — Speechmatics and Cartesia also ship both surfaces
+    /// and use one label for each pair, so the surface is <em>not</em> recoverable from the provider name
+    /// in general. Recorded here as measured behaviour; renaming any of the six is observable to callers
+    /// and to metric tags, so it is not done under this change.
+    /// </remarks>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowEmptyResult_WhenTheVendorSendsNoMessageAtAll()
+    {
+        _server.EndSessionSilently = true;
+        var recognizer = BuildRecognizer();
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var empty = (await act.Should().ThrowAsync<SpeechProviderEmptyResultException>()).Which;
+        empty.Should().NotBeOfType<SpeechProviderFailureException>(
+            "the session was clean — it was simply silent");
+        empty.Provider.Should().Be("Deepgram");
+    }
+
+    /// <summary>
+    /// The recognition half of E5, and the asymmetry against synthesis the rule turns on: a session
+    /// carrying only the vendor's <c>Metadata</c> summary produced no transcript and is nonetheless
+    /// healthy — noise with no speech is a session that correctly yielded nothing. Only zero
+    /// <em>messages</em> is a failure, which is what the test above drives.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldYieldNothingWithoutFailing_WhenTheSessionCarriesOnlyControlFrames()
+    {
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(DeepgramFakeServer.ReadFrame(DeepgramFakeServer.MetadataFrame));
+
+        var recognizer = BuildRecognizer();
+
+        var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().BeEmpty();
     }
 
     [Fact]

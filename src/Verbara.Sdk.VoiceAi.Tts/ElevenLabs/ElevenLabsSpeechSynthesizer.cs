@@ -49,42 +49,92 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
         // issued, independent of scheduling/mock latency. Mirrors the STT fence (ADR-0038).
         ct.ThrowIfCancellationRequested();
 
+        // Nothing is asked of the provider for text that carries no speech, so the zero audio that
+        // follows is not a provider failure and must not be reported as one (ADR-0050 E5).
+        if (string.IsNullOrWhiteSpace(text)) yield break;
+
         var uri = BuildUri();
         using var ws = new ClientWebSocket();
+
+        // So a rejected upgrade can report the vendor's own status rather than "the upgrade failed".
+        ws.Options.CollectHttpResponseDetails = true;
 
         // Unconditional: the header name is vendor-specific and lower-case, and nothing could catch a
         // change to it while this line ran under production alone.
         ws.Options.SetRequestHeader("xi-api-key", _options.ApiKey);
 
-        await ws.ConnectAsync(uri, ct).ConfigureAwait(false);
+        try
+        {
+            await ws.ConnectAsync(uri, ct).ConfigureAwait(false);
+        }
+        catch (WebSocketException ex)
+        {
+            // ADR-0050 E7 — one type whether the vendor validates here or in band. This vendor was
+            // measured validating in band (a `1008` failure frame), but that is the vendor's choice
+            // and not this client's contract.
+            throw SpeechProviderFailureException.FromHandshake(ProviderName, ws.HttpStatusCode, ex);
+        }
 
         var channel = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
 
         // Fire-and-forget: send text chunks to the server.
         var sendTask = SendTextAsync(ws, text, ct);
 
-        // Receive loop decodes audio frames to the channel, then completes the writer.
+        // Receive loop decodes audio to the channel, then completes the writer — with the failure
+        // when there is one.
         var receiveTask = Task.Run(async () =>
         {
             try
             {
-                await ReceiveFramesAsync(ws, channel.Writer, ct).ConfigureAwait(false);
-            }
-            finally
-            {
+                await ReceiveFramesAsync(ws, channel.Writer, ProviderName, ct).ConfigureAwait(false);
                 channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                // Completing the writer *with* the exception is what carries a provider failure out
+                // of this background task and into the caller's MoveNextAsync (ADR-0050 E1).
+                channel.Writer.TryComplete(ex);
             }
         }, ct);
 
         // Yield frames as they arrive from the receive loop (true streaming).
+        var yieldedAudio = false;
         await foreach (var frame in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+        {
+            if (frame.Length > 0) yieldedAudio = true;
             yield return frame;
+        }
 
         // Ensure both tasks complete (propagate exceptions).
         await Task.WhenAll(sendTask, receiveTask).ConfigureAwait(false);
+
+        // ADR-0050 E5, the synthesis rule. Unreachable when the loop threw (the reader raises that
+        // first) and unreachable under cancellation (ReadAllAsync raises OperationCanceledException).
+        if (!yieldedAudio)
+        {
+            throw new SpeechProviderEmptyResultException(
+                ProviderName,
+                $"{ProviderName} ended the session without producing any audio and without reporting a failure.");
+        }
     }
 
+    /// <remarks>
+    /// Swallows the two exceptions a dead session raises here. The receive loop owns this session's
+    /// failure and now raises it (<c>ADR-0050</c> E1), so a send that loses the race against a socket
+    /// the provider already closed must not fault this task as well: the caller would see whichever
+    /// of the two arrived first, and the second would be an unobserved task exception.
+    /// </remarks>
     private async Task SendTextAsync(ClientWebSocket ws, string text, CancellationToken ct)
+    {
+        try
+        {
+            await SendChunksAsync(ws, text, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { /* the caller's own instruction — not a failure (E6) */ }
+        catch (WebSocketException) { /* the receive loop reports why the session died */ }
+    }
+
+    private async Task SendChunksAsync(ClientWebSocket ws, string text, CancellationToken ct)
     {
         // Send the text chunk with voice settings.
         var chunk = new ElevenLabsTextChunk
@@ -131,6 +181,7 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
     private static async Task ReceiveFramesAsync(
         ClientWebSocket ws,
         ChannelWriter<ReadOnlyMemory<byte>> writer,
+        string provider,
         CancellationToken ct)
     {
         var buf = new byte[ReceiveBufferSize];
@@ -143,10 +194,27 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
             {
                 result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
             }
+            // Cancellation is the caller's own instruction and never a provider failure
+            // (ADR-0050 E6).
             catch (OperationCanceledException) { break; }
-            catch (WebSocketException) { break; }
+            catch (WebSocketException ex)
+            {
+                // Door 3 (ADR-0050 E2c). This was `break`, which turned a socket that died
+                // mid-session into a normal completion — so a truncated synthesis was
+                // indistinguishable from a complete one.
+                throw SpeechProviderFailureException.FromTransport(provider, ex);
+            }
 
-            if (result.MessageType == WebSocketMessageType.Close) break;
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                // Door 2 (ADR-0050 E2b). The close code was read nowhere in this SDK, and this
+                // vendor was measured rejecting a credential with close 1008 — the same 1008 it
+                // also puts in the failure frame below, so either door alone catches it.
+                var closeFailure = SpeechProviderFailureException.FromCloseStatus(
+                    provider, ws.CloseStatus, ws.CloseStatusDescription);
+                if (closeFailure is not null) throw closeFailure;
+                break;
+            }
 
             // Assemble until the message is whole. The vendor sizes these frames, not this client:
             // one measured run returned ~29 KB of base64 per frame against this 64 KiB buffer, so a
@@ -162,7 +230,7 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
                 // mentioning a mode is not evidence the mode does not exist, and keeping the branch
                 // costs nothing. Removing it would be an unmeasured change.
                 ? assembled.WrittenSpan.ToArray()
-                : DecodeAudioFrame(assembled.WrittenSpan);
+                : DecodeAudioFrame(assembled.WrittenSpan, provider);
 
             assembled.Clear();
 
@@ -173,19 +241,27 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
 
     /// <summary>
     /// Decodes the audio carried by a server text frame, or <see langword="null"/> for a frame that
-    /// carries none.
+    /// carries none. Throws when the frame is the vendor's failure frame.
     /// </summary>
     /// <remarks>
-    /// The frame this skips is not always harmless: an invalid credential arrives here as
-    /// <c>{"message":…,"error":"invalid_api_key","code":1008}</c>, which has no <c>audio</c> member
-    /// and is therefore dropped, leaving the caller an empty stream and no exception. That is
-    /// <c>Sdk/ADR-0049</c> D1 on this surface. Surfacing it changes behaviour — a synthesis that
-    /// silently yields nothing would start throwing — so it belongs to the D1 remedy and its own
-    /// decision, not inside a frame-format fix.
+    /// Door 1 on this surface (<c>ADR-0049</c> D1, remedied under <c>ADR-0050</c> E1). An invalid
+    /// credential arrives here as <c>{"message":…,"error":"invalid_api_key","code":1008}</c> — a frame
+    /// with no <c>audio</c> member, which this method used to drop, leaving the caller an empty stream
+    /// and no exception. A frame carrying an <c>error</c> member is now a failure; a frame that merely
+    /// carries no audio (<c>isFinal</c>, alignment-only) still returns <see langword="null"/> and is
+    /// skipped, because "no audio in this frame" and "the request failed" are different facts.
     /// </remarks>
-    private static byte[]? DecodeAudioFrame(ReadOnlySpan<byte> utf8Json)
+    /// <exception cref="SpeechProviderFailureException">
+    /// The frame reported a failure. Carries the vendor's <c>error</c> as
+    /// <see cref="SpeechProviderFailureException.Code"/>.
+    /// </exception>
+    private static byte[]? DecodeAudioFrame(ReadOnlySpan<byte> utf8Json, string provider)
     {
         var frame = JsonSerializer.Deserialize(utf8Json, VoiceAiTtsJsonContext.Default.ElevenLabsAudioOutput);
+
+        if (frame?.Error is { Length: > 0 } error)
+            throw SpeechProviderFailureException.FromErrorFrame(provider, error, frame.Message);
+
         return frame?.Audio is { Length: > 0 } base64 ? Convert.FromBase64String(base64) : null;
     }
 

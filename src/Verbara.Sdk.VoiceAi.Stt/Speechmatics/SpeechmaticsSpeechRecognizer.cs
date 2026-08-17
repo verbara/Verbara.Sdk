@@ -45,11 +45,26 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
 
         var wsUri = BuildUri();
         using var ws = new ClientWebSocket();
+
+        // So a rejected upgrade can report the vendor's own status rather than "the upgrade failed".
+        ws.Options.CollectHttpResponseDetails = true;
+
         ApplyCredential(ws);
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
-        await ws.ConnectAsync(wsUri, connectCts.Token).ConfigureAwait(false);
+        try
+        {
+            await ws.ConnectAsync(wsUri, connectCts.Token).ConfigureAwait(false);
+        }
+        catch (WebSocketException ex)
+        {
+            // ADR-0050 E7, and this surface is the argument for it: a bad credential here does *not*
+            // fail the upgrade — it is accepted with 101 and then closed 4001 not_authorised (see
+            // ApplyCredential). Where a vendor validates is the vendor's choice and can change without
+            // a line of this repository changing, so both places raise the same type.
+            throw SpeechProviderFailureException.FromHandshake(ProviderName, ws.HttpStatusCode, ex);
+        }
 
         // Send the Speechmatics StartRecognition config as the first text frame.
         var sampleRate = format.SampleRate > 0 ? format.SampleRate : _options.SampleRate;
@@ -72,25 +87,41 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
         var startJson = JsonSerializer.Serialize(
             start,
             VoiceAiSttJsonContext.Default.SpeechmaticsStartRecognitionMessage);
-        await ws.SendAsync(
-            Encoding.UTF8.GetBytes(startJson).AsMemory(),
-            WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+        try
+        {
+            await ws.SendAsync(
+                Encoding.UTF8.GetBytes(startJson).AsMemory(),
+                WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+        }
+        catch (WebSocketException ex)
+        {
+            // The one send in this client that no receive loop stands behind yet, so it reports its
+            // own failure rather than leaving a bare WebSocketException to escape a client that
+            // promises typed provider failures (ADR-0050 E2c).
+            throw SpeechProviderFailureException.FromTransport(ProviderName, ex);
+        }
 
         var channel = Channel.CreateUnbounded<SpeechRecognitionResult>();
 
         // Fire-and-forget: stream audio frames to the server as binary WebSocket messages.
         var sendTask = SendLoopAsync(ws, audioFrames, ct);
 
-        // Receive loop writes transcripts to channel, then completes the writer.
+        // Receive loop writes transcripts to channel, then completes the writer — with the failure
+        // when the session failed.
+        var sawVendorFrame = false;
         var receiveTask = Task.Run(async () =>
         {
             try
             {
-                await ReceiveLoopAsync(ws, channel.Writer, ct).ConfigureAwait(false);
-            }
-            finally
-            {
+                sawVendorFrame = await ReceiveLoopAsync(ws, channel.Writer, ProviderName, ct)
+                    .ConfigureAwait(false);
                 channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                // Completing the writer *with* the exception is what carries a provider failure out
+                // of this background task and into the caller's MoveNextAsync (ADR-0050 E1).
+                channel.Writer.TryComplete(ex);
             }
         }, ct);
 
@@ -100,6 +131,18 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
 
         // Ensure both tasks complete (propagate exceptions via AggregateException).
         await Task.WhenAll(sendTask, receiveTask).ConfigureAwait(false);
+
+        // ADR-0050 E5, the recognition rule — and it is deliberately not the synthesis one. Zero
+        // transcripts is a healthy outcome here: turn detection flushes on any trigger, so a session
+        // that carried only noise is *supposed* to produce nothing. What is not healthy is a session
+        // in which the vendor never said anything at all — no RecognitionStarted, no lifecycle
+        // message, nothing — which is the silent nothing D2 exists to name.
+        if (!sawVendorFrame)
+        {
+            throw new SpeechProviderEmptyResultException(
+                ProviderName,
+                $"{ProviderName} ended the session without sending a single message and without reporting a failure.");
+        }
     }
 
     private static async Task SendLoopAsync(
@@ -141,12 +184,24 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
         catch (WebSocketException) { }
     }
 
-    private static async Task ReceiveLoopAsync(
+    /// <summary>
+    /// Reads the session to its end. Returns whether the vendor sent any message at all — the
+    /// evidence <c>ADR-0050</c> E5's recognition rule turns on, which is <em>not</em> whether any
+    /// transcript was produced.
+    /// </summary>
+    /// <exception cref="SpeechProviderFailureException">The session failed.</exception>
+    private static async Task<bool> ReceiveLoopAsync(
         ClientWebSocket ws,
         ChannelWriter<SpeechRecognitionResult> writer,
+        string provider,
         CancellationToken ct)
     {
         var buf = new byte[65536];
+
+        // Counts messages, not transcripts, and excludes the close frame: "the vendor closed and
+        // said nothing else" is precisely the case this has to report.
+        var sawVendorFrame = false;
+
         while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
         {
             ValueWebSocketReceiveResult result;
@@ -154,14 +209,34 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
             {
                 result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
             }
+            // Cancellation is the caller's own instruction and never a provider failure
+            // (ADR-0050 E6).
             catch (OperationCanceledException) { break; }
-            catch (WebSocketException) { break; }
+            catch (WebSocketException ex)
+            {
+                // Door 3 (ADR-0050 E2c). This was `break`, which ended the stream normally — so a
+                // session the peer killed halfway through an utterance looked exactly like one that
+                // finished, and the caller acted on a partial transcript believing it complete.
+                throw SpeechProviderFailureException.FromTransport(provider, ex);
+            }
 
-            // Unchanged line, changed meaning: with the half-close gone from the send loop, the
-            // close frame that ends this loop is the vendor deciding the session is over — after
-            // its EndOfTranscript — not the vendor answering a close we sent before it had
-            // finished transcribing.
-            if (result.MessageType == WebSocketMessageType.Close) break;
+            // Door 2 (ADR-0050 E2b), and the one this vendor's measured rejection arrives through:
+            // a credential it will not accept is answered with 101 and then close
+            // `4001 not_authorised`, which this loop used to discard, returning zero transcripts and
+            // no error.
+            //
+            // With the half-close gone from the send loop, a *normal* close here is the vendor
+            // deciding the session is over — after its EndOfTranscript — not the vendor answering a
+            // close we sent before it had finished transcribing.
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                var closeFailure = SpeechProviderFailureException.FromCloseStatus(
+                    provider, ws.CloseStatus, ws.CloseStatusDescription);
+                if (closeFailure is not null) throw closeFailure;
+                break;
+            }
+
+            sawVendorFrame = true;
             if (result.MessageType != WebSocketMessageType.Text) continue;
 
             var json = Encoding.UTF8.GetString(buf, 0, result.Count);
@@ -171,8 +246,16 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
 
             if (msg is null) continue;
 
-            // Only transcript messages carry content. Lifecycle (RecognitionStarted,
-            // EndOfTranscript, Error, Warning, Info) is observed but not surfaced.
+            // Door 1 (ADR-0049 D1, remedied under ADR-0050 E1). `Error` was in the list of lifecycle
+            // messages "observed but not surfaced" — observed by nothing, in practice, since falling
+            // through the transcript test discarded it silently. Note the vendor's inversion: the
+            // kind is in `message` and the code is in `type`.
+            if (string.Equals(msg.Message, "Error", StringComparison.Ordinal))
+                throw SpeechProviderFailureException.FromErrorFrame(provider, msg.Type, msg.Reason);
+
+            // Only transcript messages carry content. The remaining lifecycle messages
+            // (RecognitionStarted, EndOfTranscript, Warning, Info) are not failures and are not
+            // results either.
             var isPartial = string.Equals(msg.Message, "AddPartialTranscript", StringComparison.Ordinal);
             var isFinal = string.Equals(msg.Message, "AddTranscript", StringComparison.Ordinal);
             if (!isPartial && !isFinal) continue;
@@ -202,6 +285,8 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
                 TimeSpan.Zero);
             await writer.WriteAsync(stt, ct).ConfigureAwait(false);
         }
+
+        return sawVendorFrame;
     }
 
     /// <summary>

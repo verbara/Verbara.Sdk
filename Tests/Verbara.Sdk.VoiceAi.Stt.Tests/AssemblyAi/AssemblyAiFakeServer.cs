@@ -113,6 +113,33 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
     /// <summary>If true, abort the WebSocket abnormally after sending messages.</summary>
     public bool AbortAfterSend { get; set; }
 
+    /// <summary>
+    /// When set, the session answers with this one text frame — no <c>Begin</c>, no turns — and then
+    /// closes <em>normally</em>. The normal close is the point: it leaves the frame as the only failure
+    /// signal in the session, so a test that sees an exception has isolated door 1 (<c>ADR-0050</c>
+    /// E2a) rather than the close code. This vendor was measured putting the same <c>3007</c> in both
+    /// places, so on the live surface either door alone catches a sub-floor message.
+    /// </summary>
+    public string? ErrorFrameJson { get; set; }
+
+    /// <summary>
+    /// The code the session closes with, or <see langword="null"/> for
+    /// <see cref="WebSocketCloseStatus.NormalClosure"/>. Setting it with
+    /// <see cref="EndSessionSilently"/> isolates door 2 (<c>ADR-0050</c> E2b).
+    /// </summary>
+    public WebSocketCloseStatus? CloseStatus { get; set; }
+
+    /// <summary>The reason phrase sent with <see cref="CloseStatus"/>.</summary>
+    public string CloseStatusDescription { get; set; } = "done";
+
+    /// <summary>
+    /// When <see langword="true"/> the session sends nothing whatsoever — not even the <c>Begin</c>
+    /// greeting — and closes as soon as it is established. That is the silent nothing D2 exists to
+    /// name (<c>ADR-0050</c> E5): a session with zero transcripts is healthy, a session with zero
+    /// <em>messages</em> is not.
+    /// </summary>
+    public bool EndSessionSilently { get; set; }
+
     public int Port => _server.Port;
 
     public AssemblyAiFakeServer()
@@ -135,6 +162,26 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
 
         var ws = session.WebSocket;
         var ct = session.ServerCancellationToken;
+
+        if (EndSessionSilently)
+        {
+            await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+            return;
+        }
+
+        if (ErrorFrameJson is { } errorFrame)
+        {
+            try
+            {
+                var failure = Encoding.UTF8.GetBytes(errorFrame);
+                await ws.SendAsync(failure.AsMemory(), WebSocketMessageType.Text, true, ct)
+                    .ConfigureAwait(false);
+            }
+            catch { return; }
+
+            await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+            return;
+        }
 
         // Send initial Begin message (wire-protocol greeting).
         var beginBytes = Encoding.UTF8.GetBytes(BuildBeginJson());
@@ -209,11 +256,22 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
             }
         }
 
+        await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Closes the server side with <see cref="CloseStatus"/> — normal closure unless a test asked for
+    /// another code.
+    /// </summary>
+    private async Task CloseWithConfiguredStatusAsync(System.Net.WebSockets.WebSocket ws)
+    {
+        var status = CloseStatus ?? WebSocketCloseStatus.NormalClosure;
+
         if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
         {
             try
             {
-                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
+                await ws.CloseAsync(status, CloseStatusDescription, CancellationToken.None)
                     .ConfigureAwait(false);
             }
             catch { }

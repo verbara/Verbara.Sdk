@@ -1,5 +1,7 @@
+using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Tts.Deepgram;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
@@ -245,8 +247,13 @@ public class DeepgramSpeechSynthesizerTests : IAsyncDisposable
             "an unmodelled sibling field must not cost the caller a byte of audio");
     }
 
+    /// <summary>
+    /// Door 3 (<c>ADR-0050</c> E2c), and the inverse of what this test used to assert. Under
+    /// <c>NotThrowAsync</c> a socket killed mid-utterance ended the stream exactly as a completed
+    /// utterance does, so a caller had no way to tell a truncated synthesis from a whole one.
+    /// </summary>
     [Fact]
-    public async Task SynthesizeAsync_ShouldComplete_WhenServerAbortsAfterSend()
+    public async Task SynthesizeAsync_ShouldThrowTransportFailure_WhenServerAbortsAfterSend()
     {
         _server.AbortAfterSend = true;
         var synth = BuildSynthesizer();
@@ -255,7 +262,134 @@ public class DeepgramSpeechSynthesizerTests : IAsyncDisposable
             .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
             .ToListAsync();
 
-        await act.Should().NotThrowAsync();
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
+        failure.Code.Should().BeNull("a dead socket carries no vendor code");
+        failure.InnerException.Should().BeOfType<WebSocketException>();
+    }
+
+    /// <summary>
+    /// The fourth door, and on this surface the one that matters most: §1.3a measured this vendor
+    /// rejecting a bad credential with <c>HTTP 401</c> at the upgrade, on both its surfaces, which is
+    /// exactly the failure <c>ADR-0050</c> E7 wraps. This test drives the no-HTTP-answer half — a
+    /// refused connection, hence no code — because no fake in this suite can answer an upgrade with a
+    /// status yet; the <c>401</c> mapping itself is asserted on the factory
+    /// (<c>SpeechProviderFailureExceptionTests</c>). Built inline rather than through
+    /// <c>BuildSynthesizer</c> because the point of this test is that it never reaches the fake.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
+    {
+        var synth = new DeepgramSpeechSynthesizer(Options.Create(new DeepgramTtsOptions
+        {
+            ApiKey = TestApiKey,
+            Model = DeepgramVoices.Thalia,
+            Encoding = "linear16",
+            SampleRate = 16000,
+            BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/v1/speak",
+        }));
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Handshake);
+        failure.Code.Should().BeNull("a refused connection produced no HTTP answer to report");
+        failure.InnerException.Should().BeAssignableTo<WebSocketException>();
+    }
+
+    /// <summary>
+    /// Door 1 (<c>ADR-0050</c> E2a) — the one branch of this change on this surface with no live
+    /// measurement behind it. This vendor rejects a credential at the handshake, so no probe has ever
+    /// produced an in-band failure frame here and the frame below is the documented shape, not a
+    /// recorded one. The test exists for the same reason the branch does: the cost is one frame, and
+    /// the alternative is leaving door 1 open on the assumption that this vendor never sends one.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowErrorFrameFailure_WhenTheServerSendsAnErrorFrame()
+    {
+        _server.ErrorFrameJson =
+            """{"type":"Error","code":"UNSUPPORTED_ENCODING","description":"encoding is not supported"}""";
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
+        failure.Code.Should().Be("UNSUPPORTED_ENCODING");
+        failure.Message.Should().Contain("encoding is not supported");
+    }
+
+    /// <summary>
+    /// Door 2 (<c>ADR-0050</c> E2b): no frame of any kind, just a close code the client used to read
+    /// nowhere. With no audio and no <c>Flushed</c>, the code is the only signal in the session.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowCloseCodeFailure_WhenServerClosesAbnormally()
+    {
+        _server.AudioFramesToSend.Clear();
+        _server.SendFlushedTerminator = false;
+        _server.CloseStatus = WebSocketCloseStatus.PolicyViolation;   // 1008
+        _server.CloseStatusDescription = "quota exceeded";
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.CloseCode);
+        failure.Code.Should().Be("1008");
+        failure.Message.Should().Contain("quota exceeded");
+    }
+
+    /// <summary>
+    /// D2 (<c>ADR-0050</c> E5): the vendor completes the utterance properly — <c>Flushed</c> then a
+    /// normal close — having sent no audio. Nothing failed on the wire, so this is not a
+    /// <see cref="SpeechProviderFailureException"/>; it is still an empty synthesis, and silence is
+    /// not an answer to a request for speech.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowEmptyResult_WhenSessionEndsCleanlyWithNoAudio()
+    {
+        _server.AudioFramesToSend.Clear();
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var empty = (await act.Should().ThrowAsync<SpeechProviderEmptyResultException>()).Which;
+        empty.Should().NotBeOfType<SpeechProviderFailureException>(
+            "nothing failed on the wire — the session was clean and produced nothing");
+
+        // Pinned rather than skipped because this vendor's two surfaces label themselves differently:
+        // this synthesizer reports `DeepgramTts`, the recognizer the bare `Deepgram`. Not a contract —
+        // Speechmatics and Cartesia also ship both surfaces and use one label for each pair, so the
+        // surface is not recoverable from the provider name in general. (This is *not* ADR-0050 E8: E8 is
+        // the substitution of D2's operational discriminator — which of the two exception types fires —
+        // and says nothing about how a provider spells its own name.)
+        empty.Provider.Should().Be("DeepgramTts");
+    }
+
+    /// <summary>
+    /// The other half of E5: text carrying no speech is not asked of the provider at all, so the zero
+    /// audio that follows is not a failure. Asserted through the fake seeing no session, since "did
+    /// not throw" alone would also pass if a session had opened and been lucky.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldYieldNothingWithoutConnecting_WhenTextIsWhitespace()
+    {
+        var synth = BuildSynthesizer();
+
+        var frames = await synth.SynthesizeAsync("\n\t", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        frames.Should().BeEmpty();
+        _server.CapturedAuthorization.Should().BeNull("no session should have been opened at all");
+        _server.ReceivedJsonMessages.Should().BeEmpty();
     }
 
     [Fact]

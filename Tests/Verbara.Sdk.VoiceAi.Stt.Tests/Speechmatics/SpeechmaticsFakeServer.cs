@@ -108,6 +108,35 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
     /// <summary>If true, abort the WebSocket abnormally after sending RecognitionStarted + transcripts.</summary>
     public bool AbortAfterSend { get; set; }
 
+    /// <summary>
+    /// When set, the session answers with this one text frame — no <c>RecognitionStarted</c>, no
+    /// transcripts — and then closes <em>normally</em>. The normal close is the point: it leaves the
+    /// frame as the only failure signal in the session, so a test that sees an exception has isolated
+    /// door 1 (<c>ADR-0050</c> E2a) rather than the close code.
+    /// </summary>
+    public string? ErrorFrameJson { get; set; }
+
+    /// <summary>
+    /// The code the session closes with, or <see langword="null"/> for
+    /// <see cref="WebSocketCloseStatus.NormalClosure"/>. Setting it with
+    /// <see cref="EndSessionSilently"/> isolates door 2 (<c>ADR-0050</c> E2b), which is not a
+    /// hypothetical on this surface: a rejected credential was measured as <c>101</c> followed by close
+    /// <c>4001 not_authorised</c> and nothing else — no frame to read, the code carrying the whole
+    /// failure.
+    /// </summary>
+    public WebSocketCloseStatus? CloseStatus { get; set; }
+
+    /// <summary>The reason phrase sent with <see cref="CloseStatus"/>.</summary>
+    public string CloseStatusDescription { get; set; } = "done";
+
+    /// <summary>
+    /// When <see langword="true"/> the session sends nothing whatsoever — not even the
+    /// <c>RecognitionStarted</c> greeting — and closes as soon as the client's first frame arrives.
+    /// This is the silent nothing D2 exists to name (<c>ADR-0050</c> E5): a session with zero
+    /// transcripts is healthy, a session with zero <em>messages</em> is not.
+    /// </summary>
+    public bool EndSessionSilently { get; set; }
+
     public int Port => _server.Port;
 
     public SpeechmaticsFakeServer()
@@ -140,6 +169,29 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
                 ReceivedStartRecognitionJson = Encoding.UTF8.GetString(buf, 0, first.Count);
         }
         catch { return; }
+
+        if (EndSessionSilently)
+        {
+            // Not even the greeting: the vendor accepted the upgrade, said nothing at all and ended
+            // the session. Closing with CloseStatus lets one knob serve both the silent-close case and
+            // the measured 4001 rejection.
+            await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+            return;
+        }
+
+        if (ErrorFrameJson is { } errorFrame)
+        {
+            try
+            {
+                var failure = Encoding.UTF8.GetBytes(errorFrame);
+                await ws.SendAsync(failure.AsMemory(), WebSocketMessageType.Text, true, ct)
+                    .ConfigureAwait(false);
+            }
+            catch { return; }
+
+            await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+            return;
+        }
 
         // Respond with RecognitionStarted.
         var started = Encoding.UTF8.GetBytes(BuildRecognitionStartedJson());
@@ -210,11 +262,22 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
             }
         }
 
+        await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Closes the server side with <see cref="CloseStatus"/> — normal closure unless a test asked for
+    /// another code.
+    /// </summary>
+    private async Task CloseWithConfiguredStatusAsync(System.Net.WebSockets.WebSocket ws)
+    {
+        var status = CloseStatus ?? WebSocketCloseStatus.NormalClosure;
+
         if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
         {
             try
             {
-                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
+                await ws.CloseAsync(status, CloseStatusDescription, CancellationToken.None)
                     .ConfigureAwait(false);
             }
             catch { }

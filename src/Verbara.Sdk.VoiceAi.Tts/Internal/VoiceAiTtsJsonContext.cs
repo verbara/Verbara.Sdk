@@ -34,6 +34,23 @@ internal sealed class ElevenLabsAudioOutput
 
     /// <summary>Set on the vendor's last frame of an utterance.</summary>
     [JsonPropertyName("isFinal")] public bool? IsFinal { get; set; }
+
+    /// <summary>
+    /// The vendor's symbolic failure code — <c>invalid_api_key</c> and the like. Present only on a
+    /// failure frame, which carries no <c>audio</c> member and was therefore dropped as
+    /// "carries no audio" until ADR-0050.
+    /// </summary>
+    [JsonPropertyName("error")] public string? Error { get; set; }
+
+    /// <summary>Human-readable reason, alongside <see cref="Error"/> on a failure frame.</summary>
+    [JsonPropertyName("message")] public string? Message { get; set; }
+
+    /// <summary>
+    /// Numeric code on a failure frame. Measured as <c>1008</c> for a rejected credential — the same
+    /// value the vendor then closes the socket with, so this frame and the close code are two
+    /// spellings of one failure and either door alone catches it.
+    /// </summary>
+    [JsonPropertyName("code")] public int? Code { get; set; }
 }
 
 // --- Cartesia TTS DTOs ---

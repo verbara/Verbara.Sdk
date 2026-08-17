@@ -1,6 +1,8 @@
 using System.Net;
+using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Tts.DependencyInjection;
 using Verbara.Sdk.VoiceAi.Tts.Lmnt;
 using FluentAssertions;
@@ -256,8 +258,15 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
         regenerated.Should().Equal(RecordedAudio);
     }
 
+    /// <summary>
+    /// Door 3 (<c>ADR-0050</c> E2c), and the inverse of the assertion this test used to make. It
+    /// asserted <c>NotThrowAsync</c> — a socket killed mid-session ended the stream as though the
+    /// vendor had finished speaking, so a truncated synthesis was indistinguishable from a complete
+    /// one. The audio already yielded still reaches the caller; what changes is that the stream now
+    /// ends by raising rather than by completing.
+    /// </summary>
     [Fact]
-    public async Task SynthesizeAsync_ShouldComplete_WhenServerAborts()
+    public async Task SynthesizeAsync_ShouldThrowTransportFailure_WhenServerAbortsMidSession()
     {
         _server.AbortAfterSend = true;
         var synth = BuildSynthesizer();
@@ -266,17 +275,67 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
             .SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz)
             .ToListAsync();
 
-        await act.Should().NotThrowAsync();
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
+        failure.Code.Should().BeNull("a dead socket carries no vendor code");
+        failure.InnerException.Should().BeOfType<WebSocketException>();
     }
 
+    /// <summary>
+    /// The fourth door, and the one no receive-loop test can reach: a session that never opens.
+    /// <c>ADR-0050</c> E7 wraps the bare <see cref="WebSocketException"/> so the caller reads one type
+    /// whether this vendor validates at the upgrade or in band — this one embeds the credential in the
+    /// first message rather than in a header, so its upgrade cannot reject a bad key at all and the
+    /// failure necessarily arrives later. A refused connection carries no HTTP answer, hence no code.
+    /// </summary>
     [Fact]
-    public async Task SynthesizeAsync_ShouldComplete_WhenServerAbortsMidSend()
+    public async Task SynthesizeAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
     {
-        // Server crashes (RST) the instant it receives the client's first frame, so the
-        // client's remaining request sends (text/flush/EOF) write to a half-dead socket.
-        // The synthesizer must swallow the transport abort and end the stream gracefully.
-        // Looped: the send/abort interleaving is timing-sensitive, so a single clean pass
-        // proves nothing — but the fix makes every iteration deterministically non-throwing.
+        // The port is the seam on this surface (there is no BaseUri option), so it is passed directly
+        // rather than through BuildSynthesizer — the point of this test is that it never reaches the fake.
+        var synth = new LmntSpeechSynthesizer(
+            Options.Create(new LmntTtsOptions
+            {
+                ApiKey = "test-lmnt-key",
+                Voice = LmntVoices.Leah,
+                Transport = LmntTransport.WebSocket,
+            }),
+            fakeWsPort: ClosedPort.Reserve());
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Handshake);
+        failure.Code.Should().BeNull("a refused connection produced no HTTP answer to report");
+        failure.InnerException.Should().BeAssignableTo<WebSocketException>();
+    }
+
+    /// <summary>
+    /// The same door reached from the other side: the server crashes (RST) the instant it receives the
+    /// client's first frame, so the client's remaining request sends (text/flush/eof) write to a
+    /// half-dead socket and no audio ever arrives.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This test also used to assert <c>NotThrowAsync</c>: a mid-send crash produced an empty stream
+    /// and no exception at all. What it must not assert now is the exact type, and that is a finding
+    /// rather than a shortcut. Which of the two failures the caller sees depends on an interleaving
+    /// the client does not control — the loop raises <see cref="SpeechProviderFailureException"/> when
+    /// the read faults, but if the client's own send observes the reset first the socket is already
+    /// <c>Aborted</c> by the time the loop re-checks its condition, and the session ends through the
+    /// zero-output rule instead. Both are failures and neither is silent, which is the contract
+    /// (<c>ADR-0050</c> E3: one base type callers can catch).
+    /// </para>
+    /// <para>
+    /// Looped 50× because the interleaving is timing-sensitive: a single pass would prove nothing
+    /// about either arm.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldReportAFailure_WhenServerAbortsMidSend()
+    {
         _server.AbortOnFirstReceive = true;
 
         for (var i = 0; i < 50; i++)
@@ -287,8 +346,91 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
                 .SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz)
                 .ToListAsync();
 
-            await act.Should().NotThrowAsync();
+            await act.Should().ThrowAsync<SpeechProviderException>();
         }
+    }
+
+    /// <summary>
+    /// Door 1 (<c>ADR-0050</c> E2a) with the frame the live endpoint was measured sending for a
+    /// rejected credential: <c>{"error":"Invalid API key"}</c> (§3.7a). The fake closes
+    /// <em>normally</em> afterwards, so the frame is the only failure signal in the session and an
+    /// exception here cannot have come from the close code.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowErrorFrameFailure_WhenCredentialIsRejectedInBand()
+    {
+        _server.ErrorFrameJson = """{"error":"Invalid API key"}""";
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
+        failure.Provider.Should().Be("LMNT");
+        failure.Message.Should().Contain("Invalid API key", "the vendor's reason is the whole evidence");
+    }
+
+    /// <summary>
+    /// Door 2 (<c>ADR-0050</c> E2b): the vendor ends the session with a code and says nothing else —
+    /// which is exactly how this one was measured rejecting a credential, closing <c>1002</c>. No
+    /// audio and no <c>finish</c>, so the close code is the only signal the client can read.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowCloseCodeFailure_WhenServerClosesAbnormally()
+    {
+        _server.AudioFramesToSend.Clear();
+        _server.SendFinishTerminator = false;
+        _server.CloseStatus = WebSocketCloseStatus.ProtocolError;   // 1002, as measured
+        _server.CloseStatusDescription = "Invalid API key";
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.CloseCode);
+        failure.Code.Should().Be("1002");
+    }
+
+    /// <summary>
+    /// D2 (<c>ADR-0050</c> E5): the vendor finishes the session properly — <c>finish</c> then a normal
+    /// close — having sent no audio at all. Nothing failed on the wire, so this is not a
+    /// <see cref="SpeechProviderFailureException"/>; it is still an empty synthesis, and a caller that
+    /// asked for speech and received none must be told.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowEmptyResult_WhenSessionEndsCleanlyWithNoAudio()
+    {
+        _server.AudioFramesToSend.Clear();
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz)
+            .ToListAsync();
+
+        var empty = (await act.Should().ThrowAsync<SpeechProviderEmptyResultException>()).Which;
+        empty.Should().NotBeOfType<SpeechProviderFailureException>(
+            "nothing failed on the wire — the session was clean and produced nothing");
+        empty.Provider.Should().Be("LMNT");
+    }
+
+    /// <summary>
+    /// The other half of E5: text carrying no speech is not asked of the provider at all, so the zero
+    /// audio that follows is not a failure. Asserted through the fake seeing no session, since "did
+    /// not throw" alone would also pass if a session had opened and been lucky.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldYieldNothingWithoutConnecting_WhenTextIsWhitespace()
+    {
+        var synth = BuildSynthesizer();
+
+        var frames = await synth.SynthesizeAsync(" \t ", AudioFormat.Slin16Mono16kHz).ToListAsync();
+
+        frames.Should().BeEmpty();
+        _server.ReceivedJsonMessages.Should().BeEmpty("no session should have been opened at all");
     }
 
     [Fact]
@@ -474,6 +616,50 @@ public class LmntSpeechSynthesizerHttpTests : IAsyncDisposable
             .ToListAsync();
 
         await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
+    /// <summary>
+    /// D2 (<c>ADR-0050</c> E5) on the other transport: <c>200 OK</c> with an empty body. The contract
+    /// is declared on <c>SpeechSynthesizer.SynthesizeAsync</c>, so it cannot hold over WebSocket and
+    /// not here.
+    /// </summary>
+    /// <remarks>
+    /// Note what is deliberately <em>not</em> wrapped: a non-2xx status keeps raising
+    /// <see cref="HttpRequestException"/> (the test above). It is already a typed exception, it already
+    /// carries the vendor's status, and it is not one of the three silent doors this change closes —
+    /// wrapping it would be a behaviour change with no defect behind it.
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_Http_ShouldThrowEmptyResult_WhenTheResponseSucceedsWithNoAudio()
+    {
+        _server.ResponseAudio = [];
+
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("silence", AudioFormat.Slin16Mono16kHz)
+            .ToListAsync();
+
+        var empty = (await act.Should().ThrowAsync<SpeechProviderEmptyResultException>()).Which;
+        empty.Should().NotBeOfType<SpeechProviderFailureException>(
+            "the request succeeded — the response merely carried no audio");
+        empty.Provider.Should().Be("LMNT");
+    }
+
+    /// <summary>
+    /// The E5 guard sits before the transport split, so this transport owes the same promise: text
+    /// carrying no speech is never sent to the provider, and the zero audio that follows is not a
+    /// failure. Asserted through the fake seeing no request at all.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_Http_ShouldYieldNothingWithoutRequesting_WhenTextIsWhitespace()
+    {
+        var synth = BuildSynthesizer();
+
+        var chunks = await synth.SynthesizeAsync("   ", AudioFormat.Slin16Mono16kHz).ToListAsync();
+
+        chunks.Should().BeEmpty();
+        _server.ReceivedPath.Should().BeNull("no request should have been issued at all");
     }
 
     public async ValueTask DisposeAsync()

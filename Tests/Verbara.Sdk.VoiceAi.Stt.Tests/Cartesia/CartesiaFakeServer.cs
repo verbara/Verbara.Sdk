@@ -115,6 +115,33 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
     /// <summary>If true, abort the WebSocket abnormally after sending messages.</summary>
     public bool AbortAfterSend { get; set; }
 
+    /// <summary>
+    /// When set, the session answers with this one text frame — no transcripts — and then closes
+    /// <em>normally</em>. The normal close is the point: it leaves the frame as the only failure signal
+    /// in the session, so a test that sees an exception has isolated door 1 (<c>ADR-0050</c> E2a) rather
+    /// than the close code. What the live endpoint sends here is measured:
+    /// <c>{"type":"error","code":400,"message":"Missing sample_rate: …"}</c>, then close <c>1008</c>.
+    /// </summary>
+    public string? ErrorFrameJson { get; set; }
+
+    /// <summary>
+    /// The code the session closes with, or <see langword="null"/> for
+    /// <see cref="WebSocketCloseStatus.NormalClosure"/>. Setting it with
+    /// <see cref="EndSessionSilently"/> isolates door 2 (<c>ADR-0050</c> E2b) — this is the
+    /// <c>1008 PolicyViolation</c> half of the same measured rejection.
+    /// </summary>
+    public WebSocketCloseStatus? CloseStatus { get; set; }
+
+    /// <summary>The reason phrase sent with <see cref="CloseStatus"/>.</summary>
+    public string CloseStatusDescription { get; set; } = "done";
+
+    /// <summary>
+    /// When <see langword="true"/> the session sends nothing whatsoever and closes as soon as it is
+    /// established. That is the silent nothing D2 exists to name (<c>ADR-0050</c> E5): a session with
+    /// zero transcripts is healthy, a session with zero <em>messages</em> is not.
+    /// </summary>
+    public bool EndSessionSilently { get; set; }
+
     public CartesiaFakeServer()
     {
         _server = new WebSocketTestServer(HandleSessionAsync);
@@ -136,6 +163,26 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
         ReceivedApiKey = session.Headers.TryGetValue("X-API-Key", out var apiKey) ? apiKey : null;
         ReceivedApiVersion =
             session.Headers.TryGetValue("Cartesia-Version", out var version) ? version : null;
+
+        if (EndSessionSilently)
+        {
+            await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+            return;
+        }
+
+        if (ErrorFrameJson is { } errorFrame)
+        {
+            try
+            {
+                var failure = Encoding.UTF8.GetBytes(errorFrame);
+                await ws.SendAsync(failure.AsMemory(), WebSocketMessageType.Text, true, ct)
+                    .ConfigureAwait(false);
+            }
+            catch { return; }
+
+            await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+            return;
+        }
 
         // Send result messages immediately upon connection (snapshot to avoid races).
         var messages = ResultMessages.ToList();
@@ -209,11 +256,22 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
             }
         }
 
+        await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Closes the server side with <see cref="CloseStatus"/> — normal closure unless a test asked for
+    /// another code.
+    /// </summary>
+    private async Task CloseWithConfiguredStatusAsync(System.Net.WebSockets.WebSocket ws)
+    {
+        var status = CloseStatus ?? WebSocketCloseStatus.NormalClosure;
+
         if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
         {
             try
             {
-                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
+                await ws.CloseAsync(status, CloseStatusDescription, CancellationToken.None)
                     .ConfigureAwait(false);
             }
             catch { }

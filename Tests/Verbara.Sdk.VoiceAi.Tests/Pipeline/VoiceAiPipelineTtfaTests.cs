@@ -14,7 +14,11 @@ using Xunit;
 namespace Verbara.Sdk.VoiceAi.Tests.Pipeline;
 
 /// <summary>
-/// Tests for the <c>tts.synthesis.ttfa_ms</c> histogram recorded by <see cref="VoiceAiPipeline"/>.
+/// Tests for the two synthesis instruments <see cref="VoiceAiPipeline"/> samples off the first audio
+/// chunk: the <c>tts.synthesis.ttfa_ms</c> histogram, and the <c>tts.syntheses.silent</c> counter that
+/// <c>ADR-0050</c> E9 adds for a synthesis which yields no chunk at all. They share a class because they
+/// share a trigger — the same "did any audio arrive" flag decides both — so a change to one that broke
+/// the other would be caught here.
 /// Uses <see cref="MeterListener"/> — the AOT-safe subscription API — to capture metric emissions
 /// without reflection or dynamic binding.
 /// </summary>
@@ -174,6 +178,99 @@ public class VoiceAiPipelineTtfaTests
 
         captured.Should().BeEmpty(
             "TTFA should not be recorded when the synthesizer throws before yielding the first audio frame");
+    }
+
+    // ---- tts.syntheses.silent (ADR-0050 E9) ----
+
+    /// <summary>
+    /// The E9 counter, and this harness is the right place for it because
+    /// <c>TrackedFakeSynthesizer</c> is the residual E9 describes: a subclass of the public
+    /// <see cref="SpeechSynthesizer"/> base that returns no audio and raises nothing. The eight
+    /// WebSocket clients cannot reach this counter — they throw
+    /// <see cref="SpeechProviderEmptyResultException"/> — so an implementation that does not throw is
+    /// the only thing that can produce a sample here.
+    /// </summary>
+    [Fact]
+    public async Task Pipeline_ShouldCountASilentSynthesis_WhenTheSynthesizerYieldsNoAudioWithoutThrowing()
+    {
+        var uid = $"silent-{Guid.NewGuid():N}";
+        var tts = new TrackedFakeSynthesizer(uid).WithSilence(TimeSpan.Zero);
+        var pipeline = BuildPipeline(tts);
+
+        var captured = await RunAndCaptureSilentAsync(pipeline, uid);
+
+        captured.Should().ContainSingle("one silent synthesis must produce exactly one sample");
+        captured[0].Should().Be(1);
+    }
+
+    /// <summary>
+    /// The control that keeps the counter from meaning "a synthesis happened": a synthesizer that
+    /// yields audio must produce no sample at all.
+    /// </summary>
+    [Fact]
+    public async Task Pipeline_ShouldNotCountASilentSynthesis_WhenTheSynthesizerYieldsAudio()
+    {
+        var uid = $"silent-{Guid.NewGuid():N}";
+        var tts = new TrackedFakeSynthesizer(uid).WithSilence(TimeSpan.FromMilliseconds(40));
+        var pipeline = BuildPipeline(tts);
+
+        var captured = await RunAndCaptureSilentAsync(pipeline, uid);
+
+        captured.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// The second control, and the one that keeps the counter and the failure counter from
+    /// double-reporting the same session: a throwing synthesizer produced no audio either, but it
+    /// reported why. That is <c>tts.syntheses.failed</c>, which is where every provider failure now
+    /// lands — the whole point of E9 being scoped to what does <em>not</em> throw.
+    /// </summary>
+    [Fact]
+    public async Task Pipeline_ShouldNotCountASilentSynthesis_WhenTheSynthesizerThrows()
+    {
+        var uid = $"silent-{Guid.NewGuid():N}";
+        var tts = new TrackedFakeSynthesizer(uid)
+            .WithError(new SpeechProviderEmptyResultException(uid, "no audio"), afterCount: 0);
+        var pipeline = BuildPipeline(tts);
+
+        var captured = await RunAndCaptureSilentAsync(pipeline, uid);
+
+        captured.Should().BeEmpty("a reported failure is not a silent completion");
+    }
+
+    private static async Task<List<long>> RunAndCaptureSilentAsync(
+        VoiceAiPipeline pipeline,
+        string expectedUid)
+    {
+        var captured = new List<long>();
+
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == SpeechSynthesisMetrics.Meter.Name &&
+                instrument.Name == "tts.syntheses.silent")
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+        {
+            string? provider = null;
+            foreach (var tag in tags)
+            {
+                if (tag.Key == "voiceai.provider")
+                    provider = tag.Value?.ToString();
+            }
+            // Filtering on the per-test uid is what makes this safe on a process-wide Meter shared
+            // with every other test in the assembly.
+            if (provider == expectedUid)
+                lock (captured) captured.Add(value);
+        });
+        listener.Start();
+
+        await RunPipelineWithSingleUtterance(pipeline, voiceFrameCount: 3, silenceFrameCount: 4);
+
+        return captured;
     }
 
     // ---- Helper: run and capture TTFA for a specific provider uid ----

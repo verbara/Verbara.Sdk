@@ -1,8 +1,8 @@
-using System.Net;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json.Nodes;
 using Verbara.Sdk.TestInfrastructure.Http;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 
 namespace Verbara.Sdk.VoiceAi.Stt.Tests.Deepgram;
 
@@ -19,6 +19,14 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Deepgram;
 /// <c>start</c>, <c>metadata</c>, word-level arrays — where the previous
 /// <c>BuildResultJson</c> emitted a five-field object. A parser that threw on an unmodelled sibling
 /// field passed against that object and fails against these.
+/// <para>
+/// Runs on the shared <see cref="WebSocketTestServer"/> (TcpListener + manual upgrade). It did not
+/// until <c>ADR-0050</c> needed an <see cref="AbortAfterSend"/> knob here: the <c>HttpListener</c>
+/// version could not have one, because <c>HttpListener</c> + <c>ws.Abort()</c> hangs on Linux. That is
+/// not inferred from the two fakes that were already migrated for it — it was measured again on the way
+/// here, as a single ElevenLabs abort test taking 9 m 49 s against 753 ms for a whole migrated class.
+/// Nothing about the wire sequencing changed in the port.
+/// </para>
 /// </remarks>
 internal sealed class DeepgramFakeServer : IAsyncDisposable
 {
@@ -35,11 +43,7 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
     // comes out of the same tree.
     private static readonly Lazy<ProviderRecordings> RecordingsTree = new(() => ProviderRecordings.Locate());
 
-    private readonly HttpListener _listener = null!;
-    private readonly CancellationTokenSource _cts = new();
-    private readonly TaskCompletionSource _sessionCompleted =
-        new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private Task? _acceptLoop;
+    private readonly WebSocketTestServer _server;
     private int _receivedFrameCount;
 
     public List<string> ResultMessages { get; } = [];
@@ -76,46 +80,51 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
     /// </remarks>
     public string? ReceivedAuthorization { get; private set; }
 
-    /// <summary>
-    /// Completes when the session handler returns — the join point for the assertions. Same role as
-    /// <c>WebSocketTestServer.SessionCompleted</c>, kept locally because this fake predates that
-    /// server and still runs on <see cref="HttpListener"/>.
-    /// </summary>
-    public Task SessionCompleted => _sessionCompleted.Task;
+    /// <summary>Completes when the session handler returns — the join point for the assertions.</summary>
+    public Task SessionCompleted => _server.SessionCompleted;
 
-    public int Port { get; }
+    public int Port => _server.Port;
+
+    /// <summary>If true, abort the WebSocket abnormally after sending messages.</summary>
+    public bool AbortAfterSend { get; set; }
+
+    /// <summary>
+    /// When set, the session answers with this one text frame — no results — and then closes
+    /// <em>normally</em>, leaving the frame as the only failure signal so a test isolates door 1
+    /// (<c>ADR-0050</c> E2a) rather than the close code.
+    /// </summary>
+    /// <remarks>
+    /// <b>This shape is documented, not measured, and this surface is the reason the distinction is
+    /// worth writing down.</b> §1.3a ran the missing invalid-credential control against Deepgram on
+    /// 2026-08-15 and got <c>HTTP 401</c> at the upgrade on <em>both</em> Deepgram surfaces — the
+    /// credential never reaches a frame. So no live session has produced an in-band failure here, the
+    /// member names come from the vendor's published streaming schema, and the client's door-1 branch is
+    /// latent by measurement rather than by omission. It is still closed, and still exercised here,
+    /// because the cost is one branch and the alternative is trusting that this vendor never sends one.
+    /// </remarks>
+    public string? ErrorFrameJson { get; set; }
+
+    /// <summary>
+    /// The code the session closes with, or <see langword="null"/> for
+    /// <see cref="WebSocketCloseStatus.NormalClosure"/>. Set together with
+    /// <see cref="EndSessionSilently"/> it isolates door 2 (<c>ADR-0050</c> E2b).
+    /// </summary>
+    public WebSocketCloseStatus? CloseStatus { get; set; }
+
+    /// <summary>The reason phrase sent with <see cref="CloseStatus"/>.</summary>
+    public string CloseStatusDescription { get; set; } = "done";
+
+    /// <summary>
+    /// When <see langword="true"/> the session sends nothing whatsoever and closes as soon as it is
+    /// established — the silent nothing D2 exists to name (<c>ADR-0050</c> E5). On this surface even the
+    /// <c>Metadata</c> summary is absent, which is the point: a session with zero transcripts is
+    /// healthy, a session with zero <em>messages</em> is not.
+    /// </summary>
+    public bool EndSessionSilently { get; set; }
 
     public DeepgramFakeServer()
     {
-        // Retry port allocation to avoid conflicts with parallel tests.
-        for (int attempt = 0; attempt < 10; attempt++)
-        {
-            var tcp = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-            tcp.Start();
-            var port = ((IPEndPoint)tcp.LocalEndpoint).Port;
-            tcp.Stop();
-
-            var listener = new HttpListener();
-            // IPv4 literal, not "localhost": localhost resolves ::1 first, and an IPv4-only
-            // listener does not own ::1 on its port — two fake servers could otherwise bind the
-            // same port number and cross-wire. The literal makes a lost race fail with
-            // EADDRINUSE into the retry loop above instead of silently answering the wrong client.
-            listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-            try
-            {
-                listener.Start();
-                _listener = listener;
-                Port = port;
-                break;
-            }
-            catch (HttpListenerException) when (attempt < 9)
-            {
-                listener.Close();
-            }
-        }
-
-        if (_listener is null)
-            throw new InvalidOperationException("Failed to allocate a port for the fake Deepgram server.");
+        _server = new WebSocketTestServer(HandleSessionAsync);
 
         // Default seed: the recorded frames verbatim, so a test that does not care about the
         // transcript still exercises the full documented field set.
@@ -123,44 +132,36 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
         ResultMessages.Add(ReadFrame(FinalResultsFrame));
     }
 
-    public void Start() => _acceptLoop = Task.Run(AcceptLoopAsync);
+    public void Start() => _server.Start();
 
-    private async Task AcceptLoopAsync()
+    private async Task HandleSessionAsync(WebSocketTestSession session)
     {
-        try
+        var ws = session.WebSocket;
+        var ct = session.ServerCancellationToken;
+
+        ReceivedRequestUri = session.RequestUri;
+        ReceivedAuthorization =
+            session.Headers.TryGetValue("Authorization", out var authorization) ? authorization : null;
+
+        if (EndSessionSilently)
         {
-            while (!_cts.Token.IsCancellationRequested)
+            await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+            return;
+        }
+
+        if (ErrorFrameJson is { } errorFrame)
+        {
+            try
             {
-                var ctx = await _listener.GetContextAsync().WaitAsync(_cts.Token).ConfigureAwait(false);
-                if (ctx.Request.IsWebSocketRequest)
-                    _ = Task.Run(() => HandleWebSocketAsync(ctx), _cts.Token);
-                else
-                    ctx.Response.Close();
+                var failure = Encoding.UTF8.GetBytes(errorFrame);
+                await ws.SendAsync(failure.AsMemory(), WebSocketMessageType.Text, true, ct)
+                    .ConfigureAwait(false);
             }
-        }
-        catch (OperationCanceledException) { }
-        catch (HttpListenerException) { }
-    }
+            catch { return; }
 
-    private async Task HandleWebSocketAsync(HttpListenerContext ctx)
-    {
-        try
-        {
-            await RunSessionAsync(ctx).ConfigureAwait(false);
+            await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+            return;
         }
-        finally
-        {
-            _sessionCompleted.TrySetResult();
-        }
-    }
-
-    private async Task RunSessionAsync(HttpListenerContext ctx)
-    {
-        ReceivedRequestUri = ctx.Request.RawUrl;
-        ReceivedAuthorization = ctx.Request.Headers["Authorization"];
-
-        var wsCtx = await ctx.AcceptWebSocketAsync(null).ConfigureAwait(false);
-        var ws = wsCtx.WebSocket;
 
         // Send result messages immediately upon connection.
         // Take a snapshot of the messages to avoid races.
@@ -169,8 +170,14 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
         {
             if (ws.State != WebSocketState.Open) return;
             var bytes = Encoding.UTF8.GetBytes(msg);
-            await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, _cts.Token)
+            await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, ct)
                 .ConfigureAwait(false);
+        }
+
+        if (AbortAfterSend)
+        {
+            ws.Abort();
+            return;
         }
 
         // Receive frames until the client signals end of input — and then keep reading. CloseSent
@@ -183,7 +190,7 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
         {
             try
             {
-                var result = await ws.ReceiveAsync(buf.AsMemory(), _cts.Token).ConfigureAwait(false);
+                var result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
                 if (result.MessageType == WebSocketMessageType.Binary)
                 {
                     Interlocked.Increment(ref _receivedFrameCount);
@@ -196,9 +203,9 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
                     // contract, which is the defect §3.6d measured on the other two surfaces.
                     ReceivedTerminatorText = Encoding.UTF8.GetString(buf, 0, result.Count);
                     var metadata = Encoding.UTF8.GetBytes(ReadFrame(MetadataFrame));
-                    await ws.SendAsync(metadata.AsMemory(), WebSocketMessageType.Text, true, _cts.Token)
+                    await ws.SendAsync(metadata.AsMemory(), WebSocketMessageType.Text, true, ct)
                         .ConfigureAwait(false);
-                    await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", _cts.Token)
+                    await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
                         .ConfigureAwait(false);
                 }
                 else if (result.MessageType == WebSocketMessageType.Close)
@@ -210,12 +217,22 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
             catch { break; }
         }
 
-        // Gracefully close the server side.
+        await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Closes the server side with <see cref="CloseStatus"/> — normal closure unless a test asked for
+    /// another code.
+    /// </summary>
+    private async Task CloseWithConfiguredStatusAsync(System.Net.WebSockets.WebSocket ws)
+    {
+        var status = CloseStatus ?? WebSocketCloseStatus.NormalClosure;
+
         if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
         {
             try
             {
-                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
+                await ws.CloseAsync(status, CloseStatusDescription, CancellationToken.None)
                     .ConfigureAwait(false);
             }
             catch { }
@@ -251,10 +268,6 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
-        _cts.Cancel();
-        _listener.Stop();
-        if (_acceptLoop is not null)
-            try { await _acceptLoop.ConfigureAwait(false); } catch { }
-        _cts.Dispose();
+        await _server.DisposeAsync().ConfigureAwait(false);
     }
 }

@@ -1,5 +1,7 @@
+using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Tts.ElevenLabs;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
@@ -248,15 +250,133 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
         _server.ReceivedJsonMessages.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// D2 on this surface (ADR-0050 E5). This test required the opposite until then — a clean close
+    /// with zero audio had to complete silently — which is the outcome an invalid credential produced
+    /// on this vendor, since its <c>1008</c> failure frame carries no <c>audio</c> member and was
+    /// dropped as "carries no audio".
+    /// </summary>
     [Fact]
-    public async Task SynthesizeAsync_ShouldComplete_WhenServerClosesConnection()
+    public async Task SynthesizeAsync_ShouldThrowEmptyResult_WhenSessionEndsCleanlyWithNoAudio()
     {
         _server.AudioFramesToSend.Clear();
         var synth = BuildSynthesizer();
+
         var act = async () => await synth
             .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
             .ToListAsync();
-        await act.Should().NotThrowAsync();
+
+        var empty = (await act.Should().ThrowAsync<SpeechProviderEmptyResultException>()).Which;
+        empty.Provider.Should().Be("ElevenLabs");
+        empty.Should().NotBeOfType<SpeechProviderFailureException>();
+    }
+
+    /// <summary>
+    /// Door 1 (ADR-0049 D1) with this vendor's measured frame: an invalid credential answers
+    /// <c>{"message":…,"error":"invalid_api_key","code":1008}</c>, which has no <c>audio</c> member
+    /// and was therefore skipped by the frame decoder, leaving the caller an empty stream and no
+    /// exception. The session closes normally here, so the frame is the only failure signal.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowErrorFrameFailure_WhenCredentialIsRejectedInBand()
+    {
+        _server.ErrorFrameJson =
+            """{"message":"Invalid API key","error":"invalid_api_key","code":1008}""";
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
+
+        // The symbolic code, not the numeric one: `invalid_api_key` is what a retry policy can act on
+        // (it must not retry), where 1008 says only "policy violation".
+        failure.Code.Should().Be("invalid_api_key");
+        failure.Message.Should().Contain("Invalid API key");
+    }
+
+    /// <summary>
+    /// Door 2 (ADR-0050 E2b) — the same rejection spelled as a close code, which this client also
+    /// discarded. Either door alone catches it, and this test proves the second one does.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowCloseCodeFailure_WhenServerClosesAbnormally()
+    {
+        _server.AudioFramesToSend.Clear();
+        _server.CloseStatus = WebSocketCloseStatus.PolicyViolation;   // 1008, as measured
+        _server.CloseStatusDescription = "invalid_api_key";
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.CloseCode);
+        failure.Code.Should().Be("1008");
+        failure.Message.Should().Contain("invalid_api_key");
+    }
+
+    /// <summary>
+    /// Door 3 (ADR-0050 E2c). Unreachable on this surface before: the fake had no way to kill a
+    /// socket, so a truncated synthesis had never been exercised here at all.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowTransportFailure_WhenServerAbortsMidSession()
+    {
+        _server.AbortAfterSend = true;
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
+        failure.Code.Should().BeNull();
+        failure.InnerException.Should().BeOfType<WebSocketException>();
+    }
+
+    /// <summary>
+    /// The fourth door, and the one no receive-loop test can reach: a session that never opens. This
+    /// vendor was measured validating <em>in band</em> (a <c>1008</c> failure frame), so its handshake
+    /// normally succeeds — which is the whole point of <c>ADR-0050</c> E7: where a vendor validates is
+    /// the vendor's choice, and a caller should not have to catch a different type when it changes.
+    /// A refused connection carries no HTTP answer, hence no code.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
+    {
+        var synth = BuildSynthesizer(
+            o => o.BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/v1/text-to-speech");
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Handshake);
+        failure.Code.Should().BeNull("a refused connection produced no HTTP answer to report");
+        failure.InnerException.Should().BeAssignableTo<WebSocketException>();
+    }
+
+    /// <summary>
+    /// The other half of E5: text carrying no speech is not asked of the provider at all, so the zero
+    /// audio that follows is not a failure. Asserted through the fake seeing no session, since "did
+    /// not throw" alone would also pass if a session had opened and been lucky.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldYieldNothingWithoutConnecting_WhenTextIsWhitespace()
+    {
+        var synth = BuildSynthesizer();
+
+        var frames = await synth.SynthesizeAsync(" \t ", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        frames.Should().BeEmpty();
+        _server.ReceivedApiKey.Should().BeNull("no session should have been opened at all");
+        _server.ReceivedJsonMessages.Should().BeEmpty();
     }
 
     // --- Flash 2.5 / options tests ---

@@ -134,6 +134,26 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
     public bool AbortAfterSend { get; set; }
 
     /// <summary>
+    /// When set, the session answers with this one text frame — no audio, no <c>done</c> — and then
+    /// closes <em>normally</em>. The normal close is the point: it leaves the frame as the only
+    /// failure signal in the session, so a test that sees an exception has isolated door 1
+    /// (<c>ADR-0050</c> E2a) rather than the close code.
+    /// </summary>
+    public string? ErrorFrameJson { get; set; }
+
+    /// <summary>
+    /// The code the session closes with, or <see langword="null"/> for
+    /// <see cref="WebSocketCloseStatus.NormalClosure"/>. Setting it with no
+    /// <see cref="ErrorFrameJson"/> isolates door 2 (<c>ADR-0050</c> E2b) — the vendor ends the
+    /// session with a code and says nothing else, which is how Speechmatics rejects a credential and
+    /// how Cartesia STT rejected every session while its query string was missing.
+    /// </summary>
+    public WebSocketCloseStatus? CloseStatus { get; set; }
+
+    /// <summary>The reason phrase sent with <see cref="CloseStatus"/>.</summary>
+    public string CloseStatusDescription { get; set; } = "done";
+
+    /// <summary>
     /// When <see langword="true"/>, the session replays the recorded <c>chunk</c> frame verbatim —
     /// <c>flush_id</c>, <c>step_time</c> and the echoed <c>context_id</c> included — instead of
     /// synthesising one per audio frame. The client must decode its <c>data</c> member and tolerate
@@ -251,6 +271,15 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
 
         ct.ThrowIfCancellationRequested();
 
+        if (ErrorFrameJson is { } errorFrame)
+        {
+            try { await SendTextFrameAsync(ws, errorFrame, ct).ConfigureAwait(false); }
+            catch { }
+
+            await CloseSessionAsync(ws, receiveTask).ConfigureAwait(false);
+            return;
+        }
+
         if (SendRecordedChunkFrame)
         {
             // The vendor's own frame shape, replayed verbatim from the recordings tree.
@@ -295,13 +324,24 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
             catch { }
         }
 
+        await CloseSessionAsync(ws, receiveTask).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Closes the server side with <see cref="CloseStatus"/> — normal closure unless a test asked for
+    /// another code — and then drains the receive task.
+    /// </summary>
+    private async Task CloseSessionAsync(WebSocket ws, Task receiveTask)
+    {
+        var status = CloseStatus ?? WebSocketCloseStatus.NormalClosure;
+
         try
         {
             if (ws.State == WebSocketState.Open)
-                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
+                await ws.CloseAsync(status, CloseStatusDescription, CancellationToken.None)
                     .ConfigureAwait(false);
             else if (ws.State == WebSocketState.CloseReceived)
-                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
+                await ws.CloseOutputAsync(status, CloseStatusDescription, CancellationToken.None)
                     .ConfigureAwait(false);
         }
         catch { }

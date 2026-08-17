@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -46,8 +47,17 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         AudioFormat outputFormat,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        // Nothing is asked of the provider for text that carries no speech, so the zero audio that
+        // follows is not a provider failure and must not be reported as one (ADR-0050 E5).
+        if (string.IsNullOrWhiteSpace(text)) yield break;
+
         var uri = BuildUri();
         using var ws = new ClientWebSocket();
+
+        // The vendor's own code for a rejected upgrade, which this surface has: Cartesia answers a
+        // bad credential `401` at the handshake (measured, ADR-0049). Without this the wrapped
+        // exception could only say "the upgrade failed".
+        ws.Options.CollectHttpResponseDetails = true;
 
         // Unconditional, and that is the point: every test now executes these two lines, which is
         // what makes a defect in them reachable. Behind `if (_fakeServerPort is null)` they were
@@ -57,7 +67,17 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
-        await ws.ConnectAsync(uri, connectCts.Token).ConfigureAwait(false);
+        try
+        {
+            await ws.ConnectAsync(uri, connectCts.Token).ConfigureAwait(false);
+        }
+        catch (WebSocketException ex)
+        {
+            // ADR-0050 E7. Left raw, this would make a caller's `catch` depend on which validation
+            // regime the vendor happens to use — and that is a property of the vendor, not of this
+            // client, so it can change with no line here changing.
+            throw SpeechProviderFailureException.FromHandshake(ProviderName, ws.HttpStatusCode, ex);
+        }
 
         var channel = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
 
@@ -69,26 +89,49 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         // Fire-and-forget: send the synthesis request. Nothing follows it — see SendRequestAsync.
         var sendTask = SendRequestAsync(ws, text, outputFormat, sessionCts.Token);
 
-        // Receive loop writes decoded audio to the channel, stops on `done` / `error`.
+        // Receive loop writes decoded audio to the channel, stops on `done`, throws on a failure.
         var receiveTask = Task.Run(async () =>
         {
             try
             {
-                await ReceiveFramesAsync(ws, channel.Writer, sessionCts.Token).ConfigureAwait(false);
+                await ReceiveFramesAsync(ws, channel.Writer, ProviderName, sessionCts.Token)
+                    .ConfigureAwait(false);
+                channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                // Not a swallow — the opposite. Completing the writer *with* the exception is what
+                // carries a provider failure out of this background task and into the caller's
+                // MoveNextAsync below (ADR-0050 E1). Completing it without one is how the failure
+                // used to disappear.
+                channel.Writer.TryComplete(ex);
             }
             finally
             {
-                channel.Writer.TryComplete();
                 await sessionCts.CancelAsync().ConfigureAwait(false);
             }
         }, ct);
 
         // Yield binary audio frames as they arrive (true streaming).
+        var yieldedAudio = false;
         await foreach (var frame in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+        {
+            if (frame.Length > 0) yieldedAudio = true;
             yield return frame;
+        }
 
         // Propagate any exceptions from send/receive tasks.
         await Task.WhenAll(sendTask, receiveTask).ConfigureAwait(false);
+
+        // ADR-0050 E5, the synthesis rule: the session ended clean, said nothing, and produced no
+        // audio. Not reachable when the loop threw — the reader raises that first — and not reachable
+        // under cancellation, which ReadAllAsync raises as OperationCanceledException (E6).
+        if (!yieldedAudio)
+        {
+            throw new SpeechProviderEmptyResultException(
+                ProviderName,
+                $"{ProviderName} ended the session without producing any audio and without reporting a failure.");
+        }
     }
 
     private async Task SendRequestAsync(
@@ -117,9 +160,19 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         };
 
         var json = JsonSerializer.Serialize(request, VoiceAiTtsJsonContext.Default.CartesiaTtsRequest);
-        await ws.SendAsync(
-            Encoding.UTF8.GetBytes(json).AsMemory(),
-            WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+
+        // The receive loop owns the session's failure, and now raises it: a send that loses a race
+        // with a socket the vendor has already torn down would otherwise fault this task with a
+        // second, less informative exception that nothing awaits (the caller is already receiving
+        // the receive loop's). Same shape LmntSpeechSynthesizer has carried for this reason.
+        try
+        {
+            await ws.SendAsync(
+                Encoding.UTF8.GetBytes(json).AsMemory(),
+                WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { return; }
+        catch (WebSocketException) { return; }
 
         // The request IS the end of input for a non-continued synthesis, and it is the last thing
         // this method sends.
@@ -138,6 +191,7 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
     private static async Task ReceiveFramesAsync(
         ClientWebSocket ws,
         ChannelWriter<ReadOnlyMemory<byte>> writer,
+        string provider,
         CancellationToken ct)
     {
         var buf = new byte[ReceiveBufferSize];
@@ -151,9 +205,24 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
                 result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { break; }
-            catch (WebSocketException) { break; }
+            catch (WebSocketException ex)
+            {
+                // Door 3 (ADR-0050 E2c). This was `break`, which turned a socket that died
+                // mid-session into a normal completion: the caller received an empty stream, or
+                // worse a silently truncated one after real audio, and no error either way.
+                throw SpeechProviderFailureException.FromTransport(provider, ex);
+            }
 
-            if (result.MessageType == WebSocketMessageType.Close) break;
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                // Door 2 (ADR-0050 E2b). The close code was discarded here, and `CloseStatus` was
+                // read nowhere in this package — yet it is an in-band failure signal on measured
+                // surfaces. The rule lives in one place for all eight clients.
+                var closeFailure = SpeechProviderFailureException.FromCloseStatus(
+                    provider, ws.CloseStatus, ws.CloseStatusDescription);
+                if (closeFailure is not null) throw closeFailure;
+                break;
+            }
 
             // Assemble until the message is whole. The vendor sizes these frames, not this client,
             // and a loop that parsed each read as a complete message would hand JSON a truncated
@@ -189,17 +258,26 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
                 continue;
             }
 
-            // `done` ends the stream; so does `error` — silently, which is the defect underneath
-            // this one. An invalid credential, a rejected voice or a malformed request all arrive
-            // here as {"type":"error","error":…,"status_code":4xx} and leave the caller an empty
-            // stream and no exception. That is Sdk/ADR-0049 D1 on this surface. Surfacing it changes
-            // behaviour — a synthesis that silently yields nothing would start throwing — so it
-            // belongs to the D1 remedy and its own decision, not inside a frame-format fix.
-            if (string.Equals(message.Type, "done", StringComparison.Ordinal) ||
-                string.Equals(message.Type, "error", StringComparison.Ordinal))
+            // Door 1 (ADR-0049 D1, remedied under ADR-0050 E1). `error` used to end the stream
+            // exactly as `done` did — silently. An invalid credential, a rejected voice or a
+            // malformed request all arrive here as
+            // {"type":"error","error":…,"status_code":4xx}, and the caller was left an empty stream
+            // and no exception. The vendor's own two fields go out verbatim.
+            if (string.Equals(message.Type, "error", StringComparison.Ordinal))
             {
-                break;
+                throw SpeechProviderFailureException.FromErrorFrame(
+                    provider,
+                    message.StatusCode?.ToString(CultureInfo.InvariantCulture),
+                    message.Error);
             }
+
+            // `done` is the vendor saying the synthesis is complete. Still the only clean end.
+            if (string.Equals(message.Type, "done", StringComparison.Ordinal)) break;
+
+            // Any other type is deliberately ignored rather than treated as a failure: an
+            // unrecognised type is not evidence of one, and a vendor adding a benign lifecycle
+            // message must not start breaking sessions. What no longer happens is a *failure*
+            // falling in here, which is what the allow-list above used to do.
         }
     }
 

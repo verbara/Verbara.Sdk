@@ -1,5 +1,7 @@
+using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Stt.Speechmatics;
 using Verbara.Sdk.VoiceAi.Stt.Tests.Helpers;
 using FluentAssertions;
@@ -272,6 +274,13 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         // frames are now the recorded ones, so the message filter is exercised against the shapes
         // Speechmatics documents — including RecognitionStarted's nested language_pack_info —
         // rather than against two-field placeholders.
+        //
+        // This is also the guard on the recognition half of ADR-0050 E5, and the reason that half is
+        // deliberately not the synthesis rule: a session that produced no transcript is a *healthy*
+        // session (turn detection flushes on any trigger, so noise with no speech correctly yields
+        // nothing). Zero results must therefore stay an empty list, never an exception — what E5
+        // reports on this surface is a session with no vendor messages at all, which the test below
+        // drives.
         _server.ResultMessages.Clear();
         _server.ResultMessages.Add(SpeechmaticsFakeServer.BuildEndOfTranscriptJson());
 
@@ -281,14 +290,113 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         results.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// Door 3 (<c>ADR-0050</c> E2c), and the inverse of what this test used to assert. Under
+    /// <c>NotThrowAsync</c> a socket killed mid-session ended the transcript stream exactly as the
+    /// vendor's own <c>EndOfTranscript</c> does — the caller could not tell a truncated transcript
+    /// from a complete one, which on this surface is the difference between a whole utterance and half
+    /// of one.
+    /// </summary>
     [Fact]
-    public async Task StreamAsync_ShouldComplete_WhenServerAborts()
+    public async Task StreamAsync_ShouldThrowTransportFailure_WhenServerAbortsMidSession()
     {
         _server.AbortAfterSend = true;
         var recognizer = BuildRecognizer();
+
         var act = async () =>
             await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
-        await act.Should().NotThrowAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
+        failure.Code.Should().BeNull("a dead socket carries no vendor code");
+        failure.InnerException.Should().BeOfType<WebSocketException>();
+    }
+
+    /// <summary>
+    /// The fourth door, and the one this vendor makes the case for: it was measured accepting the
+    /// upgrade with <c>101</c> and only then rejecting the credential with close <c>4001
+    /// not_authorised</c> — so on this surface the handshake succeeds and the close code carries the
+    /// failure. <c>ADR-0050</c> E7 exists so a caller does not have to know which of the two a vendor
+    /// picked. Here the upgrade is refused outright: no HTTP answer, hence no code.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
+    {
+        var recognizer = BuildRecognizer(o => o.BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/v2");
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Handshake);
+        failure.Code.Should().BeNull("a refused connection produced no HTTP answer to report");
+        failure.InnerException.Should().BeAssignableTo<WebSocketException>();
+    }
+
+    /// <summary>
+    /// Door 1 (<c>ADR-0050</c> E2a) with this vendor's inverted naming: <c>message</c> is the kind and
+    /// <c>type</c> is the code, so the code that reaches
+    /// <see cref="SpeechProviderFailureException.Code"/> is a symbol rather than a number. The fake
+    /// closes normally afterwards, so the frame is the only failure signal in the session.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowErrorFrameFailure_WhenTheServerSendsAnErrorMessage()
+    {
+        _server.ErrorFrameJson =
+            """{"message":"Error","type":"not_authorised","reason":"Not authorised for this endpoint"}""";
+        var recognizer = BuildRecognizer();
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
+        failure.Code.Should().Be("not_authorised", "on this surface `type` is the code, not the kind");
+        failure.Message.Should().Contain("Not authorised for this endpoint");
+    }
+
+    /// <summary>
+    /// Door 2 (<c>ADR-0050</c> E2b), and the measured failure this whole change started from: a
+    /// rejected credential here is <c>101</c> followed by close <c>4001 not_authorised</c> and nothing
+    /// else. There is no frame to read — the code is the entire evidence — and it was read nowhere,
+    /// which is why the provider was unusable as shipped while every test stayed green.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowCloseCodeFailure_WhenCredentialIsRejectedWithACloseCode()
+    {
+        _server.EndSessionSilently = true;
+        _server.CloseStatus = (WebSocketCloseStatus)4001;
+        _server.CloseStatusDescription = "not_authorised";
+        var recognizer = BuildRecognizer();
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.CloseCode);
+        failure.Code.Should().Be("4001");
+        failure.Message.Should().Contain("not_authorised");
+    }
+
+    /// <summary>
+    /// D2 (<c>ADR-0050</c> E5) on the recognition side: the vendor accepted the upgrade, sent no
+    /// message of any kind — not even the <c>RecognitionStarted</c> greeting — and closed normally.
+    /// Nothing failed on the wire, so this is not a <see cref="SpeechProviderFailureException"/>; it is
+    /// also not the healthy zero-transcript session above, and the two must not report the same way.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowEmptyResult_WhenTheVendorSendsNoMessageAtAll()
+    {
+        _server.EndSessionSilently = true;
+        var recognizer = BuildRecognizer();
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var empty = (await act.Should().ThrowAsync<SpeechProviderEmptyResultException>()).Which;
+        empty.Should().NotBeOfType<SpeechProviderFailureException>(
+            "the session was clean — it was simply silent");
+        empty.Provider.Should().Be("Speechmatics");
     }
 
     [Fact]
