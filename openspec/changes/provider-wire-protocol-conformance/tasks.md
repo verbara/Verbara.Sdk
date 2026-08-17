@@ -1235,9 +1235,20 @@ commit.
       predicted a damaged transcript and returned 10/10, which narrowed the shipped claim to duration
       arithmetic. §4 is referenced, not restated, and the identifier-value rule is named as the probe's
       instance of it rather than duplicated
-- [ ] 6.9 `docs/guides/provider-test-substrate.md` — state plainly that a green provider suite is not
+- [x] 6.9 `docs/guides/provider-test-substrate.md` — state plainly that a green provider suite is not
       evidence of route, authentication or frame-type conformance, with these six defects as the
-      demonstration, and point at the §5.5 record for what has actually been checked
+      demonstration, and point at the §5.5 record for what has actually been checked.
+      **Closed 2026-08-17** as two named subsections under the existing §5 *Where the substrate does not
+      reach* — the honest home, since this is a limit of the substrate and not a new topic. The
+      pre-existing drift paragraph became *Recordings age*; the new *A green suite is not evidence of
+      conformance* leads, because it is the graver limit: drift is about a fixture aging, this is about
+      the suite never having tested the thing at all. Carries the closed-loop mechanism (fake and client
+      written by the same author from the same reading, so the suite compares the client to the author's
+      belief), the six defects as a table with what was green while each shipped, and the §5.5 pointer
+      with *not characterised* named as distinct from correct. Class D is called out specifically: the
+      handshake **succeeded**, so a test asserting the connection opened has asserted nothing about the
+      credential. Shipped with §6.8 rather than separately — the new text cites §11 of the recording
+      protocol, and splitting them would have merged a dangling cross-reference
 - [ ] 6.10 `CHANGELOG.md` — one `[Unreleased]` entry under `### Fixed`. This changes **shipped**
       behaviour in `Verbara.Sdk.VoiceAi.Tts` and `Verbara.Sdk.VoiceAi.Stt`, not test behaviour. State
       the blast radius per provider without inflating it: Speechmatics **STT** could never authenticate,
