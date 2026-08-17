@@ -631,7 +631,7 @@ characterised* in §5.5.
       to prevent. **Closes when** the capture script grows a WebSocket plan for this surface and the
       `done` frame — and, while the credential is there, the `transcript` and `error` frames — land as
       `class: "recorded"` with the sidecars corrected
-- [ ] 3.18 **AssemblyAI rejects every message shorter than 50 ms, and the client cannot produce longer
+- [x] 3.18 **AssemblyAI rejects every message shorter than 50 ms, and the client cannot produce longer
       ones.** Measured 2026-08-16: a 20 ms message is answered
       `3007 Input Duration Violation: 20.0 ms. Expected between 50 and 1000 ms`, three of three, and
       the session ends. `AssemblyAiSpeechRecognizer` sends **one WebSocket message per frame the caller
@@ -642,7 +642,33 @@ characterised* in §5.5.
       rather than a footnote to it. **Closes when** the client coalesces caller frames into messages
       inside the vendor's stated 50–1000 ms window, with a test that feeds 20 ms frames and asserts
       the messages leaving the client are ≥ 50 ms — the assertion has to be on what is sent, since a
-      fake that accepts anything is what let this ship
+      fake that accepts anything is what let this ship.
+      **Closed 2026-08-17.** The client coalesces to the floor and splits at the ceiling — a single
+      2000 ms message draws the same `3007`, so the window is two-sided and only the small end had been
+      described here. Four tests assert on the bytes the client sent, which the fake could not see
+      before: it discarded `result.Count` on the binary branch, and no test in this repo asserted on the
+      size of audio sent to any provider. Verified through the shipped client — 20 ms frames of 8 kHz
+      audio, `10/10` digits in one final, against `0/10` with zero finals and zero partials from the
+      pre-fix client in the same harness minutes later, which is the D1 silent-failure class observed in
+      production form. Three reverts, three non-empty failure sets (1 / 4 / 3) — the rate half fails one
+      test and nothing else, and the tail-padding set is a strict subset of the coalescing set, which is
+      what independence of the two halves looks like rather than three disjoint sets. Two findings
+      worth carrying out of it: the task described the floor as the whole constraint, and the
+      **declared** sample rate turned out to be the number the window is enforced on — see 3.18a
+- [x] 3.18a **The same fix had to correct a second defect: this client ignored the `AudioFormat` it was
+      handed.** `BuildUri` declared `AssemblyAiOptions.SampleRate` (default 16000) while the shipped
+      pipeline feeds `AudioFormat.Slin16Mono8kHz` — the only one of the four streaming STT clients not
+      to declare `format.SampleRate`. Not cosmetic, and not what reconnaissance predicted either. The
+      control that settled it: identical 800-byte messages of identical 8 kHz audio, declared `8000`
+      transcribe `10/10` and declared `16000` die `3007 Input Duration Violation: 25.0 ms` — so the
+      vendor computes a message's duration from the *declaration*, which means coalescing to 50 ms of
+      the audio actually held would have lost every session while the declaration stayed wrong. The two
+      defects were therefore not separable. Equally worth recording: the mismatch **on its own is
+      harmless** — declared 16000 over 8 kHz audio still returned `10/10`, refusing the recon's
+      inference that it damaged transcripts — so the claim shipped is about duration arithmetic, not
+      audio quality. Closed with the format winning and the option kept as the documented fallback
+      (Speechmatics' shape); `AssemblyAiOptions.SampleRate`'s "expects 16000" summary corrected to what
+      `8000` was measured doing
 - [ ] 3.19 **AssemblyAI's wrong-path control does not discriminate, so route claims there rest on
       nothing.** `wss://streaming.assemblyai.com/v3/ws-does-not-exist` upgraded `101` and served a
       normal session (2026-08-16). A control that cannot fail is not a control, so this surface's

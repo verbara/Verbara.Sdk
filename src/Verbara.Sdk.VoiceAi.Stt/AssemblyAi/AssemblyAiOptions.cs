@@ -22,7 +22,17 @@ public sealed class AssemblyAiOptions
     [RegularExpression(@"^wss?://.+", ErrorMessage = "BaseUri must start with wss:// or ws://.")]
     public string BaseUri { get; set; } = "wss://streaming.assemblyai.com/v3/ws";
 
-    /// <summary>Audio sample rate in Hz. AssemblyAI Universal Streaming expects 16000.</summary>
+    /// <summary>
+    /// Fallback audio sample rate in Hz, declared to the service only when the caller's
+    /// <see cref="Verbara.Sdk.Audio.AudioFormat"/> carries none. A format that states a rate wins.
+    /// </summary>
+    /// <remarks>
+    /// The default is the rate AssemblyAI documents for Universal Streaming, but the previous summary
+    /// here — "expects 16000" — was stronger than the evidence: a session declaring 8000 over 8 kHz
+    /// audio recovered all ten digits of a ten-digit utterance (measured 2026-08-17, §3.18). Telephony
+    /// callers should let their format speak rather than set this, since the service also derives each
+    /// audio message's duration from whatever is declared here.
+    /// </remarks>
     public int SampleRate { get; set; } = 16000;
 
     /// <summary>

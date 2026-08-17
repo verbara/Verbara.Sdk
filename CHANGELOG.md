@@ -4,6 +4,54 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: AssemblyAI realtime STT rejected every session a telephony caller could start
+
+`AssemblyAiSpeechRecognizer` sent **one WebSocket message per frame the caller yielded**. AssemblyAI
+enforces a message-duration window and answers anything outside it with
+`{"type":"Error","error_code":3007,"error":"Input Duration Error: Input Duration Violation: 20.0 ms.
+Expected between 50 and 1000 ms"}`, then closes the session. An Asterisk AudioSocket source yields
+20 ms frames, so every such session died — and died silently, because the receive loop keeps only
+transcript messages and drops the error frame on the floor. Measured end-to-end through the shipped
+client on 2026-08-17: 3.2 seconds of speech in, an empty transcript out, **no exception**.
+
+- **The client now coalesces caller frames into the vendor's stated 50–1000 ms window**, emitting as
+  soon as the floor is reached so the added latency is bounded by one message. It **splits at the
+  ceiling** as well: a single 2000 ms message draws the same `3007`, so both ends are enforced, and the
+  ceiling is reachable from one caller frame rather than only from accumulation.
+
+- **BREAKING for anyone who set `AssemblyAiOptions.SampleRate`: the caller's `AudioFormat` now wins.**
+  The option is read only when the format carries no rate, matching what `SpeechmaticsSpeechRecognizer`
+  already did and what Deepgram and Cartesia do outright. This client was the only one of the four that
+  ignored the format it was handed, and it matters beyond consistency: the service computes each
+  message's duration from the rate the client **declared**. The same 800-byte messages of the same
+  8 kHz audio transcribe 10/10 declared as `8000` and die `3007 Input Duration Violation: 25.0 ms`
+  declared as `16000`. The declared rate and the coalescing thresholds now come from one value, so that
+  divergence is not expressible rather than merely fixed.
+
+- **`AssemblyAiOptions.SampleRate`'s summary said the service "expects 16000"** — stronger than the
+  evidence. A session declaring `8000` over 8 kHz audio recovered all ten digits of a ten-digit
+  utterance. The summary now says what was measured, and marks the option as the fallback it is.
+
+- **The trailing remainder is padded with silence, and sending it as-is was measured working first.**
+  A lone sub-floor message at the end of a stream is tolerated, three runs of three. It is rejected
+  anyway: three consecutive sub-floor messages drew `3007` with zero finals, so the tolerance is real,
+  thin and nowhere stated, and when it breaks it costs the whole transcript rather than the tail.
+  Padding keeps every message inside the window the vendor *states*; zeros are silence in signed 16-bit
+  PCM, so it cannot invent a word where dropping the remainder could clip one.
+
+- **Verified through the shipped client with the before arm in the same session.** Fed 20 ms frames of
+  8 kHz audio with `SampleRate` left at its `16000` default on purpose, the remediated client returns
+  **10/10** digits in one final; the pre-fix client through the same harness minutes later returns
+  **0/10** with zero finals and zero partials.
+
+- **The suite now asserts on the bytes the client sends.** The fake discarded `result.Count` on its
+  binary branch and kept only a frame counter, and no test in this repo asserted on the size of audio
+  sent to any provider — a fake that cannot fail a client sending 20 ms messages is what let this ship.
+  It now records every complete binary message's length, accumulating until `EndOfMessage` so a
+  fragmented message is not read as several short ones. Reverting the declared rate fails exactly one
+  test and nothing else; removing the coalescing fails four while that rate assertion still passes; and
+  sending the tail short fails three of those four.
+
 ### Fixed — Tests: two fakes answered on a timer, and one of them ejected a PR from the merge queue
 
 `CartesiaFakeServer` and `ElevenLabsFakeServer` replied after a fixed `Task.Delay(30)` instead of
