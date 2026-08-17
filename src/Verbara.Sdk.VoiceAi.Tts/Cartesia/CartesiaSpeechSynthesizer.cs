@@ -24,21 +24,21 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
     private const int ReceiveBufferSize = 65536;
 
     private readonly CartesiaOptions _options;
-    private readonly int? _fakeServerPort;
 
     /// <inheritdoc />
     public override string ProviderName => "Cartesia";
 
-    /// <summary>Initializes a new instance for production use.</summary>
+    /// <summary>Initializes a new instance.</summary>
+    /// <remarks>
+    /// There is no second, test-only constructor. Tests reach a fake by pointing
+    /// <see cref="CartesiaOptions.BaseUri"/> at it — the same seam an operator uses for a regional
+    /// endpoint — so the suite drives the production path instead of one built for it. The previous
+    /// <c>fakeServerPort</c> overload took over the route <em>and</em> suppressed the credential, and
+    /// what that cost was measured: with every auth header in this layer renamed to a header no
+    /// vendor reads, all 187 tests of the two provider suites still passed.
+    /// </remarks>
     public CartesiaSpeechSynthesizer(IOptions<CartesiaOptions> options)
         => _options = options.Value;
-
-    /// <summary>Initializes a new instance for testing with a fake server.</summary>
-    internal CartesiaSpeechSynthesizer(IOptions<CartesiaOptions> options, int fakeServerPort)
-    {
-        _options = options.Value;
-        _fakeServerPort = fakeServerPort;
-    }
 
     /// <inheritdoc />
     public override async IAsyncEnumerable<ReadOnlyMemory<byte>> SynthesizeAsync(
@@ -49,11 +49,11 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         var uri = BuildUri();
         using var ws = new ClientWebSocket();
 
-        if (_fakeServerPort is null)
-        {
-            ws.Options.SetRequestHeader("X-API-Key", _options.ApiKey);
-            ws.Options.SetRequestHeader("Cartesia-Version", _options.ApiVersion);
-        }
+        // Unconditional, and that is the point: every test now executes these two lines, which is
+        // what makes a defect in them reachable. Behind `if (_fakeServerPort is null)` they were
+        // executed by production alone and by no test at all.
+        ws.Options.SetRequestHeader("X-API-Key", _options.ApiKey);
+        ws.Options.SetRequestHeader("Cartesia-Version", _options.ApiVersion);
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
@@ -203,11 +203,12 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         }
     }
 
-    private Uri BuildUri()
-    {
-        if (_fakeServerPort.HasValue)
-            return new Uri($"ws://127.0.0.1:{_fakeServerPort}/tts/websocket");
-
-        return new Uri(_options.BaseUri);
-    }
+    /// <summary>The endpoint to open, taken whole from configuration.</summary>
+    /// <remarks>
+    /// No "am I under test?" branch: <see cref="CartesiaOptions.BaseUri"/> admits <c>ws://</c>, so
+    /// the suite points it at its fake and every test then executes this line — the same one
+    /// production executes. The branch this replaces also replaced the <em>path</em>, so the route
+    /// the client really uses was never exercised by anything.
+    /// </remarks>
+    private Uri BuildUri() => new(_options.BaseUri);
 }

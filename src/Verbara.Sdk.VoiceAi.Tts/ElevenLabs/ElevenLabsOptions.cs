@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Verbara.Sdk.VoiceAi.Tts.ElevenLabs;
 
 /// <summary>Canonical ElevenLabs model identifiers.</summary>
@@ -57,6 +59,20 @@ public sealed class ElevenLabsOptions
 {
     /// <summary>ElevenLabs API key.</summary>
     public string ApiKey { get; set; } = string.Empty;
+
+    /// <summary>
+    /// WebSocket endpoint prefix. The client appends <c>/{VoiceId}/stream-input</c> and the query,
+    /// so the voice segment stays in shipped code — the same split
+    /// <c>SpeechmaticsOptions.BaseUri</c> uses for its language segment.
+    /// </summary>
+    /// <remarks>
+    /// The client used to hard-code this host, so tests could only reach a fake through a
+    /// constructor that replaced the whole URL — and that replacement substituted a literal
+    /// <c>test-voice</c> for <see cref="VoiceId"/>, meaning the voice segment production sends was
+    /// exercised by nothing.
+    /// </remarks>
+    [RegularExpression(@"^wss?://.+", ErrorMessage = "BaseUri must start with wss:// or ws://.")]
+    public string BaseUri { get; set; } = "wss://api.elevenlabs.io/v1/text-to-speech";
 
     /// <summary>Voice identifier to use for synthesis.</summary>
     public string VoiceId { get; set; } = string.Empty;

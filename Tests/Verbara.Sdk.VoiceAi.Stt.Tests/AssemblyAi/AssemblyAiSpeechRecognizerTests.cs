@@ -41,11 +41,22 @@ public class AssemblyAiSpeechRecognizerTests : IAsyncDisposable
         _server.Start();
     }
 
+    /// <summary>The credential every test in this class sends, asserted on by the fake.</summary>
+    private const string TestApiKey = "test-key";
+
+    /// <summary>
+    /// Reaches the fake through <see cref="AssemblyAiOptions.BaseUri"/>, so the route, the query and
+    /// the raw-key <c>Authorization</c> header all come from shipped code.
+    /// </summary>
     private AssemblyAiSpeechRecognizer BuildRecognizer(Action<AssemblyAiOptions>? configure = null)
     {
-        var opts = new AssemblyAiOptions { ApiKey = "test-key" };
+        var opts = new AssemblyAiOptions
+        {
+            ApiKey = TestApiKey,
+            BaseUri = $"ws://127.0.0.1:{_server.Port}/v3/ws"
+        };
         configure?.Invoke(opts);
-        return new AssemblyAiSpeechRecognizer(Options.Create(opts), fakeServerPort: _server.Port);
+        return new AssemblyAiSpeechRecognizer(Options.Create(opts));
     }
 
     /// <summary>
@@ -436,6 +447,17 @@ public class AssemblyAiSpeechRecognizerTests : IAsyncDisposable
             yield return new byte[bytesEach];
 
         await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldAuthenticateWithTheRawKey_WhenOpeningASession()
+    {
+        var recognizer = BuildRecognizer();
+        await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // Exactly the key: AssemblyAI takes no scheme prefix, so this also fails a client that
+        // helpfully adds one.
+        _server.ReceivedAuthorization.Should().Be(TestApiKey);
     }
 
     public async ValueTask DisposeAsync()

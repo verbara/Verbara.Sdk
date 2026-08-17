@@ -23,12 +23,29 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
         _server.Start();
     }
 
-    private ElevenLabsSpeechSynthesizer BuildSynthesizer()
-        => new(Options.Create(new ElevenLabsOptions
+    /// <summary>The credential every test in this class sends, asserted on by the fake.</summary>
+    private const string TestApiKey = "test-key";
+
+    /// <summary>The voice id every test sends — a path segment, so the fake sees it in the route.</summary>
+    private const string TestVoiceId = "test-voice";
+
+    /// <summary>
+    /// Reaches the fake through <see cref="ElevenLabsOptions.BaseUri"/>, so the route (voice segment
+    /// included), the query and the <c>xi-api-key</c> header all come from shipped code. Takes a
+    /// configure action because three URL-parameter tests vary one option each — they used to
+    /// duplicate the whole options block and the test-only constructor with it.
+    /// </summary>
+    private ElevenLabsSpeechSynthesizer BuildSynthesizer(Action<ElevenLabsOptions>? configure = null)
+    {
+        var opts = new ElevenLabsOptions
         {
-            ApiKey = "test-key",
-            VoiceId = "test-voice"
-        }), fakeServerPort: _server.Port);
+            ApiKey = TestApiKey,
+            VoiceId = TestVoiceId,
+            BaseUri = $"ws://127.0.0.1:{_server.Port}/v1/text-to-speech"
+        };
+        configure?.Invoke(opts);
+        return new ElevenLabsSpeechSynthesizer(Options.Create(opts));
+    }
 
     /// <summary>The audio the fake replays, read from the same tree the fake reads.</summary>
     private static byte[] RecordedAudio => ElevenLabsFakeServer.ReadFrameBytes(ElevenLabsFakeServer.AudioChunk);
@@ -293,14 +310,7 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
     [Fact]
     public async Task SynthesizeAsync_ShouldIncludeLatencyParam2_WhenLatencyOptimizationMid()
     {
-        var synth = new ElevenLabsSpeechSynthesizer(
-            Options.Create(new ElevenLabsOptions
-            {
-                ApiKey = "test-key",
-                VoiceId = "test-voice",
-                LatencyOptimization = ElevenLabsLatencyOptimization.Mid
-            }),
-            fakeServerPort: _server.Port);
+        var synth = BuildSynthesizer(o => o.LatencyOptimization = ElevenLabsLatencyOptimization.Mid);
 
         await synth.SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
@@ -310,14 +320,7 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
     [Fact]
     public async Task SynthesizeAsync_ShouldIncludePcm24000OutputFormat_WhenOutputFormatPcm24k()
     {
-        var synth = new ElevenLabsSpeechSynthesizer(
-            Options.Create(new ElevenLabsOptions
-            {
-                ApiKey = "test-key",
-                VoiceId = "test-voice",
-                OutputFormat = ElevenLabsOutputFormat.Pcm24k
-            }),
-            fakeServerPort: _server.Port);
+        var synth = BuildSynthesizer(o => o.OutputFormat = ElevenLabsOutputFormat.Pcm24k);
 
         await synth.SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
@@ -327,18 +330,33 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
     [Fact]
     public async Task SynthesizeAsync_ShouldIncludeTurbo2ModelId_WhenModelExplicitlySetToTurbo2()
     {
-        var synth = new ElevenLabsSpeechSynthesizer(
-            Options.Create(new ElevenLabsOptions
-            {
-                ApiKey = "test-key",
-                VoiceId = "test-voice",
-                ModelId = ElevenLabsModels.Turbo2
-            }),
-            fakeServerPort: _server.Port);
+        var synth = BuildSynthesizer(o => o.ModelId = ElevenLabsModels.Turbo2);
 
         await synth.SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
         _server.LastRequestUrl.Should().Contain("model_id=eleven_turbo_v2");
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldAuthenticateTheUpgrade_WhenOpeningASession()
+    {
+        var synth = BuildSynthesizer();
+        await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        _server.ReceivedApiKey.Should().Be(TestApiKey);
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldPutTheConfiguredVoiceInTheRoute_WhenVoiceIdIsSet()
+    {
+        // Unassertable before the seam changed: the test-only constructor substituted a literal
+        // `test-voice` for whatever VoiceId held, so this route segment came from the branch rather
+        // than from the option. A voice id distinct from the class default is what shows the
+        // difference.
+        var synth = BuildSynthesizer(o => o.VoiceId = "voice-from-options");
+        await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        _server.LastRequestUrl.Should().StartWith("/v1/text-to-speech/voice-from-options/stream-input");
     }
 
     public async ValueTask DisposeAsync()

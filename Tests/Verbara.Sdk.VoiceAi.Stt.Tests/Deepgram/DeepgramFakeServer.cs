@@ -58,6 +58,24 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
     /// </summary>
     public bool ReceivedClientCloseFrame { get; private set; }
 
+    /// <summary>Raw URL (path + query) of the WebSocket upgrade — the route the client asked for.</summary>
+    /// <remarks>
+    /// Not captured before §2.3c, and the omission hid a real divergence: the client's test-only URI
+    /// branch left <c>model</c> and <c>language</c> out of the query, so what this fake received was
+    /// never what production sends. Both now come from one expression.
+    /// </remarks>
+    public string? ReceivedRequestUri { get; private set; }
+
+    /// <summary>
+    /// The <c>Authorization</c> header the client sent on the upgrade, or <see langword="null"/> if
+    /// it sent none — which was every session until §2.3c.
+    /// </summary>
+    /// <remarks>
+    /// Deepgram's scheme is <c>Token</c>. Capturing the whole value rather than just the key keeps
+    /// the scheme inside the assertion.
+    /// </remarks>
+    public string? ReceivedAuthorization { get; private set; }
+
     /// <summary>
     /// Completes when the session handler returns — the join point for the assertions. Same role as
     /// <c>WebSocketTestServer.SessionCompleted</c>, kept locally because this fake predates that
@@ -138,6 +156,9 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
 
     private async Task RunSessionAsync(HttpListenerContext ctx)
     {
+        ReceivedRequestUri = ctx.Request.RawUrl;
+        ReceivedAuthorization = ctx.Request.Headers["Authorization"];
+
         var wsCtx = await ctx.AcceptWebSocketAsync(null).ConfigureAwait(false);
         var ws = wsCtx.WebSocket;
 

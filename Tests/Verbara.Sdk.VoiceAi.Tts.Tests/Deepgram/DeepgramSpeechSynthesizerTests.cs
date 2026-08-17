@@ -23,17 +23,23 @@ public class DeepgramSpeechSynthesizerTests : IAsyncDisposable
         _server.Start();
     }
 
+    /// <summary>The credential every test in this class sends, asserted on by the fake.</summary>
+    private const string TestApiKey = "test-key";
+
     private DeepgramSpeechSynthesizer BuildSynthesizer(
         string model = DeepgramVoices.Thalia,
         string encoding = "linear16",
         int sampleRate = 16000)
         => new(Options.Create(new DeepgramTtsOptions
         {
-            ApiKey = "test-key",
+            ApiKey = TestApiKey,
             Model = model,
             Encoding = encoding,
             SampleRate = sampleRate,
-        }), fakeServerPort: _server.Port);
+            // The operator-facing seam, not a test-only constructor: route, query and credential all
+            // come from shipped code. Path as the production default carries it.
+            BaseUri = $"ws://127.0.0.1:{_server.Port}/v1/speak",
+        }));
 
     /// <summary>The audio the fake replays, read from the same tree the fake reads.</summary>
     private static byte[] RecordedAudio => DeepgramTtsFakeServer.ReadFrameBytes(DeepgramTtsFakeServer.AudioChunk);
@@ -269,6 +275,17 @@ public class DeepgramSpeechSynthesizerTests : IAsyncDisposable
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         _server.ReceivedJsonMessages.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldAuthenticateWithTheTokenScheme_WhenOpeningASession()
+    {
+        var synth = BuildSynthesizer();
+        await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // Scheme and key together: Deepgram takes `Token <key>`, so asserting the key alone would
+        // pass a client that sent `Bearer`.
+        _server.CapturedAuthorization.Should().Be($"Token {TestApiKey}");
     }
 
     public async ValueTask DisposeAsync()

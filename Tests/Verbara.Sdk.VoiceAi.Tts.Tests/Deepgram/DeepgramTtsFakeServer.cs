@@ -97,6 +97,18 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
     /// <summary>Raw HTTP request-target captured from the WS upgrade (e.g. <c>/v1/speak?model=...&amp;encoding=...</c>).</summary>
     public string? CapturedRequestUri { get; private set; }
 
+    /// <summary>
+    /// The <c>Authorization</c> header the client sent on the upgrade, or <see langword="null"/> if
+    /// it sent none.
+    /// </summary>
+    /// <remarks>
+    /// Deepgram's scheme is <c>Token</c> — neither <c>Bearer</c> nor a bare key. Until §2.3c the
+    /// client set this header only when no fake port was configured, so the value here was always
+    /// null and no test could tell one scheme from another. Capturing the whole value rather than
+    /// just the key is what keeps the scheme inside the assertion.
+    /// </remarks>
+    public string? CapturedAuthorization { get; private set; }
+
     /// <summary>Binary audio frames to send back to the client after the Speak + Flush messages arrive.</summary>
     public List<byte[]> AudioFramesToSend { get; } = [];
 
@@ -142,6 +154,8 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
     private async Task HandleSessionAsync(WebSocketTestSession session)
     {
         CapturedRequestUri = session.RequestUri;
+        CapturedAuthorization =
+            session.Headers.TryGetValue("Authorization", out var authorization) ? authorization : null;
 
         var ws = session.WebSocket;
         var ct = session.ServerCancellationToken;

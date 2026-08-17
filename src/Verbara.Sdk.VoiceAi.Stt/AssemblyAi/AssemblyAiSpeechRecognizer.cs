@@ -42,21 +42,20 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
     private static readonly TimeSpan MaxMessageDuration = TimeSpan.FromSeconds(1);
 
     private readonly AssemblyAiOptions _options;
-    private readonly int? _fakeServerPort;
 
     /// <inheritdoc />
     public override string ProviderName => "AssemblyAI";
 
-    /// <summary>Initializes a new instance for production use.</summary>
+    /// <summary>Initializes a new instance.</summary>
+    /// <remarks>
+    /// No test-only constructor: tests reach a fake through
+    /// <see cref="AssemblyAiOptions.BaseUri"/>. This client is the one where the cost is easiest to
+    /// state — its credential is the raw key in <c>Authorization</c> with no scheme prefix, a
+    /// distinction the suite could not see while the header was set only when no fake port was
+    /// configured.
+    /// </remarks>
     public AssemblyAiSpeechRecognizer(IOptions<AssemblyAiOptions> options)
         => _options = options.Value;
-
-    /// <summary>Initializes a new instance for testing with a fake server.</summary>
-    internal AssemblyAiSpeechRecognizer(IOptions<AssemblyAiOptions> options, int fakeServerPort)
-    {
-        _options = options.Value;
-        _fakeServerPort = fakeServerPort;
-    }
 
     /// <inheritdoc />
     public override async IAsyncEnumerable<SpeechRecognitionResult> StreamAsync(
@@ -83,11 +82,9 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
         var wsUri = BuildUri(wireFormat.SampleRate);
         using var ws = new ClientWebSocket();
 
-        if (_fakeServerPort is null)
-        {
-            // AssemblyAI auth: raw API key in Authorization header (no "Bearer " prefix).
-            ws.Options.SetRequestHeader("Authorization", _options.ApiKey);
-        }
+        // AssemblyAI auth: raw API key in Authorization header (no "Bearer " prefix). Unconditional,
+        // so every test asserts that shape rather than the vendor being the first to check it.
+        ws.Options.SetRequestHeader("Authorization", _options.ApiKey);
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
@@ -296,9 +293,8 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
             CultureInfo.InvariantCulture,
             $"?sample_rate={sampleRate}&format_turns={_options.FormatTurns}&end_of_turn_confidence_threshold={_options.EndOfTurnConfidenceThreshold}");
 
-        if (_fakeServerPort.HasValue)
-            return new Uri($"ws://127.0.0.1:{_fakeServerPort}/v3/ws{query}");
-
+        // No under-test branch — BaseUri admits ws://, so this is the line every test executes and
+        // the one production executes.
         return new Uri(_options.BaseUri + query);
     }
 }

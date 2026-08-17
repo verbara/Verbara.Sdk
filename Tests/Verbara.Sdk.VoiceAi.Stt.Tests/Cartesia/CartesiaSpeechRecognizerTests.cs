@@ -30,11 +30,23 @@ public class CartesiaSpeechRecognizerTests : IAsyncDisposable
         _server.Start();
     }
 
+    /// <summary>The credential every test in this class sends, asserted on by the fake.</summary>
+    private const string TestApiKey = "test-key";
+
+    /// <summary>
+    /// Reaches the fake through <see cref="CartesiaOptions.BaseUri"/> — the operator-facing seam —
+    /// so route, query and credential all come from shipped code. The path is the one the production
+    /// default carries.
+    /// </summary>
     private CartesiaSpeechRecognizer BuildRecognizer(Action<CartesiaOptions>? configure = null)
     {
-        var opts = new CartesiaOptions { ApiKey = "test-key" };
+        var opts = new CartesiaOptions
+        {
+            ApiKey = TestApiKey,
+            BaseUri = $"ws://127.0.0.1:{_server.Port}/stt/websocket"
+        };
         configure?.Invoke(opts);
-        return new CartesiaSpeechRecognizer(Options.Create(opts), fakeServerPort: _server.Port);
+        return new CartesiaSpeechRecognizer(Options.Create(opts));
     }
 
     /// <summary>
@@ -276,6 +288,22 @@ public class CartesiaSpeechRecognizerTests : IAsyncDisposable
     /// assertion is a race the defect wins. The bound is a liveness guard, not a synchronisation
     /// delay: it is never reached on a passing run.
     /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldAuthenticateTheUpgrade_WhenOpeningASession()
+    {
+        var sut = BuildRecognizer();
+        await sut.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await SessionEndedAsync();
+
+        // Asking for the header by name is what makes a renamed field a failure rather than a
+        // silence: this suite passed with every auth header in the layer renamed.
+        _server.ReceivedApiKey.Should().Be(TestApiKey);
+        _server.ReceivedApiVersion.Should().Be("2024-11-13");
+
+        // The route now comes from BaseUri, so this is the path production asks for.
+        new Uri($"ws://localhost{_server.RequestUri}").AbsolutePath.Should().Be("/stt/websocket");
+    }
+
     private Task SessionEndedAsync() => _server.SessionCompleted.WaitAsync(TimeSpan.FromSeconds(10));
 
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()

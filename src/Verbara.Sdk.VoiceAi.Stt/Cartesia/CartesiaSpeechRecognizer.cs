@@ -27,21 +27,18 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
     private static readonly byte[] DoneFrame = "done"u8.ToArray();
 
     private readonly CartesiaOptions _options;
-    private readonly int? _fakeServerPort;
 
     /// <inheritdoc />
     public override string ProviderName => "Cartesia";
 
-    /// <summary>Initializes a new instance for production use.</summary>
+    /// <summary>Initializes a new instance.</summary>
+    /// <remarks>
+    /// No test-only constructor: tests reach a fake through
+    /// <see cref="CartesiaOptions.BaseUri"/>, the seam an operator uses for a regional endpoint —
+    /// the shape <see cref="Speechmatics.SpeechmaticsSpeechRecognizer"/> has carried all along.
+    /// </remarks>
     public CartesiaSpeechRecognizer(IOptions<CartesiaOptions> options)
         => _options = options.Value;
-
-    /// <summary>Initializes a new instance for testing with a fake server.</summary>
-    internal CartesiaSpeechRecognizer(IOptions<CartesiaOptions> options, int fakeServerPort)
-    {
-        _options = options.Value;
-        _fakeServerPort = fakeServerPort;
-    }
 
     /// <inheritdoc />
     public override async IAsyncEnumerable<SpeechRecognitionResult> StreamAsync(
@@ -58,11 +55,9 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
         using var ws = new ClientWebSocket();
         ws.Options.KeepAliveInterval = TimeSpan.FromSeconds(_options.KeepAliveSeconds);
 
-        if (_fakeServerPort is null)
-        {
-            ws.Options.SetRequestHeader("X-API-Key", _options.ApiKey);
-            ws.Options.SetRequestHeader("Cartesia-Version", _options.ApiVersion);
-        }
+        // Unconditional: every test executes these two lines, so a defect in either is reachable.
+        ws.Options.SetRequestHeader("X-API-Key", _options.ApiKey);
+        ws.Options.SetRequestHeader("Cartesia-Version", _options.ApiVersion);
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
@@ -198,8 +193,9 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
             $"&encoding=pcm_s16le" +
             $"&sample_rate={format.SampleRate}";
 
-        return _fakeServerPort.HasValue
-            ? new Uri($"ws://127.0.0.1:{_fakeServerPort}/stt/websocket{query}")
-            : new Uri($"{_options.BaseUri}{query}");
+        // No under-test branch: BaseUri admits ws://, so the suite points it at its fake and every
+        // test then builds the URI on this line — the same one production builds it on. The branch
+        // this replaces substituted the path too, leaving the real route unexercised.
+        return new Uri($"{_options.BaseUri}{query}");
     }
 }

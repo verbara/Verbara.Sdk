@@ -19,21 +19,19 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
     private static readonly byte[] CloseStreamFrame = """{"type":"CloseStream"}"""u8.ToArray();
 
     private readonly DeepgramOptions _options;
-    private readonly int? _fakeServerPort;
 
     /// <inheritdoc />
     public override string ProviderName => "Deepgram";
 
-    /// <summary>Initializes a new instance for production use.</summary>
+    /// <summary>Initializes a new instance.</summary>
+    /// <remarks>
+    /// No test-only constructor: tests reach a fake through
+    /// <see cref="DeepgramOptions.BaseUri"/>. The overload this replaces built its own query, and the
+    /// two copies had already drifted — the test-only one omitted <c>model</c> and <c>language</c>
+    /// entirely, so no test could observe either parameter leaving the client.
+    /// </remarks>
     public DeepgramSpeechRecognizer(IOptions<DeepgramOptions> options)
         => _options = options.Value;
-
-    /// <summary>Initializes a new instance for testing with a fake server.</summary>
-    internal DeepgramSpeechRecognizer(IOptions<DeepgramOptions> options, int fakeServerPort)
-    {
-        _options = options.Value;
-        _fakeServerPort = fakeServerPort;
-    }
 
     /// <inheritdoc />
     public override async IAsyncEnumerable<SpeechRecognitionResult> StreamAsync(
@@ -49,8 +47,9 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
         var wsUri = BuildUri(format);
         using var ws = new ClientWebSocket();
 
-        if (_fakeServerPort is null)
-            ws.Options.SetRequestHeader("Authorization", $"Token {_options.ApiKey}");
+        // Unconditional, scheme included: `Token` is Deepgram's, and while this ran under production
+        // alone a change to it was invisible to the suite.
+        ws.Options.SetRequestHeader("Authorization", $"Token {_options.ApiKey}");
 
         await ws.ConnectAsync(wsUri, ct).ConfigureAwait(false);
 
@@ -145,13 +144,9 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
 
     private Uri BuildUri(AudioFormat format)
     {
-        if (_fakeServerPort.HasValue)
-            return new Uri($"ws://127.0.0.1:{_fakeServerPort}/v1/listen" +
-                $"?encoding=linear16&sample_rate={format.SampleRate}&channels=1" +
-                $"&interim_results={_options.InterimResults.ToString().ToLowerInvariant()}" +
-                $"&punctuate={_options.Punctuate.ToString().ToLowerInvariant()}");
-
-        return new Uri($"wss://api.deepgram.com/v1/listen" +
+        // One expression for every caller. The two it replaces had drifted: the under-test copy left
+        // out `model` and `language`, so the suite watched a request production never sends.
+        return new Uri($"{_options.BaseUri}" +
             $"?encoding=linear16&sample_rate={format.SampleRate}&channels=1" +
             $"&model={Uri.EscapeDataString(_options.Model)}" +
             $"&language={Uri.EscapeDataString(_options.Language)}" +
