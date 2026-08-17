@@ -11,8 +11,10 @@ namespace Verbara.Sdk.VoiceAi.Stt.Cartesia;
 
 /// <summary>
 /// Cartesia Ink-Whisper streaming STT provider over WebSocket.
-/// Sends an initial JSON config message, then streams raw PCM audio frames
-/// as binary messages and yields transcript events as they arrive.
+/// Session parameters travel in the query string of the upgrade — this service has no opening
+/// message and rejects one (see <see cref="BuildUri"/>) — after which raw PCM audio frames go up as
+/// binary messages, transcript events come back as they arrive, and the bare word <c>done</c> ends
+/// the input.
 /// </summary>
 public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
 {
@@ -52,7 +54,7 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
         // issued, independent of scheduling/mock latency.
         ct.ThrowIfCancellationRequested();
 
-        var wsUri = BuildUri();
+        var wsUri = BuildUri(format);
         using var ws = new ClientWebSocket();
         ws.Options.KeepAliveInterval = TimeSpan.FromSeconds(_options.KeepAliveSeconds);
 
@@ -66,19 +68,11 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
         connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
         await ws.ConnectAsync(wsUri, connectCts.Token).ConfigureAwait(false);
 
-        // Send the Cartesia "start" config as the first text frame.
-        var init = new CartesiaSttInitMessage
-        {
-            Model = _options.Model,
-            Language = _options.Language,
-            Encoding = "pcm_s16le",
-            SampleRate = format.SampleRate
-        };
-        var initJson = JsonSerializer.Serialize(init, VoiceAiSttJsonContext.Default.CartesiaSttInitMessage);
-        await ws.SendAsync(
-            Encoding.UTF8.GetBytes(initJson).AsMemory(),
-            WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
-
+        // No configuration frame is sent here, and its absence is the fix. A JSON "start" message
+        // stood in this spot; the service has no such message and answers it with
+        // `Invalid client message: Unrecognized text message "{…}". Expected one of: "finalize",
+        // "done", "close"`. The four values it carried — model, language, encoding, sample_rate —
+        // now travel in the query string, which is where this service reads them (see BuildUri).
         var channel = Channel.CreateUnbounded<SpeechRecognitionResult>();
 
         // Linked CTS: when the receive loop detects the server is gone (abort / close),
@@ -176,11 +170,36 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
         }
     }
 
-    private Uri BuildUri()
+    /// <summary>
+    /// The session URI: the configured base with the session parameters as a query string.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This client shipped <see cref="CartesiaOptions.BaseUri"/> verbatim, with <b>no query string at
+    /// all</b>, and the service closed every session <c>1008 Missing sample_rate</c> — twelve runs on
+    /// 2026-08-16, twelve rejections. The rejection is in band: the upgrade succeeds with <c>101</c>
+    /// first, which is why a probe that stopped at the handshake recorded this surface as working
+    /// while no session had ever opened. Adding the parameters the vendor's own rejection names opens
+    /// a session that transcribes, with the same key on the same host — the control that isolates the
+    /// defect to the missing query rather than to the account.
+    /// </para>
+    /// <para>
+    /// Only the scheme, host and port differ under test. The query is built once and both branches
+    /// carry it, so the expression that ships is the expression the suite exercises — a branch that
+    /// built a different URL for tests is how a client can send a request nothing has ever asserted
+    /// on.
+    /// </para>
+    /// </remarks>
+    private Uri BuildUri(AudioFormat format)
     {
-        if (_fakeServerPort.HasValue)
-            return new Uri($"ws://127.0.0.1:{_fakeServerPort}/stt/websocket");
+        var query =
+            $"?model={Uri.EscapeDataString(_options.Model)}" +
+            $"&language={Uri.EscapeDataString(_options.Language)}" +
+            $"&encoding=pcm_s16le" +
+            $"&sample_rate={format.SampleRate}";
 
-        return new Uri(_options.BaseUri);
+        return _fakeServerPort.HasValue
+            ? new Uri($"ws://127.0.0.1:{_fakeServerPort}/stt/websocket{query}")
+            : new Uri($"{_options.BaseUri}{query}");
     }
 }

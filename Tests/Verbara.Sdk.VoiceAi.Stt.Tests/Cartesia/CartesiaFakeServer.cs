@@ -20,11 +20,15 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Cartesia;
 /// <para>
 /// Cartesia is <c>permitted-with-conditions</c> for capturing Output
 /// (<c>docs/guides/provider-recording-protocol.md</c> §7), so unlike Deepgram and AssemblyAI its
-/// terms are <em>not</em> the reason these frames are authored rather than captured — the reason is
-/// simply that no capture credential exists in this environment. A real capture stays a known,
-/// cleared upgrade path here. Until then the frames take §7's documentation-derived route: authored
-/// to Cartesia's published realtime schema with fictional values, <c>class: "synthetic"</c>,
-/// <c>terms.verdict: "not-applicable"</c>, plus a <c>source_schema</c> block.
+/// terms are <em>not</em> the reason these frames are authored rather than captured. Neither is the
+/// credential, any longer: the live run of 2026-08-16 drove real sessions on this surface. What
+/// blocks a capture now is narrower and worth naming — <c>scripts/capture-provider-recording.py</c>
+/// speaks HTTP only and has no WebSocket plan, so there is no path that produces a fixture with
+/// provenance this repo would accept. Until there is, the frames take §7's documentation-derived
+/// route: authored to Cartesia's published realtime schema with fictional values,
+/// <c>class: "synthetic"</c>, <c>terms.verdict: "not-applicable"</c>, plus a <c>source_schema</c>
+/// block. That route held up under measurement: the live <c>transcript</c> frames carried exactly
+/// the field set below, absent <c>confidence</c> included.
 /// </para>
 /// <para>
 /// The consequence worth knowing before reading <see cref="BuildTranscriptJson"/>: Cartesia
@@ -85,6 +89,14 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
     /// </summary>
     public bool ReceivedClientCloseFrame { get; private set; }
 
+    /// <summary>
+    /// The raw request-target of the upgrade, query string included — the channel this service
+    /// actually reads its session parameters from. Recorded because the shipped client sent none at
+    /// all and the vendor closed every session <c>1008 Missing sample_rate</c>; a fake that only
+    /// looked at frames could not see that, which is how the defect survived a green suite.
+    /// </summary>
+    public string? RequestUri { get; private set; }
+
     /// <summary>Completes when the session handler returns — the join point for the assertions.</summary>
     public Task SessionCompleted => _server.SessionCompleted;
 
@@ -110,6 +122,7 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
     {
         var ws = session.WebSocket;
         var ct = session.ServerCancellationToken;
+        RequestUri = session.RequestUri;
 
         // Send result messages immediately upon connection (snapshot to avoid races).
         var messages = ResultMessages.ToList();
@@ -155,9 +168,13 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
                     // asserting the half-close as the contract — which is what §3.6d measured as
                     // the weaker of the two. This fake closes without an acknowledgement frame:
                     // the other three answer their terminator from a recording, and there is no
-                    // recording of Cartesia's reply to `done`. Authoring one would put a frame in
-                    // the tree that nothing has ever observed, which is the failure mode the
-                    // recordings exist to prevent.
+                    // recording of Cartesia's reply to `done`. That reply is no longer unobserved —
+                    // the live run of 2026-08-16 saw `{"type":"done","is_final":false,…}` arrive and
+                    // the service close 1000 about 158 ms later — but observing a frame and having a
+                    // committable fixture are different things, and the gap between them is the
+                    // missing WebSocket capture path noted on the class remark above. Hand-writing
+                    // it here from memory of a run would put a frame in the tree whose provenance is
+                    // a deleted harness, which is the failure mode the recordings exist to prevent.
                     ReceivedTerminatorText = text;
                     try
                     {

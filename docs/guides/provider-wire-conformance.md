@@ -142,7 +142,7 @@ a wrong-path control has to be read, not pattern-matched.
 |---|---|---|---|---|---|---|
 | Deepgram STT | `wss://api.deepgram.com/v1/listen` | OK | OK | `handshake` | `live + both controls` | 2026-08-16 |
 | Speechmatics STT | `wss://eu2.rt.speechmatics.com/v2` | OK | **2 fixed, 4 open** | `in-band` | `live + both controls` | 2026-08-16 |
-| Cartesia STT | `wss://api.cartesia.ai/stt/websocket` | **broken** | **1 fixed, broken** | `handshake` (credential) | `live + both controls` | 2026-08-16 |
+| Cartesia STT | `wss://api.cartesia.ai/stt/websocket` | **fixed** | **2 fixed** | `handshake` (credential) + `in-band` (session) | `live + both controls` | 2026-08-16 |
 | AssemblyAI STT | `wss://streaming.assemblyai.com/v3/ws` | not controllable | **1 fixed, 1 open** | `in-band` | `live + credential control` | 2026-08-16 |
 | Google STT | `https://speech.googleapis.com` | OK | n/a (batch) | in the response | `live + both controls` | 2026-08-15 |
 | OpenAI Whisper | `https://api.openai.com/v1/audio/transcriptions` | OK | n/a (batch) | not measured | `live, uncontrolled` | 2026-08-09 |
@@ -203,7 +203,8 @@ caveat above (see the remediation section below). **Four** defects stay open on 
 rejected session still reaches the caller as an empty stream) and the three assembly signals the client
 ignores — `word_delimiter`, `attaches_to`, and the vendor's already-assembled `metadata.transcript`.
 
-**Cartesia STT — the session cannot open at all, and the row that said otherwise is corrected here.**
+**Cartesia STT — the session could not open at all, and the row that said otherwise was corrected
+here; both defects are now fixed and the fix is measured through the shipped client.**
 Wrong path `404` and invalid credential `401` still hold: credential validation is at the handshake.
 But the previous row read "route and auth OK, frames not exercised", and the route half of that was an
 artifact of stopping at `101`. Streamed against, the shipped request is **rejected in-band**: the
@@ -222,6 +223,31 @@ So `CartesiaSttInitMessage` — `model`, `language`, `encoding`, `sample_rate` �
 when the socket survives; those values belong in the query string, and the type exists to be ignored.
 This is the same shape as Speechmatics TTS §4.5 (a configuration sent in a channel the vendor does not
 read) and it is exactly what a `101`-deep probe cannot see.
+
+**Both are fixed, and unlike the two diagnoses above the fix was measured through the shipped client
+rather than through a probe.** The four parameters moved into the query string and the init frame was
+**deleted** rather than left as an ignored message; `CartesiaSttInitMessage` and its source-generated
+registration are gone. Three arms in one process, same key, same host, seconds apart:
+
+| Arm | What it sends | Outcome |
+|---|---|---|
+| **control** | the URI as shipped, no query at all | `101`, then in band: `{"type":"error","code":400,"message":"Missing sample_rate: …"}`, close `1008 PolicyViolation` |
+| **shipped** | `CartesiaSpeechRecognizer` as it now ships | **10/10** digits in one final transcript |
+| **witness** | a raw socket carrying the same query | the transcript, then `{"type":"done"}`, then the vendor closes `1000` |
+
+The control matters more than the result: it fires in the same run rather than on a remembered earlier
+date, so the difference between the two arms is the query string and cannot be the account, the key,
+the host or the day. The shipped arm was then repeated five consecutive times at the shipped 5-second
+connect default — 10/10 in all five.
+
+Two things the run measured that were not being looked for. The vendor **normalizes spoken digits to
+numerals** (`"one two three…"` comes back `" 12345678910"`), so a word-matching metric reads a perfect
+transcript as 0/10 — the same instrument defect §3.6d hit on Speechmatics, met again on a second
+surface, which makes it a property of the metric rather than of one vendor. And the live frames match
+the field set the fake's recordings were **authored** from — `type`, `request_id`, `text`, `is_final`,
+`duration`, `language`, `words[]` with `start`/`end` — including the absence of `confidence` that
+`CartesiaSttTranscriptMessage` models as nullable. For this one message the documentation-derived
+route is no longer only what the vendor *says* it sends: it is what it sent.
 
 **AssemblyAI STT** — invalid credential **`101` followed by an error frame**, which is what exposed the
 in-band validation point and a matching client defect; real key `101` with first frame `Begin`
@@ -339,7 +365,7 @@ source files and runs through the same harness minutes later:
 | Deepgram STT | 10/10, 10 finals | not re-run — §3.6d measured `A ≡ B` here across three repetitions |
 | Speechmatics STT | **10/10**, 1 final, 17 partials | **0/10**, **zero finals**, 17 partials |
 | AssemblyAI STT | **10/10**, 1 final, 10–14 partials | **0/10**, **zero finals**, 8–9 partials |
-| Cartesia STT | **not verifiable — see below** | — |
+| Cartesia STT | **10/10**, 1 final, 0 partials — measured once the query string was fixed | — (see below) |
 
 Three things this run establishes that the §3.6d probe could not:
 
@@ -347,12 +373,17 @@ Three things this run establishes that the §3.6d probe could not:
    two builds of the shipped client. Because the control ran the same day through the same harness, a
    vendor-side difference between the two probe dates cannot explain the result. Without that arm this
    would have measured the day, not the change.
-2. **Cartesia's remediation cannot be verified live at all, and how it fails is itself the finding.**
-   The shipped client never opens a session (the missing query string, above): zero partials, zero
-   finals, dead in 0.5 s — and it reports `error=none`. That is the ADR-0049 D1 silent-failure class
-   observed end-to-end through the shipped client for the first time rather than through a probe. Its
-   half-close fix is asserted by a fake and stands unmeasured on the wire until the query string is
-   fixed.
+2. **Cartesia's remediation could not be verified live at all, and how it failed was itself the
+   finding — the query string has since been fixed and it now can be.** The client never opened a
+   session (the missing query string, above): zero partials, zero finals, dead in 0.5 s — and it
+   reported `error=none`. That is the ADR-0049 D1 silent-failure class observed end-to-end through the
+   shipped client for the first time rather than through a probe. Its half-close fix was asserted by a
+   fake and stood unmeasured on the wire; with the query string fixed the same shipped client returns
+   **10/10 in a single final**, so the arm that was resting on a fake now rests on the wire and all
+   four surfaces in the table are measured. No control column is available for this row: restoring the
+   half-close here would restore it on top of a session that never existed when arms A/B/C were run,
+   so what §3.6d recorded for Cartesia (`A` 5/10, `B` 7/10, `C ≡ B`) came from a probe holding the
+   corrected URL, and the shipped client has only ever run arm B.
 3. **The remediated Speechmatics path takes about five seconds longer** for the same audio (13.4 s vs
    8.2 s wall). Those seconds are the client waiting for the vendor to finalize instead of cutting it
    off — which is to say they are the transcript.
@@ -365,14 +396,22 @@ stopped there, and passed against a client that half-closed.
 this package sends a close frame at all, and each session now ends only when the **vendor** closes it.
 The unbounded wait is not new — the old code also sat in `ReceiveAsync` waiting for a peer that might
 never answer — but what backs it is weaker: RFC 6455 §5.5.1 *obliges* a peer to echo a close frame,
-whereas nothing obliges a vendor to end a session after a terminator. Measured, three of the four do
-(that is why the re-probe returned at all, in 8–13 s). Cartesia is the one that could not be measured,
-and Cartesia is also where a sibling command exists — `finalize` — whose whole purpose is to flush
-without ending the session. So a bound belongs here eventually; what is missing is the measurement that
-would set it, and a timeout invented ahead of that measurement is the machinery this record exists to
-argue against. It is tracked as its own task rather than shipped as a guess, and the exposure is
-concrete: `VoiceAiPipeline` awaits one STT session per utterance, so a vendor that acknowledges the
-terminator without closing would leave a call stuck in recognition rather than degrade it.
+whereas nothing obliges a vendor to end a session after a terminator. **All four are now measured to
+close, Cartesia included** — it was the one that could not be, and the query-string fix is what made
+the measurement possible. On the wire it answers `done` with a `{"type":"done"}` frame and then closes
+`1000` **158 ms** later; through the shipped client the session ends **172 ms** after the last audio
+frame. The other three returned in 8–13 s, which is why the re-probe returned at all.
+
+That is a measurement, not a guarantee, and it is worth being exact about which one. It says no surface
+in this package currently acknowledges a terminator and then holds the session open — not that none
+ever will. Cartesia is also where a sibling command exists, `finalize`, whose whole purpose is to flush
+*without* ending the session; the client does not send it, and a vendor that started treating `done`
+the way `finalize` behaves would produce exactly the hang this paragraph describes. So the bound stays
+unshipped, and now for a stated reason rather than a missing one: **there is no surface to calibrate it
+against.** A timeout picked without one would be the machinery this record exists to argue against. The
+exposure it would cover is concrete — `VoiceAiPipeline` awaits one STT session per utterance, so a
+vendor that acknowledged without closing would leave a call stuck in recognition rather than degrade it
+— and the trigger to build it is the first surface measured doing that, not a calendar date.
 
 ## Still not characterised
 
@@ -382,7 +421,13 @@ Named here rather than left as absence, because absence is what this file exists
   transcript frames on both and the error path on Cartesia, so these are no longer *never exercised*;
   what remains uncharacterised is the complete field set of each message type, which those runs
   recorded only to the depth the experiment needed (`is_final`/`text` on Cartesia, `is_final` and the
-  alternatives array on Deepgram).
+  alternatives array on Deepgram). **Cartesia's `transcript` and `error` messages are now closed**:
+  the query-string run observed both in full and they match the field set the fixtures were authored
+  from. Its end-of-session `{"type":"done"}` frame was observed for the first time in that run and is
+  **not** yet in the fixture tree — the fake still closes on the terminator without acknowledging it,
+  because committing a captured WebSocket frame needs a capture path the canonical capture script does
+  not have yet (it is HTTP-only). Tracked as its own task; an out-of-band capture whose provenance
+  could only cite a harness that was then deleted is not a fixture this repo should carry.
 - **Speechmatics STT** — the field set of `AddTranscript`. A transcript frame **has** now been observed
   live (2026-08-16): `metadata.transcript` arrives already assembled, alongside a `results` array, on
   the terminator path only. What stays uncharacterised is the rest of that message's fields, and every

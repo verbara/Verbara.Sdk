@@ -528,8 +528,15 @@ characterised* in §5.5.
       §3.17** — the shipped client cannot open a session at all, so there is no wire to measure the fix
       on; its half-close fix rests on the fake alone until then, and the way it fails (zero output,
       `error=none`, dead in 0.5 s) is the D1 silent-failure class seen end-to-end through a shipped
-      client for the first time rather than through a probe
-- [ ] 3.6f **The terminator path has no bound, and §3.6e is what removed the one it had.** With the
+      client for the first time rather than through a probe.
+      **That deferral is discharged**: §3.17 fixed the query string the same day and the shipped
+      Cartesia client then recovered 10/10 in a single final, so the fourth arm rests on the wire and
+      not on a fake. One asymmetry stays on the record rather than being smoothed over — the other
+      three carry a half-close-restored control run minutes later, and Cartesia has none, because
+      restoring arm A here would restore it on top of a session that did not exist when arms A/B/C
+      were measured. What §3.6d recorded for this surface (`A` 5/10, `B` 7/10, `C ≡ B`) came from a
+      probe already holding the corrected URL; the shipped client has only ever run arm B
+- [x] 3.6f **The terminator path has no bound, and §3.6e is what removed the one it had.** With the
       half-close gone, no client under `src/Verbara.Sdk.VoiceAi.Stt/` sends a close frame at all, and
       each `ReceiveLoopAsync` exits only on the vendor's close frame, a `WebSocketException`, or the
       caller's token — so a vendor that acknowledges the terminator and keeps the session open wedges
@@ -547,8 +554,19 @@ characterised* in §5.5.
       against everywhere else. **Closes when** either §3.17's live Cartesia run shows the vendor
       closing after `done` (recording that all four are measured and the bound is unnecessary), or a
       surface is measured acknowledging without closing and a drain deadline lands with the arm that
-      justified its value — not a round number
-- [ ] 3.17 **Cartesia STT cannot open a session at all — Class A, measured 2026-08-16, twelve runs.**
+      justified its value — not a round number.
+      **Closed 2026-08-16 by the first condition, and no code shipped.** §3.17's live run measured the
+      missing fourth surface: Cartesia answers `done` with a `{"type":"done","is_final":false,…}` frame
+      and closes `1000` **158 ms** later on a raw witness socket; through the shipped client the
+      session ends **172 ms** after the last audio frame. All four are now measured ending the session,
+      so the bound is not shipped — and the reason is now a measurement rather than its absence:
+      **there is no surface to calibrate a deadline against.** Recorded with the limit of what that
+      shows, because it is narrow: it says no surface *currently* acknowledges and holds, not that none
+      will. `finalize` remains the counterexample-shaped risk on this very surface — a sibling command
+      whose documented purpose is to flush without ending the session — so the trigger to build the
+      bound is the first surface measured behaving that way, and it is written into the guide's trade
+      paragraph rather than left in this file, since that is where the next reader will be
+- [x] 3.17 **Cartesia STT cannot open a session at all — Class A, measured 2026-08-16, twelve runs.**
       `CartesiaSpeechRecognizer.BuildUri()` returns `_options.BaseUri` verbatim —
       `wss://api.cartesia.ai/stt/websocket`, with **no query string** — and the vendor closes the
       session `1008 Missing sample_rate` every time. This is in-band: the upgrade succeeds, which is
@@ -568,7 +586,40 @@ characterised* in §5.5.
       that re-probe has to happen as part of closing this one rather than leave the only one of the
       four resting on a fake. Re-probing the shipped client on 2026-08-16 also produced the first
       end-to-end observation of the D1 silent-failure class through a shipped client rather than a
-      probe: zero results, dead in 0.5 s, `error=none`
+      probe: zero results, dead in 0.5 s, `error=none`.
+      **Done 2026-08-16.** `BuildUri` now takes the `AudioFormat` and both branches — production and
+      fake-server — carry the same query, so the expression under test is the expression that ships;
+      `sample_rate` comes from the format rather than from options because it describes the audio
+      actually being sent. `CartesiaSttInitMessage` and its `[JsonSerializable]` registration are
+      deleted. The fake records the upgrade's request-target and the body-assertion test is replaced
+      by two: the query carries the four parameters, and no configuration frame is sent at all. Both
+      were verified by reverting each half of the fix in turn — one failing test each, never both, so
+      neither assertion is passing for the wrong reason. **The live run closes the criterion**: three
+      arms in one process, same key, same host, seconds apart — the URI as previously shipped rejected
+      `1008 PolicyViolation` behind an in-band `{"type":"error","code":400}`; the shipped client
+      recovered **10/10** digits in one final; a raw witness socket carrying the same query saw the
+      transcript, then `{"type":"done"}`, then a `1000` close. Five further consecutive runs at the
+      shipped 5-second connect default: 10/10 each. Two side observations, both recorded in the guide
+      — the vendor normalizes spoken digits to numerals, so a word-matching metric reads a perfect
+      transcript as 0/10 (the §3.6d instrument defect met again on a second surface, which makes it a
+      property of the metric); and the live `transcript` frames match the field set the fixtures were
+      *authored* from, absent `confidence` included, so for that one message the documentation-derived
+      route is confirmed against the wire rather than merely against the page
+- [ ] 3.17a **The Cartesia STT fixtures are documentation-derived for a reason that no longer holds,
+      and the vendor's `done` frame has been observed but cannot be committed.** The three sidecars
+      under `Recordings/cartesia-stt/` state that the blocker is the absence of a capture credential;
+      §3.17's live run used one, so that is stale. The real blocker is narrower and now named in the
+      fake's class remark: `scripts/capture-provider-recording.py` speaks HTTP only — its `PROVIDERS`
+      table holds request/response plans, no WebSocket session plan — so there is no path that yields
+      a fixture whose provenance cites the canonical capture script. Consequence today: the fake still
+      closes on the terminator **without** the `{"type":"done","is_final":false,…}` acknowledgement the
+      service was measured sending ~158 ms before its close, so nothing asserts the client tolerates
+      that frame (the `flush_done` fixture covers the more dangerous `is_final: true` shape, which is
+      why this is a gap and not a hole). Deliberately not closed by hand-writing the frame from a run:
+      a fixture whose provenance can only cite a deleted harness is the artifact this protocol exists
+      to prevent. **Closes when** the capture script grows a WebSocket plan for this surface and the
+      `done` frame — and, while the credential is there, the `transcript` and `error` frames — land as
+      `class: "recorded"` with the sidecars corrected
 - [ ] 3.18 **AssemblyAI rejects every message shorter than 50 ms, and the client cannot produce longer
       ones.** Measured 2026-08-16: a 20 ms message is answered
       `3007 Input Duration Violation: 20.0 ms. Expected between 50 and 1000 ms`, three of three, and
