@@ -144,17 +144,43 @@ public class CartesiaSpeechRecognizerTests : IAsyncDisposable
             .Which.Transcript.Should().Be(RecordedText(CartesiaFakeServer.FinalTranscriptFrame));
     }
 
+    /// <summary>
+    /// The session parameters belong in the query string, and the assertion moved there with them.
+    /// This test used to read them out of an opening JSON frame — a frame the service does not
+    /// accept, answering it with <c>Expected one of: "finalize", "done", "close"</c> — while the
+    /// client sent no query at all and every real session was closed <c>1008 Missing sample_rate</c>.
+    /// A fake that only inspects frames cannot see a defect that lives in the request line, which is
+    /// how a client that had never opened a session kept a green suite.
+    /// </summary>
     [Fact]
-    public async Task StreamAsync_ShouldSendStartConfig_WhenConnectionOpens()
+    public async Task StreamAsync_ShouldSendSessionParametersInTheQuery_WhenConnectionOpens()
     {
         var recognizer = BuildRecognizer();
         await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await SessionEndedAsync();
 
-        _server.ReceivedJsonMessages.Should().NotBeEmpty();
-        var init = _server.ReceivedJsonMessages[0];
-        init.Should().Contain("\"type\":\"start\"");
-        init.Should().Contain("\"model\":\"ink-whisper\"");
-        init.Should().Contain("\"sample_rate\":8000");
+        var query = new Uri($"ws://localhost{_server.RequestUri}").Query;
+        query.Should().Contain("sample_rate=8000", "the vendor names this one when it is missing")
+            .And.Contain("model=ink-whisper")
+            .And.Contain("language=en")
+            .And.Contain("encoding=pcm_s16le");
+    }
+
+    /// <summary>
+    /// The other half of the same fix: the parameters moved to the query, so nothing may be sent as
+    /// an opening frame any more. Asserting the query alone would pass on a client that sent both,
+    /// which is the state the vendor rejects — and the terminator is deliberately excluded here,
+    /// since it is the one text frame this socket does accept.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldSendNoConfigurationFrame_WhenConnectionOpens()
+    {
+        var recognizer = BuildRecognizer();
+        await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await SessionEndedAsync();
+
+        _server.ReceivedJsonMessages.Should().BeEmpty(
+            "this service accepts only \"finalize\", \"done\" and \"close\" as text");
     }
 
     [Fact]

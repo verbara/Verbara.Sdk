@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: Cartesia realtime STT could not open a session at all
+
+`CartesiaSpeechRecognizer` connected to `wss://api.cartesia.ai/stt/websocket` with **no query string**
+and sent its configuration as an opening JSON frame. Both halves were wrong. The service reads session
+parameters from the query and closes `1008 Missing sample_rate` without one — twelve runs on
+2026-08-16, twelve rejections — and it has no opening message at all, answering JSON on that socket
+with `Invalid client message: Unrecognized text message "{…}". Expected one of: "finalize", "done",
+"close"`. The rejection is in band, behind a successful `101`, which is why a probe that stopped at the
+handshake recorded this surface as healthy while no session had ever opened.
+
+- **`model`, `language`, `encoding` and `sample_rate` now travel in the query string**, where this
+  service reads them. `sample_rate` comes from the `AudioFormat` passed to `StreamAsync` rather than
+  from options, because it describes the audio actually being sent.
+
+- **`CartesiaSttInitMessage` is deleted, not left unsent** — the DTO and its `[JsonSerializable]`
+  registration are both gone. A type that only ever produced a message the vendor rejects is not
+  dead weight to keep for symmetry with the other clients.
+
+- **Measured through the shipped client with a control in the same run.** The URI as previously
+  shipped was rejected `1008` seconds before the fixed client recovered **10/10** spoken digits in one
+  final transcript, same key, same host — so the difference is the query string and cannot be the
+  account or the day. Repeated five consecutive times at the shipped 5-second connect default: 10/10
+  each time.
+
+- **The test asserted the wrong channel, which is how this survived a green suite.** The fake checked
+  the *body* of an opening frame the vendor never reads; it now records the upgrade's request-target
+  and asserts the four parameters there, plus that no configuration frame is sent at all. Both new
+  assertions were verified by reverting each half of the fix in turn — each failure lands on exactly
+  one test.
+
 ### Fixed — two of the four streaming STT clients returned no final transcript at all
 
 Every streaming STT client ended its input the same way: stream the audio, then `CloseOutputAsync`.
@@ -56,10 +86,12 @@ way to consume this API — got nothing from either provider.
   which can be before the server has read what the client sent just before that. Re-verified by
   injecting both destructive arms into all four clients — eight arms, eight detections.
 
-Named so it is not mistaken for done: **Cartesia's fix is asserted by its fake and unmeasured on the
-wire**, because that client cannot open a session at all — it connects with no query string and the
-vendor closes `1008 Missing sample_rate`. Its live verification is deferred to that fix. The way it
-fails is its own finding: zero results, dead in half a second, and no error reaches the caller
+Named so it is not mistaken for done: **Cartesia's fix was asserted by its fake and unmeasured on the
+wire**, because that client could not open a session at all — it connected with no query string and the
+vendor closed `1008 Missing sample_rate`. Its live verification was deferred to that fix. **That caveat
+is now retired**: the query string is fixed (entry above) and the same shipped client returns 10/10 on
+the wire, so all four surfaces in this entry are measured rather than three. The way it failed is still
+its own finding: zero results, dead in half a second, and no error reaching the caller
 (`Sdk/ADR-0049` D1, observed end-to-end through a shipped client for the first time). Also unchanged:
 AssemblyAI still sends one message per caller frame and so still fails any caller feeding frames
 shorter than the vendor's 50 ms floor.
@@ -68,11 +100,14 @@ And the trade this makes, stated rather than left to be found: no client here se
 more, so a session now ends only when the **vendor** closes it. The unbounded wait is not new — the old
 code also sat in `ReceiveAsync` waiting on a peer that might never answer — but its backing is weaker,
 because RFC 6455 obliges a peer to echo a close frame and nothing obliges a vendor to end a session.
-Three of the four were measured ending it; Cartesia could not be measured, and is the one surface with
-a sibling command (`finalize`) whose purpose is to flush *without* ending the session. A drain deadline
-is deliberately **not** shipped here: the measurement that would set it does not exist yet, and a
-timeout picked ahead of that measurement is exactly the unmeasured machinery this work removed
-elsewhere.
+**All four are now measured ending it**, Cartesia included once its query string was fixed: it answers
+the terminator with a `{"type":"done"}` frame and closes `1000` about 158 ms later, and through the
+shipped client the session ends 172 ms after the last audio frame. A drain deadline is still
+deliberately **not** shipped, but the reason has changed from a missing measurement to a stated one:
+no surface in this package acknowledges a terminator and then holds the session open, so there is
+nothing to calibrate a timeout against. Cartesia remains the one surface with a sibling command
+(`finalize`) whose purpose is to flush *without* ending the session; the client does not send it, and
+the first surface measured acknowledging-without-closing is what should trigger building the bound.
 
 ### Fixed — BREAKING: Speechmatics realtime STT could not open a session at all
 

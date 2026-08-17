@@ -64,15 +64,6 @@ internal sealed class GoogleSpeechAlternative
 }
 
 // --- Cartesia STT DTOs ---
-internal sealed class CartesiaSttInitMessage
-{
-    [JsonPropertyName("type")] public string Type { get; set; } = "start";
-    [JsonPropertyName("model")] public string Model { get; set; } = string.Empty;
-    [JsonPropertyName("language")] public string Language { get; set; } = string.Empty;
-    [JsonPropertyName("encoding")] public string Encoding { get; set; } = "pcm_s16le";
-    [JsonPropertyName("sample_rate")] public int SampleRate { get; set; }
-}
-
 internal sealed class CartesiaSttTranscriptMessage
 {
     [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
@@ -150,7 +141,6 @@ internal sealed class SpeechmaticsAlternative
 [JsonSerializable(typeof(GoogleSpeechResponse))]
 [JsonSerializable(typeof(GoogleSpeechResult))]
 [JsonSerializable(typeof(GoogleSpeechAlternative))]
-[JsonSerializable(typeof(CartesiaSttInitMessage))]
 [JsonSerializable(typeof(CartesiaSttTranscriptMessage))]
 [JsonSerializable(typeof(AssemblyAiTurnMessage))]
 [JsonSerializable(typeof(SpeechmaticsStartRecognitionMessage))]
