@@ -82,29 +82,46 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
         var wsUri = BuildUri(wireFormat.SampleRate);
         using var ws = new ClientWebSocket();
 
+        // So a rejected upgrade can report the vendor's own status rather than "the upgrade failed".
+        ws.Options.CollectHttpResponseDetails = true;
+
         // AssemblyAI auth: raw API key in Authorization header (no "Bearer " prefix). Unconditional,
         // so every test asserts that shape rather than the vendor being the first to check it.
         ws.Options.SetRequestHeader("Authorization", _options.ApiKey);
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
-        await ws.ConnectAsync(wsUri, connectCts.Token).ConfigureAwait(false);
+        try
+        {
+            await ws.ConnectAsync(wsUri, connectCts.Token).ConfigureAwait(false);
+        }
+        catch (WebSocketException ex)
+        {
+            // ADR-0050 E7 — one type whether the vendor validates at the upgrade or in band.
+            throw SpeechProviderFailureException.FromHandshake(ProviderName, ws.HttpStatusCode, ex);
+        }
 
         var channel = Channel.CreateUnbounded<SpeechRecognitionResult>();
 
         // Fire-and-forget: stream audio to the server as binary WebSocket messages.
         var sendTask = SendLoopAsync(ws, audioFrames, wireFormat, ct);
 
-        // Receive loop writes transcripts to channel, then completes the writer.
+        // Receive loop writes transcripts to channel, then completes the writer — with the failure
+        // when the session failed.
+        var sawVendorFrame = false;
         var receiveTask = Task.Run(async () =>
         {
             try
             {
-                await ReceiveLoopAsync(ws, channel.Writer, ct).ConfigureAwait(false);
-            }
-            finally
-            {
+                sawVendorFrame = await ReceiveLoopAsync(ws, channel.Writer, ProviderName, ct)
+                    .ConfigureAwait(false);
                 channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                // Completing the writer *with* the exception is what carries a provider failure out
+                // of this background task and into the caller's MoveNextAsync (ADR-0050 E1).
+                channel.Writer.TryComplete(ex);
             }
         }, ct);
 
@@ -114,6 +131,17 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
 
         // Ensure both tasks complete (propagate exceptions via AggregateException).
         await Task.WhenAll(sendTask, receiveTask).ConfigureAwait(false);
+
+        // ADR-0050 E5, the recognition rule, which is deliberately not the synthesis one: zero
+        // transcripts is a healthy outcome (turn detection flushes on any trigger, so noise with no
+        // speech is a session that correctly produced nothing). A session in which the vendor never
+        // sent a single message — not even `Begin` — is the silent nothing D2 exists to name.
+        if (!sawVendorFrame)
+        {
+            throw new SpeechProviderEmptyResultException(
+                ProviderName,
+                $"{ProviderName} ended the session without sending a single message and without reporting a failure.");
+        }
     }
 
     /// <summary>
@@ -224,12 +252,24 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
         }
     }
 
-    private static async Task ReceiveLoopAsync(
+    /// <summary>
+    /// Reads the session to its end. Returns whether the vendor sent any message at all — the
+    /// evidence <c>ADR-0050</c> E5's recognition rule turns on, which is <em>not</em> whether any
+    /// transcript was produced.
+    /// </summary>
+    /// <exception cref="SpeechProviderFailureException">The session failed.</exception>
+    private static async Task<bool> ReceiveLoopAsync(
         ClientWebSocket ws,
         ChannelWriter<SpeechRecognitionResult> writer,
+        string provider,
         CancellationToken ct)
     {
         var buf = new byte[65536];
+
+        // Counts messages, not transcripts, and excludes the close frame: "the vendor closed and
+        // said nothing else" is precisely the case this has to report.
+        var sawVendorFrame = false;
+
         while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
         {
             ValueWebSocketReceiveResult result;
@@ -237,13 +277,32 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
             {
                 result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
             }
+            // Cancellation is the caller's own instruction and never a provider failure
+            // (ADR-0050 E6).
             catch (OperationCanceledException) { break; }
-            catch (WebSocketException) { break; }
+            catch (WebSocketException ex)
+            {
+                // Door 3 (ADR-0050 E2c). This was `break`: a session the peer killed mid-utterance
+                // ended as though the vendor had finished, and the caller acted on the partial.
+                throw SpeechProviderFailureException.FromTransport(provider, ex);
+            }
 
-            // Unchanged line, changed meaning: with the half-close gone from the send loop, the
-            // close frame that ends this loop is the vendor deciding the session is over, not the
-            // vendor answering a close we sent before it had finished transcribing.
-            if (result.MessageType == WebSocketMessageType.Close) break;
+            // Door 2 (ADR-0050 E2b), and this vendor closes with its error code — the sub-floor audio
+            // message that draws `3007` in band closes the session `3007` as well, so the frame and
+            // the close code are two spellings of one failure and either door alone catches it.
+            //
+            // With the half-close gone from the send loop, a *normal* close here is the vendor
+            // deciding the session is over, not the vendor answering a close we sent before it had
+            // finished transcribing.
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                var closeFailure = SpeechProviderFailureException.FromCloseStatus(
+                    provider, ws.CloseStatus, ws.CloseStatusDescription);
+                if (closeFailure is not null) throw closeFailure;
+                break;
+            }
+
+            sawVendorFrame = true;
             if (result.MessageType != WebSocketMessageType.Text) continue;
 
             var json = Encoding.UTF8.GetString(buf, 0, result.Count);
@@ -252,6 +311,18 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
                 VoiceAiSttJsonContext.Default.AssemblyAiTurnMessage);
 
             if (msg is null) continue;
+
+            // Door 1 (ADR-0049 D1, remedied under ADR-0050 E1). This is the message §4.15 named: the
+            // error frame that answered every 20 ms-framed session went straight through the Turn
+            // test below and onto the floor, which is why sending audio the vendor rejected produced
+            // an empty transcript and no error to explain it.
+            if (string.Equals(msg.Type, "Error", StringComparison.Ordinal))
+            {
+                throw SpeechProviderFailureException.FromErrorFrame(
+                    provider,
+                    msg.ErrorCode?.ToString(CultureInfo.InvariantCulture),
+                    msg.Error);
+            }
 
             // Only "Turn" messages carry transcripts. Begin/Termination are lifecycle.
             if (!string.Equals(msg.Type, "Turn", StringComparison.Ordinal)) continue;
@@ -265,6 +336,8 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
                 TimeSpan.Zero);
             await writer.WriteAsync(stt, ct).ConfigureAwait(false);
         }
+
+        return sawVendorFrame;
     }
 
     /// <summary>

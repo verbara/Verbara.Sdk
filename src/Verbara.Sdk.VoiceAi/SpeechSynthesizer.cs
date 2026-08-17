@@ -15,6 +15,36 @@ public abstract class SpeechSynthesizer : IAsyncDisposable
     public virtual string ProviderName => GetType().Name;
 
     /// <summary>Synthesizes text into a stream of audio frames.</summary>
+    /// <remarks>
+    /// <para>
+    /// Every provider in this SDK signals a failure by throwing (<c>ADR-0050</c> E1); a synthesis
+    /// never ends quietly having produced nothing. Because these are raised from the enumeration,
+    /// they surface at <c>MoveNextAsync</c> — that is, from the <c>await foreach</c> — and not from
+    /// the call that hands back this enumerable.
+    /// </para>
+    /// <para>
+    /// A third-party implementation is free not to throw, which is why the pipeline keeps a
+    /// zero-output counter as a backstop (<c>ADR-0050</c> E9). The counter is not a substitute: a
+    /// caller of this method directly sees nothing unless the implementation throws.
+    /// </para>
+    /// <para>
+    /// <paramref name="text"/> that is empty or whitespace yields no audio and does <em>not</em>
+    /// throw: no provider was asked for anything, so there is no provider failure to report.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="SpeechProviderFailureException">
+    /// The provider reported a failure — its own error frame, a failure close code, a rejected
+    /// upgrade, or a connection that died mid-stream.
+    /// <see cref="SpeechProviderFailureException.Signal"/> says which.
+    /// </exception>
+    /// <exception cref="SpeechProviderEmptyResultException">
+    /// The session ended cleanly, was not cancelled, reported no failure, and produced no audio.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="ct"/> was cancelled. Cancellation is never reported as a provider failure
+    /// (<c>ADR-0050</c> E6), so a barge-in that ends a synthesis at zero bytes arrives here and not
+    /// as a <see cref="SpeechProviderException"/>.
+    /// </exception>
     public abstract IAsyncEnumerable<ReadOnlyMemory<byte>> SynthesizeAsync(
         string text,
         AudioFormat outputFormat,

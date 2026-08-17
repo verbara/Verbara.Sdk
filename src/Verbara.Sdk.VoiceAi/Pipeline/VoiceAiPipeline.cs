@@ -291,6 +291,24 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                     }
                     await session.WriteAudioAsync(audioChunk, linked.Token).ConfigureAwait(false);
                 }
+
+                // ADR-0050 E9, and the whole reason it is additive: reaching this line means the
+                // synthesizer finished, was not cancelled and threw nothing, so the eight WebSocket
+                // clients in this SDK cannot arrive here empty — they raise
+                // SpeechProviderEmptyResultException and land in the catch below. What can arrive here
+                // empty is the residual: an HTTP-backed synthesizer, or any third-party subclass of the
+                // public base, returning silence in silence. `ttfaRecorded` is the flag to test because
+                // it is set exactly once, on the first chunk yielded.
+                //
+                // Only the provider is tagged. The two-type discriminator that E8 substitutes for D2's
+                // is not a variable at this site — nothing was thrown here, which is precisely what
+                // makes the sample worth taking.
+                if (!ttfaRecorded)
+                {
+                    SpeechSynthesisMetrics.SynthesesSilent.Add(1,
+                        new KeyValuePair<string, object?>("voiceai.provider", _tts.ProviderName));
+                }
+
                 SpeechSynthesisMetrics.SynthesesCompleted.Add(1);
                 Publish(new SynthesisEndedEvent(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow - synthStart));
                 history.Add(new ConversationTurn(transcript, response, DateTimeOffset.UtcNow));

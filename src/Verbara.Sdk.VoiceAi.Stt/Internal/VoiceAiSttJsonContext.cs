@@ -8,6 +8,19 @@ internal sealed class DeepgramResultMessage
     [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
     [JsonPropertyName("is_final")] public bool IsFinal { get; set; }
     [JsonPropertyName("channel")] public DeepgramChannel? Channel { get; set; }
+
+    /// <summary>
+    /// Detail on a <c>type: "Error"</c> frame — the vendor's documented member, <b>not observed</b>.
+    /// This surface rejects a bad credential at the handshake (<c>401</c>), so no live run has produced
+    /// an in-band failure frame here and the field set of this message type is uncharacterised.
+    /// </summary>
+    [JsonPropertyName("description")] public string? Description { get; set; }
+
+    /// <summary>
+    /// The short label the same documented frame carries alongside <see cref="Description"/>. Also
+    /// unobserved; read only as a fallback when <see cref="Description"/> is absent.
+    /// </summary>
+    [JsonPropertyName("message")] public string? Message { get; set; }
 }
 
 internal sealed class DeepgramChannel
@@ -70,6 +83,17 @@ internal sealed class CartesiaSttTranscriptMessage
     [JsonPropertyName("text")] public string Text { get; set; } = string.Empty;
     [JsonPropertyName("is_final")] public bool IsFinal { get; set; }
     [JsonPropertyName("confidence")] public float? Confidence { get; set; }
+
+    /// <summary>
+    /// Numeric code on a <c>type: "error"</c> frame. Measured, not documented: the run that found the
+    /// missing query string was answered
+    /// <c>{"type":"error","code":400,"message":"Missing sample_rate: …"}</c> in band, then close
+    /// <c>1008</c> — so the frame carries an HTTP-shaped code inside a WebSocket session.
+    /// </summary>
+    [JsonPropertyName("code")] public int? Code { get; set; }
+
+    /// <summary>The reason accompanying <see cref="Code"/> on an error frame.</summary>
+    [JsonPropertyName("message")] public string? Message { get; set; }
 }
 
 // --- AssemblyAI Universal Streaming v3 DTOs ---
@@ -79,6 +103,20 @@ internal sealed class AssemblyAiTurnMessage
     [JsonPropertyName("transcript")] public string Transcript { get; init; } = string.Empty;
     [JsonPropertyName("end_of_turn")] public bool EndOfTurn { get; init; }
     [JsonPropertyName("turn_is_formatted")] public bool TurnIsFormatted { get; init; }
+
+    /// <summary>
+    /// The vendor's numeric code on a <c>type: "Error"</c> frame. Measured: a sub-floor audio message
+    /// is answered <c>3007</c> in band and the session then closes with the same <c>3007</c> as its
+    /// WebSocket code.
+    /// </summary>
+    [JsonPropertyName("error_code")] public int? ErrorCode { get; init; }
+
+    /// <summary>
+    /// The reason accompanying <see cref="ErrorCode"/> — measured as <c>"Input Duration Error: Input
+    /// Duration Violation: 25.0 ms. Expected between 50 and 1000 ms"</c>, which is the rejection that
+    /// states the window this client now coalesces to.
+    /// </summary>
+    [JsonPropertyName("error")] public string? Error { get; init; }
 }
 
 // --- Speechmatics Realtime DTOs ---
@@ -118,8 +156,24 @@ internal sealed class SpeechmaticsEndOfStreamMessage
 
 internal sealed class SpeechmaticsTranscriptMessage
 {
+    /// <summary>
+    /// The message <em>kind</em>, not human text — <c>AddTranscript</c>, <c>RecognitionStarted</c>,
+    /// <c>Error</c>. This vendor names the discriminator <c>message</c>, where others name it
+    /// <c>type</c>.
+    /// </summary>
     [JsonPropertyName("message")] public string Message { get; set; } = string.Empty;
+
     [JsonPropertyName("results")] public SpeechmaticsResult[]? Results { get; set; }
+
+    /// <summary>
+    /// The vendor's symbolic code on an <c>Error</c> or <c>Warning</c> message —
+    /// <c>not_authorised</c> and the like. Note the inversion against every other provider here:
+    /// on this surface <c>type</c> is the code and <c>message</c> is the kind.
+    /// </summary>
+    [JsonPropertyName("type")] public string? Type { get; set; }
+
+    /// <summary>Human-readable detail accompanying <see cref="Type"/>.</summary>
+    [JsonPropertyName("reason")] public string? Reason { get; set; }
 }
 
 internal sealed class SpeechmaticsResult

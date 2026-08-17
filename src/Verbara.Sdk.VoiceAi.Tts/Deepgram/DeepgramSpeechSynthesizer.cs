@@ -60,8 +60,15 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
         // issued, independent of scheduling/mock latency. Mirrors the STT fence (ADR-0038).
         ct.ThrowIfCancellationRequested();
 
+        // Nothing is asked of the provider for text that carries no speech, so the zero audio that
+        // follows is not a provider failure and must not be reported as one (ADR-0050 E5).
+        if (string.IsNullOrWhiteSpace(text)) yield break;
+
         var uri = BuildUri(outputFormat);
         using var ws = new ClientWebSocket();
+
+        // So a rejected upgrade can report the vendor's own status rather than "the upgrade failed".
+        ws.Options.CollectHttpResponseDetails = true;
 
         // Unconditional, so the scheme token is part of what the suite exercises. `Token` is not
         // `Bearer` and not a bare key, and nothing could tell the difference while this line was
@@ -70,7 +77,16 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
-        await ws.ConnectAsync(uri, connectCts.Token).ConfigureAwait(false);
+        try
+        {
+            await ws.ConnectAsync(uri, connectCts.Token).ConfigureAwait(false);
+        }
+        catch (WebSocketException ex)
+        {
+            // ADR-0050 E7 — the caller catches one type whether the vendor rejects a credential at
+            // the upgrade or in band, which is the vendor's choice and not this client's contract.
+            throw SpeechProviderFailureException.FromHandshake(ProviderName, ws.HttpStatusCode, ex);
+        }
 
         var channel = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
 
@@ -81,26 +97,47 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
         // Fire-and-forget: send Speak + Flush messages, then send Close.
         var sendTask = SendRequestAsync(ws, text, sessionCts.Token);
 
-        // Receive loop writes binary audio frames to the channel; stops on Flushed/Close.
+        // Receive loop writes binary audio frames to the channel; stops on Flushed/Close — and
+        // completes the writer with the failure when the session failed.
         var receiveTask = Task.Run(async () =>
         {
             try
             {
-                await ReceiveFramesAsync(ws, channel.Writer, sessionCts.Token).ConfigureAwait(false);
+                await ReceiveFramesAsync(ws, channel.Writer, ProviderName, sessionCts.Token)
+                    .ConfigureAwait(false);
+                channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                // Completing the writer *with* the exception is what carries a provider failure out
+                // of this background task and into the caller's MoveNextAsync (ADR-0050 E1).
+                channel.Writer.TryComplete(ex);
             }
             finally
             {
-                channel.Writer.TryComplete();
                 await sessionCts.CancelAsync().ConfigureAwait(false);
             }
         }, ct);
 
         // Yield binary audio frames as they arrive (true streaming).
+        var yieldedAudio = false;
         await foreach (var frame in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+        {
+            if (frame.Length > 0) yieldedAudio = true;
             yield return frame;
+        }
 
         // Propagate any exceptions from send/receive tasks.
         await Task.WhenAll(sendTask, receiveTask).ConfigureAwait(false);
+
+        // ADR-0050 E5, the synthesis rule. Unreachable when the loop threw (the reader raises that
+        // first) and unreachable under cancellation (ReadAllAsync raises OperationCanceledException).
+        if (!yieldedAudio)
+        {
+            throw new SpeechProviderEmptyResultException(
+                ProviderName,
+                $"{ProviderName} ended the session without producing any audio and without reporting a failure.");
+        }
     }
 
     private static async Task SendRequestAsync(
@@ -108,19 +145,28 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
         string text,
         CancellationToken ct)
     {
-        // Send the Speak message with the full text.
-        var speakMsg = new DeepgramSpeakMessage { Text = text };
-        var speakJson = JsonSerializer.Serialize(speakMsg, VoiceAiTtsJsonContext.Default.DeepgramSpeakMessage);
-        await ws.SendAsync(
-            Encoding.UTF8.GetBytes(speakJson).AsMemory(),
-            WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+        // Speak and Flush are fire-and-forget request frames, and the receive loop owns this session's
+        // failure now that it raises one (ADR-0050 E1). A send that loses the race against a socket
+        // the provider already closed must not fault this task as well: Task.WhenAll is not reached
+        // on the failure path, so that second exception would go unobserved.
+        try
+        {
+            // Send the Speak message with the full text.
+            var speakMsg = new DeepgramSpeakMessage { Text = text };
+            var speakJson = JsonSerializer.Serialize(speakMsg, VoiceAiTtsJsonContext.Default.DeepgramSpeakMessage);
+            await ws.SendAsync(
+                Encoding.UTF8.GetBytes(speakJson).AsMemory(),
+                WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
 
-        // Send Flush to signal end-of-text and trigger audio generation.
-        var flushMsg = new DeepgramControlMessage { Type = "Flush" };
-        var flushJson = JsonSerializer.Serialize(flushMsg, VoiceAiTtsJsonContext.Default.DeepgramControlMessage);
-        await ws.SendAsync(
-            Encoding.UTF8.GetBytes(flushJson).AsMemory(),
-            WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+            // Send Flush to signal end-of-text and trigger audio generation.
+            var flushMsg = new DeepgramControlMessage { Type = "Flush" };
+            var flushJson = JsonSerializer.Serialize(flushMsg, VoiceAiTtsJsonContext.Default.DeepgramControlMessage);
+            await ws.SendAsync(
+                Encoding.UTF8.GetBytes(flushJson).AsMemory(),
+                WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { return; /* the session ended: nothing left to send */ }
+        catch (WebSocketException) { return; /* peer aborted the connection mid-send */ }
 
         // Send Close to gracefully terminate the session after flushing.
         // Guarded: the server may close first (Flushed → server-initiated close).
@@ -144,6 +190,7 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
     private static async Task ReceiveFramesAsync(
         ClientWebSocket ws,
         ChannelWriter<ReadOnlyMemory<byte>> writer,
+        string provider,
         CancellationToken ct)
     {
         var buf = new byte[65536];
@@ -155,10 +202,26 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
             {
                 result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
             }
+            // Cancellation is the caller's own instruction and never a provider failure
+            // (ADR-0050 E6).
             catch (OperationCanceledException) { break; }
-            catch (WebSocketException) { break; }
+            catch (WebSocketException ex)
+            {
+                // Door 3 (ADR-0050 E2c). This was `break`, which turned a socket that died
+                // mid-session into a normal completion.
+                throw SpeechProviderFailureException.FromTransport(provider, ex);
+            }
 
-            if (result.MessageType == WebSocketMessageType.Close) break;
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                // Door 2 (ADR-0050 E2b), and the one that carries the measured evidence on this
+                // surface: this client's only in-band failure shape is unmeasured, so the close code
+                // is what a rejected session is actually recognised by here.
+                var closeFailure = SpeechProviderFailureException.FromCloseStatus(
+                    provider, ws.CloseStatus, ws.CloseStatusDescription);
+                if (closeFailure is not null) throw closeFailure;
+                break;
+            }
 
             if (result.MessageType == WebSocketMessageType.Binary)
             {
@@ -170,7 +233,7 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
 
             if (result.MessageType == WebSocketMessageType.Text)
             {
-                var done = HandleTextFrame(buf, result.Count);
+                var done = HandleTextFrame(buf, result.Count, provider);
                 if (done) return;
             }
         }
@@ -180,7 +243,8 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
     /// Parses a server text frame and returns <see langword="true"/> when the stream is complete
     /// (<c>Flushed</c> message received).
     /// </summary>
-    private static bool HandleTextFrame(byte[] buf, int count)
+    /// <exception cref="SpeechProviderFailureException">The frame reported a failure.</exception>
+    private static bool HandleTextFrame(byte[] buf, int count, string provider)
     {
         var json = Encoding.UTF8.GetString(buf, 0, count);
         var control = JsonSerializer.Deserialize(
@@ -194,6 +258,17 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
             case "Flushed":
                 // All audio for the current flush sequence has been sent — stream is complete.
                 return true;
+
+            case "Error":
+                // Door 1 (ADR-0050 E1) — and the one branch of this change with no measurement behind
+                // it: no live run against this endpoint produced a failure frame, so the member names
+                // are the vendor's documented ones and not observed ones. Kept because the cost is a
+                // switch arm and the alternative is leaving the door open on a guess that this vendor
+                // never sends one; the measured door on this surface is the close code above. Same
+                // reasoning as the Binary branches tolerated without evidence elsewhere in this
+                // package — the difference is only that this one is written down.
+                throw SpeechProviderFailureException.FromErrorFrame(
+                    provider, control.Code, control.Description);
 
             case "Warning":
                 // Server warning — log but do not throw; audio delivery continues.

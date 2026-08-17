@@ -92,8 +92,9 @@ kept, because swapping it would be an unmeasured change riding along with a meas
    "abandon the request". *Fixed.*
 3. The receive loop compares an error *message* against the literal string `"error"`, which no real
    message equals, so both live failures fall through, the close is swallowed, and the caller gets an
-   empty stream and no exception. *Open* — it is a behaviour change and belongs to the ADR-0049 D1
-   remedy, not to a route fix.
+   empty stream and no exception. ***Fixed*** — under ADR-0050, the D1 remedy this pointed at (see
+   *The silent-failure class, closed* below). It was left open here because it is a behaviour change and
+   did not belong to a route fix.
 
 **Speechmatics TTS** — the voice is selected by **path segment**, not by a body field: `/generate`
 returns `404` (identically to a route that does not exist, because that is what it is),
@@ -108,8 +109,8 @@ after the request, which alone cost everything (a control differing only in that
 chunks, 32 694 B, in 1.022 s); and only then does the frame-type defect appear — audio arrives base64
 in the `data` field of `type="chunk"` **text** frames, while the loop read only binary. All three are
 *fixed*, in one commit, because fixing only the frame type would still have shipped a provider that
-produces silence. A fourth is *open*: an `error` frame ends the stream with no exception (ADR-0049
-D1). What this surface's row does **not** claim: the fixed client has not itself been run live. What
+produces silence. A fourth was *open* and is now **fixed** under ADR-0050: an `error` frame ended the
+stream with no exception (ADR-0049 D1). What this surface's row does **not** claim: the fixed client has not itself been run live. What
 ran was a probe reproducing the corrected request — the same wire behaviour the client now produces,
 but a reconstruction of it, not the artifact.
 
@@ -126,9 +127,9 @@ but a reconstruction of it, not the artifact.
 Two defects, both total, and they fire in sequence: the half-close, then the frame type. **0 binary
 bytes** ever arrive, so the client's "only yield binary frames" comment is not a partial defect — the
 branch it prefers receives nothing at all. Both are *fixed*, in one commit, for the same reason
-Cartesia's are. A third is *open*: the invalid-credential frame from arm D has no `audio` member and
-is silently dropped, so a rejected key still reaches the caller as an empty stream and no exception
-(ADR-0049 D1). As with Cartesia, the fixed client has not itself been run live — arm B is a
+Cartesia's are. A third was *open* and is now **fixed** under ADR-0050: the invalid-credential frame from arm D has no
+`audio` member and was silently dropped, so a rejected key reached the caller as an empty stream and no
+exception (ADR-0049 D1). As with Cartesia, the fixed client has not itself been run live — arm B is a
 reconstruction of what it now sends, not the artifact. Arm C is worth its cost for what it
 **refuted**: the
 shipped frames carry `"flush": null` and `"voice_settings": null`, the exact shape that was a total
@@ -199,8 +200,9 @@ streamed no audio. The half-close runs of 2026-08-16 streamed audio and did obse
 this row now carries the later date; the credential arms above remain 08-15 measurements and are not
 redated by it. The half-close — which cost the caller every final transcript — **is fixed**, and the
 run that measured the fix through the shipped client is the same one that retired the credential fix's
-caveat above (see the remediation section below). **Four** defects stay open on this surface: the swallowed `Error` frame (ADR-0049 D1, so a
-rejected session still reaches the caller as an empty stream) and the three assembly signals the client
+caveat above (see the remediation section below). The swallowed `Error` frame (ADR-0049 D1, so a
+rejected session reached the caller as an empty stream) is **fixed** under ADR-0050. **Three** defects
+stay open on this surface, all in assembly rather than in failure reporting: the three signals the client
 ignores — `word_delimiter`, `attaches_to`, and the vendor's already-assembled `metadata.transcript`.
 
 **Cartesia STT — the session could not open at all, and the row that said otherwise was corrected
@@ -261,8 +263,9 @@ in-band validation point and a matching client defect; real key `101` with first
   `3007 Input Duration Violation: 20.0 ms. Expected between 50 and 1000 ms`. The client did not batch
   — `AssemblyAiSpeechRecognizer` sent one WebSocket message per frame the caller yields — so a caller
   feeding 20 ms frames, which is what an Asterisk AudioSocket source produces, failed every session.
-  Silently: the receive loop filters to transcript messages, so the error is dropped on the floor
-  (§4.15). Sessions here were driven at 100 ms to measure anything else at all, and that deviation is
+  Silently: the receive loop filtered to transcript messages, so the error was dropped on the floor
+  (§4.15 — the drop itself is **fixed** under ADR-0050; the coalescing fix below is what stops the error
+  being provoked in the first place). Sessions here were driven at 100 ms to measure anything else at all, and that deviation is
   part of the result. **Fixed 2026-08-17** — the client now coalesces into the vendor's window; the
   measurement that fixed it, including which end of the window the *declared sample rate* is enforced
   on, is below.
@@ -477,6 +480,38 @@ fix in turn fails a non-empty set of tests, and the two halves are covered indep
 option as the declared rate fails exactly 1 test and nothing else, removing the coalescing fails 4 while
 that rate assertion still passes, and sending the tail short fails 3 — a strict subset of those 4, since
 padding only concerns the last message. The pre-fix client fails 5, the union of the first two.
+
+## The silent-failure class, closed — 2026-08-17
+
+Every *Open* marker above that read "ADR-0049 D1" pointed at one missing decision: what a client should
+do when the vendor says a session failed. ADR-0050 settles it — a typed exception thrown from the
+receive loop — and this section records what closing it actually took, because the shape found was wider
+than the shape recorded.
+
+**The class was three doors, not one.** Each surface above was written up by the door that produced its
+measured symptom, which made the class look like a frame-filter problem. It was not:
+
+| Door | What it looked like | How many of the 8 WebSocket clients had it open |
+|---|---|---|
+| The frame allow-list | an error frame falls into the same discard branch as lifecycle noise | 8 |
+| The **close code** | `ws.CloseStatus` read, then thrown away — `1002`, `1008`, `4001` all indistinguishable from a finished session | 8 |
+| `catch (WebSocketException) { break; }` | a socket dying mid-stream ends the stream as normal completion | 8 |
+
+A surface whose allow-list was clean was still silent through the other two, so "which surfaces are
+affected" went from the five with a filter defect to **eight** — every WebSocket speech client in the
+SDK.
+
+**What a caller sees now.** `SpeechProviderFailureException` when the vendor reported a failure,
+carrying a `Signal` (`ErrorFrame`, `CloseCode`, `Handshake`, `Transport`) and the vendor's own code and
+text; `SpeechProviderEmptyResultException` when the session ended clean and empty. Cancellation raises
+neither. On the recognition side the empty case is deliberately narrower than on synthesis: zero
+transcripts is a healthy session, zero *messages* is not.
+
+**What is still not evidence.** Two error-frame branches — Deepgram TTS and Deepgram STT — are closed
+against the vendor's published schema and not against a capture, because this vendor rejects a bad
+credential with `HTTP 401` at the upgrade on both surfaces, so no session can produce the frame those
+branches catch. The code and its tests say so at the branch. Every other frame and close code under test
+is one a probe recorded on the live endpoint.
 
 ## Still not characterised
 

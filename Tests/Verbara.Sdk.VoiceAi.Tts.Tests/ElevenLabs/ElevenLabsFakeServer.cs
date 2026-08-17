@@ -1,8 +1,8 @@
-using System.Net;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using Verbara.Sdk.TestInfrastructure.Http;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 
 namespace Verbara.Sdk.VoiceAi.Tts.Tests.ElevenLabs;
 
@@ -22,6 +22,12 @@ internal enum ElevenLabsAudioTransport
 /// <c>{"message_type":"alignment","words":[]}</c> (ADR-0041 D4).
 /// </summary>
 /// <remarks>
+/// <para>
+/// Built on the shared <see cref="WebSocketTestServer"/> (TcpListener + manual upgrade) so that
+/// <see cref="AbortAfterSend"/> disposes cleanly. The <c>HttpListener</c> version this replaces hung
+/// on Linux after <c>ws.Abort()</c> — measured here as a single test taking 9 m 49 s where the whole
+/// Cartesia class takes 753 ms, which is the same defect Cartesia's fake was migrated for.
+/// </para>
 /// <para>
 /// Only where the payloads come from changed. Accept, receive, answer and close sequencing is
 /// untouched (tasks.md §6.4) — including the 30 ms answer delay.
@@ -74,11 +80,10 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
     /// <summary>Read a recorded binary payload.</summary>
     public static byte[] ReadFrameBytes(string relativePath) => RecordingsTree.Value.ReadBytes(relativePath);
 
-    private readonly HttpListener _listener = null!;
-    private readonly CancellationTokenSource _cts = new();
-    private Task? _acceptLoop;
+    private readonly WebSocketTestServer _server;
 
-    public int Port { get; }
+    /// <summary>The loopback port the session listens on.</summary>
+    public int Port => _server.Port;
 
     private readonly List<string> _receivedJsonMessages = [];
 
@@ -152,33 +157,34 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
     /// </remarks>
     public string? ReceivedApiKey { get; private set; }
 
+    /// <summary>
+    /// Abort the socket abnormally after sending all frames — the socket death that used to end this
+    /// client's stream as a normal completion (<c>ADR-0050</c> E2c). This fake had no such knob, so
+    /// door 3 was unreachable on this surface.
+    /// </summary>
+    public bool AbortAfterSend { get; set; }
+
+    /// <summary>
+    /// When set, the session answers with this one text frame — no audio — and then closes
+    /// <em>normally</em>. The normal close is the point: it leaves the frame as the only failure
+    /// signal, so a test that sees an exception has isolated door 1 (<c>ADR-0050</c> E2a).
+    /// </summary>
+    public string? ErrorFrameJson { get; set; }
+
+    /// <summary>
+    /// The code the session closes with, or <see langword="null"/> for
+    /// <see cref="WebSocketCloseStatus.NormalClosure"/>. Set with no <see cref="ErrorFrameJson"/> it
+    /// isolates door 2 (<c>ADR-0050</c> E2b). On this vendor both spellings carry the same value: a
+    /// rejected credential arrives as a <c>1008</c> frame and a <c>1008</c> close.
+    /// </summary>
+    public WebSocketCloseStatus? CloseStatus { get; set; }
+
+    /// <summary>The reason phrase sent with <see cref="CloseStatus"/>.</summary>
+    public string CloseStatusDescription { get; set; } = "done";
+
     public ElevenLabsFakeServer()
     {
-        // Retry port allocation to avoid conflicts with parallel tests.
-        for (int attempt = 0; attempt < 10; attempt++)
-        {
-            var tcp = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-            tcp.Start();
-            var port = ((IPEndPoint)tcp.LocalEndpoint).Port;
-            tcp.Stop();
-
-            var listener = new HttpListener();
-            listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-            try
-            {
-                listener.Start();
-                _listener = listener;
-                Port = port;
-                break;
-            }
-            catch (HttpListenerException) when (attempt < 9)
-            {
-                listener.Close();
-            }
-        }
-
-        if (_listener is null)
-            throw new InvalidOperationException("Failed to allocate a port for the fake ElevenLabs server.");
+        _server = new WebSocketTestServer(HandleSessionAsync);
 
         // Default seed: the recorded tone, split into 320-byte frames. Its length is deliberately
         // not a multiple of AudioFrameSize, so the last frame is short and a partial final frame
@@ -186,32 +192,16 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
         AudioFramesToSend.AddRange(ReadFrameBytes(AudioChunk).Chunk(AudioFrameSize));
     }
 
-    public void Start() => _acceptLoop = Task.Run(AcceptLoopAsync);
+    public void Start() => _server.Start();
 
-    private async Task AcceptLoopAsync()
+    private async Task HandleSessionAsync(WebSocketTestSession session)
     {
-        try
-        {
-            while (!_cts.Token.IsCancellationRequested)
-            {
-                var ctx = await _listener.GetContextAsync().WaitAsync(_cts.Token).ConfigureAwait(false);
-                if (ctx.Request.IsWebSocketRequest)
-                    _ = Task.Run(() => HandleWebSocketAsync(ctx), _cts.Token);
-                else
-                    ctx.Response.Close();
-            }
-        }
-        catch (OperationCanceledException) { }
-        catch (HttpListenerException) { }
-    }
-
-    private async Task HandleWebSocketAsync(HttpListenerContext ctx)
-    {
-        LastRequestUrl = ctx.Request.RawUrl;
-        ReceivedApiKey = ctx.Request.Headers["xi-api-key"];
-        var wsCtx = await ctx.AcceptWebSocketAsync(null).ConfigureAwait(false);
-        var ws = wsCtx.WebSocket;
+        var ws = session.WebSocket;
+        var ct = session.ServerCancellationToken;
         var buf = new byte[65536];
+
+        LastRequestUrl = session.RequestUri;
+        ReceivedApiKey = session.Headers.TryGetValue("xi-api-key", out var apiKey) ? apiKey : null;
 
         // Signalled once the client's end-of-input is in _receivedJsonMessages. Waiting for the
         // *first* message would not be enough here: this client sends three — the text with voice
@@ -226,7 +216,7 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
             {
                 try
                 {
-                    var result = await ws.ReceiveAsync(buf.AsMemory(), _cts.Token).ConfigureAwait(false);
+                    var result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
                     if (result.MessageType == WebSocketMessageType.Text)
                     {
                         var json = Encoding.UTF8.GetString(buf, 0, result.Count);
@@ -263,13 +253,24 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
                 // The losing arm. It bounds a hang rather than ordering anything — the two arms
                 // above decide when this wait returns — so no assertion depends on its length.
                 // fence-allow: GUARD-TIMEOUT — ceiling on a causal wait, never the winning arm
-                Task.Delay(EndOfInputWaitCeiling, _cts.Token))
+                Task.Delay(EndOfInputWaitCeiling, ct))
             .ConfigureAwait(false);
+
+        ct.ThrowIfCancellationRequested();
+
+        if (ErrorFrameJson is { } errorFrame)
+        {
+            try { await SendTextFrameAsync(ws, errorFrame, ct).ConfigureAwait(false); }
+            catch { }
+
+            await CloseSessionAsync(ws, receiveTask).ConfigureAwait(false);
+            return;
+        }
 
         if (SendRecordedAudioOutputFrame)
         {
             // The vendor's own message shape, replayed verbatim from the recordings tree.
-            await SendTextFrameAsync(ws, ReadFrame(AudioOutputFrame)).ConfigureAwait(false);
+            await SendTextFrameAsync(ws, ReadFrame(AudioOutputFrame), ct).ConfigureAwait(false);
         }
         else
         {
@@ -281,7 +282,7 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
 
                 if (Transport == ElevenLabsAudioTransport.Binary)
                 {
-                    await ws.SendAsync(frames[i].AsMemory(), WebSocketMessageType.Binary, true, _cts.Token)
+                    await ws.SendAsync(frames[i].AsMemory(), WebSocketMessageType.Binary, true, ct)
                         .ConfigureAwait(false);
                     continue;
                 }
@@ -289,22 +290,42 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
                 // How the vendor actually answers: base64 audio on a text frame, isFinal on the last.
                 var isFinal = i == frames.Count - 1 ? "true" : "false";
                 await SendTextFrameAsync(
-                        ws, $"{{\"audio\":\"{Convert.ToBase64String(frames[i])}\",\"isFinal\":{isFinal}}}")
+                        ws,
+                        $"{{\"audio\":\"{Convert.ToBase64String(frames[i])}\",\"isFinal\":{isFinal}}}",
+                        ct)
                     .ConfigureAwait(false);
             }
         }
 
+        if (AbortAfterSend)
+        {
+            ws.Abort();
+            try { await receiveTask.ConfigureAwait(false); } catch { }
+            return;
+        }
+
         // Complete close handshake after sending all audio.
+        await CloseSessionAsync(ws, receiveTask).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Closes the server side with <see cref="CloseStatus"/> — normal closure unless a test asked for
+    /// another code — and then drains the receive task.
+    /// </summary>
+    private async Task CloseSessionAsync(WebSocket ws, Task receiveTask)
+    {
+        var status = CloseStatus ?? WebSocketCloseStatus.NormalClosure;
+
         try
         {
             if (ws.State == WebSocketState.Open)
             {
-                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
+                await ws.CloseAsync(status, CloseStatusDescription, CancellationToken.None)
                     .ConfigureAwait(false);
             }
             else if (ws.State == WebSocketState.CloseReceived)
             {
-                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None)
+                await ws.CloseOutputAsync(status, CloseStatusDescription, CancellationToken.None)
                     .ConfigureAwait(false);
             }
         }
@@ -341,13 +362,13 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
     /// <summary>
     /// Sends one text message, fragmented when <see cref="TextFrameFragmentBytes"/> asks for it.
     /// </summary>
-    private async Task SendTextFrameAsync(WebSocket ws, string json)
+    private async Task SendTextFrameAsync(WebSocket ws, string json, CancellationToken ct)
     {
         var bytes = Encoding.UTF8.GetBytes(json);
 
         if (TextFrameFragmentBytes <= 0 || TextFrameFragmentBytes >= bytes.Length)
         {
-            await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, _cts.Token)
+            await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, ct)
                 .ConfigureAwait(false);
             return;
         }
@@ -357,7 +378,7 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
             var length = Math.Min(TextFrameFragmentBytes, bytes.Length - offset);
             var endOfMessage = offset + length >= bytes.Length;
             await ws.SendAsync(
-                    bytes.AsMemory(offset, length), WebSocketMessageType.Text, endOfMessage, _cts.Token)
+                    bytes.AsMemory(offset, length), WebSocketMessageType.Text, endOfMessage, ct)
                 .ConfigureAwait(false);
         }
     }
@@ -365,10 +386,6 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
-        _cts.Cancel();
-        _listener.Stop();
-        if (_acceptLoop is not null)
-            try { await _acceptLoop.ConfigureAwait(false); } catch { }
-        _cts.Dispose();
+        await _server.DisposeAsync().ConfigureAwait(false);
     }
 }

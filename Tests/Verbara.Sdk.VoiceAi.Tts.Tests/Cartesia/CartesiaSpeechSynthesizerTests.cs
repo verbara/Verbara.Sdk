@@ -1,3 +1,4 @@
+using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
 using Verbara.Sdk.VoiceAi.Tts.Cartesia;
@@ -254,8 +255,14 @@ public class CartesiaSpeechSynthesizerTests : IAsyncDisposable
         regenerated.Should().Equal(RecordedAudio);
     }
 
+    /// <summary>
+    /// Door 3 (ADR-0050 E2c), and this test asserted the opposite until then: it required the client
+    /// to <em>complete normally</em> when the socket died mid-session, which is exactly the silent
+    /// truncation the ADR removes. A caller cannot tell 12 KB of a 30 KB utterance from the whole of
+    /// a short one, so "the audio ended" has to mean the audio ended.
+    /// </summary>
     [Fact]
-    public async Task SynthesizeAsync_ShouldComplete_WhenServerAborts()
+    public async Task SynthesizeAsync_ShouldThrowTransportFailure_WhenServerAbortsMidSession()
     {
         _server.AbortAfterSend = true;
         var synth = BuildSynthesizer();
@@ -264,7 +271,100 @@ public class CartesiaSpeechSynthesizerTests : IAsyncDisposable
             .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
             .ToListAsync();
 
-        await act.Should().NotThrowAsync();
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
+        failure.Provider.Should().Be("Cartesia");
+
+        // No code, because nothing was said — the evidence is the inner transport exception, which is
+        // never discarded.
+        failure.Code.Should().BeNull();
+        failure.InnerException.Should().BeOfType<WebSocketException>();
+    }
+
+    /// <summary>
+    /// Door 1 (ADR-0049 D1). The frame is the vendor's own shape; the session closes
+    /// <em>normally</em> after it, so the exception can only have come from the frame.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowErrorFrameFailure_WhenServerReportsAFailure()
+    {
+        _server.ErrorFrameJson =
+            """{"type":"error","status_code":402,"error":"insufficient credits"}""";
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
+
+        // The vendor's own code, verbatim and unparsed — what a retry policy reads (E4).
+        failure.Code.Should().Be("402");
+        failure.Message.Should().Contain("insufficient credits");
+    }
+
+    /// <summary>
+    /// Door 2 (ADR-0050 E2b): the close code alone, with no error frame and no audio, is a failure.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowCloseCodeFailure_WhenServerClosesAbnormally()
+    {
+        _server.AudioFramesToSend.Clear();
+        _server.SendDoneTerminator = false;
+        _server.CloseStatus = WebSocketCloseStatus.PolicyViolation;   // 1008, as measured on this vendor
+        _server.CloseStatusDescription = "Missing sample_rate";
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.CloseCode);
+        failure.Code.Should().Be("1008");
+        failure.Message.Should().Contain("Missing sample_rate");
+    }
+
+    /// <summary>
+    /// D2 on this surface (ADR-0050 E5): the session ended cleanly, produced no audio, and said
+    /// nothing about why — the one case that is not a <see cref="SpeechProviderFailureException"/>
+    /// because there is no code and no vendor message to carry.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowEmptyResult_WhenSessionEndsCleanlyWithNoAudio()
+    {
+        _server.AudioFramesToSend.Clear();
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var empty = (await act.Should().ThrowAsync<SpeechProviderEmptyResultException>()).Which;
+        empty.Provider.Should().Be("Cartesia");
+
+        // Not the failure type: a caller catching SpeechProviderFailureException must not catch this,
+        // because "the vendor told us why" and "the vendor told us nothing" are different events.
+        empty.Should().NotBeOfType<SpeechProviderFailureException>();
+    }
+
+    /// <summary>
+    /// The other half of E5: text that carries no speech is not asked of the provider at all, so the
+    /// zero audio that follows is not a failure. Asserted through the fake seeing no session rather
+    /// than through the empty result, since "did not throw" alone would also pass if the client had
+    /// opened a session and been lucky.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldYieldNothingWithoutConnecting_WhenTextIsWhitespace()
+    {
+        var synth = BuildSynthesizer();
+
+        var frames = await synth.SynthesizeAsync("   \t\n ", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        frames.Should().BeEmpty();
+        _server.ReceivedApiKey.Should().BeNull("no session should have been opened at all");
+        _server.ReceivedJsonMessages.Should().BeEmpty();
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -55,13 +56,28 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
         using var ws = new ClientWebSocket();
         ws.Options.KeepAliveInterval = TimeSpan.FromSeconds(_options.KeepAliveSeconds);
 
+        // So a rejected upgrade can report the vendor's own status rather than "the upgrade failed".
+        // This surface validates the credential *there* — a bad key is answered 401 at the handshake —
+        // so the status is the whole evidence of that failure.
+        ws.Options.CollectHttpResponseDetails = true;
+
         // Unconditional: every test executes these two lines, so a defect in either is reachable.
         ws.Options.SetRequestHeader("X-API-Key", _options.ApiKey);
         ws.Options.SetRequestHeader("Cartesia-Version", _options.ApiVersion);
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
-        await ws.ConnectAsync(wsUri, connectCts.Token).ConfigureAwait(false);
+        try
+        {
+            await ws.ConnectAsync(wsUri, connectCts.Token).ConfigureAwait(false);
+        }
+        catch (WebSocketException ex)
+        {
+            // ADR-0050 E7. Measured on this surface: an invalid credential is rejected here with 401
+            // and a wrong path with 404, neither of which the caller could previously read off the
+            // bare WebSocketException.
+            throw SpeechProviderFailureException.FromHandshake(ProviderName, ws.HttpStatusCode, ex);
+        }
 
         // No configuration frame is sent here, and its absence is the fix. A JSON "start" message
         // stood in this spot; the service has no such message and answers it with
@@ -77,17 +93,25 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
         // Fire-and-forget: stream audio frames to the server.
         var sendTask = SendLoopAsync(ws, audioFrames, sessionCts.Token);
 
-        // Receive loop writes transcripts to channel, then completes the writer and
-        // cancels the session so the send loop unblocks.
+        // Receive loop writes transcripts to channel, then completes the writer — with the failure
+        // when the session failed — and cancels the session so the send loop unblocks.
+        var sawVendorFrame = false;
         var receiveTask = Task.Run(async () =>
         {
             try
             {
-                await ReceiveLoopAsync(ws, channel.Writer, sessionCts.Token).ConfigureAwait(false);
+                sawVendorFrame = await ReceiveLoopAsync(ws, channel.Writer, ProviderName, sessionCts.Token)
+                    .ConfigureAwait(false);
+                channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                // Completing the writer *with* the exception is what carries a provider failure out
+                // of this background task and into the caller's MoveNextAsync (ADR-0050 E1).
+                channel.Writer.TryComplete(ex);
             }
             finally
             {
-                channel.Writer.TryComplete();
                 await sessionCts.CancelAsync().ConfigureAwait(false);
             }
         }, ct);
@@ -98,6 +122,18 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
 
         // Ensure both tasks complete (propagate exceptions via AggregateException).
         await Task.WhenAll(sendTask, receiveTask).ConfigureAwait(false);
+
+        // ADR-0050 E5, the recognition rule, which is deliberately not the synthesis one: zero
+        // transcripts is a healthy outcome (turn detection flushes on any trigger, so noise with no
+        // speech is a session that correctly produced nothing). A session in which the vendor never
+        // sent a single message is the silent nothing D2 exists to name — and on this surface that is
+        // not hypothetical: it is what every session did while the query string was missing.
+        if (!sawVendorFrame)
+        {
+            throw new SpeechProviderEmptyResultException(
+                ProviderName,
+                $"{ProviderName} ended the session without sending a single message and without reporting a failure.");
+        }
     }
 
     private static async Task SendLoopAsync(
@@ -126,12 +162,24 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
         catch (WebSocketException) { }
     }
 
-    private static async Task ReceiveLoopAsync(
+    /// <summary>
+    /// Reads the session to its end. Returns whether the vendor sent any message at all — the
+    /// evidence <c>ADR-0050</c> E5's recognition rule turns on, which is <em>not</em> whether any
+    /// transcript was produced.
+    /// </summary>
+    /// <exception cref="SpeechProviderFailureException">The session failed.</exception>
+    private static async Task<bool> ReceiveLoopAsync(
         ClientWebSocket ws,
         ChannelWriter<SpeechRecognitionResult> writer,
+        string provider,
         CancellationToken ct)
     {
         var buf = new byte[65536];
+
+        // Counts messages, not transcripts, and excludes the close frame: "the vendor closed and
+        // said nothing else" is precisely the case this has to report.
+        var sawVendorFrame = false;
+
         while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
         {
             ValueWebSocketReceiveResult result;
@@ -139,13 +187,33 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
             {
                 result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
             }
+            // Cancellation is the caller's own instruction and never a provider failure
+            // (ADR-0050 E6).
             catch (OperationCanceledException) { break; }
-            catch (WebSocketException) { break; }
+            catch (WebSocketException ex)
+            {
+                // Door 3 (ADR-0050 E2c). This was `break`, which ended a killed session as though
+                // the vendor had finished transcribing.
+                throw SpeechProviderFailureException.FromTransport(provider, ex);
+            }
 
-            // Unchanged line, changed meaning: with the half-close gone from the send loop, the
-            // close frame that ends this loop is the vendor deciding the session is over, not the
-            // vendor answering a close we sent before it had finished transcribing.
-            if (result.MessageType == WebSocketMessageType.Close) break;
+            // Door 2 (ADR-0050 E2b), and this is the surface that proves the door matters: while the
+            // query string was missing, *every* session ended here with close `1008 Missing
+            // sample_rate` — twelve runs, twelve rejections — and this line discarded all twelve,
+            // which is why the client reported no error while no session had ever transcribed.
+            //
+            // With the half-close gone from the send loop, a *normal* close here is the vendor
+            // deciding the session is over, not the vendor answering a close we sent before it had
+            // finished.
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                var closeFailure = SpeechProviderFailureException.FromCloseStatus(
+                    provider, ws.CloseStatus, ws.CloseStatusDescription);
+                if (closeFailure is not null) throw closeFailure;
+                break;
+            }
+
+            sawVendorFrame = true;
             if (result.MessageType != WebSocketMessageType.Text) continue;
 
             var json = Encoding.UTF8.GetString(buf, 0, result.Count);
@@ -154,6 +222,19 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
                 VoiceAiSttJsonContext.Default.CartesiaSttTranscriptMessage);
 
             if (msg is null) continue;
+
+            // Door 1 (ADR-0049 D1, remedied under ADR-0050 E1). Measured in band alongside that close
+            // code: `{"type":"error","code":400,"message":"Missing sample_rate: …"}` — a frame the
+            // transcript test below dropped, so the vendor named the defect and the client said
+            // nothing.
+            if (string.Equals(msg.Type, "error", StringComparison.Ordinal))
+            {
+                throw SpeechProviderFailureException.FromErrorFrame(
+                    provider,
+                    msg.Code?.ToString(CultureInfo.InvariantCulture),
+                    msg.Message);
+            }
+
             if (!string.Equals(msg.Type, "transcript", StringComparison.Ordinal)) continue;
 
             var stt = new SpeechRecognitionResult(
@@ -163,6 +244,8 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
                 TimeSpan.Zero);
             await writer.WriteAsync(stt, ct).ConfigureAwait(false);
         }
+
+        return sawVendorFrame;
     }
 
     /// <summary>

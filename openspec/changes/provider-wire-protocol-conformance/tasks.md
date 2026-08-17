@@ -308,7 +308,7 @@ characterised* in §5.5.
 - [x] 2.9 A regression test per provider, `Method_ShouldExpected_WhenCondition`: a normal synthesis
       yields non-zero audio. This is the assertion the current suites do not make, which is why a
       synthesizer that produces nothing passes today
-- [ ] 2.10 The silent-completion **signal**, which does not fall out of the frame-type fix in 2.1 and is
+- [x] 2.10 The silent-completion **signal**, which does not fall out of the frame-type fix in 2.1 and is
       a separate decision: `src/Verbara.Sdk.VoiceAi.Tts/Cartesia/CartesiaSpeechSynthesizer.cs` reaches
       the vendor's `done` terminator having written zero bytes and completes normally. Make that outcome
       observable to the caller **and counted**. Two things to decide and record: (a) the observable
@@ -324,8 +324,25 @@ characterised* in §5.5.
       observable change for anyone already listening on that Meter name. A request whose input legitimately warrants no audio must stay distinguishable —
       name the discriminator explicitly (frames arrived and were discarded, versus no frames arrived).
       This is the task the spec's zero-audio requirement is implemented by; without it the requirement
-      has no code behind it
-- [ ] 2.10a The signal from 2.10 is **not Cartesia-only — measured, not assumed.** The open question
+      has no code behind it.
+      **Settled by `Sdk/ADR-0050` and shipped.** (a) The observable form is a **throw**, from the
+      background receive loop into the caller's `MoveNextAsync` via `channel.Writer.TryComplete(ex)` —
+      two types, `SpeechProviderFailureException` when the vendor reported a failure and
+      `SpeechProviderEmptyResultException` when the session ended clean and empty, both rooted at
+      `System.Exception` because the core package has no exception base of its own (E1/E3/E4). (b) Neither
+      of the two counters this task offered: `SynthesesCompleted` and `SynthesesFailed` both keep firing
+      as they do, and once the clients throw, `SynthesesFailed` absorbs every provider failure — which
+      changes what that counter means for anyone already listening, unavoidably and correctly, because it
+      was reporting failed sessions as successful. A **third**, additive counter
+      (`tts.syntheses.silent`, tagged `voiceai.provider`) covers only the residual the clients cannot
+      reach: an implementation of the public base that returns silence without raising (E9). (c) The
+      discriminator this task asked to be named explicitly turned out to be **unimplementable as
+      stated** once the throw is in place — a client that throws on a discarded frame never reaches the
+      zero-audio check, so "frames arrived and were discarded" is no longer a state that can be reported
+      from there. `Sdk/ADR-0050` E8 records the substitution rather than reinterpreting D2 silently: the
+      operative test is *did the vendor report a failure* → the first type, *did the session end clean
+      and empty uncancelled* → the second, *was it cancelled* → neither (E6)
+- [x] 2.10a The signal from 2.10 is **not Cartesia-only — measured, not assumed.** The open question
       this task originally carried was answered by the 2026-08-15 probe: ElevenLabs emits only text
       frames (`{alignment, audio, isFinal, normalizedAlignment}`, audio base64) and then closes
       **`1000` normal**. `src/Verbara.Sdk.VoiceAi.Tts/ElevenLabs/ElevenLabsSpeechSynthesizer.cs` reads
@@ -335,7 +352,17 @@ characterised* in §5.5.
       Additionally, and worse than first recorded: ElevenLabs sends its **auth error** as text too
       (`{code, error, message}`), so a bad credential loses the audio and the reason in the same
       branch. Fixing the frame type in §2.1 fixes both, but assert them as two separate tests — a
-      normal synthesis yields audio, and a rejected credential surfaces an error
+      normal synthesis yields audio, and a rejected credential surfaces an error.
+      **Shipped under `Sdk/ADR-0050`, and it went wider than "not Cartesia-only":** all four TTS
+      surfaces and all four STT surfaces got the same three doors closed and the same two types, because
+      the audit found the shape at eight of eight clients rather than at the two this task names. The two
+      separate tests exist per surface (`…ShouldThrowErrorFrameFailure_When…` and
+      `…ShouldThrowEmptyResult_When…`), and on the recognition side the second one is deliberately *not*
+      symmetric: zero transcripts is a healthy session there, zero **messages** is not (E5), so each STT
+      surface also carries a lifecycle-only test asserting silence stays silent. Two door-1 branches are
+      closed **without** a measured frame shape and say so in the code — Deepgram TTS and Deepgram STT,
+      because §1.3a measured this vendor rejecting a bad credential with `HTTP 401` at the upgrade on both
+      surfaces, so no live session can produce the in-band frame those branches catch
 - [x] 2.11 Cartesia and ElevenLabs land as **two separate commits**. Cartesia additionally reaches its
       `done` terminator and completes successfully with zero audio — call that out in its commit body,
       because it is the silent-failure case and it is the reason this section is first
@@ -433,7 +460,7 @@ characterised* in §5.5.
       without the attribute. **How it hid:** `LmntWsFakeServer` records the init message and then
       replies with audio regardless of what it says, so the suite asserted the message was *sent*, never
       that it was *acceptable* — the §3.12 property, one level further in than §3.12 states it
-- [ ] 3.6b **The error frame that says why is thrown away — not fixed here, and it is `Sdk/ADR-0049`
+- [x] 3.6b **The error frame that says why is thrown away — not fixed here, and it is `Sdk/ADR-0049`
       D1 measured on a sixth surface.** `LmntSpeechSynthesizer.ReceiveWsFramesAsync` terminates on
       `notification.Error == "error"`, comparing an error *message* against the literal string
       `"error"`, which no real message equals. Both live failures — `{"error":"model: Input should be
@@ -443,7 +470,16 @@ characterised* in §5.5.
       of a failure frame) and D2 (zero output as success) together, with a D4 control, on the LMNT WS
       surface. Fixing it changes behaviour — synthesis that silently yields nothing would start
       throwing — so it belongs with the ADR-0049 train and its D1 remedy, not inside a route fix.
-      **Closes when** ADR-0049's D1 remedy covers this site, or a decision records why it does not
+      **Closes when** ADR-0049's D1 remedy covers this site, or a decision records why it does not.
+      **Closed the first way: `Sdk/ADR-0050` is that remedy and it covers this site.** All three doors
+      this task describes are now shut on the LMNT WS surface — the `== "error"` comparison is gone in
+      favour of the error frame being carried out as `SpeechProviderFailureException` with the vendor's
+      own text, the `1002` close code is read instead of discarded, and
+      `catch (WebSocketException) { break; }` became a throw. The measured frames from §3.6a and from the
+      invalid-credential control are what the new tests send. One behaviour of this surface is
+      deliberately left alone and recorded rather than fixed: on the **HTTP** transport a non-2xx status
+      still surfaces as `HttpRequestException` rather than a `SpeechProvider*` type. There is no measured
+      defect behind that, and retyping it would be a second behavioural break riding along with this one
 - [x] 3.6c **A third total defect on the same transport, found only because the fix for the second one
       was audited against the client instead of against the probe.** §3.6a was verified with a probe
       that reproduced the init message but *not* the client's close sequence, so it proved the init
@@ -926,7 +962,7 @@ commit.
       only the *field inventory* — useful to whoever models the frame later, not evidence of a defect
       here. The DTO modelling belongs to `provider-dto-robustness-fences` — route it there under §4.14
       and **do not edit that change's artifacts from here**
-- [ ] 4.6a Record the **swallowed `Error` frame — this one *is* a defect, and it is what makes §4.1
+- [x] 4.6a Record the **swallowed `Error` frame — this one *is* a defect, and it is what makes §4.1
       silent.** The same `continue` that correctly skips `Info` also skips `Error`. Speechmatics signals
       in-band failure as a message, so a session the vendor rejects yields no exception, no log and no
       transcript: the caller observes an `IAsyncEnumerable` that completes normally and empty. That is
@@ -934,7 +970,16 @@ commit.
       rather than as an error, and it is why a green suite never caught it. Surface `Error` (and decide
       the same question for `Warning`) so an in-band rejection reaches the caller. This is the STT
       counterpart of the TTS silent-completion signal in §2.10, and it binds to the same spec
-      requirement — a provider that produced nothing does not report success
+      requirement — a provider that produced nothing does not report success.
+      **Shipped under `Sdk/ADR-0050`.** `Error` now leaves the receive loop as
+      `SpeechProviderFailureException` carrying the vendor's `type` as the code and its `reason` as the
+      message — the measured `not_authorised` rejection from §4.1 is what the regression test sends, so
+      the frame that made §4.1 silent is the frame under test. **`Warning` was decided the other way, and
+      deliberately:** it stays a non-result, non-failure lifecycle message. A warning is the vendor
+      continuing to work, and E4's two types are evidence about whether the session failed, not a
+      severity ladder — promoting `Warning` to an exception would end sessions the vendor intended to
+      keep. It is therefore skipped by the same branch as `RecognitionStarted`, `EndOfTranscript` and
+      `Info`, which the source comment now names explicitly instead of leaving the reader to infer
 - [x] 4.6 Record that the live `RecognitionStarted` field set **confirms** the committed fixture: the
       live top-level set is `{message, orchestrator_version, id, language_pack_info}` with
       `language_pack_info` an object, and
@@ -979,7 +1024,7 @@ commit.
       closure `provider-dto-robustness-fences` counts (its §1.2 figures) and inside its coverage guard
       (its §8.3). Flag it in this change's record so those numbers are re-derived; **do not edit that
       change's artifacts from here**
-- [ ] 4.15 **AssemblyAI STT — the seventh defect, and the one that makes the swallow a class.**
+- [x] 4.15 **AssemblyAI STT — the seventh defect, and the one that makes the swallow a class.**
       `src/Verbara.Sdk.VoiceAi.Stt/AssemblyAi/AssemblyAiSpeechRecognizer.cs:137` reads
       `if (!string.Equals(msg.Type, "Turn", StringComparison.Ordinal)) continue;` — structurally the
       same filter as the Speechmatics one in §4.6a, written by someone who believed they were skipping
@@ -990,8 +1035,13 @@ commit.
       §4.6a fixes Speechmatics and land them in the **same commit** — one remedy, one shape, so the
       next reviewer sees a rule rather than two coincidences. `Termination` stays a legitimate skip;
       the discriminator is whether the frame carries a failure, not whether it is on the content
-      allow-list (`Sdk/ADR-0049` D1)
-- [ ] 4.16 Audit **every** provider receive loop in `src/Verbara.Sdk.VoiceAi.Stt/` and
+      allow-list (`Sdk/ADR-0049` D1).
+      **Shipped under `Sdk/ADR-0050`, in the same commit as §4.6a — and wider than "the same commit":**
+      the remedy landed at all eight WebSocket clients at once, so what a reviewer sees is one rule
+      applied uniformly rather than two coincidences or eight variations. The measured
+      `{error, error_code, type}` frame is what this surface's regression test sends, `Termination`
+      remains a legitimate skip, and the lifecycle-only test next to it proves the skip still holds
+- [x] 4.16 Audit **every** provider receive loop in `src/Verbara.Sdk.VoiceAi.Stt/` and
       `src/Verbara.Sdk.VoiceAi.Tts/` for the allow-list filtering shape — a `continue` or a
       message-type equality test that lets unanticipated frames fall into a discard branch. A first
       pass already found **five** sites, not the three with a live symptom: beyond Speechmatics,
@@ -1001,12 +1051,37 @@ commit.
       handshake so no auth frame reaches the branch today, but every other error either vendor defines
       does, and a vendor moving validation in-band converts them with no line changing. Finish the
       sweep across the remaining surfaces and record the result per surface even where the answer is
-      "no such branch", because a clean loop is evidence and an unexamined one is not
-- [ ] 4.17 Remediate the two **latent** sites from §4.16 (`CartesiaSpeechRecognizer.cs:165`,
+      "no such branch", because a clean loop is evidence and an unexamined one is not.
+      **Sweep finished 2026-08-17. Thirteen surfaces, and the count of affected ones went from five to
+      eight.** Every WebSocket client had all three doors open, not just the allow-list one this task
+      describes: the frame filter (door 1), the **discarded close code** (door 2 — `ws.CloseStatus` read
+      and thrown away at all eight), and `catch (WebSocketException) { break; }` (door 3), which turns a
+      socket dying mid-stream into normal completion. Doors 2 and 3 are why the sweep matters more than
+      its first pass suggested: a surface whose frame filter is clean is still silent through the other
+      two. Per surface —
+      **remediated (8):** Cartesia TTS, ElevenLabs TTS, LMNT TTS (WS), Deepgram TTS, Deepgram STT,
+      Speechmatics STT, AssemblyAI STT, Cartesia STT.
+      **no such branch (5), and each verified rather than assumed:** Azure TTS, Speechmatics TTS (HTTP),
+      Google STT, Whisper STT, Azure Whisper STT hold no receive loop at all — request/response over
+      HTTP, no `ReceiveAsync`, no message-type equality test, no `continue` discard. Each calls
+      `EnsureSuccessStatusCode()`, so a rejected request already reaches the caller as
+      `HttpRequestException`. What is *not* closed on those five is the zero-output-on-`2xx` case: a
+      vendor answering `200` with no audio still completes silently. That residual is what the E9 counter
+      `tts.syntheses.silent` exists to make visible, and it is recorded rather than retyped — no measured
+      defect stands behind it and no probe has produced one
+- [x] 4.17 Remediate the two **latent** sites from §4.16 (`CartesiaSpeechRecognizer.cs:165`,
       `DeepgramSpeechRecognizer.cs:120`) under the same D1 shape as §4.6a and §4.15. No measured defect
       forces these — that is precisely the argument for doing them here rather than after one bites,
       and `Sdk/ADR-0049` binds all five sites, not the three with symptoms. If they are deferred
-      instead, the deferral is recorded with that reasoning rather than left as silence
+      instead, the deferral is recorded with that reasoning rather than left as silence.
+      **Done, not deferred — under `Sdk/ADR-0050`, same shape and same commit as §4.6a and §4.15.** Both
+      latent sites now throw on a failure frame, and both are tested. What the tests cannot do is send a
+      *measured* frame: §1.3a established that Deepgram validates credentials with `HTTP 401` at the
+      upgrade, so its in-band frame shape is documented rather than observed, and the fake and the test
+      both say so in as many words rather than letting a later reader mistake a published schema for a
+      capture. Cartesia STT is the opposite case — its door-1 frame
+      (`{"type":"error","code":400,"message":"Missing sample_rate: …"}`) and its `1008` close were both
+      measured on the live endpoint, so the latent site turned out to have a real signal waiting behind it
 
 - [x] 4.18 **The fake had no way to see the credential, and that is why it certified the defect.**
       `SpeechmaticsFakeServer` captured the request URI and the `StartRecognition` body and nothing

@@ -47,27 +47,46 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
         var wsUri = BuildUri(format);
         using var ws = new ClientWebSocket();
 
+        // So a rejected upgrade can report the vendor's own status rather than "the upgrade failed".
+        // This surface validates the credential *there* — a malformed key is answered 401 at the
+        // upgrade and a wrong path 404 — so the status is the whole evidence of that failure.
+        ws.Options.CollectHttpResponseDetails = true;
+
         // Unconditional, scheme included: `Token` is Deepgram's, and while this ran under production
         // alone a change to it was invisible to the suite.
         ws.Options.SetRequestHeader("Authorization", $"Token {_options.ApiKey}");
 
-        await ws.ConnectAsync(wsUri, ct).ConfigureAwait(false);
+        try
+        {
+            await ws.ConnectAsync(wsUri, ct).ConfigureAwait(false);
+        }
+        catch (WebSocketException ex)
+        {
+            // ADR-0050 E7 — one type whether the vendor validates at the upgrade or in band.
+            throw SpeechProviderFailureException.FromHandshake(ProviderName, ws.HttpStatusCode, ex);
+        }
 
         var channel = System.Threading.Channels.Channel.CreateUnbounded<SpeechRecognitionResult>();
 
         // Fire-and-forget: send audio frames to the server.
         var sendTask = SendLoopAsync(ws, audioFrames, ct);
 
-        // Receive loop writes results to channel, then completes the writer.
+        // Receive loop writes results to channel, then completes the writer — with the failure when
+        // the session failed.
+        var sawVendorFrame = false;
         var receiveTask = Task.Run(async () =>
         {
             try
             {
-                await ReceiveLoopAsync(ws, channel.Writer, ct).ConfigureAwait(false);
-            }
-            finally
-            {
+                sawVendorFrame = await ReceiveLoopAsync(ws, channel.Writer, ProviderName, ct)
+                    .ConfigureAwait(false);
                 channel.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                // Completing the writer *with* the exception is what carries a provider failure out
+                // of this background task and into the caller's MoveNextAsync (ADR-0050 E1).
+                channel.Writer.TryComplete(ex);
             }
         }, ct);
 
@@ -77,6 +96,17 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
 
         // Ensure both tasks complete (propagate exceptions via AggregateException).
         await Task.WhenAll(sendTask, receiveTask).ConfigureAwait(false);
+
+        // ADR-0050 E5, the recognition rule, which is deliberately not the synthesis one: zero
+        // transcripts is a healthy outcome (turn detection flushes on any trigger, so noise with no
+        // speech is a session that correctly produced nothing). A session in which the vendor never
+        // sent a single message — not even Metadata — is the silent nothing D2 exists to name.
+        if (!sawVendorFrame)
+        {
+            throw new SpeechProviderEmptyResultException(
+                ProviderName,
+                $"{ProviderName} ended the session without sending a single message and without reporting a failure.");
+        }
     }
 
     private static async Task SendLoopAsync(
@@ -108,12 +138,24 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
         catch (WebSocketException) { }
     }
 
-    private static async Task ReceiveLoopAsync(
+    /// <summary>
+    /// Reads the session to its end. Returns whether the vendor sent any message at all — the
+    /// evidence <c>ADR-0050</c> E5's recognition rule turns on, which is <em>not</em> whether any
+    /// transcript was produced.
+    /// </summary>
+    /// <exception cref="SpeechProviderFailureException">The session failed.</exception>
+    private static async Task<bool> ReceiveLoopAsync(
         ClientWebSocket ws,
         System.Threading.Channels.ChannelWriter<SpeechRecognitionResult> writer,
+        string provider,
         CancellationToken ct)
     {
         var buf = new byte[65536];
+
+        // Counts messages, not transcripts, and excludes the close frame: "the vendor closed and
+        // said nothing else" is precisely the case this has to report.
+        var sawVendorFrame = false;
+
         while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
         {
             ValueWebSocketReceiveResult result;
@@ -121,18 +163,49 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
             {
                 result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
             }
+            // Cancellation is the caller's own instruction and never a provider failure
+            // (ADR-0050 E6).
             catch (OperationCanceledException) { break; }
-            catch (WebSocketException) { break; }
+            catch (WebSocketException ex)
+            {
+                // Door 3 (ADR-0050 E2c). This was `break`, which ended a killed session as though
+                // the vendor had finished transcribing.
+                throw SpeechProviderFailureException.FromTransport(provider, ex);
+            }
 
-            // Unchanged line, changed meaning: with the half-close gone from the send loop, the
-            // close frame that ends this loop is the vendor deciding the session is over, not the
-            // vendor answering a close we sent before it had finished transcribing.
-            if (result.MessageType == WebSocketMessageType.Close) break;
+            // Door 2 (ADR-0050 E2b). The close code was discarded here as it was at all eight
+            // clients.
+            //
+            // With the half-close gone from the send loop, a *normal* close is the vendor deciding
+            // the session is over, not the vendor answering a close we sent before it had finished
+            // transcribing.
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                var closeFailure = SpeechProviderFailureException.FromCloseStatus(
+                    provider, ws.CloseStatus, ws.CloseStatusDescription);
+                if (closeFailure is not null) throw closeFailure;
+                break;
+            }
+
+            sawVendorFrame = true;
             if (result.MessageType != WebSocketMessageType.Text) continue;
 
             var json = System.Text.Encoding.UTF8.GetString(buf, 0, result.Count);
             var msg = JsonSerializer.Deserialize(json, VoiceAiSttJsonContext.Default.DeepgramResultMessage);
-            if (msg?.Type != "Results") continue;
+            if (msg is null) continue;
+
+            // Door 1 (ADR-0050 E1) — and the one branch of this change on this surface with no
+            // measurement behind it: this vendor rejects a credential at the handshake, so no live run
+            // has produced an in-band failure frame here and the member names are documented rather
+            // than observed. Kept because the cost is one branch and the alternative is leaving the
+            // door open on the assumption that this vendor never sends one.
+            if (string.Equals(msg.Type, "Error", StringComparison.Ordinal))
+            {
+                throw SpeechProviderFailureException.FromErrorFrame(
+                    provider, null, msg.Description ?? msg.Message);
+            }
+
+            if (!string.Equals(msg.Type, "Results", StringComparison.Ordinal)) continue;
 
             var alt = msg.Channel?.Alternatives?.FirstOrDefault();
             if (alt is null) continue;
@@ -140,6 +213,8 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
             var stt = new SpeechRecognitionResult(alt.Transcript, alt.Confidence, msg.IsFinal, TimeSpan.Zero);
             await writer.WriteAsync(stt, ct).ConfigureAwait(false);
         }
+
+        return sawVendorFrame;
     }
 
     private Uri BuildUri(AudioFormat format)

@@ -1,3 +1,4 @@
+using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
 using Verbara.Sdk.VoiceAi.Stt.Cartesia;
@@ -224,14 +225,109 @@ public class CartesiaSpeechRecognizerTests : IAsyncDisposable
         results.Should().ContainSingle(r => r.IsFinal && Math.Abs(r.Confidence - 0.88f) < 0.001f);
     }
 
+    /// <summary>
+    /// Door 3 (<c>ADR-0050</c> E2c), and the inverse of what this test used to assert. Under
+    /// <c>NotThrowAsync</c> a socket killed mid-session ended the transcript stream exactly as the
+    /// vendor's own <c>done</c> does.
+    /// </summary>
     [Fact]
-    public async Task StreamAsync_ShouldComplete_WhenServerAborts()
+    public async Task StreamAsync_ShouldThrowTransportFailure_WhenServerAbortsMidSession()
     {
         _server.AbortAfterSend = true;
         var recognizer = BuildRecognizer();
+
         var act = async () =>
             await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
-        await act.Should().NotThrowAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
+        failure.Code.Should().BeNull("a dead socket carries no vendor code");
+        failure.InnerException.Should().BeOfType<WebSocketException>();
+    }
+
+    /// <summary>
+    /// Door 1 (<c>ADR-0050</c> E2a) with the frame this surface was measured producing, twelve runs out
+    /// of twelve: the session opens, the vendor answers
+    /// <c>{"type":"error","code":400,"message":"Missing sample_rate: …"}</c>, and the client used to
+    /// deserialize it into its transcript DTO, see a type it does not want, and drop it. The fake closes
+    /// normally here so the frame is the only failure signal in the session.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowErrorFrameFailure_WhenTheServerRejectsTheSessionInBand()
+    {
+        _server.ErrorFrameJson =
+            """{"type":"error","code":400,"message":"Missing sample_rate: expected an integer"}""";
+        var recognizer = BuildRecognizer();
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
+        failure.Code.Should().Be("400", "the vendor puts an HTTP-shaped code inside a WebSocket session");
+        failure.Message.Should().Contain("Missing sample_rate");
+    }
+
+    /// <summary>
+    /// Door 2 (<c>ADR-0050</c> E2b): the other half of the same measured rejection, driven alone. The
+    /// vendor closed <c>1008</c> after the frame above, and either signal must be enough on its own —
+    /// this client is the one whose sessions all ended this way while its suite stayed green.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowCloseCodeFailure_WhenServerClosesAbnormally()
+    {
+        _server.EndSessionSilently = true;
+        _server.CloseStatus = WebSocketCloseStatus.PolicyViolation;   // 1008, as measured
+        _server.CloseStatusDescription = "Missing sample_rate";
+        var recognizer = BuildRecognizer();
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.CloseCode);
+        failure.Code.Should().Be("1008");
+        failure.Message.Should().Contain("Missing sample_rate");
+    }
+
+    /// <summary>
+    /// D2 (<c>ADR-0050</c> E5) on the recognition side: the vendor accepted the upgrade, sent no message
+    /// of any kind and closed normally. Nothing failed on the wire, so this is not a
+    /// <see cref="SpeechProviderFailureException"/> — and it is not the healthy zero-transcript session
+    /// below either.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowEmptyResult_WhenTheVendorSendsNoMessageAtAll()
+    {
+        _server.EndSessionSilently = true;
+        var recognizer = BuildRecognizer();
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var empty = (await act.Should().ThrowAsync<SpeechProviderEmptyResultException>()).Which;
+        empty.Should().NotBeOfType<SpeechProviderFailureException>(
+            "the session was clean — it was simply silent");
+        empty.Provider.Should().Be("Cartesia");
+    }
+
+    /// <summary>
+    /// The recognition half of E5, and the asymmetry against synthesis that the rule turns on: a session
+    /// carrying only a control frame produced no transcript and is nonetheless healthy — turn detection
+    /// flushes on any trigger, so noise with no speech correctly yields nothing. Zero results must stay
+    /// an empty list; only zero <em>messages</em> is a failure.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldYieldNothingWithoutFailing_WhenTheSessionCarriesOnlyControlFrames()
+    {
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(CartesiaFakeServer.ReadFrame(CartesiaFakeServer.FlushDoneFrame));
+
+        var recognizer = BuildRecognizer();
+
+        var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().BeEmpty();
     }
 
     [Fact]

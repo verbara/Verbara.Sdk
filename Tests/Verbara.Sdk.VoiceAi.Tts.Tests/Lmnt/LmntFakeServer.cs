@@ -124,6 +124,27 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     /// </summary>
     public bool AbortOnFirstReceive { get; set; }
 
+    /// <summary>
+    /// When set, the session answers with this one text frame — no audio, no <c>finish</c> — and then
+    /// closes <em>normally</em>. The normal close is the point: it leaves the frame as the only
+    /// failure signal in the session, so a test that sees an exception has isolated door 1
+    /// (<c>ADR-0050</c> E2a) rather than the close code. What the live endpoint sends here is
+    /// <c>{"error":"Invalid API key"}</c> (§3.7a).
+    /// </summary>
+    public string? ErrorFrameJson { get; set; }
+
+    /// <summary>
+    /// The code the session closes with, or <see langword="null"/> for
+    /// <see cref="WebSocketCloseStatus.NormalClosure"/>. Setting it with no
+    /// <see cref="ErrorFrameJson"/> isolates door 2 (<c>ADR-0050</c> E2b) — the vendor ends the
+    /// session with a code and says nothing else. This vendor was measured closing <c>1002</c> after
+    /// rejecting a credential, so on the live surface either door alone catches that failure.
+    /// </summary>
+    public WebSocketCloseStatus? CloseStatus { get; set; }
+
+    /// <summary>The reason phrase sent with <see cref="CloseStatus"/>.</summary>
+    public string CloseStatusDescription { get; set; } = "done";
+
     public LmntWsFakeServer()
     {
         _server = new WebSocketTestServer(HandleSessionAsync);
@@ -162,6 +183,18 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
         // still appending to. That is what made
         // SynthesizeAsync_WsInit_ShouldIncludeFlushAndEof_InSubsequentMessages flake in CI.
         await WaitForRequestOrTimeoutAsync(ct).ConfigureAwait(false);
+
+        if (ErrorFrameJson is { } errorFrame)
+        {
+            var bytes = Encoding.UTF8.GetBytes(errorFrame);
+            try { await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false); }
+            catch { /* peer may already be gone; the close below still runs */ }
+
+            await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+            try { await receiveTask.ConfigureAwait(false); } catch { }
+            return;
+        }
+
         await SendAudioFramesAsync(ws, ct).ConfigureAwait(false);
         await TearDownAsync(ws, receiveTask, ct).ConfigureAwait(false);
     }
@@ -262,11 +295,22 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
             catch { /* peer may have closed mid-send; swallow and proceed to close handshake */ }
         }
 
+        await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Closes the server side with <see cref="CloseStatus"/> — normal closure unless a test asked for
+    /// another code.
+    /// </summary>
+    private async Task CloseWithConfiguredStatusAsync(System.Net.WebSockets.WebSocket ws)
+    {
+        var status = CloseStatus ?? WebSocketCloseStatus.NormalClosure;
+
         if (ws.State == WebSocketState.Open)
-            try { await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None).ConfigureAwait(false); }
+            try { await ws.CloseAsync(status, CloseStatusDescription, CancellationToken.None).ConfigureAwait(false); }
             catch { /* peer already closed abruptly */ }
         else if (ws.State == WebSocketState.CloseReceived)
-            try { await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None).ConfigureAwait(false); }
+            try { await ws.CloseOutputAsync(status, CloseStatusDescription, CancellationToken.None).ConfigureAwait(false); }
             catch { /* peer already closed abruptly */ }
     }
 
