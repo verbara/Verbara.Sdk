@@ -1220,10 +1220,21 @@ commit.
       ADR-0041 (recordings as the provider evidence class), ADR-0043 (evidence produced off the PR path)
 - [ ] 6.7 Add the ADR-0048 **and ADR-0049** rows to `docs/decisions/README.md` in numeric order, matching the existing row
       format (link, one-sentence summary, status and date)
-- [ ] 6.8 `docs/guides/provider-recording-protocol.md` — add the probe method as a named section: the
+- [x] 6.8 `docs/guides/provider-recording-protocol.md` — add the probe method as a named section: the
       controlled comparison, the mandatory negative control, and the governing epistemic rule *"a vendor
       asserting X is evidence; a vendor not mentioning Y is not."* Section 4's redaction rules already
-      cover the probe and are referenced rather than restated
+      cover the probe and are referenced rather than restated.
+      **Closed 2026-08-17** as **§11**, appended rather than inserted: §4 (redaction), §5 (provenance)
+      and §7 (terms) are referenced by number from other guides and from ADR-0048, so renumbering to
+      place the probe next to §3 would have broken live cross-references to buy adjacency. Five
+      subsections — the controlled comparison, the mandatory negative control, the epistemic rule, the
+      four evidence classes, and handling. Two things the task did not ask for but the train earned and
+      would otherwise be lost with the scratch probe scripts: the corollary that **a measured tolerance
+      is weaker ground than a stated contract** (the §3.6f trade, and §3.18's padding decision in the
+      other direction), and that **a control refuting its own hypothesis is a finding** — §3.18's arm I
+      predicted a damaged transcript and returned 10/10, which narrowed the shipped claim to duration
+      arithmetic. §4 is referenced, not restated, and the identifier-value rule is named as the probe's
+      instance of it rather than duplicated
 - [ ] 6.9 `docs/guides/provider-test-substrate.md` — state plainly that a green provider suite is not
       evidence of route, authentication or frame-type conformance, with these six defects as the
       demonstration, and point at the §5.5 record for what has actually been checked
