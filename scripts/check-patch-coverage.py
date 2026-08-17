@@ -27,24 +27,36 @@ up).
 Liveness self-tests (transplanted from the SyncFence `MinimumScannedFiles` defense,
 Sdk/ADR-0004) — a mis-wired report reads false-green without them:
   * empty / unresolved merge-base (a shallow clone) -> exit 1, loud.
-  * the diff ADDS an executable source line but diff-cover measured ZERO lines
-    -> exit 1, loud (the report does not line up with the source tree).
-A clean diff that adds no measurable executable source is NOT a liveness failure —
-there is legitimately nothing to measure; patch coverage passes. This covers not
-only docs/config-only changes but also import-path refactors, pure renames, and
-comment/type-only or test-only edits: those touch source files yet add no line
-diff-cover can score, so a zero measurement is honest, not a mis-wiring. It also
-covers a change confined to a coverage-EXCLUDED project — a multi-project repo may
-verify DB-bound code (e.g. a *.Storage.Postgres project) only in a separate
-integration-tests job and exclude it from the unit-coverage report by design; that
-project's changed lines are absent from this report, so the liveness trip scopes to
-the changed file's PROJECT (not just its top-level dir) to tell "excluded project"
-apart from "mis-wired report".
+  * the diff ADDS a line the report was SUPPOSED to measure but diff-cover measured
+    ZERO lines -> exit 1, loud (the report does not line up with the source tree).
+A clean diff that adds no measurable line is NOT a liveness failure — there is
+legitimately nothing to measure; patch coverage passes.
+
+What counts as "supposed to be measured" is decided by the REPORT, not by the text
+of the added line. For a file the report carries, an added line arms the trip only
+when that line NUMBER is one the report instruments; comments, XML doc, attribute
+lines and the continuation lines of a multi-line statement are not sequence points
+in any build, so a zero measurement there is arithmetic, not mis-wiring. Both
+formats state the set directly (Cobertura `<line number=>`, lcov `DA:`), and the
+numbers are comparable because both sides are HEAD-side: the report comes from this
+job's build+test of HEAD, and `git diff --unified=0 <base>...HEAD` counts added
+lines from the HEAD-side `+c` of each `@@` header. Only a file that did NOT exist at
+the merge base falls back to a text heuristic — it has no instrumented-line set to
+consult, and untested new code is exactly what this trip is for.
+
+Three scopes run ahead of that rule and are unchanged: test paths never arm; a
+changed file outside the report's instrumented PROJECT roots never arms (a
+build/config file, and a by-design coverage-EXCLUDED project — a multi-project repo
+may verify DB-bound code, e.g. a *.Storage.Postgres project, only in a separate
+integration-tests job, and scoping to the top-level dir alone would wrongly flag it);
+and an already-existing file the report does not carry never arms (a pure
+interface/declaration file, an integration-only class no unit test loads).
 
 Exit codes: 0 = pass, 1 = fail (below floor OR a liveness trip OR a wiring error).
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -102,16 +114,21 @@ def resolve_merge_base():
     return proc.stdout.strip() or None
 
 
-# An added line matching any of these is never scored by diff-cover, so a diff made
-# up ONLY of them (an import-path refactor, a rename, a comment/type edit) yields a
-# legitimate zero measurement — not a mis-wired report. Conservative by design: any
-# added line that is NOT clearly non-executable counts as executable, so a real code
-# change still arms the liveness trip.
+# Last-resort text heuristic, used for ONE case only: a file that did not exist at
+# the merge base and that the report does not carry, so no instrumented-line set
+# exists to ask. Conservative by design — any added line that is NOT clearly
+# non-executable counts as executable, so untested new code still arms the trip.
+# For every other file the report itself is the authority (report_instrumented_lines),
+# which is why this list never needed to learn C# attribute or continuation lines.
 _NON_EXECUTABLE_PREFIXES = (
     "import ", "from ", "} from ", "export {", "export type ", "export * ",
     "//", "/*", "*/", "* ",
 )
 _NON_EXECUTABLE_EXACT = {"*", "{", "}", "(", ")", "[", "]", "};", "),", ");", "],", "})"}
+
+# `@@ -a,b +c,d @@` — group 1 is the HEAD-side first line of the hunk, which seeds
+# the counter that gives every added line its number.
+_HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 
 
 def _is_test_path(path):
@@ -120,26 +137,54 @@ def _is_test_path(path):
             or "/tests/" in lower or "/__tests__/" in lower)
 
 
-def report_source_files(report_path, fmt):
-    """The set of file paths the coverage report actually instruments. Used to
-    scope the liveness trip: a changed file that is NOT in the report (a config
-    file like eslint.config.js, a build script) can never be measured, so its
-    executable-looking lines are not a mis-wiring signal."""
-    files = set()
+def report_instrumented_lines(report_path, fmt):
+    """`{repo-relative path -> {line numbers the report instruments}}`, the gate's
+    ground truth in two places at once.
+
+    The KEYS say which files the report measures at all: a changed file that is
+    absent (a config file like eslint.config.js, a build script, a pure interface
+    declaration, a by-design coverage-excluded project) can never be measured, so
+    its executable-LOOKING lines are not a mis-wiring signal. The VALUES say which
+    lines of a carried file are sequence points, which is the question the liveness
+    trip actually needs answered and the one a text heuristic cannot answer: a C#
+    `[LoggerMessage(...)]` attribute line or the continuation line of a multi-line
+    statement reads as code and is instrumented by nothing.
+
+    Both formats state it directly — Cobertura as `<line number="N">` under each
+    `<class filename=...>`, lcov as `DA:<line>,<hits>` between `SF:` and
+    `end_of_record` — so nothing here guesses. Cobertura filenames are normalized to
+    repo-relative before this runs; lcov `SF:` paths already are. A merged report may
+    carry one file in several `<class>` elements (partial classes, multiple
+    packages), so line sets accumulate rather than replace."""
+    files = {}
     if fmt == "lcov":
+        current = None
         with open(report_path, encoding="utf-8") as handle:
             for line in handle:
+                line = line.strip()
                 if line.startswith("SF:"):
-                    files.add(line[3:].strip())
+                    key = "/".join(_split_path(line[3:].strip()))
+                    current = files.setdefault(key, set())
+                elif line == "end_of_record":
+                    current = None
+                elif line.startswith("DA:") and current is not None:
+                    number = line[3:].split(",")[0].strip()
+                    if number.isdigit():
+                        current.add(int(number))
     else:  # cobertura
         for cls in ET.parse(report_path).getroot().iter("class"):
             filename = cls.get("filename")
-            if filename:
-                files.add(filename)
+            if not filename:
+                continue
+            entry = files.setdefault("/".join(_split_path(filename)), set())
+            for line_element in cls.iter("line"):
+                number = line_element.get("number")
+                if number and number.isdigit():
+                    entry.add(int(number))
     return files
 
 
-def instrumented_roots(report_path, fmt):
+def instrumented_roots(line_map):
     """The set of project-level roots the coverage report instruments (e.g.
     {'src/CoreLib', 'src/DataLayer'} for a multi-project repo, or {'src'} for a flat
     one). Used to scope the liveness trip: a changed executable file whose PROJECT the
@@ -151,11 +196,11 @@ def instrumented_roots(report_path, fmt):
     the top-level dir alone (e.g. 'src') would wrongly flag the latter, since the
     excluded project still lives under 'src'.
 
-    Cobertura paths are normalized to repo-relative before this runs; lcov `SF:`
-    paths are already repo-relative. If no root can be derived (a flat report),
-    returns None so the caller falls back to the original 'any source file' rule."""
+    Takes the map from report_instrumented_lines, whose keys are already normalized.
+    If no root can be derived (a flat report), returns None so the caller falls back
+    to the original 'any source file' rule."""
     roots = set()
-    for entry in report_source_files(report_path, fmt):
+    for entry in line_map:
         root = _project_root(_split_path(entry))
         if root:
             roots.add(root)
@@ -188,25 +233,37 @@ def _in_scope(changed_path, roots):
     return _project_root(_split_path(changed_path)) in roots
 
 
-def diff_adds_executable_source(merge_base, source_extensions, roots, report_files):
-    """True if the PR diff ADDS a plausibly-executable line to a NON-TEST source file
-    the report is SUPPOSED to measure — a NEW file in an instrumented project, or an
-    existing file already carried in the report. Only then is a zero measurement a
-    mis-wiring (real code changed but 0 measured). Everything else is legitimately
-    unmeasurable and passes as 'nothing to gate': an import-path refactor, rename,
-    comment/type-only or test-only edit (no scorable line at all); a change confined to
-    non-instrumented config/tooling or a coverage-excluded project (out of the
-    instrumented projects); and a modified file the report does not carry — a pure
-    interface/abstract declaration file (its new `Foo();` signature lines look
-    executable but produce no coverage), or an integration-only class no unit test
-    loads. A NEW file still trips (its executable code must be tested); only an
-    already-existing, report-absent file is waved through, so untested new code can
-    never hide."""
+def diff_adds_executable_source(merge_base, source_extensions, roots, line_map):
+    """True if the PR diff ADDS a line to a NON-TEST source file that the report was
+    SUPPOSED to measure. Only then is a zero measurement a mis-wiring (something
+    measurable changed but 0 measured).
+
+    For a file the report CARRIES, the report decides: the added line arms the trip
+    only if its NUMBER is one the report instruments. That is the whole point — a
+    comment, an XML doc line, a C# attribute line and the continuation lines of a
+    multi-line statement are not sequence points, so measuring 0 for a diff made only
+    of those is arithmetic, not mis-wiring, and a text heuristic cannot tell the
+    difference. The numbers line up because both sides are HEAD-side (see the module
+    docstring).
+
+    Only a file that did NOT exist at the merge base AND is absent from the report
+    falls back to the conservative text heuristic: there is no instrumented-line set
+    to consult, and untested new code is exactly what this trip is for, so it still
+    arms.
+
+    Everything else is legitimately unmeasurable and passes as 'nothing to gate': a
+    test-only edit; a change confined to non-instrumented config/tooling or to a
+    coverage-excluded project (outside the instrumented project roots); and a modified
+    file the report does not carry — a pure interface/abstract declaration file (its
+    new `Foo();` signature lines look executable but produce no coverage), or an
+    integration-only class no unit test loads."""
     proc = run(["git", "diff", "--unified=0", f"{merge_base}...HEAD"])
     if proc.returncode != 0:
         return False
     is_source = False
     added_file = False
+    instrumented = None   # the carried file's instrumented lines, or None if absent
+    new_line = 0          # HEAD-side number of the next added line
     for line in proc.stdout.splitlines():
         if line.startswith("--- "):
             # File header (`--- a/path` or `--- /dev/null`); /dev/null marks a new file.
@@ -216,13 +273,27 @@ def diff_adds_executable_source(merge_base, source_extensions, roots, report_fil
             path = line[4:].strip()
             if path.startswith("b/"):
                 path = path[2:]
-            normalized = "/".join(_split_path(path))
+            instrumented = line_map.get("/".join(_split_path(path)))
             is_source = (any(path.lower().endswith(ext) for ext in source_extensions)
                          and not _is_test_path(path)
                          and _in_scope(path, roots)
-                         and (added_file or normalized in report_files))
+                         and (added_file or instrumented is not None))
+            new_line = 0
             continue
-        if not is_source or line.startswith("+++") or not line.startswith("+"):
+        header = _HUNK_HEADER.match(line)
+        if header:
+            new_line = int(header.group(1))
+            continue
+        if line.startswith("+++") or not line.startswith("+"):
+            # A `-` line consumes no HEAD-side number, so the counter does not move.
+            continue
+        number = new_line
+        new_line += 1
+        if not is_source:
+            continue
+        if instrumented is not None:
+            if number in instrumented:
+                return True
             continue
         code = line[1:].strip()
         if not code or code in _NON_EXECUTABLE_EXACT:
@@ -335,27 +406,27 @@ def main():
         measured_lines = int(result.get("total_num_lines", 0))
         changed_lines = int(result.get("num_changed_lines", 0))
 
-        # Liveness 2: the diff ADDS an executable source line but the report
+        # Liveness 2: the diff ADDS a line the report instruments but the report
         # measured zero diff lines -> the report does not line up with the tree.
-        # Import-only/rename/comment/test-only diffs add no executable line, so a
-        # zero measurement there is honest (handled by the measured_lines==0 branch).
+        # A diff of comments/attributes/continuations, or of files the report does
+        # not carry, adds no instrumented line, so a zero measurement there is
+        # honest (handled by the measured_lines==0 branch below).
         source_extensions = _SOURCE_EXTENSIONS[fmt]
-        roots = instrumented_roots(report_for_diffcover, fmt)
-        report_files = {
-            "/".join(_split_path(entry))
-            for entry in report_source_files(report_for_diffcover, fmt)
-        }
+        line_map = report_instrumented_lines(report_for_diffcover, fmt)
+        roots = instrumented_roots(line_map)
         if measured_lines == 0 and diff_adds_executable_source(
-                merge_base, source_extensions, roots, report_files):
-            fail(f"the diff adds executable {fmt} source lines but diff-cover measured "
+                merge_base, source_extensions, roots, line_map):
+            fail(f"the diff adds instrumented {fmt} source lines but diff-cover measured "
                  f"0 diff lines (changed lines seen: {changed_lines}). The coverage "
                  f"report is mis-wired against the source tree — refusing to read "
                  f"false-green.")
 
         if measured_lines == 0:
-            # Honestly nothing measurable (docs/config only). Nothing to gate.
+            # Honestly nothing measurable — the diff adds no line this report
+            # instruments (docs/config, comments/attributes, an uninstrumented
+            # project). Nothing to gate.
             print(f"Patch coverage: no measurable {fmt} lines in this diff "
-                  f"(docs/config-only change). floor {patch_floor}% — n/a, pass.")
+                  f"(no instrumented line added). floor {patch_floor}% — n/a, pass.")
             return
 
         patch_pct = round(float(result.get("total_percent_covered", 0.0)), 2)

@@ -790,6 +790,25 @@ frame-format fix.
 
 ### Changed — CI
 
+- **The patch-coverage mis-wiring trip now arms from the report, not from the line text** (verbatim
+  replication of `Verbara.Sdk.Pro` PR #95; the script is byte-identical across the four ADR-0013
+  repos). `check-patch-coverage.py`'s second liveness self-test asks *"diff-cover measured 0 lines —
+  did this diff add something it was supposed to measure?"* and answered from a prefix heuristic that
+  models only comment and TypeScript shapes. It therefore reads a `[LoggerMessage(…)]` attribute line
+  and a `Message = "…"` string continuation as executable C#, and **neither is ever a Cobertura
+  sequence point** — so a documentation/attribute-only PR failed as `mis-wired` while the report it
+  accused was correct (measured on the Pro PR that exposed it: 85 added `src/**/*.cs` lines, 5 of
+  them arming the trip, **0** instrumented). The trip now asks the report: for a file the report
+  carries, an added line arms it only when that line's **number** is in the file's instrumented set.
+  The two coordinate systems are one — the report is built from HEAD, and `@@ -a,b +c,d @@` seeds a
+  HEAD-side counter that `+` lines advance and `-` lines do not. A file the report does **not** carry
+  and that did not exist at the merge base keeps the text heuristic, so the failure this trip was
+  built for — a path-normalization break that puts *every* file outside the report — still fires on
+  the first added file. It is sharper in the other direction too: an lcov `DA:` on an `import` line
+  now arms where the heuristic waved it through. Suite 7 → 10 cases in
+  `scripts/tests/test_check_patch_coverage.py`; no version bump, no package delta — CI machinery
+  only. Rationale, alternatives and the rule as a spec: Pro `openspec/specs/patch-coverage-liveness/`.
+
 - **`publish.yml` now creates the GitHub Release object itself.** The workflow packed and pushed
   the packages to nuget.org on every `v*` tag but never created the Release, so tags accumulated
   published-but-release-less — `v2.3.0` shipped that way and was backfilled by hand on 2026-07-12

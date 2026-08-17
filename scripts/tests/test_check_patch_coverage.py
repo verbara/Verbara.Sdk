@@ -1,15 +1,22 @@
 """Unit tests for check-patch-coverage.py (the diff-coverage primary gate).
 
-Each test builds a throwaway git repo (a local "origin/main" ref + a feature
-HEAD with committed changes), a fixture Cobertura report, and runs the script
-with CWD inside the repo. Cases: below-patch FAIL, above PASS, shallow-clone
-(unresolved merge-base) FAIL, touched-but-zero (mis-wired report) FAIL.
+Most tests build a throwaway git repo (a local "origin/main" ref + a feature
+HEAD with committed changes), a fixture Cobertura report, and run the script
+end to end with CWD inside the repo. Cases: below-patch FAIL, above PASS,
+shallow-clone (unresolved merge-base) FAIL, touched-but-zero (mis-wired report)
+FAIL, and the several shapes that are legitimately unmeasurable and must pass.
 
-The four diff-cover-dependent cases are skipped when diff-cover is not installed
-so `python3 -m unittest` still runs offline; CI installs the pinned diff-cover
-(ADR-0013) so they always execute there. The shallow-clone case needs no
-diff-cover and always runs. Stdlib unittest only — NO pip deps.
+Two cases assert the liveness EVIDENCE RULE directly on the predicate rather than
+end to end, because a fixture cannot produce the case: a report whose paths line up
+well enough to instrument a given line is a report diff-cover would also score, so
+"instrumented yet unmeasured" only exists at that seam.
+
+The end-to-end cases are skipped when diff-cover is not installed so
+`python3 -m unittest` still runs offline; CI installs the pinned diff-cover
+(ADR-0013) so they always execute there. The shallow-clone case and the two
+predicate cases need no diff-cover and always run. Stdlib unittest only — NO pip deps.
 """
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -21,6 +28,16 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _SCRIPT = os.path.join(_HERE, os.pardir, "check-patch-coverage.py")
 
 _HAS_DIFF_COVER = shutil.which("diff-cover") is not None
+
+
+def _load_script():
+    """Import check-patch-coverage.py as a module. Its filename is not a valid
+    identifier, so this goes through importlib; the `__main__` guard keeps main()
+    from running on import."""
+    spec = importlib.util.spec_from_file_location("check_patch_coverage", _SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 _FLOOR = '{"line":78,"slack":3,"branch":64,"lines_valid_min":1,"patch":85}'
 
@@ -89,6 +106,44 @@ class CheckPatchCoverageTests(unittest.TestCase):
         self._write("src/calc.py", calc_body)
         _git(self.repo, "add", "-A")
         _git(self.repo, "commit", "-qm", "change")
+
+    def _commit_annotated_thing(self):
+        """Shared fixture for the line-level evidence rule. Base: a 4-line class.
+        Feature: three ADDED lines — 3 (a comment), 4 (a C# attribute line) and 5 (its
+        continuation) — none of which is a sequence point in any build. The method
+        body is untouched and lands at line 6."""
+        self._write("src/Acme.Core/Thing.cs",
+                    "class Thing\n"
+                    "{\n"
+                    "    int F() { return 1; }\n"
+                    "}\n")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-qm", "thing")
+        _git(self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        _git(self.repo, "checkout", "-q", "-b", "feature")
+        self._write("src/Acme.Core/Thing.cs",
+                    "class Thing\n"
+                    "{\n"
+                    "    // See Pro/ADR-0017.\n"
+                    "    [Log(Level = 1,\n"
+                    '        Message = "hello {Name}")]\n'
+                    "    int F() { return 1; }\n"
+                    "}\n")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-qm", "annotate")
+
+    def _diff_adds(self, line_map):
+        """Run the liveness predicate directly against this repo's diff, with a
+        hand-built instrumented-line map standing in for a coverage report."""
+        module = _load_script()
+        merge_base = _git(self.repo, "merge-base", "origin/main", "HEAD").stdout.strip()
+        previous = os.getcwd()
+        os.chdir(self.repo)
+        try:
+            return module.diff_adds_executable_source(
+                merge_base, (".cs",), module.instrumented_roots(line_map), line_map)
+        finally:
+            os.chdir(previous)
 
     def _report(self, lines):
         text = _cobertura(lines).replace("{ROOT}", self.repo)
@@ -219,6 +274,45 @@ class CheckPatchCoverageTests(unittest.TestCase):
         result = self._run(report, self._floor())
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("n/a, pass", result.stdout)
+
+    @unittest.skipUnless(_HAS_DIFF_COVER, "diff-cover not installed")
+    def test_ShouldPass_WhenAddedLinesAreNotInstrumented(self):
+        # The PR #94 shape. An EXISTING file the report CARRIES gains only lines the
+        # report does not instrument: a comment, a C# attribute line, and the
+        # continuation line of a multi-line statement. None is a sequence point, so
+        # diff-cover correctly measures 0 -> n/a, pass. Under the old text heuristic
+        # the attribute and continuation lines read as executable and tripped the
+        # mis-wiring self-test, turning a correct green into a red.
+        self._commit_annotated_thing()
+        # The report carries Thing.cs and instruments ONLY line 6 (the method body,
+        # which the diff does not touch); the added lines are 3, 4 and 5.
+        text = _cobertura([(6, 1)], filename="src/Acme.Core/Thing.cs").replace(
+            "{ROOT}", self.repo)
+        report = os.path.join(self.repo, "Cobertura.xml")
+        with open(report, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        result = self._run(report, self._floor())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("n/a, pass", result.stdout)
+
+    def test_DiffAddsExecutableSource_ShouldReturnTrue_WhenAddedLineIsInstrumented(self):
+        # The evidence rule, asserted directly on the predicate. An added line whose
+        # NUMBER the report instruments IS mis-wiring evidence: if the report says the
+        # line is measurable and diff-cover scored nothing, the two do not line up.
+        # Constructed in-process because an end-to-end fixture cannot produce it — a
+        # report whose paths line up well enough to instrument line 3 is a report
+        # diff-cover would also score, so the real mis-wiring can only be simulated
+        # at this seam.
+        self._commit_annotated_thing()
+        self.assertTrue(self._diff_adds({"src/Acme.Core/Thing.cs": {3, 6}}))
+
+    def test_DiffAddsExecutableSource_ShouldReturnFalse_WhenAddedLineIsNotInstrumented(self):
+        # The other direction, on the same diff: the added lines are 3, 4 and 5; the
+        # report instruments only 6. Nothing measurable was added, so a 0 measurement
+        # is arithmetic and the trip must stand down. Paired with the test above, this
+        # pins the rule rather than the absence of the trip.
+        self._commit_annotated_thing()
+        self.assertFalse(self._diff_adds({"src/Acme.Core/Thing.cs": {6}}))
 
     def test_ShouldFail_WhenMergeBaseUnresolved(self):
         # A fresh repo with an unrelated orphan HEAD and NO origin/main ref: the
