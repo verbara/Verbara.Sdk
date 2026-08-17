@@ -16,6 +16,14 @@ namespace Verbara.Sdk.VoiceAi.Stt.Cartesia;
 /// </summary>
 public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
 {
+    /// <summary>
+    /// Cartesia's in-band end-of-input terminator, sent as a text frame when the audio source is
+    /// exhausted. It is a bare word, not JSON: the service answers any JSON sent on this socket
+    /// with <c>Expected one of: "finalize", "done", "close"</c>, which is how the three accepted
+    /// commands were established rather than read off a page. See <see cref="SendLoopAsync"/>.
+    /// </summary>
+    private static readonly byte[] DoneFrame = "done"u8.ToArray();
+
     private readonly CartesiaOptions _options;
     private readonly int? _fakeServerPort;
 
@@ -74,8 +82,7 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
         var channel = Channel.CreateUnbounded<SpeechRecognitionResult>();
 
         // Linked CTS: when the receive loop detects the server is gone (abort / close),
-        // we cancel the send loop so it does not hang inside SendAsync or CloseOutputAsync
-        // on the half-dead socket.
+        // we cancel the send loop so it does not hang inside SendAsync on the half-dead socket.
         using var sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
         // Fire-and-forget: stream audio frames to the server.
@@ -117,21 +124,14 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
                 await ws.SendAsync(frame, WebSocketMessageType.Binary, true, ct).ConfigureAwait(false);
             }
 
-            // Signal end-of-audio (half-close) so the server flushes any pending transcript.
-            // Guarded by a short timeout because CloseOutputAsync can hang if the server
-            // aborted the connection at the socket level and the client hasn't seen the
-            // FIN yet.
+            // End of input: the terminator goes in band and the output side stays open.
+            // A bare half-close stood here — guarded by its own timeout, because CloseOutputAsync
+            // can hang on a socket the server has already abandoned. Measured live on 2026-08-16
+            // against one utterance of ten spoken digits (§3.6d), the half-close alone recovered
+            // 5/10 and the terminator 7/10; the timeout it needed is gone with it, since a text
+            // frame on a dead socket fails rather than blocks.
             if (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
-            {
-                using var closeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                closeCts.CancelAfter(TimeSpan.FromSeconds(2));
-                try
-                {
-                    await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", closeCts.Token)
-                        .ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) { /* server is gone, give up */ }
-            }
+                await ws.SendAsync(DoneFrame, WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
         catch (WebSocketException) { }
@@ -153,6 +153,9 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
             catch (OperationCanceledException) { break; }
             catch (WebSocketException) { break; }
 
+            // Unchanged line, changed meaning: with the half-close gone from the send loop, the
+            // close frame that ends this loop is the vendor deciding the session is over, not the
+            // vendor answering a close we sent before it had finished transcribing.
             if (result.MessageType == WebSocketMessageType.Close) break;
             if (result.MessageType != WebSocketMessageType.Text) continue;
 

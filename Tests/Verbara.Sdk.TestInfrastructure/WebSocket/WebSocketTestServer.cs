@@ -34,10 +34,26 @@ public sealed class WebSocketTestServer : IAsyncDisposable
     private readonly TcpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private readonly Func<WebSocketTestSession, Task> _onConnection;
+    private readonly TaskCompletionSource _sessionCompleted =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? _acceptLoop;
 
     /// <summary>The TCP port the server is listening on (loopback only).</summary>
     public int Port { get; }
+
+    /// <summary>
+    /// Completes when the first accepted session's handler returns — a join point for assertions
+    /// about what the client did on its way out.
+    /// </summary>
+    /// <remarks>
+    /// Without it, a test that asserts on the last thing a client sent is racing the session: the
+    /// client's <c>StreamAsync</c> returns as soon as the server closes, which can be before the
+    /// server has read what the client sent just before that. Awaiting this is what makes such an
+    /// assertion deterministic rather than usually-right — see the half-close tests in the STT
+    /// suites, whose first version passed against a client that half-closed for exactly that
+    /// reason.
+    /// </remarks>
+    public Task SessionCompleted => _sessionCompleted.Task;
 
     /// <summary>
     /// Create a new server bound to a free loopback port. <paramref name="onConnection"/> is
@@ -109,6 +125,7 @@ public sealed class WebSocketTestServer : IAsyncDisposable
         finally
         {
             try { client.Dispose(); } catch { }
+            _sessionCompleted.TrySetResult();
         }
     }
 

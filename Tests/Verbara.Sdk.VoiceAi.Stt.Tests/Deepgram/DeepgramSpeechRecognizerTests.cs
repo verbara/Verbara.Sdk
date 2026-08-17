@@ -188,6 +188,42 @@ public class DeepgramSpeechRecognizerTests : IAsyncDisposable
         _server.ReceivedFrameCount.Should().Be(0);
     }
 
+    [Fact]
+    public async Task StreamAsync_ShouldSendTheCloseStreamTerminator_WhenInputEnds()
+    {
+        var recognizer = BuildRecognizer();
+        await recognizer.StreamAsync(ThreeFrames(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await SessionEndedAsync();
+
+        _server.ReceivedTerminatorText.Should().Be("""{"type":"CloseStream"}""");
+    }
+
+    /// <summary>
+    /// Deepgram is the one surface where §3.6d measured the half-close and the terminator as
+    /// equivalent — 10/10 digits either way — so this test guards a decision rather than a defect:
+    /// all four clients end input the same way, and a reader who restores the half-close here on
+    /// the grounds that it used to work would have to re-run the measurement to find out that it
+    /// is the two other surfaces, not this one, that would break.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldNotHalfCloseTheOutputSide_WhenInputEnds()
+    {
+        var recognizer = BuildRecognizer();
+        await recognizer.StreamAsync(ThreeFrames(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await SessionEndedAsync();
+
+        _server.ReceivedClientCloseFrame.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Wait for the fake's session handler to return before asserting on what the client sent last.
+    /// <c>StreamAsync</c> returns as soon as the server closes, which can be before the server has
+    /// read the frames the client sent just before that — so without this join point a half-close
+    /// assertion is a race the defect wins. The bound is a liveness guard, not a synchronisation
+    /// delay: it is never reached on a passing run.
+    /// </summary>
+    private Task SessionEndedAsync() => _server.SessionCompleted.WaitAsync(TimeSpan.FromSeconds(10));
+
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()
     {
         yield return new byte[320];

@@ -311,9 +311,60 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         _server.ReceivedFrameCount.Should().Be(0);
     }
 
+    /// <summary>
+    /// <c>last_seq_no</c> is compared against the count the fake kept independently, not against a
+    /// literal: the client and the server have to agree on how many audio chunks crossed the
+    /// socket, and a hard-coded 3 would still pass if both drifted together.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldSendEndOfStreamNumberedWithTheAudioChunkCount_WhenInputEnds()
+    {
+        var recognizer = BuildRecognizer();
+        await recognizer.StreamAsync(ThreeFrames(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await SessionEndedAsync();
+
+        using var terminator = JsonDocument.Parse(_server.ReceivedEndOfStreamJson!);
+        terminator.RootElement.GetProperty("message").GetString().Should().Be("EndOfStream");
+        terminator.RootElement.GetProperty("last_seq_no").GetInt32()
+            .Should().Be(_server.ReceivedFrameCount).And.Be(3);
+    }
+
+    /// <summary>
+    /// The load-bearing half of the pair. §3.6d streamed one utterance of ten spoken digits into
+    /// this surface three ways: half-close alone returned 0/10 digits — twenty
+    /// <c>AddPartialTranscript</c> messages, not one <c>AddTranscript</c>, and no
+    /// <c>EndOfTranscript</c> — the terminator alone returned 10/10, and sending both returned 0/10
+    /// again. So the half-close is not merely redundant here, it destroys the result even when the
+    /// terminator precedes it. This test fails the moment a client sends it again.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldNotHalfCloseTheOutputSide_WhenInputEnds()
+    {
+        var recognizer = BuildRecognizer();
+        await recognizer.StreamAsync(ThreeFrames(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+        await SessionEndedAsync();
+
+        _server.ReceivedClientCloseFrame.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Wait for the fake's session handler to return before asserting on what the client sent last.
+    /// <c>StreamAsync</c> returns as soon as the server closes, which can be before the server has
+    /// read the frames the client sent just before that — so without this join point a half-close
+    /// assertion is a race the defect wins. The bound is a liveness guard, not a synchronisation
+    /// delay: it is never reached on a passing run.
+    /// </summary>
+    private Task SessionEndedAsync() => _server.SessionCompleted.WaitAsync(TimeSpan.FromSeconds(10));
+
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()
     {
         yield return new byte[320];
+        await Task.CompletedTask;
+    }
+
+    private static async IAsyncEnumerable<ReadOnlyMemory<byte>> ThreeFrames()
+    {
+        for (int i = 0; i < 3; i++) yield return new byte[320];
         await Task.CompletedTask;
     }
 

@@ -12,6 +12,12 @@ namespace Verbara.Sdk.VoiceAi.Stt.Deepgram;
 /// </summary>
 public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
 {
+    /// <summary>
+    /// Deepgram's in-band end-of-input terminator, sent as a text frame when the audio source is
+    /// exhausted. It replaces the half-close that stood there before — see <see cref="SendLoopAsync"/>.
+    /// </summary>
+    private static readonly byte[] CloseStreamFrame = """{"type":"CloseStream"}"""u8.ToArray();
+
     private readonly DeepgramOptions _options;
     private readonly int? _fakeServerPort;
 
@@ -87,9 +93,16 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
                 await ws.SendAsync(frame, WebSocketMessageType.Binary, true, ct).ConfigureAwait(false);
             }
 
-            // Signal the server that audio is complete (half-close).
+            // End of input: the terminator goes in band and the output side stays open.
+            // A bare half-close stood here until 2026-08-16, when all four STT surfaces were
+            // measured live against the same utterance (§3.6d). On Deepgram the two spellings are
+            // equivalent — 10/10 digits either way — but on Speechmatics and AssemblyAI the
+            // half-close costs the entire transcript, and sending the terminator *and*
+            // half-closing is exactly as bad as half-closing alone. Deepgram is remediated with
+            // the other three rather than left as the one site whose measured equivalence a later
+            // reader would have to rediscover before daring to touch it.
             if (ws.State == WebSocketState.Open)
-                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
+                await ws.SendAsync(CloseStreamFrame, WebSocketMessageType.Text, true, ct)
                     .ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
@@ -112,6 +125,9 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
             catch (OperationCanceledException) { break; }
             catch (WebSocketException) { break; }
 
+            // Unchanged line, changed meaning: with the half-close gone from the send loop, the
+            // close frame that ends this loop is the vendor deciding the session is over, not the
+            // vendor answering a close we sent before it had finished transcribing.
             if (result.MessageType == WebSocketMessageType.Close) break;
             if (result.MessageType != WebSocketMessageType.Text) continue;
 

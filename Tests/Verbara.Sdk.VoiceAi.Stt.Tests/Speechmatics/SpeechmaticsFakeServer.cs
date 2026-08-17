@@ -88,6 +88,23 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
     /// <summary>Count of binary WebSocket frames received from the client.</summary>
     public int ReceivedFrameCount => _receivedFrameCount;
 
+    /// <summary>
+    /// The client's in-band end-of-input terminator — the <c>EndOfStream</c> text frame — or
+    /// <c>null</c> if it never sent one.
+    /// </summary>
+    public string? ReceivedEndOfStreamJson { get; private set; }
+
+    /// <summary>
+    /// True if the client ever sent a close frame. A remediated client sends none at all: it ends
+    /// input with <see cref="ReceivedEndOfStreamJson"/> and lets the service close the session, so
+    /// any close frame reaching here is the half-close §3.6d measured as costing this surface its
+    /// entire transcript.
+    /// </summary>
+    public bool ReceivedClientCloseFrame { get; private set; }
+
+    /// <summary>Completes when the session handler returns — the join point for the assertions.</summary>
+    public Task SessionCompleted => _server.SessionCompleted;
+
     /// <summary>If true, abort the WebSocket abnormally after sending RecognitionStarted + transcripts.</summary>
     public bool AbortAfterSend { get; set; }
 
@@ -151,8 +168,12 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
             return;
         }
 
-        // Receive binary audio frames until the client closes.
-        while (ws.State == WebSocketState.Open)
+        // Receive binary audio frames until the client signals end of input — and then keep
+        // reading. CloseSent is in the loop condition on purpose: a client that half-closes sends
+        // that frame immediately behind the terminator, so a fake that stopped at the terminator
+        // would report every client as clean. Not hypothetical — it is what the first version of
+        // this loop did, and the half-close test below passed against a client that half-closed.
+        while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
         {
             ValueWebSocketReceiveResult result;
             try
@@ -165,8 +186,26 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
             {
                 Interlocked.Increment(ref _receivedFrameCount);
             }
+            else if (result.MessageType == WebSocketMessageType.Text)
+            {
+                // End of input. The service answers EndOfStream with EndOfTranscript and then
+                // closes the session itself — a fake that ended the session on the client's close
+                // frame instead would be asserting the half-close as the contract, which is the
+                // defect §3.6d measured (twenty partials, not one AddTranscript).
+                ReceivedEndOfStreamJson = Encoding.UTF8.GetString(buf, 0, result.Count);
+                try
+                {
+                    var endOfTranscript = Encoding.UTF8.GetBytes(BuildEndOfTranscriptJson());
+                    await ws.SendAsync(endOfTranscript.AsMemory(), WebSocketMessageType.Text, true, ct)
+                        .ConfigureAwait(false);
+                    await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
+                        .ConfigureAwait(false);
+                }
+                catch { break; }
+            }
             else if (result.MessageType == WebSocketMessageType.Close)
             {
+                ReceivedClientCloseFrame = true;
                 break;
             }
         }

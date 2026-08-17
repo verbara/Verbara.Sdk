@@ -4,6 +4,76 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — two of the four streaming STT clients returned no final transcript at all
+
+Every streaming STT client ended its input the same way: stream the audio, then `CloseOutputAsync`.
+The comment above one of them stated the belief the other three shared — *"signal end-of-audio
+(half-close) so the server flushes any pending transcript"*. Nobody had measured it. Measured on all
+four surfaces on 2026-08-16, against one utterance of ten spoken digits replayed byte-identically
+into every arm, it is false on three and actively destructive on two: **Speechmatics and AssemblyAI
+emit partials all session and then end with zero finals.** A caller consuming only finals — the normal
+way to consume this API — got nothing from either provider.
+
+- **All four clients now send the vendor's in-band terminator as a text frame and leave the output
+  side open**, letting the vendor end the session: `{"type":"CloseStream"}` (Deepgram),
+  `{"message":"EndOfStream","last_seq_no":N}` (Speechmatics — the send loop counts audio chunks
+  because the terminator has to name the last one), `{"type":"Terminate"}` (AssemblyAI), and the bare
+  word `done` (Cartesia, which answers any JSON on that socket with
+  `Expected one of: "finalize", "done", "close"` — that rejection is how the accepted commands were
+  established, not a documentation page).
+
+- **The half-close is removed, not supplemented, and that is a measured distinction.** The obvious
+  remedy — keep the half-close, add the terminator — was run as its own arm and is exactly as bad as
+  the half-close alone on both broken surfaces. Adding the terminator without removing the close
+  would have looked like a fix and shipped the defect.
+
+- **Deepgram is remediated too, although it was measured unaffected** (10/10 digits with the
+  half-close, without it, and with both). Leaving one site different for no behavioural reason costs
+  the next reader a re-derivation before they dare touch it. The arm that makes that a result rather
+  than an untested assumption is the known-wrong control: a torn-down transport scored 8/10 there, so
+  the instrument does detect a lost tail.
+
+- **Verified against the shipped clients, not a probe reproducing them.** The remediated
+  `SpeechmaticsSpeechRecognizer` and `AssemblyAiSpeechRecognizer` each recovered **10/10** digits with
+  one final; the half-close restored in the same source files, run through the same harness minutes
+  later, returned **0/10** and zero finals on both. Running only the fixed build would have measured
+  the day rather than the change.
+
+- **Cartesia's `CloseOutputAsync` needed a timeout, because it can hang on a socket the peer has
+  abandoned.** That timeout is gone with the call it guarded — a text frame on a dead socket fails
+  rather than blocks.
+
+- **The receive loops were left alone on purpose.** All four already read while the socket is `Open`
+  *or* `CloseSent`, so they were never why a final arrived too late. One unchanged line changed
+  meaning instead: the close frame that ends the loop is now the vendor deciding the session is over,
+  not the vendor answering a close we sent before it had finished transcribing.
+
+- **The first version of the tests for this was blind, and the fix to that shipped with it.** Each
+  fake stopped reading at the terminator — so a client that half-closed immediately behind it looked
+  clean, and the new assertions passed against exactly the defect they exist to catch. The fakes now
+  keep reading (`or CloseSent`), and `WebSocketTestServer.SessionCompleted` gives the tests a
+  deterministic join point instead of a race: `StreamAsync` returns as soon as the server closes,
+  which can be before the server has read what the client sent just before that. Re-verified by
+  injecting both destructive arms into all four clients — eight arms, eight detections.
+
+Named so it is not mistaken for done: **Cartesia's fix is asserted by its fake and unmeasured on the
+wire**, because that client cannot open a session at all — it connects with no query string and the
+vendor closes `1008 Missing sample_rate`. Its live verification is deferred to that fix. The way it
+fails is its own finding: zero results, dead in half a second, and no error reaches the caller
+(`Sdk/ADR-0049` D1, observed end-to-end through a shipped client for the first time). Also unchanged:
+AssemblyAI still sends one message per caller frame and so still fails any caller feeding frames
+shorter than the vendor's 50 ms floor.
+
+And the trade this makes, stated rather than left to be found: no client here sends a close frame any
+more, so a session now ends only when the **vendor** closes it. The unbounded wait is not new — the old
+code also sat in `ReceiveAsync` waiting on a peer that might never answer — but its backing is weaker,
+because RFC 6455 obliges a peer to echo a close frame and nothing obliges a vendor to end a session.
+Three of the four were measured ending it; Cartesia could not be measured, and is the one surface with
+a sibling command (`finalize`) whose purpose is to flush *without* ending the session. A drain deadline
+is deliberately **not** shipped here: the measurement that would set it does not exist yet, and a
+timeout picked ahead of that measurement is exactly the unmeasured machinery this work removed
+elsewhere.
+
 ### Fixed — BREAKING: Speechmatics realtime STT could not open a session at all
 
 The long-lived API key travelled as a `?jwt=` query parameter, which the service does not accept.
@@ -51,9 +121,11 @@ because `SpeechmaticsFakeServer` had no way to look at the credential.
 
 Named so it is not mistaken for done: the swallowed `Error` frame on this same loop is untouched
 (`Sdk/ADR-0049` D1 — it is what makes an in-band rejection silent), as are the three assembly signals
-the client ignores (`word_delimiter`, `attaches_to`, `metadata.transcript`). And the **fixed client
-has not itself been run live** — the three arms were a probe reproducing what it now sends, which is
-the same wire behaviour but a reconstruction of it, not the artifact.
+the client ignores (`word_delimiter`, `attaches_to`, `metadata.transcript`). The fixed client had not
+itself been run live when this was written — the three arms were a probe reproducing what it now
+sends, a reconstruction rather than the artifact. **That has since been closed** by the half-close
+re-probe in the entry above: the shipped `SpeechmaticsSpeechRecognizer` reached a full transcript live
+on 2026-08-16, which is not possible unless its `Authorization: Bearer` channel authenticated.
 
 ### Fixed — BREAKING: ElevenLabs and Cartesia TTS never returned a byte of audio
 
