@@ -1168,6 +1168,84 @@ remaining HTTP migrations will need.
       > causal wait is a few lines and the refutation has to be re-earned every time a test is added.
       > Verified after the fix: full TTS suite green **20/20 idle and 15/15 with twice as many spinners
       > as cores**, and the unit lane at **3 081 tests / 30 assemblies, 0 warnings**.
+
+      > **Third amendment (2026-08-17) — the class swept beyond the two fakes, and one verdict above
+      > turns out to be narrower than it reads.** Same technique throughout: force the interleaving,
+      > see whether an assertion moves, and record the negative results as results.
+      >
+      > **The Realtime negative result does not generalise to the fake.** `RealtimeFakeServer` has
+      > three timers, not one — 30 ms before the first event, 5 ms between events, 100 ms before
+      > closing — and the amendment above controlled only the first. Controlled one at a time, all
+      > three pass **59/59**. Controlled **together**, the suite fails: 3 tests in one run and 1 in the
+      > next, and that inconsistency is itself the finding, because a race is what varies between two
+      > runs of the same build. The assertion that falls is
+      > `Bridge_ExecutesFunction_AndSendsResultToServer` waiting on a `response.create` the client
+      > never got to send, because the fake closed first — so the load-bearing timer is the
+      > **pre-close** one, and no single timer holds the suite up. The *sum* of the slack does. The
+      > earlier "passes 5/5 at delay 0" was true of the timer it tested and is left standing rather
+      > than edited, because the pair is the lesson: **an individually-refuted timer can still be
+      > load-bearing in company, so a per-timer control does not clear a fake.** The fix still belongs
+      > to `websocket-fake-protocol-contract` (Sdk/ADR-0045) §3.2 and is deliberately not attempted
+      > here — the causal close condition is "the client has sent everything it is going to", which
+      > the fake cannot derive; the vendor keeps the session open instead, so §3.2's redesign across
+      > 59 tests is the fix and a fourth timer would not be.
+      >
+      > **CI's other known flake had the same defect with the seam already in hand.**
+      > `WebSocketAudioSessionTests.ReadPump_ShouldTransitionToDisconnected_WhenCloseFrameReceived`
+      > slept 100 ms and then asserted the state; at 0 it fails. It now waits on `StateChanges`, the
+      > observable it was already subscribed to — the same file's `DtmfControlMessage_…` test has
+      > waited that way all along, so this was an inconsistency inside one file rather than a missing
+      > capability. Checked in the other direction too: with the close frame removed the wait throws
+      > `TimeoutException` in 5 s instead of asserting on an empty list. Two sibling barriers were
+      > controlled and **refuted** — `…ShouldReturnEmpty_WhenChannelCompleted`'s 50 ms and
+      > `AudioSocketServerTests`' 300 ms process-and-drop both pass at 0 — and left alone, now with
+      > the shelf-life caveat attached to them by name.
+      >
+      > **Form 2 — a test resting on a fixed global resource — has exactly one defect in the tree, and
+      > not where a literal search puts it.** `FastAgiIntegrationTests` binds 4573 because the dialplan
+      > dials back to it (`docker/functional/asterisk-config/extensions.conf`); that port is
+      > contractual and cannot move. The *other* holder was invisible: `AddVerbara` registers
+      > `AgiHostedService` unconditionally, so every started host binds `AgiPort`, and two
+      > `GracefulShutdownTests` tests that never speak AGI left it at its **4573 default**. No file in
+      > the test tree contains the string.
+      >
+      > From the queue run's own log rather than from inference: `Verbara.Sdk.IntegrationTests` ran
+      > 10:52:42.6 → 10:53:20.5 and `Verbara.Sdk.FunctionalTests` 10:52:44.9 → 11:09:11.7 — **a 36 s
+      > overlap** — with the failing bind at 10:53:20.1 while one of those two tests was live.
+      > `RunConfiguration.MaxCpuCount=1` does not separate them: the comment in `ci.yml` claiming it
+      > serialises the projects states an intent, and the same log shows four other assemblies
+      > interleaving. Two plausible mechanisms were **refuted** before the real one was accepted — an
+      > accepted socket in `TIME_WAIT` does not block the re-bind (4/4 rounds), and neither does an
+      > accepted leg still open when the listener stops (4/4), even though `FastAgiServer.StopAsync`
+      > awaits the accept loop but not its fire-and-forget handlers so that leg really does outlive it.
+      > Only two live **listeners** conflict, wildcard against loopback included. Fixed by taking 4573
+      > away from the side that never needed it. Verified as a property rather than as a green test:
+      > polling `ss` while those two tests run shows 4573 listening on unfixed `main` and **never**
+      > with the fix.
+      >
+      > Refuted in the same pass and left alone: every `AudioSocketServer` in the tree already binds
+      > `Port = 0`; the `Di/` and `Hosting/` registration tests build a provider and never start a
+      > host, so their `AddVerbara` binds nothing; `HealthCheckEdgeCaseTests` says as much in its own
+      > comment; and `AgiHealthCheckIntegrationTests` was already on port 0 — the outlier was one file,
+      > never a convention. One **latent** hazard was fixed anyway because refuting it costs more than
+      > changing it: `HostShutdown_ShouldStopAgiServer` hard-coded 14573 under a comment reading "pick
+      > a free ephemeral port", which it was not.
+      >
+      > **Also closed here:** the two ceilings the second amendment introduced were themselves unmarked
+      > `Task.Delay` calls, so `sync-fence-baseline.json` still grandfathered both files at 1 — the fix
+      > removed the barriers but not the allowance. Both now carry
+      > `// fence-allow: GUARD-TIMEOUT` and both entries are **0**, which is what makes the next timer
+      > in those files fail the build rather than inherit room to exist.
+      >
+      > Two things found in passing and deliberately **not** changed, recorded so they are not
+      > rediscovered as new. `AudioSocketServerTests.HandleConnection_ShouldDisposeSession_WhenNoUuidReceived`
+      > waits 600 ms for a 300 ms idle timeout and then asserts `ActiveStreamCount == 0` — but the
+      > server only registers a stream after a non-empty `ChannelId` (`AudioSocketServer.cs:110-123`),
+      > and the test never sends a UUID, so the assertion holds whether or not the idle timeout fires.
+      > That is a test that cannot fail, which is a different defect from a test that fails on load and
+      > wants its own fix. And `AddVerbara` opens a listener on `IPAddress.Any:4573` for every
+      > consumer, AGI or not, with no opt-out — shipped behaviour and a product question, not a test
+      > defect, so nothing here touches it.
 - [x] 8.6 Coverage floor holds (`scripts/check-coverage-floor.py`) — no provider loses coverage when
       its fake is deleted
       — **line 80.4% inside the band [78, 81]; branch 66.05% ≥ 64; 12 967 lines measured ≥ 12 315.**

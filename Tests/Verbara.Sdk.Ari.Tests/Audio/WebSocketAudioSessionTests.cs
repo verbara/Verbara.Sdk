@@ -100,10 +100,26 @@ public class WebSocketAudioSessionTests
 
         var sut = CreateSession(ws);
         var states = new List<AudioStreamState>();
-        using var sub = sut.StateChanges.Subscribe(s => states.Add(s));
+
+        // Wait for the transition this test is named after instead of for 100 ms. That sleep was
+        // load-bearing, not cosmetic: forced to zero the assertion fails, which is another way of
+        // saying a loaded runner can outrun it. StateChanges was already subscribed here, so the
+        // causal seam cost nothing to reach — and DtmfControlMessage_ShouldEmitDtmfReceivedEvent
+        // below already waits this way on ControlMessages.
+        var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = sut.StateChanges.Subscribe(s =>
+        {
+            states.Add(s);
+            if (s == AudioStreamState.Disconnected)
+                disconnected.TrySetResult();
+        });
 
         sut.Start();
-        await Task.Delay(100);
+
+        // Deliberately generous and never reached on the happy path — the wait returns the moment
+        // the read pump publishes the state. Removing the close frame makes it throw here in 5 s
+        // instead of asserting on an empty list, which is how this wait was checked.
+        await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         states.Should().Contain(AudioStreamState.Disconnected);
         await sut.DisposeAsync();
