@@ -772,3 +772,104 @@ Practical consequences:
 - When a capture is replaced, delete the old file rather than versioning it alongside the new one.
   The history keeps it; the working tree should not.
 - If a provider is dropped from the SDK, delete its `Recordings/` subtree in the same change.
+
+---
+
+## 11. The probe method — establishing conformance against the vendor
+
+A recording answers *"what did the vendor send?"*. It cannot answer *"is what we send correct?"* — a
+fixture is captured from a request this repository already believed in, so a wrong request produces a
+faithful recording of the wrong exchange. Six shipped defects were found this way and none of them
+had a red test: the suites replayed our own misreadings back to us.
+
+The **probe** is the separate procedure that closes that gap.
+[ADR-0048](../decisions/0048-wire-conformance-by-live-probe-with-negative-control.md) makes it the
+only thing that promotes a route, credential or frame-type claim to *verified*, and
+[ADR-0049](../decisions/0049-in-band-failure-must-reach-the-caller.md) extends it to the receive
+loop. A probe is **operator-run and off the PR path** — it spends a real credential against a real
+endpoint, so it never becomes a CI gate.
+
+### 11.1 The controlled comparison
+
+A probe is not "call the endpoint and see". It is a set of **arms** that differ in exactly one
+variable, run against the same host with the same credential, minutes apart:
+
+| Hold constant | Vary |
+|---------------|------|
+| credential, host, audio or text payload, transport, time window | the one thing under test — a path segment, a header name, a declared sample rate, a message size |
+
+Two arms differing in two things measure nothing. When the design forces two variables to move
+together, that is itself the finding: it means the two defects are not separable and must ship in one
+commit, and the record has to say so.
+
+State the payload in the record, not just the verdict. "Same ten-digit utterance, 3155 ms, the 8 kHz
+file downsampled from the 16 kHz one" is what lets a later reader tell a wire defect from a bad
+recording.
+
+### 11.2 The negative control is mandatory
+
+Every arm that claims success carries a sibling arm expected to **fail**, on the same host, in the
+same session window.
+
+> **A control that cannot fail is not a control.** If the wrong route, the absent credential or the
+> malformed frame produces the *same* outcome as the correct one, the probe discriminated nothing and
+> the claim stays *uncontrolled* — no matter how green the positive arm looked.
+
+This is not a formality. It has fired both ways:
+
+- A route claim survived only because the deliberately wrong path returned a different status on the
+  same host. Where the wrong path returned the *same* status, the claim was demoted rather than
+  recorded.
+- A control **refuted its own hypothesis**: an arm predicted to damage the transcript returned a
+  perfect result. That bounded the defect to duration arithmetic instead of audio quality — a
+  narrower and more honest claim than the one the reconnaissance had written.
+
+A refuting control is a finding, not a nuisance. Record it.
+
+### 11.3 The governing epistemic rule
+
+> **A vendor asserting X is evidence; a vendor not mentioning Y is not.**
+
+Silence in a vendor's documentation licenses no inference. Neither does a permissive observation:
+
+> **A measured tolerance is weaker ground than a stated contract.** Nothing obliges a vendor to keep
+> being lenient. When a probe shows the service accepting something its documentation does not
+> promise, the client still targets the stated contract — and the record says the tolerance was
+> measured and deliberately not relied on.
+
+Both halves matter. The first stops a claim from resting on absence; the second stops it from resting
+on a leniency that can be withdrawn without notice.
+
+### 11.4 Evidence classes are never flattened
+
+A probe's outcome is filed as one of four, and a stronger word is never substituted for a weaker one:
+
+| Class | Means |
+|-------|-------|
+| `controlled` | a live arm plus a negative control that discriminated |
+| `uncontrolled` | a live arm whose control did not discriminate, or none was run |
+| `documentation-derived` | asserted from the vendor's published protocol, never exercised |
+| `not characterised` | not examined — which is **not** the same as correct |
+
+A surface that produced nothing must not report success. Zero output with no exception is a failure
+result, not an empty one — that is the class ADR-0049 exists for.
+
+The per-surface record lives in
+[provider-wire-conformance.md](provider-wire-conformance.md): route status, frame status, evidence
+class and date, per surface. A probe that does not land a row there did not happen.
+
+### 11.5 Handling and hygiene
+
+- **§4's redaction rules apply unchanged** and are not restated here. They already cover the probe's
+  output: credentials, signed URLs, account identifiers, and correlating request/session identifiers
+  — which for a probe means `request_id`, `context_id`, `session_id` and their siblings. Field
+  *names* are reportable; their **values** never are.
+- **Credentials are read from the environment.** Never written to a file, never echoed to a log,
+  never pasted into a report or a commit message.
+- **Probe scripts are scratch.** Write it, run it, delete it. A probe script is a measurement
+  instrument, not an artifact — and a committed one implies a repeatability this protocol does not
+  claim, since re-running it spends a credential nobody in CI has.
+- **A probe does not produce a fixture.** If an arm observes a frame worth asserting on, the frame
+  reaches a `Recordings/` tree through §3 with `class: "recorded"` — never by hand-transcribing it
+  from a probe run. A fixture whose provenance can only cite a deleted harness is exactly what this
+  protocol exists to prevent.

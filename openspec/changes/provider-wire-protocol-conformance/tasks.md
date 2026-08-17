@@ -334,7 +334,7 @@ characterised* in §5.5.
       a probe reproducing the corrected request — `context_id` added, half-close dropped — which is
       the same wire behaviour this client now produces, but it is a reconstruction and not the
       artifact. §5.5 records Cartesia TTS accordingly and §7.7 applies
-- [ ] 2.15 **Drift caused into a neighbouring open change — recorded here, not fixed here.**
+- [x] 2.15 **Drift caused into a neighbouring open change — recorded here, not fixed here.**
       `openspec/changes/provider-dto-robustness-fences/proposal.md` counts response members by name
       and states *"Tts contributes exactly one response member (`CartesiaTtsControlMessage.Type`)"*.
       That type no longer exists: §2.2 replaced it with `CartesiaTtsServerMessage`, which contributes
@@ -343,7 +343,18 @@ characterised* in §5.5.
       number. Editing another change's proposal from this one is the scope-widening §2.8 forbids, so
       the correction belongs to whoever next picks that change up — it must **re-run its inventory**
       rather than adjust the figure by hand, because this commit is unlikely to be the only source
-      of drift since it was counted
+      of drift since it was counted.
+      **Closed 2026-08-17.** Recorded, not fixed, and every claim above re-verified against the tree
+      first rather than trusted from when the task was written: `CartesiaTtsControlMessage` is gone —
+      the name survives only in a doc comment on its replacement — and `CartesiaTtsServerMessage`
+      declares exactly one non-nullable response member (`Type`) plus four nullable ones (`Data`,
+      `Error`, `Done`, `StatusCode`); `ElevenLabsAudioOutput` adds two nullable ones (`Audio`,
+      `IsFinal`). The neighbour's `proposal.md` still reads **24** with *"Tts 1"* and still names the
+      deleted type, so both the name and the number are stale, as stated. Deliberately **not** corrected
+      to a new figure: publishing a hand-adjusted count would present a number nobody inventoried as if
+      someone had, and this change is unlikely to be the only drift since that census — a re-run is the
+      only honest remedy, and it belongs to that change. `openspec/changes/provider-dto-robustness-fences/`
+      is untouched by this change, which is the §2.8 boundary holding rather than being waived
 
 ## 3. Class A — the request never reaches the vendor (LMNT HTTP, Speechmatics TTS)
 
@@ -1218,15 +1229,47 @@ commit.
       defects, because the bytes never arrive or arrive on the wrong frame type; and they are not drift,
       because they are static, present-day, and were wrong on the day the code was written. Related:
       ADR-0041 (recordings as the provider evidence class), ADR-0043 (evidence produced off the PR path)
-- [ ] 6.7 Add the ADR-0048 **and ADR-0049** rows to `docs/decisions/README.md` in numeric order, matching the existing row
-      format (link, one-sentence summary, status and date)
-- [ ] 6.8 `docs/guides/provider-recording-protocol.md` — add the probe method as a named section: the
+- [x] 6.7 Add the ADR-0048 **and ADR-0049** rows to `docs/decisions/README.md` in numeric order, matching the existing row
+      format (link, one-sentence summary, status and date).
+      **Closed 2026-08-17 with no edit — both rows were already there**, added by `926fd413` (#174), the
+      PR that proposed this change. The task was written expecting a later close-out to add them, so
+      this is the §2.8 "verify before scoping" case: the gap was assumed from the task list rather than
+      from the tree. Both rows carry link, one-sentence summary, status and date, and sit in numeric
+      order after ADR-0044. Verified beyond what was asked, because a glance at the tail proves nothing
+      about the middle: **every one of the 46 ADR files on disk has a README row** (`0001`–`0044`,
+      `0048`, `0049`). The apparent gap at `0045`–`0047` is correct and must not be "fixed" — those
+      numbers are **reserved** by open openspec changes via their `decision_ref` (`Sdk/ADR-0045`,
+      `Sdk/ADR-0046`, `Sdk/ADR-0047`) and their ADR files do not exist yet; ADR-0048 and ADR-0049 both
+      cite 0046 and 0047 as the neighbouring layers by number
+- [x] 6.8 `docs/guides/provider-recording-protocol.md` — add the probe method as a named section: the
       controlled comparison, the mandatory negative control, and the governing epistemic rule *"a vendor
       asserting X is evidence; a vendor not mentioning Y is not."* Section 4's redaction rules already
-      cover the probe and are referenced rather than restated
-- [ ] 6.9 `docs/guides/provider-test-substrate.md` — state plainly that a green provider suite is not
+      cover the probe and are referenced rather than restated.
+      **Closed 2026-08-17** as **§11**, appended rather than inserted: §4 (redaction), §5 (provenance)
+      and §7 (terms) are referenced by number from other guides and from ADR-0048, so renumbering to
+      place the probe next to §3 would have broken live cross-references to buy adjacency. Five
+      subsections — the controlled comparison, the mandatory negative control, the epistemic rule, the
+      four evidence classes, and handling. Two things the task did not ask for but the train earned and
+      would otherwise be lost with the scratch probe scripts: the corollary that **a measured tolerance
+      is weaker ground than a stated contract** (the §3.6f trade, and §3.18's padding decision in the
+      other direction), and that **a control refuting its own hypothesis is a finding** — §3.18's arm I
+      predicted a damaged transcript and returned 10/10, which narrowed the shipped claim to duration
+      arithmetic. §4 is referenced, not restated, and the identifier-value rule is named as the probe's
+      instance of it rather than duplicated
+- [x] 6.9 `docs/guides/provider-test-substrate.md` — state plainly that a green provider suite is not
       evidence of route, authentication or frame-type conformance, with these six defects as the
-      demonstration, and point at the §5.5 record for what has actually been checked
+      demonstration, and point at the §5.5 record for what has actually been checked.
+      **Closed 2026-08-17** as two named subsections under the existing §5 *Where the substrate does not
+      reach* — the honest home, since this is a limit of the substrate and not a new topic. The
+      pre-existing drift paragraph became *Recordings age*; the new *A green suite is not evidence of
+      conformance* leads, because it is the graver limit: drift is about a fixture aging, this is about
+      the suite never having tested the thing at all. Carries the closed-loop mechanism (fake and client
+      written by the same author from the same reading, so the suite compares the client to the author's
+      belief), the six defects as a table with what was green while each shipped, and the §5.5 pointer
+      with *not characterised* named as distinct from correct. Class D is called out specifically: the
+      handshake **succeeded**, so a test asserting the connection opened has asserted nothing about the
+      credential. Shipped with §6.8 rather than separately — the new text cites §11 of the recording
+      protocol, and splitting them would have merged a dangling cross-reference
 - [ ] 6.10 `CHANGELOG.md` — one `[Unreleased]` entry under `### Fixed`. This changes **shipped**
       behaviour in `Verbara.Sdk.VoiceAi.Tts` and `Verbara.Sdk.VoiceAi.Stt`, not test behaviour. State
       the blast radius per provider without inflating it: Speechmatics **STT** could never authenticate,

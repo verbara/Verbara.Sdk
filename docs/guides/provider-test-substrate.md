@@ -97,6 +97,49 @@ Providers that read a configurable endpoint from their own options (`WhisperOpti
 
 ## 5. Where the substrate does not reach
 
+### A green suite is not evidence of conformance
+
+**A passing provider suite is not evidence that the route, the credential or the frame type is
+correct.** It never was. Every VoiceAi suite in this repository was green on the day each of the
+defects below was written and every day since.
+
+The mechanism is that **a provider suite is a closed loop.** The fake server and the client under
+test are written by the same author, from the same reading of the same vendor documentation, usually
+at the same sitting. Whatever that author believed about the vendor's route, frame type or field
+semantics is asserted on *both* sides of the test. The suite compares the client against the author's
+belief, never against the vendor — green means "the client agrees with itself".
+
+The consequence is sharper than "insufficient coverage". More testing does not help, because every
+case, edge condition, fixture and tightened assertion you add is written against the same fake. None
+of the six defects below was findable by any depth of work inside the suite:
+
+| Class | Defect | What was green while it shipped |
+|---|---|---|
+| A | Speechmatics TTS POSTed to `/generate`; the API selects the voice by path segment (`/generate/{voice}`) | route |
+| A | LMNT's HTTP path used the wrong path, the wrong body encoding and assumed the wrong media type | route, body, response type |
+| B | Cartesia TTS read audio only from binary frames; the vendor sends base64 in JSON **text** frames — so it reached its `done` terminator having produced zero audio | frame type, and a silent success |
+| B | ElevenLabs TTS, the same misreading of the same transport | frame type |
+| C | Speechmatics STT space-joins tokens, ignoring the `word_delimiter`, `attaches_to` and the vendor's own assembled `metadata.transcript` | field semantics |
+| D | Speechmatics STT put a long-lived API key in a `jwt` query parameter; the vendor accepts the upgrade (`101`) and then closes `4001 not_authorised` | authentication |
+
+Class D is the one to keep in mind when reading a green result: the handshake **succeeded**. A test
+that asserts the connection opened has asserted nothing about the credential. Where a vendor
+validates a credential — before or after `101` — is measured, never inferred from where the client
+puts it ([ADR-0049](../decisions/0049-in-band-failure-must-reach-the-caller.md)).
+
+So a suite of this kind answers "does the client still do what we decided it should?" — a real and
+useful question, and the reason these suites exist. It does not answer "is what we decided correct?"
+Only the vendor settles that, through a live probe carrying a negative control
+([ADR-0048](../decisions/0048-wire-conformance-by-live-probe-with-negative-control.md); the procedure
+is §11 of [provider-recording-protocol.md](provider-recording-protocol.md)).
+
+**Do not infer conformance from this guide, or from a green run.** What has actually been checked,
+per surface — route status, frame status, evidence class and date — is recorded in
+[provider-wire-conformance.md](provider-wire-conformance.md). A surface absent from that record is
+*not characterised*, which is not the same as correct.
+
+### Recordings age
+
 Recordings are photographs. Nothing in this repository re-captures them, so a fixture ages into
 asserting a wire format the vendor no longer sends. ADR-0041 accepts that explicitly: this closes the
 *shared-misreading* gap, not the *drift* gap. Detecting drift needs contract tests against the live
