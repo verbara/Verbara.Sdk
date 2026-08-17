@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.Json;
 using Verbara.Sdk.TestInfrastructure.Http;
 
 namespace Verbara.Sdk.VoiceAi.Tts.Tests.ElevenLabs;
@@ -46,6 +47,16 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
 
     /// <summary>Size of each binary frame the session sends: 160 samples, 10 ms at 16 kHz.</summary>
     public const int AudioFrameSize = 320;
+
+    /// <summary>
+    /// Upper bound on how long a session waits for the client's end-of-input before answering.
+    /// </summary>
+    /// <remarks>
+    /// Not a tuning knob and never reached on the happy path — the wait returns as soon as the
+    /// terminator lands. Deliberately generous so that a loaded runner cannot turn it back into the
+    /// timing dependency it exists to remove.
+    /// </remarks>
+    private static readonly TimeSpan EndOfInputWaitCeiling = TimeSpan.FromSeconds(5);
 
     // Generator parameters for AudioChunk, mirrored in its provenance sidecar. The regeneration
     // fence test re-renders the file from exactly these three numbers.
@@ -189,6 +200,12 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
         var ws = wsCtx.WebSocket;
         var buf = new byte[65536];
 
+        // Signalled once the client's end-of-input is in _receivedJsonMessages. Waiting for the
+        // *first* message would not be enough here: this client sends three — the text with voice
+        // settings, a flush, then the empty-text terminator — and the assertions are on the ones
+        // after the first.
+        var endOfInputReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
         // Receive text messages from client in background (non-blocking).
         var receiveTask = Task.Run(async () =>
         {
@@ -198,8 +215,14 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
                 {
                     var result = await ws.ReceiveAsync(buf.AsMemory(), _cts.Token).ConfigureAwait(false);
                     if (result.MessageType == WebSocketMessageType.Text)
+                    {
+                        var json = Encoding.UTF8.GetString(buf, 0, result.Count);
                         lock (_receivedJsonMessages)
-                            _receivedJsonMessages.Add(Encoding.UTF8.GetString(buf, 0, result.Count));
+                            _receivedJsonMessages.Add(json);
+
+                        if (IsEndOfInput(json))
+                            endOfInputReceived.TrySetResult();
+                    }
                     else if (result.MessageType == WebSocketMessageType.Close)
                     {
                         // Recorded, not tolerated: against the live endpoint this frame costs all
@@ -212,8 +235,20 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
             }
         });
 
-        // Small delay to let client send first text message.
-        await Task.Delay(30).ConfigureAwait(false);
+        // Wait for the client's end-of-input, not for a stopwatch. A fixed 30 ms delay here did not
+        // order the receive loop against the answer path: under load the loop had not appended the
+        // client's text by the time the audio and the close had gone out and its stream had
+        // completed, so an assertion on what was sent read a prefix of it. Setting that delay to 0
+        // reproduces it 5/5 on `SynthesizeAsync_ShouldSendTextChunk`.
+        //
+        // Three arms, and the first two are causal rather than timed: the terminator arrived, or the
+        // receive loop ended so nothing more is coming. The ceiling only exists so a fake can never
+        // hang a suite, and it preserves the old behaviour for a client that sends nothing.
+        await Task.WhenAny(
+                endOfInputReceived.Task,
+                receiveTask,
+                Task.Delay(EndOfInputWaitCeiling, _cts.Token))
+            .ConfigureAwait(false);
 
         if (SendRecordedAudioOutputFrame)
         {
@@ -260,6 +295,31 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
         catch { }
 
         try { await receiveTask.ConfigureAwait(false); } catch { }
+    }
+
+    /// <summary>
+    /// Whether a client message is the vendor's end-of-input signal: a chunk with empty <c>text</c>.
+    /// </summary>
+    /// <remarks>
+    /// Parsed rather than string-matched so the signal does not depend on how the client's
+    /// serializer spaces or orders members, and so a chunk that merely <em>contains</em> an empty
+    /// string elsewhere is not mistaken for the terminator. A frame that is not JSON at all is not a
+    /// terminator, which is what the fake should conclude from it.
+    /// </remarks>
+    private static bool IsEndOfInput(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("text", out var text)
+                && text.ValueKind == JsonValueKind.String
+                && text.GetString()!.Length == 0;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     /// <summary>

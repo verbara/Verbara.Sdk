@@ -27,9 +27,12 @@ internal enum CartesiaAudioTransport
 /// indefinitely on Linux after <c>ws.Abort()</c>.
 /// </para>
 /// <para>
-/// Only where the payloads come from changed. Accept, receive, answer and close sequencing is
-/// untouched (tasks.md §6.4) — including the 30 ms answer delay, which the §8.5 sweep examined and
-/// refuted as a defect for this fake.
+/// Accept and close sequencing follows tasks.md §6.4. The <b>answer</b> sequencing no longer does:
+/// the 30 ms delay this session used to wait before replying has been replaced by a wait on the
+/// client's request. The §8.5 sweep examined that delay and refuted it as a defect for this fake,
+/// which was true when the sweep ran and stopped being true a week later — #180 added
+/// <c>SynthesizeAsync_ShouldSendADistinctContextId_PerRequest</c>, the first test to make two
+/// requests against one instance, and the delay then cost a queue run. See §8.5's second amendment.
 /// </para>
 /// <para>
 /// The <c>done</c> frame carries the full documented field set, so three fields the client never
@@ -60,6 +63,16 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
 
     /// <summary>Size of each binary frame the session sends: 160 samples, 20 ms at 8 kHz.</summary>
     public const int AudioFrameSize = 320;
+
+    /// <summary>
+    /// Upper bound on how long a session waits for the client's request before answering anyway.
+    /// </summary>
+    /// <remarks>
+    /// Not a tuning knob and never reached on the happy path — the wait returns as soon as the
+    /// request lands, which is faster than the fixed delay it replaced. Deliberately generous so
+    /// that a loaded runner cannot turn it into the timing dependency it exists to remove.
+    /// </remarks>
+    private static readonly TimeSpan RequestWaitCeiling = TimeSpan.FromSeconds(5);
 
     // Generator parameters for AudioChunk, mirrored in its provenance sidecar. The regeneration
     // fence test re-renders the file from exactly these three numbers.
@@ -158,6 +171,12 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
         var ct = session.ServerCancellationToken;
         var buf = new byte[65536];
 
+        // Signalled the moment this session's request is in _receivedJsonMessages. Per session and
+        // not per server on purpose: the synthesizer opens one ClientWebSocket per SynthesizeAsync
+        // call, so a server-wide signal would already be set for the second connection and that is
+        // precisely the one that went missing.
+        var requestReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
         // Receive client request (JSON) in background.
         var receiveTask = Task.Run(async () =>
         {
@@ -171,8 +190,12 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
                 catch { break; }
 
                 if (result.MessageType == WebSocketMessageType.Text)
+                {
                     lock (_receivedJsonMessages)
                         _receivedJsonMessages.Add(Encoding.UTF8.GetString(buf, 0, result.Count));
+
+                    requestReceived.TrySetResult();
+                }
                 else if (result.MessageType == WebSocketMessageType.Close)
                 {
                     // Recorded, not tolerated: against the live endpoint this frame costs all the
@@ -183,8 +206,23 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
             }
         }, ct);
 
-        // Small delay so the client has time to send the synthesis request.
-        await Task.Delay(30, ct).ConfigureAwait(false);
+        // Wait for the request, not for a stopwatch. A fixed 30 ms delay here did not order the
+        // receive loop against the answer path: under load the loop had not appended this session's
+        // request by the time the audio, the `done` frame and the close had gone out and the
+        // client's stream had completed, so a test that made two requests read one. Setting that
+        // delay to 0 reproduces it 10/10 with none of them recorded, which is the same assertion
+        // failing by a larger margin.
+        //
+        // Three arms, and the first two are causal rather than timed: the request arrived, or the
+        // receive loop ended so no request is coming. The ceiling only exists so a fake can never
+        // hang a suite, and it preserves the old behaviour for a client that sends nothing at all.
+        await Task.WhenAny(
+                requestReceived.Task,
+                receiveTask,
+                Task.Delay(RequestWaitCeiling, ct))
+            .ConfigureAwait(false);
+
+        ct.ThrowIfCancellationRequested();
 
         if (SendRecordedChunkFrame)
         {

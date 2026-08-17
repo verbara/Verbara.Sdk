@@ -1124,6 +1124,50 @@ remaining HTTP migrations will need.
       > barrier and a fake's own failure has no reporting channel; and no fake honours
       > `result.EndOfMessage`, which is safe only because every payload in this tree is far below the
       > 4 KiB internal receive buffer.
+      >
+      > **Second amendment (2026-08-17) — two of the twelve refutations did not hold, and not for the
+      > same reason.** The sweep's standard was right and so was its technique: forcing the
+      > interleaving with delay → 0. Applying that same technique to the two Class A timers it left in
+      > place fires on both — `CartesiaFakeServer` **10/10** on
+      > `SynthesizeAsync_ShouldSendADistinctContextId_PerRequest`, `ElevenLabsFakeServer` **5/5** on
+      > `SynthesizeAsync_ShouldSendTextChunk`. One defect, two different mistakes:
+      >
+      > | Fake | Observing test | Existed at the sweep? | The refutation was |
+      > |---|---|---|---|
+      > | Cartesia TTS | `…ShouldSendADistinctContextId_PerRequest` | **no** — added 2026-08-16 by #180 | correct then, and **expired** |
+      > | ElevenLabs TTS | `SynthesizeAsync_ShouldSendTextChunk` | **yes** — since 2026-05-05, asserting on `ReceivedJsonMessages` in the same words | **wrong** |
+      >
+      > Cartesia is the instructive one precisely because nothing was done badly. A per-instance race
+      > needs two sessions to be visible, and #180 wrote the first test that issues two requests
+      > against one fake. **A refutation resting on "no test observes it today" has a shelf life, and
+      > nothing re-runs it when a test is added.** ElevenLabs has no such defence: the observing test
+      > predates the sweep by three months and its assertion is unchanged since.
+      >
+      > The price of the class, on the record rather than inferred: CI failed
+      > `…ShouldSendADistinctContextId_PerRequest` on the merge-queue ref for #184, GitHub ejected the
+      > PR, and the queue run was lost. The same test had passed on the PR ref minutes earlier — same
+      > commit, same suite, runner load the only variable. That is this item's original lesson arriving
+      > a second time.
+      >
+      > **Fixed by removing the timers, not by lengthening them.** Cartesia waits for the request (its
+      > client opens one `ClientWebSocket` per `SynthesizeAsync`, so one request per session is the
+      > entire signal); ElevenLabs waits for the empty-`text` end-of-input, because that client sends
+      > three messages and the assertions are on the ones after the first. Both take the LMNT/Deepgram
+      > shape: a causal arm, a receive-loop-ended arm so a client that sends nothing is still answered,
+      > and a generous ceiling whose only job is to keep a fake from hanging a suite.
+      >
+      > `RealtimeFakeServer` was checked with the same control and **passes 5/5 at delay 0** — its
+      > timer orders no assertion of any test that exists, so it is left alone. It stays on the
+      > latent-hazard list above; that listing is unchanged, not upgraded, and it is not unowned —
+      > `websocket-fake-protocol-contract` (Sdk/ADR-0045) §3.2 already scopes replacing that timer, on
+      > the strength of the suite's 25 s of pure timeout rather than of a failing assertion. The point
+      > of recording the negative result is that this control discriminated: it fired on two fakes and
+      > refused the third.
+      >
+      > What to carry forward: a Class A timer costs less to **remove** than to refute, because the
+      > causal wait is a few lines and the refutation has to be re-earned every time a test is added.
+      > Verified after the fix: full TTS suite green **20/20 idle and 15/15 with twice as many spinners
+      > as cores**, and the unit lane at **3 081 tests / 30 assemblies, 0 warnings**.
 - [x] 8.6 Coverage floor holds (`scripts/check-coverage-floor.py`) — no provider loses coverage when
       its fake is deleted
       — **line 80.4% inside the band [78, 81]; branch 66.05% ≥ 64; 12 967 lines measured ≥ 12 315.**
