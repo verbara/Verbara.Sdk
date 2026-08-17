@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Tests: two fakes answered on a timer, and one of them ejected a PR from the merge queue
+
+`CartesiaFakeServer` and `ElevenLabsFakeServer` replied after a fixed `Task.Delay(30)` instead of
+waiting for the client's request. Nothing ordered the receive loop against the answer path, so on a
+loaded runner the fake sent its audio, its terminator and its close before the loop had recorded what
+the client sent — the client's stream completed, and an assertion on the request read a prefix of it.
+
+- **The cost is measured, not hypothetical.** CI failed
+  `CartesiaSpeechSynthesizerTests.SynthesizeAsync_ShouldSendADistinctContextId_PerRequest` on the
+  merge-queue ref and the PR was ejected from the queue. The same commit had passed the same test on
+  the PR ref minutes earlier: runner load was the only variable.
+
+- **Both fakes now wait on the protocol.** Cartesia waits for the request, since its client opens one
+  `ClientWebSocket` per `SynthesizeAsync` and one request per session is the whole signal. ElevenLabs
+  waits for the empty-`text` end-of-input, because that client sends three messages and the assertions
+  are on the ones after the first. Each keeps a receive-loop-ended arm so a client that sends nothing
+  is still answered, and a generous ceiling whose only job is to keep a fake from hanging a suite.
+
+- **Confirmed by forcing the interleaving both ways.** Setting the delay to 0 fails 10/10 on Cartesia
+  and 5/5 on ElevenLabs; with the waits in place the delay is gone entirely and the TTS suite is green
+  20/20 idle and 15/15 with twice as many spinners as cores, unit lane 3 081 tests / 30 assemblies.
+
+- **The same control refused a third fake.** `RealtimeFakeServer` has the identical timer and passes
+  5/5 at delay 0 — no assertion of any existing test depends on it — so it was left untouched. It is a
+  latent hazard already owned by ADR-0045, not a defect to fix here.
+
+- **Why an earlier sweep for this exact class missed them, and it is two different reasons.** The
+  Cartesia refutation was correct when it was made and expired a week later, when the first test to
+  issue two requests against one fake instance was added. The ElevenLabs one was simply wrong: its
+  observing test predates the sweep by three months, with the same assertion it has today. A
+  refutation resting on "no test observes it today" has a shelf life, and nothing re-runs it.
+
 ### Fixed — BREAKING: Cartesia realtime STT could not open a session at all
 
 `CartesiaSpeechRecognizer` connected to `wss://api.cartesia.ai/stt/websocket` with **no query string**
