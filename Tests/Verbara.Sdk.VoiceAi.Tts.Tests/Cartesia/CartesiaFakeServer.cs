@@ -106,6 +106,25 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
         get { lock (_receivedJsonMessages) return _receivedJsonMessages.ToArray(); }
     }
 
+    /// <summary>
+    /// The <c>X-API-Key</c> header the client sent on the upgrade, or <see langword="null"/> if it
+    /// sent none.
+    /// </summary>
+    /// <remarks>
+    /// Null was the only value this could ever have held until §2.3c: the client set its headers
+    /// behind <c>if (_fakeServerPort is null)</c>, so under test no credential was sent and no fake
+    /// could tell. Renaming every auth header in the layer to one no vendor reads left all 187 tests
+    /// of the two provider suites passing — which is why the credential is now asserted rather than
+    /// assumed.
+    /// </remarks>
+    public string? ReceivedApiKey { get; private set; }
+
+    /// <summary>The <c>Cartesia-Version</c> header the client sent, or <see langword="null"/>.</summary>
+    public string? ReceivedApiVersion { get; private set; }
+
+    /// <summary>Raw HTTP request-target of the upgrade — the route the client actually asked for.</summary>
+    public string? ReceivedRequestUri { get; private set; }
+
     public List<byte[]> AudioFramesToSend { get; } = [];
 
     /// <summary>Send the recorded <c>done</c> control frame as a text message after all audio frames.</summary>
@@ -170,6 +189,11 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
         var ws = session.WebSocket;
         var ct = session.ServerCancellationToken;
         var buf = new byte[65536];
+
+        ReceivedRequestUri = session.RequestUri;
+        ReceivedApiKey = session.Headers.TryGetValue("X-API-Key", out var apiKey) ? apiKey : null;
+        ReceivedApiVersion =
+            session.Headers.TryGetValue("Cartesia-Version", out var version) ? version : null;
 
         // Signalled the moment this session's request is in _receivedJsonMessages. Per session and
         // not per server on purpose: the synthesizer opens one ClientWebSocket per SynthesizeAsync

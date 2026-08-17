@@ -234,7 +234,7 @@ characterised* in §5.5.
       assembly is removed (§2.12, §2.13). **Still open:** the long-input live run per provider. That
       conjunct asks whether the vendor fragments *in practice*, which no fake can answer, so this
       task stays unticked until it is run
-- [ ] 2.3c **The fake seam bypasses the credential entirely, at six sites — so no fake can catch an
+- [x] 2.3c **The fake seam bypasses the credential entirely, at six sites — so no fake can catch an
       auth defect.** Every WebSocket client gates its auth header behind `if (_fakeServerPort is
       null)`, meaning under test the header is never set and the fake never sees one. Verified
       2026-08-16, and it is not the two sites review first found — it is six:
@@ -246,7 +246,33 @@ characterised* in §5.5.
       credential defect past a green suite (§4.1: "its fake never checked the credential at all").
       **Fix:** reshape each seam to substitute the **origin only**, letting headers, query and route
       flow through shipped code, and have each fake assert the auth header and scheme arrived.
-      **Closes when** all six are reshaped and each fake carries a credential assertion
+      **Closes when** all six are reshaped and each fake carries a credential assertion.
+      **Done 2026-08-17, and the cost of the seam was measured before it was removed.** Control A:
+      with every auth header in the six clients renamed to a header no vendor reads, the two suites
+      returned **187 passed / 0 failed** — so `Authorization`, the exact defect §4.1 says shipped past
+      a green suite, was invisible to every test. Control B, same mutation after the fix: **six
+      failures, one per client** (`SynthesizeAsync_ShouldAuthenticateTheUpgrade_WhenOpeningASession`
+      for Cartesia and ElevenLabs TTS, `…WithTheTokenScheme…` for both Deepgram surfaces,
+      `…TheUpgrade…` for Cartesia STT, `…WithTheRawKey…` for AssemblyAI). That delta is the evidence,
+      not the green suite. **The fix is the repo's own precedent, not a new invention:**
+      `SpeechmaticsSpeechRecognizer` already had no test-only constructor — tests reach its fake by
+      setting `BaseUri`, the seam an operator uses for a regional endpoint — so all six were converted
+      to that shape and the `fakeServerPort` overloads are gone. **Two findings the task text did not
+      predict.** The seam also replaced the *query*, and the two copies had already drifted: Deepgram
+      STT's under-test copy omitted `model` and `language` entirely, so the suite watched a request
+      production never sends, and ElevenLabs hard-coded `test-voice` over `_options.VoiceId`. Both are
+      now one expression, with `StreamAsync_ShouldSendModelAndLanguage_WhenOpeningASession` (non-default
+      `nova-3`/`pt`) and `SynthesizeAsync_ShouldPutTheConfiguredVoiceInTheRoute_WhenVoiceIdIsSet`
+      asserting what was previously unassertable. **Scope decision, taken deliberately:** ElevenLabs
+      TTS and Deepgram STT had no `BaseUri` at all, so the route could not flow through shipped code
+      without adding one. Both gained a public `BaseUri` with the `^wss?://` validation the other
+      providers carry — a real operator gap either way, since neither client could be pointed at a
+      regional or self-hosted endpoint. **Deferred with a reason:** the vendor-specific *rejection*
+      shape (Speechmatics answers a bad key with 101 then `4001 not_authorised`, which
+      `SpeechmaticsFakeServer` deferred here) is not extended to the other five — that behaviour differs
+      per vendor and there is no live evidence of each one's shape, so inventing five is worse than
+      asserting none. LMNT stays with §3.10, which owns its two internal test constructors. Suites
+      after the change: Tts 91 → **95**, Stt 96 → **100**
 - [x] 2.4 ElevenLabs has **no server-message DTO at all** — `VoiceAiTtsJsonContext.cs` declares only the
       outbound `ElevenLabsTextChunk` / `ElevenLabsVoiceSettings`. Add a server DTO for the audio field
       and register it. Alignment members are optional: model them or ignore them, but tolerate them —

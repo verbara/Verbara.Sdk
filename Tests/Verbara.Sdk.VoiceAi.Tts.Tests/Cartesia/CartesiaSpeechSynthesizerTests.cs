@@ -23,12 +23,21 @@ public class CartesiaSpeechSynthesizerTests : IAsyncDisposable
         _server.Start();
     }
 
+    /// <summary>The credential every test in this class sends, asserted on by the fake.</summary>
+    private const string TestApiKey = "test-key";
+
+    /// <summary>
+    /// Built through <see cref="CartesiaOptions.BaseUri"/> rather than through a test-only
+    /// constructor, so the route, the query and the credential all come from shipped code. The path
+    /// here is the one the production default carries — <c>/tts/websocket</c>.
+    /// </summary>
     private CartesiaSpeechSynthesizer BuildSynthesizer()
         => new(Options.Create(new CartesiaOptions
         {
-            ApiKey = "test-key",
-            VoiceId = "test-voice"
-        }), fakeServerPort: _server.Port);
+            ApiKey = TestApiKey,
+            VoiceId = "test-voice",
+            BaseUri = $"ws://127.0.0.1:{_server.Port}/tts/websocket"
+        }));
 
     /// <summary>The audio the fake replays, read from the same tree the fake reads.</summary>
     private static byte[] RecordedAudio => CartesiaFakeServer.ReadFrameBytes(CartesiaFakeServer.AudioChunk);
@@ -256,6 +265,22 @@ public class CartesiaSpeechSynthesizerTests : IAsyncDisposable
             .ToListAsync();
 
         await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_ShouldAuthenticateTheUpgrade_WhenOpeningASession()
+    {
+        var synth = BuildSynthesizer();
+        await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // The header name is asserted by asking for it by name: a client that sent the key under any
+        // other field leaves this null, which is the defect the whole suite was blind to.
+        _server.ReceivedApiKey.Should().Be(TestApiKey);
+        _server.ReceivedApiVersion.Should().Be("2024-11-13");
+
+        // And the route came from CartesiaOptions.BaseUri rather than from a branch, so this is the
+        // path production asks for.
+        _server.ReceivedRequestUri.Should().Be("/tts/websocket");
     }
 
     public async ValueTask DisposeAsync()

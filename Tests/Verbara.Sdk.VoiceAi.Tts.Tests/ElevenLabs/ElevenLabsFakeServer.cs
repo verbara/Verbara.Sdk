@@ -140,6 +140,18 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
     /// <summary>Raw URL (path + query) of the most recent WebSocket upgrade request.</summary>
     public string? LastRequestUrl { get; private set; }
 
+    /// <summary>
+    /// The <c>xi-api-key</c> header the client sent on the upgrade, or <see langword="null"/> if it
+    /// sent none.
+    /// </summary>
+    /// <remarks>
+    /// Null on every session until §2.3c: the client set the header only when no fake port was
+    /// configured, so under test it authenticated with nothing and no fake could notice. The header
+    /// name is vendor-specific and lower-case, which is exactly the kind of detail a suite should
+    /// pin rather than leave to the first live call.
+    /// </remarks>
+    public string? ReceivedApiKey { get; private set; }
+
     public ElevenLabsFakeServer()
     {
         // Retry port allocation to avoid conflicts with parallel tests.
@@ -196,6 +208,7 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
     private async Task HandleWebSocketAsync(HttpListenerContext ctx)
     {
         LastRequestUrl = ctx.Request.RawUrl;
+        ReceivedApiKey = ctx.Request.Headers["xi-api-key"];
         var wsCtx = await ctx.AcceptWebSocketAsync(null).ConfigureAwait(false);
         var ws = wsCtx.WebSocket;
         var buf = new byte[65536];

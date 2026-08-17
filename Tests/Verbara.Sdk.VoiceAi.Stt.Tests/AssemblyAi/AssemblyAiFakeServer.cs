@@ -84,6 +84,17 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
     public string? ReceivedRequestUri { get; private set; }
 
     /// <summary>
+    /// The <c>Authorization</c> header the client sent on the upgrade, or <see langword="null"/> if
+    /// it sent none.
+    /// </summary>
+    /// <remarks>
+    /// AssemblyAI takes the raw key with no scheme prefix, so the whole value is the credential and
+    /// a stray <c>Bearer </c> would be a defect. Until §2.3c the client set this header only when no
+    /// fake port was configured, which left that distinction untestable.
+    /// </remarks>
+    public string? ReceivedAuthorization { get; private set; }
+
+    /// <summary>
     /// The client's in-band end-of-input terminator, or <c>null</c> if it never sent one.
     /// </summary>
     public string? ReceivedTerminatorText { get; private set; }
@@ -119,6 +130,8 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
     private async Task HandleSessionAsync(WebSocketTestSession session)
     {
         ReceivedRequestUri = session.RequestUri;
+        ReceivedAuthorization =
+            session.Headers.TryGetValue("Authorization", out var authorization) ? authorization : null;
 
         var ws = session.WebSocket;
         var ct = session.ServerCancellationToken;

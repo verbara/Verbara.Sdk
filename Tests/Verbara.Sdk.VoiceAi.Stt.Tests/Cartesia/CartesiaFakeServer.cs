@@ -97,6 +97,16 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
     /// </summary>
     public string? RequestUri { get; private set; }
 
+    /// <summary>
+    /// The <c>X-API-Key</c> header the client sent on the upgrade, or <see langword="null"/> if it
+    /// sent none — which is what every session recorded here until §2.3c, because the client set its
+    /// headers only when no fake port was configured.
+    /// </summary>
+    public string? ReceivedApiKey { get; private set; }
+
+    /// <summary>The <c>Cartesia-Version</c> header the client sent, or <see langword="null"/>.</summary>
+    public string? ReceivedApiVersion { get; private set; }
+
     /// <summary>Completes when the session handler returns — the join point for the assertions.</summary>
     public Task SessionCompleted => _server.SessionCompleted;
 
@@ -123,6 +133,9 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
         var ws = session.WebSocket;
         var ct = session.ServerCancellationToken;
         RequestUri = session.RequestUri;
+        ReceivedApiKey = session.Headers.TryGetValue("X-API-Key", out var apiKey) ? apiKey : null;
+        ReceivedApiVersion =
+            session.Headers.TryGetValue("Cartesia-Version", out var version) ? version : null;
 
         // Send result messages immediately upon connection (snapshot to avoid races).
         var messages = ResultMessages.ToList();

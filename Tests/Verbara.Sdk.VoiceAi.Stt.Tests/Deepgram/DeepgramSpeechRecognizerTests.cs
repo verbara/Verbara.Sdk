@@ -28,13 +28,23 @@ public class DeepgramSpeechRecognizerTests : IAsyncDisposable
         _server.Start();
     }
 
+    /// <summary>The credential every test in this class sends, asserted on by the fake.</summary>
+    private const string TestApiKey = "test-key";
+
+    /// <summary>
+    /// Reaches the fake through <see cref="DeepgramOptions.BaseUri"/>, so route, query and credential
+    /// all come from shipped code — including the <c>model</c> and <c>language</c> parameters the
+    /// test-only branch used to omit.
+    /// </summary>
     private DeepgramSpeechRecognizer BuildRecognizer(Action<DeepgramOptions>? configure = null)
     {
-        var opts = new DeepgramOptions { ApiKey = "test-key" };
+        var opts = new DeepgramOptions
+        {
+            ApiKey = TestApiKey,
+            BaseUri = $"ws://127.0.0.1:{_server.Port}/v1/listen"
+        };
         configure?.Invoke(opts);
-        return new DeepgramSpeechRecognizer(
-            Options.Create(opts),
-            fakeServerPort: _server.Port);
+        return new DeepgramSpeechRecognizer(Options.Create(opts));
     }
 
     /// <summary>
@@ -234,6 +244,33 @@ public class DeepgramSpeechRecognizerTests : IAsyncDisposable
     {
         for (int i = 0; i < 3; i++) yield return new byte[320];
         await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldAuthenticateWithTheTokenScheme_WhenOpeningASession()
+    {
+        var recognizer = BuildRecognizer();
+        await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        _server.ReceivedAuthorization.Should().Be($"Token {TestApiKey}");
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldSendModelAndLanguage_WhenOpeningASession()
+    {
+        // These two parameters were absent from the client's test-only URI branch, so the fake
+        // received a request production never sends and no test could see the difference. They are
+        // set to non-default values here for the same reason the voice id is in the ElevenLabs
+        // suite: a default would also match a client that ignored the option.
+        var recognizer = BuildRecognizer(o =>
+        {
+            o.Model = "nova-3";
+            o.Language = "pt";
+        });
+        await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var query = new Uri($"ws://localhost{_server.ReceivedRequestUri}").Query;
+        query.Should().Contain("model=nova-3").And.Contain("language=pt");
     }
 
     public async ValueTask DisposeAsync()

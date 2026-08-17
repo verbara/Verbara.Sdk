@@ -23,21 +23,20 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
     private const int ReceiveBufferSize = 65536;
 
     private readonly ElevenLabsOptions _options;
-    private readonly int? _fakeServerPort;
 
     /// <inheritdoc />
     public override string ProviderName => "ElevenLabs";
 
-    /// <summary>Initializes a new instance for production use.</summary>
+    /// <summary>Initializes a new instance.</summary>
+    /// <remarks>
+    /// No test-only constructor: tests reach a fake through
+    /// <see cref="ElevenLabsOptions.BaseUri"/>. The overload this replaces did more than redirect —
+    /// it swapped <see cref="ElevenLabsOptions.VoiceId"/> for a literal and suppressed the
+    /// credential, so neither the voice segment nor the <c>xi-api-key</c> header was reachable from
+    /// a test.
+    /// </remarks>
     public ElevenLabsSpeechSynthesizer(IOptions<ElevenLabsOptions> options)
         => _options = options.Value;
-
-    /// <summary>Initializes a new instance for testing with a fake server.</summary>
-    internal ElevenLabsSpeechSynthesizer(IOptions<ElevenLabsOptions> options, int fakeServerPort)
-    {
-        _options = options.Value;
-        _fakeServerPort = fakeServerPort;
-    }
 
     /// <inheritdoc />
     public override async IAsyncEnumerable<ReadOnlyMemory<byte>> SynthesizeAsync(
@@ -53,8 +52,9 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
         var uri = BuildUri();
         using var ws = new ClientWebSocket();
 
-        if (_fakeServerPort is null)
-            ws.Options.SetRequestHeader("xi-api-key", _options.ApiKey);
+        // Unconditional: the header name is vendor-specific and lower-case, and nothing could catch a
+        // change to it while this line ran under production alone.
+        ws.Options.SetRequestHeader("xi-api-key", _options.ApiKey);
 
         await ws.ConnectAsync(uri, ct).ConfigureAwait(false);
 
@@ -191,22 +191,12 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
 
     private Uri BuildUri()
     {
-        if (_fakeServerPort.HasValue)
-        {
-            // Include query parameters even for the fake server so URL-parameter tests work.
-            var outputFmt = ToOutputFormatString(_options.OutputFormat);
-            var latency = (int)_options.LatencyOptimization;
-            return new Uri(
-                $"ws://127.0.0.1:{_fakeServerPort}/v1/text-to-speech/test-voice/stream-input" +
-                $"?model_id={Uri.EscapeDataString(_options.ModelId)}" +
-                $"&output_format={outputFmt}" +
-                $"&optimize_streaming_latency={latency}");
-        }
-
+        // One expression, so there is no second copy of the query to drift from this one — and the
+        // voice segment is the configured VoiceId whether the endpoint is the vendor's or a fake.
         var outputFormat = ToOutputFormatString(_options.OutputFormat);
         var latencyOpt = (int)_options.LatencyOptimization;
         return new Uri(
-            $"wss://api.elevenlabs.io/v1/text-to-speech/{_options.VoiceId}/stream-input" +
+            $"{_options.BaseUri}/{_options.VoiceId}/stream-input" +
             $"?model_id={Uri.EscapeDataString(_options.ModelId)}" +
             $"&output_format={outputFormat}" +
             $"&optimize_streaming_latency={latencyOpt}");

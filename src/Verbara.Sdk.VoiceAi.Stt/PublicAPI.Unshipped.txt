@@ -71,3 +71,5 @@ Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsSpeechRecognizer.SpeechmaticsSp
 override Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsSpeechRecognizer.ProviderName.get -> string!
 override Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsSpeechRecognizer.StreamAsync(System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>! audioFrames, Verbara.Sdk.Audio.AudioFormat format, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.VoiceAi.SpeechRecognitionResult>!
 static Verbara.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddSpeechmaticsStt(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.BaseUri.get -> string!
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.BaseUri.set -> void

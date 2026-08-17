@@ -61,6 +61,8 @@ Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat
 Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat.Pcm16k = 0 -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat
 Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat.Pcm22050 = 1 -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat
 Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat.Pcm24k = 2 -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.BaseUri.get -> string!
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.BaseUri.set -> void
 Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.LatencyOptimization.get -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization
 Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.LatencyOptimization.set -> void
 Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.OutputFormat.get -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOutputFormat

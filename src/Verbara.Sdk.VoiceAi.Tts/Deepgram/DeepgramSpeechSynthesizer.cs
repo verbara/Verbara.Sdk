@@ -35,21 +35,19 @@ namespace Verbara.Sdk.VoiceAi.Tts.Deepgram;
 public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
 {
     private readonly DeepgramTtsOptions _options;
-    private readonly int? _fakeServerPort;
 
     /// <inheritdoc />
     public override string ProviderName => "DeepgramTts";
 
-    /// <summary>Initializes a new instance for production use.</summary>
+    /// <summary>Initializes a new instance.</summary>
+    /// <remarks>
+    /// No test-only constructor: tests reach a fake through
+    /// <see cref="DeepgramTtsOptions.BaseUri"/>, the seam an operator uses for a self-hosted or
+    /// regional endpoint. The overload this replaces suppressed the credential under test, so the
+    /// <c>Authorization</c> line below was executed by production alone.
+    /// </remarks>
     public DeepgramSpeechSynthesizer(IOptions<DeepgramTtsOptions> options)
         => _options = options.Value;
-
-    /// <summary>Initializes a new instance for testing with a fake server port.</summary>
-    internal DeepgramSpeechSynthesizer(IOptions<DeepgramTtsOptions> options, int fakeServerPort)
-    {
-        _options = options.Value;
-        _fakeServerPort = fakeServerPort;
-    }
 
     /// <inheritdoc />
     public override async IAsyncEnumerable<ReadOnlyMemory<byte>> SynthesizeAsync(
@@ -65,8 +63,10 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
         var uri = BuildUri(outputFormat);
         using var ws = new ClientWebSocket();
 
-        if (_fakeServerPort is null)
-            ws.Options.SetRequestHeader("Authorization", $"Token {_options.ApiKey}");
+        // Unconditional, so the scheme token is part of what the suite exercises. `Token` is not
+        // `Bearer` and not a bare key, and nothing could tell the difference while this line was
+        // skipped under test.
+        ws.Options.SetRequestHeader("Authorization", $"Token {_options.ApiKey}");
 
         using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
@@ -216,9 +216,9 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
             $"&sample_rate={sampleRate}" +
             $"&speed={_options.Speed.ToString("G", System.Globalization.CultureInfo.InvariantCulture)}";
 
-        if (_fakeServerPort.HasValue)
-            return new Uri($"ws://127.0.0.1:{_fakeServerPort}/v1/speak{query}");
-
+        // One expression for both, because BaseUri admits ws://. The branch this replaces built the
+        // same query twice — a shape that lets the two copies drift, which is exactly what happened
+        // in the STT sibling, where the fake's copy silently dropped `model` and `language`.
         return new Uri($"{_options.BaseUri}{query}");
     }
 }

@@ -51,6 +51,40 @@ client on 2026-08-17: 3.2 seconds of speech in, an empty transcript out, **no ex
   fragmented message is not read as several short ones. Reverting the declared rate fails exactly one
   test and nothing else; removing the coalescing fails four while that rate assertion still passes; and
   sending the tail short fails three of those four.
+### Fixed — Tests: six provider fakes never saw a credential, so no test could catch an auth defect
+
+Every WebSocket provider client carried a second, test-only constructor taking a `fakeServerPort`, and
+it did more than redirect the origin: behind `if (_fakeServerPort is null)` it also **suppressed the
+auth header** and rebuilt the **route and query**. The production expression was therefore executed by
+production alone and by no test at all — which is the structural reason a credential defect could ship
+past a green suite in this layer.
+
+- **The blindness was measured before it was removed.** With every auth header in the six clients
+  renamed to a header no vendor reads, the two provider suites returned **187 passed, 0 failed**.
+  Renaming `Authorization` was invisible. After the change the same mutation fails **six tests, one per
+  client** — that delta is the evidence, not the green suite.
+
+- **The fix is this repo's own precedent, not a new invention.** `SpeechmaticsSpeechRecognizer` already
+  had no test seam: its tests reach a fake by setting `BaseUri`, the same knob an operator uses for a
+  regional endpoint. All six clients now have that shape, the `fakeServerPort` overloads are gone, and
+  the credential headers are set unconditionally — so every test executes the line production executes,
+  header name, scheme and value included.
+
+- **Two query copies had already drifted, silently.** Deepgram STT's under-test URI omitted `model` and
+  `language` entirely, so the suite was watching a request production never sends; ElevenLabs put a
+  hard-coded `test-voice` in the route where production puts `VoiceId`. Each client now builds its URI
+  in one expression, and both parameters are asserted from non-default values.
+
+- **`ElevenLabsOptions` and STT `DeepgramOptions` gained `BaseUri`**, validated `^wss?://` like the
+  other providers'. Required for the route to flow through shipped code, and an operator gap in its own
+  right: neither client could be pointed at a regional or self-hosted endpoint.
+
+- **What is deliberately still unasserted:** each vendor's *rejection* shape for a bad key. Speechmatics
+  answers 101 then `4001 not_authorised`; the other five have not been observed, and inventing five
+  guesses would be worse than asserting none.
+
+Unit lane after the change: **3 094 tests** across 30 projects, 0 failures, 0 warnings.
+
 ### Fixed — Tests: a state transition awaited on a clock, and two suites competing for one port
 
 The sweep behind the two-fakes entry below continued into the rest of the class. Two more defects, both
