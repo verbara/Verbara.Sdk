@@ -334,7 +334,7 @@ characterised* in §5.5.
       a probe reproducing the corrected request — `context_id` added, half-close dropped — which is
       the same wire behaviour this client now produces, but it is a reconstruction and not the
       artifact. §5.5 records Cartesia TTS accordingly and §7.7 applies
-- [ ] 2.15 **Drift caused into a neighbouring open change — recorded here, not fixed here.**
+- [x] 2.15 **Drift caused into a neighbouring open change — recorded here, not fixed here.**
       `openspec/changes/provider-dto-robustness-fences/proposal.md` counts response members by name
       and states *"Tts contributes exactly one response member (`CartesiaTtsControlMessage.Type`)"*.
       That type no longer exists: §2.2 replaced it with `CartesiaTtsServerMessage`, which contributes
@@ -343,7 +343,18 @@ characterised* in §5.5.
       number. Editing another change's proposal from this one is the scope-widening §2.8 forbids, so
       the correction belongs to whoever next picks that change up — it must **re-run its inventory**
       rather than adjust the figure by hand, because this commit is unlikely to be the only source
-      of drift since it was counted
+      of drift since it was counted.
+      **Closed 2026-08-17.** Recorded, not fixed, and every claim above re-verified against the tree
+      first rather than trusted from when the task was written: `CartesiaTtsControlMessage` is gone —
+      the name survives only in a doc comment on its replacement — and `CartesiaTtsServerMessage`
+      declares exactly one non-nullable response member (`Type`) plus four nullable ones (`Data`,
+      `Error`, `Done`, `StatusCode`); `ElevenLabsAudioOutput` adds two nullable ones (`Audio`,
+      `IsFinal`). The neighbour's `proposal.md` still reads **24** with *"Tts 1"* and still names the
+      deleted type, so both the name and the number are stale, as stated. Deliberately **not** corrected
+      to a new figure: publishing a hand-adjusted count would present a number nobody inventoried as if
+      someone had, and this change is unlikely to be the only drift since that census — a re-run is the
+      only honest remedy, and it belongs to that change. `openspec/changes/provider-dto-robustness-fences/`
+      is untouched by this change, which is the §2.8 boundary holding rather than being waived
 
 ## 3. Class A — the request never reaches the vendor (LMNT HTTP, Speechmatics TTS)
 
@@ -1218,8 +1229,18 @@ commit.
       defects, because the bytes never arrive or arrive on the wrong frame type; and they are not drift,
       because they are static, present-day, and were wrong on the day the code was written. Related:
       ADR-0041 (recordings as the provider evidence class), ADR-0043 (evidence produced off the PR path)
-- [ ] 6.7 Add the ADR-0048 **and ADR-0049** rows to `docs/decisions/README.md` in numeric order, matching the existing row
-      format (link, one-sentence summary, status and date)
+- [x] 6.7 Add the ADR-0048 **and ADR-0049** rows to `docs/decisions/README.md` in numeric order, matching the existing row
+      format (link, one-sentence summary, status and date).
+      **Closed 2026-08-17 with no edit — both rows were already there**, added by `926fd413` (#174), the
+      PR that proposed this change. The task was written expecting a later close-out to add them, so
+      this is the §2.8 "verify before scoping" case: the gap was assumed from the task list rather than
+      from the tree. Both rows carry link, one-sentence summary, status and date, and sit in numeric
+      order after ADR-0044. Verified beyond what was asked, because a glance at the tail proves nothing
+      about the middle: **every one of the 46 ADR files on disk has a README row** (`0001`–`0044`,
+      `0048`, `0049`). The apparent gap at `0045`–`0047` is correct and must not be "fixed" — those
+      numbers are **reserved** by open openspec changes via their `decision_ref` (`Sdk/ADR-0045`,
+      `Sdk/ADR-0046`, `Sdk/ADR-0047`) and their ADR files do not exist yet; ADR-0048 and ADR-0049 both
+      cite 0046 and 0047 as the neighbouring layers by number
 - [x] 6.8 `docs/guides/provider-recording-protocol.md` — add the probe method as a named section: the
       controlled comparison, the mandatory negative control, and the governing epistemic rule *"a vendor
       asserting X is evidence; a vendor not mentioning Y is not."* Section 4's redaction rules already
