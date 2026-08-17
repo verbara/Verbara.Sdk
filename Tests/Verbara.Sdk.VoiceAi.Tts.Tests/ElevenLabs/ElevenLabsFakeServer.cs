@@ -247,6 +247,9 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
         await Task.WhenAny(
                 endOfInputReceived.Task,
                 receiveTask,
+                // The losing arm. It bounds a hang rather than ordering anything — the two arms
+                // above decide when this wait returns — so no assertion depends on its length.
+                // fence-allow: GUARD-TIMEOUT — ceiling on a causal wait, never the winning arm
                 Task.Delay(EndOfInputWaitCeiling, _cts.Token))
             .ConfigureAwait(false);
 

@@ -51,6 +51,45 @@ client on 2026-08-17: 3.2 seconds of speech in, an empty transcript out, **no ex
   fragmented message is not read as several short ones. Reverting the declared rate fails exactly one
   test and nothing else; removing the coalescing fails four while that rate assertion still passes; and
   sending the tail short fails three of those four.
+### Fixed — Tests: a state transition awaited on a clock, and two suites competing for one port
+
+The sweep behind the two-fakes entry below continued into the rest of the class. Two more defects, both
+confirmed by forcing the interleaving, plus a correction to what that sweep concluded about a third fake.
+
+- **A test waited 100 ms for the state it is named after.**
+  `WebSocketAudioSessionTests.ReadPump_ShouldTransitionToDisconnected_WhenCloseFrameReceived` slept and
+  then asserted; at 0 ms it fails. It now waits on `StateChanges`, the observable it was already
+  subscribed to — the same file had been waiting that way elsewhere, so this was an inconsistency inside
+  one file. Checked in the other direction too: with the close frame removed the wait now throws a
+  `TimeoutException` in 5 s instead of asserting on an empty list. Two sibling barriers were controlled,
+  passed at 0, and left alone.
+
+- **Two test assemblies competed for TCP 4573, and only one of them said so.**
+  `FastAgiIntegrationTests` must use that port — the Asterisk dialplan dials back to it. The other
+  holder was invisible: `AddVerbara` registers the AGI hosted service unconditionally, so any started
+  host binds `AgiPort`, and two `GracefulShutdownTests` tests that never speak AGI left it at its 4573
+  default. No file in the test tree contains the string. Both now ask for an ephemeral port; a
+  hard-coded 14573 elsewhere in the same class, sitting under a comment that called it ephemeral, went
+  with them.
+
+- **The overlap is measured, and the CI comment that denies it is wrong.** In the failing run
+  `Verbara.Sdk.IntegrationTests` and `Verbara.Sdk.FunctionalTests` overlapped for 36 s;
+  `RunConfiguration.MaxCpuCount=1` does not serialise the projects the way `ci.yml` claims, and four
+  other assemblies interleave in the same log. Two mechanisms were refuted before the right one was
+  accepted — neither a socket in `TIME_WAIT` nor an accepted leg still open blocks the re-bind; only two
+  live listeners conflict. Verified as a property, not a green test: polling `ss` while those tests run
+  shows 4573 listening on unfixed `main` and never with the fix.
+
+- **A per-timer control does not clear a fake.** `RealtimeFakeServer`'s three timers each pass 59/59
+  alone; zeroed together the suite fails — 3 tests in one run, 1 in the next, which is what a race looks
+  like. The load-bearing one is the pre-close wait, and what holds the suite up is the sum of the slack,
+  not any single delay. Left to ADR-0045 §3.2, which already owns replacing it: the causal close
+  condition is "the client has sent everything it will", which the fake cannot derive.
+
+- **The two fakes' replacement ceilings no longer carry an allowance.** Both were unmarked `Task.Delay`
+  calls, so the sync-fence baseline still grandfathered those files at 1 — the barriers were gone but
+  the room to add new ones was not. They now carry `// fence-allow: GUARD-TIMEOUT` and both entries are
+  0. Unit lane after the change: 3 086 tests / 30 assemblies, 0 warnings.
 
 ### Fixed — Tests: two fakes answered on a timer, and one of them ejected a PR from the merge queue
 
@@ -74,9 +113,9 @@ the client sent — the client's stream completed, and an assertion on the reque
   and 5/5 on ElevenLabs; with the waits in place the delay is gone entirely and the TTS suite is green
   20/20 idle and 15/15 with twice as many spinners as cores, unit lane 3 081 tests / 30 assemblies.
 
-- **The same control refused a third fake.** `RealtimeFakeServer` has the identical timer and passes
-  5/5 at delay 0 — no assertion of any existing test depends on it — so it was left untouched. It is a
-  latent hazard already owned by ADR-0045, not a defect to fix here.
+- **The same control refused a third fake — per timer.** `RealtimeFakeServer`'s equivalent timer
+  passes 5/5 at delay 0, so it was left untouched. That verdict is narrower than it first read: the
+  fake has three timers and zeroing all of them together does fail. See the continuation entry above.
 
 - **Why an earlier sweep for this exact class missed them, and it is two different reasons.** The
   Cartesia refutation was correct when it was made and expired a week later, when the first test to

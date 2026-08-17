@@ -9,7 +9,7 @@
     "Tests/Verbara.Sdk.Ami.Tests/Internal/AsyncEventPumpTests.cs": 1,
     "Tests/Verbara.Sdk.Ari.Tests/Audio/AudioSocketServerTests.cs": 4,
     "Tests/Verbara.Sdk.Ari.Tests/Audio/AudioSocketSessionTests.cs": 2,
-    "Tests/Verbara.Sdk.Ari.Tests/Audio/WebSocketAudioSessionTests.cs": 3,
+    "Tests/Verbara.Sdk.Ari.Tests/Audio/WebSocketAudioSessionTests.cs": 2,
     "Tests/Verbara.Sdk.Ari.Tests/Outbound/AriOutboundListenerTests.cs": 1,
     "Tests/Verbara.Sdk.Cluster.Postgres.Tests/PostgresDistributedLockTests.cs": 2,
     "Tests/Verbara.Sdk.Cluster.Postgres.Tests/PostgresFixture.cs": 2,
@@ -74,9 +74,9 @@
     "Tests/Verbara.Sdk.VoiceAi.Tests/Pipeline/VoiceAiPipelineTests.cs": 8,
     "Tests/Verbara.Sdk.VoiceAi.Tests/Pipeline/VoiceAiPipelineTtfaTests.cs": 1,
     "Tests/Verbara.Sdk.VoiceAi.Tests/Pipeline/VoiceAiPipelineTurnDetectorTests.cs": 4,
-    "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Cartesia/CartesiaFakeServer.cs": 1,
+    "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Cartesia/CartesiaFakeServer.cs": 0,
     "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Deepgram/DeepgramTtsFakeServer.cs": 1,
-    "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/ElevenLabs/ElevenLabsFakeServer.cs": 1,
+    "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/ElevenLabs/ElevenLabsFakeServer.cs": 0,
     "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Lmnt/LmntFakeServer.cs": 1,
     "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Lmnt/LmntSpeechSynthesizerTests.cs": 1
   }

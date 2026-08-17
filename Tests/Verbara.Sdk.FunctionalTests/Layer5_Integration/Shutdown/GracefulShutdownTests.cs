@@ -32,6 +32,16 @@ public sealed class GracefulShutdownTests : FunctionalTestBase
                 o.Ami.Username = AmiConnectionFactory.Username;
                 o.Ami.Password = AmiConnectionFactory.Password;
                 o.Ami.AutoReconnect = false;
+
+                // Not incidental, and not visible to anyone grepping this tree for "4573":
+                // AddVerbara always registers AgiHostedService, so starting this host binds AgiPort
+                // on every interface. Left at its 4573 default it takes the one port
+                // FastAgiIntegrationTests cannot move off, because the Asterisk dialplan dials back
+                // to it (docker/functional/asterisk-config/extensions.conf). The two assemblies were
+                // measured overlapping for 36 s inside one run — MaxCpuCount=1 does not separate
+                // them — and the collision cost a queue entry. This test is about AMI shutdown and
+                // never speaks AGI, so it takes whatever port the OS hands out.
+                o.AgiPort = 0;
             }))
             .Build();
 
@@ -53,8 +63,12 @@ public sealed class GracefulShutdownTests : FunctionalTestBase
     [Fact]
     public async Task HostShutdown_ShouldStopAgiServer()
     {
-        // Pick a free ephemeral port
-        const int agiPort = 14573;
+        // Actually ephemeral now. The comment here used to say "pick a free ephemeral port" over a
+        // hard-coded 14573, which is neither free by construction nor ephemeral; nothing else claims
+        // 14573 today, so it never failed, but that is a property of the rest of the tree rather
+        // than of this test. Port 0 makes it one — the same choice AgiHealthCheckIntegrationTests
+        // already made. None of the assertions below look at the port.
+        const int agiPort = 0;
 
         using var host = Host.CreateDefaultBuilder()
             .ConfigureLogging(b => b.SetMinimumLevel(LogLevel.Warning))
@@ -142,6 +156,10 @@ public sealed class GracefulShutdownTests : FunctionalTestBase
                 o.Ami.Username = AmiConnectionFactory.Username;
                 o.Ami.Password = AmiConnectionFactory.Password;
                 o.Ami.AutoReconnect = false;
+
+                // Ephemeral for the same reason as HostShutdown_ShouldCloseAmiConnection: starting
+                // this host would otherwise hold 4573 for the duration of the shutdown measurement.
+                o.AgiPort = 0;
             }))
             .Build();
 
