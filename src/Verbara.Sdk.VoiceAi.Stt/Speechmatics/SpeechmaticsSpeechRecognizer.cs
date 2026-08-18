@@ -13,9 +13,18 @@ namespace Verbara.Sdk.VoiceAi.Stt.Speechmatics;
 /// Speechmatics Realtime STT provider over WebSocket. Sends a <c>StartRecognition</c>
 /// JSON frame, streams raw PCM audio as binary messages, and yields transcript events
 /// parsed from <c>AddPartialTranscript</c> (interim) and <c>AddTranscript</c> (final)
-/// messages. Lifecycle messages (<c>RecognitionStarted</c>, <c>EndOfTranscript</c>,
-/// <c>Error</c>, <c>Warning</c>, <c>Info</c>) are observed but not surfaced as results.
+/// messages.
 /// </summary>
+/// <remarks>
+/// <para>
+/// A transcript's text is the vendor's own <c>metadata.transcript</c>, not a local rebuild of the
+/// token stream. <c>RecognitionStarted</c> is therefore no longer purely lifecycle: its
+/// <c>language_pack_info.word_delimiter</c> is captured for the fallback assembly used when a
+/// transcript message carries no <c>metadata.transcript</c>. <c>EndOfTranscript</c>, <c>Warning</c>,
+/// <c>Info</c> and <c>AudioAdded</c> remain observed and not surfaced; <c>Error</c> is raised
+/// (<c>ADR-0050</c> E1).
+/// </para>
+/// </remarks>
 public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
 {
     private readonly SpeechmaticsOptions _options;
@@ -202,6 +211,11 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
         // said nothing else" is precisely the case this has to report.
         var sawVendorFrame = false;
 
+        // Overwritten by RecognitionStarted's language_pack_info. A space is the fallback and not a
+        // preference: it is what the vendor declares for every language pack seen here, and it is only
+        // reached if the greeting never arrives or omits the field.
+        var wordDelimiter = " ";
+
         while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
         {
             ValueWebSocketReceiveResult result;
@@ -253,33 +267,57 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
             if (string.Equals(msg.Message, "Error", StringComparison.Ordinal))
                 throw SpeechProviderFailureException.FromErrorFrame(provider, msg.Type, msg.Reason);
 
+            // The greeting carries the language pack's own token separator. It used to be discarded
+            // with the rest of the lifecycle messages, which is why this client space-joined Japanese
+            // the same way it space-joined English.
+            if (string.Equals(msg.Message, "RecognitionStarted", StringComparison.Ordinal))
+            {
+                var started = JsonSerializer.Deserialize(
+                    json,
+                    VoiceAiSttJsonContext.Default.SpeechmaticsRecognitionStartedMessage);
+                if (started?.LanguagePackInfo?.WordDelimiter is { } declared) wordDelimiter = declared;
+                continue;
+            }
+
             // Only transcript messages carry content. The remaining lifecycle messages
-            // (RecognitionStarted, EndOfTranscript, Warning, Info) are not failures and are not
-            // results either.
+            // (EndOfTranscript, Warning, Info, AudioAdded) are not failures and are not results
+            // either.
             var isPartial = string.Equals(msg.Message, "AddPartialTranscript", StringComparison.Ordinal);
             var isFinal = string.Equals(msg.Message, "AddTranscript", StringComparison.Ordinal);
             if (!isPartial && !isFinal) continue;
             if (msg.Results is null || msg.Results.Length == 0) continue;
 
-            // Concatenate results[*].alternatives[0].content; average the confidences.
-            var sb = new StringBuilder();
+            // Confidence is the mean of results[*].alternatives[0].confidence and stays that way even
+            // now that the text no longer comes from the same walk. Saying so is the point: the two
+            // used to be produced by one loop, and letting confidence quietly become "the mean of
+            // whatever the vendor's own text happened to be built from" would change a published
+            // number's meaning without a line announcing it.
             var confSum = 0f;
             var confCount = 0;
             foreach (var r in msg.Results)
             {
                 if (r.Alternatives is null || r.Alternatives.Length == 0) continue;
-                var alt = r.Alternatives[0];
-                if (sb.Length > 0 && !string.IsNullOrEmpty(alt.Content)) sb.Append(' ');
-                sb.Append(alt.Content);
-                confSum += alt.Confidence;
+                confSum += r.Alternatives[0].Confidence;
                 confCount++;
             }
 
-            if (sb.Length == 0) continue;
+            // The vendor publishes its own assembly of the segment, and it is the authority: it has
+            // already applied the language pack's delimiter and each token's attaches_to, which is
+            // knowledge this client can only approximate. Trimmed because it carries inter-segment
+            // glue — measured live on 2026-08-18, finals arrive as "The ", "team reviewed ",
+            // "…looks good. ", so concatenating them verbatim reproduces the utterance exactly, but a
+            // single result would carry a trailing space no other provider in this SDK emits. The trim
+            // touches that glue and nothing else: on every frame measured, the vendor's trimmed text
+            // and the local assembly below agree character for character.
+            var transcript = msg.Metadata?.Transcript is { } vendorText
+                ? vendorText.Trim()
+                : AssembleFromTokens(msg.Results, wordDelimiter);
+
+            if (transcript.Length == 0) continue;
 
             var avgConf = confCount > 0 ? confSum / confCount : 0f;
             var stt = new SpeechRecognitionResult(
-                sb.ToString(),
+                transcript,
                 avgConf,
                 isFinal,
                 TimeSpan.Zero);
@@ -287,6 +325,38 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
         }
 
         return sawVendorFrame;
+    }
+
+    /// <summary>
+    /// Rebuilds a segment from its token stream, for the one case that needs it: a transcript message
+    /// carrying no <c>metadata.transcript</c>.
+    /// </summary>
+    /// <remarks>
+    /// Two vendor signals do the work the old unconditional <c>' '</c> ignored. The language pack's
+    /// <paramref name="wordDelimiter"/> is what separates tokens in this language — a pack declaring
+    /// an empty delimiter assembles with no separators at all. And a result marked
+    /// <c>attaches_to: "previous"</c> binds to the token before it, which is how the vendor says a
+    /// full stop belongs against the last word: the shipped join produced <c>"… mañana ."</c> where
+    /// the vendor's own text reads <c>"… mañana."</c>. The rule is therefore <em>use what the vendor
+    /// declared</em>, never <em>special-case punctuation</em> — the delimiter is read from the
+    /// session, not assumed, and the attachment is read from the result, not inferred from the
+    /// content being a period.
+    /// </remarks>
+    private static string AssembleFromTokens(SpeechmaticsResult[] results, string wordDelimiter)
+    {
+        var sb = new StringBuilder();
+        foreach (var r in results)
+        {
+            if (r.Alternatives is null || r.Alternatives.Length == 0) continue;
+            var content = r.Alternatives[0].Content;
+            if (string.IsNullOrEmpty(content)) continue;
+
+            var attachesToPrevious = string.Equals(r.AttachesTo, "previous", StringComparison.Ordinal);
+            if (sb.Length > 0 && !attachesToPrevious) sb.Append(wordDelimiter);
+            sb.Append(content);
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>

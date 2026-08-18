@@ -62,6 +62,46 @@ the change (`Sdk/ADR-0050`).
   abort test before this: not one asserting the wrong thing, none at all, because its fake could not
   abort without hanging.
 
+### Fixed — BREAKING: Speechmatics STT put a space in front of every full stop
+
+`SpeechmaticsSpeechRecognizer` rebuilt each segment by joining `results[*].alternatives[0].content`
+with a single space, unconditionally. Speechmatics publishes three signals that say how its tokens go
+together, and the client read none of them: `language_pack_info.word_delimiter` on
+`RecognitionStarted`, each result's `attaches_to`, and `metadata.transcript` — the vendor's own
+assembled segment. Measured live on 2026-08-18, an utterance the service transcribed as
+`"…this morning, and it"` reached the caller as `"…this morning , and it"`, and the Spanish fixture in
+this repo assembles to `"… mañana ."` where the vendor's own text reads `"… mañana."`.
+
+**BREAKING** in the plain sense: `SpeechRecognitionResult.Transcript` now carries different characters
+for the same session. Anything matching on transcript text — keyword spotting, intent routing, test
+assertions — should be re-checked.
+
+- **The vendor's `metadata.transcript` is now the transcript**, trimmed. The trim removes inter-segment
+  glue and nothing else: the service pads finals (`"The "`, `"team reviewed "`, `"…looks good. "`) so
+  they concatenate without a separator, and a per-result value carrying a trailing space would make
+  this the only provider in the SDK that does.
+
+- **Local assembly survives as the fallback for a message carrying no `metadata.transcript`**, and it
+  is fixed there too: it joins with the delimiter the language pack declared and suppresses it for a
+  result marked `attaches_to: "previous"`. The rule is *use what the vendor declared*, never
+  *special-case punctuation* — a pack declaring an empty `word_delimiter` assembles with no separators
+  at all, which a punctuation special case would get wrong.
+
+- **Confidence still comes from `alternatives[0].confidence`**, averaged, even though the text no
+  longer comes from that walk. The two used to be produced by one loop, and a test pins that
+  separating them did not quietly change what the published number means.
+
+- **The authority rule is pinned by a constructed divergence, and the honest reason is recorded.**
+  Across eleven live transcript messages the vendor's trimmed text and the corrected local assembly
+  agreed character for character — so at first *nothing failed* when the vendor's text was ignored
+  altogether. That silent pass is the shape this work exists to remove, so a frame whose
+  `metadata.transcript` its own tokens cannot produce now stands behind the rule. No measured frame
+  contains such a divergence, and the test says so rather than implying the vendor rewrites segments.
+
+- **Four new source-generated DTOs**, all `internal`: the `RecognitionStarted` message and its
+  `language_pack_info`, the transcript `metadata`, plus `type` and `attaches_to` on a result. No
+  reflection, registered in `VoiceAiSttJsonContext`.
+
 ### Fixed — BREAKING: Speechmatics TTS was the sixth synthesizer, and it kept neither half of the empty-result contract
 
 `SpeechSynthesizer.SynthesizeAsync` declares two promises in XML docs that ship to consumers of this
