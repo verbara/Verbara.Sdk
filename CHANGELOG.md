@@ -62,6 +62,34 @@ the change (`Sdk/ADR-0050`).
   abort test before this: not one asserting the wrong thing, none at all, because its fake could not
   abort without hanging.
 
+### Fixed — BREAKING: Speechmatics TTS was the sixth synthesizer, and it kept neither half of the empty-result contract
+
+`SpeechSynthesizer.SynthesizeAsync` declares two promises in XML docs that ship to consumers of this
+package: a session that ends cleanly having produced no audio raises `SpeechProviderEmptyResultException`,
+and `text` that is empty or whitespace yields nothing *without asking any provider for anything*. Five
+synthesizers kept both. `SpeechmaticsSpeechSynthesizer` kept neither — its read loop was
+`if (read == 0) yield break;` with no accounting, and the file contained no whitespace guard at all. Its
+closest analogue is LMNT's own HTTP loop, which does both, so this was never a transport limitation; the
+ADR-0050 sweep closed eight WebSocket surfaces and this HTTP-only one was never in that scope. Same
+breakage class as the entry above: a call that used to go quiet can now throw.
+
+- **The whitespace half fixes a defect the live route reproduces.** Probed on 2026-08-18,
+  `POST /generate/{voice}` answers an empty or whitespace `text` with `200 audio/wav` and **7 724 bytes**
+  — and those bytes are not silence: 3 817 of the 3 840 samples are non-zero, 0.24 s of audible audio.
+  A caller the contract promised silence was therefore billed for a request and handed speech. The guard
+  stops at "empty or whitespace" and deliberately does not widen to punctuation-only text, which the same
+  probe showed returns the same body: the contract's words are what they are, and "text a human would not
+  read aloud" is a judgement no measurement supports.
+
+- **The empty-result half closes a published-contract gap, not a reproducible vendor failure, and the
+  code says so.** The same probe never saw an empty body — the smallest response was a 44-byte RIFF header
+  plus 7 680 bytes of data. The guard counts **bytes, not samples**: a header-only response carrying zero
+  samples would still pass it, because catching that means parsing the container, which this provider
+  deliberately does not do, and nothing measured says the vendor emits one.
+
+- **Both guards are negative-controlled.** Removing them fails exactly the two new tests and nothing else
+  — 2 red, 9 green — so neither is passing on an assertion some other test already made.
+
 ### Fixed — BREAKING: AssemblyAI realtime STT rejected every session a telephony caller could start
 
 `AssemblyAiSpeechRecognizer` sent **one WebSocket message per frame the caller yielded**. AssemblyAI

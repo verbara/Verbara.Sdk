@@ -237,6 +237,73 @@ public class SpeechmaticsSpeechSynthesizerTests
         await act.Should().ThrowAsync<HttpRequestException>();
     }
 
+    /// <summary>
+    /// <c>ADR-0050</c> E5 on the HTTP transport: a request that succeeds but carries no audio must
+    /// reach the caller as <see cref="SpeechProviderEmptyResultException"/>, not as a stream that
+    /// simply ends.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>What this arm is and is not.</strong> It closes a gap in a contract this package
+    /// publishes — the promise is declared in <c>SpeechSynthesizer.SynthesizeAsync</c>'s XML docs and
+    /// was honoured by the other five synthesizers and not this one. It is <em>not</em> a
+    /// reproduction of a failure the vendor is currently observed to produce: probed on 2026-08-18,
+    /// the live route never answered with an empty body — the smallest response seen was a 44-byte
+    /// RIFF header plus 7 680 bytes of data. The stub below is therefore a contract fixture, and
+    /// saying so is the point; a test that implied "the vendor does this" would be claiming a
+    /// measurement nobody took.
+    /// </para>
+    /// <para>
+    /// Note what is deliberately not wrapped: a non-2xx status keeps raising
+    /// <see cref="HttpRequestException"/> (the test above). It is already typed, it already carries
+    /// the vendor's status, and it is not one of the silent doors E5 closes.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowEmptyResult_WhenTheResponseSucceedsWithNoAudio()
+    {
+        await using var server = HttpProviderMockServer.Start();
+        server.Stub(SynthesisRequest(), HttpProviderResponse.Bytes([], RecordedMediaType));
+        var synth = SynthesizerFor(server);
+
+        var act = async () => await synth
+            .SynthesizeAsync("silence", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        var empty = (await act.Should().ThrowAsync<SpeechProviderEmptyResultException>()).Which;
+        empty.Should().NotBeOfType<SpeechProviderFailureException>(
+            "the request succeeded — the response merely carried no audio");
+        empty.Provider.Should().Be("Speechmatics");
+        server.UnmatchedRequests.Should().BeEmpty("the request itself was well-formed");
+    }
+
+    /// <summary>
+    /// The other half of E5: <c>text</c> that carries no speech yields nothing <em>without asking the
+    /// provider for anything</em>. Asserted through the substrate seeing no request at all — matched
+    /// or otherwise — which is also the negative control: delete the guard and this goes red, because
+    /// a request would appear.
+    /// </summary>
+    /// <remarks>
+    /// This half does reproduce a live defect. Probed on 2026-08-18, <c>POST /generate/{voice}</c>
+    /// answers whitespace text <c>200 audio/wav</c> with 7 724 bytes carrying 0.24 s of audible
+    /// audio — so before the guard, a caller the contract promised silence was billed for a request
+    /// and handed speech. The stub is armed with the normal recorded response precisely so the test
+    /// cannot pass by accident: if a request were issued it would match and yield audio.
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldYieldNothingWithoutRequesting_WhenTextIsWhitespace()
+    {
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest(), RecordedResponse, RecordedMediaType);
+        var synth = SynthesizerFor(server);
+
+        var chunks = await synth.SynthesizeAsync("   ", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        chunks.Should().BeEmpty();
+        server.ReceivedRequests.Should().BeEmpty("no request should have been issued at all");
+        server.UnmatchedRequests.Should().BeEmpty("not an unmatched one either");
+    }
+
     [Fact]
     public void RecordedCapture_ShouldBeTheWavItsSidecarDescribes_WhenReadFromRecordingsTree()
     {

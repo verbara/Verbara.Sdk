@@ -800,7 +800,7 @@ characterised* in §5.5.
       sharpens §3.7b rather than softening it. The vendor's media type is right at one format and
       wrong (`…-fp32` over MP3) at another, so it can never be treated as evidence about the bytes;
       only a classifier can.
-- [ ] 3.7d **Speechmatics TTS is the only synthesizer that does not honour the empty-result contract
+- [x] 3.7d **Speechmatics TTS is the only synthesizer that does not honour the empty-result contract
       its own base class declares — found 2026-08-17 reviewing the `wiremock-http-provider-substrate`
       §4.5 migration, and it is a `src/**` defect, so that test-only change deliberately does not fix
       it.** The contract itself is `Sdk/ADR-0050`.
@@ -827,8 +827,33 @@ characterised* in §5.5.
       barge-in case). LMNT's HTTP loop (`:428`) does the same, so it is shared rather than a Speechmatics
       outlier, and whether the caller still observes the cancellation depends on whether it passes the
       token to its own `await foreach`. Measure it before calling it a defect.
-      Lands as its own PR: shipped-behaviour change, so it carries a `PackageVersion` bump, the two
-      missing tests, and a negative control that fails if the guard is removed.
+      Lands as its own PR: shipped-behaviour change, carrying the two missing tests and a negative
+      control that fails if the guard is removed.
+      **Closed 2026-08-18. Both halves shipped — and the measurement this task demanded moved which
+      half is which.** The live route was probed before a line was written, and it refuted the shape
+      this task assumed. `POST /generate/{voice}` answers empty, whitespace *and* punctuation-only
+      `text` with `200 audio/wav` and 7 724 bytes, of which 3 817 of 3 840 samples are non-zero —
+      0.24 s of audible audio, not silence and not an empty body. So the **whitespace early-out fixes
+      a defect this vendor reproduces on demand** (a caller promised silence was billed for a request
+      and handed speech), while the **empty-result guard closes a gap in a contract this package
+      publishes rather than a failure this vendor is currently observed to produce**. Both are worth
+      shipping; only one of them was the live defect, and the code, the tests and the CHANGELOG each
+      say which. Neither RIFF size field is usable as a length, incidentally — both are streaming
+      placeholders (`0xFFFFFFF7` and `0xFFFFFFD3`).
+      **The guard counts bytes, not samples** — the boundary this task warned about is therefore still
+      open by choice, not by oversight: a header-only response with zero samples would pass it, and
+      catching that means parsing the container, which this provider deliberately does not do (it
+      yields the vendor's bytes unexamined). No measurement says the vendor emits one.
+      **Retraction — the `PackageVersion` bump this task asked for does not apply.** Evidence:
+      `git log -p -- Directory.Build.props` shows the last bump was #132 (2.3.2 → 2.4.0) and #191 —
+      the eight-surface ADR-0050 break itself — did not bump at all. In this repo PRs accumulate under
+      `[Unreleased]` and the release commit bumps. 2.4.0 stands; the CHANGELOG entry carries the
+      BREAKING framing instead.
+      **Still open, deliberately: the third observation above.** `catch (OperationCanceledException)
+      { yield break; }` was left exactly as it was on both this loop and LMNT's. It was never measured,
+      this PR measured nothing new about it, and changing a cancellation path on two providers on the
+      strength of a code read is the kind of move this task itself said not to make. It needs its own
+      task and its own probe.
 - [x] 3.8 A JSON body needs a request DTO: add it to
       `src/Verbara.Sdk.VoiceAi.Tts/Internal/VoiceAiTtsJsonContext.cs` and register it;
       `FormUrlEncodedContent` and its `Dictionary<string, string>` go away. The DTO is AOT-source-gen
