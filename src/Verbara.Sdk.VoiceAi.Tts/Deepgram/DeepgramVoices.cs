@@ -124,4 +124,13 @@ public static class DeepgramVoices
     /// synthesises.
     /// </remarks>
     public const string HeliosLegacy = "aura-helios-en";
+
+    /// <summary>Aura 1 — Helios (English, male). Superseded by <see cref="HeliosLegacy"/>.</summary>
+    /// <remarks>
+    /// Kept so code written against 2.1.0-2.4.0 keeps compiling. It now carries the same working
+    /// Aura 1 id as <see cref="HeliosLegacy"/> instead of the <c>"aura-2-helios-en"</c> the API
+    /// rejects, so recompiling against this release repairs the call rather than only renaming it.
+    /// </remarks>
+    [Obsolete("Renamed to HeliosLegacy — Helios exists only in Aura 1. This constant now carries the same id.")]
+    public const string Helios = HeliosLegacy;
 }

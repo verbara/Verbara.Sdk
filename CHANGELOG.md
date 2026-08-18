@@ -27,7 +27,9 @@ in the build compared a string constant against the roster of the service that r
   combination found."`** There is no Aura 2 Helios; the voice exists only in Aura 1. The constant is
   now `HeliosLegacy = "aura-helios-en"`, which synthesises. Deepgram fails loudly on a bad id, so
   this one was always going to surface at runtime — unlike the Speechmatics default, which could
-  not.
+  not. **`Helios` itself stays, as an `[Obsolete]` alias carrying that same working id**: dropping a
+  public `const` is a binary break (ApiCompat `CP0002` against the 2.1.0 baseline), so callers who
+  kept the old name keep compiling, and recompiling repairs the call instead of only renaming it.
 
 ### Added — the catalogs are now checked against the vendors that have to accept them
 

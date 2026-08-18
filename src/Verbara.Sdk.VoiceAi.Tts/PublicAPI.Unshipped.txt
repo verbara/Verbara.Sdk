@@ -118,6 +118,7 @@ const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Fabian = "aura-2-fabian-de
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Fujin = "aura-2-fujin-ja" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Gloria = "aura-2-gloria-es" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Hector = "aura-2-hector-fr" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Helios = "aura-helios-en" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.HeliosLegacy = "aura-helios-en" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Izanami = "aura-2-izanami-ja" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Javier = "aura-2-javier-es" -> string!
