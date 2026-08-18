@@ -48,6 +48,20 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
     /// <summary>Recorded <c>flush_done</c> control frame — the parser must ignore it.</summary>
     public const string FlushDoneFrame = "cartesia-stt/flush-done-frame.json";
 
+    /// <summary>
+    /// The <em>authored</em> <c>flush_done</c> shape carrying <c>is_final</c> true — the frame a
+    /// broken type filter would leak through as an empty final result. Kept separate from
+    /// <see cref="FlushDoneFrame"/> because the live service was measured sending <c>false</c>, so
+    /// this is what the client must tolerate rather than what the vendor sends.
+    /// </summary>
+    public const string FlushDoneFinalFlagFrame = "cartesia-stt/flush-done-frame-final-flag.json";
+
+    /// <summary>Recorded end-of-session <c>done</c> acknowledgement — the reply to the terminator.</summary>
+    public const string DoneFrame = "cartesia-stt/done-frame.json";
+
+    /// <summary>Recorded <c>error</c> frame — the service's rejection of an unrecognized message.</summary>
+    public const string ErrorFrame = "cartesia-stt/error-frame.json";
+
     // Resolved once per assembly: discovery walks the filesystem, and every frame in this suite
     // comes out of the same tree.
     private static readonly Lazy<ProviderRecordings> RecordingsTree = new(() => ProviderRecordings.Locate());
@@ -226,18 +240,20 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
                     // End of input, and the one text frame on this socket that is not JSON. A fake
                     // that ended the session on the client's close frame instead would be
                     // asserting the half-close as the contract — which is what §3.6d measured as
-                    // the weaker of the two. This fake closes without an acknowledgement frame:
-                    // the other three answer their terminator from a recording, and there is no
-                    // recording of Cartesia's reply to `done`. That reply is no longer unobserved —
-                    // the live run of 2026-08-16 saw `{"type":"done","is_final":false,…}` arrive and
-                    // the service close 1000 about 158 ms later — but observing a frame and having a
-                    // committable fixture are different things, and the gap between them is the
-                    // missing WebSocket capture path noted on the class remark above. Hand-writing
-                    // it here from memory of a run would put a frame in the tree whose provenance is
-                    // a deleted harness, which is the failure mode the recordings exist to prevent.
+                    // the weaker of the two.
+                    //
+                    // The acknowledgement is now sent, and from a recording rather than from
+                    // memory. This branch used to close bare, because the reply had been *seen*
+                    // live but there was no capture path that could commit it — the script spoke
+                    // HTTP only. It speaks WebSocket now, the frame was captured through it, and
+                    // sending it here is what finally puts the client's tolerance of the
+                    // acknowledgement under test instead of under a comment.
                     ReceivedTerminatorText = text;
                     try
                     {
+                        var ack = Encoding.UTF8.GetBytes(ReadFrame(DoneFrame));
+                        await ws.SendAsync(ack.AsMemory(), WebSocketMessageType.Text, true, ct)
+                            .ConfigureAwait(false);
                         await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
                             .ConfigureAwait(false);
                     }

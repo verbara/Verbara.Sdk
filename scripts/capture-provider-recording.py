@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Capture a real speech-provider response into a committed fixture (ADR-0041 D4).
 
-Implements steps 3-8 of `docs/guides/provider-recording-protocol.md` §3 for five provider
-surfaces — three STT, two TTS — so a capture is reproducible instead of being a one-off ceremony
+Implements steps 3-8 of `docs/guides/provider-recording-protocol.md` §3 for six provider
+surfaces — four STT, two TTS — so a capture is reproducible instead of being a one-off ceremony
 performed by hand: it sends the same request the SDK sends, redacts, normalizes, writes the
 provenance sidecar and enforces the size cap.
 
@@ -11,6 +11,8 @@ provenance sidecar and enforces the size cap.
     python3 scripts/capture-provider-recording.py google-speech
     python3 scripts/capture-provider-recording.py speechmatics-tts
     python3 scripts/capture-provider-recording.py lmnt-http
+    python3 scripts/capture-provider-recording.py cartesia-stt
+    python3 scripts/capture-provider-recording.py cartesia-stt-error
 
 Credentials come from the environment and are never written, echoed or stored:
 
@@ -21,6 +23,8 @@ Credentials come from the environment and are never written, echoed or stored:
                            see google_speech_plan for why the choice exists at all
     speechmatics-tts       SPEECHMATICS_API_KEY
     lmnt-http              LMNT_API_KEY
+    cartesia-stt           CARTESIA_API_KEY
+    cartesia-stt-error     CARTESIA_API_KEY
 
 **Use a throwaway credential and revoke it afterwards** (protocol §3.3). A key that never had
 access to production data cannot leak production identifiers through a response body.
@@ -38,6 +42,15 @@ provider's audio may not be committed at all:
     envelope  status, headers, media type, length and observed chunk boundaries, and never the
               audio bytes (protocol §7's conservative fallback) — LMNT HTTP
 
+The last two surfaces are WebSocket sessions rather than requests, and they are shaped
+differently for a reason that is not incidental. A request has one response; a session has
+several frames of interest, and which frame is which is decided by reading them. So a session
+plan names its frames by a predicate and the capture writes one fixture per frame it actually
+saw — **a frame the service did not send produces no file and says so**. That silence is the
+finding. Filling the gap from the vendor's documentation is precisely what this protocol exists
+to prevent, and it is how a fixture ends up asserting a shape nobody ever received (measured:
+the authored Cartesia `flush_done` carried `is_final` true; the service sends false).
+
 stdlib only, by the same rule as `scripts/check-*.py`: a fixture tool that needs `pip install`
 is a fixture tool that stops being run.
 """
@@ -51,7 +64,10 @@ import hashlib
 import io
 import json
 import os
+import socket
+import ssl
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -478,6 +494,190 @@ def build_sidecar(
         },
         "notes": notes,
     }
+
+
+# --- Minimal WebSocket client (RFC 6455, stdlib only) --------------------------------------
+#
+# Written rather than imported because of the module docstring's rule: this tool is stdlib only,
+# and `websockets` would put it behind a `pip install`. Only what a capture needs is here — a
+# client handshake, masked text and binary sends, message reassembly across continuation frames,
+# and a close. No extensions, no compression, no server role.
+#
+# The codec is split from the socket deliberately, so the parts that can be wrong in a way a test
+# can catch are pure functions and the part that cannot be tested without a network is four lines.
+
+WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+WS_OPCODE_CONTINUATION = 0x0
+WS_OPCODE_TEXT = 0x1
+WS_OPCODE_BINARY = 0x2
+WS_OPCODE_CLOSE = 0x8
+WS_OPCODE_PING = 0x9
+WS_OPCODE_PONG = 0xA
+
+
+def ws_accept_token(key: str) -> str:
+    """The `Sec-WebSocket-Accept` value a conforming server must return for `key` (RFC 6455 §4.1).
+
+    Checking it is not ceremony: it is the one thing that distinguishes a real WebSocket peer from
+    any HTTP endpoint that happens to answer `101`, and a capture that skipped it could record a
+    proxy's idea of the session as though it were the vendor's.
+    """
+    digest = hashlib.sha1((key + WS_GUID).encode("ascii")).digest()  # noqa: S324 - protocol-mandated
+    return base64.b64encode(digest).decode("ascii")
+
+
+def ws_handshake_request(url: str, headers: dict[str, str], key: str) -> tuple[str, int, bytes]:
+    """Split `url` into host/port and render the upgrade request. Pure — no socket is opened."""
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme not in ("ws", "wss"):
+        raise CaptureError(f"WebSocket URL must be ws:// or wss://, got {parts.scheme!r}.")
+    port = parts.port or (443 if parts.scheme == "wss" else 80)
+    target = parts.path or "/"
+    if parts.query:
+        target = f"{target}?{parts.query}"
+
+    lines = [
+        f"GET {target} HTTP/1.1",
+        f"Host: {parts.hostname}" + (f":{parts.port}" if parts.port else ""),
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        f"Sec-WebSocket-Key: {key}",
+        "Sec-WebSocket-Version: 13",
+    ]
+    lines += [f"{name}: {value}" for name, value in headers.items()]
+    return parts.hostname or "", port, ("\r\n".join(lines) + "\r\n\r\n").encode("ascii")
+
+
+def ws_encode_frame(opcode: int, payload: bytes, mask: bytes) -> bytes:
+    """Encode one final, masked client frame. `mask` is a parameter so this stays deterministic."""
+    if len(mask) != 4:
+        raise CaptureError("A client frame mask must be exactly 4 bytes.")
+    header = bytearray([0x80 | opcode])
+    length = len(payload)
+    if length < 126:
+        header.append(0x80 | length)
+    elif length < 65536:
+        header.append(0x80 | 126)
+        header += length.to_bytes(2, "big")
+    else:
+        header.append(0x80 | 127)
+        header += length.to_bytes(8, "big")
+    header += mask
+    masked = bytes(byte ^ mask[i % 4] for i, byte in enumerate(payload))
+    return bytes(header) + masked
+
+
+def ws_decode_frames(buffer: bytes) -> tuple[list[tuple[int, bytes, bool]], bytes]:
+    """Decode whole frames out of `buffer` into `(opcode, payload, final)`, plus the leftover tail.
+
+    Frames, not messages: reassembly across continuations is the caller's job, which is what lets
+    a capture observe that a message *was* fragmented rather than having that fact hidden from it.
+    A partial frame decodes to nothing and stays in the tail — never to a truncated payload, which
+    would reach the caller as a JSON parse error blamed on the vendor.
+    """
+    frames: list[tuple[int, bytes, bool]] = []
+    offset = 0
+    while True:
+        if len(buffer) - offset < 2:
+            break
+        first, second = buffer[offset], buffer[offset + 1]
+        opcode = first & 0x0F
+        final = bool(first & 0x80)
+        length = second & 0x7F
+        cursor = offset + 2
+        if length == 126:
+            if len(buffer) - cursor < 2:
+                break
+            length = int.from_bytes(buffer[cursor:cursor + 2], "big")
+            cursor += 2
+        elif length == 127:
+            if len(buffer) - cursor < 8:
+                break
+            length = int.from_bytes(buffer[cursor:cursor + 8], "big")
+            cursor += 8
+        if second & 0x80:
+            raise CaptureError("Server frames must not be masked (RFC 6455 §5.1).")
+        if len(buffer) - cursor < length:
+            break
+        frames.append((opcode, buffer[cursor:cursor + length], final))
+        offset = cursor + length
+    return frames, buffer[offset:]
+
+
+class WebSocketSession:
+    """A client session over `ssl`/`socket`, holding only what a capture needs."""
+
+    def __init__(self, url: str, headers: dict[str, str], timeout: int) -> None:
+        key = base64.b64encode(uuid.uuid4().bytes).decode("ascii")
+        host, port, request = ws_handshake_request(url, headers, key)
+        raw = socket.create_connection((host, port), timeout=timeout)
+        self._sock = (
+            ssl.create_default_context().wrap_socket(raw, server_hostname=host)
+            if url.startswith("wss://")
+            else raw
+        )
+        self._sock.sendall(request)
+        self._buffer = b""
+        self._read_handshake(key)
+
+    def _read_handshake(self, key: str) -> None:
+        while b"\r\n\r\n" not in self._buffer:
+            chunk = self._sock.recv(READ_CHUNK_BYTES)
+            if not chunk:
+                raise CaptureError("The provider closed the connection during the upgrade.")
+            self._buffer += chunk
+        head, self._buffer = self._buffer.split(b"\r\n\r\n", 1)
+        text = head.decode("latin-1")
+        status = text.split("\r\n", 1)[0]
+        if " 101 " not in status:
+            raise CaptureError(f"The provider refused the upgrade: {status}")
+        accept = ws_accept_token(key)
+        if accept.lower() not in text.lower():
+            raise CaptureError(
+                "The provider's Sec-WebSocket-Accept did not match the key sent — the peer that "
+                "answered is not the WebSocket endpoint this capture addressed."
+            )
+
+    def send(self, opcode: int, payload: bytes) -> None:
+        self._sock.sendall(ws_encode_frame(opcode, payload, os.urandom(4)))
+
+    def messages(self, idle_timeout: int):
+        """Yield `(opcode, payload)` per reassembled message until the peer closes or goes idle."""
+        self._sock.settimeout(idle_timeout)
+        pending_opcode: int | None = None
+        pending = bytearray()
+        while True:
+            frames, self._buffer = ws_decode_frames(self._buffer)
+            for opcode, payload, final in frames:
+                if opcode == WS_OPCODE_CLOSE:
+                    return
+                if opcode == WS_OPCODE_PING:
+                    self.send(WS_OPCODE_PONG, payload)
+                    continue
+                if opcode == WS_OPCODE_PONG:
+                    continue
+                if opcode != WS_OPCODE_CONTINUATION:
+                    pending_opcode = opcode
+                    pending = bytearray()
+                pending += payload
+                if final:
+                    yield (pending_opcode or WS_OPCODE_TEXT, bytes(pending))
+                    pending = bytearray()
+            try:
+                chunk = self._sock.recv(READ_CHUNK_BYTES)
+            except (TimeoutError, OSError):
+                return
+            if not chunk:
+                return
+            self._buffer += chunk
+
+    def close(self) -> None:
+        try:
+            self.send(WS_OPCODE_CLOSE, (1000).to_bytes(2, "big"))
+        except OSError:
+            pass
+        finally:
+            self._sock.close()
 
 
 # --- Provider definitions -----------------------------------------------------------------
@@ -998,6 +1198,172 @@ PROVIDERS = {
 }
 
 
+# --- Session plans (WebSocket surfaces) ----------------------------------------------------
+#
+# A request plan is one request and one artifact. A session is neither: several frames of
+# interest arrive on one connection, and which frame is which is decided by reading them, not by
+# addressing them. So a session plan names the frames it wants by a predicate over the parsed
+# message, and the capture writes one fixture per frame it actually saw. A frame the vendor did
+# not send produces no file and says so — silence here is the finding, and inventing the missing
+# frame from the docs is the thing this whole protocol exists to stop.
+
+REQUIRED_SESSION_PLAN_KEYS = (
+    "product",
+    "url",
+    "endpoint_template",
+    "api_version",
+    "terms_verdict",
+    "terms_basis",
+    "secrets",
+    "redaction_applied",
+    "redaction_notes",
+    "notes",
+    "headers",
+    "frames",
+)
+
+CARTESIA_STT_SOURCE_AUDIO = {
+    "origin": "reused-committed-capture",
+    "description": SOURCE_AUDIO_DESCRIPTION,
+    "license": "n/a",
+}
+
+
+def cartesia_stt_session_plan(source_pcm: bytes) -> dict:
+    """Session plan for the Cartesia realtime speech-to-text WebSocket surface.
+
+    Reproduces `CartesiaSpeechRecognizer` at the shipped `CartesiaOptions` defaults: the four
+    query parameters it builds, both headers it sets, audio as binary messages, and the bare word
+    `done` as the terminator — the value the service names in its own rejection message alongside
+    `finalize` and `close`.
+    """
+    api_key = _require_env("CARTESIA_API_KEY")
+
+    query = urllib.parse.urlencode(
+        {
+            "model": "ink-whisper",
+            # `es`, not the shipped CartesiaOptions default of `en`, because the submitted audio is
+            # the Spanish committed capture and this plan reproduces the request a caller makes for
+            # THIS scenario. Worth recording that the two disagree harmlessly: a first capture sent
+            # `en` against the same Spanish audio, and the service transcribed it correctly anyway
+            # while echoing `"language": "en"` back — so the parameter is echoed, not enforced.
+            "language": "es",
+            "encoding": "pcm_s16le",
+            "sample_rate": SOURCE_SAMPLE_RATE,
+        }
+    )
+
+    return {
+        "product": "Cartesia — speech to text, realtime (Ink WebSocket)",
+        "url": f"wss://api.cartesia.ai/stt/websocket?{query}",
+        "endpoint_template": "GET wss://api.cartesia.ai/stt/websocket",
+        "api_version": "2024-11-13",
+        "recordings_dir": STT_RECORDINGS,
+        "headers": {"X-API-Key": api_key, "Cartesia-Version": "2024-11-13"},
+        "audio": source_pcm,
+        # Submitted at the rate it would be spoken. Sending the whole buffer at once is what a
+        # first capture did, and the service answered with one final transcript and no interim
+        # ones — so an unpaced capture cannot record the interim shape at all. The pacing is what
+        # makes this a recording of a streaming session rather than of a batch upload.
+        "chunk_bytes": SOURCE_SAMPLE_RATE * SOURCE_SAMPLE_WIDTH // 5,
+        "pace_seconds": 0.2,
+        # `finalize` before `done`: the flush_done frame is the service's answer to `finalize`
+        # specifically, so a session that only ever sends the terminator can never observe it.
+        # Both words are the service's own, named in the rejection its error frame carries.
+        "pre_terminator": "finalize",
+        "terminator": "done",
+        "source_audio": CARTESIA_STT_SOURCE_AUDIO,
+        "terms_verdict": "permitted-with-conditions",
+        "terms_basis": (
+            "docs/guides/provider-recording-protocol.md section 7 (Cartesia)"
+        ),
+        "secrets": [api_key],
+        "correlation_fields": ("request_id",),
+        "redaction_applied": ["X-API-Key request header (never written)"],
+        "redaction_notes": JSON_REDACTION_NOTES,
+        "notes": (
+            "Captured from the live service over one WebSocket session at the shipped "
+            "CartesiaOptions defaults. Replaces a documentation-derived fixture: what the vendor "
+            "publishes is what it says it sends, and only a capture can say what it sent."
+        ),
+        "frames": (
+            {
+                "slug": "transcript-frame-interim",
+                "select": lambda m: m.get("type") == "transcript" and not m.get("is_final"),
+                "notes": (
+                    "An interim transcript, the shape the client must NOT surface as a result. "
+                    "Recorded rather than authored, so the is_final=false discriminator is the "
+                    "vendor's own and not our reading of its documentation."
+                ),
+            },
+            {
+                "slug": "transcript-frame-final",
+                "select": lambda m: m.get("type") == "transcript" and bool(m.get("is_final")),
+                "notes": "A final transcript — the only frame shape the client may surface.",
+            },
+            {
+                "slug": "flush-done-frame",
+                "select": lambda m: m.get("type") == "flush_done",
+                "notes": (
+                    "The non-transcript control frame. CartesiaSpeechRecognizer deserializes "
+                    "EVERY text frame into its transcript DTO and only then filters on "
+                    "type != \"transcript\", so this is the frame a broken filter leaks through "
+                    "as an empty final result."
+                ),
+            },
+            {
+                "slug": "done-frame",
+                "select": lambda m: m.get("type") == "done",
+                "notes": (
+                    "The end-of-session acknowledgement the service sends before closing. Nothing "
+                    "in the suite could send this frame while it existed only in a run log."
+                ),
+            },
+        ),
+    }
+
+
+def cartesia_stt_error_session_plan(source_pcm: bytes) -> dict:
+    """The same surface, driven to its error frame instead of its transcript frames.
+
+    A second session rather than a second predicate on the first: the error is provoked by sending
+    a text message the service does not accept, and a session that has been told something invalid
+    is not a session whose transcript frames should be trusted as ordinary output.
+    """
+    plan = cartesia_stt_session_plan(source_pcm)
+    plan.update(
+        {
+            "audio": b"",
+            "pre_terminator": None,
+            # The recognizer's own comment records this rejection verbatim: the service answers an
+            # unrecognized text message with `Expected one of: "finalize", "done", "close"`.
+            "terminator": "{}",
+            "frames": (
+                {
+                    "slug": "error-frame",
+                    "select": lambda m: m.get("type") == "error",
+                    "notes": (
+                        "The service's rejection of an unrecognized client text message. Provoked "
+                        "deliberately: no audio was sent in this session, so the frame carries no "
+                        "transcript and the error text is the vendor's own protocol message."
+                    ),
+                },
+            ),
+            "notes": (
+                "Captured from the live service over a WebSocket session deliberately driven to "
+                "its error path by sending a text message the protocol does not accept."
+            ),
+        }
+    )
+    return plan
+
+
+SESSION_PROVIDERS = {
+    "cartesia-stt": cartesia_stt_session_plan,
+    "cartesia-stt-error": cartesia_stt_error_session_plan,
+}
+
+
 def build_plan(provider: str, repo_root: Path) -> dict:
     """Load whatever the surface submits, build its plan, and fill in the shared defaults."""
     source_pcm = b""
@@ -1210,6 +1576,143 @@ def capture(provider: str, repo_root: Path, force: bool, timeout: int) -> int:
     return 0
 
 
+def build_session_plan(provider: str, repo_root: Path) -> dict:
+    """Load the submitted audio and build a session plan, refusing an incomplete one."""
+    source = repo_root / SOURCE_PCM
+    if not source.is_file():
+        raise CaptureError(
+            f"Source audio {SOURCE_PCM} not found. It is the committed Azure TTS capture; "
+            "this script does not invent audio (protocol §6)."
+        )
+
+    plan = {
+        **PLAN_DEFAULTS,
+        "provider_slug": provider,
+        **SESSION_PROVIDERS[provider](source.read_bytes()),
+    }
+    missing = [key for key in REQUIRED_SESSION_PLAN_KEYS if key not in plan]
+    if missing:
+        raise CaptureError(
+            f"Session plan for {provider} is missing {', '.join(missing)}. Nothing was sent."
+        )
+    return plan
+
+
+def run_session(plan: dict, timeout: int) -> list[dict]:
+    """Drive one WebSocket session and return every text message it produced, parsed.
+
+    Binary messages are counted and dropped. This surface carries its results as text, and a
+    capture that buffered whatever else arrived would be holding provider audio it has no verdict
+    for.
+    """
+    session = WebSocketSession(plan["url"], plan["headers"], timeout)
+    try:
+        audio = plan["audio"]
+        chunk = plan.get("chunk_bytes") or READ_CHUNK_BYTES
+        pace = plan.get("pace_seconds") or 0.0
+        for offset in range(0, len(audio), chunk):
+            session.send(WS_OPCODE_BINARY, audio[offset:offset + chunk])
+            if pace:
+                time.sleep(pace)
+        if plan.get("pre_terminator"):
+            session.send(WS_OPCODE_TEXT, plan["pre_terminator"].encode("utf-8"))
+        session.send(WS_OPCODE_TEXT, plan["terminator"].encode("utf-8"))
+
+        messages: list[dict] = []
+        binary_count = 0
+        for opcode, payload in session.messages(timeout):
+            if opcode != WS_OPCODE_TEXT:
+                binary_count += 1
+                continue
+            raw = payload.decode("utf-8", "replace")
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                raise CaptureError(
+                    "The service sent a text message that is not JSON; this plan assumes it is. "
+                    f"First 120 characters (redacted): {redact(raw, plan['secrets'])[:120]}"
+                ) from None
+            if isinstance(parsed, dict):
+                messages.append(parsed)
+    finally:
+        session.close()
+
+    print(f"  session produced {len(messages)} text messages, {binary_count} binary")
+    print("  message types observed: " + ", ".join(
+        sorted({str(m.get("type", "<untyped>")) for m in messages}) or ["<none>"]
+    ))
+    return messages
+
+
+def capture_session(provider: str, repo_root: Path, force: bool, timeout: int) -> int:
+    """Capture one WebSocket session into one fixture per frame of interest."""
+    plan = build_session_plan(provider, repo_root)
+    target_dir = repo_root / plan["recordings_dir"] / "cartesia-stt"
+
+    print(f"CONNECT {plan['endpoint_template'].split(' ', 1)[1]}")
+    print(f"  submitting {len(plan['audio'])} bytes of audio, terminator {plan['terminator']!r}")
+
+    for spec in plan["frames"]:
+        refuse_overwrite(target_dir / f"{spec['slug']}.json", repo_root, force)
+
+    messages = run_session(plan, timeout)
+    captured_utc = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d")
+    written = 0
+
+    for spec in plan["frames"]:
+        match = next((m for m in messages if spec["select"](m)), None)
+        if match is None:
+            # Not an error. The absence of a frame the plan asked for is an observation about the
+            # service on this run, and writing an authored stand-in is what this protocol forbids.
+            print(f"  {spec['slug']}: NOT SENT in this session — no fixture written")
+            continue
+
+        scrubbed, correlation_applied = redact_correlation_fields(
+            redact(json.dumps(match, ensure_ascii=False), plan["secrets"]),
+            plan["correlation_fields"],
+        )
+        text = normalize_json(scrubbed)
+        assert_no_account_token_leak(text, plan["account_tokens"])
+        payload = text.encode("utf-8")
+        warn_if_oversized_text(len(payload))
+
+        sidecar = build_sidecar(
+            provider="cartesia-stt",
+            product=plan["product"],
+            endpoint=plan["endpoint_template"],
+            api_version=plan["api_version"],
+            captured_utc=captured_utc,
+            payload=payload,
+            redaction_applied=[
+                *plan["redaction_applied"],
+                *(
+                    f"{field} correlation identifier (response body)"
+                    for field in correlation_applied
+                ),
+            ],
+            redaction_notes=plan["redaction_notes"],
+            terms_verdict=plan["terms_verdict"],
+            terms_basis=plan["terms_basis"],
+            notes=f"{spec['notes']} {plan['notes']}",
+            source_audio=plan["source_audio"],
+        )
+
+        target_dir.mkdir(parents=True, exist_ok=True)
+        (target_dir / f"{spec['slug']}.json").write_text(text, encoding="utf-8", newline="\n")
+        (target_dir / f"{spec['slug']}.provenance.json").write_text(
+            json.dumps(sidecar, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        print(f"  wrote {spec['slug']}.json ({len(payload)} bytes) + sidecar")
+        written += 1
+
+    print()
+    print(f"{written} of {len(plan['frames'])} requested frames captured.")
+    print("Next: python3 scripts/check-recording-redaction.py .")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -1221,7 +1724,7 @@ def main(argv: list[str] | None = None) -> int:
             "terms do not permit committing the payload — a response envelope without it."
         ),
     )
-    parser.add_argument("provider", choices=sorted(PROVIDERS))
+    parser.add_argument("provider", choices=sorted({*PROVIDERS, *SESSION_PROVIDERS}))
     parser.add_argument(
         "repo_root", nargs="?", default=".", help="repository root (default: .)"
     )
@@ -1233,8 +1736,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    run = capture_session if args.provider in SESSION_PROVIDERS else capture
     try:
-        return capture(args.provider, Path(args.repo_root).resolve(), args.force, args.timeout)
+        return run(args.provider, Path(args.repo_root).resolve(), args.force, args.timeout)
     except CaptureError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

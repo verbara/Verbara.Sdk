@@ -5,7 +5,7 @@
   "product": "Cartesia — speech to text, realtime (Ink WebSocket)",
   "endpoint": "GET wss://api.cartesia.ai/stt/websocket",
   "api_version": "n/a",
-  "captured_utc": "2026-08-14",
+  "captured_utc": "2026-08-18",
   "media_type": "application/json",
   "bytes": 506,
   "sha256": "fe011d6762d632432a132a63dafc84cac1a71fb590c6db3dd20047be3acb5b5d",
@@ -21,7 +21,7 @@
   "terms": {
     "verdict": "not-applicable",
     "basis": "docs/guides/provider-recording-protocol.md section 7 — no Output was captured at all; the fixture is authored to Cartesia's published protocol documentation. Cartesia's own verdict for a capture is permitted-with-conditions, and it is not what blocks one here (see notes)",
-    "checked_utc": "2026-08-14"
+    "checked_utc": "2026-08-18"
   },
   "source_schema": {
     "url": "https://docs.cartesia.ai/api-reference/stt/websocket",
@@ -29,5 +29,5 @@
     "read_utc": "2026-08-14",
     "method": "The documented field set, nesting, types and cardinality of the realtime speech-to-text transcript message were read from the page above and corroborated against https://docs.cartesia.ai/api-reference/stt/stt, which documents the same four server message types. The frame conforms to that schema: type, request_id, text, is_final, duration and words[] (word, start, end), with word timings in seconds as documented. The 'language' field is carried because the documentation's response example shows it on the transcript message, even though it is not enumerated in that page's schema property list — a divergence inside the vendor's own page, recorded here rather than silently resolved either way. No vendor example payload, prose or field description was copied into this repository — only the documented field names and the literal message-type constant 'transcript', which is interface, not expression. Every value is our own fiction."
   },
-  "notes": "Interim frame: is_final false, the shape Cartesia sends while a segment is still being refined — shorter text, shorter duration and a prefix of the final frame's words[]. WHY THIS IS DOCUMENTATION-DERIVED RATHER THAN CAPTURED, and it is NOT a terms problem: section 7 of the protocol guide records Cartesia as permitted-with-conditions — its ToS section 5.3(b) expressly permits use of Output outside the Services and its AUP carries no sharing restriction — so the terms would have permitted a real capture. The reason there is no capture is simply that NO CAPTURE CREDENTIAL EXISTS IN THIS ENVIRONMENT. A real capture is a known, cleared upgrade path for this provider whenever a credential appears. Like its final sibling this frame carries no 'confidence' field, because Cartesia documents none on the transcript message; the SDK models one as a nullable float and falls back to 0f, and the omission here is what makes that fallback assertable. What this artifact is worth, stated plainly: a documented schema is what the vendor says it sends, whereas a capture is what it actually sent on one day, and this route cannot close the does-the-vendor-honour-its-own-docs half of the ADR-0041 D4 gap. The page publishes no revision marker, so a silent breaking edit there is indistinguishable from no edit at all."
+  "notes": "Interim frame: is_final false, the shape Cartesia sends while a segment is still being refined — shorter text, shorter duration and a prefix of the final frame's words[]. WHY THIS IS DOCUMENTATION-DERIVED RATHER THAN CAPTURED, and the reason changed on 2026-08-18: the earlier sidecar said no capture credential existed in this environment. One does, and two live sessions were captured through scripts/capture-provider-recording.py — the transcript, flush_done, done and error frames in this directory all came from them. THIS frame did not, because the service did not send one. Model ink-whisper answered a 3.6-second utterance with a single is_final=true transcript in BOTH an unpaced session and one where the audio was submitted at the rate it would be spoken, so the interim shape was not reachable by pacing alone. That is an observation about this utterance and this model, not a claim that the service never sends interim transcripts — a longer or multi-segment utterance is the untried next step. Until one is captured, this fixture is worth what an authored fixture is worth: it says what the client must tolerate, never what the vendor sent."
 }

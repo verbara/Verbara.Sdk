@@ -1,0 +1,6 @@
+{
+  "type": "error",
+  "request_id": "00000000-0000-0000-0000-000000000000",
+  "message": "Invalid client message: Unrecognized text message \"{}\". Expected one of: \"finalize\", \"done\", \"close\".",
+  "code": 400
+}

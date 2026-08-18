@@ -1,5 +1,5 @@
 {
-  "type": "flush_done",
+  "type": "done",
   "is_final": false,
   "request_id": "00000000-0000-0000-0000-000000000000"
 }
