@@ -9,6 +9,16 @@ on:
     branches: [main]
   merge_group:
 
+# Supersede in-flight PR runs when a branch is pushed again (ADR-0051). Nothing cancelled 457 runs
+# before this: a superseded run kept its ~42 runner-minutes to completion, and on a burst day the
+# 20-job public pool starved — measured as a 51.4 min run (functional queued 20.7 min) and a
+# 170.4 min one (Unit Tests queued 2 h 22 min), neither of which was test execution.
+# `merge_group` is NEVER cancelled: each queue entry is the authoritative landing gate, and its ref
+# is unique per entry anyway, so the group below can only ever collide on pull_request.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Docs/data-only CI fast-path gate (verbara-meta/ADR-0016 §1). Classifies the PR / merge_group
   # diff against the event's OWN base and exposes outputs.docs_only.
@@ -245,36 +255,47 @@ jobs:
   functional-tests:
     name: Functional Tests (Testcontainers)
     runs-on: ubuntu-latest
-    needs: [unit-tests, gate]
+    needs: gate
+    # The `needs: unit-tests` edge is GONE (ADR-0051). It dated to the first CI commit (543a2bf0)
+    # with no recorded rationale and served only to spare runner-minutes on a doomed run; what it
+    # actually did was serialize the two heaviest jobs, putting functional's ~19.7 min BEHIND unit's
+    # ~9.0 min and making the queue leg 29.7 min instead of ~20.5. Unit Tests fails on ~10% of runs,
+    # so the trade is ~2 wasted runner-jobs there against ~9 min off every landing — and the pool
+    # pressure that buys is refunded by the `concurrency:` block above.
+    #
     # This job-level `if:` must NEVER evaluate false on a docs-only diff — a false job-level if:
     # collapses the matrix and the required context "Functional Tests (Testcontainers) (23)" then
-    # never reports (#104/#105). Its ONLY purpose is to preserve the pre-existing `needs:
-    # unit-tests` edge that `!cancelled()` drops, while staying TRUE when unit-tests is SKIPPED
-    # (docs-only) so the matrix still expands. The docs-only guard itself lives on the two heavy
-    # STEPS below. Bracket index syntax because the job id contains a hyphen.
-    if: ${{ !cancelled() && needs['unit-tests'].result != 'failure' && needs['unit-tests'].result != 'cancelled' }}
-    # Bot-authored PRs skip the *heavy work* of the representative pull_request
-    # functional variant; merge_group always runs the full matrix and remains the
-    # landing gate (an automerged bot PR loses zero landing validation). The guard
-    # is applied at STEP level, NOT job level (ADR-0039 addendum, 2026-07-15):
+    # never reports (#104/#105). `!cancelled()` keeps it true even when `gate` fails or is skipped;
+    # the docs-only guard itself lives on the two heavy STEPS below.
+    if: ${{ !cancelled() }}
+    # NO pull_request event does the *heavy work* any more (ADR-0051) — merge_group runs the full
+    # matrix and remains the landing gate, so nothing reaches main unvalidated; what moves is WHEN
+    # a functional regression is reported, from PR time to queue time. The evidence for that trade:
+    # across 457 ci.yml runs (2026-05-06 → 2026-08-18) this job was the failing job on ZERO of the
+    # 57 failed runs, and passed on all ~410 runs where it executed. ADR-0039 had already carved
+    # bot PRs out of these steps; a bot PR was simply the first recognized case of a diff that does
+    # not need 19.7 min of Asterisk to be judged.
+    #
+    # The guard is applied at STEP level, NOT job level (ADR-0039 addendum, 2026-07-15):
     # a job-level if: that evaluates false collapses the matrix so GitHub reports
     # a single check named "Functional Tests (Testcontainers)" (no matrix suffix,
     # SKIPPED), and the required context "Functional Tests (Testcontainers) (23)"
-    # then NEVER reports — leaving bot PRs BLOCKED forever (observed on #104/#105).
+    # then NEVER reports — leaving the PR BLOCKED forever (observed on #104/#105).
     # Keeping the job (and its matrix) always-run materializes the (23) check-run
     # name and reports it success in seconds; only the Docker/Testcontainers steps
-    # are guarded. The guard shape is load-bearing in ways the YAML can't show:
-    # the merge_group term MUST lead (the queue actor is the enqueuer, not the bot,
-    # so user.login isn't the bot on merge_group); it keys on
-    # github.event.pull_request.user.login, NOT github.actor (actor flips to the
-    # human on a re-run and would re-enable the matrix). See ADR-0039 + addendum.
-    # Representative matrix on pull_request ([23] — newest supported, fast
-    # feedback); full matrix in the merge queue ([22, 23]) so nothing lands on
-    # main without full-matrix validation. A 22-only regression is caught at
-    # queue time rather than PR time (accepted — rare; keeps ~20 min of
-    # full-matrix wall-clock out of every PR iteration). See ADR-0038 (D3) and
-    # verbara-meta/ADR-0003. Cost: ~19 min per matrix variant, parallel across
-    # runners.
+    # are guarded. One piece of the guard shape stays load-bearing and the YAML
+    # cannot show it: the merge_group term MUST LEAD, because on a queue run the
+    # actor is the enqueuer and every `github.event.pull_request.*` field is empty —
+    # a leading term reading one would be interrogating an object that isn't there.
+    # ADR-0039's bot test (`user.login`, deliberately NOT `github.actor`, which flips
+    # to the human on a re-run) is now subsumed: a bot PR is a pull_request, so it
+    # skips for the general reason. See ADR-0039 + addendum, then ADR-0051.
+    # The pull_request matrix stays [23] even though its heavy steps now no-op: the matrix must
+    # still EXPAND so the required context "Functional Tests (Testcontainers) (23)" materializes
+    # and reports — that is the whole #104/#105 lesson. Full matrix [22, 23] in the merge queue, so
+    # nothing lands on main without full-matrix validation. ADR-0038 (D3) moved the 22 leg to queue
+    # time; ADR-0051 moves the 23 leg with it. See also verbara-meta/ADR-0003. Cost: ~19 min per
+    # variant in the queue, parallel across runners; seconds on a PR.
     strategy:
       fail-fast: false
       matrix:
@@ -289,16 +310,20 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Pre-pull Docker images and build Asterisk test image
-        # Guarded (ADR-0039 addendum): bot-authored pull_request events skip this
-        # heavy step; merge_group and human PRs run it in full. See the job comment.
+        # Guarded (ADR-0051): pull_request events skip this heavy step unless the PR carries
+        # the `ci:functional` label; merge_group runs it in full. See the job comment.
         #
-        # ADR-0039 addendum bot skip (expression UNCHANGED and still LEADING — the merge_group
-        # term must lead) AND'ed with the ADR-0016 docs-only guard. Deliberately NO `!cancelled()`
+        # merge_group-only heavy work (ADR-0051), widening the ADR-0039 bot-only skip to every
+        # pull_request. The merge_group term MUST still LEAD: on a queue run the actor is the
+        # enqueuer and no `github.event.pull_request.*` field is meaningful, so a leading term that
+        # read one would be asking the wrong object. `ci:functional` is the opt-in escape hatch for
+        # a branch that does touch this surface and wants the answer before the queue.
+        # AND'ed with the ADR-0016 docs-only guard. Deliberately NO `!cancelled()`
         # here: at STEP level any status function REMOVES the implicit success() over the preceding
         # steps, so the expensive step would run after a failed checkout/setup-dotnet. Fail-closed
         # is already guaranteed — gate=failure or gate=skipped makes the second term true => RUN.
         if: >-
-          (github.event_name == 'merge_group' || github.event.pull_request.user.login != 'dependabot[bot]')
+          (github.event_name == 'merge_group' || contains(github.event.pull_request.labels.*.name, 'ci:functional'))
           && (needs.gate.result != 'success' || needs.gate.outputs.docs_only != 'true')
         # Populate the Docker layer cache before tests run so container startups are fast.
         # The Asterisk image is rebuilt per-matrix because the FROM tag changes.
@@ -312,18 +337,22 @@ jobs:
             --build-arg CODEC_OPUS_VERSION=${{ matrix.asterisk }}.0_1.3.0 \
             -t asterisk-sdk-test-cache:${{ matrix.asterisk }}
       - name: Run functional + integration tests
-        # Guarded (ADR-0039 addendum): bot-authored pull_request events skip the
-        # Testcontainers test execution; merge_group and human PRs run it in full.
-        # With this step and the pre-pull skipped, the job completes SUCCESS in
-        # seconds on bot PRs while the (23) check-run name still reports.
+        # Guarded (ADR-0051): pull_request events skip the Testcontainers execution unless the
+        # PR carries `ci:functional`; merge_group runs it in full. With this step and the
+        # pre-pull skipped, the job completes SUCCESS in seconds on a PR while the (23)
+        # check-run name still reports — which is what keeps the queue reachable.
         #
-        # ADR-0039 addendum bot skip (expression UNCHANGED and still LEADING — the merge_group
-        # term must lead) AND'ed with the ADR-0016 docs-only guard. Deliberately NO `!cancelled()`
+        # merge_group-only heavy work (ADR-0051), widening the ADR-0039 bot-only skip to every
+        # pull_request. The merge_group term MUST still LEAD: on a queue run the actor is the
+        # enqueuer and no `github.event.pull_request.*` field is meaningful, so a leading term that
+        # read one would be asking the wrong object. `ci:functional` is the opt-in escape hatch for
+        # a branch that does touch this surface and wants the answer before the queue.
+        # AND'ed with the ADR-0016 docs-only guard. Deliberately NO `!cancelled()`
         # here: at STEP level any status function REMOVES the implicit success() over the preceding
         # steps, so the expensive step would run after a failed checkout/setup-dotnet. Fail-closed
         # is already guaranteed — gate=failure or gate=skipped makes the second term true => RUN.
         if: >-
-          (github.event_name == 'merge_group' || github.event.pull_request.user.login != 'dependabot[bot]')
+          (github.event_name == 'merge_group' || contains(github.event.pull_request.labels.*.name, 'ci:functional'))
           && (needs.gate.result != 'success' || needs.gate.outputs.docs_only != 'true')
         # MaxCpuCount=1 serializes test projects so FunctionalTests and IntegrationTests
         # do not start their Docker stacks concurrently (CI runner has limited resources).
