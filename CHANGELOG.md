@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — the functional matrix now runs in the merge queue, not on every PR push
+
+CI cost, not SDK behaviour: no package, public API or test was touched. Median `pull_request`
+validation was **29.0 min** and a landing cost ≈ **60 min** in series, with tail outliers of 51.4 and
+170.4 min. The critical path was two jobs stacked by one YAML edge — Unit Tests (9.0) → Functional
+Tests (19.7) — where `needs: unit-tests` dated to the first CI commit with no recorded rationale.
+Across **457 runs (2026-05-06 → 2026-08-18)** the functional job was the failing job on **zero** of
+the 57 failed runs, and passed on all ~410 runs where it executed.
+
+- **The heavy Testcontainers steps run on `merge_group` only**, widening the bot-only skip ADR-0039
+  already carved. The full `[22, 23]` Asterisk matrix still gates every landing, so what moves is
+  when a regression is reported — queue time instead of PR time. A `ci:functional` label opts a
+  branch back in. The guard stays at **step** level and the PR matrix still expands, because a
+  job-level skip strands the matrix-suffixed required check forever (#104/#105).
+- **`functional-tests` no longer waits for `unit-tests`**, so the two heavy suites start together —
+  this is what shortens the queue leg, 29.7 → ~20.5 min.
+- **`ci.yml` and `codeql.yml` cancel superseded `pull_request` runs.** Nothing cancelled before:
+  zero `cancelled` conclusions in 457 runs, which is how one run came to sit 2 h 22 min with Unit
+  Tests merely queued. `merge_group`, `push:[main]` and the weekly CodeQL schedule are never
+  cancelled.
+
+Expected: **PR green ~29 → ~10 min, a landing ~60 → ~31 min.** Recorded as ADR-0051.
+
 ### Fixed — the shipped Speechmatics default voice was not a voice, and one Deepgram id does not exist
 
 Both catalogs were transcribed from vendor documentation on 2026-05-03 and nothing re-read them

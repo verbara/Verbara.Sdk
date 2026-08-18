@@ -17,6 +17,16 @@ permissions:
   contents: read
   security-events: write
 
+# Supersede in-flight PR runs when a branch is pushed again (ADR-0051) — same reasoning as ci.yml,
+# and this workflow is the second-heaviest thing a PR push starts (Analyze (C#), 6–10 min).
+# ONLY pull_request is cancellable: merge_group is the landing gate, and push:[main] + the weekly
+# schedule maintain the default-branch security baseline, which must never be cancelled by a
+# later run. `github.ref` is unique per queue entry and per event, so the group cannot collide
+# across those three.
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Docs/data-only CI fast-path gate (verbara-meta/ADR-0016 §1) — codeql.yml's OWN copy, because
   # `needs:` cannot cross workflow files (same reason Sdk.Pro's aot-validate.yml carries one).
