@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — two governance guards so provider conformance stops depending on memory
+
+Every wire defect fixed in this release shipped past a green suite, and two of the habits that would
+have caught them were prose in an ADR. They are build failures now. Both guards parse `src/` with
+Roslyn from `Verbara.Sdk.Governance.Tests`, which carries **zero** `ProjectReference`s by design — a
+guard that compiles against the thing it governs can be broken by the same edit it is meant to catch.
+
+- **A production provider endpoint must be declared once** — in the provider's options type or a
+  single named constant — never written inline at a call site. Fails naming file and 1-based line.
+  Two sites remain exempt behind an inline `// endpoint-allow: <CATEGORY> — <reason>` marker with a
+  closed category set, and the exemption tally is an exact-count ratchet, so a third cannot appear
+  without a reviewer seeing the number change. Re-deriving that list against the current tree found
+  the 2026-08-15 inventory of four sites was stale: three had already been remediated by this
+  release's own route fixes.
+- **Every provider client type must have a row in the conformance record**
+  (`docs/guides/provider-wire-conformance.md`, which gains a **Client type** column). Fails naming
+  the type and the file that declares it. The guard checks presence, never verdict — `not
+  characterised` is a legal, passing status, because what must be impossible is shipping a provider
+  whose conformance is simply unstated. It runs in reverse too: a row naming a type that no longer
+  exists in `src/` also fails.
+
+No shipped behaviour changes. `ADR-0048` gains a dated addendum recording what the probes settled
+after the decision was written — including that AssemblyAI STT admits **no route control that can
+fail**, so its route claim is discarded while its credential and frame evidence stand.
+
 ### Changed — BREAKING: a provider failure now reaches the caller instead of an empty stream
 
 Eight WebSocket speech clients — Cartesia TTS, ElevenLabs TTS, LMNT TTS (WebSocket), Deepgram TTS,

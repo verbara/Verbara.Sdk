@@ -399,3 +399,100 @@ of conformance and must not be cited as such.** Concretely:
   key-lifecycle concern to every session. As a fix it remains measured-good (row C) and is weighed
   against header auth on API-design grounds under D7, with the vendor's own framing of temporary
   keys as a browser concern recorded as documentation, not as measurement.
+
+## Addendum (2026-08-18) — what the probes settled after the decision was recorded
+
+**Status:** Accepted · **Extends D2, D7 and D8. Supersedes no rule; corrects one illustration and
+records three outcomes the decision demanded but could not yet contain.**
+
+ADR-0048 was written on 2026-08-15, part-way through the programme it governs. The rules held. Three
+things the rules *required someone to record later* are recorded here, and one example in D8 has been
+overtaken by measurement.
+
+### A1 — D8's example is stale; D8 itself is not
+
+D8 closes by naming Cartesia STT and AssemblyAI STT as **not characterised**, "no credential exists
+in this environment". Both were probed after that sentence was written — Cartesia STT on 2026-08-16,
+AssemblyAI STT on 2026-08-17 — and both now carry rows with their own evidence class and date. The
+rule D8 states is unchanged and the example is simply out of date; the authoritative, dated list of
+what remains uncharacterised is the conformance record, never this file. This is the first
+demonstration of D8's own consequence: an ADR that names surfaces goes stale at the speed of the
+probe, which is why the record and not the ADR is the ledger.
+
+### A2 — D2 has a boundary: a host that admits no failing route control
+
+D2 requires a companion request that is known-wrong on the same host with the same credential, and
+discards the probe's pass if that request also passes. AssemblyAI STT is the case where the discard
+is not a temporary embarrassment but a standing property of the host.
+
+**Measured 2026-08-16:** `wss://streaming.assemblyai.com/v3/ws-does-not-exist` — a path the vendor
+does not document and does not serve — completed the upgrade with `101` and then served a **normal
+session**. The route control cannot fail, so it controls nothing. The `404` recorded for this vendor
+earlier in the programme was taken against a **different host** and never controlled this one; citing
+it here would have been the D3 inference in its purest form.
+
+What follows, stated as a rule rather than as a note about one vendor:
+
+- **A control that cannot fail is not a control.** The probe's *route* claim is discarded. Its other
+  claims are untouched — the credential control on this host does discriminate, so authentication and
+  frame behaviour stand on their own evidence.
+- **The surface is not demoted to unprobed.** It drops one rung on the evidence ladder, from
+  `live + both controls` to `live + credential control`, and its Route column reads *not
+  controllable*. That is a fourth thing a Route cell can say, alongside OK, **fixed** and blank, and
+  it means "we looked, and this host will not let us check".
+- **It is a property of the host on the day it was measured, not a verdict about the vendor.** If the
+  service later serves a `404` for unknown paths, the control becomes available and the surface is
+  re-probed. Recording it as permanent would be the same mistake in the other direction.
+
+### A3 — D7's outcome for `SpeechmaticsOptions.BaseUri`, recorded as D7 requires
+
+D7 says a route fix that changes the meaning of a public property is designed and recorded
+explicitly. The design, and the alternatives rejected **by name**:
+
+- **Chosen — redefine `BaseUri` as an origin** (scheme and host, no path) and have the synthesizer
+  append `/generate/{Voice}`. The route becomes something the client owns and declares once; the
+  property becomes something a caller can state independently of any route.
+- **Rejected — append the voice segment to whatever the caller supplies.** This is the *cheaper*
+  option and it is worth being clear about what was given up: it would have been source- and
+  behaviour-compatible for every caller who never set the property, because the old default already
+  ended in `/generate`. It was rejected because it defines `BaseUri` as "the endpoint minus its last
+  segment" — a value nobody can write down without knowing the client's route — and it hands a route
+  fragment to configuration. A vendor route change would then break every caller who pinned the
+  property, silently, at a layer none of them own.
+- **Rejected — introduce a new option and obsolete `BaseUri`.** It carries both meanings forward at
+  once, so the wrong one keeps working; and when the two disagree the failure mode is the same `404`
+  this fix exists to remove.
+- **Consequence for a caller who already sets it,** stated in the property's own XML docs rather than
+  left to a release note: a value that still carries `/generate` now produces
+  `/generate/generate/{Voice}`. Callers must supply the origin alone.
+
+This reasoning is **design reasoning, not measurement**. What was measured is narrower and is stated
+where it belongs: the shipped route returned `404`, and the corrected one returns `200`.
+
+### A4 — D7's outcome for Speechmatics STT authentication
+
+Header authentication was chosen: `Authorization: Bearer <ApiKey>` on the upgrade request, with
+`ApiKey`'s meaning unchanged, one connection, and nothing to refresh. Mint-then-connect is recorded
+under *Alternatives considered*, Option H, and remains **measured-good** — it is a rejected
+alternative, not a broken one. The split between evidence and inference is the point and is repeated
+here so it cannot be lost: that **both** schemes work is measured (rows B and C); that header auth is
+the right server-side choice rests on API-design grounds plus the vendor's framing of temporary keys
+as a browser concern, and that framing is **documentation, not measurement** — exactly the class D4
+warns against treating as evidence.
+
+### A5 — Two of these rules are now enforced by a guard rather than by memory
+
+D1's "declare the route once" and D8's "every surface states an evidence class" were prose. Both are
+now checked by governance guards that parse `src/` with Roslyn and fail the build:
+
+- a **production endpoint written inline at a call site** fails, naming file and 1-based line. Two
+  sites are exempt by an inline `// endpoint-allow: <CATEGORY> — <reason>` marker with a closed
+  category set, and the exemption tally is an exact-count ratchet, so a third cannot appear without a
+  reviewer seeing the number change.
+- a **provider client type with no row in the conformance record** fails, naming the type and the file
+  that declares it. The guard checks presence, never verdict: `not characterised` is a legal, passing
+  status, because what must be impossible is shipping a provider whose conformance is simply unstated.
+  It runs in reverse too — a row naming a type that no longer exists in `src/` also fails.
+
+Both guards live in the governance test project, which carries **zero** `ProjectReference`s by design:
+a guard that compiles against the thing it governs can be broken by the same edit it is meant to catch.

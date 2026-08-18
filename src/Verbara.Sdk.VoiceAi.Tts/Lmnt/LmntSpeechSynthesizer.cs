@@ -361,6 +361,9 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
         if (_fakeWsPort.HasValue)
             return new Uri($"ws://127.0.0.1:{_fakeWsPort}/v1/ai/speech/stream");
 
+        // endpoint-allow: PENDING-VERIFICATION — this WebSocket route is recorded NOT VERIFIED in the
+        // conformance record. Hoisting it into LmntTtsOptions would publish an unverified route as
+        // configuration; it moves once a live probe with a negative control says what it is.
         return new Uri("wss://api.lmnt.com/v1/ai/speech/stream");
     }
 

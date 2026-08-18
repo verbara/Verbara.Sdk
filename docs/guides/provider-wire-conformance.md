@@ -52,15 +52,15 @@ two by route, two by frame handling — and none of the four was detectable from
 
 ## Text-to-speech
 
-| Surface | Transport | Route | Frames | Validation point | Evidence | Date |
-|---|---|---|---|---|---|---|
-| Deepgram TTS | `wss://api.deepgram.com/v1/speak` | OK | OK | `handshake` | `live + both controls` | 2026-08-15 |
-| Azure TTS | `https://{region}.tts.speech.microsoft.com` | OK | OK | not measured | `live, uncontrolled` | 2026-08-03 |
-| LMNT (HTTP) | `https://api.lmnt.com/v1/ai/speech/bytes` | **fixed** | n/a | in the response | `live + both controls` | 2026-08-15 |
-| LMNT (WebSocket) | `wss://api.lmnt.com/v1/ai/speech/stream` | OK | **2 fixed, 1 open** | `in-band` | `live + credential control` | 2026-08-15 |
-| Speechmatics TTS | `https://preview.tts.speechmatics.com/generate/{voice}` | **fixed** | n/a | in the response | `live + both controls` | 2026-08-16 |
-| Cartesia TTS | `wss://api.cartesia.ai/tts/websocket` | OK | **3 fixed, 1 open** | `handshake` | `live + both controls` | 2026-08-16 |
-| ElevenLabs TTS | `wss://api.elevenlabs.io/v1/text-to-speech/{voiceId}/stream-input` | OK | **2 fixed, 1 open** | `in-band` | `live + both controls` | 2026-08-16 |
+| Surface | Client type | Transport | Route | Frames | Validation point | Evidence | Date |
+|---|---|---|---|---|---|---|---|
+| Deepgram TTS | `DeepgramSpeechSynthesizer` | `wss://api.deepgram.com/v1/speak` | OK | OK | `handshake` | `live + both controls` | 2026-08-15 |
+| Azure TTS | `AzureTtsSpeechSynthesizer` | `https://{region}.tts.speech.microsoft.com` | OK | OK | not measured | `live, uncontrolled` | 2026-08-03 |
+| LMNT (HTTP) | `LmntSpeechSynthesizer` | `https://api.lmnt.com/v1/ai/speech/bytes` | **fixed** | n/a | in the response | `live + both controls` | 2026-08-15 |
+| LMNT (WebSocket) | `LmntSpeechSynthesizer` | `wss://api.lmnt.com/v1/ai/speech/stream` | OK | **2 fixed, 1 open** | `in-band` | `live + credential control` | 2026-08-15 |
+| Speechmatics TTS | `SpeechmaticsSpeechSynthesizer` | `https://preview.tts.speechmatics.com/generate/{voice}` | **fixed** | n/a | in the response | `live + both controls` | 2026-08-16 |
+| Cartesia TTS | `CartesiaSpeechSynthesizer` | `wss://api.cartesia.ai/tts/websocket` | OK | **3 fixed, 1 open** | `handshake` | `live + both controls` | 2026-08-16 |
+| ElevenLabs TTS | `ElevenLabsSpeechSynthesizer` | `wss://api.elevenlabs.io/v1/text-to-speech/{voiceId}/stream-input` | OK | **2 fixed, 1 open** | `in-band` | `live + both controls` | 2026-08-16 |
 
 **Deepgram TTS** — the reference run, and the only TTS surface measured *not* to hide audio in a text
 frame. Shipped defaults (`model=aura-2-thalia-en`, `encoding=linear16`, `sample_rate=24000`) returned
@@ -139,15 +139,15 @@ a wrong-path control has to be read, not pattern-matched.
 
 ## Speech-to-text
 
-| Surface | Transport | Route | Frames | Validation point | Evidence | Date |
-|---|---|---|---|---|---|---|
-| Deepgram STT | `wss://api.deepgram.com/v1/listen` | OK | OK | `handshake` | `live + both controls` | 2026-08-16 |
-| Speechmatics STT | `wss://eu2.rt.speechmatics.com/v2` | OK | **2 fixed, 4 open** | `in-band` | `live + both controls` | 2026-08-16 |
-| Cartesia STT | `wss://api.cartesia.ai/stt/websocket` | **fixed** | **2 fixed** | `handshake` (credential) + `in-band` (session) | `live + both controls` | 2026-08-16 |
-| AssemblyAI STT | `wss://streaming.assemblyai.com/v3/ws` | not controllable | **2 fixed** | `in-band` | `live + credential control` | 2026-08-17 |
-| Google STT | `https://speech.googleapis.com` | OK | n/a (batch) | in the response | `live + both controls` | 2026-08-15 |
-| OpenAI Whisper | `https://api.openai.com/v1/audio/transcriptions` | OK | n/a (batch) | not measured | `live, uncontrolled` | 2026-08-09 |
-| Azure OpenAI Whisper | Azure OpenAI deployment endpoint | OK | n/a (batch) | not measured | `live, uncontrolled` | 2026-08-09 |
+| Surface | Client type | Transport | Route | Frames | Validation point | Evidence | Date |
+|---|---|---|---|---|---|---|---|
+| Deepgram STT | `DeepgramSpeechRecognizer` | `wss://api.deepgram.com/v1/listen` | OK | OK | `handshake` | `live + both controls` | 2026-08-16 |
+| Speechmatics STT | `SpeechmaticsSpeechRecognizer` | `wss://eu2.rt.speechmatics.com/v2` | OK | **2 fixed, 4 open** | `in-band` | `live + both controls` | 2026-08-16 |
+| Cartesia STT | `CartesiaSpeechRecognizer` | `wss://api.cartesia.ai/stt/websocket` | **fixed** | **2 fixed** | `handshake` (credential) + `in-band` (session) | `live + both controls` | 2026-08-16 |
+| AssemblyAI STT | `AssemblyAiSpeechRecognizer` | `wss://streaming.assemblyai.com/v3/ws` | not controllable | **2 fixed** | `in-band` | `live + credential control` | 2026-08-17 |
+| Google STT | `GoogleSpeechRecognizer` | `https://speech.googleapis.com` | OK | n/a (batch) | in the response | `live + both controls` | 2026-08-15 |
+| OpenAI Whisper | `WhisperSpeechRecognizer` | `https://api.openai.com/v1/audio/transcriptions` | OK | n/a (batch) | not measured | `live, uncontrolled` | 2026-08-09 |
+| Azure OpenAI Whisper | `AzureWhisperSpeechRecognizer` | Azure OpenAI deployment endpoint | OK | n/a (batch) | not measured | `live, uncontrolled` | 2026-08-09 |
 
 **Deepgram STT** — shipped defaults (`encoding=linear16`, `sample_rate=16000`, `channels=1`,
 `model=nova-2`, `interim_results=true`, `punctuate=true`) with the `Authorization: Token` header
@@ -528,13 +528,28 @@ Named here rather than left as absence, because absence is what this file exists
   because committing a captured WebSocket frame needs a capture path the canonical capture script does
   not have yet (it is HTTP-only). Tracked as its own task; an out-of-band capture whose provenance
   could only cite a harness that was then deleted is not a fixture this repo should carry.
-- **Speechmatics STT** — the field set of `AddTranscript`. A transcript frame **has** now been observed
-  live (2026-08-16): `metadata.transcript` arrives already assembled, alongside a `results` array, on
-  the terminator path only. What stays uncharacterised is the rest of that message's fields, and every
-  message type outside `{Info, RecognitionStarted, AddPartialTranscript, AddTranscript, EndOfTranscript,
+- **Speechmatics STT** — narrowed twice, and what is left is narrower than it was. A transcript frame
+  was first observed live on 2026-08-16, and a fuller session on **2026-08-18** measured: the
+  `word_delimiter` the vendor declares inside `RecognitionStarted.language_pack_info`; `attaches_to`
+  on a punctuation result; `metadata.transcript` present on **all three finals and all eight
+  partials**, never empty where the results array was non-empty; and finals carrying inter-segment
+  glue whitespace that partials do not. Two frame kinds the client does not model were seen in the
+  same run — `AudioAdded` (29 of them, `{message, seq_no}`) and `Info` (2, rate-limiting telemetry,
+  15 fields). What stays uncharacterised is the remaining field set of those two, and every message
+  type outside `{Info, RecognitionStarted, AddPartialTranscript, AddTranscript, EndOfTranscript,
   AudioAdded, Error}`.
-- **Speechmatics TTS** — whether the `language` and `sample_rate` body fields are accepted as sent.
-  The route was isolated; the body fields rode along unmeasured.
+- **Speechmatics TTS** — the `voice`-in-body question only. The other half of this gap was closed on
+  2026-08-17: a capture sent the shipped defaults' whole body — `text`, `language` **and**
+  `sample_rate` — to `/generate/{voice}` and was answered `200 audio/wav`, so those two fields are
+  accepted as sent, by observation rather than inference. What remains unmeasured is which wins when
+  path and body disagree about the voice, and the route fix made it *harder* to reach: the client no
+  longer sends `voice` at all, so the conflict has to be reintroduced deliberately in a probe before
+  anything can be said about it.
+- **AssemblyAI STT** — route **not controllable**, which is different from unprobed. Measured
+  2026-08-16, an undocumented path on this host completed the upgrade and served a normal session, so
+  the wrong-path arm cannot fail and therefore controls nothing; the `404` recorded earlier in the
+  programme came from a **different host** and never applied here. Frames and credential handling
+  stand on their own evidence. See ADR-0048 A2 for what follows from a control that cannot fail.
 - **LMNT (WebSocket)** — no wrong-path control recorded on this surface. Its credential control was
   run and is what established the in-band validation point, so the gap is route-discrimination
   only.
@@ -561,7 +576,16 @@ recorded in its module docstring rather than quietly patched.
 ## Maintenance
 
 - Add the row when the surface is added, even if the row reads `not characterised`. A missing row is
-  indistinguishable from a working provider until a user finds otherwise.
+  indistinguishable from a working provider until a user finds otherwise. **This is enforced**: a
+  governance guard parses `src/` for concrete `SpeechSynthesizer` / `SpeechRecognizer` subclasses and
+  fails the build, naming the type and the file that declares it, if the **Client type** column does
+  not mention it. The guard checks that a type is *present*, never what its row says — `not
+  characterised` is a legal, passing status, because the point is that nobody can ship a provider
+  whose conformance is simply unstated. It also runs in reverse: a row naming a type that no longer
+  exists in `src/` fails too, since a row nobody is forced to update reads as coverage of a provider
+  that shipped away.
+- One client type may own several rows (`LmntSpeechSynthesizer` owns both LMNT transports). One row
+  never owns several client types.
 - A row's date is the date **its own** measurement was taken. Do not flatten several rows onto one
   header date — it would assert a live measurement for surfaces that never got one.
 - Never upgrade a class without a run. `documentation` → `live` is a probe, not an edit.

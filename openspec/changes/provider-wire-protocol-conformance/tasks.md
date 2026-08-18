@@ -739,13 +739,22 @@ characterised* in §5.5.
       audio quality. Closed with the format winning and the option kept as the documented fallback
       (Speechmatics' shape); `AssemblyAiOptions.SampleRate`'s "expects 16000" summary corrected to what
       `8000` was measured doing
-- [ ] 3.19 **AssemblyAI's wrong-path control does not discriminate, so route claims there rest on
+- [x] 3.19 **AssemblyAI's wrong-path control does not discriminate, so route claims there rest on
       nothing.** `wss://streaming.assemblyai.com/v3/ws-does-not-exist` upgraded `101` and served a
       normal session (2026-08-16). A control that cannot fail is not a control, so this surface's
       evidence class drops from `live + both controls` to `live + credential control` and its Route
       column reads *not controllable*. The `404` previously recorded for it was taken against a
       different host. **Closes when** either a route control that can fail is found on this host, or
       ADR-0048 records that this vendor admits no such control and says what follows from that
+      **Closed by ADR-0048 §A2 — the second branch of this task, not the first.** No route control that
+      can fail was found on this host, so the ADR records that the vendor admits none and states what
+      follows, as a rule rather than as a note about one vendor: a control that cannot fail discards the
+      probe's **route** claim and leaves its other claims standing on their own evidence; the surface
+      drops one rung to `live + credential control` rather than being demoted to unprobed; and the
+      absence is a property of the host **on the day it was measured**, re-testable if the service later
+      serves 404s for unknown paths. Recording it as permanent would be the same inference in the other
+      direction. The conformance record now carries it in the residue section as well, so the Route
+      column's *not controllable* is explained where a reader meets it
 - [x] 3.7 The media-type delta is the one with consumer-visible consequence: `SynthesizeHttpAsync`
       chunks the response body straight out as if it were raw PCM, and MP3 is not chunkable that way.
       `LmntTtsOptions.Format` defaults to `raw`, but whether sending `format: "raw"` on the JSON body
@@ -1464,7 +1473,7 @@ commit.
 
 ## 6. Governance, decision record and docs
 
-- [ ] 6.1 A Governance scanner in `Tests/Verbara.Sdk.Governance.Tests/`: a provider's production
+- [x] 6.1 A Governance scanner in `Tests/Verbara.Sdk.Governance.Tests/`: a provider's production
       endpoint must be declared once — in its options type or a single named constant — and not inlined
       at a call site. `LmntSpeechSynthesizer.cs:294` is the motivating case: a route no configuration
       can reach and no reader can audit without opening the file. Roslyn-syntactic like every scanner in
@@ -1489,18 +1498,80 @@ commit.
       §1.3; hoisting it into a declaration is a separate refactor). An entry is a recorded exemption and
       not an absolution: each names the condition that removes it, so the list shrinks instead of
       becoming permanent
-- [ ] 6.2 A second scanner: every provider client type has a row in the §5.5 conformance record. Fails
+      **Done — and the task's own premise did not survive contact with the tree, in two ways worth
+      naming rather than quietly correcting.**
+      **(1) The four-site allow-list was stale.** Re-derived 2026-08-18 against the current tree, only
+      **two** of the four survive. `ElevenLabsSpeechSynthesizer:161` and `DeepgramSpeechRecognizer:138`
+      were remediated — both routes now live in their options types (`ElevenLabsOptions.BaseUri`,
+      `DeepgramOptions.BaseUri`), and each carries an XML doc narrating the fix. So did the motivating
+      case itself: `LmntSpeechSynthesizer:294` is now `private const string HttpOrigin`. This change's
+      own route work remediated three of the four sites the task said "no task in it remediates".
+      The scanner therefore ships with **two** exemptions, not four — Azure TTS (`REGION-TEMPLATED`)
+      and the LMNT WebSocket route (`PENDING-VERIFICATION`).
+      **(2) "No in-repo precedent for the allow-list shape" was wrong.** `SyncFenceScanner` ships an
+      inline `// fence-allow:` marker with a CLOSED category enum, an em-dash separator and a mandatory
+      reason, where a bare marker or an unknown category is not a valid exemption. That is precisely an
+      exemption shape, and it is a better one than an external enumerated list: it sits at the violating
+      site — the same locality complaint that motivates this whole rule — and it is deleted by the same
+      edit that removes the site, which a list is not. So this scanner **follows** the shape instead of
+      establishing one. The only thing borrowed from the ratchet half (`sync-fence-baseline.json`) is
+      the exact-count assertion, and it counts *sites excused by a valid marker*, never markers, so the
+      tally cannot be padded by a comment with nothing behind it.
+      **One measured false-positive class, found by running it rather than by reasoning about it:** the
+      first run over `src/` reported **ten** sites, of which **eight** were the `ErrorMessage` of a
+      `[RegularExpression]` attribute ("BaseUri must start with wss:// or ws://."). The fix is a
+      host-shape rule — the character after `://` must be able to begin a host — not an attribute
+      carve-out, and every occurrence of every scheme is examined rather than the first, because that
+      prose quotes two. Both shapes are pinned by tests
+- [x] 6.2 A second scanner: every provider client type has a row in the §5.5 conformance record. Fails
       naming the client and the file that declares it, so a new provider ships with a status — including
       the status *not characterised*, which is a legal value
-- [ ] 6.3 Liveness self-tests for both, with a conservative `MinimumScannedFiles` floor below the real
+      **Done — `ConformanceRecordScanner` + `ConformanceRecordGuardTests`.** A provider client type is
+      a non-abstract class whose base list names `SpeechSynthesizer` or `SpeechRecognizer`; the record
+      gains a **Client type** column and the guard fails naming the type and the declaring file.
+      Fourteen types, fourteen rows (`LmntSpeechSynthesizer` owns two — one class, two transports).
+      **A weakness caught by measuring instead of assuming:** the first implementation searched the
+      whole record for the type name in backticks. Measured against the real file, **six of the
+      fourteen** types are already named that way in the narrative prose — `AssemblyAiSpeechRecognizer`
+      three times, `LmntSpeechSynthesizer` three times — so a provider could have passed on a mention
+      in a paragraph about some other defect. A guard that accepts prose as a row certifies exactly the
+      omission it exists to catch. It now reads the **second cell** of a table row and nothing else.
+      Two deliberate shapes: the check is **presence, never verdict** (`not characterised` passes, which
+      is the whole reason that value exists), and the exclusion is by **package** —
+      `Verbara.Sdk.VoiceAi.Testing`, whose charter is in-memory doubles — rather than by a `Fake` name
+      prefix, because a package boundary is a decision somebody made and a naming convention is one
+      somebody can drift away from silently. Added beyond the task: the guard also runs **in reverse**,
+      failing on a row whose client type no longer exists in `src/`, since a row nobody is forced to
+      update reads as coverage of a provider that shipped away
+- [x] 6.3 Liveness self-tests for both, with a conservative `MinimumScannedFiles` floor below the real
       count and the real count named in the comment — the established shape, so a broken locator fails
       instead of reporting a clean scan of nothing
-- [ ] 6.4 Detector unit tests: true positive with exact file and 1-based line; immunity for the same
+      **Done — three liveness self-tests, not two.** Both guards assert `MinimumScannedFiles = 500`
+      against a real count of **864** (`src/`, obj/bin and generated files excluded), with the real
+      count named in the comment. The conformance guard gets a **second** one the task did not ask for
+      and needs: it asserts the record file resolves and exceeds 5 000 characters, because a moved or
+      renamed record would otherwise turn the whole guard into an assertion about an empty string
+- [x] 6.4 Detector unit tests: true positive with exact file and 1-based line; immunity for the same
       text in a comment, an XML doc and a plain string literal. `Verbara.Sdk.Governance.Tests` has
       **zero** `ProjectReference`s by design — neither scanner may add one
-- [ ] 6.5 Negative-test both guards end to end: introduce the violation, watch the guard fail naming
+      **Done — 35 detector unit tests across the two scanners, zero `ProjectReference`s added.** True
+      positives pin exact path and 1-based line. Immunity is pinned for the three shapes the task names
+      — comment, XML doc, plain string literal — plus the two this repo actually produces: vendor
+      documentation links inside `<see href="…"/>` (which the record and the options types are full of)
+      and the `[RegularExpression]` `ErrorMessage` prose that the first run flagged eight times. Marker
+      validity is pinned in both directions: a valid marker excuses, while a bare marker, an unknown
+      category, an empty reason, and a marker separated from its site by code all still fail
+- [x] 6.5 Negative-test both guards end to end: introduce the violation, watch the guard fail naming
       file and line, remove it, watch the suite return to green
-- [ ] 6.6 `docs/decisions/0048-wire-conformance-by-live-probe-with-negative-control.md` — the file is
+      **Done — three end-to-end mutations, each introduced into `src/`, observed, then removed.**
+      (1) An inlined production endpoint added to `GoogleSpeechRecognizer` — guard failed naming
+      `src/Verbara.Sdk.VoiceAi.Stt/Google/GoogleSpeechRecognizer.cs:20` and the endpoint text; removed,
+      green. (2) A new `MutationProbeSpeechRecognizer` with no row — conformance guard failed naming the
+      type and `src/Verbara.Sdk.VoiceAi.Stt/MutationProbeSpeechRecognizer.cs:3`; removed, green.
+      (3) A record row retyped to a client that does not exist — the reverse-direction test failed
+      naming `RetiredVendorSpeechRecognizer`; restored, green. Full project green at **99 tests**
+      (from 64) after each restore
+- [x] 6.6 `docs/decisions/0048-wire-conformance-by-live-probe-with-negative-control.md` — the file is
       already on disk, `Status: Accepted`, dated 2026-08-15; use that exact filename. 0045 / 0046 / 0047
       are claimed by the open changes, so 0048 was the next free number. Content: the live probe with a
       negative control as an evidence class; the **probe-depth rule from §5.11**, which is what
@@ -1512,6 +1583,25 @@ commit.
       defects, because the bytes never arrive or arrive on the wrong frame type; and they are not drift,
       because they are static, present-day, and were wrong on the day the code was written. Related:
       ADR-0041 (recordings as the provider evidence class), ADR-0043 (evidence produced off the PR path)
+      **Done — as a dated `## Addendum`, because the ADR was already `Accepted` and shipped.** The task
+      assumed the file was a stub to be filled; it is not. ADR-0048 landed in **#174** on 2026-08-15
+      with 401 lines, and the house rule is that an `Accepted` ADR is never edited. Checked for
+      precedent rather than improvised: ADR-0038 and ADR-0039 both carry `## Addendum (YYYY-MM-DD) — …`
+      sections appended after acceptance, one of them a correction to a numbered decision. That is the
+      form used here, and the original text is untouched.
+      **Most of what §6.6 asked for was already in the ADR** and an earlier keyword search of mine
+      missed it: the probe-depth rule from §5.11 is **D9** (verbatim, including the Speechmatics
+      counterexample as its strongest argument), the public-API principle is **D7**, the four defect
+      classes and the single root cause are the Context and Classes A–D, and "why none of the open
+      changes could host this work" is **Option C** under *Alternatives considered*. The addendum adds
+      only what was genuinely absent: **A1** D8's example is stale (Cartesia and AssemblyAI were
+      unprobed when it was written and are not now) while D8's rule stands; **A2** the §3.19 finding as
+      a rule — a control that cannot fail discards the route claim, not the probe, and is a property of
+      the host on the day measured rather than a permanent verdict; **A3** D7's concrete outcome for
+      `SpeechmaticsOptions.BaseUri` with both alternatives rejected by name, the consequence for
+      existing callers, and an explicit label that the rejection reasoning is **design reasoning, not
+      measurement**; **A4** header auth as the chosen remedy with the measured/inferred split restated;
+      **A5** the two guards that turn D1 and D8 from prose into build failures
 - [x] 6.7 Add the ADR-0048 **and ADR-0049** rows to `docs/decisions/README.md` in numeric order, matching the existing row
       format (link, one-sentence summary, status and date).
       **Closed 2026-08-17 with no edit — both rows were already there**, added by `926fd413` (#174), the
@@ -1553,14 +1643,23 @@ commit.
       handshake **succeeded**, so a test asserting the connection opened has asserted nothing about the
       credential. Shipped with §6.8 rather than separately — the new text cites §11 of the recording
       protocol, and splitting them would have merged a dangling cross-reference
-- [ ] 6.10 `CHANGELOG.md` — one `[Unreleased]` entry under `### Fixed`. This changes **shipped**
+- [x] 6.10 `CHANGELOG.md` — one `[Unreleased]` entry under `### Fixed`. This changes **shipped**
       behaviour in `Verbara.Sdk.VoiceAi.Tts` and `Verbara.Sdk.VoiceAi.Stt`, not test behaviour. State
       the blast radius per provider without inflating it: Speechmatics **STT** could never authenticate,
       so every caller of `SpeechmaticsSpeechRecognizer` is affected and no option contained it; Cartesia
       and ElevenLabs affect every caller of those synthesizers and previously completed successfully
       with zero audio; Speechmatics TTS has never reached the vendor; LMNT affects only callers who set
       `Transport = Http`
-- [ ] 6.11 State the residue explicitly so no omission reads as an oversight, and state it at the
+      **Done — and the per-provider blast radius was already there, entry by entry.** Each behavioural
+      fix in this change carried its own `[Unreleased]` entry as it shipped, so what §6.10 describes is
+      satisfied across the entries already in `CHANGELOG.md` — Speechmatics STT, Cartesia, ElevenLabs,
+      Speechmatics TTS and LMNT each state their own radius, and the `Changed — BREAKING` entry for
+      ADR-0050 names all eight affected clients. What this task adds is the entry this final block
+      owes: `### Added — two governance guards so provider conformance stops depending on memory`,
+      which states plainly that **no shipped behaviour changes**, describes both guards, and records
+      the stale-inventory finding (three of four exemption sites already remediated) and the AssemblyAI
+      no-failing-control result
+- [x] 6.11 State the residue explicitly so no omission reads as an oversight, and state it at the
       resolution §1 now supports: Cartesia STT — route and auth verified with two controls, **frames not
       exercised**; Cartesia **TTS** — route and auth verified, **frame inventory still not characterised**
       because the probe's synthesis request was malformed, so its Class B finding still rests on the
@@ -1571,6 +1670,20 @@ commit.
       the LMNT WebSocket path; the Speechmatics TTS body fields; and Azure TTS's weaker evidence class.
       Each is a row in §5.5 with its own evidence class, not a silent gap and not a shared verdict
 
+      **Done — by correcting the record's existing residue section rather than writing a second one.**
+      `docs/guides/provider-wire-conformance.md` already named the residue surface by surface; three
+      bullets had gone stale against measurements taken after they were written, and a stale residue
+      statement is worse than none because it reads as current. Corrected: **Speechmatics STT**
+      narrowed twice — the 2026-08-18 session measured `word_delimiter` inside
+      `RecognitionStarted.language_pack_info`, `attaches_to`, `metadata.transcript` on all three finals
+      and all eight partials, and the inter-segment glue whitespace finals carry — and it now names the
+      two unmodelled frame kinds seen in the same run (`AudioAdded` ×29, `Info` ×2). **Speechmatics
+      TTS** is down to the `voice`-in-body question alone: the 2026-08-17 capture answered the
+      `language`/`sample_rate` half by observation, and the note records that the route fix made the
+      remaining half *harder* to reach, since the client no longer sends `voice` at all. **AssemblyAI
+      STT** gains its own bullet — route *not controllable*, which is different from unprobed, with a
+      pointer to ADR-0048 A2. §6.11's own text called AssemblyAI's route "verified"; §3.19 measured
+      otherwise, and the record follows the measurement
 ## 7. Verification
 
 - [ ] 7.1 `dotnet build Verbara.Sdk.slnx` — 0 warnings, 0 errors (`TreatWarningsAsErrors`)
