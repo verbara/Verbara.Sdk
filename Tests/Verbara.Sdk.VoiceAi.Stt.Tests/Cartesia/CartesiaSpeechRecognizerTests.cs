@@ -143,12 +143,15 @@ public class CartesiaSpeechRecognizerTests : IAsyncDisposable
     public async Task StreamAsync_ShouldIgnoreFrame_WhenTypeIsNotTranscript()
     {
         // Cartesia interleaves control frames with transcripts, and the recognizer deserializes
-        // every text frame into its transcript DTO before filtering on type. The recorded
-        // flush_done carries the documented-deprecated is_final true and no text at all, which is
-        // exactly the frame a broken filter would leak through as an empty final result. Nothing in
-        // this suite could send it before the fixture existed.
+        // every text frame into its transcript DTO before filtering on type. The frame used here is
+        // the AUTHORED flush_done carrying is_final true and no text at all — exactly what a broken
+        // filter would leak through as an empty final result. It is deliberately not the recorded
+        // one: the live capture of 2026-08-18 measured the service sending is_final FALSE, so the
+        // recording is the benign shape and swapping this test onto it would have looked like an
+        // upgrade while quietly removing the only adversarial case.
         _server.ResultMessages.Clear();
-        _server.ResultMessages.Add(CartesiaFakeServer.ReadFrame(CartesiaFakeServer.FlushDoneFrame));
+        _server.ResultMessages.Add(
+            CartesiaFakeServer.ReadFrame(CartesiaFakeServer.FlushDoneFinalFlagFrame));
         _server.ResultMessages.Add(CartesiaFakeServer.ReadFrame(CartesiaFakeServer.FinalTranscriptFrame));
 
         var recognizer = BuildRecognizer();
@@ -291,6 +294,52 @@ public class CartesiaSpeechRecognizerTests : IAsyncDisposable
         failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
         failure.Code.Should().Be("400", "the vendor puts an HTTP-shaped code inside a WebSocket session");
         failure.Message.Should().Contain("Missing sample_rate");
+    }
+
+    /// <summary>
+    /// The same door, driven by a <em>recorded</em> rejection rather than a reproduced one. The frame
+    /// above is hand-written from a measured session; this one is the bytes the service actually sent,
+    /// captured 2026-08-18 through the WebSocket path <c>scripts/capture-provider-recording.py</c>
+    /// gained for exactly this. A second rejection shape from the same surface, and it matters that
+    /// the client reports both: the two carry different prose and only the <c>type</c> and
+    /// <c>code</c> fields in common.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowErrorFrameFailure_WhenTheServerRejectsAnUnrecognizedMessage()
+    {
+        _server.ErrorFrameJson = CartesiaFakeServer.ReadFrame(CartesiaFakeServer.ErrorFrame);
+        var recognizer = BuildRecognizer();
+
+        var act = async () =>
+            await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
+        failure.Code.Should().Be("400");
+        failure.Message.Should().Contain("Unrecognized text message");
+    }
+
+    /// <summary>
+    /// The end-of-session acknowledgement, under test rather than under a comment. The service answers
+    /// the <c>done</c> terminator with <c>{"type":"done","is_final":false,…}</c> before closing — a
+    /// frame the recognizer deserializes into its transcript DTO like every other, and one that
+    /// carries no text. It must change nothing: the transcript sent before it still surfaces, and the
+    /// acknowledgement itself must not arrive as a second, empty result. The fake sends it from the
+    /// recording on every terminator, so this assertion covers the whole suite's sessions; naming it
+    /// once here is what makes a regression legible.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldYieldOnlyTheTranscript_WhenTheServiceAcknowledgesTheTerminator()
+    {
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(CartesiaFakeServer.ReadFrame(CartesiaFakeServer.FinalTranscriptFrame));
+
+        var recognizer = BuildRecognizer();
+        var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        _server.ReceivedTerminatorText.Should().Be("done", "the acknowledgement only follows the terminator");
+        results.Should().ContainSingle()
+            .Which.Transcript.Should().Be(RecordedText(CartesiaFakeServer.FinalTranscriptFrame));
     }
 
     /// <summary>

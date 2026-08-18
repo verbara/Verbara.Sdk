@@ -81,6 +81,9 @@ public sealed class AzureTtsSpeechSynthesizer : SpeechSynthesizer
         };
 
         var origin = _fakeOrigin
+            // endpoint-allow: REGION-TEMPLATED — the origin is interpolated from _options.Region and
+            // AzureTtsOptions exposes no endpoint property, so no single constant can express it.
+            // This surface passed both halves of its probe; the exemption is about shape, not doubt.
             ?? $"https://{_options.Region}.tts.speech.microsoft.com";
         var uri = new Uri(new Uri(origin), SynthesisPath);
 

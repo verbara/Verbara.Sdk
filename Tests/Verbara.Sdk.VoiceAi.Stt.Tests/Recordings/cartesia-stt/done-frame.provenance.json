@@ -7,8 +7,8 @@
   "api_version": "2024-11-13",
   "captured_utc": "2026-08-18",
   "media_type": "application/json",
-  "bytes": 104,
-  "sha256": "5bab608df679d1fe09a1bf6c9b52133bb4f9bfb25f948f3952c88fc2dfe2a33e",
+  "bytes": 98,
+  "sha256": "8fd097386ce2f1bc2ed6c8ba51d05c6363ca537d764fe52c5510c9154e22b016",
   "source_audio": {
     "origin": "reused-committed-capture",
     "description": "Synthetic speech, not a recording of any person: the committed Azure TTS capture Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/azure-tts/synthesize-short-es-co.raw (prebuilt neural voice es-CO-SalomeNeural, 8 kHz 16-bit mono PCM, 3.76 s) reading the fictional sentence 'El sistema registró la solicitud correctamente.', wrapped in a 44-byte canonical RIFF/WAVE header identical to the one WhisperSpeechRecognizer builds. Reusing that capture keeps one cleared, reviewed audio artifact in the repo instead of adding a second. It is submitted for a single transcription, which is inference, not training: neither Azure's bar on using Output Content as synthetic training data for a similar service nor OpenAI Services Agreement 3.3(e) on developing competing models is engaged.",
@@ -26,5 +26,5 @@
     "basis": "docs/guides/provider-recording-protocol.md section 7 (Cartesia)",
     "checked_utc": "2026-08-18"
   },
-  "notes": "The non-transcript control frame. CartesiaSpeechRecognizer deserializes EVERY text frame into its transcript DTO and only then filters on type != \"transcript\", so this is the frame a broken filter leaks through as an empty final result. Captured from the live service over one WebSocket session at the shipped CartesiaOptions defaults. Replaces a documentation-derived fixture: what the vendor publishes is what it says it sends, and only a capture can say what it sent."
+  "notes": "The end-of-session acknowledgement the service sends before closing. Nothing in the suite could send this frame while it existed only in a run log. Captured from the live service over one WebSocket session at the shipped CartesiaOptions defaults. Replaces a documentation-derived fixture: what the vendor publishes is what it says it sends, and only a capture can say what it sent."
 }

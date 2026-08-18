@@ -4,6 +4,100 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — two governance guards so provider conformance stops depending on memory
+
+Every wire defect fixed in this release shipped past a green suite, and two of the habits that would
+have caught them were prose in an ADR. They are build failures now. Both guards parse `src/` with
+Roslyn from `Verbara.Sdk.Governance.Tests`, which carries **zero** `ProjectReference`s by design — a
+guard that compiles against the thing it governs can be broken by the same edit it is meant to catch.
+
+- **A production provider endpoint must be declared once** — in the provider's options type or a
+  single named constant — never written inline at a call site. Fails naming file and 1-based line.
+  Two sites remain exempt behind an inline `// endpoint-allow: <CATEGORY> — <reason>` marker with a
+  closed category set, and the exemption tally is an exact-count ratchet, so a third cannot appear
+  without a reviewer seeing the number change. Re-deriving that list against the current tree found
+  the 2026-08-15 inventory of four sites was stale: three had already been remediated by this
+  release's own route fixes.
+- **Every provider client type must have a row in the conformance record**
+  (`docs/guides/provider-wire-conformance.md`, which gains a **Client type** column). Fails naming
+  the type and the file that declares it. The guard checks presence, never verdict — `not
+  characterised` is a legal, passing status, because what must be impossible is shipping a provider
+  whose conformance is simply unstated. It runs in reverse too: a row naming a type that no longer
+  exists in `src/` also fails.
+
+No shipped behaviour changes. `ADR-0048` gains a dated addendum recording what the probes settled
+after the decision was written — including that AssemblyAI STT admits **no route control that can
+fail**, so its route claim is discarded while its credential and frame evidence stand.
+
+### Documented — Speechmatics TTS: one open question answered, one wrong answer withdrawn
+
+- **The voice is selected by the path segment; a `voice` field in the body is ignored.** Measured by
+  reintroducing the conflict deliberately, in both directions, six samples per arm. The field the
+  route fix dropped was one the vendor was never reading.
+- **The voice segment admits no control that can fail** — every segment returns `200 audio/wav`,
+  nonsense included, apparently falling back to whatever voice the account is entitled to. A
+  misconfigured `Voice` therefore degrades **silently**: the caller gets audio in some other voice
+  and is never told. The route control on this surface is sound, so this is a control gap on a path
+  *parameter*, not on the route — `ADR-0048 A6` records that D2 applies per varied dimension.
+- **Consequently the earlier claim that the shipped default voice is validated is withdrawn.** It
+  rested on that voice returning `200` on a route that returns `200` for anything. The default is
+  unchanged pending an operator decision, because the vendor's authoritative `GET /voices` is
+  credential-gated and account-scoped, and one account's entitlement is not grounds for changing a
+  public default.
+- **Two measurement instruments were refuted before either produced a usable reading**, which is
+  recorded because both fail silently on any route of this shape: byte identity does not
+  discriminate here (same request twice → same length, different hash), and byte length only
+  discriminates after the within-condition spread is measured (lengths move in exact 1536-B quanta,
+  spread up to 4 608 B, so one sample per arm compares noise and still prints a verdict).
+
+### Documented — the Class B frame-assembly fix was repairing a live defect, not a margin
+
+The `EndOfMessage` assembly both Class B receive loops gained was filed as protection against a
+length-dependent exposure that the short probe sentence could not reach. Measured against both
+vendors on 2026-08-18, that premise was wrong: **ElevenLabs answered the 44-byte probe sentence with
+a 75 015-byte message**, already larger than the 65 536-byte receive buffer, and answered a 2 085-byte
+input with 58 such messages, the largest 293 720 B. **Cartesia never exceeds 8 681 B**, across 559
+messages on the same long input. One vendor fragments routinely, the other never does, and neither
+was inferable from the other. Worth naming where it hid: this surface was on record as "~115 KB
+across 4 frames, ~29 KB average" — the average was reported and the maximum was not, so a threshold
+crossing sat inside a published measurement.
+
+### Added — the fixture capture tool speaks WebSocket, and the first session corrected two fixtures
+
+`scripts/capture-provider-recording.py` could only capture request/response surfaces, so every
+WebSocket provider's fixtures were authored from vendor documentation. It now drives sessions too,
+over a minimal RFC 6455 client written in-tree — the tool is stdlib-only by rule, and a fixture tool
+behind a `pip install` is one that stops being run. The codec is separated from the socket so the
+parts that fail silently are pure functions under unit test.
+
+A session is not a request, and the plan shape says so: it names the frames it wants by a predicate
+over the parsed message and writes one fixture per frame **actually observed**. A frame the service
+did not send produces no file and reports that it did not — filling that gap from documentation is
+the failure this protocol exists to prevent, and the first Cartesia STT session showed why:
+
+- The service sends **`is_final: false`** on `flush_done`. The authored fixture asserted `true`, and
+  that flag was the entire reason it existed — it was the shape a broken type filter would leak
+  through as an empty final result. The authored frame is kept under its own name as an explicitly
+  adversarial case (the vendor's docs declare the field, so a filter that trusts it must survive it)
+  rather than deleted in favour of the benign recording.
+- The `words[]` entries and `text` carry a **leading space** the authored frame did not. The field
+  set and types matched the documentation exactly; the values did not.
+
+Four frames — `transcript`, `flush_done`, `done`, `error` — are now `class: "recorded"`, and the
+Cartesia STT fake answers the terminator with the recorded acknowledgement instead of closing bare.
+The **interim** transcript stays authored: `ink-whisper` answered a 3.6-second utterance with a
+single final transcript in both an unpaced and a real-time-paced session, which its sidecar now
+records in place of a stale claim that no capture credential existed.
+
+### Documented — LMNT HTTP: the version header is kept at `1.0`, and now for a measured reason
+
+`LmntTtsOptions.ApiVersion` stays at `1.0` even though the vendor's docs show `1.2` on the same
+header. Probed 2026-08-18 with every form field held at the shipped defaults and only the header
+varied: `1.0`, `1.2`, the header **omitted entirely**, `9.9` and `banana` all returned `200
+application/vnd.lmnt.audio-int16` with a headerless PCM payload. The header **admits no control that
+can fail**, so a bump would be an unmeasured change dressed as a fix. Not claimed: that the header is
+ignored — three dimensions on one route's success path were compared, nothing more.
+
 ### Changed — BREAKING: a provider failure now reaches the caller instead of an empty stream
 
 Eight WebSocket speech clients — Cartesia TTS, ElevenLabs TTS, LMNT TTS (WebSocket), Deepgram TTS,

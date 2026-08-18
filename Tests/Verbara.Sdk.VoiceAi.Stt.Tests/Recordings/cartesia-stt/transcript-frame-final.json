@@ -1,45 +1,40 @@
 {
   "type": "transcript",
-  "request_id": "00000000-0000-0000-0000-000000000000",
-  "text": "La llamada quedó registrada en el sistema.",
-  "is_final": true,
-  "duration": 2.48,
+  "duration": 3.198,
   "language": "es",
+  "is_final": true,
   "words": [
     {
-      "word": "La",
-      "start": 0.06,
-      "end": 0.22
+      "word": " El",
+      "start": 0.16,
+      "end": 0.28
     },
     {
-      "word": "llamada",
-      "start": 0.22,
-      "end": 0.74
+      "word": " sistema",
+      "start": 0.28,
+      "end": 0.66
     },
     {
-      "word": "quedó",
-      "start": 0.74,
-      "end": 1.1
+      "word": " registró",
+      "start": 0.66,
+      "end": 1.2
     },
     {
-      "word": "registrada",
-      "start": 1.1,
-      "end": 1.62
+      "word": " la",
+      "start": 1.2,
+      "end": 1.36
     },
     {
-      "word": "en",
-      "start": 1.7,
-      "end": 1.84
+      "word": " solicitud",
+      "start": 1.36,
+      "end": 1.94
     },
     {
-      "word": "el",
-      "start": 1.84,
-      "end": 1.98
-    },
-    {
-      "word": "sistema",
-      "start": 1.98,
-      "end": 2.48
+      "word": " correctamente.",
+      "start": 1.94,
+      "end": 3.06
     }
-  ]
+  ],
+  "request_id": "00000000-0000-0000-0000-000000000000",
+  "text": " El sistema registró la solicitud correctamente."
 }

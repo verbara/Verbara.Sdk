@@ -1144,5 +1144,167 @@ class CaptureArtifactTests(_EnvScopedTestCase):
         self.assertIn("deliberately not committed", sidecar["notes"])
 
 
+@contextlib.contextmanager
+def _env(**values):
+    """Set env vars for the duration of a plan build, restoring whatever was there."""
+    saved = {key: os.environ.get(key) for key in values}
+    os.environ.update(values)
+    try:
+        yield
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+class WebSocketCodecTests(unittest.TestCase):
+    """The frame codec, which is where a hand-written WebSocket client goes silently wrong.
+
+    Every case here is an RFC 6455 requirement the vendor would enforce by closing the connection
+    with a code that says nothing useful, so getting it wrong looks like "the provider hung up"
+    rather than like a bug in this file.
+    """
+
+    def test_ShouldDeriveTheAcceptToken_WhenGivenTheRfcExampleKey(self):
+        # RFC 6455 §1.3's own worked example — the one value in this whole file that is not ours.
+        self.assertEqual(
+            "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=",
+            capture.ws_accept_token("dGhlIHNhbXBsZSBub25jZQ=="),
+        )
+
+    def test_ShouldCarryTheQueryString_WhenRenderingTheHandshake(self):
+        host, port, request = capture.ws_handshake_request(
+            "wss://api.example.com/stt/websocket?model=ink&sample_rate=8000",
+            {"X-API-Key": "k"},
+            "dGhlIHNhbXBsZSBub25jZQ==",
+        )
+
+        self.assertEqual("api.example.com", host)
+        self.assertEqual(443, port)
+        text = request.decode("ascii")
+        # The query is where every session parameter of this surface travels, and a client that
+        # dropped it would be answered 1008 rather than refused — see the Cartesia STT close.
+        self.assertIn("GET /stt/websocket?model=ink&sample_rate=8000 HTTP/1.1\r\n", text)
+        self.assertIn("Sec-WebSocket-Version: 13\r\n", text)
+        self.assertIn("X-API-Key: k\r\n", text)
+        self.assertTrue(text.endswith("\r\n\r\n"))
+
+    def test_ShouldRejectTheUrl_WhenTheSchemeIsNotWebSocket(self):
+        with self.assertRaises(capture.CaptureError):
+            capture.ws_handshake_request("https://api.example.com/", {}, "k")
+
+    def test_ShouldMaskThePayload_WhenEncodingAClientFrame(self):
+        mask = b"\x01\x02\x03\x04"
+
+        frame = capture.ws_encode_frame(capture.WS_OPCODE_TEXT, b"done", mask)
+
+        self.assertEqual(0x81, frame[0], "final bit plus the text opcode")
+        self.assertEqual(0x84, frame[1], "mask bit plus a 4-byte length")
+        self.assertEqual(mask, frame[2:6])
+        self.assertEqual(b"done", bytes(b ^ mask[i % 4] for i, b in enumerate(frame[6:])))
+
+    def test_ShouldUseTheExtendedLength_WhenThePayloadExceedsTheShortForm(self):
+        for length, marker, width in ((126, 126, 2), (65536, 127, 8)):
+            with self.subTest(length=length):
+                frame = capture.ws_encode_frame(
+                    capture.WS_OPCODE_BINARY, b"\x00" * length, b"\x00" * 4
+                )
+                self.assertEqual(0x80 | marker, frame[1])
+                self.assertEqual(length, int.from_bytes(frame[2:2 + width], "big"))
+
+    def test_ShouldReturnTheTail_WhenAFrameArrivesSplitAcrossReads(self):
+        # An unmasked frame, because this is the server direction — a masked one is the case the
+        # test below rejects. Splitting it is the ordinary case on a socket, not an edge case.
+        whole = bytes([0x81, 0x05]) + b"hello"
+
+        frames, tail = capture.ws_decode_frames(whole[:4])
+        self.assertEqual([], frames, "a partial frame decodes to nothing, never to a truncated one")
+        self.assertEqual(whole[:4], tail)
+
+        frames, tail = capture.ws_decode_frames(tail + whole[4:])
+        self.assertEqual([(capture.WS_OPCODE_TEXT, b"hello", True)], frames)
+        self.assertEqual(b"", tail)
+
+    def test_ShouldReportFinality_WhenTheMessageArrivesAcrossContinuationFrames(self):
+        # Finality is reported rather than resolved, so a capture can observe that the vendor
+        # fragmented instead of having reassembly hide it.
+        first = bytes([0x01, 0x03]) + b"abc"          # text, not final
+        last = bytes([0x80, 0x03]) + b"def"           # continuation, final
+
+        frames, tail = capture.ws_decode_frames(first + last)
+
+        self.assertEqual(
+            [
+                (capture.WS_OPCODE_TEXT, b"abc", False),
+                (capture.WS_OPCODE_CONTINUATION, b"def", True),
+            ],
+            frames,
+        )
+        self.assertEqual(b"", tail)
+
+    def test_ShouldRefuseTheFrame_WhenTheServerMasksIt(self):
+        masked = bytes([0x81, 0x81, 0, 0, 0, 0, 0x41])
+
+        with self.assertRaises(capture.CaptureError):
+            capture.ws_decode_frames(masked)
+
+
+class SessionPlanTests(unittest.TestCase):
+    def test_ShouldReproduceTheShippedRequest_WhenPlanningTheCartesiaSttSession(self):
+        with _env(CARTESIA_API_KEY="secret-key"):
+            plan = capture.cartesia_stt_session_plan(b"\x00" * 16)
+
+        self.assertIn("wss://api.cartesia.ai/stt/websocket?", plan["url"])
+        for expected in ("model=ink-whisper", "encoding=pcm_s16le", "sample_rate=8000"):
+            self.assertIn(expected, plan["url"])
+        self.assertEqual("2024-11-13", plan["headers"]["Cartesia-Version"])
+        # The three words the service names in its own rejection; `done` is the client's.
+        self.assertEqual("done", plan["terminator"])
+        self.assertEqual("finalize", plan["pre_terminator"])
+        self.assertEqual(("request_id",), plan["correlation_fields"])
+
+    def test_ShouldSelectEachFrame_WhenTheSessionProducedTheWholeSet(self):
+        with _env(CARTESIA_API_KEY="secret-key"):
+            plan = capture.cartesia_stt_session_plan(b"")
+        observed = [
+            {"type": "transcript", "is_final": False},
+            {"type": "transcript", "is_final": True},
+            {"type": "flush_done", "is_final": False},
+            {"type": "done", "is_final": False},
+        ]
+
+        picked = {
+            spec["slug"]: next((m for m in observed if spec["select"](m)), None)
+            for spec in plan["frames"]
+        }
+
+        self.assertEqual(observed[0], picked["transcript-frame-interim"])
+        self.assertEqual(observed[1], picked["transcript-frame-final"])
+        self.assertEqual(observed[2], picked["flush-done-frame"])
+        self.assertEqual(observed[3], picked["done-frame"])
+
+    def test_ShouldSelectNothing_WhenTheServiceDidNotSendTheFrame(self):
+        # The case that actually happened: ink-whisper answered a short utterance with one final
+        # transcript and no interim one, in both a paced and an unpaced session. A plan that
+        # substituted an authored frame here would have published a fiction as a recording.
+        with _env(CARTESIA_API_KEY="secret-key"):
+            plan = capture.cartesia_stt_session_plan(b"")
+        interim = next(s for s in plan["frames"] if s["slug"] == "transcript-frame-interim")
+
+        self.assertIsNone(
+            next((m for m in [{"type": "transcript", "is_final": True}] if interim["select"](m)), None)
+        )
+
+    def test_ShouldDropTheAudioAndPacing_WhenPlanningTheErrorSession(self):
+        with _env(CARTESIA_API_KEY="secret-key"):
+            plan = capture.cartesia_stt_error_session_plan(b"\x00" * 16)
+
+        self.assertEqual(b"", plan["audio"])
+        self.assertIsNone(plan["pre_terminator"], "finalize would be a second, valid message")
+        self.assertEqual(("error-frame",), tuple(s["slug"] for s in plan["frames"]))
+
+
 if __name__ == "__main__":
     unittest.main()
