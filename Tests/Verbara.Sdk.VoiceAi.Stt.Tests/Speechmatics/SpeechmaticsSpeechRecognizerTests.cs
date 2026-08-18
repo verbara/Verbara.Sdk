@@ -1,5 +1,6 @@
 using System.Net.WebSockets;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Verbara.Sdk.Audio;
 using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Stt.Speechmatics;
@@ -17,13 +18,15 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Speechmatics;
 /// frames in <c>Recordings/speechmatics-stt/</c> (D4), not from a different server. Speechmatics STT
 /// is <c>permitted</c> for capturing Output (<c>docs/guides/provider-recording-protocol.md</c> §7 —
 /// ToS §10.3 assigns the customer all IP in Transcripts), so — unlike Deepgram and AssemblyAI — its
-/// terms are not what stands between this suite and a real capture, and as of 2026-08-16 neither is a
-/// missing credential: a working one exists and has opened a live session against this surface, which
-/// streamed no audio and so elicited no transcript frame. What is missing is a capture run, which
-/// makes a real capture a demonstrably reachable upgrade path. Meanwhile the frames take
-/// §7's documentation-derived route, <c>class: "synthetic"</c> with a <c>source_schema</c> block.
-/// That closes the field-set half of the D4 gap and not the drift half. The Speechmatics <em>TTS</em>
-/// suite is a separate, HTTP-transport surface and does migrate (§4.5).
+/// terms are not what stands between this suite and a real capture, and as of 2026-08-18 neither is a
+/// missing credential: a live session has streamed audio through this surface and elicited real
+/// transcript frames (§4.7). Those frames were read to settle how the segment is assembled and were
+/// deliberately not stored, so the fixtures keep §7's documentation-derived route —
+/// <c>class: "synthetic"</c> with a <c>source_schema</c> block — and a capture run remains the missing
+/// upgrade. What the live session <em>did</em> settle is that the vendor sends the field set these
+/// frames claim, which closes the drift half of the D4 gap for this schema while leaving the values
+/// half open. The Speechmatics <em>TTS</em> suite is a separate, HTTP-transport surface and does
+/// migrate (§4.5).
 /// </summary>
 public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
 {
@@ -59,12 +62,23 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// The transcript the SDK is expected to build out of a recorded frame: every result's first
-    /// alternative, joined with a single space, which is exactly what
-    /// <c>SpeechmaticsSpeechRecognizer</c> does. Derived from the recording rather than hard-coded,
-    /// so the two independent readers must agree on the frame's bytes.
+    /// The transcript the SDK is expected to yield for a recorded frame: the vendor's own assembled
+    /// segment at <c>metadata.transcript</c>, trimmed of the inter-segment glue whitespace the
+    /// service pads finals with. Derived from the recording rather than hard-coded, so the frame's
+    /// bytes and the client must agree.
     /// </summary>
-    private static string RecordedJoinedTranscript(string frame)
+    private static string RecordedVendorTranscript(string frame)
+    {
+        using var document = JsonDocument.Parse(SpeechmaticsFakeServer.ReadFrame(frame));
+        return document.RootElement.GetProperty("metadata").GetProperty("transcript").GetString()!.Trim();
+    }
+
+    /// <summary>
+    /// What the shipped client produced before this fix, and what it still produces as a fallback for
+    /// a frame carrying no <c>metadata.transcript</c>: every result's first alternative joined with a
+    /// single space, unconditionally.
+    /// </summary>
+    private static string RecordedSpaceJoinedTranscript(string frame)
     {
         using var document = JsonDocument.Parse(SpeechmaticsFakeServer.ReadFrame(frame));
         var parts = document.RootElement.GetProperty("results").EnumerateArray()
@@ -72,11 +86,26 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         return string.Join(' ', parts);
     }
 
-    /// <summary>The already-assembled segment text the vendor publishes at <c>metadata.transcript</c>.</summary>
-    private static string RecordedVendorTranscript(string frame)
+    /// <summary>
+    /// The recorded frame with its whole <c>metadata</c> object removed, so a test can reach the
+    /// local-assembly fallback at all. Removing the object rather than blanking the string is
+    /// deliberate: an absent field and an empty one are different instructions, and only the absent
+    /// one is supposed to fall back.
+    /// </summary>
+    private static string FrameWithoutMetadata(string frame)
     {
-        using var document = JsonDocument.Parse(SpeechmaticsFakeServer.ReadFrame(frame));
-        return document.RootElement.GetProperty("metadata").GetProperty("transcript").GetString()!;
+        var node = JsonNode.Parse(SpeechmaticsFakeServer.ReadFrame(frame))!.AsObject();
+        node.Remove("metadata");
+        return node.ToJsonString();
+    }
+
+    /// <summary>The recorded frame with its language pack declaring <paramref name="delimiter"/>.</summary>
+    private static string RecognitionStartedWithDelimiter(string delimiter)
+    {
+        var node = JsonNode.Parse(
+            SpeechmaticsFakeServer.ReadFrame(SpeechmaticsFakeServer.RecognitionStartedFrame))!.AsObject();
+        node["language_pack_info"]!["word_delimiter"] = delimiter;
+        return node.ToJsonString();
     }
 
     [Fact]
@@ -86,8 +115,8 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         var recognizer = BuildRecognizer();
         var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
 
-        var partial = RecordedJoinedTranscript(SpeechmaticsFakeServer.PartialTranscriptFrame);
-        var final = RecordedJoinedTranscript(SpeechmaticsFakeServer.FinalTranscriptFrame);
+        var partial = RecordedVendorTranscript(SpeechmaticsFakeServer.PartialTranscriptFrame);
+        var final = RecordedVendorTranscript(SpeechmaticsFakeServer.FinalTranscriptFrame);
         partial.Should().NotBeNullOrWhiteSpace("a frame that transcribes to nothing asserts nothing");
         final.Should().NotBeNullOrWhiteSpace("a frame that transcribes to nothing asserts nothing");
 
@@ -150,23 +179,30 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         var yielded = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
 
         yielded.Should().ContainSingle()
-            .Which.Transcript.Should().Be(RecordedJoinedTranscript(SpeechmaticsFakeServer.FinalTranscriptFrame));
+            .Which.Transcript.Should().Be(RecordedVendorTranscript(SpeechmaticsFakeServer.FinalTranscriptFrame));
     }
 
+    /// <summary>
+    /// The defect this suite pinned as behaviour until 2026-08-18, now inverted. The client
+    /// space-joined every token unconditionally, so a punctuation result marked
+    /// <c>attaches_to: "previous"</c> gained a separator the vendor's own text does not have.
+    /// </summary>
+    /// <remarks>
+    /// The first block is the negative control and it is the reason this test can fail: it proves the
+    /// recording still exercises the divergence. Swap the fixture for one whose tokens space-join to
+    /// the same string and the assertion below would pass against a client that never read
+    /// <c>metadata.transcript</c> at all.
+    /// </remarks>
     [Fact]
-    public async Task StreamAsync_ShouldSpaceJoinTokens_WhenFrameCarriesPunctuationAttachedToPrevious()
+    public async Task StreamAsync_ShouldYieldTheVendorsAssembledSegment_WhenFrameCarriesPunctuationAttachedToPrevious()
     {
-        // The finding this migration surfaced, asserted as the behaviour it is rather than fixed
-        // here — no src/** file is in this change's scope. Speechmatics publishes the assembled
-        // segment at metadata.transcript, and publishes a word_delimiter on RecognitionStarted;
-        // SpeechmaticsSpeechRecognizer reads neither and space-joins the token stream, so a
-        // punctuation result with attaches_to "previous" gains a space the vendor's own text does
-        // not have. A single-token fake could never show this.
         var vendorText = RecordedVendorTranscript(SpeechmaticsFakeServer.FinalTranscriptFrame);
-        var sdkText = RecordedJoinedTranscript(SpeechmaticsFakeServer.FinalTranscriptFrame);
-        sdkText.Should().NotBe(vendorText, "the recording must actually exercise the divergence");
-        sdkText.Replace(" ", string.Empty).Should().Be(vendorText.Replace(" ", string.Empty),
+        var spaceJoined = RecordedSpaceJoinedTranscript(SpeechmaticsFakeServer.FinalTranscriptFrame);
+        spaceJoined.Should().NotBe(vendorText, "the recording must actually exercise the divergence");
+        spaceJoined.Replace(" ", string.Empty).Should().Be(vendorText.Replace(" ", string.Empty),
             "the two differ only in whitespace — the tokens themselves agree");
+        vendorText.Should().EndWith("mañana.", "the vendor attaches the full stop to the last word");
+        spaceJoined.Should().EndWith("mañana .", "and the old join is what put a space in front of it");
 
         _server.ResultMessages.Clear();
         _server.ResultMessages.Add(SpeechmaticsFakeServer.ReadFrame(SpeechmaticsFakeServer.FinalTranscriptFrame));
@@ -174,7 +210,122 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         var recognizer = BuildRecognizer();
         var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
 
-        results.Should().ContainSingle().Which.Transcript.Should().Be(sdkText);
+        results.Should().ContainSingle().Which.Transcript.Should().Be(vendorText);
+    }
+
+    /// <summary>
+    /// The fallback, and the reason it is <em>use the vendor's delimiter</em> rather than
+    /// <em>special-case punctuation</em>: a frame with no <c>metadata.transcript</c> is assembled with
+    /// whatever <c>RecognitionStarted</c> declared, and a language pack declaring an empty
+    /// <c>word_delimiter</c> assembles with no separators at all.
+    /// </summary>
+    /// <remarks>
+    /// A rule that hard-coded a space and only suppressed it before punctuation would pass the test
+    /// above and fail this one, which is exactly why this one exists. Note also what it fences on the
+    /// other side: <c>attaches_to</c> is still honoured here, so the empty delimiter is not doing the
+    /// work alone.
+    /// </remarks>
+    [Fact]
+    public async Task StreamAsync_ShouldAssembleWithTheDeclaredDelimiter_WhenFrameCarriesNoVendorTranscript()
+    {
+        var tokens = RecordedSpaceJoinedTranscript(SpeechmaticsFakeServer.FinalTranscriptFrame)
+            .Replace(" ", string.Empty);
+
+        _server.RecognitionStartedJson = RecognitionStartedWithDelimiter(string.Empty);
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(FrameWithoutMetadata(SpeechmaticsFakeServer.FinalTranscriptFrame));
+
+        var recognizer = BuildRecognizer();
+        var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().Be(tokens);
+    }
+
+    /// <summary>
+    /// The fallback still honours the language pack's declared delimiter when it is an ordinary
+    /// space — and, doing so, produces exactly the vendor's own text. That agreement is the fence:
+    /// the fallback cannot drift away from the authority it stands in for without this going red.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldAssembleWhatTheVendorWouldHave_WhenFrameCarriesNoVendorTranscript()
+    {
+        var vendorText = RecordedVendorTranscript(SpeechmaticsFakeServer.FinalTranscriptFrame);
+
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(FrameWithoutMetadata(SpeechmaticsFakeServer.FinalTranscriptFrame));
+
+        var recognizer = BuildRecognizer();
+        var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().Be(vendorText);
+    }
+
+    /// <summary>
+    /// Pins the authority rule itself: when the vendor's assembled segment and any local assembly of
+    /// the same tokens disagree, the vendor's text is what the caller receives.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The divergence here is constructed, and no measured frame contains one.</strong> Probed
+    /// live on 2026-08-18 over eleven transcript messages, the vendor's trimmed <c>metadata.transcript</c>
+    /// and the delimiter-and-<c>attaches_to</c> assembly agreed character for character every time — so
+    /// this frame's <c>metadata.transcript</c> is patched to a string its own tokens cannot produce.
+    /// Saying that plainly matters: a reader must not take this test as evidence that Speechmatics
+    /// rewrites segments, only that if it ever does, its answer wins.
+    /// </para>
+    /// <para>
+    /// It exists because without it nothing failed when the vendor's text was ignored altogether. That
+    /// was measured too: reverting the client to always assemble locally left all twenty tests in this
+    /// class green, because on the committed fixtures the two sources agree by construction. The rule
+    /// this change decided (§4.10) was therefore unobservable, which is the same silent-pass shape this
+    /// work exists to remove. Inverse text normalisation, casing and writing direction are all places
+    /// the vendor knows something the token stream does not carry, and that is what the rule is for.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task StreamAsync_ShouldPreferTheVendorsTranscript_WhenItDisagreesWithLocalAssembly()
+    {
+        const string VendorRewrote = "El equipo revisó el informe a las 9:30.";
+        var node = JsonNode.Parse(
+            SpeechmaticsFakeServer.ReadFrame(SpeechmaticsFakeServer.FinalTranscriptFrame))!.AsObject();
+        node["metadata"]!["transcript"] = VendorRewrote;
+
+        var localAssembly = RecordedSpaceJoinedTranscript(SpeechmaticsFakeServer.FinalTranscriptFrame);
+        VendorRewrote.Should().NotBe(localAssembly);
+        VendorRewrote.Replace(" ", string.Empty).Should().NotBe(localAssembly.Replace(" ", string.Empty),
+            "the two must differ in more than whitespace, or no assembly rule could tell them apart");
+
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(node.ToJsonString());
+
+        var recognizer = BuildRecognizer();
+        var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().Be(VendorRewrote);
+    }
+
+    /// <summary>
+    /// Confidence keeps coming from <c>alternatives[0].confidence</c> even though the text no longer
+    /// comes from the same walk (§4.11). The two used to be produced by one loop; this pins that
+    /// separating them did not quietly change what the published number means.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldAverageAlternativeConfidences_WhenTextComesFromTheVendorsTranscript()
+    {
+        using var document = JsonDocument.Parse(
+            SpeechmaticsFakeServer.ReadFrame(SpeechmaticsFakeServer.FinalTranscriptFrame));
+        var confidences = document.RootElement.GetProperty("results").EnumerateArray()
+            .Select(r => r.GetProperty("alternatives")[0].GetProperty("confidence").GetSingle())
+            .ToArray();
+        var expected = confidences.Average();
+
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(SpeechmaticsFakeServer.ReadFrame(SpeechmaticsFakeServer.FinalTranscriptFrame));
+
+        var recognizer = BuildRecognizer();
+        var results = await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Confidence.Should().BeApproximately(expected, 0.0001f);
     }
 
     [Fact]

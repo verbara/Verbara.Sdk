@@ -154,6 +154,43 @@ internal sealed class SpeechmaticsEndOfStreamMessage
     [JsonPropertyName("last_seq_no")] public int LastSeqNo { get; set; }
 }
 
+/// <summary>
+/// The session greeting. Modelled for one field: the language pack's <c>word_delimiter</c>, which is
+/// the vendor's own answer to "what separates two tokens in this language" and was previously read by
+/// nothing — the recognizer discarded every non-transcript message.
+/// </summary>
+internal sealed class SpeechmaticsRecognitionStartedMessage
+{
+    [JsonPropertyName("message")] public string Message { get; set; } = string.Empty;
+
+    [JsonPropertyName("language_pack_info")] public SpeechmaticsLanguagePackInfo? LanguagePackInfo { get; set; }
+}
+
+/// <summary>
+/// The <c>language_pack_info</c> object nested in <c>RecognitionStarted</c>. Confirmed live on
+/// 2026-08-18 as <c>{language_description, word_delimiter, writing_direction, itn, adapted}</c>; only
+/// the delimiter is modelled, because only it changes what this client emits.
+/// </summary>
+internal sealed class SpeechmaticsLanguagePackInfo
+{
+    /// <summary>
+    /// What joins two tokens in this language pack — <c>" "</c> for English and Spanish, and empty for
+    /// a language that does not space-separate words. Nullable so "the vendor did not say" stays
+    /// distinguishable from "the vendor said empty", which are different instructions.
+    /// </summary>
+    [JsonPropertyName("word_delimiter")] public string? WordDelimiter { get; set; }
+}
+
+/// <summary>
+/// The <c>metadata</c> object on a transcript message. <c>transcript</c> is the vendor's own assembly
+/// of the segment — the authority this client now yields, rather than rebuilding the segment from the
+/// token stream.
+/// </summary>
+internal sealed class SpeechmaticsTranscriptMetadata
+{
+    [JsonPropertyName("transcript")] public string? Transcript { get; set; }
+}
+
 internal sealed class SpeechmaticsTranscriptMessage
 {
     /// <summary>
@@ -164,6 +201,14 @@ internal sealed class SpeechmaticsTranscriptMessage
     [JsonPropertyName("message")] public string Message { get; set; } = string.Empty;
 
     [JsonPropertyName("results")] public SpeechmaticsResult[]? Results { get; set; }
+
+    /// <summary>
+    /// Carries the vendor's assembled <c>transcript</c> for this segment. Present on every
+    /// <c>AddTranscript</c> and <c>AddPartialTranscript</c> observed live on 2026-08-18, and on both
+    /// committed fixtures — but modelled as nullable, because a client that yields nothing when the
+    /// vendor omits a field it usually sends is a worse failure than one that falls back.
+    /// </summary>
+    [JsonPropertyName("metadata")] public SpeechmaticsTranscriptMetadata? Metadata { get; set; }
 
     /// <summary>
     /// The vendor's symbolic code on an <c>Error</c> or <c>Warning</c> message —
@@ -179,6 +224,17 @@ internal sealed class SpeechmaticsTranscriptMessage
 internal sealed class SpeechmaticsResult
 {
     [JsonPropertyName("alternatives")] public SpeechmaticsAlternative[]? Alternatives { get; set; }
+
+    /// <summary>The token's kind — <c>word</c>, <c>punctuation</c>. Observed live on 2026-08-18.</summary>
+    [JsonPropertyName("type")] public string? Type { get; set; }
+
+    /// <summary>
+    /// <c>"previous"</c> when this token binds to the one before it with no separator — how the vendor
+    /// says that a full stop belongs against the last word rather than a delimiter away from it. Only
+    /// consulted by the local-assembly fallback; the vendor's own <c>metadata.transcript</c> has
+    /// already applied it.
+    /// </summary>
+    [JsonPropertyName("attaches_to")] public string? AttachesTo { get; set; }
 }
 
 internal sealed class SpeechmaticsAlternative
@@ -201,6 +257,9 @@ internal sealed class SpeechmaticsAlternative
 [JsonSerializable(typeof(SpeechmaticsAudioFormat))]
 [JsonSerializable(typeof(SpeechmaticsTranscriptionConfig))]
 [JsonSerializable(typeof(SpeechmaticsEndOfStreamMessage))]
+[JsonSerializable(typeof(SpeechmaticsRecognitionStartedMessage))]
+[JsonSerializable(typeof(SpeechmaticsLanguagePackInfo))]
+[JsonSerializable(typeof(SpeechmaticsTranscriptMetadata))]
 [JsonSerializable(typeof(SpeechmaticsTranscriptMessage))]
 [JsonSerializable(typeof(SpeechmaticsResult))]
 [JsonSerializable(typeof(SpeechmaticsAlternative))]

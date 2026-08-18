@@ -24,11 +24,11 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Speechmatics;
 /// (<c>docs/guides/provider-recording-protocol.md</c> §7 — ToS §10.3 assigns the customer all IP in
 /// Transcripts, the better-covered of the two directions), so unlike Deepgram and AssemblyAI its
 /// terms are <em>not</em> the reason these frames are authored rather than captured — and as of
-/// 2026-08-16 neither is a missing credential. A working one exists and has opened a live session
-/// against this surface; that session was opened to establish how the client must authenticate and
-/// streamed no audio, so no transcript frame was ever elicited and nothing of the vendor's output was
-/// stored. The reason is simply that no capture run has been made. A real capture is a demonstrably
-/// reachable upgrade path here. Until then the frames take §7's documentation-derived route:
+/// 2026-08-18 neither is a missing credential. A live session has streamed audio through this surface
+/// and elicited real transcript frames (§4.7); they were read to settle how the segment is assembled
+/// and were deliberately not stored, so nothing of the vendor's output is committed here. The reason
+/// is simply that no capture run has been made. A real capture is a demonstrably reachable upgrade
+/// path here. Until then the frames take §7's documentation-derived route:
 /// <c>class: "synthetic"</c>, <c>terms.verdict: "not-applicable"</c>, plus a <c>source_schema</c>
 /// block.
 /// </para>
@@ -37,9 +37,10 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Speechmatics;
 /// already-assembled <c>transcript</c>, per-result <c>type</c> / timings / <c>attaches_to</c> /
 /// <c>is_eos</c> / <c>volume</c>, and per-alternative <c>language</c> / <c>display</c> /
 /// <c>speaker</c> / <c>tags</c> — where the previous builders emitted a two-value object. The final
-/// frame ends on a punctuation result, which is what makes visible that the recognizer rebuilds the
-/// segment by space-joining <c>results[*].alternatives[0].content</c> instead of reading
-/// <c>metadata.transcript</c>.
+/// frame ends on a punctuation result marked <c>attaches_to: "previous"</c>, which is what made
+/// visible that the recognizer rebuilt the segment by space-joining
+/// <c>results[*].alternatives[0].content</c> instead of reading <c>metadata.transcript</c>. That
+/// defect is fixed; the frame keeps the punctuation result because it is now the negative control.
 /// </para>
 /// </remarks>
 internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
@@ -65,6 +66,14 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
 
     /// <summary>Messages the server emits after <c>RecognitionStarted</c>.</summary>
     public List<string> ResultMessages { get; } = [];
+
+    /// <summary>
+    /// The greeting the session sends, defaulting to the recorded frame verbatim. Settable because
+    /// <c>language_pack_info.word_delimiter</c> is now read by the client: a language pack declaring
+    /// something other than a space is a real vendor configuration, and a fake that could only ever
+    /// send one delimiter could not tell "reads the declaration" apart from "hard-codes a space".
+    /// </summary>
+    public string RecognitionStartedJson { get; set; } = BuildRecognitionStartedJson();
 
     /// <summary>The first text frame received from the client (expected: <c>StartRecognition</c>).</summary>
     public string? ReceivedStartRecognitionJson { get; private set; }
@@ -194,7 +203,7 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
         }
 
         // Respond with RecognitionStarted.
-        var started = Encoding.UTF8.GetBytes(BuildRecognitionStartedJson());
+        var started = Encoding.UTF8.GetBytes(RecognitionStartedJson);
         try
         {
             await ws.SendAsync(started.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);

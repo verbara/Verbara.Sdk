@@ -1071,42 +1071,86 @@ commit.
       fixture was right; nothing in it changes. Upgrade its provenance sidecar's evidence class the way
       §5.9 does for the Deepgram TTS sidecars — from documentation-derived to "conforms to what the
       service actually sends"
-- [ ] 4.7 `src/Verbara.Sdk.VoiceAi.Stt/Speechmatics/SpeechmaticsSpeechRecognizer.cs` line 170 —
+- [x] 4.7 `src/Verbara.Sdk.VoiceAi.Stt/Speechmatics/SpeechmaticsSpeechRecognizer.cs` line 170 —
       `if (sb.Length > 0 && !string.IsNullOrEmpty(alt.Content)) sb.Append(' ');` space-joins every token
       unconditionally. Three vendor-supplied signals are ignored; each is a separate sub-task below.
       **Closes when** the committed fixtures assemble to text with no spurious separator
-- [ ] 4.8 `word_delimiter` — sent on `RecognitionStarted` inside `language_pack_info`, and discarded:
+- [x] 4.8 `word_delimiter` — sent on `RecognitionStarted` inside `language_pack_info`, and discarded:
       the recognizer drops every non-transcript message and `VoiceAiSttJsonContext.cs` has no DTO for
       the start message at all. Add the DTO, capture the delimiter at session start, and join with it.
       `Tests/Verbara.Sdk.VoiceAi.Stt.Tests/Recordings/speechmatics-stt/recognition-started-frame.json`
       already carries `"word_delimiter": " "` nested inside `language_pack_info`, and §4.6 confirms that
       shape against the live session
-- [ ] 4.9 `attaches_to` — `SpeechmaticsResult` in
+- [x] 4.9 `attaches_to` — `SpeechmaticsResult` in
       `src/Verbara.Sdk.VoiceAi.Stt/Internal/VoiceAiSttJsonContext.cs` models only `alternatives`. Add
       `type` and `attaches_to`; a result marked as attaching to its predecessor gets no leading
       delimiter. `.../Recordings/speechmatics-stt/add-transcript-frame.json` already carries a
       `"type": "punctuation"` result with `"attaches_to": "previous"`
-- [ ] 4.10 `metadata.transcript` — `SpeechmaticsTranscriptMessage` models only `message` and `results`,
+- [x] 4.10 `metadata.transcript` — `SpeechmaticsTranscriptMessage` models only `message` and `results`,
       while the vendor publishes the assembled segment. Decide and record: the vendor's assembled text
       is the authority for the transcript, and local assembly survives only for what that text does not
       carry. The same fixture carries `"transcript": "El equipo revisó el informe esta mañana."`
-- [ ] 4.11 Confidence today is the mean of `alternatives[0].confidence` across results. If the transcript
+- [x] 4.11 Confidence today is the mean of `alternatives[0].confidence` across results. If the transcript
       text stops coming from local assembly, confidence still must — say so in the code and in the
       change record rather than letting it quietly change meaning
-- [ ] 4.12 Regression test for the reported shape, asserted against the committed fixture and its actual
+- [x] 4.12 Regression test for the reported shape, asserted against the committed fixture and its actual
       text: `.../Recordings/speechmatics-stt/add-transcript-frame.json` carries
       `"transcript": "El equipo revisó el informe esta mañana."`, so the assembled segment must end
       `… mañana.` and not `… mañana .`. Use that sentence, or author a new fixture and say so — do not
       assert a sentence no committed fixture contains
-- [ ] 4.13 A second test with a non-space delimiter — a language pack declaring an empty
+- [x] 4.13 A second test with a non-space delimiter — a language pack declaring an empty
       `word_delimiter` assembles with no separators — so the fix is *use the vendor's delimiter* and not
       *special-case punctuation*
-- [ ] 4.14 The new and widened DTOs from §2.2, §2.4, §3.8 and §4.8–§4.10 — plus the unmodelled `Info`
+- [x] 4.14 The new and widened DTOs from §2.2, §2.4, §3.8 and §4.8–§4.10 — plus the unmodelled `Info`
       frame observed in §4.5, which is routed to that change and not modelled here — land inside the
       reachability
       closure `provider-dto-robustness-fences` counts (its §1.2 figures) and inside its coverage guard
       (its §8.3). Flag it in this change's record so those numbers are re-derived; **do not edit that
       change's artifacts from here**
+      **Closed 2026-08-18 as one PR — and the live probe that opened it changed two of the decisions.**
+      A session was streamed through `wss://eu2.rt.speechmatics.com/v2/en` carrying one synthesised
+      English utterance, and every transcript frame it produced was read before a line was written.
+      Nothing of the vendor's output was stored, so the fixtures stay `class: "synthetic"`; what the
+      session settled is the *shape*, which is now recorded in all four provenance sidecars.
+      **What it confirmed.** `word_delimiter` arrives nested in `language_pack_info` exactly as the
+      fixture claims; `attaches_to: "previous"` arrives on the punctuation result; `metadata.transcript`
+      is present on **every** `AddTranscript` **and** `AddPartialTranscript`. The defect reproduces
+      live: the vendor's own `"…this morning, and it"` reached the caller as `"…this morning , and it"`.
+      **§4.10 decided: the vendor's `metadata.transcript` is the transcript, trimmed.** The trim is not
+      cosmetic and not a widening of the rule — finals arrive glued (`"The "`, `"team reviewed "`,
+      `"…looks good. "`) so they concatenate without a separator, and a per-result value carrying that
+      trailing space would make this the only provider in the SDK that emits one. Local assembly
+      survives strictly as the fallback for a message with no `metadata.transcript`, and is fixed there
+      too (delimiter + `attaches_to`).
+      **The finding that mattered most, and it was a failure of this change's own tests.** With all
+      three signals implemented, a mutation that ignored `metadata.transcript` entirely and always
+      assembled locally left **every test green** — because on the committed fixtures the vendor's
+      trimmed text and the corrected local assembly agree character for character, and across eleven
+      live messages they agreed too. The §4.10 authority rule was therefore unobservable: exactly the
+      silent-pass shape this change exists to remove, reproduced inside it. A test built on a
+      *constructed* divergence now stands behind the rule, and it states in its own remarks that no
+      measured frame diverges — so no reader can take it as evidence that Speechmatics rewrites
+      segments. All three signals are now individually mutation-checked: ignore the vendor transcript,
+      `attaches_to`, or the declared delimiter and exactly one distinct test fails for each.
+      **A test that pinned the defect as behaviour had to be inverted**, not merely supplemented:
+      `StreamAsync_ShouldSpaceJoinTokens_WhenFrameCarriesPunctuationAttachedToPrevious` asserted the
+      space-join deliberately, because §4.5 was test-only. It is now
+      `StreamAsync_ShouldYieldTheVendorsAssembledSegment_…` and keeps its negative control — the
+      recording must still exercise the divergence, or the assertion proves nothing.
+      **§4.11 held:** confidence still comes from `alternatives[0].confidence`, averaged, and a test
+      pins that separating it from the text walk did not change what the number means.
+      **§4.14 is a flag, not code:** the four new DTOs — `SpeechmaticsRecognitionStartedMessage`,
+      `SpeechmaticsLanguagePackInfo`, `SpeechmaticsTranscriptMetadata`, plus `type`/`attaches_to` on
+      `SpeechmaticsResult` — enter the reachability closure `provider-dto-robustness-fences` counts
+      (its §1.2) and its coverage guard (its §8.3); those figures must be re-derived there. Not edited
+      from here. The unmodelled `Info` frame is likewise routed there, and the live session sharpens
+      what it is: two arrived, carrying `{type, reason, region, quota, usage, rate_limiting_enabled,
+      burst_limit, burst_rate, sustained_limit, sustained_rate, growth_rate_1m, growth_rate_1m_limit,
+      growth_rate_avg_5m, growth_rate_avg_5m_limit, last_updated}` — a rate-limiting telemetry frame,
+      not an error. A second unmodelled kind appeared that no task names: **`AudioAdded`**, 29 of them,
+      `{message, seq_no}` — the per-chunk acknowledgement. Neither is a result nor a failure and both
+      fall through the existing skip, so nothing is broken; both belong in the DTO-fence census.
+      **No `PackageVersion` bump** — 2.4.0 stands, `[Unreleased]` accumulates.
 - [x] 4.15 **AssemblyAI STT — the seventh defect, and the one that makes the swallow a class.**
       `src/Verbara.Sdk.VoiceAi.Stt/AssemblyAi/AssemblyAiSpeechRecognizer.cs:137` reads
       `if (!string.Equals(msg.Type, "Turn", StringComparison.Ordinal)) continue;` — structurally the
