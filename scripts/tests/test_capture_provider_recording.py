@@ -445,7 +445,7 @@ class BuildSidecarShapeTests(unittest.TestCase):
         self.assertEqual("audio/wav", self._sidecar(media_type="audio/wav")["media_type"])
 
     def test_ShouldCarryTheGivenSourceAudio_WhenTheSurfaceSubmitsText(self):
-        block = capture.tts_source_audio("eleanor")
+        block = capture.tts_source_audio("jack")
 
         self.assertEqual(block, self._sidecar(source_audio=block)["source_audio"])
 
@@ -461,13 +461,13 @@ class BuildSidecarShapeTests(unittest.TestCase):
 class TtsSourceAudioTests(unittest.TestCase):
     def test_ShouldDeclareOriginNotApplicable(self):
         # Protocol section 6 has no "input text" field; the azure-tts capture is the precedent.
-        self.assertEqual("not-applicable", capture.tts_source_audio("eleanor")["origin"])
+        self.assertEqual("not-applicable", capture.tts_source_audio("jack")["origin"])
 
     def test_ShouldNameTheSentenceAndTheVoice(self):
-        block = capture.tts_source_audio("eleanor")
+        block = capture.tts_source_audio("jack")
 
         self.assertIn(capture.TTS_INPUT_TEXT, block["description"])
-        self.assertIn("'eleanor'", block["description"])
+        self.assertIn("'jack'", block["description"])
         self.assertIn("no custom or cloned voice", block["description"])
 
 
@@ -775,7 +775,7 @@ class SpeechmaticsTtsPlanTests(_EnvScopedTestCase):
         plan = capture.speechmatics_tts_plan(b"")
 
         self.assertEqual(
-            "https://preview.tts.speechmatics.com/generate/eleanor", plan["url"])
+            "https://preview.tts.speechmatics.com/generate/jack", plan["url"])
 
     def test_ShouldPostTheShippedOptionDefaults(self):
         # A capture taken at non-default options is a capture of a request production never sends.
@@ -806,7 +806,7 @@ class SpeechmaticsTtsPlanTests(_EnvScopedTestCase):
         plan = capture.speechmatics_tts_plan(b"")
 
         self.assertEqual("not-applicable", plan["source_audio"]["origin"])
-        self.assertIn("'eleanor'", plan["source_audio"]["description"])
+        self.assertIn("'jack'", plan["source_audio"]["description"])
 
     def test_ShouldCarryTheSection7VerdictAndItsCondition(self):
         os.environ["SPEECHMATICS_API_KEY"] = "sm-key"

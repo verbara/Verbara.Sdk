@@ -31,7 +31,7 @@ namespace Verbara.Sdk.VoiceAi.Tts.Tests.Speechmatics;
 public class SpeechmaticsSpeechSynthesizerTests
 {
     private const string ApiKey = "test-key";
-    private const string Voice = "eleanor";
+    private const string Voice = SpeechmaticsVoices.Jack;
 
     /// <summary>The route the vendor actually serves — the voice is a path segment, not a body field.</summary>
     private const string SynthesisPath = "/generate/" + Voice;
@@ -43,7 +43,7 @@ public class SpeechmaticsSpeechSynthesizerTests
     private const string RecordedMediaType = "audio/wav";
 
     /// <summary>Length of the capture, as its sidecar records it.</summary>
-    private const int RecordedLength = 72236;
+    private const int RecordedLength = 73772;
 
     /// <summary>The synthesizer's own read buffer — <c>SpeechmaticsSpeechSynthesizer.ChunkSize</c>.</summary>
     private const int ChunkSize = 8192;
@@ -110,7 +110,7 @@ public class SpeechmaticsSpeechSynthesizerTests
 
         await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
-        // Matching is the assertion: the stub declares POST /generate/eleanor and nothing else, so a
+        // Matching is the assertion: the stub declares POST /generate/jack and nothing else, so a
         // request that put the voice anywhere but the path would land in UnmatchedRequests.
         var request = server.ReceivedRequests.Should().ContainSingle().Subject;
         request.Method.Should().Be("POST");

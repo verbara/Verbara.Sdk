@@ -1039,7 +1039,7 @@ def speechmatics_tts_plan(source_pcm: bytes) -> dict:
     """Request plan for the Speechmatics preview TTS surface.
 
     Reproduces `SpeechmaticsSpeechSynthesizer.SynthesizeAsync` at the shipped `SpeechmaticsOptions`
-    defaults — voice `eleanor`, language `en`, 16 kHz — because those are the values a caller who
+    defaults — voice `jack`, language `en`, 16 kHz — because those are the values a caller who
     configures nothing sends. `source_pcm` is ignored: this surface's input is text.
     """
     api_key = _require_env("SPEECHMATICS_API_KEY")
@@ -1049,7 +1049,12 @@ def speechmatics_tts_plan(source_pcm: bytes) -> dict:
     # This plan previously carried the body-field form, i.e. the capture instrument reproduced the
     # very defect it existed to detect and could only ever have recorded a 404. Keep it matching
     # what SpeechmaticsSpeechSynthesizer actually sends.
-    voice = "eleanor"
+    #
+    # The voice was `eleanor` until 2026-08-18, mirroring the SDK default of the day. Live pitch
+    # measurement then showed `eleanor` is not a voice at all: the service answers 200 for any
+    # segment and synthesises the fallback speaker `jack`. The SDK default moved to `jack`; this
+    # plan follows it, because its contract is to send what a caller who configures nothing sends.
+    voice = "jack"
 
     # Field names and order from SpeechmaticsTtsRequest; compact, as System.Text.Json writes it.
     body = json.dumps(
@@ -1093,7 +1098,7 @@ def speechmatics_tts_plan(source_pcm: bytes) -> dict:
         ),
         "notes": (
             "Captured by scripts/capture-provider-recording.py, which sends the same compact "
-            "JSON body the SDK sends at its shipped defaults (voice eleanor, language en, 16 kHz "
+            "JSON body the SDK sends at its shipped defaults (voice jack, language en, 16 kHz "
             "— SpeechmaticsTtsRequest's field names and order). One short sentence, per protocol "
             "§7's condition that synthesized-audio captures stay minimal: §10.3's express IP "
             "assignment is written about Transcripts, and the TTS direction rests on §10.5's "

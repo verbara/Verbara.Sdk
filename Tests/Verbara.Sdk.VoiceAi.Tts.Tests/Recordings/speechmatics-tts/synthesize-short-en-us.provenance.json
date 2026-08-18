@@ -5,13 +5,13 @@
   "product": "Speechmatics — text to speech (preview)",
   "endpoint": "POST https://preview.tts.speechmatics.com/generate/{voice}",
   "api_version": "preview",
-  "captured_utc": "2026-08-17",
+  "captured_utc": "2026-08-18",
   "media_type": "audio/wav",
-  "bytes": 72236,
-  "sha256": "0632b6a17c9654a4d876ca46998697892d179bf1130f2a04017ad00d74c19509",
+  "bytes": 73772,
+  "sha256": "04b69744c9c64b0c6b624066ffa0b285c95cf6b3d650fb4f226de94056b9aa16",
   "source_audio": {
     "origin": "not-applicable",
-    "description": "TTS input is a fixed English sentence authored for this fixture ('The system recorded the request successfully.') — no source recording exists, and the sentence names no real person, organisation or number. Rendered by the prebuilt catalogue voice 'eleanor'; no custom or cloned voice was used.",
+    "description": "TTS input is a fixed English sentence authored for this fixture ('The system recorded the request successfully.') — no source recording exists, and the sentence names no real person, organisation or number. Rendered by the prebuilt catalogue voice 'jack'; no custom or cloned voice was used.",
     "license": "n/a"
   },
   "redaction": {
@@ -23,7 +23,7 @@
   "terms": {
     "verdict": "permitted-with-conditions",
     "basis": "docs/guides/provider-recording-protocol.md section 7 (Speechmatics TTS)",
-    "checked_utc": "2026-08-17"
+    "checked_utc": "2026-08-18"
   },
-  "notes": "72236 bytes of synthesized audio with a RIFF/WAVE container. Captured by scripts/capture-provider-recording.py, which sends the same compact JSON body the SDK sends at its shipped defaults (voice eleanor, language en, 16 kHz — SpeechmaticsTtsRequest's field names and order). One short sentence, per protocol §7's condition that synthesized-audio captures stay minimal: §10.3's express IP assignment is written about Transcripts, and the TTS direction rests on §10.5's weaker derivatives language, so this fixture is permitted by inference rather than by an express grant. Re-read §10 before re-capturing."
+  "notes": "73772 bytes of synthesized audio with a RIFF/WAVE container. Captured by scripts/capture-provider-recording.py, which sends the same compact JSON body the SDK sends at its shipped defaults (voice jack, language en, 16 kHz — SpeechmaticsTtsRequest's field names and order). One short sentence, per protocol §7's condition that synthesized-audio captures stay minimal: §10.3's express IP assignment is written about Transcripts, and the TTS direction rests on §10.5's weaker derivatives language, so this fixture is permitted by inference rather than by an express grant. Re-read §10 before re-capturing."
 }

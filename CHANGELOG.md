@@ -4,6 +4,62 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — the shipped Speechmatics default voice was not a voice, and one Deepgram id does not exist
+
+Both catalogs were transcribed from vendor documentation on 2026-05-03 and nothing re-read them
+afterwards. Two entries had rotted by August, and neither was findable by reading the code: nothing
+in the build compared a string constant against the roster of the service that receives it.
+
+- **`SpeechmaticsOptions.Voice` defaulted to `eleanor`, which the service does not offer.** The
+  vendor publishes four voices — `sarah`, `theo`, `megan`, `jack` — and rejects none of them nor
+  anything else: `POST /generate/{anything}` answers `200 audio/wav`. Byte comparison cannot settle
+  what it synthesised, because the service is stochastic and one voice asked twice for one sentence
+  returns different audio of different length. Median fundamental frequency can: the four documented
+  ids resolve to four speakers at **88 / 109 / 180 / 195 Hz** with a within-voice spread under 5 Hz,
+  while `eleanor` measures **92 Hz** — indistinguishable from `jack` and from two deliberate
+  nonsense segments. `eleanor` was never being honoured; every caller on the default was already
+  hearing Jack. **The default is now `jack`, so the configuration describes what the service does
+  and the audio callers receive is unchanged.**
+- **The account-scoped `GET /voices` is not a usable roster and is no longer treated as one.** It
+  named a single voice while three others demonstrably synthesised as distinct speakers. This
+  supersedes the reading recorded earlier in this release.
+- **`DeepgramVoices.Helios` carried `aura-2-helios-en`, which returns `400 "No such model/version
+  combination found."`** There is no Aura 2 Helios; the voice exists only in Aura 1. The constant is
+  now `HeliosLegacy = "aura-helios-en"`, which synthesises. Deepgram fails loudly on a bad id, so
+  this one was always going to surface at runtime — unlike the Speechmatics default, which could
+  not. **`Helios` itself stays, as an `[Obsolete]` alias carrying that same working id**: dropping a
+  public `const` is a binary break (ApiCompat `CP0002` against the 2.1.0 baseline), so callers who
+  kept the old name keep compiling, and recompiling repairs the call instead of only renaming it.
+
+### Added — the catalogs are now checked against the vendors that have to accept them
+
+- **`SpeechmaticsVoices`** — the four ids, each carrying its measured pitch, plus `IsKnown`. The
+  comparison is **ordinal on purpose**: measured the same day, `sarah` returns the 180 Hz speaker
+  while `Sarah` and `SARAH` return the ~90 Hz fallback, so case-insensitive matching would wave
+  through a value the API silently ignores.
+- **`SpeechmaticsOptionsValidator` now validates the voice at startup**, because the service never
+  will. `SpeechmaticsOptions.AllowUnlistedVoice` opts out for callers who need a voice added to the
+  preview after this release.
+- **`VoiceCatalogConformanceTests`** (`Category=Realtime`, credential-gated, skips rather than
+  passes when unconfigured) — walks every `public const string` each catalog declares and checks it
+  against the live vendor roster: `GET /v1/ai/voice/list` for LMNT, `GET /v1/models` for Deepgram.
+  Speechmatics has no usable roster, so that surface is checked acoustically instead, carrying both
+  controls: the four voices must separate, and an unknown segment must land on the fallback. Verified
+  by re-injecting both historical defects and watching three of the four tests go red.
+
+### Changed — two catalogs now say what they are
+
+- **`DeepgramVoices`** gains 16 measured ids and closes the 2026-05-03 `TODO(multilingual)`: one
+  masculine and one feminine voice for German, French, Italian, Japanese and Dutch, read from the
+  live catalog, plus Colombian, Latin American and Peninsular Spanish. Live counts are recorded
+  (en=53, es=17, it=9, nl=9, de=7, ja=5, fr=2) so the subset is visibly a subset.
+- **`LmntVoices`** states plainly that its six entries are a curated telephony subset of the
+  vendor's 44 system voices, not the roster — any id from the vendor's list is supported. All six
+  were re-checked live and still exist.
+- The Speechmatics capture plan in `scripts/capture-provider-recording.py` follows the new default,
+  and the fixture beside it was re-captured at `/generate/jack`.
+
+
 ### Added — two governance guards so provider conformance stops depending on memory
 
 Every wire defect fixed in this release shipped past a green suite, and two of the habits that would

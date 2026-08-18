@@ -102,11 +102,14 @@ returns `404` (identically to a route that does not exist, because that is what 
 `401` on the same host. Fixed. The `language` and `sample_rate` body fields were later observed
 accepted as sent, and on **2026-08-18** the path-vs-body conflict was measured directly: the **path
 wins and the body `voice` field is ignored**, so the field the route fix dropped was one the vendor
-was never reading. Separately, and on a different axis from the route: **the voice segment has no
-control that can fail.** Every segment tried returns `200 audio/wav`, including nonsense ones. The
-*route* control does fail correctly — `/generatex/{voice}`, `/generate` and `/generate/` are all
-`404` — so this surface's route evidence class stands; what is uncontrolled is a path *parameter*,
-which is why the class column is unchanged and this paragraph exists.
+was never reading. Separately, and on a different axis from the route: **the voice
+segment has no control that can fail at the transport layer.** Every segment tried returns
+`200 audio/wav`, including nonsense ones. The *route* control does fail correctly —
+`/generatex/{voice}`, `/generate` and `/generate/` are all `404` — so this surface's route evidence
+class stands; what was uncontrolled is a path *parameter*. On **2026-08-18** a control was found for
+it one layer up: the speaker. Median fundamental frequency separates the four documented voices at
+88 / 109 / 180 / 195 Hz with a within-voice spread under 5 Hz, and every unrecognised segment lands
+on the 88 Hz speaker. That is now an automated check — see *Voice catalogs are checked against the vendor* below.
 
 **Cartesia TTS** — three defects, and the documented one was the least of them. The shipped request
 omitted `context_id`, so the endpoint answered an error and sent no audio; the client half-closed
@@ -486,6 +489,33 @@ option as the declared rate fails exactly 1 test and nothing else, removing the 
 that rate assertion still passes, and sending the tail short fails 3 — a strict subset of those 4, since
 padding only concerns the last message. The pre-fix client fails 5, the union of the first two.
 
+## Voice catalogs are checked against the vendor — 2026-08-18
+
+Three providers ship a voice identifier the caller can rely on without looking anything up: a
+default (`SpeechmaticsOptions.Voice`, `LmntTtsOptions.Voice`, `DeepgramTtsOptions.Model`) and, for
+two of them, a catalog of named constants. All of it was transcribed from vendor documentation on
+2026-05-03. Nothing re-read it afterwards, and nothing in the build compares such a constant with
+the roster of the service that has to accept it. Two entries had rotted by August:
+
+- `SpeechmaticsOptions.Voice` shipped the default "eleanor" — **not a voice**. The route answers
+  `200 audio/wav` for it anyway, synthesised by the fallback speaker.
+- `DeepgramVoices.Helios` shipped the id "aura-2-helios-en" — **`400`**, "No such model/version
+  combination found." Helios exists only in Aura 1.
+
+The two failed differently, and the difference is the whole point. Deepgram rejects a bad id, so
+that defect was always going to surface the first time anyone called it. Speechmatics does not, so
+`eleanor` shipped, was captured into a fixture, was probed twice, and still read as working — the
+status code says `200` and the body is valid audio. Only *who is speaking* distinguishes the two
+cases, and no HTTP-level assertion can reach that.
+
+`VoiceCatalogConformanceTests` (`Category=Realtime`, credential-gated) now walks every
+`public const string` the catalogs declare and checks it live: membership in `GET /v1/ai/voice/list`
+for LMNT and `GET /v1/models` for Deepgram, and for Speechmatics — which has no usable roster — a
+pitch measurement carrying both controls, that the four voices separate and that an unknown segment
+lands on the fallback. It skips when the credential is absent, because a green run without a key
+would reproduce exactly the failure it exists to catch. It was verified by re-injecting both
+defects and watching three of its four tests go red.
+
 ## The silent-failure class, closed — 2026-08-17
 
 Every *Open* marker above that read "ADR-0049 D1" pointed at one missing decision: what a client should
@@ -557,11 +587,17 @@ Named here rather than left as absence, because absence is what this file exists
   different hash), and byte length only becomes one after the within-voice spread is measured
   (lengths move in exact 1536-B steps and the spread reaches 4 608 B, so single samples per arm
   compare noise). With six samples per arm the ranges separate and **no sample ever landed in the
-  opposite voice's range**. What is open now is that **the voice segment cannot fail**: unrecognised
-  segments return `200 audio/wav` rather than an error, apparently falling back to whatever voice
-  the account is entitled to, so a misconfigured `Voice` degrades silently and the caller is never
-  told. The vendor does expose an authoritative, credential-gated `GET /voices`; the client does not
-  consult it. This is route-independent — the route control fails correctly.
+  opposite voice's range**. **The voice segment still cannot fail on the wire** — unrecognised
+  segments return `200 audio/wav` rather than an error — but as of **2026-08-18** what it falls back
+  *to* is measured rather than supposed: the ~88 Hz speaker `jack`, identically for `eleanor`, for
+  two nonsense segments and for mis-cased forms of real ids. Two consequences were acted on. The
+  shipped default was `eleanor`, which is not one of the vendor's four voices, so every caller on
+  the default had been served `jack` all along; the default now *says* `jack`, leaving the audio
+  unchanged. And the check the wire will not perform moved into `SpeechmaticsOptionsValidator`,
+  which rejects an unlisted voice at startup unless `AllowUnlistedVoice` is set. The
+  credential-gated `GET /voices` was previously called authoritative here; it is not, and the client
+  is right not to consult it — it named one voice while three others synthesised as demonstrably
+  distinct speakers. This is route-independent — the route control fails correctly.
 - **AssemblyAI STT** — route **not controllable**, which is different from unprobed. Measured
   2026-08-16, an undocumented path on this host completed the upgrade and served a normal session, so
   the wrong-path arm cannot fail and therefore controls nothing; the `404` recorded earlier in the
