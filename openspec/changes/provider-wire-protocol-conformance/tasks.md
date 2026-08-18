@@ -210,7 +210,7 @@ characterised* in §5.5.
       "error":"invalid_api_key","code":1008}` then close `1008`, so ElevenLabs is an **in-band**
       validation surface for the ADR-0049 scoreboard (measured, per D3); wrong path → **HTTP 403** at
       the handshake, which distinguishes routes but is not the `404` the other surfaces answer
-- [ ] 2.3b **The Class B fix converts an ignored margin into a live defect, and fixing §2.3/§2.1
+- [x] 2.3b **The Class B fix converts an ignored margin into a live defect, and fixing §2.3/§2.1
       without this ships a new one.** Verified 2026-08-16: **no receive loop in either
       `Verbara.Sdk.VoiceAi.Tts` or `Verbara.Sdk.VoiceAi.Stt` reads `result.EndOfMessage`** — zero
       occurrences. This is not an unknown pattern in the codebase: `AriClient.cs:165`,
@@ -234,6 +234,30 @@ characterised* in §5.5.
       assembly is removed (§2.12, §2.13). **Still open:** the long-input live run per provider. That
       conjunct asks whether the vendor fragments *in practice*, which no fake can answer, so this
       task stays unticked until it is run
+      **Closed 2026-08-18 — the live run was made and the answer is worse than the task assumed: one
+      of the two vendors fragments, and it was already fragmenting on the short probe sentence.**
+      Message size is the exact quantity that decides this, because a message larger than the
+      65 536-byte receive buffer arrives across more than one `ReceiveAsync` with `EndOfMessage`
+      false. Measured per message, no audio retained:
+
+      | provider | input | messages | largest message | over 64 KiB |
+      |---|---|---|---|---|
+      | ElevenLabs | 44 B (the probe sentence) | 4 | **75 015 B** | **1** |
+      | ElevenLabs | 2 085 B | 76 | **293 720 B** | **58** |
+      | Cartesia | 44 B | 17 | 8 681 B | 0 |
+      | Cartesia | 2 085 B | 559 | 8 681 B | 0 |
+
+      **What this changes about the finding's own framing.** This task, and §5.7 before it, described
+      the exposure as length-dependent and unreachable by the short probe sentence. That is false for
+      ElevenLabs: the 44-byte sentence already produced a **75 015-byte** message, 1.14× the buffer.
+      The earlier observation that recorded this surface as "~115 KB across 4 frames, ~29 KB average"
+      is where it hid — the average was reported and the maximum was not, and one of those four frames
+      was over the buffer the whole time. **An average concealed a threshold crossing**, which is the
+      transferable lesson.
+      **Cartesia caps its messages** at 8 681 B and never approaches the buffer, across 559 messages
+      on the long input — so the two Class B surfaces are genuinely different and neither one's
+      behaviour could have been inferred from the other. This is also why the fix that landed in §2.3
+      and §2.1 was repairing a **live** defect on ElevenLabs rather than closing a margin.
 - [x] 2.3c **The fake seam bypasses the credential entirely, at six sites — so no fake can catch an
       auth defect.** Every WebSocket client gates its auth header behind `if (_fakeServerPort is
       null)`, meaning under test the header is never set and the fake never sees one. Verified
@@ -424,7 +448,7 @@ characterised* in §5.5.
       (a) redefine `BaseUri` as an origin/prefix and append `/{voice}`; (b) append the segment to
       whatever the caller supplies; (c) introduce a new option and obsolete `BaseUri`. Record the choice,
       the rejected alternatives by name, and the consequence for a caller who already sets it
-- [ ] 3.3 Everything else the client sends is already correct — bearer auth, content type, sample rate.
+- [x] 3.3 Everything else the client sends is already correct — bearer auth, content type, sample rate.
       Whether `voice` should *also* remain in the body, and whether the `language` and `sample_rate`
       body fields are accepted as sent, are **not verified**: only the route was isolated. Record them as
       not verified; do not resolve them by inference
@@ -436,10 +460,47 @@ characterised* in §5.5.
       and the fix made it harder to reach rather than easier: the client no longer sends `voice` at all,
       so which one wins when path and body disagree cannot be observed without deliberately
       reintroducing the conflict in a probe. Until someone does, that is unknown, not fine
-- [ ] 3.4 The competing hypothesis is closed and must be recorded as closed so it is not reopened: the
+      **Closed 2026-08-18 — the path wins and the body `voice` field is ignored, established in both
+      directions.** The conflict was reintroduced deliberately in a scratchpad probe, as this task
+      required. Getting an answer took three attempts, and the first two refuted their own instrument:
+      (1) **byte identity is not a discriminator on this route** — the same request sent twice returned
+      the same byte count and different SHA-256, so the synthesis is not reproducible bit-for-bit;
+      (2) **byte length is a discriminator, but only after the noise floor is measured** — a first pass
+      compared single samples per arm and produced an incoherent verdict, because lengths move in exact
+      multiples of 1536 B (768 samples, 48 ms at 16 kHz) and the within-voice spread reaches 4 608 B.
+      Six samples per arm, with the within-voice range measured first, made the ranges disjoint:
+      `eleanor` [84 524, 89 132] vs `sarah` [75 308, 76 844]. Then both directions agree — path
+      `eleanor` + body `sarah` landed 5/6 in `eleanor`'s range and **0/6** in `sarah`'s; path `sarah` +
+      body `eleanor` landed 4/6 in `sarah`'s range and **0/6** in `eleanor`'s. The stray samples sit one
+      1536-B chunk outside a range estimated from six draws; **no sample ever crossed to the opposite
+      voice**, which is the statistic that carries the claim. So the client dropping `voice` from the
+      body in §3.1 removed a field the vendor was never reading. No audio bytes were retained.
+- [x] 3.4 The competing hypothesis is closed and must be recorded as closed so it is not reopened: the
       shipped default voice `eleanor` is absent from the vendor's published four-voice list **but
       returns 200**, so the published list is incomplete and `SpeechmaticsOptions.Voice` is fine. One
       delta, not three. Do not change the default
+      **RETRACTION (2026-08-18) — this task's premise is refuted, so the record it asks for must not be
+      written.** The inference was: `eleanor` is absent from the vendor's published four-voice list *but
+      returns 200*, therefore the list is incomplete and the default is fine. The middle step does not
+      hold, because **the route returns `200 audio/wav` for every voice segment tried**, including
+      `does-not-exist` and `zzzzzzzz`. A 200 on this route carries no information about whether a voice
+      exists, so it could never have supported the conclusion — the check that was run was not a check.
+      What the probe found instead, on 2026-08-18:
+      - There is an authoritative listing, **`GET /voices`**, credential-gated (`401` unauthenticated).
+        For the account used here it returns exactly one voice, and it is **not** `eleanor`.
+      - Output size ranges separate `sarah` from the rest, and `eleanor`'s range coincides with both the
+        one listed voice's and `does-not-exist`'s. The economical reading is that an unrecognised
+        segment falls back to the account's entitled voice, and that `eleanor` is taking that path.
+      - `eleanor` therefore appears in **no** source available to us: not the vendor's published list,
+        not the account listing. It has zero evidence behind it, where the listed voice has two.
+      **Consequence, and why the code is not changed here.** A wrong `Voice` fails *silently*: the caller
+      gets 200 and audio in some other voice and is never told. That is the same silent-failure class
+      ADR-0050 addresses. But which value to default to depends on account entitlement, and one
+      account's `/voices` is not grounds for changing a shipped public-API default. Recorded as a live
+      decision for the operator rather than resolved unilaterally; the route-level negative control is
+      unaffected and still fails correctly (`/generatex/{voice}`, `/generate` and `/generate/` all
+      `404`). **Do not** rewrite the `speechmatics-tts` fixture provenance: it records the voice that
+      actually produced those bytes, which remains true.
 - [x] 3.5 `src/Verbara.Sdk.VoiceAi.Tts/Speechmatics/SpeechmaticsOptions.cs` line 23 — the
       `<see href="https://docs.speechmatics.com/tts-api-ref"/>` is a **dead link (404)**. Replace it
       with a live URL or remove the `href`; XML docs ship to consumers of a public MIT package, so a
@@ -686,7 +747,7 @@ characterised* in §5.5.
       property of the metric); and the live `transcript` frames match the field set the fixtures were
       *authored* from, absent `confidence` included, so for that one message the documentation-derived
       route is confirmed against the wire rather than merely against the page
-- [ ] 3.17a **The Cartesia STT fixtures are documentation-derived for a reason that no longer holds,
+- [x] 3.17a **The Cartesia STT fixtures are documentation-derived for a reason that no longer holds,
       and the vendor's `done` frame has been observed but cannot be committed.** The three sidecars
       under `Recordings/cartesia-stt/` state that the blocker is the absence of a capture credential;
       §3.17's live run used one, so that is stale. The real blocker is narrower and now named in the
@@ -701,6 +762,42 @@ characterised* in §5.5.
       to prevent. **Closes when** the capture script grows a WebSocket plan for this surface and the
       `done` frame — and, while the credential is there, the `transcript` and `error` frames — land as
       `class: "recorded"` with the sidecars corrected
+      **Closed 2026-08-18. The capture script speaks WebSocket now, three frames are `recorded`, and
+      the two that are not are each unrecorded for a stated reason.**
+      `scripts/capture-provider-recording.py` gained a minimal RFC 6455 client — written rather than
+      imported, because the module's stdlib-only rule is what keeps it runnable and `websockets`
+      would put it behind a `pip install`. The codec is split from the socket so the parts that fail
+      silently (accept-token derivation, masking, extended lengths, partial frames, continuation
+      finality, refusing a masked server frame) are pure functions under nine unit tests; the script
+      suite is **126 tests, green**. Alongside it, a *session plan*: a request has one response, but a
+      session has several frames of interest and which is which is decided by reading them, so a
+      session plan names frames by a predicate and the capture writes one fixture per frame it
+      actually saw.
+      **Captured live, `class: "recorded"`:** `transcript-frame-final`, `flush-done-frame`,
+      `done-frame` (one paced session) and `error-frame` (a second session driven to its error path
+      by sending a text message the protocol rejects). The fake now answers the terminator with the
+      recorded `done` frame instead of closing bare, which is the consequence this task named, and a
+      test asserts the acknowledgement changes nothing.
+      **Two findings the capture produced that the documentation-derived fixtures had wrong, and
+      neither was reachable without a capture:**
+      1. **`flush_done` carries `is_final` FALSE.** The authored fixture asserted `true`, and its
+         whole stated value was that `true` is the shape a broken type filter leaks through as an
+         empty final result. So the vendor does not send the dangerous shape. The authored frame is
+         **kept**, moved to `flush-done-frame-final-flag.json` and honestly relabelled: the vendor's
+         own docs declare the field, so a filter that trusts it must still survive it, and replacing
+         the only adversarial case with the benign recording would have reduced coverage while
+         looking like an upgrade. The test that needs the adversarial shape now names it explicitly.
+      2. **The service's `words[]` entries and `text` carry a LEADING SPACE** (`" El"`, `" sistema"`)
+         which the authored fixture did not. Field *set* and *types* matched the documentation
+         exactly — so the vendor does honour its own docs on shape — but not the values.
+      **Not captured, and this is the observation rather than a shortfall:** `transcript-frame-interim`
+      stays authored, because `ink-whisper` answered a 3.6-second utterance with a single
+      `is_final: true` transcript in **both** an unpaced session and one paced at real time. Interim
+      frames were not reachable by pacing this utterance; a longer or multi-segment one is the
+      untried next step, and its sidecar now says exactly that instead of the stale "no credential
+      exists". Also recorded from a first run: sending `language=en` against Spanish audio still
+      transcribed correctly and echoed `"language": "en"` back, so that parameter is echoed rather
+      than enforced — the shipped plan sends `es` to match the scenario.
 - [x] 3.18 **AssemblyAI rejects every message shorter than 50 ms, and the client cannot produce longer
       ones.** Measured 2026-08-16: a 20 ms message is answered
       `3007 Input Duration Violation: 20.0 ms. Expected between 50 and 1000 ms`, three of three, and
@@ -788,7 +885,7 @@ characterised* in §5.5.
       lesson is the change's own epistemic rule applied to a header instead of a doc — a vendor
       asserting a media type is evidence about the assertion, not about the bytes. Only the frame walk,
       with `format=mp3` as its control, settled it
-- [ ] 3.7c **The version header the SDK sends is not the version the vendor's docs show — observed
+- [x] 3.7c **The version header the SDK sends is not the version the vendor's docs show — observed
       2026-08-17, not fixed, and the observation belongs here rather than where it was found.**
       `LmntSpeechSynthesizer` sends `lmnt-version: 1.0` (`LmntTtsOptions.ApiVersion`, whose XML docs
       state that default). `docs.lmnt.com`'s *Synthesize speech (bytes)* page shows `1.2` on the same
@@ -809,6 +906,22 @@ characterised* in §5.5.
       sharpens §3.7b rather than softening it. The vendor's media type is right at one format and
       wrong (`…-fp32` over MP3) at another, so it can never be treated as evidence about the bytes;
       only a classifier can.
+      **Closed 2026-08-18 — the comparison was run and it says nothing, so the default is not bumped.**
+      Five arms against `POST /v1/ai/speech/bytes`, every form field held at the SDK's shipped defaults
+      and only the header varied, three runs per arm: `1.0` (shipped), `1.2` (docs), **header omitted
+      entirely**, `9.9`, and `banana`. All five returned **`200`**, all five declared
+      `application/vnd.lmnt.audio-int16`, and all five payloads classified headerless PCM. The null
+      comparison ran first per ADR-0048 A6 and is what makes the negative result readable: three
+      identical requests varied by **8 960 B** in length, a spread as wide as any between-arm
+      difference, so length is not a discriminator on this route and no length claim is made.
+      **What this licenses:** the header produces no observable difference in status, declared media
+      type or payload classification, and — the sharper half — **it admits no control that can fail**:
+      `banana` is accepted exactly like `1.0`. That is the A6 shape again, on a header this time. So
+      the vendor's docs showing `1.2` remains evidence about the documentation only, which is precisely
+      what §3.7b was written to enforce, and bumping `LmntTtsOptions.ApiVersion` would be an unmeasured
+      change dressed as a fix. **What this does not license:** claiming the header is *ignored*. Three
+      dimensions on one route's success path were compared; response semantics on failure paths, or on
+      other routes, were not. Left at `1.0`. No audio bytes were retained — LMNT is `not-cleared`.
 - [x] 3.7d **Speechmatics TTS is the only synthesizer that does not honour the empty-result contract
       its own base class declares — found 2026-08-17 reviewing the `wiremock-http-provider-substrate`
       §4.5 migration, and it is a `src/**` defect, so that test-only change deliberately does not fix

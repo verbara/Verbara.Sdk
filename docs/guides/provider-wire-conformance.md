@@ -99,9 +99,14 @@ kept, because swapping it would be an unmeasured change riding along with a meas
 **Speechmatics TTS** — the voice is selected by **path segment**, not by a body field: `/generate`
 returns `404` (identically to a route that does not exist, because that is what it is),
 `/generate/{voice}` returns `200 audio/wav` — 33 836 B of valid `RIFF`/`WAVE`. Invalid credential
-`401` on the same host. Fixed. **Not** verified on this surface: whether the `language` and
-`sample_rate` body fields are accepted as sent. Only the route was isolated, so only the route is
-claimed.
+`401` on the same host. Fixed. The `language` and `sample_rate` body fields were later observed
+accepted as sent, and on **2026-08-18** the path-vs-body conflict was measured directly: the **path
+wins and the body `voice` field is ignored**, so the field the route fix dropped was one the vendor
+was never reading. Separately, and on a different axis from the route: **the voice segment has no
+control that can fail.** Every segment tried returns `200 audio/wav`, including nonsense ones. The
+*route* control does fail correctly — `/generatex/{voice}`, `/generate` and `/generate/` are all
+`404` — so this surface's route evidence class stands; what is uncontrolled is a path *parameter*,
+which is why the class column is unchanged and this paragraph exists.
 
 **Cartesia TTS** — three defects, and the documented one was the least of them. The shipped request
 omitted `context_id`, so the endpoint answered an error and sent no audio; the client half-closed
@@ -523,11 +528,17 @@ Named here rather than left as absence, because absence is what this file exists
   recorded only to the depth the experiment needed (`is_final`/`text` on Cartesia, `is_final` and the
   alternatives array on Deepgram). **Cartesia's `transcript` and `error` messages are now closed**:
   the query-string run observed both in full and they match the field set the fixtures were authored
-  from. Its end-of-session `{"type":"done"}` frame was observed for the first time in that run and is
-  **not** yet in the fixture tree — the fake still closes on the terminator without acknowledging it,
-  because committing a captured WebSocket frame needs a capture path the canonical capture script does
-  not have yet (it is HTTP-only). Tracked as its own task; an out-of-band capture whose provenance
-  could only cite a harness that was then deleted is not a fixture this repo should carry.
+  from. **Closed 2026-08-18:** the capture script grew a WebSocket session path, and the `transcript`,
+  `flush_done`, `done` and `error` frames are now committed as `class: "recorded"` with the fake
+  answering the terminator from the recording instead of closing bare. Two things the capture
+  corrected, neither reachable without one: the vendor sends **`is_final` false** on `flush_done`
+  where the authored fixture asserted true — so the shape that fixture existed to guard against is
+  one the vendor does not produce, and it is kept separately as an explicitly authored adversarial
+  case rather than deleted — and the `words[]` entries and `text` carry a **leading space** the
+  authored frame did not. Field set and types matched the documentation exactly. Still authored: the
+  **interim** transcript, because `ink-whisper` answered a 3.6-second utterance with a single final
+  transcript in both an unpaced and a real-time-paced session. That is an observation about this
+  utterance, not a claim the service never sends interim frames.
 - **Speechmatics STT** — narrowed twice, and what is left is narrower than it was. A transcript frame
   was first observed live on 2026-08-16, and a fuller session on **2026-08-18** measured: the
   `word_delimiter` the vendor declares inside `RecognitionStarted.language_pack_info`; `attaches_to`
@@ -538,28 +549,49 @@ Named here rather than left as absence, because absence is what this file exists
   15 fields). What stays uncharacterised is the remaining field set of those two, and every message
   type outside `{Info, RecognitionStarted, AddPartialTranscript, AddTranscript, EndOfTranscript,
   AudioAdded, Error}`.
-- **Speechmatics TTS** — the `voice`-in-body question only. The other half of this gap was closed on
-  2026-08-17: a capture sent the shipped defaults' whole body — `text`, `language` **and**
-  `sample_rate` — to `/generate/{voice}` and was answered `200 audio/wav`, so those two fields are
-  accepted as sent, by observation rather than inference. What remains unmeasured is which wins when
-  path and body disagree about the voice, and the route fix made it *harder* to reach: the client no
-  longer sends `voice` at all, so the conflict has to be reintroduced deliberately in a probe before
-  anything can be said about it.
+- **Speechmatics TTS** — **the `voice`-in-body question is closed; a different gap opened in its
+  place.** Measured 2026-08-18 by reintroducing the conflict deliberately: the path wins in both
+  directions and the body field is ignored. Two instrument refutations came first and are worth
+  keeping, because both would silently produce a wrong answer on any route like this one — byte
+  identity is not a discriminator here (the same request twice returns the same length and a
+  different hash), and byte length only becomes one after the within-voice spread is measured
+  (lengths move in exact 1536-B steps and the spread reaches 4 608 B, so single samples per arm
+  compare noise). With six samples per arm the ranges separate and **no sample ever landed in the
+  opposite voice's range**. What is open now is that **the voice segment cannot fail**: unrecognised
+  segments return `200 audio/wav` rather than an error, apparently falling back to whatever voice
+  the account is entitled to, so a misconfigured `Voice` degrades silently and the caller is never
+  told. The vendor does expose an authoritative, credential-gated `GET /voices`; the client does not
+  consult it. This is route-independent — the route control fails correctly.
 - **AssemblyAI STT** — route **not controllable**, which is different from unprobed. Measured
   2026-08-16, an undocumented path on this host completed the upgrade and served a normal session, so
   the wrong-path arm cannot fail and therefore controls nothing; the `404` recorded earlier in the
   programme came from a **different host** and never applied here. Frames and credential handling
   stand on their own evidence. See ADR-0048 A2 for what follows from a control that cannot fail.
+- **LMNT (HTTP)** — the `lmnt-version` header **admits no control that can fail**, measured
+  2026-08-18. Five values against the same request with every form field held at the shipped
+  defaults — `1.0`, the `1.2` the vendor's docs show, the header **omitted entirely**, `9.9` and
+  `banana` — all returned `200 application/vnd.lmnt.audio-int16` with a headerless PCM payload. The
+  null comparison ran first and is what makes that readable: three identical requests varied by
+  8 960 B, so length discriminates nothing here. The shipped `1.0` is therefore kept; the vendor
+  documenting a newer value is evidence about the documentation, not the wire. Not licensed by this:
+  calling the header *ignored* — only one route's success path was compared, across three dimensions.
 - **LMNT (WebSocket)** — no wrong-path control recorded on this surface. Its credential control was
   run and is what established the in-band validation point, so the gap is route-discrimination
   only.
 - **Azure TTS, both Whisper recognizers** — validation point, and route evidence at
   `live, uncontrolled`.
-- **Every surface** — behaviour on inputs long enough to fragment a frame across the 64 KiB receive
-  buffer. The probe sentence used throughout is far too short to reach it. The two Class B loops now
-  assemble until `EndOfMessage` and their fakes can split a frame on demand, so the *client* side is
-  handled and tested; what is still unmeasured is whether either **vendor** fragments in practice,
-  which no fake can answer.
+- **Frame fragmentation across the 64 KiB receive buffer** — **answered for both Class B surfaces on
+  2026-08-18, and the premise it was filed under was wrong.** This was recorded as length-dependent
+  and out of reach of the short probe sentence. It is not: ElevenLabs answered the **44-byte** probe
+  sentence with a **75 015-byte** message, already over the buffer, and answered a 2 085-byte input
+  with 58 such messages, the largest **293 720 B**. Cartesia never approaches it — 8 681 B is its
+  largest message, across 559 of them on the long input. So one vendor fragments routinely and the
+  other never does, neither inferable from the other, and the `EndOfMessage` assembly both loops
+  gained was repairing a **live** defect rather than closing a margin. Note where it hid: this
+  surface was on record as "~115 KB across 4 frames, ~29 KB average" — the average was reported, the
+  maximum was not, and one of those four frames had been over the buffer all along. Still unmeasured
+  on the **Class A** (binary-frame) surfaces, where frame size is chosen by the client and the
+  measured headroom is 34×.
 
 ## Two properties this record keeps having to restate
 

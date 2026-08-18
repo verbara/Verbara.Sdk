@@ -496,3 +496,35 @@ now checked by governance guards that parse `src/` with Roslyn and fail the buil
 
 Both guards live in the governance test project, which carries **zero** `ProjectReference`s by design:
 a guard that compiles against the thing it governs can be broken by the same edit it is meant to catch.
+
+### A6 — D2's boundary again, one level down; and an instrument must be checked against its own noise floor
+
+A2 recorded a host whose **route** control cannot fail. Speechmatics TTS supplies the same shape one
+level down, on a path **parameter**: `/generate/{voice}` answers `200 audio/wav` for every segment
+tried, nonsense included, so the voice arm of a comparison controls nothing. Its route control is
+sound (`/generatex/{voice}`, `/generate` and `/generate/` all `404`), which is exactly why this is
+worth writing down separately — **a surface can carry a passing negative control on the route and no
+control at all on a parameter within it.** D2 should be read as applying per varied dimension, not
+per surface. Where the vendor exposes an authoritative listing, as this one does at a
+credential-gated `GET /voices`, that listing is the control the route refuses to be.
+
+This also retires a claim D-series probing had accepted: the shipped default voice `eleanor` was
+recorded as validated because it *returned 200*. Under a route that returns 200 for anything, that
+observation had no discriminating power at the moment it was made. The conclusion drawn from it —
+"the vendor's published list is incomplete, the option default is fine" — was therefore never
+supported, and is withdrawn. What replaces it is not the opposite conclusion but a measurement: the
+default appears in no list available to us, and its output ranges coincide with an unrecognised
+segment's.
+
+The methodological rule the same probe forced, which D9 did not state:
+
+> **Establish that an instrument discriminates before reading anything from it.** Run the
+> null comparison — the same input twice — and measure the within-condition spread first.
+
+Two instruments failed this on one route. Byte identity: the same request twice returned identical
+lengths and different hashes, so a hash comparison would have called every arm "different". Byte
+length: usable, but only after measuring that lengths move in exact 1536-B quanta with a
+within-voice spread up to 4 608 B — a first pass comparing one sample per arm produced an incoherent
+verdict from pure noise and looked like a real result. The finding that survived was stated in the
+form the spread permits: with six samples per arm the two voices' ranges are disjoint, both
+directions of the conflict agree, and **no sample ever landed in the opposite voice's range**.
