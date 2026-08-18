@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.Http;
 using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Tts.DependencyInjection;
 using Verbara.Sdk.VoiceAi.Tts.Lmnt;
@@ -82,7 +83,7 @@ public class LmntTtsOptionsTests
 /// WireMock.NET matches HTTP/1.1 requests and cannot hold the duplex session these tests drive
 /// (ADR-0041 D2), so <c>LmntWsFakeServer</c> on <c>WebSocketTestServer</c> stays. LMNT ships both
 /// transports, and D3 splits the provider by transport rather than by suite: the HTTP class further
-/// down this file migrates (§4.6), this one does not. Fidelity here comes from recorded frames (D4).
+/// down this file has migrated (§4.6), this one has not. Fidelity here comes from recorded frames (D4).
 /// </summary>
 public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
 {
@@ -498,37 +499,118 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
 // HTTP transport tests
 // ─────────────────────────────────────────────────────────────────────────────
 
-public class LmntSpeechSynthesizerHttpTests : IAsyncDisposable
+/// <summary>
+/// Transport: HTTP — migrated to the shared WireMock substrate (ADR-0041 D1, §4.6), replacing the
+/// <c>HttpListener</c> fake. Matching is strict, so a request sent to the wrong route or without the
+/// vendor's <c>X-API-Key</c> header fails to match rather than receiving the canned body.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <strong>The fixture is a pair, and only one half is the vendor's.</strong> LMNT is
+/// <c>not-cleared</c> for committing Output (<c>docs/guides/provider-recording-protocol.md</c> §7),
+/// so what was captured on 2026-08-17 is the response <em>envelope</em> —
+/// <c>lmnt-http/synthesize-short-en-us.json</c>: real status, real header names, the vendor's own
+/// declared media type, real content length and real read boundaries, with the audio counted and
+/// discarded rather than written. The body served under it is
+/// <c>lmnt-http/body-pcm-s16le-16khz.raw</c>, built locally by <see cref="SyntheticPcm"/>. The stub
+/// takes its status and media type from the envelope, so the client meets the declaration it meets in
+/// production; what this pair cannot prove is anything about the content of LMNT's speech.
+/// </para>
+/// <para>
+/// The migration was blocked until the route fix landed (<c>Sdk/ADR-0048</c>): until 2026-08-15 this
+/// client posted to <c>/v1/ai/speech/generate</c>, which the live API answers
+/// <c>404 {"detail":"Not Found"}</c>, so a fixture pinning the client's request and a working
+/// response at once was a contradiction — which strict matching surfaces instead of hiding.
+/// </para>
+/// </remarks>
+public class LmntSpeechSynthesizerHttpTests
 {
-    private readonly LmntHttpFakeServer _server;
-    private readonly HttpClient _http;
+    private const string ApiKey = "test-lmnt-key";
 
-    public LmntSpeechSynthesizerHttpTests()
+    /// <summary>The only route the live API serves — see <c>LmntSpeechSynthesizer.HttpRoute</c>.</summary>
+    private const string SynthesisPath = "/v1/ai/speech/bytes";
+
+    /// <summary>The route this client posted to until 2026-08-15, which the vendor answers 404.</summary>
+    private const string RetiredPath = "/v1/ai/speech/generate";
+
+    /// <summary>The recorded response envelope — see its provenance sidecar.</summary>
+    private const string RecordedEnvelope = "lmnt-http/synthesize-short-en-us.json";
+
+    /// <summary>The locally built body the envelope describes the shape of — its sidecar too.</summary>
+    private const string SyntheticBody = "lmnt-http/body-pcm-s16le-16khz.raw";
+
+    /// <summary><c>LmntSpeechSynthesizer.HttpChunkSize</c> — the client's own read buffer.</summary>
+    private const int HttpChunkSize = 8192;
+
+    // Generator parameters for SyntheticBody, mirrored in its provenance sidecar. The regeneration
+    // fence test re-renders the file from exactly these three numbers.
+    private const int BodySampleCount = 10001;
+    private const int BodyPeriodSamples = 64;
+    private const short BodyAmplitude = 11000;
+    private const int BodyLength = BodySampleCount * 2;
+
+    private static readonly ProviderRecordings Recordings = ProviderRecordings.Locate();
+    private static readonly RecordedResponseEnvelope Recorded = ReadEnvelope();
+
+    /// <summary>The status, media type, length and read boundaries observed on the live response.</summary>
+    private sealed record RecordedResponseEnvelope(
+        HttpStatusCode Status,
+        string MediaType,
+        int ContentLength,
+        IReadOnlyList<int> ChunkSizes);
+
+    private static RecordedResponseEnvelope ReadEnvelope()
     {
-        _server = new LmntHttpFakeServer();
-        _server.Start();
-        _http = new HttpClient();
+        using var document = JsonDocument.Parse(Recordings.ReadText(RecordedEnvelope));
+        var root = document.RootElement;
+        return new RecordedResponseEnvelope(
+            (HttpStatusCode)root.GetProperty("status").GetInt32(),
+            root.GetProperty("media_type").GetString()!,
+            root.GetProperty("content_length").GetInt32(),
+            [.. root.GetProperty("chunk_sizes").EnumerateArray().Select(e => e.GetInt32())]);
     }
 
-    private LmntSpeechSynthesizer BuildSynthesizer(Action<LmntTtsOptions>? configure = null)
+    private static byte[] Body => Recordings.ReadBytes(SyntheticBody);
+
+    private static HttpProviderRequest SynthesisRequest(string path = SynthesisPath) =>
+        HttpProviderRequest.Post(path)
+            .WithHeader("X-API-Key", ApiKey)
+            .WithHeader("lmnt-version", "1.0");
+
+    /// <summary>The stub every success-path test uses: the recorded envelope over the local body.</summary>
+    private static void StubRecordedEnvelope(HttpProviderMockServer server, byte[]? body = null) =>
+        server.Stub(
+            SynthesisRequest(),
+            HttpProviderResponse.Bytes(body ?? Body, Recorded.MediaType, Recorded.Status));
+
+    private static LmntSpeechSynthesizer SynthesizerFor(
+        HttpProviderMockServer server,
+        Action<LmntTtsOptions>? configure = null,
+        string? originSuffix = null)
     {
         var opts = new LmntTtsOptions
         {
-            ApiKey = "test-lmnt-key",
+            ApiKey = ApiKey,
             Voice = LmntVoices.Leah,
             Transport = LmntTransport.Http,
         };
+        // Format is deliberately left at its default so the suite exercises what ships.
         configure?.Invoke(opts);
-        return new LmntSpeechSynthesizer(Options.Create(opts), _http, _server.Origin);
+        var origin = server.BaseAddress.ToString().TrimEnd('/') + originSuffix;
+        return new LmntSpeechSynthesizer(Options.Create(opts), server.CreateClient(), origin);
     }
 
     [Fact]
     public async Task SynthesizeAsync_Http_ShouldSendApiKeyHeader()
     {
-        var synth = BuildSynthesizer();
+        await using var server = HttpProviderMockServer.Start();
+        StubRecordedEnvelope(server);
+        var synth = SynthesizerFor(server);
+
         await synth.SynthesizeAsync("hello http", AudioFormat.Slin16Mono16kHz).ToListAsync();
 
-        _server.ReceivedApiKey.Should().Be("test-lmnt-key");
+        server.ReceivedRequests.Should().ContainSingle().Subject
+            .Header("X-API-Key").Should().Be(ApiKey);
     }
 
     [Fact]
@@ -536,80 +618,132 @@ public class LmntSpeechSynthesizerHttpTests : IAsyncDisposable
     {
         // Regression guard for the shipped defect. Every HTTP synthesis this client ever made went
         // to /v1/ai/speech/generate, which the live API answers 404 {"detail":"Not Found"} —
-        // byte-identically to a path that does not exist. The old fake answered 200 on any path, so
-        // the suite certified a route that had never once worked.
-        var synth = BuildSynthesizer();
+        // byte-identically to a path that does not exist. The retired fake answered 200 on any path,
+        // so the suite certified a route that had never once worked.
+        await using var server = HttpProviderMockServer.Start();
+        StubRecordedEnvelope(server);
+        var synth = SynthesizerFor(server);
 
         await synth.SynthesizeAsync("hello http", AudioFormat.Slin16Mono16kHz).ToListAsync();
 
-        _server.ReceivedMethod.Should().Be("POST");
-        _server.ReceivedPath.Should().Be(LmntHttpFakeServer.SynthesisPath);
-        _server.ReceivedPath.Should().NotBe("/v1/ai/speech/generate");
-        _server.UnmatchedRequestCount.Should().Be(0);
+        var request = server.ReceivedRequests.Should().ContainSingle().Subject;
+        request.Method.Should().Be("POST");
+        request.Path.Should().Be(SynthesisPath);
+        server.UnmatchedRequests.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task SynthesizeAsync_Http_ShouldThrow_WhenClientPostsToAnUnknownRoute()
+    public async Task SynthesizeAsync_Http_ShouldNotMatch_WhenTheOnlyRouteOfferedIsTheRetiredOne()
     {
-        // Proves the guard above can actually fail: point the client at an origin carrying a path
-        // and the fake refuses it exactly as the live API does. Without this, a fake that silently
-        // stopped matching would make the route assertions vacuous again.
-        var opts = new LmntTtsOptions
-        {
-            ApiKey = "test-lmnt-key",
-            Transport = LmntTransport.Http,
-        };
-        var synth = new LmntSpeechSynthesizer(
-            Options.Create(opts), _http, _server.Origin + "/wrong-prefix");
+        // The inverse, so the guard above can actually fail: the substrate offers ONLY the dead route
+        // and nothing else. A client that reverted to it would match and this test would go red.
+        await using var server = HttpProviderMockServer.Start();
+        server.Stub(
+            SynthesisRequest(RetiredPath),
+            HttpProviderResponse.Bytes(Body, Recorded.MediaType, Recorded.Status));
+        var synth = SynthesizerFor(server);
 
         var act = async () => await synth
             .SynthesizeAsync("hello", AudioFormat.Slin16Mono16kHz)
             .ToListAsync();
 
         await act.Should().ThrowAsync<HttpRequestException>();
-        _server.UnmatchedRequestCount.Should().Be(1);
+        server.UnmatchedRequests.Should().ContainSingle().Subject.Path.Should().Be(SynthesisPath);
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_Http_ShouldThrow_WhenClientPostsToAnUnknownRoute()
+    {
+        // Point the client at an origin carrying a path and the substrate refuses it exactly as the
+        // live API does. Without this, a substrate that silently stopped matching would make the
+        // route assertions vacuous again.
+        await using var server = HttpProviderMockServer.Start();
+        StubRecordedEnvelope(server);
+        var synth = SynthesizerFor(server, originSuffix: "/wrong-prefix");
+
+        var act = async () => await synth
+            .SynthesizeAsync("hello", AudioFormat.Slin16Mono16kHz)
+            .ToListAsync();
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+        server.UnmatchedRequests.Should().ContainSingle().Subject
+            .Path.Should().Be("/wrong-prefix" + SynthesisPath);
     }
 
     [Fact]
     public async Task SynthesizeAsync_Http_ShouldSendLmntVersionHeader()
     {
-        var synth = BuildSynthesizer();
+        await using var server = HttpProviderMockServer.Start();
+        StubRecordedEnvelope(server);
+        var synth = SynthesizerFor(server);
+
         await synth.SynthesizeAsync("hello", AudioFormat.Slin16Mono16kHz).ToListAsync();
 
-        _server.ReceivedLmntVersion.Should().Be("1.0");
+        server.ReceivedRequests.Should().ContainSingle().Subject
+            .Header("lmnt-version").Should().Be("1.0");
     }
 
     [Fact]
     public async Task SynthesizeAsync_Http_ShouldIncludeVoiceAndTextInBody()
     {
-        var synth = BuildSynthesizer();
+        await using var server = HttpProviderMockServer.Start();
+        StubRecordedEnvelope(server);
+        var synth = SynthesizerFor(server);
+
         await synth.SynthesizeAsync("form body test", AudioFormat.Slin16Mono16kHz).ToListAsync();
 
-        _server.ReceivedRequestBody.Should().NotBeNullOrEmpty();
-        _server.ReceivedRequestBody!.Should().Contain("voice=");
-        _server.ReceivedRequestBody.Should().Contain("text=");
+        var request = server.ReceivedRequests.Should().ContainSingle().Subject;
+        request.Header("Content-Type").Should().StartWith("application/x-www-form-urlencoded");
+        request.BodyAsString.Should().NotBeNullOrEmpty();
+        request.BodyAsString!.Should().Contain("voice=");
+        request.BodyAsString.Should().Contain("text=");
     }
 
     [Fact]
-    public async Task SynthesizeAsync_Http_ShouldYieldAudioBytes_WhenResponseIsSuccess()
+    public async Task SynthesizeAsync_Http_ShouldYieldTheBodyIntact_WhenChunked()
     {
-        _server.ResponseAudio = new byte[10_000];
-        for (var i = 0; i < _server.ResponseAudio.Length; i++)
-            _server.ResponseAudio[i] = (byte)(i & 0xFF);
+        // The point of the fixture pair: a body whose length is NOT a multiple of the client's own
+        // 8 KiB read buffer traverses the read loop, so a partial final chunk reaches the consumer.
+        // The 10 000-byte counting pattern this replaced was closer to arithmetic than to audio, and
+        // frame boundaries are still not asserted — the client yields what Stream.ReadAsync returned.
+        await using var server = HttpProviderMockServer.Start();
+        StubRecordedEnvelope(server);
+        var expected = Body;
+        var synth = SynthesizerFor(server);
 
-        var synth = BuildSynthesizer();
         var chunks = await synth.SynthesizeAsync("large", AudioFormat.Slin16Mono16kHz).ToListAsync();
 
-        chunks.Should().NotBeEmpty();
-        chunks.Sum(c => c.Length).Should().Be(10_000);
+        (expected.Length % HttpChunkSize).Should().NotBe(0, "the body must not be buffer-aligned");
+        chunks.Should().HaveCountGreaterThan(1, "the response must actually be chunked");
+        chunks.Should().OnlyContain(c => c.Length > 0 && c.Length <= HttpChunkSize);
+        chunks.Should().Contain(c => c.Length != HttpChunkSize, "a partial chunk must reach the consumer");
+        chunks.SelectMany(c => c.ToArray()).Should().Equal(expected,
+            "streaming must not alter a single byte of the body");
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_Http_ShouldNotMatch_WhenApiKeyHeaderIsWrong()
+    {
+        // Strict matching (ADR-0041 D1) turns a silent pass into a failure: the retired fake read the
+        // X-API-Key header but answered 200 whatever it said.
+        await using var server = HttpProviderMockServer.Start();
+        StubRecordedEnvelope(server);
+        var synth = SynthesizerFor(server, o => o.ApiKey = "wrong-key");
+
+        var act = async () => await synth
+            .SynthesizeAsync("hello", AudioFormat.Slin16Mono16kHz)
+            .ToListAsync();
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+        server.UnmatchedRequests.Should().ContainSingle();
     }
 
     [Fact]
     public async Task SynthesizeAsync_Http_ShouldThrow_WhenResponseIsErrorStatus()
     {
-        _server.ResponseStatus = HttpStatusCode.Unauthorized;
-
-        var synth = BuildSynthesizer();
+        await using var server = HttpProviderMockServer.Start();
+        server.Stub(SynthesisRequest(), HttpProviderResponse.Status(HttpStatusCode.Unauthorized));
+        var synth = SynthesizerFor(server);
 
         var act = async () => await synth
             .SynthesizeAsync("fail", AudioFormat.Slin16Mono16kHz)
@@ -632,9 +766,9 @@ public class LmntSpeechSynthesizerHttpTests : IAsyncDisposable
     [Fact]
     public async Task SynthesizeAsync_Http_ShouldThrowEmptyResult_WhenTheResponseSucceedsWithNoAudio()
     {
-        _server.ResponseAudio = [];
-
-        var synth = BuildSynthesizer();
+        await using var server = HttpProviderMockServer.Start();
+        StubRecordedEnvelope(server, body: []);
+        var synth = SynthesizerFor(server);
 
         var act = async () => await synth
             .SynthesizeAsync("silence", AudioFormat.Slin16Mono16kHz)
@@ -649,24 +783,52 @@ public class LmntSpeechSynthesizerHttpTests : IAsyncDisposable
     /// <summary>
     /// The E5 guard sits before the transport split, so this transport owes the same promise: text
     /// carrying no speech is never sent to the provider, and the zero audio that follows is not a
-    /// failure. Asserted through the fake seeing no request at all.
+    /// failure. Asserted through the substrate seeing no request at all — matched or otherwise.
     /// </summary>
     [Fact]
     public async Task SynthesizeAsync_Http_ShouldYieldNothingWithoutRequesting_WhenTextIsWhitespace()
     {
-        var synth = BuildSynthesizer();
+        await using var server = HttpProviderMockServer.Start();
+        StubRecordedEnvelope(server);
+        var synth = SynthesizerFor(server);
 
         var chunks = await synth.SynthesizeAsync("   ", AudioFormat.Slin16Mono16kHz).ToListAsync();
 
         chunks.Should().BeEmpty();
-        _server.ReceivedPath.Should().BeNull("no request should have been issued at all");
+        server.ReceivedRequests.Should().BeEmpty("no request should have been issued at all");
     }
 
-    public async ValueTask DisposeAsync()
+    [Fact]
+    public void RecordedEnvelope_ShouldDescribeTheResponseTheStubServes_WhenReadFromRecordingsTree()
     {
-        GC.SuppressFinalize(this);
-        _http.Dispose();
-        await _server.DisposeAsync();
+        // Fixture-integrity fence, and the reason the envelope is load-bearing rather than decorative:
+        // every success-path stub above takes its status and media type from this file, so if the
+        // capture were re-saved with different values the stubs would change with it. These are the
+        // numbers its sidecar records.
+        Recorded.Status.Should().Be(HttpStatusCode.OK);
+        Recorded.MediaType.Should().Be("application/vnd.lmnt.audio-int16",
+            "the vendor declares its own type for int16 PCM, not audio/raw or audio/L16");
+        Recorded.ContentLength.Should().Be(Recorded.ChunkSizes.Sum(),
+            "the length must be the reads that produced it, or one of the two was edited by hand");
+        Recorded.ChunkSizes.Should().HaveCountGreaterThan(1, "a real audio response arrives in pieces");
+        Recorded.ChunkSizes.Max().Should().Be(HttpChunkSize,
+            "the boundaries are the client's own 8 KiB reads — that is what makes them comparable");
+        Recorded.ChunkSizes[^1].Should().BeLessThan(HttpChunkSize,
+            "the live response was not buffer-aligned either");
+    }
+
+    [Fact]
+    public void SyntheticBody_ShouldMatchItsDocumentedGeneratorParameters_WhenRegeneratedLocally()
+    {
+        // The "commit a small generator" half of the source-audio rule (protocol guide §6): the
+        // committed bytes are reproducible from three numbers in the sidecar, not magic. They stand in
+        // for LMNT's audio precisely because they are not LMNT's audio — §7 rates the surface
+        // not-cleared, so the body half of this pair is the repository's own.
+        var body = Body;
+
+        body.Should().HaveCount(BodyLength, "the sidecar records this exact length");
+        (body.Length % HttpChunkSize).Should().NotBe(0);
+        body.Should().Equal(SyntheticPcm.Triangle(BodySampleCount, BodyPeriodSamples, BodyAmplitude));
     }
 }
 

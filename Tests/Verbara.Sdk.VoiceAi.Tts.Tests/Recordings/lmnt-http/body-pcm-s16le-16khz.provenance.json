@@ -1,0 +1,33 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "synthetic",
+  "provider": "lmnt-http",
+  "product": "LMNT — text to speech (HTTP)",
+  "endpoint": "POST https://api.lmnt.com/v1/ai/speech/bytes",
+  "api_version": "1.0",
+  "captured_utc": "2026-08-17",
+  "media_type": "application/vnd.lmnt.audio-int16",
+  "bytes": 20002,
+  "sha256": "fbe877b3af6bbf888987c124a783738dec2566daaed6776ad964224006b0d176",
+  "source_audio": {
+    "origin": "synthetic",
+    "description": "Locally generated signal-generator tone — NOT provider output, and no provider was called to produce these bytes. 10001 samples of a symmetric triangle wave, period 64 samples, peak amplitude 11000, written as 16-bit signed little-endian mono at 16000 Hz (the `pcm_s16le` format and 16000 sample_rate LmntTtsOptions requests by default). Generated with integer arithmetic only, deliberately: Math.Sin is not guaranteed bit-identical across platforms and this file is asserted byte-for-byte. The generator is committed as SyntheticPcm.Triangle in this suite and RecordedFixtures_ShouldMatchTheirDocumentedGeneratorParameters_WhenRegeneratedLocally regenerates the file from these three numbers on every run, so the bytes are reproducible rather than magic. 20002 bytes is 7.6% of the 256 KiB cap and is deliberately NOT a multiple of LmntSpeechSynthesizer's 8192-byte HttpChunkSize (2 full reads + a 3618-byte partial), so a partial final chunk reaches the consumer.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [],
+    "notes": "Nothing was redacted because nothing was captured: these bytes were computed locally from three published parameters and carry no vendor speech, no voice and no spoken content of any kind."
+  },
+  "terms": {
+    "verdict": "not-applicable",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 — LMNT is not-cleared for capturing Output, so the body half of this surface's fixture pair carries no Output at all",
+    "checked_utc": "2026-08-17"
+  },
+  "source_schema": {
+    "url": "https://docs.lmnt.com/api-reference/speech/synthesize-speech-bytes",
+    "revision": "undated",
+    "read_utc": "2026-08-17",
+    "method": "The page above was read to confirm the route (POST /v1/ai/speech/bytes), that the response is a streaming binary audio body, and that `pcm_s16le` is signed 16-bit little-endian PCM — the three properties these bytes stand in for. Format, sample rate and the response media type this file is served under come from the measured envelope beside it (synthesize-short-en-us.json), not from the page. It is not a transcription of any documented payload: it is a locally computed waveform. No vendor example payload, prose or field description was copied into this repository."
+  },
+  "notes": "THE OTHER HALF OF A PAIR. `synthesize-short-en-us.json` is the recorded response envelope for this surface — real status, real header names, real media type, real length, real read boundaries — with LMNT's audio counted and discarded rather than written, because protocol section 7 rates the surface not-cleared. This file is the body that envelope describes the shape of, built here rather than taken from LMNT. The media_type above is the type the VENDOR declared on the real response (`application/vnd.lmnt.audio-int16`, measured 2026-08-17) and the type the test serves these bytes under, so the client meets the same declaration it meets in production; the bytes themselves are little-endian int16 PCM, which is what that vendor type denotes. What this pair cannot prove is that LMNT's own audio has any particular content — only a capture could, and the terms do not permit one."
+}

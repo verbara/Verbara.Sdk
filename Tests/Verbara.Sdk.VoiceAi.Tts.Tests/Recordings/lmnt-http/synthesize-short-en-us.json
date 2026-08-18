@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "media_type": "application/vnd.lmnt.audio-int16",
+  "content_length": 80608,
+  "chunk_sizes": [
+    8192,
+    8192,
+    8192,
+    8192,
+    8192,
+    8192,
+    8192,
+    8192,
+    8192,
+    6880
+  ],
+  "headers": "access-control-allow-credentials, access-control-allow-headers, access-control-allow-methods, access-control-expose-headers, alt-svc, connection, content-type: application/vnd.lmnt.audio-int16, date, request-id, transfer-encoding, via, x-generation-id, x-model-version",
+  "body_omitted": "LMNT's synthesized audio is deliberately not recorded here. Protocol §7 rates the LMNT HTTP surface not-cleared — its ToS grants no rights in generated output and its AUP restricts sharing synthesized speech — so the conservative fallback applies: commit the envelope, never the bytes."
+}

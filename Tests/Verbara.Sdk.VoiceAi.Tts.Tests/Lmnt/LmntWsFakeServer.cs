@@ -1,14 +1,9 @@
-using System.Net;
 using System.Net.WebSockets;
 using System.Text;
 using Verbara.Sdk.TestInfrastructure.Http;
 using Verbara.Sdk.TestInfrastructure.WebSocket;
 
 namespace Verbara.Sdk.VoiceAi.Tts.Tests.Lmnt;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// WebSocket fake
-// ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
 /// In-process WebSocket server that speaks the LMNT TTS streaming wire protocol, seeded from the
@@ -276,6 +271,10 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
             // from the synthesizer once it was measured to cost all the audio. The delay must stay
             // regardless — what this branch owes the test is a socket that never completes on its
             // own, not a reaction to one particular client frame.)
+            //
+            // The wait below is infinite, so the timed arm can never win: only the server CT
+            // completes it, and no assertion depends on any duration.
+            // fence-allow: GUARD-TIMEOUT — Timeout.Infinite; the cancellation token is the only arm
             try { await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { /* disposed: release the socket */ }
             try { await receiveTask.ConfigureAwait(false); } catch { }
@@ -318,182 +317,5 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     {
         GC.SuppressFinalize(this);
         await _server.DisposeAsync().ConfigureAwait(false);
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HTTP fake
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// <summary>
-/// In-process HTTP server that speaks the LMNT TTS REST wire protocol.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Accepts <c>POST /v1/ai/speech/bytes</c> only, records the form body, the path, the method and
-/// all notable headers, and replies with the caller-configured status code and audio body.
-/// Anything else gets the live API's <c>404 {"detail":"Not Found"}</c>.
-/// </para>
-/// <para>
-/// That refusal is the point. This fake used to answer 200 to any request on any path, so the
-/// client's route was never a tested property — it posted to <c>/v1/ai/speech/generate</c>, which
-/// the live API answers 404, and five green tests said otherwise for the fake's whole life. One of
-/// them was even named <c>ShouldPostToGenerateEndpoint</c> while asserting only a header. A fake
-/// more permissive than the vendor does not test a client; it certifies whatever the client does.
-/// </para>
-/// </remarks>
-internal sealed class LmntHttpFakeServer : IAsyncDisposable
-{
-    /// <summary>The only route the live API serves — see <c>LmntSpeechSynthesizer.HttpRoute</c>.</summary>
-    public const string SynthesisPath = "/v1/ai/speech/bytes";
-
-    private readonly HttpListener _listener;
-    private readonly CancellationTokenSource _cts = new();
-    private Task? _acceptLoop;
-
-    /// <summary>The raw request body received from the client.</summary>
-    public string? ReceivedRequestBody { get; private set; }
-
-    /// <summary>Absolute path of the last request — the property the old fake never looked at.</summary>
-    public string? ReceivedPath { get; private set; }
-
-    /// <summary>HTTP method of the last request.</summary>
-    public string? ReceivedMethod { get; private set; }
-
-    /// <summary>
-    /// Requests that did not match <see cref="SynthesisPath"/>. A test asserting a route must assert
-    /// this is zero: without it, a client that posts somewhere else still "passes" on the recorded
-    /// body of an earlier matched request.
-    /// </summary>
-    public int UnmatchedRequestCount { get; private set; }
-
-    /// <summary>The <c>X-API-Key</c> header value received from the client.</summary>
-    public string? ReceivedApiKey { get; private set; }
-
-    /// <summary>The <c>lmnt-version</c> header value received from the client.</summary>
-    public string? ReceivedLmntVersion { get; private set; }
-
-    /// <summary>HTTP status code to respond with. Defaults to 200.</summary>
-    public HttpStatusCode ResponseStatus { get; set; } = HttpStatusCode.OK;
-
-    /// <summary>Audio bytes to return in the response body. Defaults to 640 B of silence.</summary>
-    public byte[] ResponseAudio { get; set; } = new byte[640];
-
-    public int Port { get; }
-
-    /// <summary>
-    /// Scheme and authority only. It stops at the authority on purpose: the client must build the
-    /// route itself, or the route is not under test.
-    /// </summary>
-    public string Origin => $"http://127.0.0.1:{Port}";
-
-    public LmntHttpFakeServer()
-    {
-        // Retry port allocation to avoid conflicts with parallel tests.
-        HttpListener? listener = null;
-        var port = 0;
-        for (var attempt = 0; attempt < 10; attempt++)
-        {
-            var tcp = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-            tcp.Start();
-            port = ((IPEndPoint)tcp.LocalEndpoint).Port;
-            tcp.Stop();
-
-            var candidate = new HttpListener();
-            candidate.Prefixes.Add($"http://127.0.0.1:{port}/");
-            try
-            {
-                candidate.Start();
-                listener = candidate;
-                break;
-            }
-            catch (HttpListenerException) when (attempt < 9)
-            {
-                candidate.Close();
-            }
-        }
-
-        _listener = listener ?? throw new InvalidOperationException(
-            "Failed to allocate a port for the LMNT HTTP fake server.");
-        Port = port;
-    }
-
-    public void Start() => _acceptLoop = Task.Run(AcceptLoopAsync);
-
-    private async Task AcceptLoopAsync()
-    {
-        try
-        {
-            while (!_cts.Token.IsCancellationRequested)
-            {
-                var ctx = await _listener.GetContextAsync().WaitAsync(_cts.Token).ConfigureAwait(false);
-                _ = Task.Run(() => HandleRequestAsync(ctx), _cts.Token);
-            }
-        }
-        catch (OperationCanceledException) { }
-        catch (HttpListenerException) { }
-    }
-
-    private async Task HandleRequestAsync(HttpListenerContext ctx)
-    {
-        try
-        {
-            ReceivedMethod = ctx.Request.HttpMethod;
-            ReceivedPath = ctx.Request.Url?.AbsolutePath;
-
-            if (!string.Equals(ReceivedMethod, "POST", StringComparison.Ordinal) ||
-                !string.Equals(ReceivedPath, SynthesisPath, StringComparison.Ordinal))
-            {
-                // What the live API answers a wrong route — verbatim, so a client that misses the
-                // route fails here exactly as it fails in production.
-                UnmatchedRequestCount++;
-                var notFound = Encoding.UTF8.GetBytes("{\"detail\":\"Not Found\"}");
-                ctx.Response.StatusCode = (int)HttpStatusCode.NotFound;
-                ctx.Response.ContentType = "application/json";
-                ctx.Response.ContentLength64 = notFound.Length;
-                await ctx.Response.OutputStream.WriteAsync(notFound.AsMemory(), _cts.Token)
-                    .ConfigureAwait(false);
-                ctx.Response.Close();
-                return;
-            }
-
-            ReceivedApiKey = ctx.Request.Headers["X-API-Key"];
-            ReceivedLmntVersion = ctx.Request.Headers["lmnt-version"];
-
-            using (var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8))
-                ReceivedRequestBody = await reader.ReadToEndAsync().ConfigureAwait(false);
-
-            ctx.Response.StatusCode = (int)ResponseStatus;
-            if (ResponseStatus == HttpStatusCode.OK)
-            {
-                // What the live API returns for format=pcm_s16le (measured 2026-08-15), not the
-                // invented "audio/raw" that no LMNT response has ever carried.
-                ctx.Response.ContentType = "application/vnd.lmnt.audio-int16";
-                ctx.Response.ContentLength64 = ResponseAudio.Length;
-                await ctx.Response.OutputStream.WriteAsync(ResponseAudio.AsMemory(), _cts.Token)
-                    .ConfigureAwait(false);
-            }
-            else
-            {
-                var body = Encoding.UTF8.GetBytes($"{{\"error\":\"{ResponseStatus}\"}}");
-                ctx.Response.ContentType = "application/json";
-                ctx.Response.ContentLength64 = body.Length;
-                await ctx.Response.OutputStream.WriteAsync(body.AsMemory(), _cts.Token)
-                    .ConfigureAwait(false);
-            }
-
-            ctx.Response.Close();
-        }
-        catch { try { ctx.Response.Close(); } catch { } }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        GC.SuppressFinalize(this);
-        _cts.Cancel();
-        _listener.Stop();
-        if (_acceptLoop is not null)
-            try { await _acceptLoop.ConfigureAwait(false); } catch { }
-        _cts.Dispose();
     }
 }

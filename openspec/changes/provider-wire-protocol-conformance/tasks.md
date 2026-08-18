@@ -428,6 +428,14 @@ characterised* in §5.5.
       Whether `voice` should *also* remain in the body, and whether the `language` and `sample_rate`
       body fields are accepted as sent, are **not verified**: only the route was isolated. Record them as
       not verified; do not resolve them by inference
+      **Half of this is now measured — 2026-08-17, and it stays open for the other half.** The
+      `speechmatics-tts` fixture capture for `wiremock-http-provider-substrate` §4.5 sent the shipped
+      defaults' whole body — `text`, `language` **and** `sample_rate` — to `/generate/eleanor` and got
+      **200 `audio/wav`, 72 236 bytes**. So the two body fields are accepted as sent; that clause is
+      answered by observation, not inference. What is still unmeasured is the `voice`-in-body question,
+      and the fix made it harder to reach rather than easier: the client no longer sends `voice` at all,
+      so which one wins when path and body disagree cannot be observed without deliberately
+      reintroducing the conflict in a probe. Until someone does, that is unknown, not fine
 - [ ] 3.4 The competing hypothesis is closed and must be recorded as closed so it is not reopened: the
       shipped default voice `eleanor` is absent from the vendor's published four-voice list **but
       returns 200**, so the published list is incomplete and `SpeechmaticsOptions.Voice` is fine. One
@@ -771,6 +779,56 @@ characterised* in §5.5.
       lesson is the change's own epistemic rule applied to a header instead of a doc — a vendor
       asserting a media type is evidence about the assertion, not about the bytes. Only the frame walk,
       with `format=mp3` as its control, settled it
+- [ ] 3.7c **The version header the SDK sends is not the version the vendor's docs show — observed
+      2026-08-17, not fixed, and the observation belongs here rather than where it was found.**
+      `LmntSpeechSynthesizer` sends `lmnt-version: 1.0` (`LmntTtsOptions.ApiVersion`, whose XML docs
+      state that default). `docs.lmnt.com`'s *Synthesize speech (bytes)* page shows `1.2` on the same
+      header, read the same day. Noticed while capturing the `lmnt-http` fixture for
+      `wiremock-http-provider-substrate` §4.6, which recorded it and deliberately left it alone: a test
+      substrate cannot answer it, and §4.6's own rule was not to ride an unmeasured change along with a
+      measured one.
+      **What is measured:** the route answered **200** to `lmnt-version: 1.0` on 2026-08-17, so `1.0`
+      is not rejected today. **What is not measured, and must not be assumed either way:** whether
+      `1.0` is deprecated, whether `1.2` changes the response contract at all, and whether the header
+      is even consulted for this route — a vendor documenting a newer version is evidence about the
+      documentation, not about the wire, which is exactly the distinction §3.7b was written to enforce.
+      Resolve by probing both header values against the same request with everything else held fixed
+      and comparing status, declared media type and payload classification; bump the default only if
+      that comparison says something.
+      **One corroborating data point from the same capture:** at the shipped `format=pcm_s16le` the
+      response declares `application/vnd.lmnt.audio-int16`, and there the header *is* accurate — which
+      sharpens §3.7b rather than softening it. The vendor's media type is right at one format and
+      wrong (`…-fp32` over MP3) at another, so it can never be treated as evidence about the bytes;
+      only a classifier can.
+- [ ] 3.7d **Speechmatics TTS is the only synthesizer that does not honour the empty-result contract
+      its own base class declares — found 2026-08-17 reviewing the `wiremock-http-provider-substrate`
+      §4.5 migration, and it is a `src/**` defect, so that test-only change deliberately does not fix
+      it.** The contract itself is `Sdk/ADR-0050`.
+      `SpeechSynthesizer.SynthesizeAsync` declares two promises in XML docs that ship to consumers of a
+      public MIT package: a session that ends cleanly having produced no audio throws
+      `SpeechProviderEmptyResultException`, and `text` that is empty or whitespace yields nothing
+      *without asking any provider for anything*. Five of the six synthesizers keep both — ElevenLabs
+      (`:115`), Cartesia (`:131`), Deepgram (`:137`) and LMNT on both transports (`:203`, `:437`) — each
+      pairing a `yieldedAudio` flag with an `IsNullOrWhiteSpace` early-out. `SpeechmaticsSpeechSynthesizer`
+      keeps neither: its read loop is `if (read == 0) yield break;` with no accounting, and the file
+      contains no whitespace guard anywhere. Its closest analogue is LMNT's *own* HTTP loop
+      (`:418`–`:445`), which does both — so this is not a transport limitation.
+      **What it costs.** A `200 audio/wav` carrying zero bytes completes as though the vendor had
+      spoken: a truncated synthesis is indistinguishable from a complete one, which is the silent door
+      ADR-0050 exists to close. It was closed on eight WebSocket surfaces; this HTTP-only surface was
+      never in that scope. And whitespace text becomes a request the caller was promised was never made.
+      **Do not fix it blind.** The contract fires on a *clean* empty session, so confirm against the
+      live route what whitespace or unspeakable `text` actually returns — `200` with an empty body,
+      `200` with a WAV header and no samples, or `4xx`. A 44-byte WAV header with zero samples is not
+      zero bytes, and would require the guard to count *samples*, not bytes.
+      **A third observation from the same read, lower confidence and deliberately not asserted:** that
+      loop's `catch (OperationCanceledException) { yield break; }` (`:106`) ends the stream normally
+      where the base contract documents `OperationCanceledException` reaching the caller (E6, the
+      barge-in case). LMNT's HTTP loop (`:428`) does the same, so it is shared rather than a Speechmatics
+      outlier, and whether the caller still observes the cancellation depends on whether it passes the
+      token to its own `await foreach`. Measure it before calling it a defect.
+      Lands as its own PR: shipped-behaviour change, so it carries a `PackageVersion` bump, the two
+      missing tests, and a negative control that fails if the guard is removed.
 - [x] 3.8 A JSON body needs a request DTO: add it to
       `src/Verbara.Sdk.VoiceAi.Tts/Internal/VoiceAiTtsJsonContext.cs` and register it;
       `FormUrlEncodedContent` and its `Dictionary<string, string>` go away. The DTO is AOT-source-gen

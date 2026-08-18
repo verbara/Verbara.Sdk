@@ -77,7 +77,7 @@
     "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Cartesia/CartesiaFakeServer.cs": 0,
     "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Deepgram/DeepgramTtsFakeServer.cs": 1,
     "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/ElevenLabs/ElevenLabsFakeServer.cs": 0,
-    "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Lmnt/LmntFakeServer.cs": 1,
+    "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Lmnt/LmntWsFakeServer.cs": 0,
     "Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Lmnt/LmntSpeechSynthesizerTests.cs": 1
   }
 }

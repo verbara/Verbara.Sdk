@@ -461,6 +461,21 @@ date. **Treat synthesized-audio captures as permitted by inference, not by an ex
 them to the minimum length §8 allows, and re-read §10 before each new capture. If a reviewer is not
 comfortable with the inference, the LMNT fallback below applies equally here.
 
+**Re-read 2026-08-17, before the first capture** (§3.1's obligation, discharged). §10.3 and §10.5 are
+unchanged and the page still publishes no effective date. Two corrections to the note above, neither
+of which moves the verdict:
+
+- **The no-ownership sentence is not §10.5's own text.** §10.5 covers Speechmatics' *use* of submitted
+  AV Files. The sentence this finding leans on — *"We do not claim ownership in any of your content,
+  including any audio/video that you may provide to us or the derivatives of that such as
+  transcription"* — is still in the document, but stated separately rather than as that clause. The
+  inference the verdict rests on is unchanged; only the citation was wrong. Quote the sentence, not the
+  number, when this is re-checked.
+- **§4.3 is the restriction that binds us**, and it was not previously named here: the Software may not
+  be used to *"create, train, or improve (directly or indirectly) a similar or competing product."*
+  The same shape as the OpenAI, Microsoft and Google restrictions above, and the same answer — a short
+  fixture is not a corpus, which is the third reason §8's cap is tight.
+
 ### LMNT HTTP — `not-cleared`
 
 **Basis for the negative finding.** LMNT's Terms of Service (last updated 2023-06-12) contain **no
@@ -485,6 +500,26 @@ encoded to the same codec and container, committed as a separate `class: "synthe
 suite then gets real request matching, a real status/header set and real byte lengths through the
 frame-chunking path — everything ADR-0041 wanted from the LMNT migration — without redistributing
 LMNT's synthesized speech.
+
+**Re-read 2026-08-17, before the envelope capture.** The ToS still carries *Last Updated: June 12,
+2023* and still contains **no clause at all** on rights in generated audio; the AUP's sharing
+restriction is still the only provision on point. The verdict does not move, and the fallback above is
+what was implemented.
+
+**What the fallback looks like now that it exists, measured 2026-08-17.** The pair lives at
+`Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/lmnt-http/`: `synthesize-short-en-us.json` is the
+envelope — `200`, the vendor's own `application/vnd.lmnt.audio-int16`, 80 608 bytes observed across ten
+8 KiB reads with a short final one, response header *names* only — and `body-pcm-s16le-16khz.raw` is
+the locally computed body served under it. Two notes for whoever re-captures:
+
+- **The codec is not MP3.** An earlier note in this repository expected `audio/mpeg`, which is what the
+  route returns at the vendor's *default* format. The SDK's shipped default is `format=pcm_s16le`, and
+  at that value the response is int16 PCM under the vendor-specific media type above. The envelope
+  records what the shipped configuration actually receives, which is the only shape a fixture should
+  pin.
+- **`content_length` is an observation, not a header.** The response arrives
+  `Transfer-Encoding: chunked` and declares no `Content-Length`; the number in the envelope is the sum
+  of the reads, and the suite asserts exactly that identity so a hand-edited envelope fails.
 
 **Revisit when** LMNT publishes API terms or a developer agreement that expressly grants
 redistribution of generated audio. Record the new finding here and raise the verdict then, not

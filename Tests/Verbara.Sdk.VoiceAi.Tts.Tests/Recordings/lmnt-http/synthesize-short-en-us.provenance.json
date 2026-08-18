@@ -1,0 +1,29 @@
+{
+  "schema": "verbara.recording-provenance/1",
+  "class": "recorded",
+  "provider": "lmnt-http",
+  "product": "LMNT — text to speech (HTTP)",
+  "endpoint": "POST https://api.lmnt.com/v1/ai/speech/bytes",
+  "api_version": "1.0",
+  "captured_utc": "2026-08-17",
+  "media_type": "application/json",
+  "bytes": 819,
+  "sha256": "446fb9eb5f0f98f01736290c7eccf5b991f8933b4d982cd81b1fdab177023290",
+  "source_audio": {
+    "origin": "not-applicable",
+    "description": "TTS input is a fixed English sentence authored for this fixture ('The system recorded the request successfully.') — no source recording exists, and the sentence names no real person, organisation or number. Rendered by the prebuilt catalogue voice 'leah'; no custom or cloned voice was used.",
+    "license": "n/a"
+  },
+  "redaction": {
+    "applied": [
+      "x-api-key request header"
+    ],
+    "notes": "No vendor payload was recorded at all — only the response's status, header names, media type, length and chunk boundaries. Header values are recorded solely where they carry no account or correlation identifier. The credential rode in a request header. Observed response headers, values recorded only where they carry no account or correlation identifier: access-control-allow-credentials, access-control-allow-headers, access-control-allow-methods, access-control-expose-headers, alt-svc, connection, content-type: application/vnd.lmnt.audio-int16, date, request-id, transfer-encoding, via, x-generation-id, x-model-version."
+  },
+  "terms": {
+    "verdict": "not-cleared",
+    "basis": "docs/guides/provider-recording-protocol.md section 7 (LMNT HTTP)",
+    "checked_utc": "2026-08-17"
+  },
+  "notes": "80608 bytes of application/vnd.lmnt.audio-int16 observed in 10 reads; the audio itself was discarded, not written. LMNT's audio bytes are deliberately not committed: protocol §7 (LMNT HTTP) rates the surface not-cleared and prescribes committing the response envelope instead. This capture is that envelope. To finish the fixture pair §7 asks for, add a same-codec body built from synthetic or public-domain audio as a separate class: \"synthetic\" file — this script does not synthesize one. chunk_sizes are the lengths successive 8 KiB reads returned, matching LmntSpeechSynthesizer's own HttpChunkSize buffer; they are read boundaries, not TCP frames."
+}
