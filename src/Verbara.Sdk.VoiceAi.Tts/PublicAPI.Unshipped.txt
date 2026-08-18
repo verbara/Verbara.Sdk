@@ -28,6 +28,8 @@ override Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaSpeechSynthesizer.ProviderName
 override Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaSpeechSynthesizer.SynthesizeAsync(string! text, Verbara.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
 static Verbara.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions.AddCartesiaSpeechSynthesizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Tts.Cartesia.CartesiaOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.AllowUnlistedVoice.get -> bool
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.AllowUnlistedVoice.set -> void
 Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.ApiKey.get -> string!
 Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.ApiKey.set -> void
 Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions.BaseUri.get -> string!
@@ -49,6 +51,13 @@ Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsSpeechSynthesizer.SpeechmaticsS
 override Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsSpeechSynthesizer.DisposeAsync() -> System.Threading.Tasks.ValueTask
 override Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsSpeechSynthesizer.ProviderName.get -> string!
 override Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsSpeechSynthesizer.SynthesizeAsync(string! text, Verbara.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
+Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsVoices
+const Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsVoices.Jack = "jack" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsVoices.Megan = "megan" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsVoices.Sarah = "sarah" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsVoices.Theo = "theo" -> string!
+static Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsVoices.All.get -> System.Collections.Generic.IReadOnlyList<string!>!
+static Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsVoices.IsKnown(string? voice) -> bool
 static Verbara.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions.AddSpeechmaticsTts(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Tts.Speechmatics.SpeechmaticsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization
 Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization.High = 3 -> Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsLatencyOptimization
@@ -94,14 +103,30 @@ Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramSpeechSynthesizer.DeepgramSpeechSynthes
 override Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramSpeechSynthesizer.ProviderName.get -> string!
 override Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramSpeechSynthesizer.SynthesizeAsync(string! text, Verbara.Sdk.Audio.AudioFormat outputFormat, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<System.ReadOnlyMemory<byte>>!
 Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Agathe = "aura-2-agathe-fr" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Andromeda = "aura-2-andromeda-en" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Apollo = "aura-2-apollo-en" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Arcas = "aura-2-arcas-en" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Asteria = "aura-asteria-en" -> string!
-const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Helios = "aura-2-helios-en" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Celeste = "aura-2-celeste-es" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Cinzia = "aura-2-cinzia-it" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Daphne = "aura-2-daphne-nl" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Diana = "aura-2-diana-es" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Elara = "aura-2-elara-de" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Elio = "aura-2-elio-it" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Fabian = "aura-2-fabian-de" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Fujin = "aura-2-fujin-ja" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Gloria = "aura-2-gloria-es" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Hector = "aura-2-hector-fr" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.HeliosLegacy = "aura-helios-en" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Izanami = "aura-2-izanami-ja" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Javier = "aura-2-javier-es" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Luna = "aura-2-luna-en" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Nestor = "aura-2-nestor-es" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Orion = "aura-orion-en" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Orpheus = "aura-2-orpheus-en" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Sander = "aura-2-sander-nl" -> string!
+const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Selena = "aura-2-selena-es" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Sirio = "aura-2-sirio-es" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Stella = "aura-stella-en" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Deepgram.DeepgramVoices.Thalia = "aura-2-thalia-en" -> string!

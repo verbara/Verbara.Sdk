@@ -4,8 +4,21 @@ namespace Verbara.Sdk.VoiceAi.Tts.Lmnt;
 /// Catalog of LMNT voice identifiers curated for low-latency telephony use cases.
 /// </summary>
 /// <remarks>
-/// Voice ids verified from LMNT docs as of 2026-05-03.
-/// For the up-to-date catalog see https://docs.lmnt.com/reference/list-voices.
+/// <para>
+/// <b>This is a curated subset, not the roster.</b> LMNT publishes 44 system voices; the six below
+/// are the ones picked for low-latency telephony. Setting <c>LmntTtsOptions.Voice</c> to any other
+/// id from the vendor's list is supported and expected — these constants exist to spell the common
+/// ones correctly, not to bound the choice.
+/// </para>
+/// <para>
+/// Ids were first transcribed from LMNT's docs on 2026-05-03 and re-checked against the live
+/// <c>GET /v1/ai/voice/list?owner=system</c> catalog on 2026-08-18; all six are still present. An
+/// unknown voice fails loudly here — the API answers <c>400</c> with
+/// <c>{"error":"Invalid voice: ..."}</c> — so this catalog is a convenience, not a guard.
+/// </para>
+/// <para>
+/// For the full roster see https://docs.lmnt.com/reference/list-voices.
+/// </para>
 /// </remarks>
 public static class LmntVoices
 {
@@ -29,6 +42,7 @@ public static class LmntVoices
     /// <summary>Lily — female, English.</summary>
     public const string Lily = "lily";
 
-    // Additional system voices can be enumerated via GET https://api.lmnt.com/v1/ai/voice/list?owner=system.
-    // Verify and expand this list at integration test time.
+    // The other 38 system voices are enumerable via
+    // GET https://api.lmnt.com/v1/ai/voice/list?owner=system and are usable without appearing here.
+    // VoiceCatalogConformanceTests checks the six above against that endpoint.
 }
