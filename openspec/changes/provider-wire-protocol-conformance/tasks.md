@@ -1799,28 +1799,48 @@ commit.
       otherwise, and the record follows the measurement
 ## 7. Verification
 
-- [ ] 7.1 `dotnet build Verbara.Sdk.slnx` — 0 warnings, 0 errors (`TreatWarningsAsErrors`)
-- [ ] 7.2 `dotnet test Verbara.Sdk.slnx --filter "Category!=Functional&Category!=Integration&Category!=Realtime&Category!=Spike"`
-      green — the four-exclusion filter `ci.yml` actually uses
-- [ ] 7.3 `aot-validate.yml` green. The new DTOs are source-generated and registered in their contexts;
+- [x] 7.1 `dotnet build Verbara.Sdk.slnx` — 0 warnings, 0 errors (`TreatWarningsAsErrors`)
+- [x] 7.2 `dotnet test Verbara.Sdk.slnx --filter "Category!=Functional&Category!=Integration&Category!=Realtime&Category!=Spike"`
+      green — the four-exclusion filter `ci.yml` actually uses. **30 projects, 3 232 tests, 0 failed,
+      0 skipped.** Measured with the exit code captured directly, not through a pipe: the first
+      attempt piped to `tail`, so the `0` reported was `tail`'s and the visible run covered 7 of the
+      30 projects
+- [x] 7.3 `aot-validate.yml` green on #195/#196/#197/#198 and on main's post-merge push run. The new DTOs are source-generated and registered in their contexts;
       no reflection is introduced. The workflow is the proof, not the assumption
-- [ ] 7.4 `PublicAPI.Unshipped.txt` for `src/Verbara.Sdk.VoiceAi.Tts/` and
+- [x] 7.4 `PublicAPI.Unshipped.txt` for `src/Verbara.Sdk.VoiceAi.Tts/` and
       `src/Verbara.Sdk.VoiceAi.Stt/` — unlike the sibling DTO change, this one **does** move public API
       (§3.2, §4.2, and possibly §2.10 and §3.10). Review the diff line by line and name every entry in
-      the CHANGELOG; a surprise entry means the scope was wrong
-- [ ] 7.5 **Re-probe every fixed surface against the live endpoint**, with the negative control still
+      the CHANGELOG; a surprise entry means the scope was wrong. **31 added, 1 removed** against the
+      base; the single removal is the `Helios` value change, and every group is named in the
+      CHANGELOG ("16 measured ids" = the 18 added lines less `Helios`/`HeliosLegacy`)
+- [x] 7.5 **Re-probe every fixed surface against the live endpoint**, with the negative control still
       returning its known-wrong status on the same host: each corrected route returns a success status,
       each corrected frame path yields non-zero audio bytes, and the Speechmatics STT session opened by
       the shipped code path reaches `RecognitionStarted` instead of closing `4001` — the probe reads
       past the upgrade or it has verified nothing (§5.11). This — not the suite — is the close-out
-      evidence for §2, §3 and §4.1
-- [ ] 7.6 The silent-success assertion: a Cartesia synthesis that reaches `done` having produced zero
+      evidence for §2, §3 and §4.1. **All eight, 2026-08-19, three arms each, and the runner is now
+      committed** — the blocker found on opening this task was that no runner existed: the probe held
+      the method and its tests but not a line of network code, so every prior "probed with both
+      controls" rested on a procedure rather than on something re-runnable. Results and the two ways
+      the instrument itself was wrong: `docs/guides/provider-wire-conformance.md` →
+      *Re-probed from committed code — 2026-08-19*. `RecognitionStarted` observed; LMNT WebSocket
+      gained the wrong-path control it had been missing (`403` at the upgrade) and moves to
+      `live + both controls`
+- [x] 7.6 The silent-success assertion: a Cartesia synthesis that reaches `done` having produced zero
       audio must fail the suite. Negative-test it by reverting the frame-type fix locally, watching the
-      test go red, and restoring
-- [ ] 7.7 Where a surface could not be re-probed for want of a credential, the close-out record says so
-      and the surface stays *not characterised*. A task is not closed by a green fake, and a task closed
+      test go red, and restoring. **10 of 19 Cartesia tests went red**, including
+      `SynthesizeAsync_ShouldTerminate_WhenServerSendsDone` with
+      `SpeechProviderEmptyResultException: Cartesia ended the session without producing any audio and
+      without reporting a failure.` Restored; `git diff` on the file is empty
+- [x] 7.7 Where a surface could not be re-probed for want of a credential, the close-out record says so
+      and the surface stays *not characterised*. **Nothing had to be left uncharacterised in the end**:
+      all five credentials were present and the one missing parameter — Cartesia TTS has no default
+      voice in the shipped client — was resolved from the vendor's own public catalog rather than
+      guessed. The refusal path is real and tested, not just documented: `run_surface` returns without
+      probing and prints the environment-variable name when a credential or a voice id is absent, and
+      two unit tests hold that behaviour in place. A task is not closed by a green fake, and a task closed
       on a pinned vendor document (§2.1) is a **closed task with an unverified surface** — the task
       ledger and the §5.5 record say different things about it, deliberately
-- [ ] 7.8 `openspec validate provider-wire-protocol-conformance --type change --strict` clean
+- [x] 7.8 `openspec validate provider-wire-protocol-conformance --type change --strict` clean
 - [ ] 7.9 CI green on the PR, zero warnings; enqueue with `gh pr merge <pr> --auto` (merge queue —
       never `--squash` / `--delete-branch`)

@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — the conformance probe can now run, which it could not before
+
+`scripts/probe-provider-conformance.py` shipped the *method* — the redaction, control and depth
+rules, unit-tested and gated. It did not ship a line of network code, while its own docstring said
+"the network calls live in the runner at the bottom". Every live run behind this record was
+therefore an ad-hoc script written for the occasion and thrown away, so "probed with both controls"
+rested on a procedure — which is the exact thing the record exists because nobody could reproduce.
+
+- **The live runner.** Eight surfaces, three arms each — shipped, wrong path, invalid credential —
+  addressed exactly as the shipped clients address them, since a probe built from vendor
+  documentation agrees with a client built from the same misreading and finds nothing. `--probe
+  <surface>` or `--probe all`. Hand-run and deliberately not wired to CI: it needs credentials and
+  paid egress, and a probe nobody reads is a cost rather than a control. Module-level imports stay
+  stdlib-only so the CI script suite keeps running without a dependency install; the RFC 6455
+  primitives are borrowed from the capture tool by path rather than re-implemented, but the read
+  loop is the probe's own, because that tool raises on a non-`101` and discards the close code and
+  here both of those *are* the measurement.
+- **All eight fixed surfaces re-probed, 2026-08-19**, with both controls on the same host in the
+  same run. Full table in `docs/guides/provider-wire-conformance.md`. LMNT WebSocket gained the
+  wrong-path control it had been missing — `/v1/ai/speech/stream-does-not-exist` answers `403` at
+  the upgrade, so the arm can fail — and moves from `live + credential control` to
+  `live + both controls`. AssemblyAI's route re-measured as still *not controllable*: an
+  undocumented path served a complete session, transcript included. Speechmatics STT's
+  `101`-then-close-`4001` reproduced on demand.
+- **Two ways the instrument itself was wrong, found by running it.** It counted any non-JSON HTTP
+  body as audio regardless of status, so a Speechmatics `401` with a 172-byte error body reported
+  `172 B audio` against the *invalid-credential* arm — a control that appears to have produced
+  speech. And it reported Cartesia TTS as having gone idle with the vendor sending nothing further,
+  which reads as a vendor defect and was the probe's: the vendor had sent `done` and held the
+  context open while the probe kept reading a socket the shipped client would already have left.
+  `probe_ws` now stops at the terminator the shipped client breaks on. Both are recorded rather than
+  quietly patched, for the same reason the redaction failure is: an instrument never caught being
+  wrong has usually never been checked.
+- **A third instrument was wrong, and this one failed loudly.** The governance guard that checks
+  every shipping provider against the conformance record located the *Client type* column by
+  position — the second cell of every Markdown table in the file — which was true while the file
+  held only the two surface tables. Adding a third made it read `` `101`, `transcript` then `done` ``
+  as a client type and fail the reverse-direction check naming it an orphaned row: right to fail,
+  wrong about why. The column is now found by its header and a table that does not name it is
+  skipped whole, which is also strictly stricter than what it replaced.
+
 ### Changed — the functional matrix now runs in the merge queue, not on every PR push
 
 CI cost, not SDK behaviour: no package, public API or test was touched. Median `pull_request`
