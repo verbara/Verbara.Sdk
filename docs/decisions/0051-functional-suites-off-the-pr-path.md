@@ -125,3 +125,35 @@ cancelled either — they maintain the default-branch security baseline.
   as the replacement.
 - **NuGet / build caching.** Measured ≤1 min, almost all of it off the critical path. Not worth the
   cache-invalidation surface.
+
+## Addendum (2026-08-18) — what #199 measured, and the one decision it did not exercise
+
+The change landed as PR #199 (merged `18:53:56Z`). D1 and D2 are now measured rather than predicted;
+D3 is not, and this addendum exists so that gap is recorded somewhere tracked rather than only in
+the archived change's prose.
+
+**Measured on #199.** The load-bearing risk — the #104/#105 stranding hazard — did not materialize:
+`Functional Tests (Testcontainers) (23)` reported `success` in **19s** (and 17s on the second run),
+matrix-suffixed and with both heavy steps `skipped`, so the required context materialized exactly as
+the step-level guard intended. All nine required contexts reported and the PR reached `mergeable`.
+The PR run cost **9m56s** (9m10s on the second), against ~29 min for the same PR shape before. The
+`merge_group` leg ran the full `[22, 23]` matrix for real — (22) 18m59s, (23) 20m05s — and finished
+in **20m20s** against #198's ~31.5 min on the identical leg. Both matrix legs started at `18:33:18Z`,
+the same second as `Unit Tests`: that simultaneity *is* D2, visible in the clock.
+
+**D3 is unexercised.** The `concurrency` block never fired — the two pushes on #199 never overlapped,
+so no run was ever superseded, on either `ci.yml` or `codeql.yml`. The predicted saving (retiring the
+class of superseded runs) therefore rests on the expression alone. It will confirm or refute itself
+on the first branch that gets two pushes inside one run's wall-clock, which needs no ceremony to
+observe. The failure mode to watch for is not a missing cancellation but the opposite one:
+`cancel-in-progress` leaking to `merge_group`, which would let a later queue entry kill an in-flight
+landing gate. **Acceptance:** a superseded `pull_request` run shows `cancelled`, and a `merge_group`
+run that overlaps another entry — or whose source branch is pushed again — runs to completion. Until
+both are seen, treat D3 as reasoned, not verified.
+
+The `ci:functional` escape hatch is in the same position. The label exists (`#1D76DB`, "Run the
+functional/Testcontainers matrix on this PR (ADR-0051 opt-in)") but no PR has wanted it yet, so the
+labelled-PR path — the one that has to survive `github.event.pull_request.labels.*.name` resolving
+on a `pull_request` event while staying inert on `merge_group` — is reasoned, not verified, for the
+same reason. First branch that touches the AMI/ARI surface should use it deliberately and confirm
+the heavy steps run.

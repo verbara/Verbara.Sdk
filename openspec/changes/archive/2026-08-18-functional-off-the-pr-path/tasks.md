@@ -32,18 +32,34 @@ PR.
 
 ## 3. Verification on this change's own PR (the part that cannot be checked locally)
 
-- [ ] 3.1 Confirm `Functional Tests (Testcontainers) (23)` **reports success in seconds** on the PR
+All measured on this change's own PR, #199 (merged 2026-08-18T18:53:56Z).
+
+- [x] 3.1 Confirm `Functional Tests (Testcontainers) (23)` **reports success in seconds** on the PR
       run — not `SKIPPED`, not unsuffixed, not absent. This is the #104/#105 failure mode and the
-      single most important check in this change
-- [ ] 3.2 Confirm all nine required contexts report on the PR run, and that the PR reaches
-      `mergeable` rather than sitting `BLOCKED`
-- [ ] 3.3 Measure the PR run's wall-clock and confirm it lands near the predicted ~10 min
+      single most important check in this change. **Measured: 19s and 17s across the PR's two
+      runs, matrix-suffixed, job `success`, both heavy steps `skipped`.** The stranding hazard did
+      not materialize
+- [x] 3.2 Confirm all nine required contexts report on the PR run, and that the PR reaches
+      `mergeable` rather than sitting `BLOCKED`. **Measured: nine of nine reported; the PR reached
+      `mergeable` and was enqueued with `gh pr merge 199 --auto`**
+- [x] 3.3 Measure the PR run's wall-clock and confirm it lands near the predicted ~10 min.
+      **Measured: 9m56s, and 9m10s on the second run (16:20:58Z → 16:30:08Z) — against the ~29 min
+      the same PR shape cost before this change**
 - [ ] 3.4 Push a second commit while the first run is in flight and confirm the first run is
-      **cancelled** (the `concurrency` block's first live exercise)
-- [ ] 3.5 Confirm the `merge_group` run executes the full `[22, 23]` matrix with both heavy steps
-      running, and measure it against the predicted ~20.5 min
-- [ ] 3.6 Create the `ci:functional` label in the repo so the escape hatch exists before someone
-      needs it, and verify a labelled PR runs the heavy steps
+      **cancelled** (the `concurrency` block's first live exercise). **NOT EXERCISED — the two
+      pushes on #199 never overlapped, so no run was ever superseded.** Deferred with acceptance
+      criteria to the ADR-0051 addendum (2026-08-18); this is the one decision in the change with
+      no measured evidence behind it
+- [x] 3.5 Confirm the `merge_group` run executes the full `[22, 23]` matrix with both heavy steps
+      running, and measure it against the predicted ~20.5 min. **Measured: 20m20s
+      (18:33:04Z → 18:53:24Z) against #198's ~31.5 min on the same leg. Both matrix legs ran for
+      real — (22) 18m59s and (23) 20m05s — and both started at 18:33:18Z, the same second as
+      `Unit Tests`, which is D2 (the dropped `needs` edge) showing up in the clock**
+- [x] 3.6 Create the `ci:functional` label in the repo so the escape hatch exists before someone
+      needs it, and verify a labelled PR runs the heavy steps. **Label created (`#1D76DB`,
+      "Run the functional/Testcontainers matrix on this PR (ADR-0051 opt-in)"). The labelled-PR
+      leg is untested for the same reason as 3.4 — no PR has yet wanted it — and rides the same
+      addendum**
 
 ## 4. Closing
 
@@ -51,4 +67,4 @@ PR.
 - [x] 4.2 `openspec validate --all --strict` green (also a CI gate) — 11 passed, 0 failed
 - [x] 4.4 `scripts/tests/test_classify_docs_only.sh` still green (37/37); its self-validation case
       pins that a `ci.yml` edit is NOT docs-only, so this change's own PR exercises the full gate
-- [ ] 4.3 Archive this change once the queue run has confirmed §3.5
+- [x] 4.3 Archive this change once the queue run has confirmed §3.5
