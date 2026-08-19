@@ -466,11 +466,12 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
             await cts.CancelAsync().ConfigureAwait(false);
         });
 
-        // Use ToListAsync(cts.Token): ensures the token is checked on each iteration
-        // so the OCE propagates even if the channel reader completes first.
         var act = async () => await synth
             .SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz, cts.Token)
-            .ToListAsync(cts.Token);
+            // ADR-0052 F3: the consumer holds no token. Passing the cancelled one to ToListAsync
+            // makes the enumerator throw on our behalf, and the assertion then cannot tell a
+            // propagated throw from a silent `yield break` in the subject.
+            .ToListAsync(CancellationToken.None);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         await cancelTrigger; // surface any helper-side timeout
@@ -611,6 +612,37 @@ public class LmntSpeechSynthesizerHttpTests
 
         server.ReceivedRequests.Should().ContainSingle().Subject
             .Header("X-API-Key").Should().Be(ApiKey);
+    }
+
+    [Fact]
+    public async Task SynthesizeAsync_Http_ShouldThrowOperationCanceled_WhenCancelledMidStream()
+    {
+        // The existing `SynthesizeAsync_ShouldAbort_WhenCancelled` runs on
+        // `LmntTransport.WebSocket`, so it never enters `SynthesizeHttpAsync` — the HTTP read loop
+        // was the one carrying `ADR-0050 E6`'s `yield break` and had no cancellation coverage at
+        // all. Transport is an option, not an implementation detail: a contract declared on
+        // `SynthesizeAsync` has to hold on both.
+        //
+        // The synthetic body is 20 002 B against an 8 192 B read buffer, so cancelling after the
+        // first chunk leaves two further reads to abort (ADR-0052 F1).
+        await using var server = HttpProviderMockServer.Start();
+        StubRecordedEnvelope(server);
+        var synth = SynthesizerFor(server);
+        using var cts = new CancellationTokenSource();
+
+        // ADR-0052 F3: the token reaches the subject only, so the throw asserted below can only
+        // have come from the synthesizer.
+        var act = async () =>
+        {
+            await foreach (var chunk in synth.SynthesizeAsync(
+                "hello http", AudioFormat.Slin16Mono16kHz, cts.Token))
+            {
+                chunk.Length.Should().BeGreaterThan(0);
+                await cts.CancelAsync();
+            }
+        };
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
     [Fact]

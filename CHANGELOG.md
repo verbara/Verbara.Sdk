@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: cancelling a synthesis truncated the stream in silence on two TTS surfaces
+
+`ADR-0050 E6` said cancellation is never a failure — not counted, not wrapped, not thrown — and two
+HTTP read loops implemented that literally, catching `OperationCanceledException` and ending the
+sequence with `yield break`. The accepted `test-determinism` requirement said the opposite:
+`SynthesizeAsync` SHALL surface `OperationCanceledException` at the next iteration boundary. Both
+clauses were accepted, and nothing in CI compares an ADR against a living spec, so they disagreed
+with nothing able to notice. `ADR-0052` settles it toward the spec: cancellation stays
+not-a-failure, but it may not end the caller's sequence silently, because a truncated stream is
+indistinguishable from a whole one — the exact shape ADR-0050 exists to retire.
+
+- **`SpeechmaticsSpeechSynthesizer` and `LmntSpeechSynthesizer` over HTTP now propagate.** A caller
+  that enumerates a cancelled synthesis with a plain `await foreach` used to receive a short stream
+  and no exception; it now receives `OperationCanceledException`. Eight other
+  `catch (OperationCanceledException)` sites in the same packages are deliberately unchanged — the
+  discriminator is what the `catch` ends, not which package it sits in, so send and teardown paths
+  keep swallowing.
+- **Neither defective path had a cancellation test: the suite was not blind here, it was absent.**
+  Speechmatics TTS had none at all, and LMNT's built its subject on `LmntTransport.WebSocket` and so
+  never entered the HTTP loop. The requirement's scenario enumerates "(Deepgram, ElevenLabs, Lmnt)"
+  under a normative sentence that binds every TTS synthesizer, and a closed enumeration under an open
+  contract is how a surface goes uncovered while the suite reads complete. Two tests were written
+  against the still-defective code and confirmed red for want of a throw before the fix went in.
+- **Ten existing cancellation tests could not have failed either, and are repaired too.** Every one
+  enumerated with `ToListAsync(cts.Token)`; `ToListAsync` checks that token itself at each iteration
+  boundary, so it throws whether or not the subject does, and the assertion passes over a
+  `yield break` identically to a propagated throw. All ten now enumerate with
+  `CancellationToken.None`, so the token reaches the subject alone. All ten were green before and
+  stay green — they were never the ones holding the line, which is how the defect survived beside
+  them.
+
 ### Added — the conformance probe can now run, which it could not before
 
 `scripts/probe-provider-conformance.py` shipped the *method* — the redaction, control and depth

@@ -110,12 +110,12 @@ public sealed class SpeechmaticsSpeechSynthesizer : SpeechSynthesizer
         var yieldedAudio = false;
         while (true)
         {
-            int read;
-            try
-            {
-                read = await stream.ReadAsync(buf.AsMemory(), ct).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) { yield break; }
+            // ADR-0052 F1. Cancellation stays what ADR-0050 E6 said it was — not a provider
+            // failure, not counted, not wrapped — but it may not end the caller's sequence
+            // silently: a truncated stream is indistinguishable from a whole one, which is the
+            // shape ADR-0050 exists to retire. The token propagates to the caller's next
+            // MoveNextAsync instead of being converted into a short result.
+            var read = await stream.ReadAsync(buf.AsMemory(), ct).ConfigureAwait(false);
 
             if (read == 0)
             {

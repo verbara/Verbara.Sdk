@@ -330,7 +330,10 @@ public class DeepgramSpeechRecognizerTests : IAsyncDisposable
         var act = async () =>
             await recognizer.StreamAsync(
                     SttFrameGenerators.EndlessFrames(), AudioFormat.Slin16Mono8kHz, cts.Token)
-                .ToListAsync(cts.Token);
+                // ADR-0052 F3: the consumer holds no token. Passing the cancelled one to ToListAsync
+                // makes the enumerator throw on our behalf, and the assertion then cannot tell a
+                // propagated throw from a silent `yield break` in the subject.
+                .ToListAsync(CancellationToken.None);
         await act.Should().ThrowAsync<OperationCanceledException>();
 
         _server.ReceivedFrameCount.Should().Be(0);

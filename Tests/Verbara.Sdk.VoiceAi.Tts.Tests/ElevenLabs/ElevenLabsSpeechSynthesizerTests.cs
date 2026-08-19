@@ -245,7 +245,10 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
         var synth = BuildSynthesizer();
         var act = async () => await synth
             .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz, cts.Token)
-            .ToListAsync(cts.Token);
+            // ADR-0052 F3: the consumer holds no token. Passing the cancelled one to ToListAsync
+            // makes the enumerator throw on our behalf, and the assertion then cannot tell a
+            // propagated throw from a silent `yield break` in the subject.
+            .ToListAsync(CancellationToken.None);
         await act.Should().ThrowAsync<OperationCanceledException>();
         _server.ReceivedJsonMessages.Should().BeEmpty();
     }
