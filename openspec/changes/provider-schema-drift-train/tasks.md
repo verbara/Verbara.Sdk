@@ -2,8 +2,8 @@
 
 Execution follows Subagent-Driven Development with FCM batching:
 **Phase A (batch)** = §1 license clearance + §2 vendoring · **Phase B (focused)** = §3 sidecar schema
-and validator + §4 derived fixtures + §5 the drift job · **Phase C (batch)** = §6 §5-of-wiremock
-amendment + §7 records + §8 verification.
+and validator + §4 derived fixtures + §5 the drift job · **Phase C (batch)** = §6 the documentation-derived
+route in the recording protocol + §7 records + §8 verification.
 
 §1 gates everything: nothing is vendored before its license is read from the actual file. §5 is
 accepted only when it has been demonstrated failing on an in-scope **rename**, failing on an in-scope
@@ -117,7 +117,8 @@ proves nothing.
 ## 4. Fixtures derived from the contracts
 
 - [ ] 4.1 Derive, per reachable surface, the frames the fake servers currently hand-author. Start
-      with Deepgram STT `Results` — the case `wiremock-http-provider-substrate` §5.1 names, where the
+      with Deepgram STT `Results` — the case the archived `wiremock-http-provider-substrate` §5.1 named,
+      where the
       hand-authored object carries five fields and the real one carries `speech_final`,
       `channel_index`, `duration`, `start`, `metadata` and word arrays
 - [ ] 4.2 Take the **field set and optionality** from the contract and author values locally. Do not
@@ -178,21 +179,30 @@ proves nothing.
       read the diff artifact, decide whether the SDK must change, and re-pin deliberately. An alarm
       with no documented response is an alarm that gets muted
 
-## 6. Amend `wiremock-http-provider-substrate` §5
+## 6. Amend the documentation-derived route in `docs/guides/provider-recording-protocol.md` §7
 
-- [ ] 6.1 Amend the §5 preamble that blesses *"frames hand-authored from the vendor's own published
-      protocol documentation"*: keep the credential-free path, but make its source the
-      machine-readable contract wherever one exists. Prose is the fallback, not the default —
-      transcribing prose is the shared-misreading mechanism the programme exists to retire
-- [ ] 6.2 Re-point all **seven** reachable surfaces at their contracts, noting the tier of each so the
-      difference in authority is visible per task: §5.1 (Deepgram STT), §5.3 / §5.5 (Cartesia STT /
-      TTS), §5.4 (Speechmatics STT), §5.6 (Deepgram TTS), §5.7 (ElevenLabs TTS), §5.8 (LMNT WS)
-- [ ] 6.3 §5.2 (AssemblyAI STT) keeps the envelope-only path and gains the recorded reason: no
-      specification repository exists and the generated types describe a retired API version. This is
-      the one surface the change genuinely cannot reach
-- [ ] 6.4 Amend the §5 table so the `not-cleared` verdicts read as verdicts on **Output**, with the
-      contract's license in a second column. As written they imply the surface is unreachable, which
-      is what stalled it
+> **Re-pointed 2026-08-19.** These four tasks were written against `wiremock-http-provider-substrate`
+> §5, which archived on 2026-08-17 as
+> `openspec/changes/archive/2026-08-17-wiremock-http-provider-substrate/`. An archive is history and
+> is never edited, so the amendment lands where that material lives and is still maintained: §7's
+> *"Documentation-derived fixtures — the route that needs no verdict"* and the per-provider findings
+> beneath it. The substance is unchanged; only the file it is written into moved. Left pointing at
+> the archive, this whole section would have been unexecutable — a task that cannot be done is
+> indistinguishable from one nobody got to.
+
+- [ ] 6.1 Amend the §7 preamble that blesses *"frames authored to the vendor's published protocol
+      documentation"*: keep the credential-free path, but make its source the machine-readable
+      contract wherever one exists. Prose is the fallback, not the default — transcribing prose is
+      the shared-misreading mechanism the programme exists to retire
+- [ ] 6.2 Re-point all **seven** reachable surfaces at their contracts in their per-provider §7
+      sections, noting the tier of each so the difference in authority is visible per surface:
+      Deepgram STT, Cartesia STT / TTS, Speechmatics STT, Deepgram TTS, ElevenLabs TTS, LMNT WS
+- [ ] 6.3 AssemblyAI STT keeps the prose-derived path and gains the recorded reason: no specification
+      repository exists and the generated types describe a retired API version. This is the one
+      surface the change genuinely cannot reach
+- [ ] 6.4 Amend §7's *"How to read the verdicts"* table so the `not-cleared` verdicts read as
+      verdicts on **Output**, with the contract's license in a second column. As written they imply
+      the surface is unreachable, which is what stalled it
 
 ## 7. Decision record and docs
 
