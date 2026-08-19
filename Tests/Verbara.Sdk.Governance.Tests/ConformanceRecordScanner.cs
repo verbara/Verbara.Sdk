@@ -164,23 +164,59 @@ internal static class ConformanceRecordScanner
         return false;
     }
 
+    /// <summary>The header cell that identifies the Client type column.</summary>
+    private const string ClientTypeHeader = "Client type";
+
     /// <summary>
-    /// The second cell of every Markdown table row in the record — the Client type column.
+    /// The Client type cell of every Markdown table row in the record.
     /// "| Surface | Client type | … |" splits to ["", " Surface ", " Client type ", …, ""].
     /// </summary>
+    /// <remarks>
+    /// The column is located by its HEADER, not by its position, and a table whose header does not
+    /// name it is skipped whole. This started as "the second cell of every row", which was true of
+    /// a file containing only the two surface tables and stopped being true the moment the record
+    /// grew a third: on 2026-08-19 a probe-results table landed whose second column reads
+    /// <c>`101`, `transcript` then `done`</c> — a cell that begins and ends with a backtick, so the
+    /// positional reader registered it as a client type and the reverse-direction guard failed
+    /// naming it as an orphaned row. The guard was right to fail and its premise was wrong, which
+    /// is the more useful half: a rule that depends on a file never gaining a table is a rule that
+    /// breaks on the next honest edit, and it breaks with a message about the wrong thing.
+    /// Skipping such tables is the same principle the prose exclusion already encodes: a cell in a
+    /// table about something else is no more a row than a mention in a paragraph is. It is also
+    /// strictly stricter — the positional reader would have accepted a provider named in the second
+    /// column of any table in the file as a row it never was.
+    /// </remarks>
     private static IEnumerable<string> ClientTypeCells(string record)
     {
+        const int noTable = -1;
+        var column = noTable;
+
         foreach (var line in record.Split('\n'))
         {
             var trimmed = line.TrimEnd('\r');
             if (!trimmed.StartsWith('|'))
+            {
+                column = noTable;          // prose or a blank line ends the table
                 continue;
+            }
 
             var cells = trimmed.Split('|');
             if (cells.Length < 3)
                 continue;
 
-            yield return cells[2].Trim();
+            if (column == noTable)
+            {
+                // The first row of a table is its header. A table that does not name the column is
+                // a table about something else, and none of its cells are rows.
+                column = Array.FindIndex(
+                    cells, c => c.Trim().Equals(ClientTypeHeader, StringComparison.OrdinalIgnoreCase));
+                if (column < 0)
+                    column = int.MaxValue;   // read nothing further from this table
+                continue;
+            }
+
+            if (column < cells.Length)
+                yield return cells[column].Trim();
         }
     }
 }

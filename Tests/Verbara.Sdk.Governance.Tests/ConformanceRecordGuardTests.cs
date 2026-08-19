@@ -150,8 +150,13 @@ public sealed class ConformanceRecordGuardTests
     public void Scan_ShouldIgnore_WhenRowStatusIsNotCharacterised()
     {
         // 'not characterised' is a legal, passing status: the guard checks presence, never verdict.
+        // The header is part of the fixture because the scanner locates the column by name; this
+        // row previously stood alone, which only ever parsed because the column was read by
+        // position. What the test asserts — that the verdict cell is not consulted — is unchanged.
         const string source = "class NewVendorSpeechRecognizer : SpeechRecognizer { }";
         const string record =
+            "| Surface | Client type | Evidence |\n" +
+            "|---|---|---|\n" +
             "| New Vendor STT | `NewVendorSpeechRecognizer` | not characterised |\n";
 
         var violations = ConformanceRecordScanner.Scan(source, "src/x.cs", record);
@@ -171,6 +176,43 @@ public sealed class ConformanceRecordGuardTests
         var violations = ConformanceRecordScanner.Scan(source, "src/x.cs", record);
 
         violations.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void Scan_ShouldFlag_WhenTheTypeSitsInATableThatDoesNotNameTheColumn()
+    {
+        // THE 2026-08-19 regression, from the other direction. The record gained a probe-results
+        // table, and the positional reader took its second column for client types -- registering
+        // "`101`, `transcript` then `done`" as one, because that cell begins and ends with a
+        // backtick. A table about something else contributes no rows.
+        const string source = "class NewVendorSpeechRecognizer : SpeechRecognizer { }";
+        const string record =
+            "| Surface | shipped | wrong path |\n" +
+            "|---|---|---|\n" +
+            "| New Vendor STT | `NewVendorSpeechRecognizer` | `404` at the upgrade |\n";
+
+        var violations = ConformanceRecordScanner.Scan(source, "src/x.cs", record);
+
+        violations.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void RecordedClientTypes_ShouldReadOnlyTheHeadedTable_WhenTheRecordHasSeveral()
+    {
+        // The reverse direction is what actually broke: cells from a results table were reported as
+        // orphaned rows, which named the wrong problem in the failure message.
+        const string record =
+            "| Surface | Client type | Evidence |\n" +
+            "|---|---|---|\n" +
+            "| New Vendor STT | `NewVendorSpeechRecognizer` | `live + both controls` |\n" +
+            "\n" +
+            "| Surface | shipped | invalid credential |\n" +
+            "|---|---|---|\n" +
+            "| New Vendor STT | `101`, then `Begin` | `401` at the upgrade |\n";
+
+        var recorded = ConformanceRecordScanner.RecordedClientTypes(record);
+
+        recorded.Should().BeEquivalentTo(["NewVendorSpeechRecognizer"]);
     }
 
     [Fact]
