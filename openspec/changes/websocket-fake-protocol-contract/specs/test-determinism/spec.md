@@ -100,6 +100,57 @@ lowered as barriers are removed and MUST NOT be raised.
 - **WHEN** a change removes wall-clock barriers from a file
 - **THEN** that file's count is lowered in the same commit, and no count anywhere is raised to accommodate a new barrier
 
+## MODIFIED Requirements
+
+### Requirement: TTS synthesis observes cancellation deterministically
+
+TTS speech synthesizers SHALL observe a cancelled token deterministically: a token cancelled before
+or during `SynthesizeAsync` enumeration SHALL surface `OperationCanceledException` at the next
+iteration boundary, independent of provider/mock latency. A pre-cancelled token SHALL throw before
+the first provider request is issued. Per-provider cancellation tests MUST NOT race a wall-clock
+timer (`CancellationTokenSource(delay)`) against fake-server behaviour.
+
+A cancellation test SHALL hand the cancelled token to the **subject only**. The consumer that
+enumerates the result MUST NOT receive it — no `ToListAsync(ct)`, no `ToArrayAsync(ct)`, no
+`WithCancellation(ct)` — because each of those checks the token itself at every iteration boundary
+and throws whether or not the subject does. The assertion then passes over a silent `yield break`
+identically to a propagated throw, so the test measures the enumerator rather than the code under
+test (ADR-0052 F3).
+
+Coverage of this requirement SHALL be enumerated by **selectable code path**, not by provider name.
+Every route through `SynthesizeAsync` a caller can reach through options — each transport of a
+multi-transport synthesizer included — SHALL carry its own mid-enumeration cancellation test.
+
+#### Scenario: Pre-cancelled token throws before any provider call
+
+- **GIVEN** a `CancellationTokenSource` cancelled before `SynthesizeAsync` is enumerated
+- **WHEN** the stream is enumerated plainly, the token having been passed to `SynthesizeAsync` and not to the enumerator
+- **THEN** `OperationCanceledException` is thrown deterministically and no provider request is issued
+
+#### Scenario: Cancellation landing mid-enumeration reaches the caller
+
+- **GIVEN** a synthesis whose response leaves further reads outstanding after the first chunk is yielded
+- **WHEN** the token is cancelled after that first chunk
+- **THEN** `OperationCanceledException` propagates out of the caller's own `await foreach`, rather than the sequence simply ending
+
+#### Scenario: The enumerator cannot supply the throw
+
+- **GIVEN** the subject altered to swallow the token and end its sequence with `yield break`
+- **WHEN** the cancellation test runs
+- **THEN** it fails, because the assertion has no source of `OperationCanceledException` other than the subject
+
+#### Scenario: Every selectable transport carries its own test
+
+- **GIVEN** a synthesizer whose options select between transports
+- **WHEN** its cancellation coverage is enumerated
+- **THEN** each selectable transport has a test, because a contract declared on `SynthesizeAsync` cannot hold on one transport and not on another
+
+#### Scenario: Cancellation tests do not race the fake server
+
+- **GIVEN** the per-path mid-enumeration cancellation tests
+- **WHEN** the suite runs repeatedly under load or coverage instrumentation
+- **THEN** the tests pass deterministically — the assertion targets the iteration-boundary contract, not a timer-vs-connect scheduling race
+
 ## Architectural Risk
 
 **Level:** LOW.

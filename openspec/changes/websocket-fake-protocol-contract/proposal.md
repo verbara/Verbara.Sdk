@@ -157,7 +157,8 @@ None. The contract lands in the existing `test-determinism` capability.
 
 ### Modified Capabilities
 
-- `test-determinism`: five ADDED requirements. The capability already owns this repo's
+- `test-determinism`: five ADDED requirements and **one MODIFIED** (the TTS cancellation
+  requirement, corrected per ADR-0052 — see §5.11). The capability already owns this repo's
   deterministic-test contracts, and this is precisely the failure class it exists for — a test
   outcome that depends on scheduling rather than on the code under test. Its existing requirements
   fence *time* (cancellation observed at a deterministic seam) and *address space* (one owner per
@@ -168,7 +169,9 @@ None. The contract lands in the existing `test-determinism` capability.
 
 - `Tests/Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests`: the fake rewritten, one `ProjectReference` added,
   two test files adjusted.
-- `Tests/Verbara.Sdk.Governance.Tests`: one new detector, its unit tests and a liveness self-test.
+- `Tests/Verbara.Sdk.Governance.Tests`: **two** new detectors sharing one scanner scaffold — the
+  Class C capture-collection guard (§5.2) and the cancellation-token-provenance guard ADR-0052 left
+  unscoped (§5.7) — their unit tests and a liveness self-test.
 - `sync-fence-baseline.json`: three entries lowered.
 - `docs/decisions/`: ADR-0045 + index row. `CHANGELOG.md`: one `[Unreleased]` entry.
 - **`src/` untouched. Public API surface untouched** (`PublicAPI.*.txt` unchanged), so nothing

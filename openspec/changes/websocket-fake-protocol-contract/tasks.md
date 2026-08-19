@@ -4,6 +4,9 @@ Execution follows Subagent-Driven Development with FCM batching:
 **Phase A (batch)** = §1 baseline + §2 substrate · **Phase B (focused)** = §3 fences + §4 tests ·
 **Phase C (batch)** = §5 ratchet/guard + §6 records + §7 verification.
 
+§5.7–§5.11 were handed to this change by ADR-0052 after it was written; §5.11 is a spec correction
+and gates §5.7.
+
 Sections §2, §3 and §4 are separable on purpose: §2 must be green with the test files untouched
 before §3 changes any timing, and §3–§4 stand on either substrate if §2 is abandoned.
 
@@ -116,6 +119,37 @@ before §3 changes any timing, and §3–§4 stand on either substrate if §2 is
       empty enumeration cannot read as green
 - [ ] 5.6 Negative-test the guard end to end: revert §3.6, watch the guard fail naming the exact file
       and line, restore it, watch the suite return to green
+
+### The second detector, handed here by ADR-0052 (2026-08-19)
+
+ADR-0052 closed the E6-vs-`test-determinism` contradiction and left three items it deliberately did
+not scope, all of the same class §5 already builds for. They land here rather than in their own
+change because **the scaffolding is the expensive part, not the detector** — §5.2–§5.6 build a
+scanner, a guard test, true-positive and false-positive unit tests and a liveness self-test, and a
+second detector arriving after this change closes would rebuild all five.
+
+- [ ] 5.7 Add a cancellation-token-provenance detector to `Tests/Verbara.Sdk.Governance.Tests/`,
+      reusing the scanner scaffolding §5.2 builds rather than standing up a second one: in a test
+      method that cancels a `CancellationTokenSource`, the enumeration of the subject MUST NOT
+      receive that token. `ToListAsync(ct)`, `ToArrayAsync(ct)` and `WithCancellation(ct)` are the
+      reported forms (ADR-0052 F3)
+- [ ] 5.8 Detector unit tests — true positive: a `.ToListAsync(cts.Token)` in a method that cancels
+      `cts` is reported with a 1-based line number and the file named in the failure message
+- [ ] 5.9 Detector unit tests — false-positive immunity: `ToListAsync(CancellationToken.None)`, a
+      no-argument `ToListAsync()`, and a `ToListAsync(ct)` in a method whose token is never cancelled
+      are NOT reported. The last one matters most — a token that is only ever a hang bound is the
+      legitimate case, and a detector that cannot tell it apart will be muted
+- [ ] 5.10 Negative-test the detector against history rather than against a fixture: restore the ten
+      pre-fix cancellation tests from `c4756fbd^`, run the detector, confirm it reports **exactly
+      those ten**. A guard that cannot re-find the defect it was written for is not evidence, and
+      this is the one defect whose full extent is already known
+- [ ] 5.11 Amend the living `test-determinism` TTS cancellation requirement via the delta in
+      `specs/test-determinism/spec.md` (see the `## MODIFIED Requirements` block). Two defects: its
+      pre-cancelled scenario instructs the exact pattern §5.7 detects — *"WHEN the stream is
+      enumerated (e.g. `ToListAsync(ct)`)"* — and its provider list closes at "(Deepgram, ElevenLabs,
+      Lmnt)" beneath a normative sentence binding every TTS synthesizer, which is how Speechmatics
+      TTS and LMNT-over-HTTP went uncovered entirely. **§5.11 gates §5.7:** a guard that contradicts
+      the spec it enforces gets deleted as a false positive by the next reader
 
 ## 6. Decision record and docs
 
