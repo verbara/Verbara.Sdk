@@ -227,3 +227,44 @@ case is today counted as a completed synthesis is recorded as adjacent debt, not
   it one site earlier: the same construction exists where no symptom has appeared yet, each instance
   was written by someone who believed the filtering was harmless, and a per-incident fix leaves the
   belief intact for the next loop.
+
+## Addendum (2026-08-19) — E6 and the `test-determinism` spec disagree, and no test can tell
+
+Harvested while closing `provider-wire-protocol-conformance`. This is not a defect report; it is a
+conflict between two `Accepted` artifacts, recorded here because it is currently tracked nowhere and
+because the tests that should catch it structurally cannot.
+
+**The conflict.** E6 says cancellation "does not throw". The living spec `test-determinism`
+→ *TTS synthesis observes cancellation deterministically* says a token cancelled "before or **during**
+`SynthesizeAsync` enumeration SHALL surface `OperationCanceledException` at the next iteration
+boundary". Two synthesizers implement E6 on the yielding path and therefore contradict the SHALL:
+
+| Site | Enclosing method | Behaviour on cancel mid-read |
+|---|---|---|
+| `SpeechmaticsSpeechSynthesizer.cs:118` | `SynthesizeAsync` (public) | `yield break` — stream ends, no throw |
+| `LmntSpeechSynthesizer.cs:431` | `SynthesizeHttpAsync` | `yield break` — stream ends, no throw |
+
+The sibling `catch` sites are not in this position: ElevenLabs `:133`, Deepgram `:168`/`:185` and
+Cartesia `:174` sit on send or teardown paths, where swallowing ends no caller-visible sequence.
+
+**Why the suite is green anyway, and why that is the load-bearing part.** Every
+`SynthesizeAsync_ShouldAbort_WhenCancelled` test enumerates with `ToListAsync(cts.Token)`. `ToListAsync`
+checks that token itself at each iteration boundary, so it throws whether or not the synthesizer does.
+The assertion passes over a `yield break` identically to a propagated throw — the test is blind to the
+exact distinction the requirement exists to pin. A caller who enumerates with a plain
+`await foreach` and no `WithCancellation`, which is the ordinary shape, gets a silently truncated
+stream: the same silent-failure shape this ADR was written to retire, arriving through the one door
+E6 left open.
+
+**Not decided here.** Which artifact yields is a real choice, not a typo. E6's reasoning — that the
+caller asking to stop is not a provider failure — is sound for the *pipeline*, which already handles
+cancellation as its own arm; the spec's reasoning — that a truncated stream is indistinguishable
+from a complete one unless something throws — is sound for a *library caller*. `IAsyncEnumerable`'s
+own convention favours the spec: a cancelled enumeration is expected to throw, and .NET's
+`WithCancellation`/`[EnumeratorCancellation]` plumbing exists so it can.
+
+**Acceptance, whichever way it goes.** (a) One of the two artifacts is amended so they agree, by a
+new ADR if E6 moves. (b) The three TTS cancellation tests are rewritten to enumerate with a token
+that is *not* the cancelled one — passing `cts.Token` to `SynthesizeAsync` and enumerating plainly —
+so the assertion targets the synthesizer instead of `ToListAsync`. Until (b) exists, no run of this
+suite is evidence about either behaviour, and (a) cannot be verified.

@@ -160,10 +160,13 @@ fail**, so its route claim is discarded while its credential and frame evidence 
   and is never told. The route control on this surface is sound, so this is a control gap on a path
   *parameter*, not on the route — `ADR-0048 A6` records that D2 applies per varied dimension.
 - **Consequently the earlier claim that the shipped default voice is validated is withdrawn.** It
-  rested on that voice returning `200` on a route that returns `200` for anything. The default is
-  unchanged pending an operator decision, because the vendor's authoritative `GET /voices` is
-  credential-gated and account-scoped, and one account's entitlement is not grounds for changing a
-  public default.
+  rested on that voice returning `200` on a route that returns `200` for anything. This entry left the
+  default unchanged pending an operator decision, because the vendor's authoritative `GET /voices` is
+  credential-gated and account-scoped. **That hold was lifted later in the same unreleased cycle** —
+  see *Fixed — the shipped Speechmatics default voice was not a voice* above, where the default became
+  `jack` once the vendor was measured to publish exactly four voices and the shipped value was not
+  among them. The two entries are not in conflict once read in order: a `200` never proved the default
+  was right, and the later run proved it was wrong.
 - **Two measurement instruments were refuted before either produced a usable reading**, which is
   recorded because both fail silently on any route of this shape: byte identity does not
   discriminate here (same request twice → same length, different hash), and byte length only

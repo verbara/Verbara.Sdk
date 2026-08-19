@@ -57,10 +57,10 @@ two by route, two by frame handling — and none of the four was detectable from
 | Deepgram TTS | `DeepgramSpeechSynthesizer` | `wss://api.deepgram.com/v1/speak` | OK | OK | `handshake` | `live + both controls` | 2026-08-15 |
 | Azure TTS | `AzureTtsSpeechSynthesizer` | `https://{region}.tts.speech.microsoft.com` | OK | OK | not measured | `live, uncontrolled` | 2026-08-03 |
 | LMNT (HTTP) | `LmntSpeechSynthesizer` | `https://api.lmnt.com/v1/ai/speech/bytes` | **fixed** | n/a | in the response | `live + both controls` | 2026-08-19 |
-| LMNT (WebSocket) | `LmntSpeechSynthesizer` | `wss://api.lmnt.com/v1/ai/speech/stream` | OK | **2 fixed, 1 open** | `in-band` | `live + both controls` | 2026-08-19 |
+| LMNT (WebSocket) | `LmntSpeechSynthesizer` | `wss://api.lmnt.com/v1/ai/speech/stream` | OK | **3 fixed** | `in-band` | `live + both controls` | 2026-08-19 |
 | Speechmatics TTS | `SpeechmaticsSpeechSynthesizer` | `https://preview.tts.speechmatics.com/generate/{voice}` | **fixed** | n/a | in the response | `live + both controls` | 2026-08-19 |
-| Cartesia TTS | `CartesiaSpeechSynthesizer` | `wss://api.cartesia.ai/tts/websocket` | OK | **3 fixed, 1 open** | `handshake` | `live + both controls` | 2026-08-19 |
-| ElevenLabs TTS | `ElevenLabsSpeechSynthesizer` | `wss://api.elevenlabs.io/v1/text-to-speech/{voiceId}/stream-input` | OK | **2 fixed, 1 open** | `in-band` | `live + both controls` | 2026-08-19 |
+| Cartesia TTS | `CartesiaSpeechSynthesizer` | `wss://api.cartesia.ai/tts/websocket` | OK | **4 fixed** | `handshake` | `live + both controls` | 2026-08-19 |
+| ElevenLabs TTS | `ElevenLabsSpeechSynthesizer` | `wss://api.elevenlabs.io/v1/text-to-speech/{voiceId}/stream-input` | OK | **3 fixed** | `in-band` | `live + both controls` | 2026-08-19 |
 
 **Deepgram TTS** — the reference run, and the only TTS surface measured *not* to hide audio in a text
 frame. Shipped defaults (`model=aura-2-thalia-en`, `encoding=linear16`, `sample_rate=24000`) returned
@@ -150,7 +150,7 @@ a wrong-path control has to be read, not pattern-matched.
 | Surface | Client type | Transport | Route | Frames | Validation point | Evidence | Date |
 |---|---|---|---|---|---|---|---|
 | Deepgram STT | `DeepgramSpeechRecognizer` | `wss://api.deepgram.com/v1/listen` | OK | OK | `handshake` | `live + both controls` | 2026-08-16 |
-| Speechmatics STT | `SpeechmaticsSpeechRecognizer` | `wss://eu2.rt.speechmatics.com/v2` | OK | **2 fixed, 4 open** | `in-band` | `live + both controls` | 2026-08-19 |
+| Speechmatics STT | `SpeechmaticsSpeechRecognizer` | `wss://eu2.rt.speechmatics.com/v2` | OK | **5 fixed** | `in-band` | `live + both controls` | 2026-08-19 |
 | Cartesia STT | `CartesiaSpeechRecognizer` | `wss://api.cartesia.ai/stt/websocket` | **fixed** | **2 fixed** | `handshake` (credential) + `in-band` (session) | `live + both controls` | 2026-08-19 |
 | AssemblyAI STT | `AssemblyAiSpeechRecognizer` | `wss://streaming.assemblyai.com/v3/ws` | not controllable | **2 fixed** | `in-band` | `live + credential control` | 2026-08-19 |
 | Google STT | `GoogleSpeechRecognizer` | `https://speech.googleapis.com` | OK | n/a (batch) | in the response | `live + both controls` | 2026-08-15 |
@@ -209,9 +209,13 @@ this row now carries the later date; the credential arms above remain 08-15 meas
 redated by it. The half-close — which cost the caller every final transcript — **is fixed**, and the
 run that measured the fix through the shipped client is the same one that retired the credential fix's
 caveat above (see the remediation section below). The swallowed `Error` frame (ADR-0049 D1, so a
-rejected session reached the caller as an empty stream) is **fixed** under ADR-0050. **Three** defects
-stay open on this surface, all in assembly rather than in failure reporting: the three signals the client
-ignores — `word_delimiter`, `attaches_to`, and the vendor's already-assembled `metadata.transcript`.
+rejected session reached the caller as an empty stream) is **fixed** under ADR-0050. So are the three
+assembly defects this paragraph used to leave open — the client now reads the language pack's
+`word_delimiter` (`SpeechmaticsSpeechRecognizer.cs:278`), honours each token's `attaches_to` (`:354`),
+and prefers the vendor's already-assembled `metadata.transcript` over its own token join (`:311`).
+**Nothing stays open on this surface.** The row read "2 fixed, 4 open" until 2026-08-19 only because
+it was never revisited after those commits landed: a count in a table does not update itself when the
+code beneath it changes, and nothing in CI compares the two.
 
 **Cartesia STT — the session could not open at all, and the row that said otherwise was corrected
 here; both defects are now fixed and the fix is measured through the shipped client.**
@@ -561,7 +565,12 @@ credential — against the same host in the same run. The requests are read out 
 clients, not out of vendor documentation, because a probe built from the documentation would agree
 with a client built from the same misreading and find nothing. It is run by hand and is not wired to
 CI (it needs credentials and paid egress); what CI gates is the part that can be wrong without a
-network, which is 220 unit tests over the redaction, control and depth rules.
+network. For the probe specifically that is **46 unit tests** (`scripts/tests/test_probe_provider_conformance.py`),
+which drive every surface against a fake transport and assert the redaction, control and depth rules:
+that the credential arm never sends the real key, that all three arms hit one origin, and that each
+surface's request shape still matches the client that ships. They are 46 of the 220 tests the
+`Coverage Script Tests` check runs over `scripts/`; the other 174 belong to the capture tool (126) and
+the four coverage gates (48), and prove nothing about this probe.
 
 | Surface | shipped | wrong path | invalid credential |
 |---|---|---|---|
