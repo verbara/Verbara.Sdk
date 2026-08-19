@@ -268,3 +268,15 @@ new ADR if E6 moves. (b) The three TTS cancellation tests are rewritten to enume
 that is *not* the cancelled one — passing `cts.Token` to `SynthesizeAsync` and enumerating plainly —
 so the assertion targets the synthesizer instead of `ToListAsync`. Until (b) exists, no run of this
 suite is evidence about either behaviour, and (a) cannot be verified.
+
+**Resolved 2026-08-19 by [ADR-0052](0052-cancellation-throws-at-the-iteration-boundary.md).** E6 is
+the artifact that moved, narrowed to the loops that yield nothing: cancellation is still not a
+provider failure — not counted, not wrapped — but it may not end a caller's sequence silently.
+Acceptance (a) is met by that ADR; (b) is met by twelve tests rather than the three named above, and
+the correction is worth recording. **Three was an undercount and the wrong shape.** Ten cancellation
+tests carried the `ToListAsync(cts.Token)` blindness, not three, and all ten turned out to enumerate
+*compliant* paths — so rewriting them proved nothing about the defect. The two defective sites,
+Speechmatics TTS and LMNT over `LmntTransport.Http`, had **no cancellation test at all**: the
+scenario's provider list closes at "(Deepgram, ElevenLabs, Lmnt)" under a normative sentence binding
+every synthesizer. The evidence that (a) is real therefore comes from two tests written from nothing
+and confirmed red against the defect, not from any test this addendum could name.
