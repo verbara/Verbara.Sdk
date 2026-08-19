@@ -137,10 +137,20 @@ required, correctly per Deepgram's `Results` schema, would throw on every `Metad
 
 And a throw there is not survivable. In `DeepgramSpeechRecognizer`, the `try` around the receive loop
 wraps only `ws.ReceiveAsync` and catches only `OperationCanceledException` and `WebSocketException`;
-`JsonException` is caught **nowhere** in either `Stt` or `Tts`. It escapes `ReceiveLoopAsync`, the
-wrapper's `finally { channel.Writer.TryComplete(); }` ends the consumer's `await foreach` *normally*,
-and the exception then resurfaces from `await Task.WhenAll(...)`. One unexpected frame ends the
-recognition session mid-call.
+`JsonException` is caught **nowhere** in either `Stt` or `Tts` — re-verified 2026-08-19, still zero
+catch sites. One unexpected frame still ends the recognition session mid-call, and that is the half
+of this paragraph the change exists for.
+
+> **Half of it stopped being true on 2026-08-16 and is corrected rather than deleted.** As written,
+> this read: the exception escapes `ReceiveLoopAsync`, the wrapper's
+> `finally { channel.Writer.TryComplete(); }` ends the consumer's `await foreach` *normally*, and the
+> exception resurfaces only from `await Task.WhenAll(...)` — a session that dies looking like a
+> session that finished. **ADR-0050 E1 closed that**: all eight WebSocket surfaces now carry
+> `catch (Exception ex) { channel.Writer.TryComplete(ex); }`, so a parse failure reaches the caller
+> as a throw from their own `await foreach`, at the point they are enumerating. The silence is gone;
+> the session-ending is not. Keeping the correction visible matters because the original wording is
+> the stronger argument, and a reader who checks it against `src/` today would find it false and have
+> no way to tell which half.
 
 `OpenAiRealtime` is built the other way: a **two-pass decode** — `ServerEventBase` to read `type`,
 then the specific DTO per branch. Each of its six deserialize roots models exactly one message type,
@@ -152,10 +162,16 @@ to survive a frame they cannot parse before any throwing fence is placed on them
 
 ### Why now
 
-`wiremock-http-provider-substrate` is mid-flight and five of its eight WebSocket surfaces cannot take
-a payload recording at all. Reading that as "we are blocked on vendor credentials" is what prompted
-the measurement — and the measurement says the highest-value instrument was never blocked on
-anything. It needs no credential, no terms review and no vendor artifact.
+`wiremock-http-provider-substrate` recorded that five of its eight WebSocket surfaces cannot take a
+payload recording at all. Reading that as "we are blocked on vendor credentials" is what prompted the
+measurement — and the measurement says the highest-value instrument was never blocked on anything. It
+needs no credential, no terms review and no vendor artifact.
+
+**That argument outlived the change it was written beside, which is the point.** This paragraph read
+"is mid-flight" until 2026-08-19; the change archived on 2026-08-17 and the five surfaces are still
+uncleared, so the reasoning stands and only its tense was wrong. A "why now" that depends on another
+change's status decays the moment that change lands — this one does not, because it rests on the
+measurement rather than on the schedule.
 
 ## What Changes
 
@@ -191,9 +207,12 @@ anything. It needs no credential, no terms review and no vendor artifact.
   field must not break a released SDK, and a future "let's harden the parser" edit is exactly how that
   protection gets deleted by accident.
 - **A Governance guard that a **reachable** DTO cannot ship untested.** Reachability, not registration:
-  `VoiceAiSttJsonContext` declares 19 types and registers 17, and the two it omits —
-  `DeepgramChannel` and `DeepgramAlternative` — are exactly the types holding `transcript` and
-  `confidence`. A guard scoped to registrations would exempt the members the change exists to fence.
+  `VoiceAiSttJsonContext` declares **22** types and registers **20** (re-counted 2026-08-19; it read
+  19/17 when this was written, and the counts move every time a provider gains a DTO — which is the
+  reason to date them rather than to state them bare). The two it omits are unchanged and are still
+  the load-bearing ones: `DeepgramChannel` and `DeepgramAlternative`, exactly the types holding
+  `transcript` and `confidence`. A guard scoped to registrations would exempt the members the change
+  exists to fence.
 - **`Sdk/ADR-0046`** records the durable decision, the measured matrix, and the explicit rejection of
   `UnmappedMemberHandling.Disallow`.
 
@@ -212,8 +231,8 @@ change.
 
 ### New Capabilities
 
-None. The requirements land in `provider-contract-fidelity`, the capability introduced by
-`wiremock-http-provider-substrate`.
+None. The requirements land in `provider-contract-fidelity`, the capability
+`wiremock-http-provider-substrate` introduced before it archived.
 
 ### Modified Capabilities
 
@@ -248,7 +267,9 @@ behaviour.
 left alone: the fence is applied per call site, so request serialization is byte-identical before and
 after. A member wrongly triaged as non-nullable turns a previously-tolerated vendor `null` into a
 thrown `JsonException` mid-session — which is the intended trade, but only once the receive loop can
-survive a throw, which today it cannot.
+survive a throw. Since ADR-0050 E1 the throw at least *arrives* at the caller instead of masquerading
+as a completed session, so the failure is loud; it is still fatal to the session, so the resilience
+work below is unchanged in scope.
 
 **Mitigation:** the receive-loop work lands **first** and independently, so the ability to survive a
 malformed frame exists before anything is made to throw. The triage is per-member and evidence-driven

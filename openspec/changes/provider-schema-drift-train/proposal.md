@@ -22,8 +22,8 @@ this repository ever re-captures, so between captures nothing looks at the vendo
 
 ### The blocker for five surfaces was the wrong blocker
 
-`wiremock-http-provider-substrate` §5 records that five of its eight WebSocket surfaces cannot take a
-payload recording — Deepgram STT and TTS, AssemblyAI STT, ElevenLabs TTS, LMNT — because the terms
+The archived `wiremock-http-provider-substrate` §5 recorded that five of its eight WebSocket surfaces
+cannot take a payload recording — Deepgram STT and TTS, AssemblyAI STT, ElevenLabs TTS, LMNT — because the terms
 review returned `not-cleared`. That verdict is about the vendor's **Output**: the bytes their service
 returns. It says nothing about the vendor's **published specification**, which is a separate artifact
 under its own license.
@@ -109,10 +109,11 @@ vendor pushing a spec change must not turn someone else's unrelated pull request
   that a sidecar is present, parses, or carries the keys its class requires. This change writes that
   checker rather than extending a non-existent one, and it covers captures and vendored contracts
   alike.
-- **Fixtures for the seven reachable `wiremock-http-provider-substrate` §5 surfaces are derived from
-  the contract**, not hand-authored from prose. That change's §5 preamble is amended accordingly — the
-  cheaper path it blesses stays, but its source becomes the machine-readable contract wherever one
-  exists.
+- **Fixtures for the seven reachable WebSocket surfaces are derived from the contract**, not
+  hand-authored from prose — the set the archived `wiremock-http-provider-substrate` §5 enumerated.
+  The documentation-derived route in `docs/guides/provider-recording-protocol.md` §7 is amended
+  accordingly — the cheaper path it blesses stays, but its source becomes the machine-readable
+  contract wherever one exists.
 - **A weekly `provider-schema-drift.yml`** — `cron` in the repo's established Sunday slot plus
   `workflow_dispatch`, matching `perf-regression.yml`'s shape — that re-fetches each contract at
   `HEAD`, diffs it against the vendored pin, uploads the diff as an artifact and fails **the scheduled
@@ -146,9 +147,9 @@ checked-in files, nothing that ships.
 
 ### New Capabilities
 
-None. The requirements land in `provider-contract-fidelity`, alongside
-`wiremock-http-provider-substrate` (where the bytes come from) and `provider-dto-robustness-fences`
-(what the parser must survive when they change).
+None. The requirements land in `provider-contract-fidelity`, alongside the ones
+`wiremock-http-provider-substrate` contributed there before it archived (where the bytes come from)
+and `provider-dto-robustness-fences` (what the parser must survive when they change).
 
 ### Modified Capabilities
 
@@ -165,8 +166,11 @@ None. The requirements land in `provider-contract-fidelity`, alongside
   terms table gains a sentence distinguishing a verdict on **Output** from the license on the
   **specification**, which is the confusion that produced the original blocker; §9 gains the new
   sidecar validator beside the existing redaction guard.
-- `openspec/changes/wiremock-http-provider-substrate/tasks.md`: §5's preamble amended, its seven
-  reachable surfaces re-pointed at the contract.
+- `docs/guides/provider-recording-protocol.md` §7 (again, and for a different reason): the
+  documentation-derived route's preamble amended and its seven reachable surfaces re-pointed at the
+  contract. This was written as an edit to `wiremock-http-provider-substrate`'s tasks file; that
+  change archived on 2026-08-17 and an archive is not edited, so the amendment lands in the guide
+  that carries the material now.
 - `.github/workflows/provider-schema-drift.yml`: new, scheduled only.
 - `scripts/`: the sidecar validator and its unit tests, beside the existing guard scripts.
 - `Tests/`: the derived fixtures, and the governance test that the scope manifests and the reachable

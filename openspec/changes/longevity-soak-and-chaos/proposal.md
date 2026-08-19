@@ -32,8 +32,10 @@ Three specific gaps, each verified against the tree rather than assumed:
    Sessions/Redis and NATS have zero fault-injection coverage. Only one proxy exists (`ami-proxy`);
    every toxic is injected `downstream`; `toxicity` is hard-coded to `1.0`; the `slow_close` toxic
    and `DockerControl.PauseContainerAsync`/`UnpauseContainerAsync` are built but never called.
-3. **Benchmark coverage does not match what the repo publicly quantifies.** 13 benchmark classes /
-   44 `[Benchmark]` methods exist, and `perf-regression.yml` already runs five of them weekly — but
+3. **Benchmark coverage does not match what the repo publicly quantifies.** **12** benchmark classes
+   / **38** `[Benchmark]` methods exist as of 2026-08-19 (it read 13/44 when this was written; the
+   count moves with the suite, so it is dated rather than stated bare), and `perf-regression.yml`
+   already runs five of them weekly — but
    two of its five steps are mislabelled or measure a stand-in rather than the real path, and the
    in-process session-correlation hot path is not measured at all (details under *What Changes*).
 
