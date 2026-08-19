@@ -102,6 +102,40 @@ public class SpeechmaticsSpeechSynthesizerTests
     }
 
     [Fact]
+    public async Task SynthesizeAsync_ShouldThrowOperationCanceled_WhenCancelledMidStream()
+    {
+        // This surface had no cancellation test at all, which is why `ADR-0050 E6`'s `yield break`
+        // survived here: the living spec's TTS scenario enumerates Deepgram, ElevenLabs and Lmnt,
+        // and this synthesizer was never in that set even though the requirement's normative
+        // sentence binds every TTS synthesizer.
+        //
+        // The cancellation that discriminates is the one landing *during* enumeration. A
+        // pre-cancelled token throws at `SendAsync` and never reaches the read loop, so it cannot
+        // tell a client that propagates from one that ends the sequence silently. The capture is
+        // 73 772 B against an 8 192 B read buffer, so cancelling after the first chunk leaves nine
+        // further reads to abort (ADR-0052 F1).
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest(), RecordedResponse, RecordedMediaType);
+        var synth = SynthesizerFor(server);
+        using var cts = new CancellationTokenSource();
+
+        // ADR-0052 F3: the token reaches the subject only. A plain `await foreach` — no
+        // `WithCancellation`, no `ToListAsync(token)` — means any OperationCanceledException seen
+        // here was raised by the synthesizer rather than by the enumerator on our behalf.
+        var act = async () =>
+        {
+            await foreach (var chunk in synth.SynthesizeAsync(
+                "hola", AudioFormat.Slin16Mono8kHz, cts.Token))
+            {
+                chunk.Length.Should().BeGreaterThan(0);
+                await cts.CancelAsync();
+            }
+        };
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
     public async Task SynthesizeAsync_ShouldSelectVoiceByPathSegment_NotByBodyField()
     {
         await using var server = HttpProviderMockServer.Start();
