@@ -51,7 +51,8 @@ Tests/<TestProject>/Recordings/
 
 ## 3. Capture procedure
 
-> **Steps 4–8 are automated for five of the six HTTP surfaces** by
+> **Steps 4–8 are automated for five of the six HTTP surfaces** — every one but `azure-tts`, whose
+> capture is still hand-produced (§12.1) — by
 > `scripts/capture-provider-recording.py` (`openai-whisper`, `azure-openai-whisper`,
 > `google-speech`, `speechmatics-tts`, `lmnt-http`). It issues the request each SDK client issues
 > — the multipart shape for the Whisper surfaces (file part without a `Content-Type`, text parts
@@ -908,3 +909,43 @@ class and date, per surface. A probe that does not land a row there did not happ
   reaches a `Recordings/` tree through §3 with `class: "recorded"` — never by hand-transcribing it
   from a probe run. A fixture whose provenance can only cite a deleted harness is exactly what this
   protocol exists to prevent.
+
+## 12. Two gaps in the capture tool, recorded on 2026-08-19
+
+Harvested while closing `provider-wire-protocol-conformance`. Both were untracked; neither is
+failing anything today, which is why they need writing down rather than fixing under time pressure.
+
+### 12.1 `azure-tts` is the sixth HTTP surface, and it has no plan
+
+§3's note says steps 4–8 are automated "for five of the six HTTP surfaces" and lists the five. It
+never names the sixth, so the reader has to diff it against §2's list to find that it is **`azure-tts`**.
+`PROVIDERS` in `scripts/capture-provider-recording.py` has no `azure-tts` entry.
+
+The consequence is concrete: `Tests/Verbara.Sdk.VoiceAi.Tts.Tests/Recordings/azure-tts/synthesize-short-es-co.raw`
+— the PCM this repo's own conformance probe reads as its speech source (`SOURCE_PCM` in
+`scripts/probe-provider-conformance.py`) — is a **hand-produced** capture. Its sidecar records where
+it came from, but no committed code reproduces it. Every other recording in the tree can be re-taken
+by running one command with a credential; this one cannot, so if it is ever found wrong the repair
+is a manual procedure someone has to reconstruct.
+
+Closing it means an `azure_tts_plan` issuing the request `AzureTtsSpeechSynthesizer` issues (SSML
+body, `Ocp-Apim-Subscription-Key`, the `X-Microsoft-OutputFormat` the client sets), with
+`https://{region}.tts.speech.microsoft.com` placeholdered per §4. Until then §3's note should be read
+as naming an omission, not a rounding.
+
+### 12.2 The Google plan encodes non-ASCII the way the client does not
+
+`google_speech_plan` serializes with `ensure_ascii=False` (`scripts/capture-provider-recording.py:964`),
+so a non-ASCII character would go on the wire as UTF-8. `GoogleSpeechRecognizer` serializes with
+`JsonSerializer` and no custom encoder (`GoogleSpeechRecognizer.cs:80`), so `System.Text.Json`'s
+default escapes the same character as `\uXXXX`. Same meaning to a JSON parser, different bytes — and
+a byte-level matcher configured from the capture would not match production, which is the exact
+failure §3 already guards against for `charset=utf-8` on the `Content-Type`.
+
+**It is latent, not active.** Every field this body carries today is ASCII: `encoding`,
+`sampleRateHertz`, `languageCode` (`es-CO`), `model`, and a base64 `content`. The divergence only
+becomes real when a field that can hold arbitrary text does — an operator setting `LanguageCode` is
+still ASCII, but phrase hints or any future free-text field would not be. Recorded now because the
+line reads as deliberate (`ensure_ascii=False` is correct at the two *response*-side sites, `:399`
+and `:410`, where it preserves the vendor's Spanish transcript) and a later reader would have no
+reason to suspect the request side is a different case.

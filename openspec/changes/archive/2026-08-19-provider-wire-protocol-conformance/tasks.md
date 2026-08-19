@@ -1842,5 +1842,11 @@ commit.
       on a pinned vendor document (§2.1) is a **closed task with an unverified surface** — the task
       ledger and the §5.5 record say different things about it, deliberately
 - [x] 7.8 `openspec validate provider-wire-protocol-conformance --type change --strict` clean
-- [ ] 7.9 CI green on the PR, zero warnings; enqueue with `gh pr merge <pr> --auto` (merge queue —
-      never `--squash` / `--delete-branch`)
+- [x] 7.9 CI green on the PR, zero warnings; enqueue with `gh pr merge <pr> --auto` (merge queue —
+      never `--squash` / `--delete-branch`). **#201: 14 of 14 checks green, `CLEAN`, enqueued and
+      landed as `1ed23d95`.** The two slow lanes ran concurrently — `Unit Tests` 8m52s and
+      `Analyze (C#)` 7m54s — and the whole PR settled in **6.5 min**, which is ADR-0051 D2 (the
+      dropped `needs: unit-tests` edge) visible in the clock; `Functional Tests (Testcontainers) (23)`
+      reported pass in **16 s**, matrix-suffixed, which is D1. Enqueue confirmed through GraphQL
+      `isInMergeQueue`, not through `autoMergeRequest` — that field reads null on a PR sitting in the
+      queue, on both #200 and #201
