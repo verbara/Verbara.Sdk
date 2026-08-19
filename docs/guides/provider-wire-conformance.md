@@ -56,11 +56,11 @@ two by route, two by frame handling — and none of the four was detectable from
 |---|---|---|---|---|---|---|---|
 | Deepgram TTS | `DeepgramSpeechSynthesizer` | `wss://api.deepgram.com/v1/speak` | OK | OK | `handshake` | `live + both controls` | 2026-08-15 |
 | Azure TTS | `AzureTtsSpeechSynthesizer` | `https://{region}.tts.speech.microsoft.com` | OK | OK | not measured | `live, uncontrolled` | 2026-08-03 |
-| LMNT (HTTP) | `LmntSpeechSynthesizer` | `https://api.lmnt.com/v1/ai/speech/bytes` | **fixed** | n/a | in the response | `live + both controls` | 2026-08-15 |
-| LMNT (WebSocket) | `LmntSpeechSynthesizer` | `wss://api.lmnt.com/v1/ai/speech/stream` | OK | **2 fixed, 1 open** | `in-band` | `live + credential control` | 2026-08-15 |
-| Speechmatics TTS | `SpeechmaticsSpeechSynthesizer` | `https://preview.tts.speechmatics.com/generate/{voice}` | **fixed** | n/a | in the response | `live + both controls` | 2026-08-16 |
-| Cartesia TTS | `CartesiaSpeechSynthesizer` | `wss://api.cartesia.ai/tts/websocket` | OK | **3 fixed, 1 open** | `handshake` | `live + both controls` | 2026-08-16 |
-| ElevenLabs TTS | `ElevenLabsSpeechSynthesizer` | `wss://api.elevenlabs.io/v1/text-to-speech/{voiceId}/stream-input` | OK | **2 fixed, 1 open** | `in-band` | `live + both controls` | 2026-08-16 |
+| LMNT (HTTP) | `LmntSpeechSynthesizer` | `https://api.lmnt.com/v1/ai/speech/bytes` | **fixed** | n/a | in the response | `live + both controls` | 2026-08-19 |
+| LMNT (WebSocket) | `LmntSpeechSynthesizer` | `wss://api.lmnt.com/v1/ai/speech/stream` | OK | **2 fixed, 1 open** | `in-band` | `live + both controls` | 2026-08-19 |
+| Speechmatics TTS | `SpeechmaticsSpeechSynthesizer` | `https://preview.tts.speechmatics.com/generate/{voice}` | **fixed** | n/a | in the response | `live + both controls` | 2026-08-19 |
+| Cartesia TTS | `CartesiaSpeechSynthesizer` | `wss://api.cartesia.ai/tts/websocket` | OK | **3 fixed, 1 open** | `handshake` | `live + both controls` | 2026-08-19 |
+| ElevenLabs TTS | `ElevenLabsSpeechSynthesizer` | `wss://api.elevenlabs.io/v1/text-to-speech/{voiceId}/stream-input` | OK | **2 fixed, 1 open** | `in-band` | `live + both controls` | 2026-08-19 |
 
 **Deepgram TTS** — the reference run, and the only TTS surface measured *not* to hide audio in a text
 frame. Shipped defaults (`model=aura-2-thalia-en`, `encoding=linear16`, `sample_rate=24000`) returned
@@ -150,9 +150,9 @@ a wrong-path control has to be read, not pattern-matched.
 | Surface | Client type | Transport | Route | Frames | Validation point | Evidence | Date |
 |---|---|---|---|---|---|---|---|
 | Deepgram STT | `DeepgramSpeechRecognizer` | `wss://api.deepgram.com/v1/listen` | OK | OK | `handshake` | `live + both controls` | 2026-08-16 |
-| Speechmatics STT | `SpeechmaticsSpeechRecognizer` | `wss://eu2.rt.speechmatics.com/v2` | OK | **2 fixed, 4 open** | `in-band` | `live + both controls` | 2026-08-16 |
-| Cartesia STT | `CartesiaSpeechRecognizer` | `wss://api.cartesia.ai/stt/websocket` | **fixed** | **2 fixed** | `handshake` (credential) + `in-band` (session) | `live + both controls` | 2026-08-16 |
-| AssemblyAI STT | `AssemblyAiSpeechRecognizer` | `wss://streaming.assemblyai.com/v3/ws` | not controllable | **2 fixed** | `in-band` | `live + credential control` | 2026-08-17 |
+| Speechmatics STT | `SpeechmaticsSpeechRecognizer` | `wss://eu2.rt.speechmatics.com/v2` | OK | **2 fixed, 4 open** | `in-band` | `live + both controls` | 2026-08-19 |
+| Cartesia STT | `CartesiaSpeechRecognizer` | `wss://api.cartesia.ai/stt/websocket` | **fixed** | **2 fixed** | `handshake` (credential) + `in-band` (session) | `live + both controls` | 2026-08-19 |
+| AssemblyAI STT | `AssemblyAiSpeechRecognizer` | `wss://streaming.assemblyai.com/v3/ws` | not controllable | **2 fixed** | `in-band` | `live + credential control` | 2026-08-19 |
 | Google STT | `GoogleSpeechRecognizer` | `https://speech.googleapis.com` | OK | n/a (batch) | in the response | `live + both controls` | 2026-08-15 |
 | OpenAI Whisper | `WhisperSpeechRecognizer` | `https://api.openai.com/v1/audio/transcriptions` | OK | n/a (batch) | not measured | `live, uncontrolled` | 2026-08-09 |
 | Azure OpenAI Whisper | `AzureWhisperSpeechRecognizer` | Azure OpenAI deployment endpoint | OK | n/a (batch) | not measured | `live, uncontrolled` | 2026-08-09 |
@@ -548,6 +548,78 @@ credential with `HTTP 401` at the upgrade on both surfaces, so no session can pr
 branches catch. The code and its tests say so at the branch. Every other frame and close code under test
 is one a probe recorded on the live endpoint.
 
+## Re-probed from committed code — 2026-08-19
+
+Every earlier row in this file was produced by a probe someone wrote, ran, and threw away. The
+method was committed; the *runner* was not. So the claim "this surface was probed with both
+controls" rested on a procedure, and a procedure is exactly what this record was created because
+nobody could reproduce.
+
+`scripts/probe-provider-conformance.py` now contains the runner. All eight surfaces this change
+fixed were re-probed through it in one sitting, three arms each — shipped, wrong path, invalid
+credential — against the same host in the same run. The requests are read out of the shipped
+clients, not out of vendor documentation, because a probe built from the documentation would agree
+with a client built from the same misreading and find nothing. It is run by hand and is not wired to
+CI (it needs credentials and paid egress); what CI gates is the part that can be wrong without a
+network, which is 220 unit tests over the redaction, control and depth rules.
+
+| Surface | shipped | wrong path | invalid credential |
+|---|---|---|---|
+| LMNT (HTTP) | `200`, 83 168 B | `404 {"detail":"Not Found"}` | `403 {"error":"Invalid API key"}` |
+| LMNT (WebSocket) | `101`, 92 128 B binary, close `1000` | **`403` at the upgrade** | `101`, then `{"error":"Invalid API key"}`, close `1002` |
+| Speechmatics TTS | `200`, 84 524 B | `404 {"detail":"Not Found"}` | `401`, 172 B error body |
+| Cartesia TTS | `101`, **83 220 B** as base64 in `chunk.data`, then the vendor's `done` | `404` at the upgrade | `401` at the upgrade |
+| ElevenLabs TTS | `101`, 87 678 B as base64 in `audio`, `isFinal:true`, close `1000` | `403` at the upgrade | `101`, then `invalid_api_key` in band, close `1008` |
+| Speechmatics STT | `101`, then `RecognitionStarted` | `404` at the upgrade | `101`, then `{"type":"not_authorised"}`, close `4001` |
+| Cartesia STT | `101`, `transcript` then `done` | `404` at the upgrade | `401` at the upgrade |
+| AssemblyAI STT | `101`, `Begin` → `Turn` → `Termination`, close `1000` | **`101` and a full session** | `101`, then `Unauthorized Connection`, close `1008` |
+
+Three things this run settled that the earlier ad-hoc runs had not.
+
+**LMNT (WebSocket) now has a wrong-path control, and it discriminates.** This surface had been
+carried at `live + credential control` with route-discrimination listed as an open gap.
+`/v1/ai/speech/stream-does-not-exist` returns **`403` at the upgrade** — not a `404`, and not a
+successful upgrade — so the arm can fail and therefore controls something. The row moves to
+`live + both controls`. Note that this vendor answers a bad *path* at the handshake while answering
+a bad *credential* in band: the two questions are decided in different places on one socket, which
+is the concrete reason ADR-0049 D3 forbids inferring one from the other.
+
+**AssemblyAI's route still cannot fail, and now that has been measured twice.**
+`/v3/ws-does-not-exist` completed the upgrade and served a complete working session — `Begin`, a
+`Turn` carrying the transcript, `Termination`, close `1000` — indistinguishable from the shipped
+path. This is a finding, not a missing control, and the probe encodes it as one rather than omitting
+the arm: a route defect on this host is undetectable by path, so the column reads *not controllable*
+instead of *OK*. An arm that cannot fail proves nothing, and dropping it would have made that
+absence look like an inapplicability.
+
+**Speechmatics STT's `101`-then-`4001` is reproducible on demand.** The depth rule (§5.11) exists
+because of this surface, and it re-measured exactly as recorded: the invalid credential completed
+the upgrade, and only the close code afterwards revealed the session was never authenticated. The
+shipped arm reached `RecognitionStarted`, which is the first exchange this surface is judged on.
+
+### Two ways the instrument itself was wrong, found by running it
+
+Recorded here rather than quietly patched, for the same reason the probe's redaction failure is
+recorded in its module docstring: an instrument that has never been caught being wrong has usually
+just never been checked.
+
+**It counted an error body as audio.** Speechmatics TTS answers a bad Bearer with `401` and a
+172-byte plain-text body, and the HTTP arm counted any non-JSON body as audio regardless of status.
+The first run therefore reported `172 B audio` against the *invalid-credential* arm — a control that
+appears to have produced speech, which is the inverted finding this whole instrument exists to
+prevent. Audio is now counted only on a `2xx`.
+
+**It manufactured an anomaly on Cartesia TTS.** The first run reported
+`!! went idle — the vendor sent nothing further` after 72 818 B, which reads as a vendor defect. It
+was the probe's: the vendor had sent `done` and then held the context open, exactly as documented,
+while the probe kept reading a socket the shipped client would already have left. An A/B against the
+same request with the `continue` member omitted — the standing question about that null — behaved
+identically, confirming it was not the frame shape. `probe_ws` now takes the terminator the shipped
+client breaks on (`finish` for LMNT WS, `type:"done"` for Cartesia TTS) and stops where the client
+stops. The first attempt at that check tested for the substring `done`, which matches the
+`"done": false` member every chunk carries, and declared the stream complete on frame one — so the
+predicate parses the message and compares the `type` field.
+
 ## Still not characterised
 
 Named here rather than left as absence, because absence is what this file exists to make visible:
@@ -599,9 +671,10 @@ Named here rather than left as absence, because absence is what this file exists
   is right not to consult it — it named one voice while three others synthesised as demonstrably
   distinct speakers. This is route-independent — the route control fails correctly.
 - **AssemblyAI STT** — route **not controllable**, which is different from unprobed. Measured
-  2026-08-16, an undocumented path on this host completed the upgrade and served a normal session, so
-  the wrong-path arm cannot fail and therefore controls nothing; the `404` recorded earlier in the
-  programme came from a **different host** and never applied here. Frames and credential handling
+  2026-08-16 and again from committed code on **2026-08-19**, an undocumented path on this host
+  completed the upgrade and served a normal session — transcript included — so the wrong-path arm
+  cannot fail and therefore controls nothing; the `404` recorded earlier in the programme came from a
+  **different host** and never applied here. Frames and credential handling
   stand on their own evidence. See ADR-0048 A2 for what follows from a control that cannot fail.
 - **LMNT (HTTP)** — the `lmnt-version` header **admits no control that can fail**, measured
   2026-08-18. Five values against the same request with every form field held at the shipped
@@ -611,9 +684,10 @@ Named here rather than left as absence, because absence is what this file exists
   8 960 B, so length discriminates nothing here. The shipped `1.0` is therefore kept; the vendor
   documenting a newer value is evidence about the documentation, not the wire. Not licensed by this:
   calling the header *ignored* — only one route's success path was compared, across three dimensions.
-- **LMNT (WebSocket)** — no wrong-path control recorded on this surface. Its credential control was
-  run and is what established the in-band validation point, so the gap is route-discrimination
-  only.
+- **LMNT (WebSocket)** — ~~no wrong-path control recorded on this surface~~ **closed 2026-08-19**:
+  `/v1/ai/speech/stream-does-not-exist` returns `403` at the upgrade, so the arm can fail and the
+  surface now carries both controls. Left visible rather than deleted, because the gap stood for
+  four days while the row beside it read as verified.
 - **Azure TTS, both Whisper recognizers** — validation point, and route evidence at
   `live, uncontrolled`.
 - **Frame fragmentation across the 64 KiB receive buffer** — **answered for both Class B surfaces on
