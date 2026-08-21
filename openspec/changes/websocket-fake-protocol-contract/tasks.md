@@ -380,22 +380,90 @@ before §3 changes any timing, and §3–§4 stand on either substrate if §2 is
 
 ## 5. Ratchet and guard
 
-- [ ] 5.1 Lower the three `sync-fence-baseline.json` entries to the counts that actually survive
+- [x] 5.1 Lower the three `sync-fence-baseline.json` entries to the counts that actually survive
       (today: `Bridge/OpenAiRealtimeBridgeTests.cs` 2, `FunctionCalling/FunctionCallTests.cs` 3,
       `Internal/RealtimeFakeServer.cs` 3 — **8** total). Delete an entry outright if it reaches zero.
       Never raise a count
-- [ ] 5.2 Add a Class C detector to `Tests/Verbara.Sdk.Governance.Tests/` following the
+      — **all three reached zero and all three entries are deleted.** The suite's only remaining
+      `Task.Delay` is the `Timeout.Infinite` hold in the fake, which carries a
+      `fence-allow: GUARD-TIMEOUT` marker and therefore does not count. Baseline: 78 entries / 329
+      barriers → **75 / 321**. Ratchet green.
+- [x] 5.2 Add a Class C detector to `Tests/Verbara.Sdk.Governance.Tests/` following the
       `LoopbackSeamScanner` / `LoopbackSeamGuardTests` idiom: a `*FakeServer` type must not expose a
       mutable collection its receive loop writes
-- [ ] 5.3 Detector unit tests — true positive: a `public List<T>` capture property on a fake-server
+      — `FakeServerCaptureScanner.cs` + `FakeServerCaptureGuardTests.cs`, Roslyn-syntactic like the
+      loopback pair, scanning `Tests/` only (fakes live nowhere else).
+
+      **The discriminator is who writes, not what it is called.** A capture is written by the fake
+      (`_received.Add(frame)` in the session handler); configuration is written by the test and only
+      *read* inside the type. So the rules fire on members the declaring type mutates — no name list,
+      no ignore list.
+
+      Two rules, because one is trivially bypassed:
+      - **MutableCapture** — an exposed member of mutable collection type that the type writes to,
+        under its own name or through a private field it aliases.
+      - **LiveCaptureAlias** — an exposed member typed `IReadOnlyList<T>` whose getter returns the
+        private list *bare*, with no `ToArray()` between. Same defect wearing an interface: nothing
+        can be added through it, but it still enumerates a list another thread is appending to.
+        Without this rule, widening the property type would satisfy the guard and change nothing.
+- [x] 5.3 Detector unit tests — true positive: a `public List<T>` capture property on a fake-server
       type is reported with a 1-based line number and the file named in the failure message
-- [ ] 5.4 Detector unit tests — false-positive immunity: configuration collections written by the
+      — four true positives: the plain `public List<T>` capture (asserting rule, member name **and**
+      path), the 1-based line number on a member that is not on line 1, the read-only interface over
+      a live field, and a mutable property aliasing a renamed private field.
+
+      **That last one is not decoration — it was a real hole.** The first draft keyed rule 1 on the
+      member's own name, so `public List<string> ReceivedMessages => _receivedMessages;` passed
+      clean: the mutation is on the field, the exposure is on the property. §5.6's negative test is
+      what surfaced it, which is the entire argument for negative-testing a guard rather than
+      shipping it green.
+- [x] 5.4 Detector unit tests — false-positive immunity: configuration collections written by the
       test before `Start()` (`EventsToSend`, `AudioFramesToSend`, `ResultMessages`) are NOT reported,
       and neither is a snapshot property backed by a private field
-- [ ] 5.5 Liveness self-test — the scan must walk more than a conservative floor of files, so an
+      — six immunity tests: the three configuration collections, the snapshot-under-lock shape every
+      fake was converted to, a wholesale-republished snapshot array, a private list never exposed, a
+      non-fake-server type, and a capture shape sitting in a plain string literal (which is what
+      keeps this file's own fixtures from self-flagging).
+
+      **One immunity had to be discovered rather than predicted.** The first run reported five real
+      files — `ResultMessages` on all four STT fakes and `AudioFramesToSend` on all four TTS ones.
+      They are configuration, and the rule was still right: those fakes *do* write to them, in their
+      **constructors**, seeding a recorded default payload so a test that does not care about the
+      payload still exercises a realistic one. A constructor runs before any caller holds the object,
+      so no reader can be racing it. Constructor writes are now excluded, structurally rather than by
+      name, and a test pins the boundary: a list seeded in the constructor **and** written by the
+      session handler is still reported.
+- [x] 5.5 Liveness self-test — the scan must walk more than a conservative floor of files, so an
       empty enumeration cannot read as green
-- [ ] 5.6 Negative-test the guard end to end: revert §3.6, watch the guard fail naming the exact file
+      — two dimensions, because the file count alone is not enough. `Guard_ShouldScanManyFiles_…`
+      floors the walk at 250 files (real: 414). `Guard_ShouldRecogniseTheRepoFakeServers_…` floors
+      the **fake-server types actually recognised** at 6 (real: 10) and names `WebSocketTestServer`
+      explicitly. Walking every file proves nothing if the naming convention moves and the detector
+      recognises none of them — that failure mode leaves the file count untouched.
+- [x] 5.6 Negative-test the guard end to end: revert §3.6, watch the guard fail naming the exact file
       and line, restore it, watch the suite return to green
+      — done twice, once per revert shape, and the first attempt is the reason the detector has the
+      rule it has.
+
+      **Shape 1 — alias the private field** (`public List<string> ReceivedMessages => _receivedMessages;`).
+      The guard **passed**. Rule 1 keyed on the member's own name, and the mutation was on the field.
+      Rule added, re-run:
+
+      ```
+      Tests/Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests/Internal/RealtimeFakeServer.cs:72
+        [MutableCapture]  'ReceivedMessages' is a mutable collection the fake itself writes, …
+      ```
+
+      **Shape 2 — the literal §3.6 pre-state** (`public List<string> ReceivedMessages { get; } = [];`,
+      receive loop calling `ReceivedMessages.Add`):
+
+      ```
+      Tests/Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests/Internal/RealtimeFakeServer.cs:53
+        [MutableCapture]  'ReceivedMessages' is a mutable collection the fake itself writes, …
+      ```
+
+      Restored after each; `git diff` on the fake is empty and the Governance project is **116/116
+      green**.
 
 ### The second detector, handed here by ADR-0052 (2026-08-19)
 
