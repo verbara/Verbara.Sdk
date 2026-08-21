@@ -20,7 +20,8 @@ public sealed class AudioSocketSession : IAsyncDisposable
     private readonly Channel<ReadOnlyMemory<byte>> _audioChannel;
     private readonly CancellationTokenSource _cts;
     private readonly ILogger _logger;
-    private int _disposed; // 0 = not disposed, 1 = disposed
+    private int _disposed; // 0 = live, 1 = torn down — by any cause
+    private int _consumerDisposed; // 1 once the owner called DisposeAsync(); see ADR-0053
     private int _hangupFired; // 0 = not fired, 1 = fired
 
     /// <summary>UUID received from Asterisk (from the first UUID frame).</summary>
@@ -67,13 +68,40 @@ public sealed class AudioSocketSession : IAsyncDisposable
     internal void StartReadLoop() =>
         _ = Task.Run(() => ReadLoopAsync(_cts.Token));
 
-    /// <summary>Read incoming audio frames from Asterisk. Completes when the session ends.</summary>
-    public async IAsyncEnumerable<ReadOnlyMemory<byte>> ReadAudioAsync(
-        [EnumeratorCancellation] CancellationToken ct = default)
+    /// <summary>Read incoming audio frames from Asterisk.</summary>
+    /// <remarks>
+    /// The sequence <em>ends</em> — it does not fault — whenever the session ends: a hangup or error
+    /// frame from the far end, a socket EOF, <see cref="HangupAsync"/>, or a disposal that lands
+    /// while enumeration is under way. That holds whatever the ordering, and frames already received
+    /// are still delivered. Two things do fault, separated by who ended the session: a cancelled
+    /// <paramref name="ct"/> raises <see cref="OperationCanceledException"/> at the next iteration
+    /// boundary, and calling this after the owner disposed the session raises
+    /// <see cref="ObjectDisposedException"/> from the call itself. See ADR-0053.
+    /// </remarks>
+    public IAsyncEnumerable<ReadOnlyMemory<byte>> ReadAudioAsync(CancellationToken ct = default)
     {
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _cts.Token);
-        await foreach (var chunk in _audioChannel.Reader.ReadAllAsync(linked.Token).ConfigureAwait(false))
-            yield return chunk;
+        // An iterator body would defer this to the first MoveNextAsync, which is the whole defect.
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _consumerDisposed) == 1, this);
+        return ReadAudioCoreAsync(ct);
+    }
+
+    private async IAsyncEnumerable<ReadOnlyMemory<byte>> ReadAudioCoreAsync(
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        // No session state is read here: `_cts` may already be disposed by the time this body runs,
+        // and the channel's completion is what says the session ended.
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (_audioChannel.Reader.TryRead(out var chunk))
+            {
+                yield return chunk; // drain what arrived before the ending
+                continue;
+            }
+
+            if (!await _audioChannel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
+                yield break; // the channel completed: the session ended
+        }
     }
 
     /// <summary>Write PCM audio back to Asterisk (e.g., TTS output).</summary>
@@ -111,7 +139,7 @@ public sealed class AudioSocketSession : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed == 1, this);
         AudioSocketFrameCodec.WriteFrame(_writer, AudioSocketFrameType.Hangup, []);
         await _writer.FlushAsync(ct).ConfigureAwait(false);
-        await DisposeAsync().ConfigureAwait(false);
+        await TerminateAsync().ConfigureAwait(false);
     }
 
     private async Task ReadLoopAsync(CancellationToken ct)
@@ -139,14 +167,14 @@ public sealed class AudioSocketSession : IAsyncDisposable
                             AudioSocketMetrics.FramesReceived.Add(1);
                             AudioSocketMetrics.BytesReceived.Add(frame.Payload.Length);
                             var copy = frame.Payload.ToArray();
-                            await _audioChannel.Writer.WriteAsync(copy, ct).ConfigureAwait(false);
+                            // DropOldest, so this never blocks; TryWrite also tolerates a channel
+                            // the teardown has already completed, where WriteAsync would throw.
+                            _audioChannel.Writer.TryWrite(copy);
                             break;
 
                         case AudioSocketFrameType.Hangup:
                         case AudioSocketFrameType.Error:
-                            FireHangup();
-                            await DisposeAsync().ConfigureAwait(false);
-                            return;
+                            return; // the finally tears the transport down and fires the hangup
 
                         case AudioSocketFrameType.Silence:
                         case AudioSocketFrameType.Uuid:
@@ -168,6 +196,10 @@ public sealed class AudioSocketSession : IAsyncDisposable
         }
         finally
         {
+            // Every ending lands here — hangup frame, error frame, EOF, transport error, or the
+            // cancellation a disposal raises. Terminate first so OnHangup subscribers observe a
+            // session that has genuinely released its transport (ADR-0053).
+            await TerminateAsync().ConfigureAwait(false);
             FireHangup();
         }
     }
@@ -182,11 +214,25 @@ public sealed class AudioSocketSession : IAsyncDisposable
     }
 
     /// <inheritdoc/>
-    public async ValueTask DisposeAsync()
+    /// <remarks>Disposal is the owner's statement that it is finished with the session; afterwards
+    /// <see cref="ReadAudioAsync"/> throws like every other member. A session that ends on its own
+    /// runs the same teardown without setting that flag — see ADR-0053.</remarks>
+    public ValueTask DisposeAsync()
+    {
+        Volatile.Write(ref _consumerDisposed, 1);
+        return TerminateAsync();
+    }
+
+    /// <summary>
+    /// Release the transport. Idempotent, and shared by the owner's disposal and by every
+    /// session-initiated ending.
+    /// </summary>
+    private async ValueTask TerminateAsync()
     {
         if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;
         await _cts.CancelAsync().ConfigureAwait(false);
         _cts.Dispose();
-        _client.Dispose();
+        _audioChannel.Writer.TryComplete(); // a parked consumer ends here, not on a token
+        _client.Dispose();                  // must stay last: the FIN it emits is a test ordering edge
     }
 }

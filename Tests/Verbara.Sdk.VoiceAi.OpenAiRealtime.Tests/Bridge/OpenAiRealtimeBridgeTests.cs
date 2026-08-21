@@ -24,14 +24,12 @@ public sealed class OpenAiRealtimeBridgeTests
     /// the token explicitly to end the session.
     /// </para>
     /// <para>
-    /// Ending the session by hanging up the audio client instead reads more naturally and is not
-    /// usable here: <c>AudioSocketSession</c>'s hangup path completes the audio channel and then
-    /// disposes the session's <see cref="CancellationTokenSource"/>, so a hangup that overtakes the
-    /// first <c>MoveNext</c> of <c>ReadAudioAsync</c> makes it throw
-    /// <see cref="ObjectDisposedException"/> out of the bridge — observed 1 run in 10 under CPU
-    /// saturation. That is a production-side race in <c>Verbara.Sdk.VoiceAi.AudioSocket</c>, out of
-    /// scope for a test-only change and recorded as follow-up rather than absorbed here. Cancelling
-    /// first and hanging up in cleanup keeps these tests measuring the bridge instead of that race.
+    /// These tests were written around a hangup/dispose race in <c>Verbara.Sdk.VoiceAi.AudioSocket</c>
+    /// — a hangup that overtook <c>ReadAudioAsync</c>'s first <c>MoveNext</c> threw
+    /// <see cref="ObjectDisposedException"/> out of the bridge, 1 run in 10 under CPU saturation.
+    /// ADR-0053 fixed it: a hangup now ends the sequence whatever the ordering. Cancelling first and
+    /// hanging up in cleanup is kept because it is the clearer way to end a session under test, not
+    /// because the race is still there.
     /// </para>
     /// </remarks>
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
@@ -42,12 +40,18 @@ public sealed class OpenAiRealtimeBridgeTests
     /// <remarks>
     /// A test that cancels the session needs to know both loops are running first, and the
     /// server-side capture of <c>session.update</c> does not establish that: the fake can read that
-    /// frame off the wire while the client's <c>SendAsync</c> has not yet completed. Cancelling there
-    /// lands on the one await the bridge does not guard — the <c>session.update</c> send that
-    /// precedes <c>Task.WhenAll(InputLoop, OutputLoop)</c> — and the session faults with
-    /// <see cref="TaskCanceledException"/> instead of returning. Observed 1 run in 10 under CPU
-    /// saturation. A <em>published</em> event cannot be observed until <c>OutputLoop</c> is running,
-    /// which is after that send completed, so it is the sentinel that makes the cancel safe.
+    /// frame off the wire while the client's <c>SendAsync</c> has not yet completed. A
+    /// <em>published</em> event cannot be observed until <c>OutputLoop</c> is running, which is
+    /// after that send completed, so it is the sentinel that establishes it.
+    /// <para>
+    /// It was originally introduced because cancelling before the loops started landed on the one
+    /// await the bridge did not guard and faulted the session with
+    /// <see cref="TaskCanceledException"/> — 1 run in 10 under CPU saturation. ADR-0053 brought that
+    /// window under the same handling as the loops, so the sentinel no longer protects against a
+    /// fault; it is kept because the assertions on live socket state still need to know the loops
+    /// are up. The setup window now has its own coverage in
+    /// <c>OpenAiRealtimeBridgeSetupCancellationTests</c>.
+    /// </para>
     /// </remarks>
     private const string LoopsRunningMarkerEvent = """{"type":"input_audio_buffer.speech_started"}""";
 

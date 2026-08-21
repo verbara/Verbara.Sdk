@@ -272,6 +272,121 @@ public sealed class AudioSocketSessionTests : IAsyncDisposable
         await client.DisposeAsync();
     }
 
+    // ── ReadAudioAsync teardown orderings (ADR-0053) ─────────────────────────
+
+    /// <summary>
+    /// Ordering (a): the hangup is fully processed before the consumer's first <c>MoveNextAsync</c>.
+    /// Ordered by construction, not by delay — the client's read ends on EOF, and the FIN that
+    /// produces it is emitted by <c>_client.Dispose()</c>, the last statement of the session's
+    /// teardown. When the drain loop returns, the teardown has provably completed.
+    /// </summary>
+    [Fact]
+    public async Task ReadAudioAsync_ShouldDeliverBufferedAudioThenEnd_WhenTheHangupCompletesBeforeTheFirstRead()
+    {
+        var (session, client) = await CreateSessionAsync();
+        var payload = new byte[160];
+        payload[0] = 0x42;
+
+        await client.SendAudioAsync(payload);   // lands in the 256-slot channel …
+        await client.SendHangupAsync();         // … and the hangup follows it on the same stream
+
+        await foreach (var _ in client.ReadAudioAsync(CancellationToken.None)) { /* drain to EOF */ }
+
+        var frames = new List<ReadOnlyMemory<byte>>();
+        await foreach (var frame in session.ReadAudioAsync())
+            frames.Add(frame);
+
+        frames.Should().ContainSingle("audio received before the hangup is still the caller's audio")
+            .Which.Span[0].Should().Be(0x42);
+
+        await client.DisposeAsync();
+    }
+
+    /// <summary>Ordering (b-variant): the owner disposes while a consumer is enumerating. A routine
+    /// host shutdown must end the sequence, not fault it — see <c>AudioSocketServer.StopAsync</c>.</summary>
+    [Fact]
+    public async Task ReadAudioAsync_ShouldEndTheSequence_WhenTheSessionIsDisposedMidEnumeration()
+    {
+        var (session, client) = await CreateSessionAsync();
+        var firstFrameSeen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var frames = new List<ReadOnlyMemory<byte>>();
+
+        var consumer = Task.Run(async () =>
+        {
+            await foreach (var frame in session.ReadAudioAsync())
+            {
+                frames.Add(frame);
+                firstFrameSeen.TrySetResult();
+            }
+        });
+
+        await client.SendAudioAsync(new byte[160]);
+        await firstFrameSeen.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await session.DisposeAsync();
+
+        var fault = await Record.ExceptionAsync(() => consumer.WaitAsync(TimeSpan.FromSeconds(5)));
+
+        fault.Should().BeNull("disposing the session is how a host shuts it down, not a failure");
+        frames.Should().ContainSingle();
+
+        await client.DisposeAsync();
+    }
+
+    /// <summary>Ordering (c) / R2: a read issued after the owner disposed throws from the call
+    /// itself, naming the type — as every other member of this session already does.</summary>
+    [Fact]
+    public async Task ReadAudioAsync_ShouldThrowObjectDisposedException_WhenTheOwnerDisposedTheSession()
+    {
+        var (session, client) = await CreateSessionAsync();
+
+        await session.DisposeAsync();
+
+        var act = () => session.ReadAudioAsync();
+
+        act.Should().Throw<ObjectDisposedException>()
+            .Which.ObjectName.Should().Contain(nameof(AudioSocketSession));
+
+        await client.DisposeAsync();
+    }
+
+    /// <summary>R1: the consumer's own cancellation still faults, and takes precedence over the
+    /// sequence ending quietly. The cancelled token goes to the subject only (ADR-0052 F3).</summary>
+    [Fact]
+    public async Task ReadAudioAsync_ShouldThrowOperationCanceled_WhenTheCallersTokenIsCancelled()
+    {
+        var (session, client) = await CreateSessionAsync();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var act = async () =>
+        {
+            await foreach (var _ in session.ReadAudioAsync(cts.Token)) { /* never reached */ }
+        };
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        await client.DisposeAsync();
+    }
+
+    /// <summary>Ordering (d): a bare EOF with no hangup frame. The session must release its
+    /// transport — the server has already dropped it from its registry by the time OnHangup returns,
+    /// so nothing else can ever reclaim it.</summary>
+    [Fact]
+    public async Task ReadLoop_ShouldReleaseTheTransport_WhenTheSocketEndsWithoutAHangupFrame()
+    {
+        var (session, client) = await CreateSessionAsync();
+        var tornDown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.OnHangup += () => tornDown.TrySetResult();
+
+        await client.DisposeAsync();   // FIN, no hangup frame
+
+        await tornDown.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        session.IsConnected.Should().BeFalse(
+            "a session whose socket is gone is not connected, and its owner has already forgotten it");
+    }
+
     public async ValueTask DisposeAsync()
     {
         await _server.StopAsync(CancellationToken.None);

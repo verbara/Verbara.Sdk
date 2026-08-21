@@ -4,6 +4,56 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — a hangup that overtook the first read faulted the audio stream; a cancel during session setup vanished from telemetry
+
+Two defects in `Verbara.Sdk.VoiceAi`, one shape: state read after the code that owns it has already
+torn down. Both were recorded — and deliberately not fixed — while converting the Realtime test suite
+under `ADR-0045`, because that change touched no `src/`. `ADR-0053` states the contract they now
+follow: **a session's ending is classified by who ended it**, not by where it landed.
+
+- **`AudioSocketSession.ReadAudioAsync` was an `async` iterator that read session state.** An
+  iterator body does not run at call time — it runs on the first `MoveNextAsync`. A hangup arriving
+  in between disposed the session's `CancellationTokenSource`, so the consumer's first read threw
+  `ObjectDisposedException` **with an empty `ObjectName`**, discarding up to 256 already-received
+  frames. The window is as wide as the gap between accepting a session and enumerating it. It now
+  delivers the buffered audio and ends. **A `catch (ObjectDisposedException)` around this call
+  becomes unnecessary** — it stays correct for the case it was written for, but no longer fires on
+  ordinary hangups.
+
+- **Measuring the other four orderings turned one defect into three.** A far-end hangup landing
+  mid-enumeration was already correct (200/200). But an *owner* `DisposeAsync` landing there threw
+  `OperationCanceledException` 200/200, because disposal never fired the hangup — so **a routine host
+  shutdown was booked as a failed session**. And a socket EOF with no hangup frame released neither
+  the `TcpClient` nor the `CancellationTokenSource`, leaving `IsConnected` reading `true` on a
+  session its owner's registry had already dropped. Both are fixed on the same teardown path.
+
+- **`ObjectDisposedException` now means one thing only: the owner disposed, then someone read.** It
+  is thrown **from the call** rather than from a later `MoveNext`, and it names the type. A read
+  method that must throw eagerly cannot be an iterator, so it is now a wrapper around a private
+  iterator core that reads no session lifetime state at all.
+
+- **`OpenAiRealtimeBridge` had a setup window outside its own handler.** `ConnectAsync`, the
+  write-lock acquisition and the `session.update` send took the session token while sitting *above*
+  the `try` whose cancellation filter existed for exactly them — and the `finally` owning the clean
+  close, `SessionsCompleted`, `SessionDurationMs` and `SessionEnded` was attached to the inner try.
+  A cancel there escaped as a fault and the session **vanished from telemetry**, having already
+  incremented `SessionsStarted`. The two `try`s are now one, so there is exactly one site per
+  instrument and widening the region cannot double-count. The far end departing mid-playback is
+  handled where the write happens, for the same reason.
+
+- **`openai_realtime.sessions.failed` will start reading non-zero** for genuine connect failures
+  (refused, TLS, HTTP 4xx). Those previously escaped with **no accounting at all**, so a dashboard
+  that has always read zero will move without the failure rate having changed.
+
+- **Six regression tests, all ordered by construction rather than by delay.** The AudioSocket edge is
+  the FIN: the transport dispose is the *last* statement of the teardown, so draining the peer's read
+  to EOF is a happens-after edge on the whole teardown and cannot invert. The bridge's is a listener
+  that accepts the connection and never writes the `101`, so only the token can end the connect. With
+  `src/` reverted all six fail; 60/60 green across 30 runs idle and 30 under CPU saturation. The
+  Realtime assembly now disables test parallelisation because its metric assertions read untagged
+  process-wide instruments — measured cost **0.55–0.58 s against 0.34–0.35 s**, both under the 0.8 s
+  `ADR-0045` recorded.
+
 ### Fixed — Tests: the Realtime suite waited 25 s to reach assertions that never needed a clock
 
 Five bridge tests handed `HandleSessionAsync` a `CancellationTokenSource(5s)` and asserted whatever
