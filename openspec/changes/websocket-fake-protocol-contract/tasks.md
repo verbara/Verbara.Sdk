@@ -557,18 +557,53 @@ second detector arriving after this change closes would rebuild all five.
 
 ## 6. Decision record and docs
 
-- [ ] 6.1 Write `docs/decisions/0045-websocket-fake-protocol-contract.md` — the three defect classes
+- [x] 6.1 Write `docs/decisions/0045-websocket-fake-protocol-contract.md` — the three defect classes
       as rules plus the substrate rule, with the concrete instances as evidence. Related: ADR-0009
       (three-tier test pyramid), ADR-0014 (raw `ClientWebSocket` for VoiceAi providers), ADR-0041
       (transport split; the WebSocket surfaces stay in-process), ADR-0044 (IPv4 loopback literal),
       verbara-meta/ADR-0004 (deterministic-test-fences programme — the net-new-only barrier ratchet
       the `sync-fence-baseline.json` comment refers to; note that this repo's own ADR-0004 is central
       package management, so the citation must stay repo-qualified per ADR-0037)
-- [ ] 6.2 Add the ADR-0045 row to `docs/decisions/README.md`, in numeric order
-- [ ] 6.3 `CHANGELOG.md` — one entry under `[Unreleased]` in the existing `### Fixed — Tests` shape.
+      — written, 158 lines, Accepted 2026-08-20. Four rules (the three classes plus the substrate),
+      each with the concrete instance as evidence rather than as illustration: the 5.5 ms-vs-33.5 ms
+      measurement behind Class A, §1.3's `CloseSent` failure text behind Class B, and the 4.99 s
+      per-session pin behind the substrate rule — which is the finding that explains the wall clock,
+      and which §1.4 turned up by measuring rather than by reading the source.
+
+      An **enforcement table** maps each rule to the thing that fails for it, so no rule rests on
+      review. All five related ADRs are cited, `verbara-meta/ADR-0004` repo-qualified per ADR-0037
+      (this repo's own ADR-0004 is central package management). Alternatives records the three that
+      were genuinely weighed — raise the delays, fix one fake without a contract, a shared base class
+      — plus why the second detector ships here rather than in its own change.
+- [x] 6.2 Add the ADR-0045 row to `docs/decisions/README.md`, in numeric order
+      — inserted between ADR-0044 and ADR-0048. (0045–0047 were reserved by open changes; 0046 and
+      0047 remain unwritten, so the numeric gap is intact and expected.)
+- [x] 6.3 `CHANGELOG.md` — one entry under `[Unreleased]` in the existing `### Fixed — Tests` shape.
       **No `Directory.Build.props` version bump**: test-only, ships with the next release train
-- [ ] 6.4 Record the follow-up explicitly rather than leaving it implied: the remaining WebSocket
+      — *"Fixed — Tests: the Realtime suite waited 25 s to reach assertions that never needed a
+      clock"*, at the top of `[Unreleased]`, six bullets in the shape of the existing `Fixed — Tests`
+      entries: what the fake and the tests did, the substrate finding, the two assertions that were
+      replaced rather than ported, both negative tests, the two guards, and the two production-side
+      findings left unfixed. **No version bump** — `Directory.Build.props` is untouched.
+- [x] 6.4 Record the follow-up explicitly rather than leaving it implied: the remaining WebSocket
       surfaces not swept for Class B/C. Name them, and say that sweeping them is a separate change
+      — named in ADR-0045's Consequences and echoed in the CHANGELOG:
+      `AssemblyAiFakeServer`, `CartesiaFakeServer` (STT), `DeepgramFakeServer`,
+      `SpeechmaticsFakeServer`, `CartesiaFakeServer` (TTS), `DeepgramTtsFakeServer`,
+      `ElevenLabsFakeServer`, `LmntWsFakeServer`.
+
+      **Their state is not uniform, and the record says so rather than flattening it.** Rule 3 is
+      *enforced* across all nine by the §5.2 guard; rule 4 already holds for all nine; the two TTS
+      fakes that answered on a timer were converted to causal waits in an earlier change, and the
+      hold-open paths in `LmntWsFakeServer` and `DeepgramTtsFakeServer` already park on the server
+      token rather than on the receive loop. What has **not** been done for the eight is what was
+      done here — negative-testing each sentinel, and sweeping the tests that drive them for the
+      corollary (a token expiry as the normal path to an assertion). Until that runs, no claim is
+      made about those eight beyond what the guards enforce.
+
+      **Two production-side findings are recorded in the same place**, both surfaced by §4.6 and both
+      out of scope here because this change touches no `src/`: the `AudioSocketSession` hangup/dispose
+      race and the unguarded `session.update` send in `OpenAiRealtimeBridge`.
 
 ## 7. Verification
 
