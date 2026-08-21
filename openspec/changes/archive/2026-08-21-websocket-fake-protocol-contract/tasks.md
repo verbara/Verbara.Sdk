@@ -652,5 +652,18 @@ second detector arriving after this change closes would rebuild all five.
       well as on configuration. The tree was restored to `HEAD` afterwards and rebuilt.
 - [x] 7.5 `openspec validate websocket-fake-protocol-contract --type change --strict` clean
       — `Change 'websocket-fake-protocol-contract' is valid`.
-- [ ] 7.6 CI green on the PR, zero warnings; enqueue with `gh pr merge <pr> --auto` (merge queue —
+- [x] 7.6 CI green on the PR, zero warnings; enqueue with `gh pr merge <pr> --auto` (merge queue —
       never `--squash`/`--delete-branch`)
+      — **PR #207**, 6 commits. All 15 checks settled green: 14 `pass` and one `skipping`
+      (*Auto-merge safe Dependabot PRs*, which does not apply to a human-authored PR). The two that
+      carry this change's risk both ran long and clean — **Unit Tests 9m01s**, **Analyze (C#)
+      10m37s** — alongside AOT Trim Check (1m26s), Pack Warnings Gate (2m35s), Coverage Ratchet,
+      Coverage Script Tests, Audit Test Asserts, Dependency Review, CodeQL, Functional Tests and
+      **OpenSpec Validate**.
+
+      `mergeable=MERGEABLE` was confirmed *before* reading the checks: a CONFLICTING PR has no merge
+      ref and therefore no check-suites at all, which reads identically to an Actions outage.
+      Enqueued with `gh pr merge 207 --auto` — the second invocation answered *"already queued to
+      merge"*, which is how the merge queue reports success (`autoMergeRequest` stays null because
+      the PR enters the queue rather than GitHub's native auto-merge). Merged to `main` as
+      **`54d5e158`**.
