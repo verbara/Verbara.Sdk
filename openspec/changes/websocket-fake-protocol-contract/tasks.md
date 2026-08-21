@@ -473,28 +473,87 @@ change because **the scaffolding is the expensive part, not the detector** — �
 scanner, a guard test, true-positive and false-positive unit tests and a liveness self-test, and a
 second detector arriving after this change closes would rebuild all five.
 
-- [ ] 5.7 Add a cancellation-token-provenance detector to `Tests/Verbara.Sdk.Governance.Tests/`,
+- [x] 5.7 Add a cancellation-token-provenance detector to `Tests/Verbara.Sdk.Governance.Tests/`,
       reusing the scanner scaffolding §5.2 builds rather than standing up a second one: in a test
       method that cancels a `CancellationTokenSource`, the enumeration of the subject MUST NOT
       receive that token. `ToListAsync(ct)`, `ToArrayAsync(ct)` and `WithCancellation(ct)` are the
       reported forms (ADR-0052 F3)
-- [ ] 5.8 Detector unit tests — true positive: a `.ToListAsync(cts.Token)` in a method that cancels
+      — `CancellationProvenanceScanner.cs` + `CancellationProvenanceGuardTests.cs`, sharing
+      `TestTreeSource`, the violation record and the reporting shape with §5.2 rather than standing
+      up a second locator (which is the argument for landing it here).
+
+      A method is a cancellation test if it cancels a source **inside itself** — `Cancel()`,
+      `CancelAsync()` or `CancelAfter(…)`, including from a nested lambda, which is how the
+      cancel-on-first-frame triggers are written. Nothing keys on `[Fact]` or on the method name, so
+      a helper of the same shape is reported too. Token aliasing (`var token = cts.Token;`) is
+      resolved, so a rename on the way to the enumerator does not hide it.
+
+      **One deliberate non-rule:** a `CancellationTokenSource` constructed *with a delay* is NOT
+      treated as cancelled. In a test that is not about cancellation it is a hang bound, and
+      reporting it would mute the detector on precisely the legitimate case §5.9 protects. Racing a
+      wall-clock timer against a fake server is the sync-fence ratchet's job, not this guard's.
+- [x] 5.8 Detector unit tests — true positive: a `.ToListAsync(cts.Token)` in a method that cancels
       `cts` is reported with a 1-based line number and the file named in the failure message
-- [ ] 5.9 Detector unit tests — false-positive immunity: `ToListAsync(CancellationToken.None)`, a
+      — five true positives: `ToListAsync`, `ToArrayAsync` and `WithCancellation`; the cancel
+      arriving from a nested `Task.Run(async () => await cts.CancelAsync())` lambda; and the token
+      renamed into a local before the enumeration. The first asserts line, method name and path
+      together, and the failure message names the file, the line and the test method.
+- [x] 5.9 Detector unit tests — false-positive immunity: `ToListAsync(CancellationToken.None)`, a
       no-argument `ToListAsync()`, and a `ToListAsync(ct)` in a method whose token is never cancelled
       are NOT reported. The last one matters most — a token that is only ever a hang bound is the
       legitimate case, and a detector that cannot tell it apart will be muted
-- [ ] 5.10 Negative-test the detector against history rather than against a fixture: restore the ten
+      — all three, plus two more. `CancellationToken.None` is immune structurally rather than by
+      special case: the rule matches `<source>.Token` only where `<source>` is a name the method
+      cancelled, and `CancellationToken` never is. The fourth pins **two sources in one method** —
+      cancelling the server's lifetime token while the enumeration takes the hang bound is not a
+      violation, which a cruder "does this method cancel anything?" rule would get wrong. The fifth
+      is the string-literal immunity that keeps this file's own fixtures from self-flagging.
+- [x] 5.10 Negative-test the detector against history rather than against a fixture: restore the ten
       pre-fix cancellation tests from `c4756fbd^`, run the detector, confirm it reports **exactly
       those ten**. A guard that cannot re-find the defect it was written for is not evidence, and
       this is the one defect whose full extent is already known
-- [ ] 5.11 Amend the living `test-determinism` TTS cancellation requirement via the delta in
+      — `git checkout c4756fbd^ --` the ten files, run the guard: **exactly ten violations, one per
+      file**, no more and no fewer, each naming the test method:
+
+      ```
+      10 cancellation test(s) hand the cancelled token to the enumerator as well as the subject:
+        …/AssemblyAi/AssemblyAiSpeechRecognizerTests.cs:494      [StreamAsync_ShouldAbort_WhenCancelled]
+        …/Cartesia/CartesiaSpeechRecognizerTests.cs:419          [StreamAsync_ShouldAbort_WhenCancelled]
+        …/Deepgram/DeepgramSpeechRecognizerTests.cs:331          [StreamAsync_ShouldAbort_WhenCancelled]
+        …/Google/GoogleSpeechRecognizerTests.cs:228              [StreamAsync_ShouldAbort_WhenCancelled]
+        …/Speechmatics/SpeechmaticsSpeechRecognizerTests.cs:565  [StreamAsync_ShouldAbort_WhenCancelled]
+        …/Whisper/AzureWhisperSpeechRecognizerTests.cs:150       [StreamAsync_ShouldAbort_WhenCancelled]
+        …/Whisper/WhisperSpeechRecognizerTests.cs:156            [StreamAsync_ShouldAbort_WhenCancelled]
+        …/Deepgram/DeepgramSpeechSynthesizerTests.cs:406         [SynthesizeAsync_ShouldAbort_WhenCancelled]
+        …/ElevenLabs/ElevenLabsSpeechSynthesizerTests.cs:246     [SynthesizeAsync_ShouldAbort_WhenCancelled]
+        …/Lmnt/LmntSpeechSynthesizerTests.cs:471                 [SynthesizeAsync_ShouldAbort_WhenCancelled]
+      ```
+
+      Files restored to `HEAD` afterwards; `git status` clean apart from the two new detector files.
+      Governance is **129/129 green**.
+- [x] 5.11 Amend the living `test-determinism` TTS cancellation requirement via the delta in
       `specs/test-determinism/spec.md` (see the `## MODIFIED Requirements` block). Two defects: its
       pre-cancelled scenario instructs the exact pattern §5.7 detects — *"WHEN the stream is
       enumerated (e.g. `ToListAsync(ct)`)"* — and its provider list closes at "(Deepgram, ElevenLabs,
       Lmnt)" beneath a normative sentence binding every TTS synthesizer, which is how Speechmatics
       TTS and LMNT-over-HTTP went uncovered entirely. **§5.11 gates §5.7:** a guard that contradicts
       the spec it enforces gets deleted as a false positive by the next reader
+      — the amendment is the `## MODIFIED Requirements` block in
+      `specs/test-determinism/spec.md`, landed with the change itself (`64c37cf0`) and re-read here
+      before §5.7 was written. Both defects are closed, and the guard now says the same thing the
+      spec does:
+
+      - The pre-cancelled scenario reads *"WHEN the stream is enumerated **plainly**, the token
+        having been passed to `SynthesizeAsync` and not to the enumerator"* — it no longer instructs
+        the pattern the detector reports. The normative paragraph names all three forms
+        (`ToListAsync(ct)`, `ToArrayAsync(ct)`, `WithCancellation(ct)`), which is where §5.7's
+        reported set comes from, and a new scenario requires the assertion to have no source of
+        `OperationCanceledException` other than the subject.
+      - The closed provider list is gone: coverage is enumerated *by selectable code path, not by
+        provider name*, with a scenario binding each selectable transport of a multi-transport
+        synthesizer to its own test.
+
+      `openspec validate websocket-fake-protocol-contract --type change --strict` → valid.
 
 ## 6. Decision record and docs
 
