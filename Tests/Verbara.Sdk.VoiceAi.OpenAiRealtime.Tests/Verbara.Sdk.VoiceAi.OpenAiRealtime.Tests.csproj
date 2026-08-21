@@ -3,6 +3,8 @@
     <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.OpenAiRealtime\Verbara.Sdk.VoiceAi.OpenAiRealtime.csproj" />
     <!-- AudioSocket needed for AudioSocketServer + AudioSocketClient in bridge tests and DI tests -->
     <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.AudioSocket\Verbara.Sdk.VoiceAi.AudioSocket.csproj" />
+    <!-- WebSocketTestServer — the shared substrate every other in-process WebSocket fake runs on -->
+    <ProjectReference Include="..\Verbara.Sdk.TestInfrastructure\Verbara.Sdk.TestInfrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

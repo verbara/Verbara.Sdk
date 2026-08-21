@@ -12,45 +12,183 @@ before §3 changes any timing, and §3–§4 stand on either substrate if §2 is
 
 ## 1. Baseline — evidence before any edit
 
-- [ ] 1.1 Record per-test wall clock for `Tests/Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests` as it
+- [x] 1.1 Record per-test wall clock for `Tests/Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests` as it
       stands, `-c Release`, `--logger "console;verbosity=detailed"`. Starting point already measured
       on 2026-08-10: five bridge tests at **5 s** each (their own CTS expiring), cancellation test at
       245 ms, whole project 44.3 s including build. Re-measure at least 3 runs so the after-figure in
       §7.4 compares against a spread, not a single sample
-- [ ] 1.2 Pin the fake's close timeline. Instrument `RealtimeFakeServer` locally to log the instant
+      — **re-measured 2026-08-20, 3 runs, `-c Release --no-build`** (the 44.3 s of 2026-08-10 included
+      the build; these figures exclude it, so §7.4 must compare like for like). 59 tests, all green.
+
+      | Test | run 1 | run 2 | run 3 |
+      |---|---|---|---|
+      | `HandleSessionAsync_SendsSessionUpdate_OnConnect` | 5 s | 5 s | 5 s |
+      | `HandleSessionAsync_PublishesResponseStartedAndEndedEvents` | 5 s | 5 s | 5 s |
+      | `HandleSessionAsync_PublishesTranscriptEvents` | 5 s | 5 s | 5 s |
+      | `HandleSessionAsync_PublishesSpeechEvents` | 5 s | 5 s | 5 s |
+      | `HandleSessionAsync_PublishesErrorEvent_OnOpenAiError` | 5 s | 5 s | 5 s |
+      | `HandleSessionAsync_CancellationToken_TerminatesBothLoops` | 202 ms | 203 ms | 199 ms |
+      | `Bridge_ExecutesFunction_AndSendsResultToServer` | 308 ms | 303 ms | 303 ms |
+      | `Bridge_FunctionThrows_SendsErrorJsonToServer` | 336 ms | 329 ms | 331 ms |
+      | `Bridge_UnknownFunction_DoesNotCrash` | 302 ms | 301 ms | 303 ms |
+      | **whole project (excl. build)** | **25.58 s** | **25.49 s** | **25.49 s** |
+
+      **The 25 s is the whole project's wall clock, not a share of it.** xunit parallelises across
+      test *classes*, not within one, so `OpenAiRealtimeBridgeTests`' five 5-second tests run in
+      series and `FunctionCallTests` finishes inside that window. The project's critical path is
+      therefore exactly the bridge class, and the run-to-run spread is 0.09 s — a noise floor two
+      orders of magnitude below the budget §4 reclaims.
+- [x] 1.2 Pin the fake's close timeline. Instrument `RealtimeFakeServer` locally to log the instant
       it calls `CloseAsync`, and confirm it lands at ~130 ms (30 ms + 5 ms/event + 100 ms) — i.e.
       **before** the 200 ms cancel in `HandleSessionAsync_CancellationToken_TerminatesBothLoops`.
       This is the evidence that the test's `OutputLoop` half is not exercised today; the timeline is
       currently read off the source, not observed
-- [ ] 1.3 Negative-test the Class B claim on the current code: make the cancellation test assert the
+      — **confirmed, and now observed rather than read off the source.** Temporary `Stopwatch` marks
+      from the accept, `-c Release`; the instrumentation was reverted before §1.5. Cancellation test:
+
+      ```
+      accept                                    @   0.4 ms
+      session.created sent                      @   1.1 ms
+      recv text #1 (the client's session.update)@   5.5 ms
+      30 ms delay elapsed                       @  33.5 ms
+      100 ms pre-close delay elapsed; state=Open@ 134.1 ms   <-- CloseAsync is entered here
+      recv loop threw: WebSocketException       @ 192.7 ms   <-- the test's 200 ms cancel
+      close threw: OperationCanceledException   @ 193.1 ms
+      HandleWebSocketAsync RETURNS              @ 193.1 ms
+      ```
+
+      The close decision lands at **134 ms**, ~59 ms *before* the cancel — the predicted ~130 ms, and
+      the ordering the task exists to establish. The same three marks in the five-second tests land
+      at 129.7 / 131.9 / 138.0 / 146.4 ms, so the figure is stable across tests, not a single sample.
+- [x] 1.3 Negative-test the Class B claim on the current code: make the cancellation test assert the
       socket is still open when the token fires, watch it fail against today's fake, then revert.
       Record the failure text — it is what §4.7 must turn green
-- [ ] 1.4 Confirm or refute the concurrent-receive observation at `RealtimeFakeServer.cs:112-123`:
+      — **it fails, and the observed state is sharper than "not open".** A temporary `ProbeState`
+      on the fake exposing the live server-side `WebSocket.State`, asserted in
+      `HandleSessionAsync_CancellationToken_TerminatesBothLoops` immediately before `cts.CancelAsync()`:
+
+      ```
+      Expected fakeOpenAi.ProbeState to be WebSocketState.Open {value: 2} because the socket must
+      still be live when the token fires, or the loop exits on the server's close, but found
+      WebSocketState.CloseSent {value: 3}.
+      ```
+
+      **`CloseSent`, not `Aborted` and not `Open`** — the server had already written its close frame
+      and was waiting for the reply. That is the exact shape of the Class B defect: by the time the
+      token fires the teardown is already half-done, so the test's `OutputLoop` half cannot be
+      attributed to cancellation. This is the assertion §4.7 must turn green; both the probe and the
+      assertion were reverted afterwards.
+- [x] 1.4 Confirm or refute the concurrent-receive observation at `RealtimeFakeServer.cs:112-123`:
       `CloseAsync` is called while the background receive loop has an outstanding `ReceiveAsync` on
       the same socket, and any resulting exception is swallowed by the surrounding `catch { }`.
       Determine empirically whether the peer still observes the close frame. Whatever the answer, it
       is deleted by §2 — record it so the proposal's claim is settled rather than carried forward
-- [ ] 1.5 Pre-change flake baseline: 30× repeat run of the suite (the repo's determinism protocol),
+      — **CONFIRMED as a violation; the peer DOES observe the close frame.** Settled with a
+      purpose-built probe (a raw `ClientWebSocket` against the fake, no competing receive, deleted
+      afterwards) rather than by reading `ManagedWebSocket`:
+
+      ```
+      [PEER] connected                                            @  16.5 ms
+      [PEER] sent session.update                                   @  17.4 ms
+      [PEER] received Text: {"type":"session.created","session":{}}@  18.6 ms
+      [PEER] received Text: {"type":"response.created"}            @  46.5 ms
+      [PEER] *** RECEIVED CLOSE FRAME *** status=NormalClosure desc='done' @ 154.5 ms
+      ```
+
+      So the ordering the proposal declined to assume resolves in the harmless direction for the
+      *frame*: `CloseAsync` writes it before it waits, so it reaches the wire. **What never completes
+      is the handshake.** The outstanding `ReceiveAsync` owns the receive path, so `CloseAsync` can
+      never read the peer's close reply; it blocks, and the server's own receive loop never observes
+      a `WebSocketMessageType.Close` either. Both unwind only when the socket is finally torn down,
+      at which point `CloseAsync` throws `OperationCanceledException` into the `catch { }` and the
+      server socket ends **`Aborted`** — in every run measured, never once `Closed`.
+
+      **One consequence the proposal did not state, and it is the larger one:** because `CloseAsync`
+      blocks until teardown, `HandleWebSocketAsync` does not return at ~130 ms — it returns when the
+      *client* dies. In the five 5-second tests that is **4 987–4 992 ms**, i.e. the fake's session
+      handler is pinned for 4.86 s per test doing nothing but waiting on a close reply that cannot
+      arrive. This does not change the plan — §2 deletes the path either way, and `WebSocketTestServer`
+      gives the per-connection handler sole ownership of the socket — but it is the mechanism behind
+      the wall clock §1.1 measured, so it belongs in ADR-0045's evidence rather than only here.
+- [x] 1.5 Pre-change flake baseline: 30× repeat run of the suite (the repo's determinism protocol),
       so a post-change flake can be attributed. Note the protocol's known limit — it multiplies runs,
       not machines
+      — **30/30 green, 2026-08-20, `-c Release --no-build`, 59 tests each run.** Wall clock across
+      the 30 runs: min **25.87 s**, median **25.90 s**, max **26.06 s** (mean 25.90 s). The spread is
+      **0.19 s over thirty runs** — 0.7 % of the total.
+
+      That tightness is itself evidence rather than reassurance. A suite whose runtime is dominated
+      by real work varies with machine load; one whose runtime is dominated by fixed timeouts does
+      not. 25.9 s ± 0.1 s is the signature of five 5-second tokens expiring on schedule, and it
+      confirms from the outside what §1.1 measured from the inside: the suite is not doing 25 s of
+      work, it is waiting 25 s.
+
+      **The protocol's known limit applies in full here.** Thirty runs on one machine multiply runs,
+      not machines: they cannot surface a race that this CPU count, this scheduler and this loopback
+      stack happen to win every time. Class A is precisely such a race — the `Task.Delay(30)` at
+      `:98` wins 30/30 here and is still a race. So this baseline establishes *"no flake was
+      observable before the change"*, which is what §7.3 needs to attribute a post-change flake; it
+      does **not** establish that the current fake is sound. §1.2–§1.4 are the evidence for that, and
+      they say it is not.
 
 ## 2. Substrate migration (no test-file changes in this section)
 
-- [ ] 2.1 Add `<ProjectReference Include="..\Verbara.Sdk.TestInfrastructure\..." />` to
+- [x] 2.1 Add `<ProjectReference Include="..\Verbara.Sdk.TestInfrastructure\..." />` to
       `Tests/Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests/Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.csproj`
       — the project does not reference it today
-- [ ] 2.2 Rewrite `RealtimeFakeServer` on `WebSocketTestServer`: supply a per-connection handler
+      — added. **One consequence worth stating, because the proposal's Impact says "no new external
+      dependency":** `Verbara.Sdk.TestInfrastructure` carries a `PackageReference` to
+      `Testcontainers`, so that package now flows transitively into this test project. It is not new
+      to the repo (it is already pinned in `Directory.Packages.props` and referenced by
+      `Verbara.Sdk.VoiceAi.Tts.Tests`, `Verbara.Sdk.IntegrationTests` and `Verbara.Sdk.FunctionalTests`)
+      and nothing here instantiates a container, so **no Docker daemon is required to run this suite**
+      — the claim holds at the repo level and is qualified at the project level.
+- [x] 2.2 Rewrite `RealtimeFakeServer` on `WebSocketTestServer`: supply a per-connection handler
       taking a `WebSocketTestSession`, and delete the `HttpListener` field, `AcceptLoopAsync`, the
       `AcceptWebSocketAsync` call and the `HttpListener` close path
-- [ ] 2.3 Delete the TOCTOU port probe and its retry loop (`RealtimeFakeServer.cs:23-50`, including
+      — done. 142 lines → 102. `HandleSessionAsync(WebSocketTestSession)` is now the whole server
+      surface; `_listener`, `AcceptLoopAsync`, `AcceptWebSocketAsync`, the `_cts` and the
+      `HttpListener` close path are gone, and `WebSocketTestServer` owns accept, the RFC 6455
+      handshake and disposal. The three `Task.Delay` calls and the close sequence were carried over
+      **verbatim** so §2.5 measures the substrate and nothing else — §3 is where they go.
+- [x] 2.3 Delete the TOCTOU port probe and its retry loop (`RealtimeFakeServer.cs:23-50`, including
       the `goto success`). `WebSocketTestServer` binds `TcpListener(IPAddress.Loopback, 0)` and
       exposes `Port` directly — ADR-0044's "unavoidable for `HttpListener`" no longer applies
-- [ ] 2.4 Keep `Port`, `Start()`, `EventsToSend` and `ReceivedMessages` byte-identical in name and
+      — deleted: 28 lines of probe, ten-attempt retry loop and `goto success` replaced by
+      `public int Port => _server.Port;`. The reason it is deletable rather than merely tidied is
+      recorded in the type's own `<remarks>`, so the next reader does not reintroduce it: the probe
+      existed because `HttpListener` cannot adopt an already-bound socket, and `WebSocketTestServer`
+      binds its listener in its constructor and keeps it.
+- [x] 2.4 Keep `Port`, `Start()`, `EventsToSend` and `ReceivedMessages` byte-identical in name and
       shape so `OpenAiRealtimeBridgeTests` and `FunctionCallTests` compile and run **unmodified** in
       this section
-- [ ] 2.5 Suite green with the test files untouched, and per-test durations unchanged from §1.1 —
+      — held. `git status` after the migration lists exactly two changed files in the test project,
+      the fake and the `.csproj`; neither test file is touched. `ReceivedMessages` is still
+      `public List<string>` at this point — that is the Class C defect, and fixing it here would have
+      forced the test edits this section exists to avoid. §3.6 changes it.
+- [x] 2.5 Suite green with the test files untouched, and per-test durations unchanged from §1.1 —
       this section must not move timing in either direction. If it does, the migration changed
       behaviour and the cause is found before §3 starts
+      — **green and unchanged.** Build 0 warnings / 0 errors; 59/59 passed on each of 3 runs,
+      `-c Release --no-build --logger "console;verbosity=detailed"`:
+
+      | Test | §1.1 (before) | run 1 | run 2 | run 3 |
+      |---|---|---|---|---|
+      | `HandleSessionAsync_SendsSessionUpdate_OnConnect` | 5 s | 5 s | 5 s | 5 s |
+      | `HandleSessionAsync_PublishesResponseStartedAndEndedEvents` | 5 s | 5 s | 5 s | 5 s |
+      | `HandleSessionAsync_PublishesTranscriptEvents` | 5 s | 5 s | 5 s | 5 s |
+      | `HandleSessionAsync_PublishesSpeechEvents` | 5 s | 5 s | 5 s | 5 s |
+      | `HandleSessionAsync_PublishesErrorEvent_OnOpenAiError` | 5 s | 5 s | 5 s | 5 s |
+      | `HandleSessionAsync_CancellationToken_TerminatesBothLoops` | 199–203 ms | 200 ms | 203 ms | 203 ms |
+      | `Bridge_ExecutesFunction_AndSendsResultToServer` | 303–308 ms | 302 ms | 304 ms | 303 ms |
+      | `Bridge_FunctionThrows_SendsErrorJsonToServer` | 329–336 ms | 325 ms | 326 ms | 328 ms |
+      | `Bridge_UnknownFunction_DoesNotCrash` | 301–303 ms | 302 ms | 300 ms | 302 ms |
+      | **whole project (excl. build)** | **25.49–25.58 s** | **25.89 s** | **25.91 s** | **25.90 s** |
+
+      Every per-test figure is inside the before-spread. The project total sits ~0.35 s above §1.1's
+      three runs but exactly on the §1.5 30-run baseline (25.87–26.06 s, median 25.90 s) — §1.1's
+      three samples were the low end of that distribution, not a different number. The substrate did
+      not move timing.
 
 ## 3. Protocol fences in the fake (Class A + Class B + Class C)
 
