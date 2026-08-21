@@ -4,6 +4,53 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Tests: the Realtime suite waited 25 s to reach assertions that never needed a clock
+
+Five bridge tests handed `HandleSessionAsync` a `CancellationTokenSource(5s)` and asserted whatever
+had accumulated when it expired; three function-calling tests sat on `Task.Delay(300)`; the fake
+server paced itself with 30/5/100 ms sleeps. The project ran in **25.87–26.06 s across thirty runs**
+— a 0.19 s spread, which is the signature of five tokens expiring on schedule rather than of work
+being done. `ADR-0045` turns the three recurring defects in this layer into contracts: a fake answers
+on a **protocol sentinel**, holds open on its **own cancellation token**, and hands tests a
+**snapshot** of captured frames.
+
+- **The fake now waits for the client's `session.update` before answering**, and closes when its
+  events are delivered. It also moves onto the shared `WebSocketTestServer`, which owns its port from
+  the moment it binds — so the check-then-bind probe `HttpListener` forces (mitigated but
+  unremovable under `ADR-0044`) is deleted rather than carried over. The old path called `CloseAsync`
+  while its own receive loop had a receive outstanding: measurement showed the close *frame* reaches
+  the peer but the handshake never completes, pinning each session handler for **4.99 s** waiting on
+  a reply it could not read. That, not the delays, was where the wall clock went.
+
+- **The tests' session token now carries no timer at all.** Every bound is a
+  `WaitAsync(SignalTimeout)` whose expiry is a `TimeoutException`, so no test can still pass by
+  timing out. **25.9 s → 0.8 s**, 59/59 green, 20/20 under CPU saturation.
+
+- **Two assertions were replaced rather than ported, because they were measuring the fake.** A
+  response `Duration > Zero` held only because the fake slept 5 ms between the two events; it now
+  checks the interval between the two events the bridge published. `Bridge_UnknownFunction_DoesNotCrash`
+  gained a positive sentinel — an absence assertion with no signal is satisfied by a bridge that
+  never ran — plus the absence check its name always claimed.
+
+- **Both fences are negative-tested, and one result was sharper than expected.** Restoring the delays
+  fails the `session.update` fence 1-in-5 under load; clearing the hold-open flag does not merely
+  weaken the cancellation test, it fails it 3/3 with `CloseSent` instead of `Open` — the recorded
+  defect, reproduced on demand.
+
+- **Two Governance guards, so neither class depends on review.** `FakeServerCaptureScanner` reports a
+  fake handing out a collection its receive loop writes, discriminating by *who writes* rather than by
+  member name, so configuration collections stay writable with no ignore list. `CancellationProvenanceScanner`
+  enforces `ADR-0052` F3 — a cancelled token must not reach `ToListAsync`/`ToArrayAsync`/`WithCancellation`
+  — and is negative-tested against history rather than a fixture: restoring the ten pre-fix cancellation
+  tests makes it report exactly those ten. `sync-fence-baseline.json` drops from 329 barriers to 321.
+
+- **Two production-side findings are recorded and deliberately not fixed here**, since this change
+  touches no `src/`: a hangup that overtakes `AudioSocketSession.ReadAudioAsync`'s first `MoveNext`
+  throws `ObjectDisposedException`, and one unguarded `await` in `OpenAiRealtimeBridge` before its
+  loops start turns a cancel there into a faulted session. **One suite is converted; the other eight
+  WebSocket surfaces are a separate sweep** — the Class C guard already covers all of them, Class A
+  and Class B have been swept only here.
+
 ### Fixed — BREAKING: cancelling a synthesis truncated the stream in silence on two TTS surfaces
 
 `ADR-0050 E6` said cancellation is never a failure — not counted, not wrapped, not thrown — and two

@@ -11,6 +11,16 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.FunctionCalling;
 
 public sealed class FunctionCallTests
 {
+    /// <summary>
+    /// Upper bound on any single wait below, and the only clock in this class. Reaching it is a
+    /// failure, never a pace: every wait here is on a signal that arrives in milliseconds over a
+    /// loopback socket, and the session token carries no timer at all. Each bridge test waits on the
+    /// frame or event it asserts on, then cancels the token explicitly to end the session — the
+    /// same shape, and for the same reasons, as <c>OpenAiRealtimeBridgeTests.SignalTimeout</c>,
+    /// whose remarks record why the session is not ended by hanging up.
+    /// </summary>
+    private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
+
     // ── Shared test implementations ─────────────────────────────────────────
 
     private sealed class AddFunction : IRealtimeFunctionHandler
@@ -125,24 +135,32 @@ public sealed class FunctionCallTests
 
         var (session, audioServer, client) = await CreateAudioSessionAsync();
         await using var bridge = CreateBridge(fakeOpenAi, [new MultiplyFunction()]);
-        var events = new List<RealtimeEvent>();
-        using var sub = bridge.Events.Subscribe(e => events.Add(e));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var collector = new RealtimeEventCollector(
+            bridge.Events, e => e.OfType<RealtimeFunctionCalledEvent>().Any());
+        using var cts = new CancellationTokenSource();
+
         var bridgeTask = bridge.HandleSessionAsync(session, cts.Token).AsTask();
 
-        await Task.Delay(300);
+        // Wait for all three signals this test asserts on. The two frames are captured on the fake's
+        // receive loop and the event is published on the bridge's OutputLoop, so they are independent
+        // arrivals: waiting for one and asserting the others is the race this change removes.
+        await Task.WhenAll(
+            fakeOpenAi.WaitForClientFrameAsync("\"type\":\"conversation.item.create\""),
+            fakeOpenAi.WaitForClientFrameAsync("\"type\":\"response.create\""),
+            collector.Satisfied).WaitAsync(SignalTimeout);
+
         await cts.CancelAsync();
-        await client.SendHangupAsync();
-        try { await bridgeTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch { }
+        await bridgeTask.WaitAsync(SignalTimeout);
 
         fakeOpenAi.ReceivedMessages
             .Should().Contain(m => m.Contains("\"type\":\"conversation.item.create\"") && m.Contains("result") && m.Contains("100"));
         fakeOpenAi.ReceivedMessages
             .Should().Contain(m => m.Contains("\"type\":\"response.create\""));
-        events.OfType<RealtimeFunctionCalledEvent>()
+        collector.Events.OfType<RealtimeFunctionCalledEvent>()
             .Should().ContainSingle(e => e.FunctionName == "multiply");
 
+        await client.SendHangupAsync();
         await client.DisposeAsync();
         await audioServer.StopAsync(CancellationToken.None);
     }
@@ -158,18 +176,22 @@ public sealed class FunctionCallTests
         var (session, audioServer, client) = await CreateAudioSessionAsync();
         await using var bridge = CreateBridge(fakeOpenAi, [new ThrowingFunction()]);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource();
+
         var bridgeTask = bridge.HandleSessionAsync(session, cts.Token).AsTask();
 
-        await Task.Delay(300);
+        // End on the frame under assertion — the handler's exception must still produce a result item.
+        await fakeOpenAi.WaitForClientFrameAsync("\"type\":\"conversation.item.create\"")
+            .WaitAsync(SignalTimeout);
+
         await cts.CancelAsync();
-        await client.SendHangupAsync();
-        try { await bridgeTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch { }
+        await bridgeTask.WaitAsync(SignalTimeout);
 
         // Result must contain error JSON — handler must not cause the bridge to throw
         fakeOpenAi.ReceivedMessages
             .Should().Contain(m => m.Contains("\"type\":\"conversation.item.create\"") && m.Contains("error"));
 
+        await client.SendHangupAsync();
         await client.DisposeAsync();
         await audioServer.StopAsync(CancellationToken.None);
     }
@@ -180,23 +202,37 @@ public sealed class FunctionCallTests
         await using var fakeOpenAi = new RealtimeFakeServer();
         fakeOpenAi.EventsToSend.Add(
             """{"type":"response.function_call_arguments.done","call_id":"call-x","name":"nonexistent","arguments":"{}"}""");
+
+        // The positive sentinel for an absence assertion. An unknown function is answered with
+        // nothing at all — the bridge logs it and returns — so there is no frame to wait for, and
+        // "did not crash" measured against no signal is satisfied by a bridge that never ran.
+        // This second event travels the same socket behind the first, and OutputLoop awaits each
+        // handler before reading the next message, so its RealtimeResponseEndedEvent is proof that
+        // the unknown call was processed and the loop came out the other side.
+        fakeOpenAi.EventsToSend.Add("""{"type":"response.done"}""");
         fakeOpenAi.Start();
 
         var (session, audioServer, client) = await CreateAudioSessionAsync();
         await using var bridge = CreateBridge(fakeOpenAi, []); // no handlers
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var collector = new RealtimeEventCollector(
+            bridge.Events, e => e.OfType<RealtimeResponseEndedEvent>().Any());
+        using var cts = new CancellationTokenSource();
+
         var bridgeTask = bridge.HandleSessionAsync(session, cts.Token).AsTask();
+        await collector.Satisfied.WaitAsync(SignalTimeout);
 
-        await Task.Delay(300);
         await cts.CancelAsync();
-        await client.SendHangupAsync();
+        await bridgeTask.WaitAsync(SignalTimeout);
 
-        try { await bridgeTask.WaitAsync(TimeSpan.FromSeconds(3)); } catch (OperationCanceledException) { }
-
-        bridgeTask.Status.Should().BeOneOf(TaskStatus.RanToCompletion, TaskStatus.Canceled);
+        bridgeTask.Status.Should().Be(TaskStatus.RanToCompletion);
         bridgeTask.Exception.Should().BeNull();
 
+        // Nothing was sent back for the unknown call — the branch under test is the silent one.
+        fakeOpenAi.ReceivedMessages
+            .Should().NotContain(m => m.Contains("\"call_id\":\"call-x\""));
+
+        await client.SendHangupAsync();
         await client.DisposeAsync();
         await audioServer.StopAsync(CancellationToken.None);
     }
