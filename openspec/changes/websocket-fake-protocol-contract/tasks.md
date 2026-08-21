@@ -607,15 +607,50 @@ second detector arriving after this change closes would rebuild all five.
 
 ## 7. Verification
 
-- [ ] 7.1 `dotnet build Verbara.Sdk.slnx` — 0 warnings, 0 errors (`TreatWarningsAsErrors`)
-- [ ] 7.2 `dotnet test Verbara.Sdk.slnx --filter "Category!=Functional&Category!=Integration&Category!=Realtime&Category!=Spike"`
+- [x] 7.1 `dotnet build Verbara.Sdk.slnx` — 0 warnings, 0 errors (`TreatWarningsAsErrors`)
+      — **0 Warning(s), 0 Error(s)**, whole solution, 12.7 s.
+- [x] 7.2 `dotnet test Verbara.Sdk.slnx --filter "Category!=Functional&Category!=Integration&Category!=Realtime&Category!=Spike"`
       green — the four-exclusion filter CI actually uses (`ci.yml`), not the two documented in
       `CLAUDE.md`
-- [ ] 7.3 30× repeat-run determinism protocol on the OpenAiRealtime suite, and again under CPU
+      — **30 assemblies, 3 264 passed, 0 failed, 0 skipped.**
+- [x] 7.3 30× repeat-run determinism protocol on the OpenAiRealtime suite, and again under CPU
       saturation. Compare against §1.5
-- [ ] 7.4 Measured wall clock before/after, same machine, same configuration, ≥3 runs each — report
+      — **30/30 green idle and 30/30 green under saturation**, 59 tests every run, `-c Release
+      --no-build` as in §1.5. Saturation = 48 `yes` spinners on 24 cores (2× oversubscribed);
+      spinners confirmed reaped afterwards.
+
+      | | runs | min | median | max |
+      |---|---|---|---|---|
+      | §1.5 before, idle | 30 | 25.87 s | 25.90 s | 26.06 s |
+      | after, idle | 30 | **0.69 s** | **0.74 s** | **0.89 s** |
+      | after, saturated | 30 | 1.52 s | 1.70 s | 1.96 s |
+
+      **The comparison worth making is not the two idle rows, it is the shape.** Before, thirty runs
+      spanned 0.19 s — the signature of fixed timeouts expiring on schedule. After, the suite responds
+      to load the way work does: 2× CPU oversubscription roughly doubles it, and it is still 13×
+      faster than the idle baseline. §1.5's stated limit still applies in the other direction —
+      thirty runs on one machine multiply runs, not machines — so this establishes no observable
+      flake under this scheduler, not soundness. The negative tests in §3.7 and §4.7 are what argue
+      soundness.
+- [x] 7.4 Measured wall clock before/after, same machine, same configuration, ≥3 runs each — report
       the spread, not a single pair. State plainly if the delta is smaller than the run-to-run noise
       floor instead of claiming a win the numbers do not support
-- [ ] 7.5 `openspec validate websocket-fake-protocol-contract --type change --strict` clean
+      — **re-measured contemporaneously rather than reusing §1.1/§1.5**, because those two recorded
+      25.49–25.58 s and 25.87–26.06 s for the same suite, which is a measurement-point difference
+      (0.4 s) large enough to matter in a before/after claim. The before was restored from
+      `64c37cf0` into the working tree, rebuilt, and run through the **same harness** as the after —
+      same shell bracket, same command, same machine, same session:
+
+      | | run 1 | run 2 | run 3 | spread |
+      |---|---|---|---|---|
+      | before (`64c37cf0`) | 25.90 s | 25.88 s | 25.90 s | 0.02 s |
+      | after | 0.74 s | 0.75 s | 0.70 s | 0.05 s |
+
+      **Delta 25.15 s, against a combined noise floor of 0.07 s — roughly 360× the noise**, so the
+      win is not a measurement artefact and the caveat this task asks for does not apply. Both
+      before-runs and after-runs were 59/59 green, so the comparison is like for like on outcome as
+      well as on configuration. The tree was restored to `HEAD` afterwards and rebuilt.
+- [x] 7.5 `openspec validate websocket-fake-protocol-contract --type change --strict` clean
+      — `Change 'websocket-fake-protocol-contract' is valid`.
 - [ ] 7.6 CI green on the PR, zero warnings; enqueue with `gh pr merge <pr> --auto` (merge queue —
       never `--squash`/`--delete-branch`)
