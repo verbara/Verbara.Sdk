@@ -3,6 +3,7 @@ using Verbara.Sdk.VoiceAi.AudioSocket;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Internal;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -24,14 +25,12 @@ public sealed class OpenAiRealtimeBridgeTests
     /// the token explicitly to end the session.
     /// </para>
     /// <para>
-    /// Ending the session by hanging up the audio client instead reads more naturally and is not
-    /// usable here: <c>AudioSocketSession</c>'s hangup path completes the audio channel and then
-    /// disposes the session's <see cref="CancellationTokenSource"/>, so a hangup that overtakes the
-    /// first <c>MoveNext</c> of <c>ReadAudioAsync</c> makes it throw
-    /// <see cref="ObjectDisposedException"/> out of the bridge — observed 1 run in 10 under CPU
-    /// saturation. That is a production-side race in <c>Verbara.Sdk.VoiceAi.AudioSocket</c>, out of
-    /// scope for a test-only change and recorded as follow-up rather than absorbed here. Cancelling
-    /// first and hanging up in cleanup keeps these tests measuring the bridge instead of that race.
+    /// These tests were written around a hangup/dispose race in <c>Verbara.Sdk.VoiceAi.AudioSocket</c>
+    /// — a hangup that overtook <c>ReadAudioAsync</c>'s first <c>MoveNext</c> threw
+    /// <see cref="ObjectDisposedException"/> out of the bridge, 1 run in 10 under CPU saturation.
+    /// ADR-0053 fixed it: a hangup now ends the sequence whatever the ordering. Cancelling first and
+    /// hanging up in cleanup is kept because it is the clearer way to end a session under test, not
+    /// because the race is still there.
     /// </para>
     /// </remarks>
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
@@ -42,14 +41,30 @@ public sealed class OpenAiRealtimeBridgeTests
     /// <remarks>
     /// A test that cancels the session needs to know both loops are running first, and the
     /// server-side capture of <c>session.update</c> does not establish that: the fake can read that
-    /// frame off the wire while the client's <c>SendAsync</c> has not yet completed. Cancelling there
-    /// lands on the one await the bridge does not guard — the <c>session.update</c> send that
-    /// precedes <c>Task.WhenAll(InputLoop, OutputLoop)</c> — and the session faults with
-    /// <see cref="TaskCanceledException"/> instead of returning. Observed 1 run in 10 under CPU
-    /// saturation. A <em>published</em> event cannot be observed until <c>OutputLoop</c> is running,
-    /// which is after that send completed, so it is the sentinel that makes the cancel safe.
+    /// frame off the wire while the client's <c>SendAsync</c> has not yet completed. A
+    /// <em>published</em> event cannot be observed until <c>OutputLoop</c> is running, which is
+    /// after that send completed, so it is the sentinel that establishes it.
+    /// <para>
+    /// It was originally introduced because cancelling before the loops started landed on the one
+    /// await the bridge did not guard and faulted the session with
+    /// <see cref="TaskCanceledException"/> — 1 run in 10 under CPU saturation. ADR-0053 brought that
+    /// window under the same handling as the loops, so the sentinel no longer protects against a
+    /// fault; it is kept because the assertions on live socket state still need to know the loops
+    /// are up. The setup window now has its own coverage in
+    /// <c>OpenAiRealtimeBridgeSetupWindowTests</c>.
+    /// </para>
     /// </remarks>
     private const string LoopsRunningMarkerEvent = """{"type":"input_audio_buffer.speech_started"}""";
+
+    private const string MeterName = "Verbara.Sdk.VoiceAi.OpenAiRealtime";
+
+    /// <summary>
+    /// One 20 ms frame of assistant audio: 480 silent samples at the Realtime API's 24 kHz, which
+    /// the bridge's downsampler turns into 160 samples at the session's 8 kHz. Silent because the
+    /// samples are never inspected — what matters is that a write to Asterisk is attempted at all.
+    /// </summary>
+    private static readonly string AssistantAudioDeltaEvent =
+        $$"""{"type":"response.audio.delta","delta":"{{Convert.ToBase64String(new byte[960])}}"}""";
 
     [Fact]
     public async Task HandleSessionAsync_SendsSessionUpdate_OnConnect()
@@ -276,6 +291,58 @@ public sealed class OpenAiRealtimeBridgeTests
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The caller hanging up while the assistant is speaking — the commonest ending there is, and
+    /// the one the bridge used to mistake for a crash: the write to a torn-down session threw
+    /// <see cref="ObjectDisposedException"/> straight out of <c>OutputLoop</c>, faulting the session
+    /// and incrementing <c>sessions.failed</c> for a perfectly ordinary hangup (ADR-0053).
+    /// </summary>
+    /// <remarks>
+    /// The ordering is authored, not hoped for. The fake sends nothing of its own and holds the
+    /// socket open, so the single delta this test injects is guaranteed to arrive after the session
+    /// is gone — <c>OnHangup</c> having fired is the proof, not a delay. <c>EventsToSend</c> could
+    /// not express this: its burst leaves the instant <c>session.update</c> lands, which is before
+    /// anything has ended.
+    /// </remarks>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldEndAsCompleted_WhenTheCallerHangsUpWhileTheAssistantIsSpeaking()
+    {
+        // Arrange
+        await using var fakeOpenAi = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        fakeOpenAi.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        await using var bridge = CreateBridge(fakeOpenAi);
+        using var metrics = new MeterCapture(MeterName);
+
+        var tornDown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.OnHangup += () => tornDown.TrySetResult();
+
+        // Act — an uncancelled token throughout: this ending is the caller's, not a shutdown
+        var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
+        await fakeOpenAi.SessionUpdateReceived.WaitAsync(SignalTimeout);
+
+        await client.SendHangupAsync();
+        await tornDown.Task.WaitAsync(SignalTimeout);       // the transport is demonstrably gone…
+
+        await fakeOpenAi.SendEventAsync(AssistantAudioDeltaEvent);   // …and only then does it speak
+
+        // Assert
+        await sessionTask.WaitAsync(SignalTimeout);
+        using (new AssertionScope())
+        {
+            sessionTask.Status.Should().Be(
+                TaskStatus.RanToCompletion, "a hangup is an ending, not a fault");
+            metrics.Get("openai_realtime.sessions.completed").Should().Be(1);
+            metrics.Get("openai_realtime.sessions.failed").Should()
+                .Be(0, "nothing broke — the far end simply stopped listening");
+        }
+
+        // Cleanup
+        await client.DisposeAsync();
+        await audioServer.StopAsync(CancellationToken.None);
+    }
 
     private static async Task<(AudioSocketSession session, AudioSocketServer audioServer, AudioSocketClient client)>
         CreateAudioSessionAsync()

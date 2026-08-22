@@ -62,11 +62,6 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         using var ws = new ClientWebSocket();
         ws.Options.SetRequestHeader("Authorization", $"Bearer {_options.ApiKey}");
         ws.Options.SetRequestHeader("OpenAI-Beta", "realtime=v1");
-
-        var uri = new Uri($"{BaseUri}?model={Uri.EscapeDataString(_options.Model)}");
-        await ws.ConnectAsync(uri, ct).ConfigureAwait(false);
-        RealtimeLog.WebSocketConnected(_logger, channelId);
-
         using var wsWriteLock = new SemaphoreSlim(1, 1);
 
         var inputRate = _options.InputFormat.SampleRate;
@@ -74,8 +69,20 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         var upsampler = inputRate != 24000 ? ResamplerFactory.Create(inputRate, 24000) : null;
         var downsampler = inputRate != 24000 ? ResamplerFactory.Create(24000, inputRate) : null;
 
+        var sessionFailed = false;
+
+        // One try, one terminal block. The connect and the session.update send used to sit outside
+        // it, so a cancel landing in that window escaped as a fault and skipped the close, the
+        // counters, the duration and the end-of-session log entirely — see ADR-0053. The fix is to
+        // widen this region rather than to add a second terminal block: with a single `finally`
+        // there is exactly one site per instrument, so the telemetry cannot double-count however
+        // the code is later rearranged.
         try
         {
+            var uri = new Uri($"{BaseUri}?model={Uri.EscapeDataString(_options.Model)}");
+            await ws.ConnectAsync(uri, ct).ConfigureAwait(false);
+            RealtimeLog.WebSocketConnected(_logger, channelId);
+
             // Send session.update (voice, instructions, VAD, tools)
             var sessionUpdateBytes = BuildSessionUpdate(_registry.AllHandlers, _options);
             await wsWriteLock.WaitAsync(ct).ConfigureAwait(false);
@@ -83,44 +90,43 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             finally { wsWriteLock.Release(); }
             RealtimeMetrics.MessagesSent.Add(1);
 
-            var sessionFailed = false;
-            try
-            {
-                await Task.WhenAll(
-                    InputLoop(session, ws, wsWriteLock, upsampler, ct),
-                    OutputLoop(session, ws, wsWriteLock, downsampler, ct)
-                ).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* expected */ }
-            catch (Exception ex)
-            {
-                sessionFailed = true;
-                RealtimeMetrics.SessionsFailed.Add(1);
-                sessionActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                RealtimeLog.SessionError(_logger, channelId, ex.Message);
-                throw;
-            }
-            finally
-            {
-                // Clean close — do not use ct (already cancelled)
-                await wsWriteLock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
-                try
-                {
-                    if (ws.State == WebSocketState.Open)
-                        await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).ConfigureAwait(false);
-                }
-                catch { /* ignore close errors */ }
-                finally { wsWriteLock.Release(); }
-
-                if (!sessionFailed)
-                    RealtimeMetrics.SessionsCompleted.Add(1);
-                RealtimeMetrics.SessionDurationMs.Record(
-                    Stopwatch.GetElapsedTime(sessionStart).TotalMilliseconds);
-                RealtimeLog.SessionEnded(_logger, channelId);
-            }
+            await Task.WhenAll(
+                InputLoop(session, ws, wsWriteLock, upsampler, ct),
+                OutputLoop(session, ws, wsWriteLock, downsampler, ct)
+            ).ConfigureAwait(false);
+        }
+        // The filter tests the token, never ex.CancellationToken: a cancelled ConnectAsync surfaces
+        // a TaskCanceledException carrying a *different* token, so an identity check would silently
+        // not match and a requested shutdown would be counted as a failure.
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* expected */ }
+        catch (Exception ex)
+        {
+            sessionFailed = true;
+            RealtimeMetrics.SessionsFailed.Add(1);
+            sessionActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            RealtimeLog.SessionError(_logger, channelId, ex.Message);
+            throw;
         }
         finally
         {
+            // Clean close — never on ct, which is already cancelled. Conditional by necessity:
+            // cancelling a WebSocket operation aborts the socket, so on most cancelled paths there
+            // is nothing left to close politely.
+            await wsWriteLock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+            try
+            {
+                if (ws.State == WebSocketState.Open)
+                    await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).ConfigureAwait(false);
+            }
+            catch { /* ignore close errors */ }
+            finally { wsWriteLock.Release(); }
+
+            if (!sessionFailed)
+                RealtimeMetrics.SessionsCompleted.Add(1);
+            RealtimeMetrics.SessionDurationMs.Record(
+                Stopwatch.GetElapsedTime(sessionStart).TotalMilliseconds);
+            RealtimeLog.SessionEnded(_logger, channelId);
+
             upsampler?.Dispose();
             downsampler?.Dispose();
         }
@@ -234,7 +240,12 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                     {
                         pcm = pcm16Bytes.AsMemory();
                     }
-                    await session.WriteAudioAsync(pcm, ct).ConfigureAwait(false);
+                    // The caller hanging up while the assistant is speaking is the commonest ending
+                    // of all. Left unhandled it reaches this method's caller as a fault and is
+                    // counted as SessionsFailed — the same misclassification the read side was
+                    // fixed for, two hundred lines away (ADR-0053).
+                    try { await session.WriteAudioAsync(pcm, ct).ConfigureAwait(false); }
+                    catch (ObjectDisposedException) { return; }
                     break;
                 }
 
