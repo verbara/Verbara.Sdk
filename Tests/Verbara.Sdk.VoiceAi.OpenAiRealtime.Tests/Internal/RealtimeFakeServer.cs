@@ -148,6 +148,39 @@ internal sealed class RealtimeFakeServer : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Sends one event on the live session socket, outside <see cref="EventsToSend"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="EventsToSend"/> is delivered as a single burst the moment the client's
+    /// <c>session.update</c> lands, which cannot express an event that has to arrive <em>after</em>
+    /// something the test does — a hangup on the Asterisk side, say. This can, because the test
+    /// chooses the moment. It is deliberately refused while <see cref="EventsToSend"/> is non-empty:
+    /// the burst runs on the session handler's thread, and a second writer on one socket is the
+    /// concurrency violation this fake was rewritten to stop hiding (ADR-0045 rule 1). With the list
+    /// empty the burst body never executes, so this is the only writer.
+    /// </remarks>
+    public async Task SendEventAsync(string json)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+
+        if (EventsToSend.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "SendEventAsync would race the EventsToSend burst on the same socket. Send every "
+                + "event this way, or none of them.");
+        }
+
+        var ws = _socket ?? throw new InvalidOperationException(
+            "No session has been accepted yet — wait on SessionUpdateReceived first.");
+
+        // Sent raw rather than through SendJsonAsync, which swallows: a send the test asked for and
+        // that silently did not happen would surface ten seconds later as an unexplained timeout.
+        await ws.SendAsync(
+            Encoding.UTF8.GetBytes(json).AsMemory(), WebSocketMessageType.Text, true, CancellationToken.None)
+            .ConfigureAwait(false);
+    }
+
     private async Task HandleSessionAsync(WebSocketTestSession session)
     {
         var ws = session.WebSocket;

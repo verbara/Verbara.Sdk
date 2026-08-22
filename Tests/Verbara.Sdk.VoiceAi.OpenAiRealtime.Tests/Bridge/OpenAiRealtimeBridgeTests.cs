@@ -3,6 +3,7 @@ using Verbara.Sdk.VoiceAi.AudioSocket;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Internal;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -50,10 +51,20 @@ public sealed class OpenAiRealtimeBridgeTests
     /// window under the same handling as the loops, so the sentinel no longer protects against a
     /// fault; it is kept because the assertions on live socket state still need to know the loops
     /// are up. The setup window now has its own coverage in
-    /// <c>OpenAiRealtimeBridgeSetupCancellationTests</c>.
+    /// <c>OpenAiRealtimeBridgeSetupWindowTests</c>.
     /// </para>
     /// </remarks>
     private const string LoopsRunningMarkerEvent = """{"type":"input_audio_buffer.speech_started"}""";
+
+    private const string MeterName = "Verbara.Sdk.VoiceAi.OpenAiRealtime";
+
+    /// <summary>
+    /// One 20 ms frame of assistant audio: 480 silent samples at the Realtime API's 24 kHz, which
+    /// the bridge's downsampler turns into 160 samples at the session's 8 kHz. Silent because the
+    /// samples are never inspected — what matters is that a write to Asterisk is attempted at all.
+    /// </summary>
+    private static readonly string AssistantAudioDeltaEvent =
+        $$"""{"type":"response.audio.delta","delta":"{{Convert.ToBase64String(new byte[960])}}"}""";
 
     [Fact]
     public async Task HandleSessionAsync_SendsSessionUpdate_OnConnect()
@@ -280,6 +291,58 @@ public sealed class OpenAiRealtimeBridgeTests
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The caller hanging up while the assistant is speaking — the commonest ending there is, and
+    /// the one the bridge used to mistake for a crash: the write to a torn-down session threw
+    /// <see cref="ObjectDisposedException"/> straight out of <c>OutputLoop</c>, faulting the session
+    /// and incrementing <c>sessions.failed</c> for a perfectly ordinary hangup (ADR-0053).
+    /// </summary>
+    /// <remarks>
+    /// The ordering is authored, not hoped for. The fake sends nothing of its own and holds the
+    /// socket open, so the single delta this test injects is guaranteed to arrive after the session
+    /// is gone — <c>OnHangup</c> having fired is the proof, not a delay. <c>EventsToSend</c> could
+    /// not express this: its burst leaves the instant <c>session.update</c> lands, which is before
+    /// anything has ended.
+    /// </remarks>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldEndAsCompleted_WhenTheCallerHangsUpWhileTheAssistantIsSpeaking()
+    {
+        // Arrange
+        await using var fakeOpenAi = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        fakeOpenAi.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        await using var bridge = CreateBridge(fakeOpenAi);
+        using var metrics = new MeterCapture(MeterName);
+
+        var tornDown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.OnHangup += () => tornDown.TrySetResult();
+
+        // Act — an uncancelled token throughout: this ending is the caller's, not a shutdown
+        var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
+        await fakeOpenAi.SessionUpdateReceived.WaitAsync(SignalTimeout);
+
+        await client.SendHangupAsync();
+        await tornDown.Task.WaitAsync(SignalTimeout);       // the transport is demonstrably gone…
+
+        await fakeOpenAi.SendEventAsync(AssistantAudioDeltaEvent);   // …and only then does it speak
+
+        // Assert
+        await sessionTask.WaitAsync(SignalTimeout);
+        using (new AssertionScope())
+        {
+            sessionTask.Status.Should().Be(
+                TaskStatus.RanToCompletion, "a hangup is an ending, not a fault");
+            metrics.Get("openai_realtime.sessions.completed").Should().Be(1);
+            metrics.Get("openai_realtime.sessions.failed").Should()
+                .Be(0, "nothing broke — the far end simply stopped listening");
+        }
+
+        // Cleanup
+        await client.DisposeAsync();
+        await audioServer.StopAsync(CancellationToken.None);
+    }
 
     private static async Task<(AudioSocketSession session, AudioSocketServer audioServer, AudioSocketClient client)>
         CreateAudioSessionAsync()

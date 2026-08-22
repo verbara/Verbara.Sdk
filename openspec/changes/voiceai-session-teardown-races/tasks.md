@@ -11,13 +11,19 @@
       disposed. at System.Threading.CancellationTokenSource.get_Token() at
       AudioSocketSession.ReadAudioAsync(CancellationToken ct)+MoveNext() in AudioSocketSession.cs:74`
       — the `ObjectName` is empty, so the exception never names the session.
-- [x] 1.2 `OpenAiRealtimeBridgeSetupCancellationTests`, two tests: cancelled *during* connect and
-      cancelled *before* it. The seam is `StalledHandshakeListener` — it accepts the TCP connection,
+- [x] 1.2 `OpenAiRealtimeBridgeSetupWindowTests`, three tests: cancelled *during* connect,
+      cancelled *before* it, and — the control — a connect the far end genuinely *rejects*
+      (`RejectingHandshakeListener` answers the upgrade with `401`), which must still be counted as
+      a failure, logged as `SessionError` and rethrown. Without that third test the first two are
+      satisfied by a `catch` that swallows everything, so the pair proves only half of ADR-0053.
+      The seam for the first two is `StalledHandshakeListener` — it accepts the TCP connection,
       reads the upgrade request, signals, and never writes the `101`, so once `RequestReceived` has
       fired the *only* thing that can end `ConnectAsync` is the token. The alternative outcome is not
       unlikely, it is impossible. Pre-fix both fail on four assertions at once: the escaping
       `TaskCanceledException`, `sessions.completed = 0`, `session.duration_ms = 0` and no
-      `SessionEnded` entry. Note the clean close is *not* among them — see §3.4.
+      `SessionEnded` entry. Note the clean close is *not* among them — see §3.4. The rejection test
+      fails pre-fix for the mirror-image reason: the escaping `WebSocketException` skipped the
+      terminal block entirely, so `sessions.failed` stayed `0` and nothing was logged either.
       (The bridge's fake could not supply this seam: `WebSocketTestServer` writes its `101` before
       invoking the per-protocol handler, so any signal inside `RealtimeFakeServer` fires on the wrong
       side of the window.)

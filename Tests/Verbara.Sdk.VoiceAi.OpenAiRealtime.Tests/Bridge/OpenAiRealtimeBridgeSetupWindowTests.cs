@@ -1,3 +1,4 @@
+using System.Net.WebSockets;
 using Verbara.Sdk.VoiceAi.AudioSocket;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Internal;
@@ -16,7 +17,13 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Bridge;
 /// the <c>finally</c> that owns the close, the completion counter, the duration histogram and the
 /// end-of-session log was attached to the <em>inner</em> try. See ADR-0053.
 /// </summary>
-public sealed class OpenAiRealtimeBridgeSetupCancellationTests
+/// <remarks>
+/// Both endings of that window are exercised here, and the pair is the point: widening the try so a
+/// cancelled connect stops being a failure is only correct if a <em>broken</em> connect still is.
+/// One test without the other proves half of ADR-0053 and would be satisfied by a `catch` that
+/// swallowed everything.
+/// </remarks>
+public sealed class OpenAiRealtimeBridgeSetupWindowTests
 {
     /// <summary>Upper bound on any single wait. Reaching it is a failure, never a pace.</summary>
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
@@ -86,6 +93,43 @@ public sealed class OpenAiRealtimeBridgeSetupCancellationTests
             fault.Should().BeNull("a cancellation the caller asked for is not a fault");
             metrics.Get("openai_realtime.sessions.completed").Should().Be(1);
             metrics.Get("openai_realtime.sessions.failed").Should().Be(0);
+            log.Entries.Should().Contain(e => e.EventId.Name == "SessionEnded");
+        }
+
+        await CleanupAsync(client, audioServer);
+    }
+
+    [Fact]
+    public async Task HandleSessionAsync_ShouldCountAFailureAndRethrow_WhenTheHandshakeIsRejected()
+    {
+        // Arrange — the peer answers the upgrade with 401 instead of 101, so ConnectAsync fails for
+        // a reason no token had anything to do with: the other classification of the same window.
+        await using var rejecting = new RejectingHandshakeListener();
+        rejecting.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        var log = new RecordingLogger<OpenAiRealtimeBridge>();
+        await using var bridge = CreateBridge(rejecting.Port, log);
+        using var metrics = new MeterCapture(MeterName);
+
+        // Act — an uncancelled token, so nothing here can be mistaken for a requested shutdown
+        var fault = await Record.ExceptionAsync(
+            () => bridge.HandleSessionAsync(session, CancellationToken.None).AsTask().WaitAsync(SignalTimeout));
+
+        // Assert
+        using (new AssertionScope())
+        {
+            fault.Should().BeOfType<WebSocketException>(
+                "the caller has to learn its session never started; swallowing here would leave it "
+                + "holding a channel it believes is being handled");
+            metrics.Get("openai_realtime.sessions.started").Should().Be(1);
+            metrics.Get("openai_realtime.sessions.failed").Should()
+                .Be(1, "a handshake the far end refused is exactly what this counter is for");
+            metrics.Get("openai_realtime.sessions.completed").Should()
+                .Be(0, "counting this as completed is the misreading ADR-0053 exists to prevent");
+            metrics.GetDouble("openai_realtime.session.duration_ms").Should()
+                .BeGreaterThan(0, "the terminal block runs on the failure path too");
+            log.Entries.Should().Contain(e => e.EventId.Name == "SessionError");
             log.Entries.Should().Contain(e => e.EventId.Name == "SessionEnded");
         }
 
