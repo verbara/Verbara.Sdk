@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — a successful barge-in faulted the session, and a cancelled pipeline session was counted as a failure
+
+The two `VoiceAiPipeline` defects `ADR-0053` found and deliberately left for their own change.
+`ADR-0054` records the contract: **one owner for the synthesis token, and one answer for a cancelled
+session.**
+
+- **`_ttsCts` had four users and two owners.** `PipelineLoop` created and disposed it, `DisposeAsync`
+  disposed the same field again, and the barge-in path snapshotted it, null-checked it and cancelled
+  it. `CancellationTokenSource` throws `ObjectDisposedException` from `Cancel` after `Dispose` **even
+  when it was already cancelled**, so **a successful barge-in — a feature working — was booked as a
+  failed session and rethrown at the caller**. The field now has one owner: `PipelineLoop` creates
+  and disposes it, everyone else may only ask it to cancel, and a gate nulls the field *before* the
+  source is released. Whichever side wins, the loser sees a live source or a null field — never a
+  disposed one.
+
+- **`DisposeAsync` now cancels rather than releases**, and completes the event subject rather than
+  disposing it. Both loops outlive the call and publish as they unwind; `OnCompleted` has already
+  dropped every observer, so those publishes are silent, where `Dispose` made each one throw. That
+  was a second, independent path to the same defect, reached through the barge-in's own event.
+
+- **`voiceai.sessions.failed` changes meaning.** A cancelled session — a host shutdown, a caller
+  timeout — used to land there, and now lands in `voiceai.sessions.completed`. `HandleSessionAsync`
+  also **stops rethrowing on cancellation**. Both match what `OpenAiRealtimeBridge` has done since
+  `ADR-0053`: one `ISessionHandler` interface, one number. This is the same family of telemetry break
+  as `openai_realtime.sessions.failed` above, in the opposite direction — a dashboard counting
+  shutdowns as failures will drop.
+
+- **Two regression tests, ordered by construction, each failing on its own half.** The synthesizer
+  parks between chunks and says so; the turn detector — which the pipeline calls synchronously, once
+  per frame, on the monitor loop's own thread — says which frame it just decided on. No delay is
+  involved in any ordering. Reverting only the `catch` fails the cancellation test; reverting only
+  the ownership change, or only the subject-dispose removal, fails the barge-in test. The barge-in
+  racing `PipelineLoop`'s own `finally` has **no seam that is not a sleep** — the window is a field
+  read and the next statement — so it is closed by construction and said so in `ADR-0054` rather than
+  papered over with a delay.
+
 ### Fixed — a hangup that overtook the first read faulted the audio stream; a cancel during session setup vanished from telemetry
 
 Two defects in `Verbara.Sdk.VoiceAi`, one shape: state read after the code that owns it has already

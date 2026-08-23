@@ -28,8 +28,23 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
     private readonly Subject<VoiceAiPipelineEvent> _events = new();
 
     private volatile PipelineState _state = PipelineState.Idle;
-    private volatile CancellationTokenSource? _ttsCts;
     private int _disposed;
+
+    /// <summary>
+    /// Guards <see cref="_ttsCts"/>. Every read, write, cancel and dispose of that field happens
+    /// under this gate, and the field is set to <c>null</c> under the gate <em>before</em> the
+    /// source is disposed outside it. That is what makes cancel-after-dispose unreachable rather
+    /// than merely unlikely: the only reference anyone can obtain is one taken while the field was
+    /// still live, and once the field is null nobody can obtain one at all.
+    /// </summary>
+    private readonly Lock _ttsGate = new();
+
+    /// <summary>
+    /// The synthesis in flight, or <c>null</c> between syntheses. Owned by <see cref="PipelineLoop"/>,
+    /// which is the only member that creates or disposes it; everyone else may only ask it to cancel,
+    /// through <see cref="CancelSynthesis"/>.
+    /// </summary>
+    private CancellationTokenSource? _ttsCts;
 
     /// <summary>Observable stream of pipeline lifecycle events.</summary>
     public IObservable<VoiceAiPipelineEvent> Events => _events;
@@ -87,6 +102,13 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                 PipelineLoop(session, utteranceChannel.Reader, handler, history, ct)
             ).ConfigureAwait(false);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // ADR-0054: the caller asked for this, so it is how the session ended, not how it
+            // failed — the classification OpenAiRealtimeBridge settled on in ADR-0053. Swallowed
+            // rather than rethrown, because the bridge does not rethrow either and one
+            // ISessionHandler interface has to answer one way.
+        }
         catch
         {
             failed = true;
@@ -139,9 +161,7 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                         break;
 
                     case TurnAction.BargIn:
-                        var ttsCts = _ttsCts;
-                        if (ttsCts is not null)
-                            await ttsCts.CancelAsync().ConfigureAwait(false);
+                        CancelSynthesis();
                         VoiceAiLog.BargInDetected(_logger, session.ChannelId);
                         Publish(new BargInDetectedEvent(DateTimeOffset.UtcNow));
                         if (!isSpeaking)
@@ -273,10 +293,20 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             var ttsStart = Stopwatch.GetTimestamp();
             using var ttsActivity = VoiceAiActivitySource.StartSynthesis(_tts.ProviderName, response.Length);
 
-            _ttsCts = new CancellationTokenSource();
+            var ttsCts = new CancellationTokenSource();
+            lock (_ttsGate)
+            {
+                // Publishing the source and observing an already-disposed pipeline have to happen
+                // under one gate, or a DisposeAsync landing here would cancel nothing and leave this
+                // synthesis running past the disposal that was meant to stop it.
+                if (Volatile.Read(ref _disposed) != 0)
+                    ttsCts.Cancel();
+                _ttsCts = ttsCts;
+            }
+
             try
             {
-                using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _ttsCts.Token);
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, ttsCts.Token);
                 var ttfaRecorded = false;
                 await foreach (var audioChunk in _tts.SynthesizeAsync(
                     response, _options.OutputFormat, linked.Token).ConfigureAwait(false))
@@ -334,9 +364,9 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             {
                 SpeechSynthesisMetrics.SynthesisLatencyMs.Record(
                     Stopwatch.GetElapsedTime(ttsStart).TotalMilliseconds);
-                var ttsCts = _ttsCts;
-                _ttsCts = null;
-                ttsCts?.Dispose();
+                lock (_ttsGate)
+                    _ttsCts = null;
+                ttsCts.Dispose();
             }
 
             _state = PipelineState.Listening;
@@ -357,15 +387,31 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
 
     private void Publish(VoiceAiPipelineEvent evt) => _events.OnNext(evt);
 
+    /// <summary>
+    /// Asks the synthesis in flight, if any, to stop. This is the only way anything other than
+    /// <see cref="PipelineLoop"/> may touch <see cref="_ttsCts"/>.
+    /// </summary>
+    private void CancelSynthesis()
+    {
+        lock (_ttsGate)
+            _ttsCts?.Cancel();
+    }
+
     /// <inheritdoc/>
     public ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return ValueTask.CompletedTask;
 
-        _ttsCts?.Dispose();
+        // Intent, not mechanism (ADR-0053's shape, ADR-0054 for this type): a disposed pipeline
+        // wants the synthesis stopped, but PipelineLoop's finally is what releases the source.
+        CancelSynthesis();
+
+        // Completed, deliberately not disposed. The two loops outlive this call — Task.WhenAll has
+        // not observed them yet — and they publish as they unwind. OnCompleted has already dropped
+        // every observer, so those publishes are silent no-ops; Dispose would instead make each one
+        // throw ObjectDisposedException, which is the very defect this change exists to remove.
         _events.OnCompleted();
-        _events.Dispose();
         return ValueTask.CompletedTask;
     }
 }

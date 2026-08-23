@@ -2,6 +2,7 @@ using Verbara.Sdk.VoiceAi.AudioSocket;
 using Verbara.Sdk.VoiceAi.Events;
 using Verbara.Sdk.VoiceAi.Pipeline;
 using Verbara.Sdk.VoiceAi.Testing;
+using Verbara.Sdk.VoiceAi.Tests.Internal;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -10,6 +11,7 @@ using Xunit;
 
 namespace Verbara.Sdk.VoiceAi.Tests.Pipeline;
 
+[Collection(SessionCounterGroup.Name)]
 public class VoiceAiPipelineTurnDetectorTests
 {
     private static VoiceAiPipeline BuildPipelineWithDetector(
