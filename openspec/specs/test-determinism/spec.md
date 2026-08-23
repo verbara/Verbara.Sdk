@@ -2,7 +2,7 @@
 
 ## Purpose
 Determinism fences for Sdk's async streaming tests, so a suite's outcome never depends on which of
-two unrelated clocks wins. The capability covers three seams the repo actually owns:
+two unrelated clocks wins. The capability covers four seams the repo actually owns:
 
 1. **Cooperative cancellation observed at the iteration boundary** rather than raced against a
    mock's completion timing — and asserted so that the *subject* is what throws, never the
@@ -14,6 +14,14 @@ two unrelated clocks wins. The capability covers three seams the repo actually o
    and hand tests a snapshot rather than the live collection its receive loop writes (ADR-0045) —
    plus the corollary on the test side, that a test ends on the signal it asserts and a token
    expiry means failure, never completion.
+4. **How a harness drives a pipeline it does not own**: an in-process AudioSocket harness
+   sequences every phase on a signal the pipeline itself emits — the detector call the monitor loop
+   makes once per frame, a synthesizer that parks between chunks, and the event stream that
+   announces each stage of a response cycle — never on a fixed delay standing in for "it has
+   finished reacting" (ADR-0045). The three sentinels are not interchangeable: neither the detector
+   nor the park can speak for the recognition, handler and synthesis work that runs on after an
+   end-of-utterance decision, and a harness waiting on the end of a cycle must count the error event
+   as an ending or the one test exercising a failing stage is the one test left hanging.
 
 Coverage is enumerated **by selectable code path, not by provider name**: a closed provider list
 under an open contract hides the surfaces nobody looked at, which is how multi-transport
@@ -265,4 +273,44 @@ lowered as barriers are removed and MUST NOT be raised.
 - **GIVEN** the grandfathered per-file barrier counts in `sync-fence-baseline.json`
 - **WHEN** a change removes wall-clock barriers from a file
 - **THEN** that file's count is lowered in the same commit, and no count anywhere is raised to accommodate a new barrier
+
+### Requirement: An in-process AudioSocket harness orders its phases on a pipeline signal, never on a wall-clock delay
+A test harness driving a `VoiceAiPipeline` over an in-process AudioSocket pair SHALL sequence every
+phase — frames sent, an utterance ended, a synthesis started, a barge-in delivered — on an
+observable signal emitted by the pipeline itself, and MUST NOT use a fixed `Task.Delay` as a stand-in
+for "the pipeline has finished reacting." Three seams carry that meaning and are the sentinels:
+`ITurnDetector.Analyze`, which the pipeline calls synchronously once per frame on the monitor loop's
+own thread; a speech synthesizer that parks between chunks; and the pipeline's own event stream,
+which announces each stage of a response cycle. A detector signal orders frames and a park orders
+the synthesis window, but neither can speak for the recognition, handler and synthesis work that
+runs on after an end-of-utterance decision — that is what the event stream is for. A harness waiting
+on the end of a response cycle MUST treat the error event as an ending too, or a test written to
+exercise a failing stage waits for a success event that will never be published. Each wait MUST be
+bounded by a timeout set far above any plausible scheduling delay, so reaching it fails the test's
+own assertion rather than pacing it.
+
+#### Scenario: The harness waits for the frame's decision before sending the next
+- **GIVEN** a harness that must know a frame has been acted on before it sends another
+- **WHEN** it sends one frame and waits on that frame's own detector signal
+- **THEN** it proceeds the instant the pipeline has decided on that frame, and no elapsed time is involved in the ordering
+
+#### Scenario: A synthesis in flight is a fact, not a probability
+- **GIVEN** a test that must act while the assistant is mid-sentence
+- **WHEN** the synthesizer parks after its first chunk and announces it
+- **THEN** anything the test does before releasing the park provably happens inside the synthesis window
+
+#### Scenario: A response cycle that fails still ends the wait
+- **GIVEN** a harness waiting for the pipeline to finish reacting to an utterance
+- **WHEN** the stage under test fails and the pipeline publishes an error instead of a synthesis ending
+- **THEN** the wait ends on that error, so a test written to exercise the failure is not the one test the sweep leaves hanging
+
+#### Scenario: Removing the signal fails the test
+- **GIVEN** a harness phase newly ordered by a signal instead of a delay
+- **WHEN** that signal is removed
+- **THEN** the dependent test fails, demonstrating the ordering is real rather than incidental
+
+#### Scenario: A hang bound is kept, not swept
+- **GIVEN** a multi-second cancellation token in the same file whose only role is to bound a deadlock
+- **WHEN** the file's wall-clock barriers are retired
+- **THEN** that token is examined and kept, and the decision to keep it is recorded so a later sweep does not remove the safety net
 
