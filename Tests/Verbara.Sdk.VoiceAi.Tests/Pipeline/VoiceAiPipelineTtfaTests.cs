@@ -67,6 +67,12 @@ public class VoiceAiPipelineTtfaTests
         return buf;
     }
 
+    /// <summary>
+    /// Bounds every harness wait. Reaching it means the signal never arrived, which fails the test
+    /// on its own assertion rather than pacing it.
+    /// </summary>
+    private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
+
     private static ReadOnlyMemory<byte> SilenceFrame() => new byte[320];
 
     // ---- Tests ----
@@ -317,6 +323,9 @@ public class VoiceAiPipelineTtfaTests
     private static async Task RunPipelineWithSingleUtterance(
         VoiceAiPipeline pipeline, int voiceFrameCount, int silenceFrameCount)
     {
+        // Subscribed before the session starts, so the cycle cannot end before anyone is listening.
+        using var capture = new PipelineEventCapture(pipeline);
+
         var server = new AudioSocketServer(
             new AudioSocketOptions { Port = 0 },
             NullLogger<AudioSocketServer>.Instance);
@@ -340,7 +349,10 @@ public class VoiceAiPipelineTtfaTests
         for (int i = 0; i < silenceFrameCount; i++)
             await client.SendAudioAsync(SilenceFrame());
 
-        await Task.Delay(500);
+        // Recognition, handler and synthesis are all over before the hangup. TTFA is recorded on
+        // the first chunk the synthesizer yields, well inside that window.
+        await capture.WaitForResponseCycle().WaitAsync(SignalTimeout);
+
         await client.SendHangupAsync();
 
         await pipelineTask.WaitAsync(TimeSpan.FromSeconds(10));

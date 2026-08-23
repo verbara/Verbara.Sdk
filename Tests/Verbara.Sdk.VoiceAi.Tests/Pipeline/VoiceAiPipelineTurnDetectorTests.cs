@@ -14,10 +14,15 @@ namespace Verbara.Sdk.VoiceAi.Tests.Pipeline;
 [Collection(SessionCounterGroup.Name)]
 public class VoiceAiPipelineTurnDetectorTests
 {
+    /// <summary>
+    /// Bounds every harness wait. Reaching it means the signal never arrived.
+    /// </summary>
+    private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
+
     private static VoiceAiPipeline BuildPipelineWithDetector(
         ITurnDetector turnDetector,
         FakeSpeechRecognizer? stt = null,
-        FakeSpeechSynthesizer? tts = null,
+        SpeechSynthesizer? tts = null,
         FakeConversationHandler? handler = null)
     {
         stt ??= new FakeSpeechRecognizer().WithTranscript("hola");
@@ -70,21 +75,18 @@ public class VoiceAiPipelineTurnDetectorTests
         // Arrange: first utterance (SpeechStarted → Continue → EndOfUtterance),
         // then BargIn during TTS playback, then close out the barge-in utterance.
         var stt = new FakeSpeechRecognizer().WithTranscripts(["interrumpe", "barge"]);
-        var tts = new FakeSpeechSynthesizer()
-            .WithDelay(TimeSpan.FromSeconds(2))
-            .WithSilence(TimeSpan.FromMilliseconds(500));
+        var tts = new ParkingSpeechSynthesizer();
         var handler = new FakeConversationHandler().WithResponses(["respuesta larga", "ok"]);
 
+        // Six signals, one per frame the harness sends. The three Continues that used to sit in the
+        // middle were not part of the scenario: they absorbed whatever frames arrived during a
+        // 300 ms delay, and a script padded to match a clock describes the clock, not the scenario.
         var detector = new FakeTurnDetector()
             // First utterance: 3 frames
             .WithSignal(TurnAction.SpeechStarted)
             .WithSignal(TurnAction.Continue)
             .WithSignal(TurnAction.EndOfUtterance)
-            // Wait frames during TTS start-up (these arrive while pipeline is in Speaking state)
-            .WithSignal(TurnAction.Continue)
-            .WithSignal(TurnAction.Continue)
-            .WithSignal(TurnAction.Continue)
-            // Barge-in: user speaks over assistant
+            // Barge-in: user speaks over the assistant, then closes the utterance out
             .WithSignal(TurnAction.BargIn)
             .WithSignal(TurnAction.Continue)
             .WithSignal(TurnAction.EndOfUtterance);
@@ -94,8 +96,9 @@ public class VoiceAiPipelineTurnDetectorTests
         var events = new List<VoiceAiPipelineEvent>();
         using var sub = pipeline.Events.Subscribe(events.Add);
 
-        // Act: send first utterance, wait for TTS to start, then send barge-in frames.
-        await RunPipelineWithBargInSequence(pipeline);
+        // Act: send the first utterance, wait until the assistant is provably mid-sentence, then
+        // send the barge-in frames.
+        await RunPipelineWithBargInSequence(pipeline, tts);
 
         // Assert
         events.Should().Contain(e => e is BargInDetectedEvent);
@@ -103,6 +106,8 @@ public class VoiceAiPipelineTurnDetectorTests
 
     private static async Task RunPipelineWithFrames(VoiceAiPipeline pipeline, int frameCount)
     {
+        using var capture = new PipelineEventCapture(pipeline);
+
         var server = new AudioSocketServer(
             new AudioSocketOptions { Port = 0 },
             NullLogger<AudioSocketServer>.Instance);
@@ -120,14 +125,20 @@ public class VoiceAiPipelineTurnDetectorTests
         for (int i = 0; i < frameCount; i++)
             await client.SendAudioAsync(new byte[320]);
 
-        await Task.Delay(500);
+        // The scripted EndOfUtterance on frame 3 starts a response cycle; it is over before the
+        // hangup. The fourth frame needs no signal of its own -- nothing asserts on it.
+        await capture.WaitForResponseCycle().WaitAsync(SignalTimeout);
+
         await client.SendHangupAsync();
-        try { await pipelineTask.WaitAsync(TimeSpan.FromSeconds(5)); } catch { }
+        await pipelineTask.WaitAsync(SignalTimeout);
         await server.StopAsync(CancellationToken.None);
     }
 
-    private static async Task RunPipelineWithBargInSequence(VoiceAiPipeline pipeline)
+    private static async Task RunPipelineWithBargInSequence(
+        VoiceAiPipeline pipeline, ParkingSpeechSynthesizer tts)
     {
+        using var capture = new PipelineEventCapture(pipeline);
+
         var server = new AudioSocketServer(
             new AudioSocketOptions { Port = 0 },
             NullLogger<AudioSocketServer>.Instance);
@@ -142,23 +153,26 @@ public class VoiceAiPipelineTurnDetectorTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         var pipelineTask = pipeline.HandleSessionAsync(session, cts.Token).AsTask();
 
-        // First utterance: 3 frames → triggers STT → handler → TTS (with 2s delay)
+        // First utterance: 3 frames -> STT -> handler -> TTS
         for (int i = 0; i < 3; i++)
             await client.SendAudioAsync(new byte[320]);
 
-        // Wait for TTS playback to begin (pipeline enters Speaking state)
-        await Task.Delay(300);
+        // The synthesis has yielded a chunk and parked, so the pipeline is in Speaking state and
+        // stays there. Sending the barge-in before this point would cancel a synthesis that had not
+        // started; the 300 ms delay this replaces was betting it had.
+        await tts.Parked.WaitAsync(SignalTimeout);
 
-        // Send frames during TTS: 3 Continue signals consumed, then BargIn + Continue + EndOfUtterance
-        for (int i = 0; i < 6; i++)
-        {
+        // BargIn + Continue + EndOfUtterance, one frame per remaining script signal.
+        for (int i = 0; i < 3; i++)
             await client.SendAudioAsync(new byte[320]);
-            await Task.Delay(20);
-        }
 
-        await Task.Delay(500);
+        await capture.WaitFor<BargInDetectedEvent>().WaitAsync(SignalTimeout);
+
+        // Ends the park so the barge-in utterance's own synthesis can finish rather than deadlock.
+        tts.Release();
+
         await client.SendHangupAsync();
-        try { await pipelineTask.WaitAsync(TimeSpan.FromSeconds(5)); } catch { }
+        await pipelineTask.WaitAsync(SignalTimeout);
         await server.StopAsync(CancellationToken.None);
     }
 }
