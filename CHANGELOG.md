@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed — a successful barge-in faulted the session, and a cancelled pipeline session was counted as a failure
 
-The two `VoiceAiPipeline` defects `ADR-0053` found and deliberately left for their own change.
+The two `VoiceAiPipeline` defects `ADR-0053` found and deliberately left for their own change (#212).
 `ADR-0054` records the contract: **one owner for the synthesis token, and one answer for a cancelled
 session.**
 
@@ -43,8 +43,8 @@ session.**
 ### Fixed — a hangup that overtook the first read faulted the audio stream; a cancel during session setup vanished from telemetry
 
 Two defects in `Verbara.Sdk.VoiceAi`, one shape: state read after the code that owns it has already
-torn down. Both were recorded — and deliberately not fixed — while converting the Realtime test suite
-under `ADR-0045`, because that change touched no `src/`. `ADR-0053` states the contract they now
+torn down (#210). Both were recorded — and deliberately not fixed — while converting the Realtime test
+suite under `ADR-0045`, because that change touched no `src/`. `ADR-0053` states the contract they now
 follow: **a session's ending is classified by who ended it**, not by where it landed.
 
 - **`AudioSocketSession.ReadAudioAsync` was an `async` iterator that read session state.** An

@@ -9,6 +9,13 @@ two are faults, and what separates them is not *what* happened but *who ended it
 cancellation, and a read issued after the owner disposed the session. Everything else ends the
 sequence quietly and is accounted for as a completed session (ADR-0053).
 
+Those two faults are properties of the **stream** — what the enumeration hands its consumer. The
+**session** above it counts differently, and the distinction is the one most easily lost: a
+cancellation the caller asked for still throws at the iteration boundary, because the caller asked
+and is owed the answer, while the session it ended is recorded as *completed* and is not rethrown a
+second time at the handler's caller (ADR-0054). Same ending, two layers, and only one of them is a
+number an operator reads.
+
 These are one capability because they failed as one, at two layers, for the same reason. An
 `async` iterator does not run its body until the first `MoveNextAsync`, so a session that read its
 own lifetime state at iteration time raced its own teardown; two hundred lines away, a bridge
@@ -24,6 +31,16 @@ through a genuinely refused connection is worse. Widening a handler so a cancell
 being a failure is therefore only correct alongside the converse — a handshake the far end rejects
 must still be counted, logged and rethrown — which is why both endings of every window are pinned
 here rather than only the one that was broken.
+
+Two further requirements joined later, and they belong here for the same reason the first pair does.
+**Ownership of a cancellation source reachable from two concurrently running loops** is a lifecycle
+question, not a threading detail: when disposal and a loop's own teardown can both release it, the
+loop that merely *cancels* observes a disposed source and throws — so a barge-in, a feature working
+exactly as designed, was booked as a failed session. **Agreement between handlers** is the same
+telemetry consequence read from the other end: two implementations behind one interface classified
+an identical shutdown as a failure and as a completion respectively, and a caller reading the number
+cannot see which handler produced it. Both are cases of the ending being inferred from where it was
+observed rather than from who caused it (ADR-0054).
 ## Requirements
 ### Requirement: A hangup that overtakes the first read ends the audio stream, it does not fault it
 A streaming audio session SHALL treat every ending that the consumer did not ask for — a hangup or
@@ -93,4 +110,30 @@ accounted for exactly as one cancelled mid-stream.
 - **GIVEN** a session writing audio back to a caller who hangs up while the assistant is speaking
 - **WHEN** the write finds the audio session already ended
 - **THEN** playback stops and the session ends normally, rather than the ordinary ending being counted as a failure two hundred lines from where the read side handles the same event
+
+### Requirement: A cancellation source shared between loops has exactly one owner
+A cancellation source reachable from more than one concurrently running loop SHALL have a single
+owner responsible for releasing it, and MUST NOT be released by two paths that are unordered with
+respect to each other. A loop that only ever *cancels* MUST NOT be able to observe the source after
+another path has disposed it, and a null-check followed by an `await` is not an ordering.
+
+#### Scenario: A barge-in that lands as synthesis completes
+- **GIVEN** a synthesis in progress and a caller who starts speaking over it
+- **WHEN** the barge-in and the synthesis's own completion land together
+- **THEN** the barge-in takes effect or is harmlessly late, and in neither case does the session fault or count as failed
+
+#### Scenario: Disposing the session while a synthesis is running
+- **GIVEN** a pipeline being disposed while synthesis is under way
+- **WHEN** the disposal releases the session's resources
+- **THEN** the synthesis path cannot observe a released cancellation source
+
+### Requirement: All session handlers agree on what a cancelled session counts as
+Every implementation of the session-handler interface SHALL classify a requested cancellation the
+same way in telemetry. A cancelled session MUST NOT be a failure in one implementation and a
+completion in another, because the caller cannot see which handler produced the number.
+
+#### Scenario: The same shutdown, two handlers
+- **GIVEN** two session handlers behind one interface
+- **WHEN** each is cancelled by its caller
+- **THEN** both record the ending under the same classification, and that classification is stated in a decision record rather than inferred from whichever file is opened first
 
