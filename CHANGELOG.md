@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Tests: the pipeline harness waited 15 s on a clock the pipeline never reads
+
+Thirteen `Task.Delay` barriers paced the three `VoiceAiPipeline` test files — 300 ms after sending
+frames, 500 ms for a response, 2 s to be sure a synthesis was still in flight (#214). `ADR-0045` says
+a harness waits on a signal the subject emits; this change finds those signals, and negative-tests
+every one of them. **15.18 s → 0.35 s** for the assembly (76 tests), 30/30 green idle and 30/30 under
+CPU saturation. `sync-fence-baseline.json` drops the three files to zero.
+
+- **Three sentinels, and the third was missing from the proposal.** `ITurnDetector.Analyze` — which
+  the monitor loop calls synchronously, once per frame, on its own thread — orders frames; a
+  synthesizer that parks between chunks orders the synthesis window. Neither can speak for the
+  recognition, handler and synthesis work that runs *after* an end-of-utterance decision, which is
+  what most of the barriers actually covered. The pipeline's own event stream is the third, and a
+  wait on the end of a response cycle **counts the error event as an ending** — otherwise the one
+  test exercising a failing stage is the one test left hanging. The delta spec was amended rather
+  than worked around.
+
+- **The detector sentinel decorates, it does not substitute.** Seven of the eight harness helpers
+  register no `ITurnDetector` at all, so the pipeline builds its own `SilenceTurnDetector`.
+  Scripting a fake in its place would have deleted the coverage those tests exist for;
+  `ObservingTurnDetector` forwards every decision unchanged and signals per frame.
+
+- **Two barriers were deleted, not replaced.** `SilenceTurnDetector` advances its utterance, silence
+  and voice durations by one frame *per `Analyze` call* — it counts frames, not elapsed time — so the
+  `Task.Delay(20)` pacing between sends was ordering nothing at all.
+
+- **Ten signals were removed one at a time; four fail, six do not.** The six are reported rather than
+  deleted, because 3.1 and 3.8 are the same helper shape in two files and only 3.1 fails: the wait is
+  real, and what makes the difference is that the TTFA assertions all land on the first chunk. The
+  underlying finding is recorded — four of these tests assert less than their names claim, and
+  `await pipelineTask` is not a substitute for a cycle-end wait, since a session that ended by
+  truncation also ended (`ADR-0053`). Each of the six was then re-run 15× under full CPU saturation:
+  0/15 failures.
+
 ### Fixed — a successful barge-in faulted the session, and a cancelled pipeline session was counted as a failure
 
 The two `VoiceAiPipeline` defects `ADR-0053` found and deliberately left for their own change (#212).
