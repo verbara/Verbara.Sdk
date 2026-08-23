@@ -2,6 +2,7 @@ using Verbara.Sdk.VoiceAi.AudioSocket;
 using Verbara.Sdk.VoiceAi.Events;
 using Verbara.Sdk.VoiceAi.Pipeline;
 using Verbara.Sdk.VoiceAi.Testing;
+using Verbara.Sdk.VoiceAi.Tests.Internal;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -10,6 +11,7 @@ using Xunit;
 
 namespace Verbara.Sdk.VoiceAi.Tests.Pipeline;
 
+[Collection(SessionCounterGroup.Name)]
 public class VoiceAiPipelineTests : IAsyncDisposable
 {
     private static VoiceAiPipeline BuildPipeline(
@@ -198,6 +200,17 @@ public class VoiceAiPipelineTests : IAsyncDisposable
         events.OfType<PipelineErrorEvent>().Should().ContainSingle(e => e.Source == PipelineErrorSource.Tts);
     }
 
+    /// <summary>
+    /// Pins that a cancelled session terminates rather than hanging. It says nothing about how that
+    /// ending is <em>classified</em>.
+    /// </summary>
+    /// <remarks>
+    /// <c>RunPipelineWithEndlessFrames</c> swallows whatever the session task threw, so this test was
+    /// green while a cancelled session was being counted as a failure and rethrown, and is green now
+    /// that it is counted as a completion. Neither number is asserted here — that is
+    /// <c>VoiceAiPipelineCancellationAccountingTests</c>' job, and this comment exists so the two are
+    /// not confused for each other later.
+    /// </remarks>
     [Fact]
     public async Task HandleSessionAsync_ShouldTerminateCleanly_WhenCancelled()
     {

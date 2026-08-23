@@ -5,6 +5,7 @@ using Verbara.Sdk.VoiceAi.AudioSocket;
 using Verbara.Sdk.VoiceAi.Diagnostics;
 using Verbara.Sdk.VoiceAi.Pipeline;
 using Verbara.Sdk.VoiceAi.Testing;
+using Verbara.Sdk.VoiceAi.Tests.Internal;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -26,6 +27,7 @@ namespace Verbara.Sdk.VoiceAi.Tests.Pipeline;
 /// Each test uses a per-test unique <c>ProviderName</c> tag value so that parallel test runs on the
 /// shared process-level <see cref="Meter"/> cannot cross-contaminate captured measurements.
 /// </remarks>
+[Collection(SessionCounterGroup.Name)]
 public class VoiceAiPipelineTtfaTests
 {
     private static VoiceAiPipeline BuildPipeline(
