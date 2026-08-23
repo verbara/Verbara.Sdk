@@ -14,23 +14,36 @@ namespace Verbara.Sdk.VoiceAi.Tests.Pipeline;
 [Collection(SessionCounterGroup.Name)]
 public class VoiceAiPipelineTests : IAsyncDisposable
 {
+    private static VoiceAiPipelineOptions DefaultOptions() => new()
+    {
+        EndOfUtteranceSilence = TimeSpan.FromMilliseconds(60),
+        BargInVoiceThreshold = TimeSpan.FromMilliseconds(40),
+    };
+
+    /// <summary>
+    /// Wraps the detector the pipeline would have built for itself, so a harness gains a per-frame
+    /// signal without any test losing the <see cref="SilenceTurnDetector"/> coverage it was written
+    /// for. Pass the same options to <see cref="BuildPipeline"/> or the two disagree.
+    /// </summary>
+    private static ObservingTurnDetector ObserveDefaultDetector(VoiceAiPipelineOptions options) =>
+        new(new SilenceTurnDetector(Options.Create(options)));
+
     private static VoiceAiPipeline BuildPipeline(
         FakeSpeechRecognizer? stt = null,
-        FakeSpeechSynthesizer? tts = null,
+        SpeechSynthesizer? tts = null,
         FakeConversationHandler? handler = null,
-        VoiceAiPipelineOptions? options = null)
+        VoiceAiPipelineOptions? options = null,
+        ObservingTurnDetector? detector = null)
     {
         stt ??= new FakeSpeechRecognizer().WithTranscript("hola");
         tts ??= new FakeSpeechSynthesizer().WithSilence(TimeSpan.FromMilliseconds(40));
         handler ??= new FakeConversationHandler().WithResponse("respuesta");
-        options ??= new VoiceAiPipelineOptions
-        {
-            EndOfUtteranceSilence = TimeSpan.FromMilliseconds(60),
-            BargInVoiceThreshold = TimeSpan.FromMilliseconds(40),
-        };
+        options ??= DefaultOptions();
 
         var services = new ServiceCollection();
         services.AddSingleton<IConversationHandler>(handler);
+        if (detector is not null)
+            services.AddSingleton<ITurnDetector>(detector);
         var provider = services.BuildServiceProvider();
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 
@@ -39,6 +52,12 @@ public class VoiceAiPipelineTests : IAsyncDisposable
             Options.Create(options),
             NullLogger<VoiceAiPipeline>.Instance);
     }
+
+    /// <summary>
+    /// Every harness wait is bounded by this. It is a hang bound, not a pace: reaching it means the
+    /// signal never arrived, and the test fails on its own assertion rather than on a clock.
+    /// </summary>
+    private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
 
     private static ReadOnlyMemory<byte> SilenceFrame() => new byte[320];
 
@@ -201,27 +220,22 @@ public class VoiceAiPipelineTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// Pins that a cancelled session terminates rather than hanging. It says nothing about how that
-    /// ending is <em>classified</em>.
+    /// Pins that a session cancelled while it is genuinely running terminates rather than hanging,
+    /// and does so without throwing at the caller. It says nothing about how that ending is
+    /// <em>classified</em> — that is <c>VoiceAiPipelineCancellationAccountingTests</c>' job, and the
+    /// two are easy to confuse.
     /// </summary>
-    /// <remarks>
-    /// <c>RunPipelineWithEndlessFrames</c> swallows whatever the session task threw, so this test was
-    /// green while a cancelled session was being counted as a failure and rethrown, and is green now
-    /// that it is counted as a completion. Neither number is asserted here — that is
-    /// <c>VoiceAiPipelineCancellationAccountingTests</c>' job, and this comment exists so the two are
-    /// not confused for each other later.
-    /// </remarks>
     [Fact]
     public async Task HandleSessionAsync_ShouldTerminateCleanly_WhenCancelled()
     {
         var stt = new FakeSpeechRecognizer().WithTranscript("hola");
         var tts = new FakeSpeechSynthesizer().WithSilence(TimeSpan.FromMilliseconds(20));
         var handler = new FakeConversationHandler().WithResponse("ok");
-        var pipeline = BuildPipeline(stt, tts, handler);
+        var options = DefaultOptions();
+        var detector = ObserveDefaultDetector(options);
+        var pipeline = BuildPipeline(stt, tts, handler, options, detector);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-
-        var act = async () => await RunPipelineWithEndlessFrames(pipeline, cts.Token);
+        var act = async () => await RunPipelineUntilCancelled(pipeline, detector);
         await act.Should().NotThrowAsync();
     }
 
@@ -284,22 +298,17 @@ public class VoiceAiPipelineTests : IAsyncDisposable
     public async Task HandleSessionAsync_ShouldDetectBargIn_AndCancelTts()
     {
         var stt = new FakeSpeechRecognizer().WithTranscript("interrumpe");
-        // Use a long delay so TTS takes real wall-clock time in Speaking state
-        var tts = new FakeSpeechSynthesizer()
-            .WithDelay(TimeSpan.FromSeconds(3))
-            .WithSilence(TimeSpan.FromMilliseconds(500));
+        // Parks after its first chunk instead of sleeping for three seconds. The assistant being
+        // mid-sentence when the barge-in lands is then a fact, not a race the old delay was
+        // buying odds on.
+        var tts = new ParkingSpeechSynthesizer();
         var handler = new FakeConversationHandler().WithResponse("respuesta larga");
-        var options = new VoiceAiPipelineOptions
-        {
-            EndOfUtteranceSilence = TimeSpan.FromMilliseconds(60),
-            BargInVoiceThreshold = TimeSpan.FromMilliseconds(40),
-        };
-        var pipeline = BuildPipeline(stt, tts, handler, options);
+        var pipeline = BuildPipeline(stt, tts, handler, DefaultOptions());
 
         var events = new List<VoiceAiPipelineEvent>();
         using var sub = pipeline.Events.Subscribe(events.Add);
 
-        await RunPipelineWithBargIn(pipeline);
+        await RunPipelineWithBargIn(pipeline, tts);
 
         events.Should().Contain(e => e is BargInDetectedEvent);
     }
@@ -309,6 +318,9 @@ public class VoiceAiPipelineTests : IAsyncDisposable
     private static async Task RunPipelineWithSingleUtterance(
         VoiceAiPipeline pipeline, int voiceFrameCount, int silenceFrameCount)
     {
+        // Subscribed before the session starts, so the cycle cannot end before anyone is listening.
+        using var capture = new PipelineEventCapture(pipeline);
+
         var server = new AudioSocketServer(
             new AudioSocketOptions { Port = 0 },
             NullLogger<AudioSocketServer>.Instance);
@@ -332,15 +344,29 @@ public class VoiceAiPipelineTests : IAsyncDisposable
         for (int i = 0; i < silenceFrameCount; i++)
             await client.SendAudioAsync(SilenceFrame());
 
-        await Task.Delay(500);
+        // The utterance's whole cycle -- recognition, handler, synthesis -- is over before the
+        // hangup. One signal, because the phases it covers are not independent of each other: a
+        // frame-count wait on top of this would order nothing the cycle end does not already prove.
+        await capture.WaitForResponseCycle().WaitAsync(SignalTimeout);
+
         await client.SendHangupAsync();
 
         await pipelineTask.WaitAsync(TimeSpan.FromSeconds(5));
         await server.StopAsync(CancellationToken.None);
     }
 
-    private static async Task RunPipelineWithEndlessFrames(
-        VoiceAiPipeline pipeline, CancellationToken ct)
+    /// <summary>
+    /// Runs a session until it is provably consuming audio, then cancels it.
+    /// </summary>
+    /// <remarks>
+    /// This replaced a loop that fed silence forever against a 200 ms token, which was the only
+    /// wall-clock barrier in these files doing the inverse of the others: the clock was not covering
+    /// for a signal, it was ending the test. Three frames through the detector is what "the session
+    /// is running" actually means, and once that is known there is nothing left for the endless loop
+    /// to do. The token that remains bounds a hang; on a passing run it never fires.
+    /// </remarks>
+    private static async Task RunPipelineUntilCancelled(
+        VoiceAiPipeline pipeline, ObservingTurnDetector detector)
     {
         var server = new AudioSocketServer(
             new AudioSocketOptions { Port = 0 },
@@ -352,26 +378,29 @@ public class VoiceAiPipelineTests : IAsyncDisposable
         await using var client = new AudioSocketClient("127.0.0.1", server.BoundPort, Guid.NewGuid());
         await client.ConnectAsync(CancellationToken.None);
 
-        var session = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2), ct);
-        var pipelineTask = pipeline.HandleSessionAsync(session, ct).AsTask();
+        var session = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
-        try
-        {
-            while (!ct.IsCancellationRequested)
-            {
-                await client.SendAudioAsync(SilenceFrame(), ct);
-                await Task.Delay(20, ct);
-            }
-        }
-        catch (OperationCanceledException) { }
+        using var cts = new CancellationTokenSource(SignalTimeout);
+        var pipelineTask = pipeline.HandleSessionAsync(session, cts.Token).AsTask();
 
-        try { await pipelineTask.WaitAsync(TimeSpan.FromSeconds(2), CancellationToken.None); } catch { }
+        for (int i = 0; i < 3; i++)
+            await client.SendAudioAsync(SilenceFrame());
+
+        await detector.Analyzed(3).WaitAsync(SignalTimeout);
+
+        await cts.CancelAsync();
+
+        // Awaited, not swallowed: a cancelled session is a completion (ADR-0054), so anything
+        // reaching the caller here is the defect this test exists to catch.
+        await pipelineTask.WaitAsync(SignalTimeout);
         await server.StopAsync(CancellationToken.None);
     }
 
     private static async Task RunPipelineWithMultipleUtterances(
         VoiceAiPipeline pipeline, int utteranceCount)
     {
+        using var capture = new PipelineEventCapture(pipeline);
+
         var server = new AudioSocketServer(
             new AudioSocketOptions { Port = 0 },
             NullLogger<AudioSocketServer>.Instance);
@@ -390,7 +419,10 @@ public class VoiceAiPipelineTests : IAsyncDisposable
         {
             for (int i = 0; i < 3; i++) await client.SendAudioAsync(VoiceFrame());
             for (int i = 0; i < 4; i++) await client.SendAudioAsync(SilenceFrame());
-            await Task.Delay(500);
+
+            // Utterance u is answered before utterance u+1 is spoken. Counting cycles rather than
+            // waiting per iteration is what makes the ordering hold when one answer runs long.
+            await capture.WaitForResponseCycle(u + 1).WaitAsync(SignalTimeout);
         }
 
         await client.SendHangupAsync();
@@ -401,6 +433,8 @@ public class VoiceAiPipelineTests : IAsyncDisposable
     private static async Task RunPipelineWithContinuousVoice(
         VoiceAiPipeline pipeline, int frameCount)
     {
+        using var capture = new PipelineEventCapture(pipeline);
+
         var server = new AudioSocketServer(
             new AudioSocketOptions { Port = 0 },
             NullLogger<AudioSocketServer>.Instance);
@@ -415,19 +449,23 @@ public class VoiceAiPipelineTests : IAsyncDisposable
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var pipelineTask = pipeline.HandleSessionAsync(session, cts.Token).AsTask();
 
+        // No pacing between frames: SilenceTurnDetector advances MaxUtteranceDuration by one frame
+        // period per Analyze call, never by elapsed time, so the 20 ms delay that used to sit here
+        // ordered nothing at all. It is deleted rather than replaced by a signal.
         for (int i = 0; i < frameCount; i++)
-        {
             await client.SendAudioAsync(VoiceFrame());
-            await Task.Delay(20);
-        }
-        await Task.Delay(500);
+
+        await capture.WaitForResponseCycle().WaitAsync(SignalTimeout);
         await client.SendHangupAsync();
         await pipelineTask.WaitAsync(TimeSpan.FromSeconds(5));
         await server.StopAsync(CancellationToken.None);
     }
 
-    private static async Task RunPipelineWithBargIn(VoiceAiPipeline pipeline)
+    private static async Task RunPipelineWithBargIn(
+        VoiceAiPipeline pipeline, ParkingSpeechSynthesizer tts)
     {
+        using var capture = new PipelineEventCapture(pipeline);
+
         var server = new AudioSocketServer(
             new AudioSocketOptions { Port = 0 },
             NullLogger<AudioSocketServer>.Instance);
@@ -445,18 +483,20 @@ public class VoiceAiPipelineTests : IAsyncDisposable
         // First utterance -> triggers TTS
         for (int i = 0; i < 3; i++) await client.SendAudioAsync(VoiceFrame());
         for (int i = 0; i < 4; i++) await client.SendAudioAsync(SilenceFrame());
-        await Task.Delay(200);
 
-        // Barge-in: send voice during TTS playback
-        for (int i = 0; i < 3; i++)
-        {
-            await client.SendAudioAsync(VoiceFrame());
-            await Task.Delay(20);
-        }
+        // One chunk yielded and the synthesis parked: the pipeline is in Speaking state and will
+        // stay there until something ends it, so the barge-in below cannot arrive early or late.
+        await tts.Parked.WaitAsync(SignalTimeout);
 
-        await Task.Delay(500);
+        // Barge-in: voice while the synthesis is in flight. No pacing between frames -- the
+        // detector's barge-in threshold counts frames, not elapsed time.
+        for (int i = 0; i < 3; i++) await client.SendAudioAsync(VoiceFrame());
+
+        await capture.WaitFor<BargInDetectedEvent>().WaitAsync(SignalTimeout);
+
+        tts.Release();
         await client.SendHangupAsync();
-        try { await pipelineTask.WaitAsync(TimeSpan.FromSeconds(5)); } catch { }
+        await pipelineTask.WaitAsync(SignalTimeout);
         await server.StopAsync(CancellationToken.None);
     }
 
