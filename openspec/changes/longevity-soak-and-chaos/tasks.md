@@ -45,6 +45,18 @@ that is currently missing or broken.
       is distinct from the existing `timeout: 0` full blackhole already covered by
       `SilentDrop_ShouldDetectViaHeartbeat` against the ADR-0021 heartbeat contract — assert the
       half-open case independently, do not restate the blackhole result
+- [ ] 2.6a Scenario — **silent provider socket on a VoiceAi STT session**: the vendor's WebSocket
+      stays open and stops sending. Routed here from `websocket-fake-class-ab-sweep` §5.7, which
+      measured it rather than predicted it: neither side of an STT session carries a read bound, so
+      suppressing a single frame (`DeepgramSpeechRecognizer.SendLoopAsync`'s terminator sent as
+      `Binary` instead of `Text`, so the fake's `Text` branch never fires) left one test running past
+      a 90 s kill and its whole class past 600 s, against 101 ms for the same tests restored. That
+      sweep bounded the *fake* side only (`SessionReceiveCeiling`, 10 s, all four STT fakes) because
+      its scope forbids touching `src/`. The client side is untouched and is the real exposure:
+      the four `ReceiveLoopAsync` methods (`AssemblyAiSpeechRecognizer` and its three siblings) have
+      no receive timeout, so against a live vendor that goes silent without closing `StreamAsync`
+      never returns. Same shape as 2.6 on a different transport — assert a deterministic, named
+      failure rather than a park
 - [ ] 2.7 Scenario — **`core reload` with ~50 active channels**. No test issues `core reload` today;
       the only reloads are `pjsip reload` in the realtime suite with zero active channels. Assert
       the client stays usable or recovers, and that tracked channel state matches the PBX afterwards

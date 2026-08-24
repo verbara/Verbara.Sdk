@@ -4,6 +4,60 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Tests: eight WebSocket fakes carried fences nobody had watched fail, and four of them could hang forever
+
+`ADR-0045` gave the in-process fakes four rules, and two of them — answer on a protocol sentinel,
+hold open on the fake's own token — no guard can reach. Reading a fence proves nothing: the converted
+suite's hold-open flag was `await receiveTask` for months while every test over it stayed green. So
+each of the thirteen fences across the four STT and four TTS fakes was **removed, the suite run, the
+failure recorded verbatim, and the fence restored** (#N). Eight hold; five hold nothing, each for a
+different reason. Wall clock before and after, through the same 30-run harness: **zero** — the
+median moved 18 ms and 13 ms, about one standard deviation of its own sample, and is reported as
+noise rather than as a result.
+
+- **An idle run is not a measurement.** Three of the four TTS sentinels are green when deleted on an
+  idle 24-core box and red only under load: ElevenLabs 6/6 green idle, 9/10 red saturated; Deepgram
+  0/6 idle, 5/5 saturated. A single-regime protocol would have written three live fences down as
+  dead — the same error the converting change made, running the other way. None of the STT fences is
+  load-gated, and the mechanism is visible: their absence leaves a capture property permanently
+  `null`, which is an assertion failure, not a race.
+
+- **Four STT fakes could hang forever, and now fail in 10 s instead.** Neither side of an STT session
+  carried a read bound. Suppressing one frame — the client's terminator sent as `Binary`, so the
+  fake's `Text` branch never fires — left a single test running past a 90 s kill and its whole class
+  past 600 s, against 101 ms restored. All four fakes gained a `SessionReceiveCeiling` linked to the
+  server token; with it, the same probe fails 12 tests at exactly `[10 s]`. The **client** side is
+  untouched and is the real exposure: no recognizer's receive loop has a timeout either, so a live
+  vendor that goes silent without closing parks `StreamAsync` — routed to `longevity-soak-and-chaos`
+  rather than fixed under a test change.
+
+- **A throwing reachability probe is worthless on this substrate, which invalidated evidence
+  mid-sweep.** `WebSocketTestServer` catches every session-handler exception and still completes
+  `SessionCompleted`, so a throw at an *end-of-session* branch is indistinguishable from the session
+  ending normally — while the same throw mid-session goes loudly red (measured: 15 of 125 tests).
+  Both fences worth probing sit at the end. One verdict here had been justified that way and was
+  re-proved on a repo-wide grep instead; the probe idiom for this substrate is `Environment.FailFast`
+  plus a positive control that makes it fire.
+
+- **The `CloseSent` half-close detector is true, live, and unwitnessed — in all four STT fakes.** The
+  comment above it, duplicated verbatim four times, describes a real defect; the branch it guards is
+  provably unreachable against the client as it ships (probes across 625 test executions), and the
+  assertion it feeds is a negative one. Removing it does not turn that test red — **it turns it
+  vacuous**, which no pass/fail sweep can see. Kept, and now labelled as a regression tripwire rather
+  than as coverage.
+
+- **Two hold-open flags are correct and cannot be shown to be.** `DeepgramTtsFakeServer.HangForever`
+  has no consumer anywhere in the repo — declaration and its own `if`, no assignment.
+  `LmntWsFakeServer.HoldOpenUntilDisposed` is reachable and live, but with no client half-close there
+  is nothing to end the receive loop, so `await receiveTask` parks exactly as long as the hold-open
+  does: unfalsifiable, not verified. Both now say so in source. `LmntWsFakeServer` gained the
+  `SocketState` observable so its cancellation test can state what actually held at the cancel, and
+  the test's unverified prose claim was replaced by what measurement supports.
+
+- **No suite in either tree cancels a session that is already streaming.** Eight fakes, eight
+  cancellation tests, every one throwing before the socket opens — which is why neither hold-open has
+  a consumer. Named as a coverage gap rather than papered over.
+
 ### Fixed — Tests: the pipeline harness waited 15 s on a clock the pipeline never reads
 
 Thirteen `Task.Delay` barriers paced the three `VoiceAiPipeline` test files — 300 ms after sending
