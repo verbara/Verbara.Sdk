@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
 hold open on the fake's own token — no guard can reach. Reading a fence proves nothing: the converted
 suite's hold-open flag was `await receiveTask` for months while every test over it stayed green. So
 each of the thirteen fences across the four STT and four TTS fakes was **removed, the suite run, the
-failure recorded verbatim, and the fence restored** (#N). Eight hold; five hold nothing, each for a
+failure recorded verbatim, and the fence restored** (#216). Eight hold; five hold nothing, each for a
 different reason. Wall clock before and after, through the same 30-run harness: **zero** — the
 median moved 18 ms and 13 ms, about one standard deviation of its own sample, and is reported as
 noise rather than as a result.
