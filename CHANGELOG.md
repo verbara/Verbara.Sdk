@@ -54,9 +54,18 @@ noise rather than as a result.
   `SocketState` observable so its cancellation test can state what actually held at the cancel, and
   the test's unverified prose claim was replaced by what measurement supports.
 
-- **No suite in either tree cancels a session that is already streaming.** Eight fakes, eight
-  cancellation tests, every one throwing before the socket opens — which is why neither hold-open has
-  a consumer. Named as a coverage gap rather than papered over.
+- **No suite cancels a session with frames in flight.** Eight fakes, **seven** cancellation tests —
+  `CartesiaSpeechSynthesizerTests` has none at all. Six throw before the socket opens; the seventh,
+  `LmntSpeechSynthesizerWsTests`, cancels on a live socket it has first silenced
+  (`AudioFramesToSend.Clear()`) and asserts `WebSocketState.Open` held at the cancel. So
+  `HoldOpenUntilDisposed` does have a consumer — one that stays green whether or not the hold works
+  — and `HangForever` is the flag with none. Named as a coverage gap rather than papered over, and
+  closed by `voiceai-midstream-cancellation-coverage`.
+
+  *This bullet originally read "eight cancellation tests, every one throwing before the socket
+  opens — which is why neither hold-open has a consumer". The gap is real; the count and the shape
+  were not, and one of the two flags is consumed. Corrected before release rather than after, since
+  2.5.0 is untagged. The archived change keeps its original wording as a period-correct record.*
 
 ### Fixed — Tests: the pipeline harness waited 15 s on a clock the pipeline never reads
 
