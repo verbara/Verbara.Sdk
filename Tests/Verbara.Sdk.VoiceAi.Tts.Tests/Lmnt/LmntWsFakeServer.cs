@@ -67,6 +67,13 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     private readonly TaskCompletionSource _requestComplete =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    private readonly TaskCompletionSource _firstMessageReceived =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>Volatile because <see cref="SocketState"/> is read from the test thread while the
+    /// session handler writes it.</summary>
+    private volatile System.Net.WebSockets.WebSocket? _socket;
+
     public int Port => _server.Port;
 
     /// <summary>
@@ -78,6 +85,27 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     {
         get { lock (_receivedJsonMessages) return _receivedJsonMessages.ToArray(); }
     }
+
+    /// <summary>
+    /// Live server-side socket state, or <see langword="null"/> before the first connection is
+    /// accepted — the same observable <c>RealtimeFakeServer.SocketState</c> exposes. A cancellation
+    /// test asserts on it to state the condition at the moment its token fired, rather than only
+    /// that the test went red.
+    /// </summary>
+    /// <remarks>
+    /// It proves the cancel was observed on a <em>live</em> socket. It deliberately does not claim
+    /// more than that: it cannot distinguish <see cref="HoldOpenUntilDisposed"/> from awaiting the
+    /// receive loop, because measurement shows both leave this socket open — see that property's
+    /// remarks.
+    /// </remarks>
+    public WebSocketState? SocketState => _socket?.State;
+
+    /// <summary>
+    /// Completes when the session records the client's first text frame. A cancellation test waits
+    /// on this instead of polling <see cref="ReceivedJsonMessages"/> on a timer: the frame is a
+    /// protocol event the client always sends, and a poll interval is a clock nothing guarantees.
+    /// </summary>
+    public Task FirstMessageReceived => _firstMessageReceived.Task;
 
     /// <summary>Binary audio frames to stream back to the client.</summary>
     public List<byte[]> AudioFramesToSend { get; } = [];
@@ -108,6 +136,17 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     /// Use this to test cancellation: the synthesizer's channel-reader blocks waiting for audio,
     /// and the test's <see cref="CancellationToken"/> fires while it is blocked.
     /// </summary>
+    /// <remarks>
+    /// <b>This fence is currently unfalsifiable in this tree, and that is a measurement, not a
+    /// guess.</b> Swapping the park below for <c>await receiveTask</c> — the Class B trap ADR-0045
+    /// exists to catch — is green 10/10 on the full suite and 10/10 on the one test that sets this
+    /// flag. The reason is structural: <c>LmntSpeechSynthesizer</c> deliberately stopped half-closing
+    /// after <c>eof</c> (see its own comment on the removed <c>CloseOutputAsync</c>), so nothing ends
+    /// the receive loop and both spellings park for exactly as long. The flag is therefore a
+    /// <em>latent</em> guard — correct, and worth keeping against a client that half-closes or faults
+    /// its read — but no assertion in this suite distinguishes it from its own absence. Do not cite
+    /// it as a verified hold-open.
+    /// </remarks>
     public bool HoldOpenUntilDisposed { get; set; }
 
     /// <summary>
@@ -156,6 +195,7 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     {
         var ws = session.WebSocket;
         var ct = session.ServerCancellationToken;
+        _socket = ws;
 
         if (AbortOnFirstReceive)
         {
@@ -226,6 +266,9 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
                 var json = Encoding.UTF8.GetString(buf, 0, result.Count);
                 lock (_receivedJsonMessages)
                     _receivedJsonMessages.Add(json);
+
+                // The client has demonstrably started; releases a cancellation test to fire its token.
+                _firstMessageReceived.TrySetResult();
 
                 // EOF is the client's terminal request frame; releases HandleSessionAsync to answer.
                 if (json.Contains("\"eof\"", StringComparison.Ordinal))

@@ -89,6 +89,13 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
 {
     private readonly LmntWsFakeServer _server;
 
+    /// <summary>
+    /// Ceiling on the wait for the client's first frame. Generous on purpose: if it expires the
+    /// protocol assumption is wrong — the synthesizer never sent anything — rather than the runner
+    /// having been slow. No assertion depends on its length.
+    /// </summary>
+    private static readonly TimeSpan FirstFrameTimeout = TimeSpan.FromSeconds(10);
+
     public LmntSpeechSynthesizerWsTests()
     {
         _server = new LmntWsFakeServer();
@@ -437,33 +444,35 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
     [Fact]
     public async Task SynthesizeAsync_ShouldAbort_WhenCancelled()
     {
-        // Strategy: server holds the socket open indefinitely (no frames, no finish, no close).
-        // Cancel only after the fake server confirms receipt of the init message,
-        // guaranteeing ReadAllAsync(ct) is blocked inside the channel reader.
-        // Polling on an observable signal avoids wall-clock flakiness on slow CI runners
-        // (mirrors the Deepgram STT deflake from issue #32).
+        // Strategy: server holds the socket open indefinitely (no frames, no finish, no close), and
+        // the token fires once the fake has recorded the client's first frame — so ReadAllAsync(ct)
+        // is demonstrably blocked inside the channel reader when it does.
         //
-        // HoldOpenUntilDisposed is what actually enforces "no close" — the strategy above was, until
-        // now, only supplied by the fake's fixed 30 ms answer delay winning a race against the 5 ms
-        // cancel poll. That is not a guarantee; it is a coincidence that held on this machine.
+        // The wait is on the fake's own protocol signal, not on a clock. This used to poll
+        // ReceivedJsonMessages every 5 ms against a 5 s DateTime deadline, which asserts through a
+        // timer the protocol does not guarantee; FirstMessageReceived is the frame itself.
+        //
+        // HoldOpenUntilDisposed is set because a cancellation test must observe a socket that never
+        // completes on its own. Do NOT read that as evidence the flag is doing the work: swapping it
+        // for `await receiveTask` — the Class B trap — was measured 10/10 green here, because this
+        // synthesizer no longer half-closes after EOF and so nothing ends the receive loop either
+        // way. See LmntWsFakeServer.HoldOpenUntilDisposed's remarks. What the assertion below *can*
+        // state is the condition at the moment of the cancel: the socket was live.
         _server.AudioFramesToSend.Clear();
         _server.HoldOpenUntilDisposed = true;
 
         using var cts = new CancellationTokenSource();
         var synth = BuildSynthesizer();
 
-        // Fire-and-forget: cancel the moment the server received the first message.
+        // Fire-and-forget: cancel the moment the server records the client's first frame. The state
+        // is captured before the cancel and asserted after it, so a surprising state fails the test
+        // instead of hanging it by skipping the cancel.
         var cancelTrigger = Task.Run(async () =>
         {
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            while (_server.ReceivedJsonMessages.Count == 0)
-            {
-                if (DateTime.UtcNow > deadline)
-                    throw new TimeoutException(
-                        "LMNT fake server did not receive any message within 5 s; synthesizer never started.");
-                await Task.Delay(5).ConfigureAwait(false);
-            }
+            await _server.FirstMessageReceived.WaitAsync(FirstFrameTimeout).ConfigureAwait(false);
+            var stateAtCancel = _server.SocketState;
             await cts.CancelAsync().ConfigureAwait(false);
+            return stateAtCancel;
         });
 
         var act = async () => await synth
@@ -474,7 +483,12 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
             .ToListAsync(CancellationToken.None);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
-        await cancelTrigger; // surface any helper-side timeout
+
+        // Surfaces a helper-side timeout, and names what actually held at the cancel.
+        (await cancelTrigger).Should().Be(
+            WebSocketState.Open,
+            "cancellation has to be observed on a live socket, or the stream ended on the server's "
+            + "close instead and the test would be crediting cancellation with someone else's work");
     }
 
     [Fact]

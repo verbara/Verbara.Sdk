@@ -154,6 +154,22 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
 
     public void Start() => _server.Start();
 
+    /// <summary>
+    /// Ceiling on the session's protocol waits. The session answers on the client's terminator and
+    /// nothing else; this bounds only the case where that frame never arrives.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately generous — the whole STT suite is 125 tests and runs in 4-6 s under CPU
+    /// saturation, so well under 100 ms per session, and this is two orders of magnitude above that
+    /// — because expiry has to mean "the protocol assumption is wrong", never "the runner was busy".
+    /// The failure it replaces was measured rather than imagined: suppressing the client's
+    /// terminator (sending it as <c>Binary</c>, so the loop's <c>Text</c> branch never fires) left
+    /// one test running past a 90 s bound and its whole class past 600 s, against 101 ms for 21
+    /// tests restored. Neither side of the socket carries any other bound, so the unbounded shape
+    /// fails as a hang with no diagnostic on either side.
+    /// </remarks>
+    private static readonly TimeSpan SessionReceiveCeiling = TimeSpan.FromSeconds(10);
+
     private async Task HandleSessionAsync(WebSocketTestSession session)
     {
         ReceivedRequestUri = session.RequestUri;
@@ -207,13 +223,23 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
         // immediately behind the terminator, so a fake that stopped at the terminator would report
         // every client as clean. Not hypothetical — it is what the first version of this loop did,
         // and the half-close test below passed against a client that half-closed.
+
+        // Bound the receive loop below. It waits on a frame and the socket has no read timeout, so
+        // a client that never sends the terminator parks it forever — see SessionReceiveCeiling.
+        // The marker is a label, not an exemption: SyncFenceScanner matches only Task.Delay,
+        // Thread.Sleep, Thread.SpinWait and SpinWait.SpinUntil, so CancelAfter is invisible to the
+        // ratchet. It is here so `grep fence-allow` still enumerates every deliberate timed arm.
+        // fence-allow: GUARD-TIMEOUT — ceiling on a protocol wait, never the winning arm
+        using var ceiling = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        ceiling.CancelAfter(SessionReceiveCeiling);
+
         var buf = new byte[65536];
         while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
         {
             ValueWebSocketReceiveResult result;
             try
             {
-                result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
+                result = await ws.ReceiveAsync(buf.AsMemory(), ceiling.Token).ConfigureAwait(false);
             }
             catch { break; }
 
