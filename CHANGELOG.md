@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-08-24
+
 ### Fixed — Tests: eight WebSocket fakes carried fences nobody had watched fail, and four of them could hang forever
 
 `ADR-0045` gave the in-process fakes four rules, and two of them — answer on a protocol sentinel,
@@ -101,7 +103,7 @@ CPU saturation. `sync-fence-baseline.json` drops the three files to zero.
   truncation also ended (`ADR-0053`). Each of the six was then re-run 15× under full CPU saturation:
   0/15 failures.
 
-### Fixed — a successful barge-in faulted the session, and a cancelled pipeline session was counted as a failure
+### Fixed — BREAKING: a successful barge-in faulted the session, and a cancelled pipeline session was counted as a failure
 
 The two `VoiceAiPipeline` defects `ADR-0053` found and deliberately left for their own change (#212).
 `ADR-0054` records the contract: **one owner for the synthesis token, and one answer for a cancelled
@@ -125,7 +127,7 @@ session.**
   timeout — used to land there, and now lands in `voiceai.sessions.completed`. `HandleSessionAsync`
   also **stops rethrowing on cancellation**. Both match what `OpenAiRealtimeBridge` has done since
   `ADR-0053`: one `ISessionHandler` interface, one number. This is the same family of telemetry break
-  as `openai_realtime.sessions.failed` above, in the opposite direction — a dashboard counting
+  as `openai_realtime.sessions.failed` below, in the opposite direction — a dashboard counting
   shutdowns as failures will drop.
 
 - **Two regression tests, ordered by construction, each failing on its own half.** The synthesizer
@@ -137,7 +139,7 @@ session.**
   read and the next statement — so it is closed by construction and said so in `ADR-0054` rather than
   papered over with a delay.
 
-### Fixed — a hangup that overtook the first read faulted the audio stream; a cancel during session setup vanished from telemetry
+### Fixed — BREAKING: a hangup that overtook the first read faulted the audio stream; a cancel during session setup vanished from telemetry
 
 Two defects in `Verbara.Sdk.VoiceAi`, one shape: state read after the code that owns it has already
 torn down (#210). Both were recorded — and deliberately not fixed — while converting the Realtime test
@@ -353,8 +355,12 @@ in the build compared a string constant against the roster of the service that r
   now `HeliosLegacy = "aura-helios-en"`, which synthesises. Deepgram fails loudly on a bad id, so
   this one was always going to surface at runtime — unlike the Speechmatics default, which could
   not. **`Helios` itself stays, as an `[Obsolete]` alias carrying that same working id**: dropping a
-  public `const` is a binary break (ApiCompat `CP0002` against the 2.1.0 baseline), so callers who
-  kept the old name keep compiling, and recompiling repairs the call instead of only renaming it.
+  public `const` is a binary break (ApiCompat `CP0002` against the baseline), so callers who kept the
+  old name keep compiling, and recompiling repairs the call instead of only renaming it. **With
+  `TreatWarningsAsErrors` on, they do not**: the alias is the only new obsoletion in this release, and
+  `CS0618` becomes an error like any other. It therefore carries `DiagnosticId = "VSDK0001"`, so that
+  build can suppress this one rename with `<NoWarn>VSDK0001</NoWarn>` rather than silencing every
+  obsoletion in its tree.
 
 ### Added — the catalogs are now checked against the vendors that have to accept them
 
