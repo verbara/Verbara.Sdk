@@ -6,21 +6,26 @@ on:
       - 'v*'
   workflow_dispatch:
 
-permissions:
-  # `contents: write` (not `read`) so the final step can create the GitHub Release
-  # object for the tag. Single-job workflow, so a job-level override would scope
-  # nothing — the same job packs, pushes and releases.
-  contents: write
+# Default-deny. Only the job that needs to create a Release object is granted
+# `contents: write`; nothing else in this workflow gets a token scope at all.
+permissions: {}
 
 concurrency:
-  group: publish-${{ github.ref }}
+  # One group for the whole workflow, NOT `publish-${{ github.ref }}`: a per-ref
+  # group puts every tag in a group of its own, so two tags pushed close together
+  # race each other into `dotnet nuget push`. Serialising on the workflow is the
+  # point — a release is not a per-ref operation, it is a per-feed operation.
+  group: publish
   cancel-in-progress: false
 
 jobs:
   publish:
     name: Pack and push to nuget.org
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
+    permissions:
+      contents: write # the final step creates the GitHub Release object for the tag
+      checks: read # the provenance gate reads this sha's check runs
     env:
       CI: true
     steps:
@@ -33,24 +38,243 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # ---------------------------------------------------------------------
+      # Gate 1 — is this a real publish, and which version is it publishing?
+      #
+      # `github.ref_type == 'tag'` ALONE does not answer the first question:
+      # `workflow_dispatch` lets you pick a tag in the ref dropdown, which sets
+      # `ref_type` to `tag` and satisfies the very gate that was meant to keep
+      # dispatch runs off the feed. Both halves are required.
+      #
+      # This is a correctness gate, not a security boundary. On a tag push GitHub
+      # runs the workflow file AS IT EXISTS IN THE TAGGED COMMIT, so every `if:`
+      # below ships with whatever is being released. The boundary that actually
+      # holds is a tag ruleset on `v*` restricting who can create the tag.
+      # ---------------------------------------------------------------------
+      - name: Resolve release identity
+        id: identity
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "push" ] && [ "$REF_TYPE" = "tag" ]; then
+            IS_PUBLISH=true
+            VERSION="${REF_NAME#v}"
+            echo "::notice::PUBLISH run — tag $REF_NAME, version $VERSION."
+          else
+            IS_PUBLISH=false
+            VERSION="$(sed -n 's:.*<PackageVersion>\(.*\)</PackageVersion>.*:\1:p' Directory.Build.props | head -1)"
+            echo "::notice::DRY RUN ($EVENT_NAME on $REF_TYPE $REF_NAME) — packs and verifies version $VERSION, publishes NOTHING."
+          fi
+
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not resolve a version to release."
+            exit 1
+          fi
+
+          {
+            echo "is_publish=$IS_PUBLISH"
+            echo "version=$VERSION"
+          } >> "$GITHUB_OUTPUT"
+
+      # ---------------------------------------------------------------------
+      # Gate 2 — provenance. A tag can be cut from any commit in the repo,
+      # including one that never passed CI on `main`. Two seconds of `git` and
+      # one API call buy what re-running the test suite here only approximates:
+      # this exact sha reached `main`, and `main`'s checks were green on it.
+      #
+      # Deliberately NOT a mirrored `dotnet test` run: the unit filter in `ci.yml`
+      # excludes four categories, and `Tests/Verbara.Sdk.Data.Npgsql.Tests` carries
+      # 18 `[Fact]`s with no `Category` trait at all while `PostgresFixture` starts
+      # a `postgres:18-alpine` container unconditionally. Mirroring the filter here
+      # would drag a Docker Hub pull into the release path to re-prove what `main`
+      # already proved.
+      # ---------------------------------------------------------------------
+      - name: Verify the tagged commit shipped through main
+        if: steps.identity.outputs.is_publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags --quiet origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA is not an ancestor of origin/main — this tag was cut off the release line."
+            exit 1
+          fi
+
+          # Only COMPLETED runs are evidence. A run still in flight reports
+          # `conclusion: null`, and this workflow's own check run is one of them —
+          # counting either as a failure would make the gate self-blocking.
+          CONCLUSIONS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs" \
+            --paginate -q '.check_runs[] | select(.status == "completed") | .conclusion' || true)"
+
+          if [ -z "$CONCLUSIONS" ]; then
+            echo "::error::No completed check runs for $GITHUB_SHA — nothing proves this commit was ever built."
+            exit 1
+          fi
+
+          if printf '%s\n' "$CONCLUSIONS" | grep -qvE '^(success|skipped|neutral)$'; then
+            echo "::error::$GITHUB_SHA has non-green check runs:"
+            printf '%s\n' "$CONCLUSIONS" | sort | uniq -c
+            exit 1
+          fi
+
+          echo "::notice::$GITHUB_SHA is on main and its check runs are green."
+
       - name: Restore
         run: dotnet restore Verbara.Sdk.slnx
 
       - name: Build Release
-        run: dotnet build Verbara.Sdk.slnx -c Release --no-restore
+        run: dotnet build Verbara.Sdk.slnx -c Release --no-restore -p:TreatWarningsAsErrors=true
 
       - name: Pack
-        run: dotnet pack Verbara.Sdk.slnx -c Release --no-build -o ./artifacts
+        # `-p:TreatWarningsAsErrors=true` matches `ci.yml`'s pack step. Without it
+        # the release pack is a laxer build than the one CI signed off on.
+        run: dotnet pack Verbara.Sdk.slnx -c Release --no-build -p:TreatWarningsAsErrors=true -o ./artifacts
 
-      - name: List artifacts
-        run: ls -la ./artifacts/*.nupkg ./artifacts/*.snupkg 2>/dev/null || true
+      # ---------------------------------------------------------------------
+      # Gate 3 — assert the OUTPUT, not the input.
+      #
+      # Checking `<PackageVersion>` against the tag proves nothing about what is
+      # on disk: NuGet normalises on the way out (`2.5.0.0` packs as `…2.5.0.nupkg`,
+      # `2.5.0+ci` drops the metadata), so the file names are the only statement
+      # of what would reach the feed. `ls … || true` swallowed an empty directory.
+      # ---------------------------------------------------------------------
+      - name: Verify packed artifacts
+        env:
+          VERSION: ${{ steps.identity.outputs.version }}
+        run: |
+          set -euo pipefail
 
+          shopt -s nullglob
+          ALL=(./artifacts/*.nupkg)
+          MATCHING=(./artifacts/*."$VERSION".nupkg)
+
+          if [ ${#ALL[@]} -eq 0 ]; then
+            echo "::error::Pack produced no .nupkg files."
+            exit 1
+          fi
+
+          if [ ${#MATCHING[@]} -ne ${#ALL[@]} ]; then
+            echo "::error::${#ALL[@]} package(s) packed but only ${#MATCHING[@]} carry version $VERSION:"
+            printf '  %s\n' "${ALL[@]}"
+            exit 1
+          fi
+
+          echo "${#ALL[@]} package(s) at version $VERSION:"
+          printf '  %s\n' "${ALL[@]}"
+
+      # ---------------------------------------------------------------------
+      # Gate 4 — the release notes are built and validated BEFORE the push.
+      #
+      # The old check ran after the packages were already on nuget.org and only
+      # warned, falling back to a pointer body. A grep for the heading would not
+      # have caught the failure it was guarding either: with `## [2.5.0] - …`
+      # immediately followed by `## [2.4.0] - …`, the heading exists and this awk
+      # still extracts zero lines. Running the extraction itself is the only check
+      # that agrees with what the Release step will do.
+      # ---------------------------------------------------------------------
+      - name: Build release notes from CHANGELOG.md
+        if: steps.identity.outputs.is_publish == 'true'
+        env:
+          VERSION: ${{ steps.identity.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          # This version's own section: everything between its heading
+          # (`## [2.4.0] - 2026-07-26`) and the next `## [` heading.
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { grab = 1; next }
+            grab && index($0, "## [") == 1 { exit }
+            grab { print }
+          ' CHANGELOG.md > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            echo "::error::CHANGELOG.md has no content under a '## [$VERSION]' heading. Write the section, then re-tag."
+            exit 1
+          fi
+
+          # Drop trailing blank lines and any horizontal rule the section ended on,
+          # so the footer below contributes the only `---` in the body.
+          awk '{ line[NR] = $0 }
+               END { last = NR
+                     while (last > 0 && (line[last] ~ /^[[:space:]]*$/ || line[last] == "---")) last--
+                     for (i = 1; i <= last; i++) print line[i] }' release-notes.md > release-notes.trimmed
+          mv release-notes.trimmed release-notes.md
+
+          {
+            printf '\n---\n\n'
+            printf 'Packages published to [nuget.org](https://www.nuget.org/profiles/verbara) at version `%s`:\n\n' "$VERSION"
+            for f in ./artifacts/*.nupkg; do
+              [ -e "$f" ] || continue
+              base="$(basename "$f" .nupkg)"
+              printf -- '- `%s`\n' "${base%".$VERSION"}"
+            done
+          } >> release-notes.md
+
+          echo "Release notes: $(wc -l < release-notes.md) lines."
+
+      # ---------------------------------------------------------------------
+      # The push. The key moved out of the `run:` line and into `env:`.
+      #
+      # `--api-key ${{ secrets.NUGET_API_KEY }}` interpolated into argv is two
+      # bugs at once: the value lands in the process command line, and if the
+      # secret ever resolves empty the folded `run:` collapses to
+      # `--api-key --skip-duplicate`, so `--skip-duplicate` is consumed as the
+      # key and the push fails in a way that reads like an auth problem.
+      # ---------------------------------------------------------------------
       - name: Push to nuget.org
-        run: >
-          dotnet nuget push "./artifacts/*.nupkg"
-          --source https://api.nuget.org/v3/index.json
-          --api-key ${{ secrets.NUGET_API_KEY }}
-          --skip-duplicate
+        if: steps.identity.outputs.is_publish == 'true'
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${NUGET_API_KEY:-}" ]; then
+            echo "::error::NUGET_API_KEY is not set for this run."
+            exit 1
+          fi
+
+          dotnet nuget push "./artifacts/*.nupkg" \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key "$NUGET_API_KEY" \
+            --skip-duplicate 2>&1 | tee push.log
+
+          if ! grep -q 'pushed' push.log; then
+            echo "::warning::No package reported a successful push — every one was skipped as a duplicate. Expected on a re-run, suspicious on a fresh tag."
+          fi
+
+      # ---------------------------------------------------------------------
+      # Gate 5 — the only check that distinguishes "published" from "green".
+      # `--skip-duplicate` turns a no-op into a success, so a run can go entirely
+      # green having uploaded nothing. Ask the feed. Indexing latency is real, so
+      # a timeout warns rather than fails: the packages are already pushed by then
+      # and failing the job would not un-push them.
+      # ---------------------------------------------------------------------
+      - name: Verify the feed has the release
+        if: steps.identity.outputs.is_publish == 'true'
+        env:
+          VERSION: ${{ steps.identity.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          CANARY="$(basename "$(ls ./artifacts/*.nupkg | head -1)" ".$VERSION.nupkg")"
+          LOWER="$(printf '%s' "$CANARY" | tr '[:upper:]' '[:lower:]')"
+          INDEX="https://api.nuget.org/v3-flatcontainer/${LOWER}/index.json"
+
+          for attempt in $(seq 1 20); do
+            if curl -fsS "$INDEX" 2>/dev/null | grep -q "\"$VERSION\""; then
+              echo "::notice::$CANARY $VERSION is live on nuget.org (attempt $attempt)."
+              exit 0
+            fi
+            sleep 30
+          done
+
+          echo "::warning::$CANARY $VERSION was not visible at $INDEX after 10 minutes. Packages were pushed; confirm indexing by hand."
 
       - name: Create GitHub Release
         # `publish.yml` pushed the packages but never created the Release object,
@@ -59,13 +283,10 @@ jobs:
         # Mirrors Verbara.Platform.Web's `release.yml` (Web #246) and Sdk.Pro's
         # in-workflow `gh release create`.
         #
-        # Tag pushes only: this workflow also answers `workflow_dispatch`, where
-        # `github.ref` is a branch and there is no version to release.
-        #
         # Runs AFTER the nuget push, so a Release object never advertises packages
         # that failed to publish. Idempotent — an existing Release (e.g. the themed
         # one `/xr:release` §H creates) is left untouched, never overwritten.
-        if: github.ref_type == 'tag'
+        if: steps.identity.outputs.is_publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
@@ -77,50 +298,26 @@ jobs:
             exit 0
           fi
 
-          VERSION="${TAG#v}"
-          NOTES_FILE="$(mktemp)"
-
-          # This version's own CHANGELOG section: everything between its heading
-          # (`## [2.4.0] - 2026-07-26`) and the next `## [` heading.
-          awk -v v="$VERSION" '
-            $0 ~ "^## \\[" v "\\]" { grab = 1; next }
-            grab && /^## \[/       { exit }
-            grab                   { print }
-          ' CHANGELOG.md > "$NOTES_FILE"
-
-          if [ ! -s "$NOTES_FILE" ]; then
-            echo "::warning::No CHANGELOG.md section found for [$VERSION] — falling back to a pointer body."
-            printf 'See [`CHANGELOG.md`](https://github.com/%s/blob/main/CHANGELOG.md) for this release.\n' \
-              "$GITHUB_REPOSITORY" > "$NOTES_FILE"
+          # Claim the `Latest` badge only when this really is the highest STABLE
+          # version tag, so a patch cut on an older line cannot steal it from a
+          # newer minor — and a prerelease never takes it at all. `sort -V` ranks
+          # `v2.5.0-rc1` ABOVE `v2.5.0`, so prereleases are filtered out first
+          # rather than sorted against.
+          if printf '%s' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            HIGHEST="$(gh api "repos/${GITHUB_REPOSITORY}/tags" --paginate -q '.[].name' \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+            if [ "$HIGHEST" = "$TAG" ]; then LATEST=true; else LATEST=false; fi
+            PRERELEASE=false
+            echo "highest stable tag=$HIGHEST · this tag=$TAG · --latest=$LATEST"
+          else
+            LATEST=false
+            PRERELEASE=true
+            echo "$TAG is a prerelease · --latest=false"
           fi
-
-          # Drop trailing blank lines and any horizontal rule the section ended on,
-          # so the footer below contributes the only `---` in the body.
-          awk '{ line[NR] = $0 }
-               END { last = NR
-                     while (last > 0 && (line[last] ~ /^[[:space:]]*$/ || line[last] == "---")) last--
-                     for (i = 1; i <= last; i++) print line[i] }' "$NOTES_FILE" > "${NOTES_FILE}.trimmed"
-          mv "${NOTES_FILE}.trimmed" "$NOTES_FILE"
-
-          {
-            printf '\n---\n\n'
-            printf 'Packages published to [nuget.org](https://www.nuget.org/profiles/verbara) at version `%s`:\n\n' "$VERSION"
-            for f in ./artifacts/*.nupkg; do
-              [ -e "$f" ] || continue
-              base="$(basename "$f" .nupkg)"
-              printf -- '- `%s`\n' "${base%".$VERSION"}"
-            done
-          } >> "$NOTES_FILE"
-
-          # Claim the `Latest` badge only when this really is the highest version
-          # tag, so a patch cut on an older line cannot steal it from a newer minor.
-          # Tags come from the API — `actions/checkout` is shallow and carries none.
-          HIGHEST="$(gh api "repos/${GITHUB_REPOSITORY}/tags" --paginate -q '.[].name' | sort -V | tail -1)"
-          if [ "$HIGHEST" = "$TAG" ]; then LATEST=true; else LATEST=false; fi
-          echo "highest tag=$HIGHEST · this tag=$TAG · --latest=$LATEST"
 
           gh release create "$TAG" \
             --verify-tag \
             --latest="$LATEST" \
+            --prerelease="$PRERELEASE" \
             --title "$TAG" \
-            --notes-file "$NOTES_FILE"
+            --notes-file release-notes.md
