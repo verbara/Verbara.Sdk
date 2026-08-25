@@ -179,7 +179,15 @@ jobs:
       # that agrees with what the Release step will do.
       # ---------------------------------------------------------------------
       - name: Build release notes from CHANGELOG.md
-        if: steps.identity.outputs.is_publish == 'true'
+        # Runs on a DRY RUN too, deliberately. Everything it needs is the resolved
+        # version, which both modes produce — and it is the step most able to fail
+        # the release outright, so a rehearsal that skipped it would prove the least
+        # about the part with the most to prove. On a dispatch the file is built,
+        # validated and thrown away; only `gh release create` ever reads it.
+        #
+        # This also turns `workflow_dispatch` into a release-readiness check: bump
+        # the version, dispatch, and the run fails until CHANGELOG.md has a section
+        # for it that is neither empty nor over the cap.
         env:
           VERSION: ${{ steps.identity.outputs.version }}
         run: |
