@@ -216,7 +216,24 @@ jobs:
             done
           } >> release-notes.md
 
-          echo "Release notes: $(wc -l < release-notes.md) lines."
+          # GitHub caps a release body at 125,000 characters and `gh release create`
+          # runs AFTER the push, so a body that does not fit would publish 29 packages
+          # and then fail to announce them. Measured here, pre-push, where failing is free.
+          # Bytes, not characters: `wc -m` depends on a UTF-8 locale the runner does not
+          # guarantee, and for this file bytes over-count, which errs toward blocking.
+          BODY_LIMIT=125000
+          BODY_BYTES="$(wc -c < release-notes.md)"
+
+          if [ "$BODY_BYTES" -gt "$BODY_LIMIT" ]; then
+            echo "::error::Release body is $BODY_BYTES bytes, over GitHub's $BODY_LIMIT-character cap. Split the CHANGELOG section before tagging."
+            exit 1
+          fi
+
+          if [ "$BODY_BYTES" -gt $(( BODY_LIMIT * 9 / 10 )) ]; then
+            echo "::warning::Release body is $BODY_BYTES bytes — over 90% of GitHub's $BODY_LIMIT-character cap. The next release of this size will not fit."
+          fi
+
+          echo "Release notes: $(wc -l < release-notes.md) lines, $BODY_BYTES bytes."
 
       # ---------------------------------------------------------------------
       # The push. The key moved out of the `run:` line and into `env:`.

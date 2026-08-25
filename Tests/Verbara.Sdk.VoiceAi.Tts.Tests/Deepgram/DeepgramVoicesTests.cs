@@ -23,11 +23,11 @@ public class DeepgramVoicesTests
     public void Helios_ShouldStillResolveToTheSameWorkingId_WhenCalledByItsOldName()
     {
         // The old name survives as an obsolete alias: removing a public const is a binary break
-        // (ApiCompat CP0002 against the 2.1.0 baseline), and callers who kept it should get audio
-        // rather than the 400 the old value earned them.
-#pragma warning disable CS0618 // pinning the obsolete alias is the point of this test
+        // (ApiCompat CP0002 against the package-validation baseline), and callers who kept it should
+        // get audio rather than the 400 the old value earned them.
+#pragma warning disable VSDK0001 // pinning the obsolete alias is the point of this test
         DeepgramVoices.Helios.Should().Be(DeepgramVoices.HeliosLegacy);
-#pragma warning restore CS0618
+#pragma warning restore VSDK0001
     }
 
     [Fact]
