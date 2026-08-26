@@ -100,30 +100,42 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Peel to a COMMIT before anything else. On a tag push `$GITHUB_SHA` is only reliably a
+          # commit when the tag is lightweight; for an annotated tag it can be the tag object's
+          # sha, and `repos/.../commits/<sha>/check-runs` cannot resolve a non-commit — the gate
+          # would fail on a release that is perfectly fine. This repo has published annotated tags
+          # before (v1.x is full of them; v2.2.1 and v2.3.0 are the most recent), so this is a real
+          # shape, not a hypothetical. `^{commit}` is a no-op on a lightweight tag and peels an
+          # annotated one, which makes the gate indifferent to how the tag was created.
+          SHA="$(git rev-parse "${GITHUB_SHA}^{commit}")"
+          if [ "$SHA" != "$GITHUB_SHA" ]; then
+            echo "::notice::$GITHUB_SHA is an annotated tag object; verifying its commit $SHA."
+          fi
+
           git fetch --no-tags --quiet origin main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::$GITHUB_SHA is not an ancestor of origin/main — this tag was cut off the release line."
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error::$SHA is not an ancestor of origin/main — this tag was cut off the release line."
             exit 1
           fi
 
           # Only COMPLETED runs are evidence. A run still in flight reports
           # `conclusion: null`, and this workflow's own check run is one of them —
           # counting either as a failure would make the gate self-blocking.
-          CONCLUSIONS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs" \
+          CONCLUSIONS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" \
             --paginate -q '.check_runs[] | select(.status == "completed") | .conclusion' || true)"
 
           if [ -z "$CONCLUSIONS" ]; then
-            echo "::error::No completed check runs for $GITHUB_SHA — nothing proves this commit was ever built."
+            echo "::error::No completed check runs for $SHA — nothing proves this commit was ever built."
             exit 1
           fi
 
           if printf '%s\n' "$CONCLUSIONS" | grep -qvE '^(success|skipped|neutral)$'; then
-            echo "::error::$GITHUB_SHA has non-green check runs:"
+            echo "::error::$SHA has non-green check runs:"
             printf '%s\n' "$CONCLUSIONS" | sort | uniq -c
             exit 1
           fi
 
-          echo "::notice::$GITHUB_SHA is on main and its check runs are green."
+          echo "::notice::$SHA is on main and its check runs are green."
 
       - name: Restore
         run: dotnet restore Verbara.Sdk.slnx

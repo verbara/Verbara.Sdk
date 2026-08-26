@@ -1,0 +1,74 @@
+name: Release Hygiene
+
+# The two checks here answer questions no other workflow in this repo is positioned to ask.
+#
+# `publish.yml` triggers on `push: tags: v*` and nothing else, and `ci.yml` runs on
+# `pull_request` + `merge_group` and deliberately drops the post-merge push run. Between them
+# there is a blind spot the exact shape of a release: once a PR lands, nothing looks at the
+# repo again until somebody pushes a tag. If nobody does, every signal stays green, because no
+# signal is about the release. `<PackageVersion>` sat at 2.5.0 for a month that way.
+#
+# So this workflow runs where nothing else does — after the merge, on `main` — and its failure
+# mode is a notification, not a block. It cannot be a required check: gating PRs on "a release
+# is owed" would stop unrelated work to punish a maintenance task. GitHub emails the actor when
+# a workflow fails on a default-branch push, and that is the intended delivery.
+#
+# The weekly schedule covers the case a push trigger structurally cannot: a staged release on a
+# repo that has gone quiet. That is the state 2.5.0 was actually in near the end.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 13 * * 1' # Mondays 13:00 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+# Serialise on the workflow, not the ref: both jobs read repo-wide state (tags, the published
+# feed), so two overlapping runs would report on the same thing twice. Never cancel in progress
+# — these runs are short, and a cancelled run reports no result at all, which is the exact
+# silence this workflow exists to remove.
+concurrency:
+  group: release-hygiene
+  cancel-in-progress: false
+
+jobs:
+  publish-liveness:
+    name: Publish Liveness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # Full history AND tags: the check derives the expected tag from Directory.Build.props,
+          # asks whether it exists, and diffs from it. A shallow clone would answer "the tag does
+          # not exist" for every release ever published.
+          fetch-depth: 0
+
+      - name: Make sure tags are present
+        run: git fetch --tags --force --quiet
+
+      - name: Is a release owed?
+        run: scripts/ci/check-publish-liveness.sh
+
+  apicompat-baseline:
+    name: ApiCompat Baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Make sure tags are present
+        run: git fetch --tags --force --quiet
+
+      # Deliberately a separate job from the one above. They fail for unrelated reasons and are
+      # fixed by different edits; folding them into one job would make either failure hide the
+      # other, and there is no ordering between them.
+      - name: Is the package-validation baseline current?
+        run: scripts/ci/check-apicompat-baseline.sh

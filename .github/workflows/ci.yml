@@ -189,6 +189,14 @@ jobs:
       - name: Run docs-only classifier unit tests (ADR-0016)
         run: bash scripts/tests/test_classify_docs_only.sh
 
+      # Release-hygiene guard unit tests (ADR-0055). Same precedent as the classifier above: both
+      # guards fire on states that only occur when nobody is looking, so a broken one fails exactly
+      # the way the bug it guards against fails — silently, green. They belong in this job rather
+      # than in release-hygiene.yml, which runs post-merge and therefore cannot block the PR that
+      # breaks them.
+      - name: Run release-hygiene guard unit tests (ADR-0055)
+        run: bash scripts/tests/test_release_hygiene.sh
+
   aot-check:
     name: AOT Trim Check
     runs-on: ubuntu-latest
