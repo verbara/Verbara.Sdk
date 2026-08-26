@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — Release hygiene: the two states that produce no signal now produce one (ADR-0055)
+
+`publish.yml` only runs on a tag push and `ci.yml` drops its post-merge run, so between them nothing
+looks at the repo after a PR lands until somebody pushes a tag. The 2.4.0 → 2.5.0 cycle spent that
+blind spot well: 88 commits, 19 of them touching `src/`, a month between tags, and one CHANGELOG
+section that reached 117,711 of GitHub's 125,000-character release-body cap. Nothing was red, because
+nothing was looking.
+
+- **`scripts/ci/check-publish-liveness.sh`** — fails when a version is staged but never tagged, and
+  when unreleased shipped content has been waiting past a budget (14 days, or an `[Unreleased]`
+  section past 90% of the release-body cap). The budget is the design: this repo cuts tags by hand
+  roughly monthly, so unreleased content is the *normal* state, and a check that failed on its mere
+  existence would be red most of every month. Replayed against that cycle it is quiet on 2026-08-02
+  and fails on 2026-08-15 — ten days before the tag actually went up. Adapted from Sdk.Pro's script
+  of the same name rather than copied; Pro auto-releases on every push, so its calibration destroys
+  the signal here.
+- **`scripts/ci/check-apicompat-baseline.sh`** — `PackageValidationBaselineVersion` is the only thing
+  in this repo that catches an unintended binary break, and it goes stale after every release without
+  anything noticing: it sat at `2.1.0` while 2.2.x, 2.3.x and 2.4.0 shipped, passing the whole time.
+  It now ratchets to the newest published tag, and also fails if that baseline is not resolvable on
+  nuget.org. Moved to **2.5.0** here; all 29 packages pack clean against it.
+- Both run in a new **`release-hygiene.yml`** on `push: main` and weekly — a notification, not a
+  merge gate, because blocking a PR on "a release is overdue" would stop unrelated work. Both carry
+  39 unit tests in `Coverage Script Tests`, since a broken guard fails the same way the bug it guards
+  against fails: silently, green.
+
+### Fixed — The release provenance gate no longer depends on how the tag was created
+
+`repos/.../commits/<sha>/check-runs` cannot resolve a sha that is not a commit, and on a tag push
+`$GITHUB_SHA` is only reliably a commit when the tag is **lightweight** — for an annotated tag it can
+be the tag object's sha. This repo has published annotated tags before (`v2.2.1` and `v2.3.0` are the
+most recent), so the gate would have failed a perfectly good release for a maintainer reaching for
+`git tag -a` out of habit. It now peels `${GITHUB_SHA}^{commit}` first, which is a no-op on a
+lightweight tag and correct on an annotated one.
+
 ## [2.5.0] - 2026-08-24
 
 ### Fixed — Tests: eight WebSocket fakes carried fences nobody had watched fail, and four of them could hang forever
