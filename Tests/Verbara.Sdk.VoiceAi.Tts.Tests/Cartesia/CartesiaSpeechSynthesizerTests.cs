@@ -398,6 +398,109 @@ public class CartesiaSpeechSynthesizerTests : IAsyncDisposable
         _server.ReceivedJsonMessages.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// The eighth WebSocket surface's first cancellation test — this class had none, so a caller
+    /// cancelling Cartesia synthesis was the one provider whose behaviour nothing here stated.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The contract this asserts is the one the other seven assert: a token already cancelled when
+    /// the caller starts enumerating throws <see cref="OperationCanceledException"/> and reaches no
+    /// provider. What is worth writing down is that this synthesizer arrives there by a different
+    /// route. The other three TTS synthesizers open with <c>ct.ThrowIfCancellationRequested()</c>
+    /// (Deepgram, ElevenLabs, Lmnt); this one has no such guard, so the throw comes out of
+    /// <c>ClientWebSocket.ConnectAsync</c> — measured 10/10 as <c>TaskCanceledException</c> raised
+    /// from <c>CartesiaSpeechSynthesizer.SynthesizeAsync</c>'s connect line, carrying the linked
+    /// <c>connectCts</c> token rather than the caller's. <c>TaskCanceledException</c> derives from
+    /// <see cref="OperationCanceledException"/>, so the assertion below holds either way, and that
+    /// is deliberate: it states the contract, not the mechanism, and would keep holding if an entry
+    /// guard were added later.
+    /// </para>
+    /// <para>
+    /// Asserted through the fake seeing nothing rather than through the throw alone — and through
+    /// <em>both</em> of the fake's session-entry witnesses, not just the JSON. <c>ReceivedApiKey</c>
+    /// is written the moment the upgrade completes, so a test that checked only
+    /// <c>ReceivedJsonMessages</c> would still pass if the session had opened and merely sent no
+    /// request. Six of the seven pre-existing cancellation tests assert only that weaker half.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldAbort_WhenCancelled()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz, cts.Token)
+            // ADR-0052 F3: the consumer holds no token. Passing the cancelled one to ToListAsync
+            // makes the enumerator throw on our behalf, and the assertion then cannot tell a
+            // propagated throw from a silent `yield break` in the subject.
+            .ToListAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        _server.ReceivedApiKey.Should().BeNull("no session should have been opened at all");
+        _server.ReceivedJsonMessages.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// The case this surface never had: cancellation observed while the server still has
+    /// audio to give.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sibling above cancels before enumeration starts, so it exercises the connect path and
+    /// no session is ever opened. This one cancels from inside the caller's own
+    /// <c>await foreach</c>, one audio chunk in, with the fake parked mid-delivery — the shape
+    /// §3.3 of <c>voiceai-midstream-cancellation-coverage</c> prescribes.
+    /// </para>
+    /// <para>
+    /// Two conditions are asserted rather than assumed, because "it threw" alone would also pass
+    /// if the session had ended on the server's own close and the test were crediting
+    /// cancellation with someone else's work: the socket was live at the moment the token fired,
+    /// and the gate was holding an undelivered frame. The gate counts the fake's <em>outbound</em>
+    /// messages; this surface sends no greeting, so a hold at 1 means the first <c>chunk</c> frame
+    /// was delivered and the second was not — the recorded audio chunks into seven of them, so
+    /// there is always a remainder to hold.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldAbort_WhenCancelledMidDelivery()
+    {
+        var gate = new OutboundFrameGate(1);
+        _server.OutboundGate = gate;
+
+        using var cts = new CancellationTokenSource();
+        var synth = BuildSynthesizer();
+
+        WebSocketState? stateAtCancel = null;
+        var observed = 0;
+
+        var act = async () =>
+        {
+            // ADR-0052 F3: the token goes to SynthesizeAsync and nowhere else. The consumer holds
+            // none, so a throw here is the synthesizer's own.
+            await foreach (var chunk in synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz, cts.Token))
+            {
+                observed++;
+                stateAtCancel = _server.SocketState;
+                await cts.CancelAsync();
+            }
+        };
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        observed.Should().Be(1, "the cancel must land after audio reached the caller, not before");
+        stateAtCancel.Should().Be(
+            WebSocketState.Open,
+            "cancellation has to be observed on a live socket, or the stream ended on the server's "
+            + "close instead and the test would be crediting cancellation with someone else's work");
+        gate.Held.IsCompleted.Should().BeTrue("the fake must still have had a frame to send");
+        gate.Delivered.Should().Be(1, "exactly the first chunk frame was delivered");
+    }
+
     [Fact]
     public async Task SynthesizeAsync_ShouldAuthenticateTheUpgrade_WhenOpeningASession()
     {

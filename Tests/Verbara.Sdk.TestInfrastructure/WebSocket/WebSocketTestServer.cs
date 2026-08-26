@@ -37,9 +37,35 @@ public sealed class WebSocketTestServer : IAsyncDisposable
     private readonly TaskCompletionSource _sessionCompleted =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? _acceptLoop;
+    private volatile System.Net.WebSockets.WebSocket? _currentSocket;
 
     /// <summary>The TCP port the server is listening on (loopback only).</summary>
     public int Port { get; }
+
+    /// <summary>
+    /// Parks outbound delivery after a chosen number of messages, so a test can cancel while this
+    /// server still has frames to send. Set it before the client connects; leave it
+    /// <see langword="null"/> — the default — and the session gets the raw socket, unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Opt-in on purpose: with no gate armed nothing about an accepted session differs from before
+    /// this property existed, so no existing test can be perturbed by it. See
+    /// <see cref="OutboundFrameGate"/> for why the hold belongs to the transport rather than to each
+    /// fake's protocol handler.
+    /// </remarks>
+    public OutboundFrameGate? OutboundGate { get; set; }
+
+    /// <summary>
+    /// The server side's view of the current session's socket, or <see langword="null"/> before the
+    /// first connection is accepted.
+    /// </summary>
+    /// <remarks>
+    /// The condition a cancellation test needs to state and otherwise cannot: that the socket was
+    /// still live when the token fired, rather than the stream having ended on the server's own
+    /// close and the test crediting cancellation with someone else's work. Read through a volatile
+    /// field because the accept loop writes it on a different thread from the one asserting on it.
+    /// </remarks>
+    public WebSocketState? SocketState => _currentSocket?.State;
 
     /// <summary>
     /// Completes when the first accepted session's handler returns — a join point for assertions
@@ -103,10 +129,15 @@ public sealed class WebSocketTestServer : IAsyncDisposable
 
             await SendUpgradeResponseAsync(stream, wsKey, _cts.Token).ConfigureAwait(false);
 
-            var ws = System.Net.WebSockets.WebSocket.CreateFromStream(
+            var raw = System.Net.WebSockets.WebSocket.CreateFromStream(
                 stream,
                 new WebSocketCreationOptions { IsServer = true });
 
+            var ws = OutboundGate is { } gate
+                ? new GatedWebSocket(raw, gate, _cts.Token)
+                : raw;
+
+            _currentSocket = ws;
             var session = new WebSocketTestSession(ws, requestUri, headers, _cts.Token);
             try
             {

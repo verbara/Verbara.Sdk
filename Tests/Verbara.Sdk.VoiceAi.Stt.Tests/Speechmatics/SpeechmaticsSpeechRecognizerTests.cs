@@ -1,4 +1,5 @@
 using System.Net.WebSockets;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Verbara.Sdk.Audio;
@@ -574,6 +575,66 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// The case seven of the eight WebSocket surfaces never had: cancellation observed while the
+    /// server still has frames to give.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sibling above cancels before enumeration starts, so it exercises the entry guard and no
+    /// socket is ever opened. This one cancels from inside the caller's own <c>await foreach</c>,
+    /// one transcript in, with the fake parked mid-delivery — the shape §3.1 of
+    /// <c>voiceai-midstream-cancellation-coverage</c> prescribes, and the one the HTTP-transport
+    /// Lmnt test already uses.
+    /// </para>
+    /// <para>
+    /// Two conditions are asserted rather than assumed, because "it threw" alone would also pass if
+    /// the session had ended on the server's own close and the test were crediting cancellation with
+    /// someone else's work: the socket was live at the moment the token fired, and the gate was
+    /// holding an undelivered frame. The gate counts the fake’s <em>outbound</em> messages — the <c>RecognitionStarted</c> greeting is the first, the partial transcript the second — so a hold at 2 leaves the final transcript unsent.
+    /// </para>
+    /// <para>
+    /// Negative-tested by neutralising the hold (§3.6): with delivery ungated the caller observes
+    /// <b>two</b> transcripts before the cancel takes effect, so <c>observed</c> is what detects a
+    /// cancel that is not actually mid-flight — not the gate's own bookkeeping.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task StreamAsync_ShouldAbort_WhenCancelledMidDelivery()
+    {
+        var gate = new OutboundFrameGate(2);
+        _server.OutboundGate = gate;
+
+        using var cts = new CancellationTokenSource();
+        var recognizer = BuildRecognizer();
+
+        WebSocketState? stateAtCancel = null;
+        var observed = 0;
+
+        var act = async () =>
+        {
+            // ADR-0052 F3: the token goes to StreamAsync and nowhere else. The consumer holds none,
+            // so a throw here is the recognizer's own.
+            await foreach (var result in recognizer.StreamAsync(
+                               SttFrameGenerators.EndlessFrames(), AudioFormat.Slin16Mono8kHz, cts.Token))
+            {
+                observed++;
+                stateAtCancel = _server.SocketState;
+                await cts.CancelAsync();
+            }
+        };
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        observed.Should().Be(1, "the cancel must land after a transcript reached the caller, not before");
+        stateAtCancel.Should().Be(
+            WebSocketState.Open,
+            "cancellation has to be observed on a live socket, or the stream ended on the server's "
+            + "close instead and the test would be crediting cancellation with someone else's work");
+        gate.Held.IsCompleted.Should().BeTrue("the fake must still have had a frame to send");
+        gate.Delivered.Should().Be(2, "exactly the greeting and the partial transcript were delivered");
+    }
+
+    /// <summary>
     /// <c>last_seq_no</c> is compared against the count the fake kept independently, not against a
     /// literal: the client and the server have to agree on how many audio chunks crossed the
     /// socket, and a hard-coded 3 would still pass if both drifted together.
@@ -607,6 +668,73 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         await SessionEndedAsync();
 
         _server.ReceivedClientCloseFrame.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Witnesses the <c>CloseSent</c> disjunct in this fake's receive loop — the one fence in the
+    /// sweep's inventory that no test in this suite could reach.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The fence is <c>while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)</c>. The
+    /// <c>CloseSent</c> disjunct is what keeps the loop alive across the fake's <em>own</em> close:
+    /// the terminator branch answers, calls <c>CloseOutputAsync</c> — which moves the server socket
+    /// to <c>CloseSent</c> — and then falls back to the top of the loop. With only <c>Open</c> there,
+    /// the loop would exit on that very evaluation and the client's close frame would never be read,
+    /// so <c>ReceivedClientCloseFrame</c> would read <see langword="false"/> for every client alike.
+    /// </para>
+    /// <para>
+    /// No shipped recognizer can produce that condition: none of the four sends a close frame at all
+    /// (§4.1 — <c>grep 'CloseAsync\|CloseOutputAsync' src/Verbara.Sdk.VoiceAi.Stt/</c> returns one
+    /// hit and it is a comment). So the witness has to be a client that does, and this test is one:
+    /// a raw <see cref="ClientWebSocket"/> driven by hand. <c>src/</c> is deliberately not touched —
+    /// the sweep proved this fence live by temporarily reinstating the removed half-close, which is
+    /// a measurement technique, not a change (§4.4).
+    /// </para>
+    /// <para>
+    /// The pair of assertions is the test. The terminator having been recorded proves the fake
+    /// reached the branch that closes its own output, so the close frame that follows is read from
+    /// <c>CloseSent</c> and not from <c>Open</c> — without it, a client that closed without a
+    /// terminator would satisfy the second assertion while never exercising the fence at all. Frame
+    /// ordering is TCP's, not a race: the terminator is written first, so it is read first.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task Session_ShouldKeepReadingPastItsOwnClose_WhenTheClientHalfCloses()
+    {
+        using var client = new ClientWebSocket();
+        await client.ConnectAsync(new Uri($"ws://127.0.0.1:{_server.Port}/v2"), CancellationToken.None);
+
+        // This vendor answers nothing until StartRecognition arrives, and the fake consumes that
+        // first text frame outside the loop — so it has to be sent before the terminator.
+        await client.SendAsync(
+            Encoding.UTF8.GetBytes("""{"message":"StartRecognition"}""").AsMemory(),
+            WebSocketMessageType.Text,
+            true,
+            CancellationToken.None);
+
+        // A frame of audio, then the terminator: the fake answers it and half-closes its own output,
+        // which is the state the fence is about.
+        await client.SendAsync(new byte[320].AsMemory(), WebSocketMessageType.Binary, true, CancellationToken.None);
+        await client.SendAsync(
+            Encoding.UTF8.GetBytes("""{"message":"EndOfStream","last_seq_no":1}""").AsMemory(),
+            WebSocketMessageType.Text,
+            true,
+            CancellationToken.None);
+
+        // The half-close this suite's own recognizers never perform.
+        await client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
+
+        await SessionEndedAsync();
+
+        _server.ReceivedEndOfStreamJson.Should().Be(
+            """{"message":"EndOfStream","last_seq_no":1}""",
+            "the fake must have reached the branch that closes its own output before the client's "
+            + "close arrives, or the frame below was read from Open and the fence was never used");
+
+        _server.ReceivedClientCloseFrame.Should().BeTrue(
+            "the loop must keep reading while the server socket is CloseSent, or the client's close "
+            + "frame is never seen and every client reads as one that did not half-close");
     }
 
     /// <summary>
