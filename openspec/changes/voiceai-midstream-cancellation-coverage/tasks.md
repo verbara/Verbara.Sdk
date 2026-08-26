@@ -755,7 +755,19 @@ them is used; §5.1 and §5.2 are already closed and carry their own notes.
 
 ## 7. Close-out
 
-- [ ] 7.1 Fill the PR number into the CHANGELOG entry before archiving.
+- [x] 7.1 Fill the PR number into the CHANGELOG entry before archiving.
+
+      **#227** — https://github.com/verbara/Verbara.Sdk/pull/227, two commits: `9c4d030c`
+      (`test(voiceai):` — substrate, fakes and the thirteen tests) and `5db0b787`
+      (`docs(openspec):` — this evidence and the follow-up change).
+
+      **Placed in the body, not the heading, which is where §5.3 had put the placeholder.** Filling
+      `(#PR)` in place would have made this the only `###` heading in the file carrying a PR number —
+      the existing convention puts the reference inline next to the claim it belongs to
+      (`CHANGELOG.md:98, :158, :191, :228`). Both of this change's sections carry it, since both
+      shipped in the same PR: the `Added` section next to "none of the eight cancelled a session that
+      had frames in flight", and the `Removed` section next to "the property and its dead branch are
+      gone".
 - [ ] 7.2 `openspec archive voiceai-midstream-cancellation-coverage --yes` via the CLI, shipped as
       its own docs PR.
 - [x] 7.3 Route anything found in `src/` that is not task 2.3 to an existing change rather than

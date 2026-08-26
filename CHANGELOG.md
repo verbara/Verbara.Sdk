@@ -4,20 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added — Cancellation is now witnessed with frames in flight, on all eight WebSocket surfaces (#PR)
+### Added — Cancellation is now witnessed with frames in flight, on all eight WebSocket surfaces
 
 The class A/B sweep left the eight WebSocket fakes with seven cancellation tests between them and
 recorded that as a gap. Measured again here, the gap is sharper than the bullet said: **none of the
-eight cancelled a session that had frames in flight.** Six hand `StreamAsync`/`SynthesizeAsync` a
-pre-cancelled token, so the entry guard fires and no socket is ever opened; the seventh cancels on a
-live socket the fake is holding *silent*; the eighth — Cartesia TTS — had no cancellation test at
-all. Nothing in the suite could tell a cancellation from a stream that had already finished.
+eight cancelled a session that had frames in flight** (#227). Six hand
+`StreamAsync`/`SynthesizeAsync` a pre-cancelled token, so the entry guard fires and no socket is
+ever opened; the seventh cancels on a live socket the fake is holding *silent*; the eighth —
+Cartesia TTS — had no cancellation test at all. Nothing in the suite could tell a cancellation from
+a stream that had already finished.
 
 - **`OutboundFrameGate`** (`Verbara.Sdk.TestInfrastructure`) — an opt-in decorator on
   `WebSocketTestServer` that stops the server writing after its Nth outbound message. Stated once on
   the shared substrate rather than as eight per-fake knobs, because "hold the next frame" is a
-  property of the transport and not of any vendor's protocol; with no gate armed the session gets the
-  raw socket, so no existing test can be perturbed by it. `WebSocketTestServer` also exposes
+  property of the transport and not of any vendor's protocol; with no gate armed the session gets
+  the raw socket, so no existing test can be perturbed by it. `WebSocketTestServer` also exposes
   `SocketState`, which only one of the eight fakes previously had.
 - **Eight mid-flight cancellation tests**, one per surface: cancel from inside the caller's own
   `await foreach`, one transcript or one audio chunk in, with the fake parked on a frame it cannot
@@ -47,10 +48,10 @@ The sweep found it unreachable — declaration plus its own `if`, no assignment 
 on the argument that a mid-stream cancellation test on that surface would need it. That test now
 exists and does not: the hold it needs is on the fake's outbound side mid-delivery, which is a
 different condition from a session that answers nothing at all. The property and its dead branch are
-gone. `LmntWsFakeServer.HoldOpenUntilDisposed` stays and is **not** the same finding — it is set by a
-test and does execute; what it lacks is any assertion that can distinguish it from `await receiveTask`
-(re-measured 10/10 green with the swap in place, now against both of that surface's cancellation
-tests).
+gone (#227). `LmntWsFakeServer.HoldOpenUntilDisposed` stays and is **not** the same finding — it is
+set by a test and does execute; what it lacks is any assertion that can distinguish it from
+`await receiveTask` (re-measured 10/10 green with the swap in place, now against both of that
+surface's cancellation tests).
 
 ### Added — Release hygiene: the two states that produce no signal now produce one (ADR-0055)
 
