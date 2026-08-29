@@ -1,6 +1,6 @@
 # Verbara.Sdk.VoiceAi.TurnDetection
 
-ML-based turn detection for the Verbara.Sdk VoiceAi pipeline using the Pipecat smart-turn-v3 ONNX model. Detects semantic end-of-turn boundaries — not just silence — for more natural conversational turn-taking.
+ML-based turn detection for the Verbara.Sdk VoiceAi pipeline using the Pipecat smart-turn-v3.2-cpu ONNX model. Detects semantic end-of-turn boundaries — not just silence — for more natural conversational turn-taking.
 
 ## Installation
 

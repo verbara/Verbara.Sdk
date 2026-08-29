@@ -197,6 +197,15 @@ jobs:
       - name: Run release-hygiene guard unit tests (ADR-0055)
         run: bash scripts/tests/test_release_hygiene.sh
 
+      # Perf-baseline guard unit tests (ADR-0042 D4/D5). The comparison itself runs weekly in
+      # perf-regression.yml, which is `schedule` + `workflow_dispatch` only and can therefore never
+      # tell a PR that its guard is broken. Its Python half rides the `unittest discover` step
+      # above; the notifier is bash and needs naming, like the two guards before it. NO new job and
+      # NO new check-run name (ADR-0042 D3) — a guard that costs a branch-protection edit is not
+      # cheap, whatever its runtime.
+      - name: Run perf-baseline notifier unit tests (ADR-0042)
+        run: bash scripts/tests/test_report_perf_breach.sh
+
   aot-check:
     name: AOT Trim Check
     runs-on: ubuntu-latest

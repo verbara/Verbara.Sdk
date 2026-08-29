@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>ML-based turn detection for Verbara.Sdk VoiceAi pipeline using Pipecat smart-turn-v3 ONNX model.</Description>
+    <Description>ML-based turn detection for Verbara.Sdk VoiceAi pipeline using the Pipecat smart-turn-v3.2-cpu ONNX model.</Description>
     <PackageTags>$(PackageTags);voice-ai;turn-detection;onnx;smart-turn</PackageTags>
     <IsAotCompatible>false</IsAotCompatible>
     <EnableAotAnalyzer>false</EnableAotAnalyzer>

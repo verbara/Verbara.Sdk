@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 namespace Verbara.Sdk.VoiceAi.TurnDetection;
 
 /// <summary>
-/// ML-based turn detector using the Pipecat smart-turn-v3 ONNX model.
+/// ML-based turn detector using the Pipecat smart-turn-v3.2-cpu ONNX model.
 /// Detects semantic end-of-turn boundaries, not just silence pauses.
 /// </summary>
 public sealed class SmartTurnDetector : ITurnDetector, IDisposable

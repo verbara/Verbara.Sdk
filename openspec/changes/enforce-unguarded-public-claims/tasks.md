@@ -146,43 +146,182 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
 
 ## 2. AMI throughput — arm the weekly gate
 
-- [ ] 2.1 Run `.github/workflows/perf-regression.yml` via `workflow_dispatch` several times and
+- [x] 2.1 Run `.github/workflows/perf-regression.yml` via `workflow_dispatch` several times and
       record the hosted-runner spread per benchmark — the bands are calibrated from observation,
       never guessed
-- [ ] 2.2 Author `Tests/Verbara.Sdk.Benchmarks/baseline.json`: hosted-runner mean + tolerance band
+      **Calibrated from 13 real runs, not from dispatches.** The workflow has run weekly for months
+      and twelve runs still had unexpired artifacts, plus one dispatched here — better evidence than
+      ad-hoc dispatches, because they are the exact runner and the exact Sunday-04:00 slot the gate
+      will run in.
+
+      **The dominant finding is that the spread is not jitter.** `ubuntu-latest` alternates between
+      AMD EPYC 7763 (9 runs) and EPYC 9V74 (4), and the 9V74 is uniformly faster — up to **−20.7%**
+      on `AriJson.SerializeChannel`. Within-run CV is 0.11–0.67%; across-run CV is 0.5–11.2%. So a
+      band derived from `Statistics.StandardDeviation` in the report would be roughly **20× too
+      tight** and would red the gate on the first run that landed on the other VM. Normalising by a
+      per-run machine factor was tested and rejected: it helps the machine-sensitive benchmarks,
+      hurts the insensitive ones, and would normalise away a systemic regression hitting everything.
+
+- [x] 2.2 Author `Tests/Verbara.Sdk.Benchmarks/baseline.json`: hosted-runner mean + tolerance band
       per benchmark, explicitly NOT the README's workstation figures (Sdk/ADR-0042 D4)
-- [ ] 2.3 Add the comparison step to the workflow: parse the collected BenchmarkDotNet JSON, compare
+      `Tests/Verbara.Sdk.Benchmarks/baseline.json` — 19 entries keyed by `FullName`, each carrying
+      `mean_ns` and `tolerance_pct`, plus a `calibration` block recording the 13 runs, the window
+      2026-06-07 → 2026-08-29 and both CPU models.
+
+      **Hosted-runner means, explicitly not the README's** (D4): the workstation figures are
+      1.97×–2.35× faster, so an absolute comparison would be permanently red.
+
+      Band formula `max(3σ_pooled, 1.5 × worst-observed-deviation, 1.25 × full-range)`, floored at
+      ±10% and ±15% under 100 ns. Verified: **0 breaches across all 13 runs**, tightest headroom
+      5.8pp. `AriJson.SerializeChannel` needs ±45%, which is a weak detector and is honest about it —
+      it exists only to swallow the two-CPU gap. Keying the baseline on `ProcessorName` would collapse
+      it to ±10%, and is deferred to the enforce PR so the observe-only window can say whether a
+      third CPU model shows up.
+
+- [x] 2.3 Add the comparison step to the workflow: parse the collected BenchmarkDotNet JSON, compare
       each mean against its band, and **fail closed** on a missing/empty/unparseable result — today
       `|| true` would render a benchmark that never ran as green
-- [ ] 2.4 Add breach notification: file or update an issue naming the benchmark, baseline, observed
+      `scripts/ci/check-perf-baseline.py`, wired into the workflow — a script rather than inline
+      YAML so it is testable, following the `classify-docs-only.sh` precedent. **37 unit tests**,
+      riding the existing `unittest discover` step: no new job, no new check-run name (D3).
+
+      **Fail-closed proven against real artifacts**, not synthetic ones:
+
+      | mutation | `--enforce` | observing |
+      |---|---|---|
+      | a `results/` directory deleted | **exit 1**, 4 structural errors naming the benchmarks | exit 0, same report |
+      | report file replaced with non-JSON | **exit 1** | — |
+      | artifacts root absent entirely | **exit 1** | — |
+
+      The first row is the `\|\| true` failure mode this task exists to close: a benchmark that never
+      ran currently reads as green.
+
+- [x] 2.4 Add breach notification: file or update an issue naming the benchmark, baseline, observed
       value and band, so the signal outlives the run (Sdk/ADR-0042 D5)
-- [ ] 2.5 Land the comparison observing-only first, confirm two consecutive scheduled runs would
+      `scripts/ci/report-perf-breach.sh` files or updates an issue naming the benchmark, the
+      baseline, the observed value and the band. 27 unit tests, registered in `ci.yml` beside the two
+      guards before it. A weekly red nobody is told about is observational under another name (D5).
+
+- [x] 2.5 Land the comparison observing-only first, confirm two consecutive scheduled runs would
       have passed, then flip it to failing — the gate's first act must not be a false red
-- [ ] 2.6 Confirm the workflow still has no `pull_request` and no `merge_group` trigger and
+      Landed **observing-only**: `PERF_GATE_ENFORCE: 'false'`. The comparison runs, prints the full
+      table and reports, and does not fail the job — except on exit 2 (gate misconfigured), which
+      fails in both modes, because a guard that is broken must not read green.
+
+      Replayed over **all 13 historical runs: 19/19 inside band on every one**, so the flip has its
+      evidence for the past. The flip itself waits for two consecutive *scheduled* runs under
+      observation and ships as its own PR — the cron is weekly, so that is ~2 weeks of calendar no
+      amount of work shortens, and it is why this change lands in two PRs.
+
+- [x] 2.6 Confirm the workflow still has no `pull_request` and no `merge_group` trigger and
       contributes no required check — no branch-protection reconciliation is performed or needed
       (Sdk/ADR-0042 D2–D3; ADR-0038, verbara-meta/ADR-0003)
-- [ ] 2.7 Document the human-authored baseline-update protocol next to `baseline.json`: no CI
+      Verified in the file: `on:` is `schedule` (`cron: '0 4 * * 0'`) + `workflow_dispatch` and
+      nothing else. No `pull_request`, no `merge_group`, so the workflow contributes no check-run to
+      any PR and no branch-protection reconciliation is performed or needed.
+
+- [x] 2.7 Document the human-authored baseline-update protocol next to `baseline.json`: no CI
       write-back, and a re-baseline PR states which benchmark moved, how much, and why
       (Sdk/ADR-0042 D6)
+      `Tests/Verbara.Sdk.Benchmarks/baseline.README.md`: CI never writes back, and a re-baseline PR
+      states which benchmark moved, in which direction, by how much, and why (D6). Same
+      manual-ratchet semantics as the coverage floor.
 
 ## 3. Turn detection — split the claim into its two honest halves
 
-- [ ] 3.1 Add a content-hash assertion over the embedded `smart-turn-v3.2-cpu.onnx` in
+- [x] 3.1 Add a content-hash assertion over the embedded `smart-turn-v3.2-cpu.onnx` in
       `Tests/Verbara.Sdk.VoiceAi.TurnDetection.Tests/` (read via the assembly manifest stream; the
       `Unit Tests` job already checks out with `lfs: true`)
-- [ ] 3.2 Resolve the model-version drift: align the `README.md` citation link, the package
+      `OnnxSessionManagerTests.EmbeddedModel_ShouldBeTheExactArtifactTheAccuracyClaimCites`, read
+      through the manifest stream under the resource's explicit `LogicalName`.
+
+      **The hash is asserted, not the length, and that is measurable rather than cautious**: upstream's
+      `v3.1-cpu` is 8 679 180 bytes against v3.2-cpu's 8 679 182 — **two bytes apart**. A length pin
+      would pass a silent downgrade to a model whose published English accuracy is 90.66% rather than
+      94.26%.
+
+      Negative-tested: one character changed in the expected SHA-256 turns it red at index 63.
+      Without Git LFS the stream is a ~130-byte pointer and the length assertion fails loudly, which
+      is intended.
+
+- [x] 3.2 Resolve the model-version drift: align the `README.md` citation link, the package
       `<Description>` in `src/Verbara.Sdk.VoiceAi.TurnDetection/`, the package README and the
       resource filename on one model version (currently v3 link vs v3.2 resource)
-- [ ] 3.3 Reword the `94.3% English accuracy` claim in `README.md` (lines 67 and 472) into
+      Five sites said bare `smart-turn-v3` while the shipped resource is `smart-turn-v3.2-cpu.onnx`.
+      All now say v3.2-cpu: the `<Description>` (which ships to nuget.org), the package README,
+      the `SmartTurnDetector` XML doc, and both README lines. Zero stray `v3` mentions remain in
+      living docs.
+
+      **Convergence justified by the artifact, not by convenience**: the shipped bytes hash to
+      upstream's v3.2-cpu blob exactly, and it is the only version for which the published 94.3% is
+      true. Left verbatim as dated records: the `CHANGELOG.md` entries and the pre-implementation
+      spec, which correctly describe the v3 family as a then-future gap.
+
+- [x] 3.3 Reword the `94.3% English accuracy` claim in `README.md` (lines 67 and 472) into
       attributed voice — upstream's published figure, cited to the matching model card. Leave the
       dated `CHANGELOG.md` entry verbatim as a period-correct record
-- [ ] 3.4 Add the `Verbara.Sdk.VoiceAi.TurnDetection` project reference to
+      Both README lines now read as upstream's measurement and cite the per-version benchmark
+      (`.../benchmarks/smart-turn-v3.2-cpu.md`), which is what makes the citation checkable against
+      the §3.1 pin. `:472` previously carried the figure with **no citation at all**.
+
+      **Two corrections the rewording forced.** First, the number could not be attributed to "the
+      model card": that page states neither figure — only `Params: 8M` and the checkpoint size. The
+      accuracy lives in upstream's per-version `benchmarks/` folder, at **94.26%** for v3.2-cpu.
+      Second, the figure's likely origin — the vendor launch post publishing 94.31% — is **v3.0 on a
+      different test set**, and matches only by rounding coincidence; citing it would have cited the
+      wrong model.
+
+      The `~12 ms` latency figure was **removed from both lines rather than reworded**: §3.5 measured
+      the real path at 26–37 ms, so restating it in attributed voice would have attributed a false
+      number to a third party. Its replacement wording is the one open question in this section.
+
+- [x] 3.4 Add the `Verbara.Sdk.VoiceAi.TurnDetection` project reference to
       `Tests/Verbara.Sdk.Benchmarks/` (absent today)
-- [ ] 3.5 Add the inference-latency benchmark covering the mel-spectrogram front-end plus the ONNX
+      Added; the benchmark project referenced nine projects and TurnDetection was not among them,
+      which is why the latency claim had no benchmark.
+
+- [x] 3.5 Add the inference-latency benchmark covering the mel-spectrogram front-end plus the ONNX
       session — the path the `~12 ms CPU` figure actually claims
-- [ ] 3.6 Add its workflow filter and its `baseline.json` entry, calibrated per §2.1
-- [ ] 3.7 Verify no `src/` behaviour changed anywhere in this section — docs, packaging metadata,
+      `TurnDetectionBenchmark`, driven entirely through the **public DI surface** — the detector's
+      constructor is `internal` and the benchmark project has no `InternalsVisibleTo`, which is the
+      right constraint: a benchmark needing privileged access is not measuring what ships.
+
+      Inference fires once per utterance, on the silence frame that crosses `SilenceTriggerDuration`,
+      so the utterance and all but the last silence frame are fed in `[IterationSetup]` and the
+      measured region is the single `Analyze` call that runs mel + ONNX. Feeding inside the measured
+      region would average one inference over a hundred cheap frames.
+
+      **Parameterised by utterance length, and it had to be.** The mel front-end's cost scales with
+      the accumulated audio (`numFrames = 1 + (len − 400)/160`) even though its output pads to a fixed
+      80×800 — so a single latency figure is meaningless without the length it was measured at. The
+      first draft fixed 2 s and produced a publishable number resting on an arbitrary choice.
+
+      Measured on `AMD Ryzen 9 9900X · .NET 10.0.11 · BDN 0.15.8` — the README's own machine:
+
+      | utterance | mean | allocated |
+      |---|--:|--:|
+      | 1 s | **26.18 ms** | 353 KB |
+      | 2 s | **28.20 ms** | 449 KB |
+      | 4 s | **31.22 ms** | 641 KB |
+      | 8 s (ring-buffer ceiling) | **37.30 ms** | 1 025 KB |
+
+      **The published `~12 ms` is between 2.2× and 3.1× optimistic**, on hardware faster than where
+      upstream measured, with 0.6–0.7% intra-run spread. Upstream's 12 ms is raw ONNX inference on
+      v3.0; this is the path a caller of this SDK actually pays. Not a refutation of their number —
+      a refutation of ours.
+
+- [x] 3.6 Add its workflow filter and its `baseline.json` entry, calibrated per §2.1
+      Workflow filter added. **Deliberately no `baseline.json` entry yet**: every other band was
+      calibrated from 13 real runs and this benchmark has none. Its band gets calibrated the same
+      way, from its own observations, in the PR that flips `PERF_GATE_ENFORCE`. A band guessed today
+      would break §2.1's own rule — calibrated from observation, never guessed — in the change that
+      wrote it.
+
+- [x] 3.7 Verify no `src/` behaviour changed anywhere in this section — docs, packaging metadata,
       tests and benchmarks only, so no downstream cascade to Pro or Platform
+      Confirmed from the diff. `src/` carries exactly three changed lines: one package-README
+      sentence, one XML doc comment, and the `<Description>`. No executable code, so no downstream
+      cascade to Pro or Platform. Build 0 warnings in Debug and Release.
 
 ## 4. Performance-table coherence (per-PR, no new job)
 
