@@ -60,29 +60,49 @@
       lucky. Scoped to Cartesia as the task says — Speechmatics gets its own red test when §2.1's
       scope question is settled, not folded in here.
 
+- [ ] 1.3 Same discipline for the second surface §1.1 turned up: write the failing test on
+      Speechmatics, record its verbatim failure, before its guard is moved. Scope widened with the
+      operator's approval after §1.1 measured it — the change was authored against a four-way table
+      and the package ships six synthesizers.
+
 ## 2. The fix
 
 - [ ] 2.1 Move the cancellation observation ahead of the blank-text `yield break` in
-      `src/Verbara.Sdk.VoiceAi.Tts/Cartesia/CartesiaSpeechSynthesizer.cs`, in **its own commit**,
-      with its own `Fixed` CHANGELOG line. Use the same spelling the other three use so the four
-      read alike.
+      `src/Verbara.Sdk.VoiceAi.Tts/Cartesia/CartesiaSpeechSynthesizer.cs`, in **its own commit**.
+      Use the same spelling the other four use so they read alike.
 
-- [ ] 2.2 Leave the non-cancelled blank-text path exactly as it is — zero frames, no session opened.
-      Assert it, because the obvious way to get this wrong is to make every blank request throw.
+- [ ] 2.2 The same edit in `src/Verbara.Sdk.VoiceAi.Tts/Speechmatics/SpeechmaticsSpeechSynthesizer.cs`,
+      in **its own commit**. One `Fixed` CHANGELOG line covers both, naming both surfaces — the
+      defect and the remedy are identical and splitting the entry would imply two findings.
 
-## 3. Cover all four, not just the one
+- [ ] 2.3 Leave the non-cancelled blank-text path exactly as it is on both — zero frames, no session
+      opened, no request issued. Assert it, because the obvious way to get this wrong is to make
+      every blank request throw. Speechmatics' existing guard comment records a measured reason for
+      that branch (a live route answers blank text with 0.24 s of audible audio); moving the
+      cancellation check ahead of it must not weaken it.
 
-- [ ] 3.1 One test per TTS surface for the blank-text-plus-cancelled-token input. Three of them pass
-      on the first run; that is the point — they pin the behaviour the fourth was brought up to.
+## 3. Cover every path, not just the ones being fixed
 
-- [ ] 3.2 Negative-test the new Cartesia guard: remove it, observe the test red, record verbatim,
-      restore, re-run green.
+- [ ] 3.1 One test per **selectable path** for the blank-text-plus-cancelled-token input — seven,
+      not one per provider name: Cartesia, Deepgram, ElevenLabs, Lmnt WS, Lmnt HTTP, Speechmatics,
+      Azure. Five pass on the first run; that is the point — they pin the behaviour the other two
+      were brought up to. Enumerating by provider is what let §1.1's predecessor miss Speechmatics.
+
+- [ ] 3.2 Negative-test both new guards: remove each, observe its test red, record verbatim, restore,
+      re-run green. A guard whose test stays green without it is not witnessed
+      (`test-determinism`, "A fence is not witnessed by an assertion that would hold with the fence
+      deleted").
+
+- [ ] 3.3 State in Azure's test that it passes without a guard of its own — the throw comes from
+      `HttpClient`, not from an ordering decision — so a later reader does not take its green as
+      evidence that the file states the rule.
 
 ## 4. Verification
 
 - [ ] 4.1 `dotnet build Verbara.Sdk.slnx` — zero warnings, Debug and Release.
 - [ ] 4.2 `Verbara.Sdk.VoiceAi.Tts.Tests` green under the CI filter, with the count stated.
 - [ ] 4.3 `openspec validate --all --strict` green.
+- [ ] 4.4 Re-run the §1.1 measurement after the fix and check the table in: all seven paths fault, and the non-cancelled blank-text path still yields zero frames on all seven.
 
 ## 5. Close-out
 
