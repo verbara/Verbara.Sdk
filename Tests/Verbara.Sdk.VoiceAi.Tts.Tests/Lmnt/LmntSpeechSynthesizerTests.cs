@@ -441,6 +441,32 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
         _server.ReceivedJsonMessages.Should().BeEmpty("no session should have been opened at all");
     }
 
+    /// <summary>
+    /// The precedence <c>streaming-session-lifecycle</c> states: a requested cancellation outranks
+    /// the empty-input shortcut. This surface already answered correctly before the rule was
+    /// written down, its token check sitting ahead of the blank-text branch, — the assertion is here so the next synthesizer added to this
+    /// package inherits it rather than the convention.
+    /// </summary>
+    /// <remarks>
+    /// The token goes to the subject and <see cref="CancellationToken.None"/> to the enumerator, so
+    /// the exception asserted came out of <c>SynthesizeAsync</c> and not out of the consumer
+    /// standing in for it (ADR-0052 F3).
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowOperationCanceled_WhenTextIsWhitespaceAndTokenAlreadyCancelled()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync(" \t ", AudioFormat.Slin16Mono16kHz, cts.Token)
+            .ToListAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        _server.ReceivedJsonMessages.Should().BeEmpty("the cancellation is observed before any session is opened");
+    }
+
     [Fact]
     public async Task SynthesizeAsync_ShouldAbort_WhenCancelled()
     {
@@ -900,6 +926,34 @@ public class LmntSpeechSynthesizerHttpTests
 
         chunks.Should().BeEmpty();
         server.ReceivedRequests.Should().BeEmpty("no request should have been issued at all");
+    }
+
+    /// <summary>
+    /// The precedence rule on the other transport. The guard sits ahead of the transport split, so
+    /// this path owes the same promise as the WebSocket one and is asserted separately rather than
+    /// inferred from it — a shared guard is a reason to expect the same answer, not evidence of it.
+    /// </summary>
+    /// <remarks>
+    /// The stub is left armed: if the observation were placed below the request, the stub would
+    /// match and return audio, so the test would fail on the request assertion rather than pass on
+    /// an unmatched request. The token goes to the subject, <see cref="CancellationToken.None"/> to
+    /// the enumerator (ADR-0052 F3).
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_Http_ShouldThrowOperationCanceled_WhenTextIsWhitespaceAndTokenAlreadyCancelled()
+    {
+        await using var server = HttpProviderMockServer.Start();
+        StubRecordedEnvelope(server);
+        var synth = SynthesizerFor(server);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var act = async () => await synth
+            .SynthesizeAsync("   ", AudioFormat.Slin16Mono16kHz, cts.Token)
+            .ToListAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        server.ReceivedRequests.Should().BeEmpty("the cancellation is observed before any request is issued");
     }
 
     [Fact]

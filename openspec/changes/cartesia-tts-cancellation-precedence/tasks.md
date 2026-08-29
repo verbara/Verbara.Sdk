@@ -80,42 +80,113 @@
 
 ## 2. The fix
 
-- [ ] 2.1 Move the cancellation observation ahead of the blank-text `yield break` in
+- [x] 2.1 Move the cancellation observation ahead of the blank-text `yield break` in
       `src/Verbara.Sdk.VoiceAi.Tts/Cartesia/CartesiaSpeechSynthesizer.cs`, in **its own commit**.
       Use the same spelling the other four use so they read alike.
 
-- [ ] 2.2 The same edit in `src/Verbara.Sdk.VoiceAi.Tts/Speechmatics/SpeechmaticsSpeechSynthesizer.cs`,
+      `e5bea3f8`. The guard comment is copied verbatim from Deepgram and ElevenLabs, which carry it
+      identically, so all six now read alike at that line. The *ordering* rule went into the
+      blank-text comment instead of the guard's — that is where an author who reorders the two would
+      be standing, and putting it in the guard would have made these two files read differently from
+      the four they were brought up to match.
+
+- [x] 2.2 The same edit in `src/Verbara.Sdk.VoiceAi.Tts/Speechmatics/SpeechmaticsSpeechSynthesizer.cs`,
       in **its own commit**. One `Fixed` CHANGELOG line covers both, naming both surfaces — the
       defect and the remedy are identical and splitting the entry would imply two findings.
 
-- [ ] 2.3 Leave the non-cancelled blank-text path exactly as it is on both — zero frames, no session
+      `2f106e4d`, and the CHANGELOG entry names both surfaces under one `Fixed` heading.
+
+- [x] 2.3 Leave the non-cancelled blank-text path exactly as it is on both — zero frames, no session
       opened, no request issued. Assert it, because the obvious way to get this wrong is to make
       every blank request throw. Speechmatics' existing guard comment records a measured reason for
       that branch (a live route answers blank text with 0.24 s of audible audio); moving the
       cancellation check ahead of it must not weaken it.
 
+      **Already asserted, and left standing rather than duplicated.**
+      `CartesiaSpeechSynthesizerTests.SynthesizeAsync_ShouldYieldNothingWithoutConnecting_WhenTextIsWhitespace`
+      and Speechmatics' `…_ShouldYieldNothingWithoutRequesting_WhenTextIsWhitespace` are exactly this
+      assertion and both still pass. §4.4's re-measurement confirms it independently across all seven
+      paths: `no throw, 0 frames` on every one. The Speechmatics comment is untouched — the guard
+      moved above it, its measured justification did not change.
+
 ## 3. Cover every path, not just the ones being fixed
 
-- [ ] 3.1 One test per **selectable path** for the blank-text-plus-cancelled-token input — seven,
+- [x] 3.1 One test per **selectable path** for the blank-text-plus-cancelled-token input — seven,
       not one per provider name: Cartesia, Deepgram, ElevenLabs, Lmnt WS, Lmnt HTTP, Speechmatics,
       Azure. Five pass on the first run; that is the point — they pin the behaviour the other two
       were brought up to. Enumerating by provider is what let §1.1's predecessor miss Speechmatics.
 
-- [ ] 3.2 Negative-test both new guards: remove each, observe its test red, record verbatim, restore,
+      Seven added, `7 passed, 0 failed`. The five that were not fixed passed on their first run, as
+      predicted. Each hands the token to the subject and `CancellationToken.None` to the enumerator
+      (ADR-0052 F3), and each asserts its fake or mock server saw nothing — "it threw" alone would
+      also pass if a session had been opened and the test got lucky. The two HTTP mock stubs are left
+      **armed** with the normal recorded response, so an escaped request would match and return audio,
+      failing the request assertion rather than passing as an unmatched request.
+
+- [x] 3.2 Negative-test both new guards: remove each, observe its test red, record verbatim, restore,
       re-run green. A guard whose test stays green without it is not witnessed
       (`test-determinism`, "A fence is not witnessed by an assertion that would hold with the fence
       deleted").
 
-- [ ] 3.3 State in Azure's test that it passes without a guard of its own — the throw comes from
+      Both witnessed. Each guard neutralised alone, in shipped source, then restored — the
+      modification is a measurement and is **not** in the tree (`git checkout --` after each, `src/`
+      verified clean):
+
+      | guard removed | result |
+      |---|---|
+      | `CartesiaSpeechSynthesizer` | `Failed: 1, Passed: 21, Total: 22` — the new test, and only it |
+      | `SpeechmaticsSpeechSynthesizer` | `Failed: 1, Passed: 29, Skipped: 2, Total: 32` — likewise |
+
+      Both failures verbatim, and identical to the red runs of §1.2 and §1.3:
+
+      ```
+      Expected a <System.OperationCanceledException> to be thrown, but no exception was thrown.
+      ```
+
+- [x] 3.3 State in Azure's test that it passes without a guard of its own — the throw comes from
       `HttpClient`, not from an ordering decision — so a later reader does not take its green as
       evidence that the file states the rule.
 
+      Written into the test's `<remarks>`: there is no ordering in that file to state, because it has
+      neither a guard nor a blank-text shortcut. The remark also names what the test is for — if a
+      blank-text shortcut is ever added there, it must go below a token check, and this test is what
+      fails if it does not.
+
 ## 4. Verification
 
-- [ ] 4.1 `dotnet build Verbara.Sdk.slnx` — zero warnings, Debug and Release.
-- [ ] 4.2 `Verbara.Sdk.VoiceAi.Tts.Tests` green under the CI filter, with the count stated.
-- [ ] 4.3 `openspec validate --all --strict` green.
-- [ ] 4.4 Re-run the §1.1 measurement after the fix and check the table in: all seven paths fault, and the non-cancelled blank-text path still yields zero frames on all seven.
+- [x] 4.1 `dotnet build Verbara.Sdk.slnx` — zero warnings, Debug and Release.
+
+      Both `0 Warning(s), 0 Error(s)`.
+
+- [x] 4.2 `Verbara.Sdk.VoiceAi.Tts.Tests` green under the CI filter, with the count stated.
+
+      `161 passed, 0 failed` — 154 at `1b9b984a` plus the seven of §3.1. Whole unit lane in Release
+      under the CI filter: **30 assemblies, 3 295 passed, 0 failed** (3 288 + 7).
+
+- [x] 4.3 `openspec validate --all --strict` green.
+
+      10 passed, 0 failed.
+
+- [x] 4.4 Re-run the §1.1 measurement after the fix and check the table in: all seven paths fault, and the non-cancelled blank-text path still yields zero frames on all seven.
+
+      | surface | blank + cancelled | frames | blank + live token |
+      |---|---|---|---|
+      | Cartesia (WS) | `OperationCanceledException` (caller's own) | 0 | no throw, 0 frames |
+      | Deepgram (WS) | `OperationCanceledException` (caller's own) | 0 | no throw, 0 frames |
+      | ElevenLabs (WS) | `OperationCanceledException` (caller's own) | 0 | no throw, 0 frames |
+      | Lmnt (WS) | `OperationCanceledException` (caller's own) | 0 | no throw, 0 frames |
+      | Lmnt (HTTP) | `OperationCanceledException` (caller's own) | 0 | no throw, 0 frames |
+      | Speechmatics (HTTP) | `OperationCanceledException` (caller's own) | 0 | no throw, 0 frames |
+      | Azure (HTTP) | `TaskCanceledException` (caller's own) | 0 | `HttpRequestException` — see below |
+
+      All seven fault, and the two that were fixed now carry the **caller's own** token rather than
+      arriving by accident of transport.
+
+      **Azure's last cell is an artifact of the harness, not a regression.** That synthesizer has no
+      blank-text shortcut, so with a live token it genuinely issues the request — and the harness
+      pointed it at a dead port to keep itself server-free. Its real suite, which points it at a mock
+      server, is green. Nothing in this change touches that file.
+
 
 ## 5. Close-out
 

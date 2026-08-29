@@ -438,6 +438,33 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
         _server.ReceivedJsonMessages.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// The precedence <c>streaming-session-lifecycle</c> states: a requested cancellation outranks
+    /// the empty-input shortcut. This surface already answered correctly before the rule was
+    /// written down, its token check sitting ahead of the blank-text branch, — the assertion is here so the next synthesizer added to this
+    /// package inherits it rather than the convention.
+    /// </summary>
+    /// <remarks>
+    /// The token goes to the subject and <see cref="CancellationToken.None"/> to the enumerator, so
+    /// the exception asserted came out of <c>SynthesizeAsync</c> and not out of the consumer
+    /// standing in for it (ADR-0052 F3).
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowOperationCanceled_WhenTextIsWhitespaceAndTokenAlreadyCancelled()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync(" \t ", AudioFormat.Slin16Mono8kHz, cts.Token)
+            .ToListAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        _server.ReceivedApiKey.Should().BeNull("the cancellation is observed before any session is opened");
+        _server.ReceivedJsonMessages.Should().BeEmpty();
+    }
+
     // --- Flash 2.5 / options tests ---
 
     [Fact]

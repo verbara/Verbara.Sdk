@@ -53,6 +53,34 @@ public class AzureTtsSpeechSynthesizerTests
         request.Header("Content-Type").Should().StartWith("application/ssml+xml");
     }
 
+    /// <summary>
+    /// The precedence rule on the one surface that satisfies it without stating it. This
+    /// synthesizer has neither an entry guard nor a blank-text shortcut, so the cancellation
+    /// surfaces from <c>HttpClient.SendAsync(…, ct)</c> as <see cref="TaskCanceledException"/> —
+    /// which derives from <see cref="OperationCanceledException"/>, so the contract holds.
+    /// </summary>
+    /// <remarks>
+    /// Do not read this test's green as evidence that the file states the ordering rule: there is
+    /// no ordering here to state. If a blank-text shortcut is ever added to this synthesizer, it
+    /// MUST go below a token check, and this test is what will fail if it does not.
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowOperationCanceled_WhenTextIsWhitespaceAndTokenAlreadyCancelled()
+    {
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest(), RecordedResponse, "audio/basic");
+        var synth = SynthesizerFor(server);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var act = async () => await synth
+            .SynthesizeAsync("   ", AudioFormat.Slin16Mono8kHz, cts.Token)
+            .ToListAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        server.ReceivedRequests.Should().BeEmpty("the cancellation is observed before any request is issued");
+    }
+
     [Fact]
     public async Task SynthesizeAsync_ShouldEscapeXmlInText()
     {
