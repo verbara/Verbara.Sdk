@@ -6,17 +6,104 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
 
 ## 1. Foundation
 
-- [ ] 1.1 Land `docs/decisions/0042-public-claim-guard-classes.md` (currently `Proposed`); move to
+- [x] 1.1 Land `docs/decisions/0042-public-claim-guard-classes.md` (currently `Proposed`); move to
       `Accepted` when this change lands
-- [ ] 1.2 Inventory every quantitative claim in living public docs (`README.md`, package and example
+
+      Landed and **corrected while still `Proposed`**, which is the only window the repo's own rule
+      allows — an `Accepted` ADR is never edited, only superseded. Two substantive amendments:
+
+      - **D1 gains a fourth class, `EVIDENCE`, plus a new D1a defining it.** The §1.2 inventory found
+        that the three provider guides carry ~150 measured figures — alone about 80% of the registry
+        — and that none of the three original classes can apply: ENFORCING needs vendor credentials
+        and paid egress, COHERENCE has nothing to bind to because the document *is* the record, and
+        ATTRIBUTED fails all three legs since the measurement is ours and the "artifact" is a live
+        vendor service. D1a carries two guards so the class cannot become an escape hatch: an
+        EVIDENCE claim MUST carry its date and measurement conditions, and a figure counting this
+        repository's own contents stays ENFORCING even inside a document whose other figures are
+        EVIDENCE. `provider-wire-conformance.md` is written in as both the motivating case and its
+        own counter-case.
+      - **D9's stated blocker was false and is replaced.** It claimed no labelled turn-boundary
+        corpus permits redistribution from a public MIT repo. §5.1 verified the opposite: AMI, ICSI
+        and HCRC Map Task are all CC BY 4.0 (AMI's licence sentence re-read at the primary source).
+        The blocker that survives is **labelling, not licensing** — the CC BY corpora carry word
+        timings and dialogue acts but no turn-end labels, and the one corpus with the native
+        `endpoint_bool` label, Pipecat's own, declares no licence at all and is ~81% commercial-TTS
+        output. The unblocking condition changed shape with it: a decision to derive and hand-verify
+        ~20 clips, not a search. LDC corpora are excluded separately and on firmer ground.
+
+      Status stays `Proposed` until §7.1.
+- [x] 1.2 Inventory every quantitative claim in living public docs (`README.md`, package and example
       READMEs, `docs/guides/`) and assign each one a class — ENFORCING / COHERENCE / ATTRIBUTED —
       including the two backend-dependent Performance rows (Redis / Postgres session store) that
       the current workflow filters do not cover
-- [ ] 1.3 Commit the claim registry as the single answer to "is this claim guarded?", cross-linking
+
+      Swept. **The task's own scope list was short by three files**, all of them living, public and
+      linked from `README.md`: `docs/guides/troubleshooting.md`, `docs/README-technical.md` and
+      `docs/README-commercial.md` — the last two being the largest unguarded concentration in the
+      repo. Ruled in scope by the operator; the spec delta's living-document definition was widened
+      to name them, since it listed only `docs/guides/` under `docs/`.
+
+      **The inventory found false claims, not merely unguarded ones.** Verified against the tree at
+      `2e931bf7`:
+
+      | claim | published | actual |
+      |---|---|---|
+      | `README.md:74` | 37 ADRs | **53** |
+      | `README.md:61` | headline v2.2.1 | **2.5.0**, tagged |
+      | `README-technical.md:503` | `EventPumpCapacity = 10_000 // default` | **20_000** (`AsyncEventPump.cs:21`) |
+      | `README-technical.md:216` | **all** VoiceAi packages expose an ActivitySource | **3 of 7** — falsifiable against the array it cites as proof |
+      | `README-technical.md:218` | Push (2 packages) | **4** |
+      | `README-technical.md:543/:544` | 111 actions / 215 events | **148** / **278** |
+      | `README-commercial.md:56` | 28 packages | **29** |
+      | `README.md:45` vs `Ami/README.md:7` | 148/278/18 vs 111/261/17 | two public numbers of the same quantity, in one repo |
+
+      **The Redis/Postgres rows are worse than unfiltered.** Neither has any CI touch:
+      `SessionsBackendsBenchmark` exists but `Tests/Verbara.Sdk.Benchmarks/README.md:21` calls it
+      "known flaky" and steers readers to xunit `Fact`s that contain **zero assertions**, and no
+      workflow runs `Category=Benchmark`. Worse, the record they would bind to
+      (`docs/research/benchmark-analysis.md:149`) describes the Postgres store as **"Npgsql + Dapper
+      + JSONB"** — Dapper was removed repo-wide in v2.2.0 under ADR-0022 Phase D. **The Postgres row
+      measures code that no longer ships**, so §4.1 cannot bind it without a re-measurement. Not in
+      the plan; flagged rather than silently bound.
+- [x] 1.3 Commit the claim registry as the single answer to "is this claim guarded?", cross-linking
       each entry to its guard (`MarketingClaimsTests`, `DocSnippetCompilationTests`,
       `tools/AotCanary/`, `baseline.json`, the ONNX hash pin)
-- [ ] 1.4 Add the registry to the review checklist so a new number without a class is caught at
+
+      `docs/claim-registry.md`, ~120 rows across `README.md`, both `docs/README-*.md`, the package
+      and example READMEs, all of `docs/guides/` and the `.csproj` `<Description>` values. Each row
+      carries class, guard and a status of `OK` / `GAP` / `PARTIAL` / `WRONG` / `TODO`.
+
+      The registry itself is deliberately **not** a living public document under the spec's
+      definition — it sits in `docs/` outside `docs/guides/` — which avoids the recursion of a
+      registry that must register its own contents.
+
+      Three findings the cross-linking exposed that a per-claim sweep would have missed:
+
+      - **"0 trim warnings across the package family" is PARTIAL everywhere it appears.**
+        `tools/AotCanary/` references **22 of 29** packages; `OpenTelemetry`, `Push.AspNetCore`,
+        `Push.Nats`, `Sessions.Redis`, `Sessions.Postgres` and `VoiceAi.TurnDetection` are outside
+        it. Only `src/Verbara.Sdk.Push/README.md:112` names its own guard, and it is the one package
+        for which the claim is fully true.
+      - **`README-technical.md:304-390` is orphaned.** 29 of its 32 published means match no
+        committed value anywhere in the repo, while **26 of 29 allocations match the record exactly**.
+        Allocations are deterministic across runs of the same code and means are not, so the
+        signature is a real BenchmarkDotNet execution whose output was never committed — not a
+        transcription error and not a fabrication. `:406` points readers at an artifacts directory
+        that is not in the repository. Operator ruling: replace the 32 figures with the v1.11
+        recorded values, so the block becomes bindable.
+      - **`README-commercial.md:19`'s "449 GitHub stars" is being deleted.** A third party's metric
+        about a third party's repository, stale the day after it is written, failing all three D8
+        obligations at once. The sentence's argument — asterisk-java is the mature incumbent —
+        survives without it.
+
+      Six claims carry **no class yet** and are listed under *Unresolved* rather than assigned a
+      convenient one: the vendor TTFA/pricing figures under D8's pin leg, the "100K+ agents" scale
+      claims, behavioural constants in package READMEs, the `README.md` Status release bullets, the
+      17-vs-18 AMI response-type definition, and the workload estimates in `high-load-tuning.md`.
+- [x] 1.4 Add the registry to the review checklist so a new number without a class is caught at
       review time (Sdk/ADR-0042 D1)
+
+      Added to `.github/PULL_REQUEST_TEMPLATE.md`, linking both the registry and ADR-0042 D1.
 
 ## 2. AMI throughput — arm the weekly gate
 
