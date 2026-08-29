@@ -47,8 +47,16 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         AudioFormat outputFormat,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        // Deterministic cancellation contract (test-determinism fence): observe the token
+        // at iterator entry so a pre-cancelled token throws before any provider request is
+        // issued, independent of scheduling/mock latency. Mirrors the STT fence (ADR-0038).
+        ct.ThrowIfCancellationRequested();
+
         // Nothing is asked of the provider for text that carries no speech, so the zero audio that
-        // follows is not a provider failure and must not be reported as one (ADR-0050 E5).
+        // follows is not a provider failure and must not be reported as one (ADR-0050 E5). Kept
+        // below the token check on purpose: a requested cancellation outranks this shortcut
+        // (streaming-session-lifecycle), because an empty sequence and a cancelled one are
+        // different answers and the caller has no other way to tell them apart.
         if (string.IsNullOrWhiteSpace(text)) yield break;
 
         var uri = BuildUri();

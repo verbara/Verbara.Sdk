@@ -338,6 +338,37 @@ public class SpeechmaticsSpeechSynthesizerTests
         server.UnmatchedRequests.Should().BeEmpty("not an unmatched one either");
     }
 
+    /// <summary>
+    /// The precedence <c>streaming-session-lifecycle</c> states: a requested cancellation outranks
+    /// the empty-input shortcut. This synthesizer takes the shortcut first, so a caller who has
+    /// already cancelled receives an empty sequence — the same answer it would get for "nothing to
+    /// say", and the SDK offers no other signal that would let it tell the two apart.
+    /// </summary>
+    /// <remarks>
+    /// The stub above stays armed for the same reason the whitespace test arms it: if the guard
+    /// were moved too far and a request were issued, it would match and yield audio rather than
+    /// fail as an unmatched request. The token goes to the subject and
+    /// <see cref="CancellationToken.None"/> to the enumerator, so the exception asserted here came
+    /// out of <c>SynthesizeAsync</c> and not out of the consumer standing in for it (ADR-0052 F3).
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowOperationCanceled_WhenTextIsWhitespaceAndTokenAlreadyCancelled()
+    {
+        await using var server = HttpProviderMockServer.Start();
+        server.StubRecordedBytes(SynthesisRequest(), RecordedResponse, RecordedMediaType);
+        var synth = SynthesizerFor(server);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var act = async () => await synth
+            .SynthesizeAsync("   ", AudioFormat.Slin16Mono8kHz, cts.Token)
+            .ToListAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        server.ReceivedRequests.Should().BeEmpty("the cancellation is observed before any request is issued");
+        server.UnmatchedRequests.Should().BeEmpty("not an unmatched one either");
+    }
+
     [Fact]
     public void RecordedCapture_ShouldBeTheWavItsSidecarDescribes_WhenReadFromRecordingsTree()
     {

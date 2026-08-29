@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — A cancelled caller asking for blank text now faults on every TTS surface
+
+`CartesiaSpeechSynthesizer` and `SpeechmaticsSpeechSynthesizer` took their blank-text `yield break`
+**before** observing the caller's token, so a consumer that had already cancelled received an empty
+sequence — the same answer as "nothing to say", with no other signal in the SDK to tell the two
+apart. `streaming-session-lifecycle` states the opposite: a requested cancellation takes precedence
+over the sequence ending quietly. Both now observe the token at iterator entry (#230), where
+Deepgram, ElevenLabs and Lmnt already did.
+
+- **Behaviour change, bounded to one input on two surfaces.** It cannot affect an enumeration whose
+  token is not already cancelled, and it cannot affect a cancelled enumeration of non-blank text —
+  that already threw from the transport. Blank text with a live token is unchanged everywhere: zero
+  frames, no session opened, no request issued.
+- **Enumerated by selectable path, not by provider name.** The finding that opened this change named
+  four synthesizers and one defect. The package ships six classes over seven paths — Lmnt carries two
+  transports behind one guard — and re-measuring all seven found the same defect on Speechmatics as
+  well. A closed provider list under an open contract hides the surfaces nobody looked at
+  (ADR-0052); the coverage added here is one test per path, including Azure, which satisfies the
+  contract with no guard of its own because its cancellation surfaces from `HttpClient`.
+- **Both guards are witnessed.** Removing either turns exactly one test red — its own — and leaves
+  the rest of that surface's suite green.
+
 ### Added — Cancellation is now witnessed with frames in flight, on all eight WebSocket surfaces
 
 The class A/B sweep left the eight WebSocket fakes with seven cancellation tests between them and
