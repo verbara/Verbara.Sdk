@@ -94,6 +94,25 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
 
     public int Port => _server.Port;
 
+    /// <summary>
+    /// Parks this fake's outbound delivery after a chosen number of messages, so a test can cancel
+    /// while the session still has frames to give. <see langword="null"/> — the default — leaves the
+    /// session exactly as it was before the gate existed.
+    /// </summary>
+    /// <seealso cref="OutboundFrameGate"/>
+    public OutboundFrameGate? OutboundGate
+    {
+        get => _server.OutboundGate;
+        set => _server.OutboundGate = value;
+    }
+
+    /// <summary>
+    /// Live server-side socket state, or <see langword="null"/> before the first connection is
+    /// accepted. A cancellation test asserts on it to state the condition at the moment its token
+    /// fired, rather than only that the enumeration threw.
+    /// </summary>
+    public WebSocketState? SocketState => _server.SocketState;
+
     private readonly List<string> _receivedJsonMessages = [];
 
     /// <summary>

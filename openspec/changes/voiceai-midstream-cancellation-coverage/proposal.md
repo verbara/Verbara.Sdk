@@ -91,12 +91,13 @@ with its own CHANGELOG line.
    that half-closes, asserting the session survives it. This exercises the fence without touching
    the production recognizer and without reinstating a defect in `src/`.
 
-4. **The CHANGELOG sentence corrected** in the same PR, since it is the premise this change is
-   built on and it is wrong on `main`. The entry is still under `[Unreleased]` — 2.5.0 is untagged —
-   so this is a correction before publication, not a rewrite of a shipped record. **The archived
-   change is not touched**: `openspec/changes/archive/2026-08-23-websocket-fake-class-ab-sweep/`
-   stays exactly as it shipped, a period-correct record, and this proposal is where the correction
-   lives.
+4. **The CHANGELOG sentence corrected** — *done*, in this change's own opening PR (`54524877`,
+   #220), which is why it is checked off in `tasks.md` §5.1 rather than pending. It was written when
+   2.5.0 was still untagged, so it landed as a correction before publication; `v2.5.0` has since been
+   tagged (`d8fc879b`, 2026-08-25), and the corrected bullet now sits inside the published `[2.5.0]`
+   section. **The archived change is not touched**:
+   `openspec/changes/archive/2026-08-23-websocket-fake-class-ab-sweep/` stays exactly as it shipped,
+   a period-correct record, and this proposal is where the correction lives.
 
 ## Capabilities
 

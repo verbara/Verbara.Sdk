@@ -77,6 +77,18 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     public int Port => _server.Port;
 
     /// <summary>
+    /// Parks this fake's outbound delivery after a chosen number of messages, so a test can cancel
+    /// while the session still has frames to give. <see langword="null"/> — the default — leaves the
+    /// session exactly as it was before the gate existed.
+    /// </summary>
+    /// <seealso cref="OutboundFrameGate"/>
+    public OutboundFrameGate? OutboundGate
+    {
+        get => _server.OutboundGate;
+        set => _server.OutboundGate = value;
+    }
+
+    /// <summary>
     /// All text (JSON) messages received from the client, in order — a snapshot, because the
     /// session's receive loop runs on its own thread and may still be appending while a test reads
     /// this. Returning the live list would be a torn read of a collection under concurrent mutation.
@@ -146,6 +158,15 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     /// <em>latent</em> guard — correct, and worth keeping against a client that half-closes or faults
     /// its read — but no assertion in this suite distinguishes it from its own absence. Do not cite
     /// it as a verified hold-open.
+    /// </remarks>
+    /// <remarks>
+    /// Re-measured 2026-08-26 against the mid-flight cancellation test added on this surface
+    /// (<c>SynthesizeAsync_ShouldAbort_WhenCancelledMidDelivery</c>), which was expected to be the
+    /// assertion that finally falsifies this flag. It is not: that test holds the fake on its
+    /// <em>outbound</em> side with an <c>OutboundFrameGate</c> and never sets this flag at all, so it
+    /// cannot distinguish the two spellings either. The swap is green <b>10/10</b> on the whole
+    /// <c>LmntSpeechSynthesizerWsTests</c> class with both cancellation tests present. The verdict
+    /// above is unchanged and now has a second, stronger measurement behind it.
     /// </remarks>
     public bool HoldOpenUntilDisposed { get; set; }
 

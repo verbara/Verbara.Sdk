@@ -491,6 +491,64 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
             + "close instead and the test would be crediting cancellation with someone else's work");
     }
 
+    /// <summary>
+    /// Cancellation observed while the server still has audio to give — the second half of this
+    /// surface's cancellation coverage, not a replacement for the first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sibling above is the only pre-existing test in the whole suite that cancels on a live
+    /// socket, and it stays: it holds the session open with <em>no</em> frames at all and fires
+    /// once the fake has recorded the client's first message, so what it witnesses is a caller
+    /// blocked on a silent provider. This one is the other condition — the provider is mid-answer
+    /// and the caller has already been handed audio — which is the shape §3.3 of
+    /// <c>voiceai-midstream-cancellation-coverage</c> prescribes and the one the sweep found
+    /// nowhere on a WebSocket surface. Neither subsumes the other.
+    /// </para>
+    /// <para>
+    /// It also needs none of the sibling's machinery: no <c>HoldOpenUntilDisposed</c>, no
+    /// <c>FirstMessageReceived</c> wait, no fire-and-forget trigger task. The gate is the hold, and
+    /// the caller's own first iteration is the trigger. The gate counts the fake's
+    /// <em>outbound</em> messages; this surface sends no greeting, so a hold at 1 means the first
+    /// binary audio frame was delivered and the second was not — the recorded audio chunks into
+    /// six, so the <c>finish</c> terminator behind them is never reached.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldAbort_WhenCancelledMidDelivery()
+    {
+        var gate = new OutboundFrameGate(1);
+        _server.OutboundGate = gate;
+
+        using var cts = new CancellationTokenSource();
+        var synth = BuildSynthesizer();
+
+        WebSocketState? stateAtCancel = null;
+        var observed = 0;
+
+        var act = async () =>
+        {
+            // ADR-0052 F3: the token goes to SynthesizeAsync and nowhere else. The consumer holds
+            // none, so a throw here is the synthesizer's own.
+            await foreach (var chunk in synth.SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz, cts.Token))
+            {
+                observed++;
+                stateAtCancel = _server.SocketState;
+                await cts.CancelAsync();
+            }
+        };
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        observed.Should().Be(1, "the cancel must land after audio reached the caller, not before");
+        stateAtCancel.Should().Be(
+            WebSocketState.Open,
+            "cancellation has to be observed on a live socket, or the stream ended on the server's "
+            + "close instead and the test would be crediting cancellation with someone else's work");
+        gate.Held.IsCompleted.Should().BeTrue("the fake must still have had a frame to send");
+        gate.Delivered.Should().Be(1, "exactly the first audio frame was delivered");
+    }
+
     [Fact]
     public async Task SynthesizeAsync_WsInit_ShouldIncludeFlushAndEof_InSubsequentMessages()
     {

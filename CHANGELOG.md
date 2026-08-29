@@ -4,6 +4,55 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — Cancellation is now witnessed with frames in flight, on all eight WebSocket surfaces
+
+The class A/B sweep left the eight WebSocket fakes with seven cancellation tests between them and
+recorded that as a gap. Measured again here, the gap is sharper than the bullet said: **none of the
+eight cancelled a session that had frames in flight** (#227). Six hand
+`StreamAsync`/`SynthesizeAsync` a pre-cancelled token, so the entry guard fires and no socket is
+ever opened; the seventh cancels on a live socket the fake is holding *silent*; the eighth —
+Cartesia TTS — had no cancellation test at all. Nothing in the suite could tell a cancellation from
+a stream that had already finished.
+
+- **`OutboundFrameGate`** (`Verbara.Sdk.TestInfrastructure`) — an opt-in decorator on
+  `WebSocketTestServer` that stops the server writing after its Nth outbound message. Stated once on
+  the shared substrate rather than as eight per-fake knobs, because "hold the next frame" is a
+  property of the transport and not of any vendor's protocol; with no gate armed the session gets
+  the raw socket, so no existing test can be perturbed by it. `WebSocketTestServer` also exposes
+  `SocketState`, which only one of the eight fakes previously had.
+- **Eight mid-flight cancellation tests**, one per surface: cancel from inside the caller's own
+  `await foreach`, one transcript or one audio chunk in, with the fake parked on a frame it cannot
+  deliver. Each asserts four things — the throw came out of the subject with the consumer holding no
+  token (ADR-0052 F3), exactly one item had reached the caller, the server socket was `Open` at that
+  instant, and the fake still had a frame in hand. Neutralising the hold turns all eight red on the
+  *third* of those: the caller drains the whole stream first (7, 8, 9 and 6 chunks — every frame the
+  four TTS recordings contain) and only then sees the token. It still throws
+  `OperationCanceledException` while doing it, which is why the six pre-existing tests that assert
+  only "it threw" could not have caught this.
+- **Cartesia TTS gained the cancellation test it never had.** Its throw comes from
+  `ClientWebSocket.ConnectAsync` rather than an entry guard — the other three TTS synthesizers open
+  with `ThrowIfCancellationRequested` — measured 10/10, and it carries the linked connect token, not
+  the caller's. `TaskCanceledException` derives from `OperationCanceledException`, so the contract
+  holds and no `src/` change was needed.
+- **Four `CloseSent` witnesses.** `while (ws.State is Open or CloseSent)` in each STT fake's receive
+  loop is what keeps it reading across the fake's *own* `CloseOutputAsync`, for the one read that
+  receives the client's close frame. No shipped recognizer sends one, so the fence had no possible
+  witness; the new tests drive each fake with a raw `ClientWebSocket` instead. Dropping the disjunct
+  fails **4 of 133** tests — the four just added. The four whose name is about half-closing stay
+  green, because they assert `false` against clients that never half-close and cannot tell a fake
+  that watches for the frame from one that stopped looking.
+
+### Removed — `DeepgramTtsFakeServer.HangForever`
+
+The sweep found it unreachable — declaration plus its own `if`, no assignment anywhere — and kept it
+on the argument that a mid-stream cancellation test on that surface would need it. That test now
+exists and does not: the hold it needs is on the fake's outbound side mid-delivery, which is a
+different condition from a session that answers nothing at all. The property and its dead branch are
+gone (#227). `LmntWsFakeServer.HoldOpenUntilDisposed` stays and is **not** the same finding — it is
+set by a test and does execute; what it lacks is any assertion that can distinguish it from
+`await receiveTask` (re-measured 10/10 green with the swap in place, now against both of that
+surface's cancellation tests).
+
 ### Added — Release hygiene: the two states that produce no signal now produce one (ADR-0055)
 
 `publish.yml` only runs on a tag push and `ci.yml` drops its post-merge run, so between them nothing

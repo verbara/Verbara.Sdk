@@ -414,6 +414,70 @@ public class DeepgramSpeechSynthesizerTests : IAsyncDisposable
         _server.ReceivedJsonMessages.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// The case this surface never had: cancellation observed while the server still has
+    /// audio to give.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sibling above hands <c>SynthesizeAsync</c> a pre-cancelled token, so it exercises the
+    /// entry guard and no socket is ever opened. This one cancels from inside the caller's own
+    /// <c>await foreach</c>, one audio chunk in, with the fake parked mid-delivery — the shape
+    /// §3.3 of <c>voiceai-midstream-cancellation-coverage</c> prescribes.
+    /// </para>
+    /// <para>
+    /// Two conditions are asserted rather than assumed, because "it threw" alone would also pass
+    /// if the session had ended on the server's own close and the test were crediting
+    /// cancellation with someone else's work: the socket was live at the moment the token fired,
+    /// and the gate was holding an undelivered frame. The gate counts the fake's <em>outbound</em>
+    /// messages; both preamble knobs (<c>SendMetadataOnConnect</c>, <c>SendWarningBeforeAudio</c>)
+    /// are off by default, so a hold at 1 means the first binary audio frame was delivered and the
+    /// second was not — and the <c>Flushed</c> terminator behind them is never reached.
+    /// </para>
+    /// <para>
+    /// Writing this test is what retired <c>DeepgramTtsFakeServer.HangForever</c>. That flag was kept
+    /// on the argument that a mid-stream cancellation test on this surface would need it; this is
+    /// that test, and it does not — the hold it needs is on the fake's <em>outbound</em> side,
+    /// mid-delivery, which is a different condition from a session that answers nothing at all. With
+    /// the last argument for keeping it gone, the flag and its unreachable branch were deleted
+    /// (§3.4).
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldAbort_WhenCancelledMidDelivery()
+    {
+        var gate = new OutboundFrameGate(1);
+        _server.OutboundGate = gate;
+
+        using var cts = new CancellationTokenSource();
+        var synth = BuildSynthesizer();
+
+        WebSocketState? stateAtCancel = null;
+        var observed = 0;
+
+        var act = async () =>
+        {
+            // ADR-0052 F3: the token goes to SynthesizeAsync and nowhere else. The consumer holds
+            // none, so a throw here is the synthesizer's own.
+            await foreach (var chunk in synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz, cts.Token))
+            {
+                observed++;
+                stateAtCancel = _server.SocketState;
+                await cts.CancelAsync();
+            }
+        };
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        observed.Should().Be(1, "the cancel must land after audio reached the caller, not before");
+        stateAtCancel.Should().Be(
+            WebSocketState.Open,
+            "cancellation has to be observed on a live socket, or the stream ended on the server's "
+            + "close instead and the test would be crediting cancellation with someone else's work");
+        gate.Held.IsCompleted.Should().BeTrue("the fake must still have had a frame to send");
+        gate.Delivered.Should().Be(1, "exactly the first audio frame was delivered");
+    }
+
     [Fact]
     public async Task SynthesizeAsync_ShouldAuthenticateWithTheTokenScheme_WhenOpeningASession()
     {

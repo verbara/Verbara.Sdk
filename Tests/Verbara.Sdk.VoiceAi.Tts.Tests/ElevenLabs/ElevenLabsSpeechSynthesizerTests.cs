@@ -254,6 +254,62 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// The case this surface never had: cancellation observed while the server still has
+    /// audio to give.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sibling above hands <c>SynthesizeAsync</c> a pre-cancelled token, so it exercises the
+    /// entry guard and no socket is ever opened. This one cancels from inside the caller's own
+    /// <c>await foreach</c>, one audio chunk in, with the fake parked mid-delivery — the shape
+    /// §3.3 of <c>voiceai-midstream-cancellation-coverage</c> prescribes.
+    /// </para>
+    /// <para>
+    /// Two conditions are asserted rather than assumed, because "it threw" alone would also pass
+    /// if the session had ended on the server's own close and the test were crediting
+    /// cancellation with someone else's work: the socket was live at the moment the token fired,
+    /// and the gate was holding an undelivered frame. The gate counts the fake's <em>outbound</em>
+    /// messages; this surface sends no greeting, so a hold at 1 means the first <c>audio</c> frame
+    /// was delivered and the second was not. The recorded audio chunks into nine, and the last
+    /// carries <c>isFinal</c>, so the hold is nowhere near the terminator.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldAbort_WhenCancelledMidDelivery()
+    {
+        var gate = new OutboundFrameGate(1);
+        _server.OutboundGate = gate;
+
+        using var cts = new CancellationTokenSource();
+        var synth = BuildSynthesizer();
+
+        WebSocketState? stateAtCancel = null;
+        var observed = 0;
+
+        var act = async () =>
+        {
+            // ADR-0052 F3: the token goes to SynthesizeAsync and nowhere else. The consumer holds
+            // none, so a throw here is the synthesizer's own.
+            await foreach (var chunk in synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz, cts.Token))
+            {
+                observed++;
+                stateAtCancel = _server.SocketState;
+                await cts.CancelAsync();
+            }
+        };
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        observed.Should().Be(1, "the cancel must land after audio reached the caller, not before");
+        stateAtCancel.Should().Be(
+            WebSocketState.Open,
+            "cancellation has to be observed on a live socket, or the stream ended on the server's "
+            + "close instead and the test would be crediting cancellation with someone else's work");
+        gate.Held.IsCompleted.Should().BeTrue("the fake must still have had a frame to send");
+        gate.Delivered.Should().Be(1, "exactly the first audio frame was delivered");
+    }
+
+    /// <summary>
     /// D2 on this surface (ADR-0050 E5). This test required the opposite until then — a clean close
     /// with zero audio had to complete silently — which is the outcome an invalid credential produced
     /// on this vendor, since its <c>1008</c> failure frame carries no <c>audio</c> member and was

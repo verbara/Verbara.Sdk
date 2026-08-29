@@ -82,6 +82,25 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
 
     public int Port => _server.Port;
 
+    /// <summary>
+    /// Parks this fake's outbound delivery after a chosen number of messages, so a test can cancel
+    /// while the session still has frames to give. <see langword="null"/> — the default — leaves the
+    /// session exactly as it was before the gate existed.
+    /// </summary>
+    /// <seealso cref="OutboundFrameGate"/>
+    public OutboundFrameGate? OutboundGate
+    {
+        get => _server.OutboundGate;
+        set => _server.OutboundGate = value;
+    }
+
+    /// <summary>
+    /// Live server-side socket state, or <see langword="null"/> before the first connection is
+    /// accepted. A cancellation test asserts on it to state the condition at the moment its token
+    /// fired, rather than only that the enumeration threw.
+    /// </summary>
+    public WebSocketState? SocketState => _server.SocketState;
+
     private readonly List<string> _receivedJsonMessages = [];
 
     /// <summary>
@@ -132,26 +151,6 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
 
     /// <summary>Abort the socket abnormally after sending all frames (simulates network error).</summary>
     public bool AbortAfterSend { get; set; }
-
-    /// <summary>
-    /// When <see langword="true"/>, the server keeps the connection open indefinitely
-    /// without sending any frames or terminators — used to exercise cancellation paths.
-    /// </summary>
-    /// <remarks>
-    /// <b>No test in this suite sets this flag.</b> The only two mentions of the name in the whole
-    /// repository are this declaration and the <c>if</c> below: there is no assignment anywhere, so
-    /// the branch is unreachable by construction. That grep is the proof — <em>not</em> a probe that
-    /// throws. <see cref="WebSocketTestServer"/> swallows every exception a session handler raises
-    /// (its per-connection <c>catch (Exception)</c>), so a throwing probe reports "never reached"
-    /// whether or not it fired; use <c>Environment.FailFast</c> with a positive control if a probe is
-    /// ever needed on this substrate. The branch is correctly written and never executed. It is kept
-    /// because the idiom is right and a mid-stream cancellation test on this surface would need it —
-    /// this fake's only cancellation test hands <c>SynthesizeAsync</c> a pre-cancelled token and
-    /// never opens a session. It must <em>not</em> be counted as evidence that this fake satisfies
-    /// the hold-open rule: a fence nobody has watched fail is not evidence, and one nothing reaches
-    /// cannot be watched at all.
-    /// </remarks>
-    public bool HangForever { get; set; }
 
     /// <summary>
     /// When set, the session answers with this one text frame — no audio, no <c>Flushed</c> — and then
@@ -211,21 +210,6 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
         // never sends a WebSocket close frame, so the fake's CloseAsync stays pending — and draining
         // — for the rest of the session.
         await WaitForRequestOrTimeoutAsync(ct).ConfigureAwait(false);
-
-        if (HangForever)
-        {
-            // Hold the connection open until the server is disposed (ct fires). Awaiting the receive
-            // loop is NOT enough: it exits as soon as the client half-closes, which would tear the
-            // session down and complete the client's stream — see LmntWsFakeServer.HoldOpenUntilDisposed.
-            //
-            // The wait is infinite, so the timed arm can never win: only the server CT completes it,
-            // and no assertion depends on any duration.
-            // fence-allow: GUARD-TIMEOUT — Timeout.Infinite; the cancellation token is the only arm
-            try { await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false); }
-            catch (OperationCanceledException) { /* disposed: release the socket */ }
-            try { await receiveTask.ConfigureAwait(false); } catch (Exception) { /* already torn down */ }
-            return;
-        }
 
         if (ErrorFrameJson is { } errorFrame)
         {
