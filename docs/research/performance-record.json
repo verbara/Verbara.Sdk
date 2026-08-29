@@ -1,0 +1,66 @@
+{
+  "_what_this_is": "The committed measurement record behind README.md's Performance table (ADR-0042 D7). Every absolute figure published there is bound to an entry here, and PerformanceTableCoherenceTests fails the build when the two disagree. This file is the record; README.md is the claim. When they differ, the claim moves — unless a re-measurement says otherwise, in which case this file moves in its own reviewed commit.",
+  "_this_is_not_the_regression_gate": "Correspondence between document and record is this file's job. Regression protection is Tests/Verbara.Sdk.Benchmarks/baseline.json, which holds HOSTED-RUNNER means and is a different measurement on different hardware. The two are separate failures and are detected separately (ADR-0042 D4 vs D7).",
+  "schema_version": 1,
+  "measurement": {
+    "machine": "AMD Ryzen 9 9900X (12C/24T)",
+    "runtime": ".NET 10.0.5",
+    "benchmarkdotnet": "v0.14.0",
+    "date": "2026-04-18",
+    "release": "v1.11.0",
+    "source": "docs/research/benchmark-analysis.md",
+    "note": "The AMI row is the one exception to the header above: its post-patch figure was taken on .NET 10.0.6 with MediumRunJob (30 samples), recorded in benchmark-analysis.md section 1.1. Stated per row rather than hidden behind a single header."
+  },
+  "rows": [
+    {
+      "operation": "AMI event parse + dispatch",
+      "latency": "617.6 ns",
+      "throughput": "1.62M events/sec",
+      "record_ref": "benchmark-analysis.md:106 (v1.11.1 post-patch, MediumRun), throughput at :112",
+      "note": "README published 653 ns / 1.53M until this change. That is the PRE-patch ShortRun figure from :105; the patch recovered ~35 ns and the record's own 'Throughput final' line says 1.62M. The published claim understated the SDK."
+    },
+    {
+      "operation": "ARI JSON deserialize `Channel`",
+      "latency": "283 ns",
+      "throughput": "3.54M ops/sec",
+      "record_ref": "benchmark-analysis.md:32"
+    },
+    {
+      "operation": "ARI parse `StasisStart` event",
+      "latency": "1.68 µs",
+      "throughput": "595K events/sec",
+      "versus_v1_0": "2.7×",
+      "record_ref": "benchmark-analysis.md:37 and :54"
+    },
+    {
+      "operation": "`ChannelManager.GetById` (secondary index)",
+      "latency": "6.1 ns",
+      "throughput": "163.9M lookups/sec",
+      "record_ref": "benchmark-analysis.md:40",
+      "note": "The benchmark method is named LookupByUniqueId; the README names the public API. Both are correct for their audience, but a reader diffing the two will not find a match."
+    },
+    {
+      "operation": "Observer dispatch (copy-on-write array)",
+      "latency": "~0.21 ns / observer",
+      "record_ref": "benchmark-analysis.md:18",
+      "note": "Derived: 20.7 ns for 100 observers. docs/README-technical.md publishes 22.8 ns for the same measurement, which matches no committed value — that block is being replaced with the v1.11 figures."
+    },
+    {
+      "operation": "Session store Redis `SaveAsync`",
+      "latency": "p50 79 µs",
+      "throughput": "~12.6K saves/sec",
+      "batch": "65,738 sess/sec",
+      "record_ref": "benchmark-analysis.md:155, :157, :161",
+      "note": "Fact+Stopwatch against local Docker, not BenchmarkDotNet — the table header above does not describe this row's instrument. docs/guides/session-store-backends.md:179 publishes ~250 µs for the same measurement and is wrong."
+    }
+  ],
+  "deferred_rows": [
+    {
+      "operation": "Session store Postgres `SaveAsync`",
+      "published": "~500 saves/sec (p50 1.97 ms) / batch 9,491 sess/sec",
+      "why_not_bound": "The record measures code that no longer ships. benchmark-analysis.md:149 describes the store as 'Npgsql + Dapper + JSONB', and :157 attributes the batch figure to 'Dapper no tiene COPY'. Dapper was removed repo-wide in v2.2.0 under ADR-0022 Phase D. Binding this row would pin a public claim to a measurement of deleted code.",
+      "unblocking_condition": "Re-measure Verbara.Sdk.Sessions.Postgres on the current NpgsqlExecutor path (Testcontainers, postgres:18-alpine), commit the result here, then bind. Until then the figure stays published and unguarded, which is stated rather than hidden.",
+      "also_note": "docs/guides/session-store-backends.md:9-11 publishes Postgres read latency as 5-10 ms where the record has GetAsync p50 = 51 µs. That divergence is separate from the Dapper problem and outlives it."
+    }
+  ]
+}

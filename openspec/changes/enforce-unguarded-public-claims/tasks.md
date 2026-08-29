@@ -325,27 +325,129 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
 
 ## 4. Performance-table coherence (per-PR, no new job)
 
-- [ ] 4.1 Commit the measurement record backing the `README.md` Performance table: machine, runtime
+- [x] 4.1 Commit the measurement record backing the `README.md` Performance table: machine, runtime
       version, BenchmarkDotNet version, date, one entry per published figure
-- [ ] 4.2 Add coherence tests asserting the published figures equal the record, in a project already
+      `docs/research/performance-record.json` — machine, runtime, BenchmarkDotNet version and date,
+      with one entry per published figure and a `record_ref` naming the line of
+      `benchmark-analysis.md` each came from.
+
+      **Binding the table found a ninth false claim, and it is the headline one.** `README.md:102`
+      published **1.53M events/sec (653 ns)**. The record says 653 ns is the *v1.11.0 pre-patch*
+      ShortRun figure (`:105`); the patch recovered ~35 ns, the post-patch MediumRun figure is
+      **617.6 ns**, and the record's own "Throughput final" line is **1.62M events/sec** (`:112`).
+      The SDK's flagship number understated the SDK by 6%. README now publishes the post-patch
+      figures, which is the direction §4 is for: the record is the measurement, the README is the
+      claim, and when they disagree the claim moves.
+
+      Two provenance honesties written into the record rather than smoothed over: the AMI row's
+      post-patch figure was taken on .NET 10.0.6 with MediumRunJob, not the .NET 10.0.5 ShortRun the
+      table's header states, and the Redis row is Fact+Stopwatch against local Docker rather than
+      BenchmarkDotNet at all. Both are stated per row instead of hidden behind one header.
+
+      **The Postgres row is `deferred_rows`, not bound.** `benchmark-analysis.md:149` describes the
+      store as "Npgsql + **Dapper** + JSONB" and `:157` attributes its batch figure to "Dapper no
+      tiene COPY" — and Dapper was removed repo-wide in v2.2.0 under ADR-0022 Phase D. Binding it
+      would pin a public claim to a measurement of deleted code. The entry carries its blocker and
+      its unblocking condition (re-measure on the `NpgsqlExecutor` path, commit, then bind), so the
+      row stays published and *declared* unguarded rather than quietly so.
+
+- [x] 4.2 Add coherence tests asserting the published figures equal the record, in a project already
       inside the default unit filter — the `MarketingClaimsTests` precedent, riding the existing
       `Unit Tests` job (Sdk/ADR-0042 D3, D7)
-- [ ] 4.3 Confirm no new check-run name appears on `pull_request` and the required-check set is
+      `PerformanceTableCoherenceTests` in `Verbara.Sdk.OpenTelemetry.Tests`, beside
+      `MarketingClaimsTests` — the precedent the task names, already inside the default unit filter,
+      so it rides the existing `Unit Tests` job (D3).
+
+      Four tests, and the second exists because the first has a hole:
+
+      | test | what it refuses |
+      |---|---|
+      | published figure ≠ record | a number drifting from its measurement |
+      | **a table row with no record entry** | **a new figure shipping unbound — the first test only walks the record, so without this one a new row passes** |
+      | a deferral with no blocker or no unblocking condition | a deferral decaying into a bare omission |
+      | header ≠ record's provenance | a figure published without the conditions that make it reproducible |
+
+      Negative-tested, both verbatim:
+
+      ```
+      Expected row.Cells " **1.99M events/sec** (500 ns) " to contain "617.6 ns" because README.md's
+      'AMI event parse + dispatch' row must publish the recorded latency
+      ```
+      ```
+      ... but {"Brand new unguarded row"} do(es) not match.
+      ```
+
+      Restored, 4/4 green.
+
+- [x] 4.3 Confirm no new check-run name appears on `pull_request` and the required-check set is
       byte-identical before and after
+      Verified by diff: `ci.yml` gained one **step** inside an existing job and no job. The list of
+      `name:` values in the workflow is byte-identical before and after, so no check-run name appears
+      or disappears and the required-check set needs no reconciliation (ADR-0038,
+      verbara-meta/ADR-0003).
 
 ## 5. Deferred: first-party accuracy gate (investigation only — no code)
 
-- [ ] 5.1 Survey candidate labelled turn-boundary speech corpora and record, per candidate, whether
+- [x] 5.1 Survey candidate labelled turn-boundary speech corpora and record, per candidate, whether
       its licence permits redistribution from a public MIT repository — the specific blocker, not a
       general one
-- [ ] 5.2 Record the in-house recording option's open questions (speaker consent, licence under
+      Surveyed 13 corpus families against their **primary** licence sources, not blog summaries.
+
+      **The survey refuted the ADR's own premise.** ADR-0042 D9 said no labelled turn-boundary corpus
+      permits redistribution from a public MIT repo. **AMI, ICSI and HCRC Map Task are CC BY 4.0** and
+      permit exactly that, including commercial use, against attribution alone. D9 was rewritten in
+      §1.1 rather than left standing.
+
+      | corpus | licence | redistributable? | native turn labels? |
+      |---|---|---|---|
+      | AMI, ICSI | CC BY 4.0 — *"signals and transcription, and **some** of the annotations"* | yes, from the covered layers | no — derive from word timings + dialogue acts |
+      | HCRC Map Task | CC BY 4.0 on the downloads page outright | yes | no — derive from move/game coding |
+      | Pipecat `smart-turn-data-v3.x` | **none declared** | **no** — absence of a grant is a denial | **yes** — `endpoint_bool` is exactly the target |
+      | Switchboard, Fisher, CallHome, DIHARD (LDC) | LDC non-members agreement | **no** | derive |
+      | Santa Barbara | CC BY-**ND** 3.0 | whole files only — clipping is a derivative | derive |
+      | VoxConverse | CC BY 4.0 contradicted in the same paragraph by a copyright disclaimer | **no** — defective grant | derive |
+      | Common Voice, LibriSpeech, Libri-Light | CC0 / CC BY 4.0 | yes | **no — read speech has no turns** |
+
+      The LDC clause that kills four of them in one stroke: *"User shall not otherwise publish,
+      retransmit, disclose, display, copy, reproduce or redistribute the LDC Databases to others
+      outside of User's Research Group."* Its excerpt allowance is scoped to non-commercial research
+      publications — SDK test fixtures are neither.
+
+- [x] 5.2 Record the in-house recording option's open questions (speaker consent, licence under
       which audio would be committed, Git-LFS budget) as an explicit unanswered set — Sdk/ADR-0042
       Option G is deferred, not rejected
-- [ ] 5.3 Write the deferral and its unblocking condition into the claim registry entry so the gap
+      Recorded in the registry's *Deferrals* section as an explicitly **unanswered** set, not as a
+      solved problem: speaker consent and how it would be evidenced, the licence under which recorded
+      audio would be committed to an MIT repo, and the Git-LFS budget. On the last one the honest
+      statement is that the repo already carries an 8.6 MB model in LFS so twenty short WAVs are
+      unlikely to be the binding constraint — **but nobody has checked the quota**, and saying "it
+      should be fine" is how an unchecked assumption becomes a blocker later.
+
+- [x] 5.3 Write the deferral and its unblocking condition into the claim registry entry so the gap
       is visible rather than forgotten (Sdk/ADR-0042 D9). Target shape when unblocked, unchanged
       from the original plan: ≥ 20 labelled WAVs under `Tests/fixtures/audio/turn-boundaries/`
       (10 turn-end positive, 10 turn-mid negative), precision ≥ 0.85 and recall ≥ 0.85
-- [ ] 5.4 Confirm no first-party accuracy wording ships while this gate is absent (cross-check §3.3)
+      Both deferrals are in `docs/claim-registry.md` under *Deferrals*, each with its blocker and
+      its unblocking condition:
+
+      - **Accuracy** — blocker is labelling, not licensing. Unblocking condition is a *decision*
+        (derive ~20 clips from AMI or Map Task under CC BY with in-repo attribution, and accept our
+        own labelling as ground truth), plus a cheaper parallel path: ask pipecat-ai to declare a
+        licence on their dataset cards. Target on unblock unchanged: ≥ 20 labelled WAVs, precision
+        and recall ≥ 0.85.
+      - **Latency** — the `~12 ms` was deleted, not replaced, on the operator's ruling. Unblocking
+        condition is the benchmark earning a band from its own observations, in the same PR that
+        flips `PERF_GATE_ENFORCE`.
+
+- [x] 5.4 Confirm no first-party accuracy wording ships while this gate is absent (cross-check §3.3)
+      Confirmed. The only two accuracy figures left in living public docs are `README.md:67` and
+      `:472`, both reading as Pipecat's measurement, both citing the per-version benchmark, both
+      backed by the §3.1 content-hash pin — the three D8 legs.
+
+      **One correction caught here rather than shipped.** The §3.3 rewording had left `:67` saying
+      CPU latency "is not yet measured on this SDK's own path". §3.5 then measured it, which made
+      that sentence false — a claim-guarding change publishing an untrue statement about its own
+      measurement. It now says the latency is measured but not published, and links the deferral.
 
 ## 6. Verification
 

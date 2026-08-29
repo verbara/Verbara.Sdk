@@ -64,7 +64,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 - **v2.2.0** (2026-05-20) — **ADR-0022 Phase D: Dapper removed cross-repo.** New **`Verbara.Sdk.Data.Npgsql`** package — reflection-free Postgres facade with a `NpgsqlExecutor` (Dapper-parity surface) + name-based `NpgsqlDataReader` getters + hand-written `static Map(NpgsqlDataReader)` row mapping. `Verbara.Sdk.Sessions.Postgres` migrated off Dapper; the dead `Verbara.Sdk.Dapper.Stubs` canary was removed; a permanent `BanDapperPackageReferences` MSBuild guard makes the ban load-bearing.
 - **v2.1.2** (2026-05-08) — `SmartTurnDetectorOptionsValidator` (`[OptionsValidator]` + `[Range]` + `ValidateOnStart()`), Hann window aligned to the periodic formula (`2πi/N`) matching HuggingFace WhisperFeatureExtractor + librosa, 8 dedicated `MelFilterBank` tests + 7 options-validation tests, ONNX model (8.3 MB) migrated to Git LFS.
 - **v2.1.1** (2026-05-07) — Package metadata fix: `RepositoryUrl` and `PackageProjectUrl` corrected to `verbara/Verbara.Sdk`.
-- **v2.1.0** (2026-05-07) — **`Verbara.Sdk.VoiceAi.TurnDetection`** (new): ML-based turn detector using the [Pipecat smart-turn-v3.2-cpu](https://huggingface.co/pipecat-ai/smart-turn-v3/blob/main/benchmarks/smart-turn-v3.2-cpu.md) ONNX model. Pipecat publish 94.26% English accuracy for this model version on their 31,527-sample benchmark; CPU inference latency is not yet measured on this SDK's own path. Drop-in replacement for `SilenceTurnDetector` via `services.AddSmartTurnDetection()`. Package validation enabled with v2.0.0 baseline.
+- **v2.1.0** (2026-05-07) — **`Verbara.Sdk.VoiceAi.TurnDetection`** (new): ML-based turn detector using the [Pipecat smart-turn-v3.2-cpu](https://huggingface.co/pipecat-ai/smart-turn-v3/blob/main/benchmarks/smart-turn-v3.2-cpu.md) ONNX model. Pipecat publish 94.26% English accuracy for this model version on their 31,527-sample benchmark. CPU inference latency on this SDK's own path is measured but not published — see [the claim registry](docs/claim-registry.md#deferrals--declared-with-their-blocker-adr-0042-d9). Drop-in replacement for `SilenceTurnDetector` via `services.AddSmartTurnDetection()`. Package validation enabled with v2.0.0 baseline.
 - **v2.0.0** (2026-05-06) — **Full rebrand** from `Asterisk.Sdk.*` → `Verbara.Sdk.*` (ADR-0036). Breaking change: all namespaces, assemblies, and NuGet packages renamed. Pluggable turn detection: `ITurnDetector` interface + `SilenceTurnDetector` default + `FakeTurnDetector` in `Verbara.Sdk.VoiceAi.Testing`. 26 NuGet packages, 2,868 unit tests passing.
 
 For historical v1.x releases (Asterisk.Sdk era), see [`CHANGELOG.md`](CHANGELOG.md).
@@ -99,7 +99,7 @@ Benchmarked on AMD Ryzen 9 9900X (12C/24T), .NET 10.0.5, BenchmarkDotNet v0.14.0
 
 | Operation | Throughput / Latency |
 |-----------|----------------------|
-| AMI event parse + dispatch | **1.53M events/sec** (653 ns) |
+| AMI event parse + dispatch | **1.62M events/sec** (617.6 ns) |
 | ARI JSON deserialize `Channel` | **3.54M ops/sec** (283 ns) |
 | ARI parse `StasisStart` event | **595K events/sec** (1.68 µs) — *2.7× faster than v1.0* |
 | `ChannelManager.GetById` (secondary index) | **163.9M lookups/sec** (6.1 ns) |

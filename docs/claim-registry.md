@@ -52,8 +52,8 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 | 61 | ~2,924 unit + 154 functional + 65 integration | COHERENCE | — | WRONG — the suite runs **3,295** (measured 2026-08-29); note nothing in-tree *records* that number until §4.1 commits the record |
 | 61 | headline version **v2.2.1** | COHERENCE | — | WRONG — `Directory.Build.props` is 2.5.0 and v2.5.0 is tagged |
 | 65 | ONNX model 8.3 MB | COHERENCE | — | GAP — actual 8,679,182 B |
-| 67 | 94.3% English accuracy | ATTRIBUTED | — | GAP — link targets the repo root, not the v3.2 benchmark; no pin |
-| 67 | ~12 ms CPU inference | ENFORCING | — | GAP — no TurnDetection benchmark exists |
+| 67 | 94.26% English accuracy, in upstream's voice | ATTRIBUTED | citation to upstream's per-version benchmark + the content-hash pin in `OnnxSessionManagerTests` | **OK** — all three D8 legs present |
+| 67 | ~12 ms CPU inference | ENFORCING | `TurnDetectionBenchmark` | **DELETED** — measured at 26.18–37.30 ms; deferred, see *Deferrals* |
 | 72 | 148/152 AMI (97%), 94/98 ARI (96%), 46/46, 27/27, 278 events | ENFORCING | — | GAP |
 | 74 | **37 ADRs** | ENFORCING | — | WRONG — 53 on disk |
 | 98 | measurement provenance (Ryzen 9 9900X, .NET 10.0.5, BDN v0.14.0, 2026-04-18) | COHERENCE | — | GAP |
@@ -70,7 +70,7 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 | 136 | 60 const strings, 14 nested classes, "14+ unit tests" | ENFORCING | `MarketingClaimsTests.cs:59-74` | PARTIAL — the "14+ tests" sub-claim is unpinned |
 | 164 | "First contact in 10 lines" | COHERENCE | — | WRONG — the snippet at :166-182 is 14 lines |
 | 470 | Cartesia Sonic-3 40-90 ms TTFA | ATTRIBUTED | — | GAP |
-| 472 | smart-turn-v3.2, 94.3%, ~12 ms | ATTRIBUTED / ENFORCING | — | GAP — no citation at all on this line |
+| 472 | smart-turn-v3.2-cpu, 94.26% in upstream's voice | ATTRIBUTED | citation + hash pin | **OK** — this line previously carried the figure with no citation at all |
 
 ## `docs/README-technical.md`
 
@@ -80,7 +80,7 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 | 11 | tested with Asterisk 18, 20, 22, 23 | ENFORCING | `ci.yml:310` matrix | PARTIAL — matrix is `[23]` on PR, `[22,23]` on merge_group; **18 and 20 are tested by nothing** |
 | 189 | Core (9 packages) | ENFORCING | — | GAP — correct as a subset |
 | 203 | Voice AI (8 packages) | ENFORCING | — | GAP — correct |
-| 213 | Pipecat smart-turn-v3.2 ONNX | ATTRIBUTED | — | GAP — no pin; `<Description>` says v3 |
+| 213 | Pipecat smart-turn-v3.2 ONNX | ATTRIBUTED | content-hash pin | **OK** — `<Description>` now says v3.2-cpu too |
 | 216 | **All** VoiceAi packages expose Meter + ActivitySource + IHealthCheck | ENFORCING | — | WRONG — 3 of 7; falsifiable against the very array it cites |
 | 218 | Push (2 packages) | ENFORCING | — | WRONG — 4 on disk |
 | 225 | Source Generators (1 analyzer) | ENFORCING | — | GAP — correct |
@@ -200,6 +200,56 @@ Missed by the first sweep — tracked, public, and read as current by every cont
 `asterisk-version-matrix.md`, `manual-asterisk-realtime-setup.md`, `log-analysis-prompt.md`: no quantitative claims.
 
 ---
+
+## Deferrals — declared with their blocker (ADR-0042 D9)
+
+**Turn-detection CPU inference latency.** The `~12 ms` figure was **removed from `README.md:67` and
+`:472` and not replaced.** It was 2.2×–3.1× optimistic: `TurnDetectionBenchmark` measures the path a
+caller actually pays — 8 kHz→16 kHz resample and accumulation, mel front-end, ONNX session — at
+**26.18 ms** for a 1 s utterance rising to **37.30 ms** at the 8 s ring-buffer ceiling, on the
+README's own Ryzen 9 9900X. Upstream's 12 ms is raw ONNX inference on v3.0 and is not the same
+quantity.
+
+*Why nothing is published in its place.* A latency figure is meaningless without the utterance length
+it was measured at, because the mel cost scales with the accumulated audio. Publishing the measured
+range today would put back an ENFORCING claim with no gate behind it — the benchmark has no
+`baseline.json` entry, because every other band in that file was calibrated from 13 observed runs and
+this one has none.
+
+*Unblocking condition.* The benchmark ships in this change and starts producing weekly observations
+immediately. Once it has enough runs to calibrate a band the same way — in the PR that flips
+`PERF_GATE_ENFORCE` — the figure can be published as ENFORCING, stated per utterance length and with
+its machine. Not before.
+
+**First-party turn-detection accuracy.** `README.md` states accuracy as **upstream's** measurement
+and will keep doing so until a first-party gate exists. The blocker is **labelling, not licensing**
+(ADR-0042 D9, corrected in this change after the original wording was found false).
+
+*What was checked.* AMI, ICSI and HCRC Map Task are CC BY 4.0 and **may** be redistributed from this
+repo — so the "no licence permits it" claim the ADR used to make does not survive. What they lack is
+turn-boundary labels: they carry word/segment timings and dialogue-act coding, and AMI and ICSI
+release "signals and transcription, and *some* of the annotations" under that licence rather than the
+corpus entire, so a derivation must draw from the covered layers. The one corpus with the native
+label — Pipecat's `smart-turn-data-v3.x`, whose `endpoint_bool` is exactly the target and which
+trained the model we ship — declares **no licence at all**, and carries a per-row `synthetic` flag
+indicating a large commercial-TTS majority governed by the TTS vendors' terms. LDC corpora
+(Switchboard, Fisher, CallHome, DIHARD) are excluded on firmer ground: their agreement forbids
+redistribution outside the user's research group, and its excerpt allowance is scoped to
+non-commercial research publications, which SDK test fixtures are not.
+
+*The in-house recording option is deferred, not rejected, and its open questions are unanswered:*
+speaker consent and how it would be evidenced; the licence under which recorded audio would be
+committed to an MIT repo; and whether the Git-LFS budget absorbs it — the repo already carries an
+8.6 MB model in LFS, so 20 short WAVs are unlikely to be the binding constraint, but nobody has
+checked the quota.
+
+*Unblocking condition — a decision, not a search.* Derive roughly twenty clips (10 turn-end positive,
+10 turn-mid negative) from AMI or Map Task under CC BY 4.0 with in-repo attribution, and accept that
+the gate's ground truth is our own hand-derived labelling rather than a third party's. Target once
+unblocked: precision ≥ 0.85 and recall ≥ 0.85 over `Tests/fixtures/audio/turn-boundaries/`. A
+cheaper parallel path: ask pipecat-ai to declare a licence on the dataset cards, which they already
+describe as open source — that would make `endpoint_bool` usable directly and remove the labelling
+work entirely.
 
 ## Unresolved — rulings still owed
 
