@@ -22,9 +22,9 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 
 ## Scope
 
-**In:** `README.md`, `docs/README-technical.md`, `docs/README-commercial.md`, `src/*/README.md`,
-`Examples/*/README.md`, all of `docs/guides/`, and the `<Description>` values in `src/*/*.csproj`
-(they ship to nuget.org).
+**In:** `README.md`, `CONTRIBUTING.md`, `docs/README-technical.md`, `docs/README-commercial.md`,
+`src/*/README.md`, `Examples/*/README.md`, all of `docs/guides/`, and the `<Description>` values in
+`src/*/*.csproj` (not Markdown, but published verbatim on nuget.org).
 
 **Out**, as period-correct records left verbatim: dated `CHANGELOG.md` entries,
 `openspec/changes/archive/`, `docs/decisions/`, `docs/specs/`, `docs/research/`,
@@ -43,13 +43,13 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 |---|---|---|---|---|
 | 13 | Native AOT-ready badge | ENFORCING | `tools/AotCanary/` + `tools/verify-aot.sh` + `aot-validate.yml` | PARTIAL — canary references 22 of 29 packages |
 | 23 | asterisk-java "790+ classes" | ATTRIBUTED | — | GAP — no citation, first-party voice |
-| 45 | 148 actions, 278 events, 18 typed responses | ENFORCING | — | GAP — and `src/Verbara.Sdk.Ami/README.md:7` publishes 111/261/17 |
+| 45 | 148 actions, 278 events, 18 typed responses | ENFORCING | — | GAP — `src/Verbara.Sdk.Ami/README.md:7` publishes 111/261/17, and **all three quantities need a counting definition first** (see *Unresolved* 5) |
 | 46 | 54 AGI commands | ENFORCING | — | GAP |
 | 54 | four source generators, 0 trim warnings | ENFORCING | AotCanary (trim half) | PARTIAL — generator count unguarded |
 | 61 | 29 NuGet packages | ENFORCING | — | GAP |
 | 61 | 0 build warnings | ENFORCING | `Directory.Build.props` `TreatWarningsAsErrors` + `Pack Warnings Gate` | OK |
 | 61 | 0 trim warnings | ENFORCING | AotCanary | PARTIAL — 22/29 |
-| 61 | ~2,924 unit + 154 functional + 65 integration | COHERENCE | — | WRONG — last recorded unit count is 3,295 (2026-08-29) |
+| 61 | ~2,924 unit + 154 functional + 65 integration | COHERENCE | — | WRONG — the suite runs **3,295** (measured 2026-08-29); note nothing in-tree *records* that number until §4.1 commits the record |
 | 61 | headline version **v2.2.1** | COHERENCE | — | WRONG — `Directory.Build.props` is 2.5.0 and v2.5.0 is tagged |
 | 65 | ONNX model 8.3 MB | COHERENCE | — | GAP — actual 8,679,182 B |
 | 67 | 94.3% English accuracy | ATTRIBUTED | — | GAP — link targets the repo root, not the v3.2 benchmark; no pin |
@@ -127,7 +127,7 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 |---|---|---|---|---|
 | `Verbara.Sdk/README.md:13` | 60 const strings, 14 nested classes | ENFORCING | `MarketingClaimsTests.cs:59-74` | OK |
 | `Verbara.Sdk/README.md:14` | 9 ActivitySources, 15 Meters | ENFORCING | `MarketingClaimsTests.cs:45-57` | OK |
-| `Verbara.Sdk/README.md:53` | 0 trim warnings **across the package family** | ENFORCING | AotCanary | PARTIAL — 22/29; the six uncanaried packages are `OpenTelemetry`, `Push.AspNetCore`, `Push.Nats`, `Sessions.Redis`, `Sessions.Postgres`, `VoiceAi.TurnDetection` |
+| `Verbara.Sdk/README.md:53` | 0 trim warnings **across the package family** | ENFORCING | AotCanary | PARTIAL — 22/29; the **seven** uncanaried are `OpenTelemetry`, `Push.AspNetCore`, `Push.Nats`, `Sessions.Redis`, `Sessions.Postgres`, `VoiceAi.TurnDetection` and `Ami.SourceGenerators` (packable, so it counts) |
 | `Verbara.Sdk.Ami/README.md:7` | 111 actions, 261 events, 17 response types | ENFORCING | — | WRONG — 148/278/18, and contradicts `README.md:45` |
 | `Verbara.Sdk.Ari/README.md:7-8` | 8 ARI resources, 46 event types | ENFORCING | — | GAP |
 | `Verbara.Sdk.Agi/README.md:8` | 54 AGI commands | ENFORCING | — | GAP |
@@ -157,13 +157,25 @@ The other 28 `<Description>` values carry no quantitative claim.
 | `VoiceAiSpeechmaticsExample:3,40-42` | ~27× cheaper, sub-150 ms, 55+ languages, ~$0.011/1K chars | ATTRIBUTED | GAP — all in first-party voice, no citation |
 | `VoiceAiAssemblyAiExample:47` | zero reflection | ENFORCING | OK — AotCanary |
 
-The other 15 example READMEs carry no quantitative claims.
+The other 16 example READMEs carry no quantitative claims (21 tracked, 5 listed above).
+
+## `CONTRIBUTING.md`
+
+Missed by the first sweep — tracked, public, and read as current by every contributor.
+
+| line | claim | class | guard | status |
+|---|---|---|---|---|
+| 30 | "28 SDK packages: 9 core + 8 VoiceAi + 4 Push + 2 Sessions backends" | ENFORCING | — | **WRONG** — 29 |
+| 33 | "26 example applications" | ENFORCING | — | **WRONG** — 25 tracked |
+| 34 | "33 test projects" | ENFORCING | — | **WRONG** — 37 under `Tests/` |
 
 ## `docs/guides/`
 
+`docs/guides/README.md` carries no quantitative claim beyond `:9` (below).
+
 | location | claim | class | status |
 |---|---|---|---|
-| `high-load-tuning.md:70` | five VoiceAi packages publish Meter+ActivitySource+IHealthCheck | ENFORCING | GAP — total pinned, this subset is not |
+| `high-load-tuning.md:70` | "All **five** VoiceAi packages publish a Meter + ActivitySource + IHealthCheck" | ENFORCING | **WRONG** — same falsity as `README-technical.md:216`: only 3 ActivitySources exist, so Stt and Tts publish a Meter and a HealthCheck but no source |
 | `high-load-tuning.md:95` | 9 sources, 15 meters | ENFORCING | OK — `MarketingClaimsTests` |
 | `high-load-tuning.md:13-18` | RAM per buffer (est.) | ENFORCING | GAP — derivable from capacity × entry size |
 | `high-load-tuning.md:13-18,20,251` | events/sec per agent tier; 200K/sec queue storm; VarSet 50%+ of volume | — | GAP — workload estimates about the reader's PBX; see *Unresolved* |
@@ -208,9 +220,13 @@ These carry no class yet. Each needs a decision before it can ship under D1.
 4. **The `README.md` Status release bullets (`:63-68`).** Dated release history restated inside the
    acquisition surface. D1 excludes dated `CHANGELOG` history; this block is the same content in a
    living document, and `:65`/`:67` carry real claims.
-5. **AMI response types: 18 or 17?** 18 files in `Responses/`, 17 `public sealed class` — one file
-   is a helper type. Both published values are defensible under different definitions. Needs the
-   definition before it can be guarded.
+5. **AMI surface counts need a counting definition before any of them can be guarded.** Responses:
+   18 files in `Responses/`, 17 `public sealed class` — one file is a helper type. Events: 278 files,
+   but 270 concrete events plus 8 abstract bases under `Events/Base/`, so the published 278 is a
+   *file* count. Actions: 148 concrete classes across 149 files. Every published figure here is
+   defensible under some definition and indefensible under another, and a gate cannot be written
+   until the definition is chosen. This blocks the §1.2 rows for `README.md:45`, `:72` and
+   `src/Verbara.Sdk.Ami/README.md:7`.
 6. **Workload estimates in `high-load-tuning.md`** (events/sec per tier, the 200K/sec storm, VarSet
    at 50%+). These describe the reader's PBX, not this SDK. Out of scope, or delete.
 

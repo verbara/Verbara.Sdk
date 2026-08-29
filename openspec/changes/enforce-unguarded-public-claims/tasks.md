@@ -105,6 +105,45 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
 
       Added to `.github/PULL_REQUEST_TEMPLATE.md`, linking both the registry and ADR-0042 D1.
 
+- [x] 1.5 Adversarial review of §1 (added after the fact — the review found enough that its outcome
+      belongs in the record, not only in the commit that answered it).
+
+      Reviewed on a second model against `d3971d15`. **Verdict YELLOW**, with the structure intact:
+      every headline `WRONG` row re-verified true, the licence correction verified at the primary
+      sources, `validate` 9/9, suite 3,295/3,295, and the commit confirmed to touch no C#. Six
+      findings were real and are fixed here:
+
+      - **D1a was exploitable.** Two of its three conditions were author-controlled: "the document
+        is the record" is true of any figure whose author declines to commit one, and "re-measuring
+        needs something outside our control" stretches to "CI cannot reproduce my workstation". A
+        first-party benchmark of our own code could have been classed EVIDENCE and dodged COHERENCE
+        entirely — the exact escape hatch D1a was written to prevent. Rewritten around the
+        **subject** of the measurement rather than its circumstances, and it now refuses that case by
+        name.
+      - **D1a contradicted the spec delta in the same commit** — "declared per document" against the
+        spec scenario's "per claim". The registry had been applying it per claim. D1a now says per
+        claim.
+      - **The registry's scope exceeded the spec's.** The registry covered `.csproj`
+        `<Description>` values; the spec defined living documents as tracked `*.md` only, leaving the
+        one nuget.org-shipping WRONG outside its own rule. The spec now names them, and
+        `CONTRIBUTING.md` with them.
+      - **`CONTRIBUTING.md` was missed entirely** — tracked, public, read by every contributor, and
+        carrying three stale figures: 28 packages (29), 26 examples (25), 33 test projects (37).
+      - **A WRONG filed as GAP.** `high-load-tuning.md:70` asserts all five VoiceAi packages publish
+        an `ActivitySource`; only three exist. Same falsity the registry already marked at
+        `README-technical.md:216`, missed one row down.
+      - **The canary enumeration was off by one** — 29 − 22 = 7, and `Ami.SourceGenerators` is
+        packable, so it counts.
+
+      **D9 was also overstated** and is qualified: AMI and ICSI release "signals and transcription,
+      and *some* of the annotations" under CC BY 4.0, not the corpus entire, so a derivation must
+      draw from the covered layers; and the "~81% TTS" proportion is not published on the dataset
+      card, so it is now stated as a per-row flag to be computed rather than as a figure.
+
+      The review's remaining point stands unfixed on purpose: §1.2's rows for the AMI surface counts
+      cannot be gated until a counting definition is chosen, which is now *Unresolved* 5 rather than
+      an implied 278.
+
 ## 2. AMI throughput — arm the weekly gate
 
 - [ ] 2.1 Run `.github/workflows/perf-regression.yml` via `workflow_dispatch` several times and

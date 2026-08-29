@@ -11,8 +11,10 @@ the published number equals a committed record of the measurement it reports), *
 (the number is a third party's published measurement, cited as theirs and pinned to the artifact it
 describes), and **EVIDENCE** (a dated record of a first-party measurement of something outside this
 repo's control, carrying no guard obligation — see ADR-0042 D1a). Living public documents are tracked
-`*.md` that a reader consumes as current — `README.md`, `docs/README-technical.md`,
-`docs/README-commercial.md`, package and example READMEs, and `docs/guides/` in full. Dated
+files a reader consumes as current — `README.md`, `CONTRIBUTING.md`, `docs/README-technical.md`,
+`docs/README-commercial.md`, package and example READMEs, `docs/guides/` in full, and the
+`<Description>` values in `src/*/*.csproj`, which are not Markdown but are published verbatim on
+nuget.org and are read as current there. Dated
 `CHANGELOG` history, `openspec/changes/archive/`, `docs/decisions/`, `docs/specs/`, `docs/research/`
 and `docs/plans/{completed,archived}/` are excluded as period-correct records and SHALL be left
 verbatim, matching the exclusion set the `docs-brand-consistency` capability already applies. The
