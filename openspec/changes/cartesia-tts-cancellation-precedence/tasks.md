@@ -60,10 +60,23 @@
       lucky. Scoped to Cartesia as the task says — Speechmatics gets its own red test when §2.1's
       scope question is settled, not folded in here.
 
-- [ ] 1.3 Same discipline for the second surface §1.1 turned up: write the failing test on
+- [x] 1.3 Same discipline for the second surface §1.1 turned up: write the failing test on
       Speechmatics, record its verbatim failure, before its guard is moved. Scope widened with the
       operator's approval after §1.1 measured it — the change was authored against a four-way table
       and the package ships six synthesizers.
+
+      `SpeechmaticsSpeechSynthesizerTests.SynthesizeAsync_ShouldThrowOperationCanceled_WhenTextIsWhitespaceAndTokenAlreadyCancelled`,
+      committed red. Verbatim, and word-for-word what Cartesia's says:
+
+      ```
+      Expected a <System.OperationCanceledException> to be thrown, but no exception was thrown.
+      Failed!  - Failed: 2, Passed: 0, Skipped: 0, Total: 2
+      ```
+
+      The recorded-response stub is left **armed** rather than removed: if the guard were later
+      placed too far down and a request escaped, the stub would match and return audio, so the test
+      would fail on the request assertion rather than pass on an unmatched request. An unarmed stub
+      would make "no request was issued" and "the request did not match" the same green.
 
 ## 2. The fix
 
