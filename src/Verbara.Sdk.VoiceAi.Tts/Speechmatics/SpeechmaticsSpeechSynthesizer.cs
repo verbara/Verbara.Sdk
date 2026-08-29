@@ -64,6 +64,11 @@ public sealed class SpeechmaticsSpeechSynthesizer : SpeechSynthesizer
         AudioFormat outputFormat,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        // Deterministic cancellation contract (test-determinism fence): observe the token
+        // at iterator entry so a pre-cancelled token throws before any provider request is
+        // issued, independent of scheduling/mock latency. Mirrors the STT fence (ADR-0038).
+        ct.ThrowIfCancellationRequested();
+
         // Nothing is asked of the provider for text that carries no speech, so the zero audio that
         // follows is not a provider failure and must not be reported as one (ADR-0050 E5). Not
         // theoretical on this vendor: measured 2026-08-18 against the live route, an empty or
@@ -72,7 +77,10 @@ public sealed class SpeechmaticsSpeechSynthesizer : SpeechSynthesizer
         // caller that was promised nothing paid for a request and had that audio pushed into its
         // stream. The same probe returned the same body for punctuation-only text, which this guard
         // deliberately does NOT catch: the contract's words are "empty or whitespace", and widening
-        // it to "text a human would not read aloud" is a judgement no measurement supports.
+        // it to "text a human would not read aloud" is a judgement no measurement supports. Kept
+        // below the token check on purpose: a requested cancellation outranks this shortcut
+        // (streaming-session-lifecycle), because an empty sequence and a cancelled one are
+        // different answers and the caller has no other way to tell them apart.
         if (string.IsNullOrWhiteSpace(text)) yield break;
 
         var sampleRate = outputFormat.SampleRate > 0 ? outputFormat.SampleRate : _options.SampleRate;
