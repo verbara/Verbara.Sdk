@@ -768,8 +768,29 @@ them is used; §5.1 and §5.2 are already closed and carry their own notes.
       shipped in the same PR: the `Added` section next to "none of the eight cancelled a session that
       had frames in flight", and the `Removed` section next to "the property and its dead branch are
       gone".
-- [ ] 7.2 `openspec archive voiceai-midstream-cancellation-coverage --yes` via the CLI, shipped as
+- [x] 7.2 `openspec archive voiceai-midstream-cancellation-coverage --yes` via the CLI, shipped as
       its own docs PR.
+
+      **Archived after #227 landed on `main` as `dbceea02`** (merge queue, 2026-08-29). The CLI
+      reported `test-determinism: update — + 2 added`, taking the living spec from 12 requirements
+      to 14, and moved the change to
+      `openspec/changes/archive/2026-08-29-voiceai-midstream-cancellation-coverage`.
+      `openspec validate --all --strict`: **10 passed, 0 failed**.
+
+      **No `--skip-specs`** — this change never went through `/opsx:sync`, confirmed by checking
+      that neither added requirement was already present in the living spec. The delta is
+      `## ADDED Requirements` only, so neither the dropped-scenario abort nor the
+      capability-retirement abort was reachable. Closed with the CLI, not `/opsx:archive`, which
+      never invokes it.
+
+      **Referrer sweep clean.** `grep -rn "changes/voiceai-midstream-cancellation-coverage"` across
+      the repo — not only Markdown — found nothing outside the change's own folder, so no workflow,
+      script or fixture follows the moved path.
+
+      **Step 7 of the closing routine is a no-op here.** It fills the `## Purpose` of living specs
+      the archive *creates*, which are born `TBD`; `test-determinism` already existed with a
+      written Purpose, and neither added requirement contradicts it — the fence-witness rule is the
+      one its closing paragraph already describes, now stated normatively.
 - [x] 7.3 Route anything found in `src/` that is not task 2.3 to an existing change rather than
       fixing it here — and if the named target has been archived, re-point it rather than dropping
       it, the way §5.7 of the sweep had to.
