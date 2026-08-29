@@ -195,4 +195,28 @@
       **#230** — https://github.com/verbara/Verbara.Sdk/pull/230. Placed inline in the body next to
       the sentence it belongs to, not in the `###` heading, following the convention the file already
       uses (`CHANGELOG.md:98, :158, :191, :228`) and the ruling §7.1 of the previous change made.
-- [ ] 5.2 `openspec archive cartesia-tts-cancellation-precedence --yes` via the CLI.
+- [x] 5.2 `openspec archive cartesia-tts-cancellation-precedence --yes` via the CLI.
+
+      **Archived after #230 landed on `main` as `63c5280d`** (merge queue, 2026-08-29). The CLI
+      reported `streaming-session-lifecycle: update — + 1 added`, taking the living spec from 4
+      requirements to 5, and moved the change to
+      `openspec/changes/archive/2026-08-29-cartesia-tts-cancellation-precedence`.
+      `openspec validate --all --strict`: **9 passed, 0 failed**.
+
+      **No `--skip-specs`** — no prior `/opsx:sync`, confirmed by checking the added requirement was
+      not already in the living spec. The delta is `## ADDED Requirements` only, so neither the
+      dropped-scenario abort nor the capability-retirement abort was reachable. Closed with the CLI,
+      never `/opsx:archive`.
+
+      **The referrer sweep found one, and it was not a doc link.**
+      `openspec/changes/archive/2026-08-29-voiceai-midstream-cancellation-coverage/tasks.md:832`
+      points at this change's pre-archive path — the §7.3 note that routed the finding here in the
+      first place. Annotated rather than rewritten: the paragraph is a record of the change *as
+      opened*, and its description of four-surface parity was true when written. The note gives the
+      new path and says plainly that the scope widened to seven paths before it shipped, so a reader
+      following the pointer is not misled by either half.
+
+      **Step 7 is a no-op again.** `streaming-session-lifecycle` already existed with a written
+      Purpose that names the consumer's own cancellation as one of exactly two faults, *"because the
+      caller asked and is owed the answer"*. The added requirement is a precedence detail under that
+      sentence, not a departure from it.

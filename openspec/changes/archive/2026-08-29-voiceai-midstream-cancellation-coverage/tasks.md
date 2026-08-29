@@ -836,5 +836,13 @@ them is used; §5.1 and §5.2 are already closed and carry their own notes.
       an 11-task `tasks.md` that requires the failing test **before** the fix and a negative test
       **after** it.
 
+      *(Archived 2026-08-29 to
+      `openspec/changes/archive/2026-08-29-cartesia-tts-cancellation-precedence/`, shipped as #230.
+      Note for anyone following this pointer: the paragraph above records the change **as opened**.
+      Its own §1.1 re-measurement then found the same defect on Speechmatics — the package ships six
+      synthesizers over seven selectable paths, not four — so what shipped was two guards and seven
+      tests. The four-surface parity described here is the scope this record was written against,
+      not the scope that landed.)*
+
       `openspec validate --all --strict` → `Totals: 11 passed, 0 failed (11 items)` — 10 before, plus
       the new change.
