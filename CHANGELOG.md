@@ -10,8 +10,8 @@ All notable changes to this project will be documented in this file.
 **before** observing the caller's token, so a consumer that had already cancelled received an empty
 sequence — the same answer as "nothing to say", with no other signal in the SDK to tell the two
 apart. `streaming-session-lifecycle` states the opposite: a requested cancellation takes precedence
-over the sequence ending quietly. Both now observe the token at iterator entry, where Deepgram,
-ElevenLabs and Lmnt already did.
+over the sequence ending quietly. Both now observe the token at iterator entry (#230), where
+Deepgram, ElevenLabs and Lmnt already did.
 
 - **Behaviour change, bounded to one input on two surfaces.** It cannot affect an enumeration whose
   token is not already cancelled, and it cannot affect a cancelled enumeration of non-blank text —

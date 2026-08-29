@@ -190,5 +190,9 @@
 
 ## 5. Close-out
 
-- [ ] 5.1 Fill the PR number into the CHANGELOG entry before archiving.
+- [x] 5.1 Fill the PR number into the CHANGELOG entry before archiving.
+
+      **#230** — https://github.com/verbara/Verbara.Sdk/pull/230. Placed inline in the body next to
+      the sentence it belongs to, not in the `###` heading, following the convention the file already
+      uses (`CHANGELOG.md:98, :158, :191, :228`) and the ruling §7.1 of the previous change made.
 - [ ] 5.2 `openspec archive cartesia-tts-cancellation-precedence --yes` via the CLI.
