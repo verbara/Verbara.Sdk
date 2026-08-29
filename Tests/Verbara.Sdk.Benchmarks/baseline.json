@@ -25,7 +25,9 @@
     "ari-json": "Verbara.Sdk.Benchmarks.AriJsonBenchmark",
     "ari-event": "Verbara.Sdk.Benchmarks.AriParseEventBenchmark",
     "channel-manager": "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark",
-    "observer": "Verbara.Sdk.Benchmarks.ObserverDispatchBenchmark"
+    "observer": "Verbara.Sdk.Benchmarks.ObserverDispatchBenchmark",
+    "turn-detection": "Verbara.Sdk.Benchmarks.TurnDetectionBenchmark",
+    "_turn_detection_note": "Present here with NO rows in \"benchmarks\" below, and that is deliberate rather than an oversight. The step must run and produce a report — a missing results/ directory is still a hard failure, which is the point — but its band cannot be calibrated yet: every other band in this file came from 13 observed runs and this benchmark has none. Its band is set in the PR that flips PERF_GATE_ENFORCE, from its own observations. Guessing one here would break the rule this file exists to enforce, in the change that wrote it."
   },
   "benchmarks": {
     "Verbara.Sdk.Benchmarks.AmiProtocolReaderBenchmark.ParseSingleEvent": {
@@ -53,7 +55,7 @@
       "tolerance_pct": 30
     },
     "Verbara.Sdk.Benchmarks.AriJsonBenchmark.SerializeBridge": {
-      "mean_ns": 264.50,
+      "mean_ns": 264.5,
       "tolerance_pct": 35
     },
     "Verbara.Sdk.Benchmarks.AriJsonBenchmark.Deserialize100Channels": {

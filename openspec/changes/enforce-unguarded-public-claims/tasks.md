@@ -317,6 +317,19 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
       would break §2.1's own rule — calibrated from observation, never guessed — in the change that
       wrote it.
 
+      **Caught by the guard's own contract test, in CI, not here.** `baseline.json` declares a
+      `sources` row per workflow `--filter` step and `test_check_perf_baseline.py` asserts the two
+      sets match; adding the step without the row turned `Coverage Script Tests` red on PR #232. The
+      row is added with the benchmark still unbaselined — the step must run and produce a report (a
+      missing `results/` directory stays a hard failure) while its band waits for observations.
+
+      The miss was mine and is worth naming: the Python suites were run before this filter was added
+      and only the .NET lane afterwards, so a change to a workflow was verified by a test suite that
+      does not read workflows. **One consequence for §2.5's evidence**: the 13 historical trees
+      predate this benchmark, so replaying them against the current baseline now reports one
+      structural failure each. The 19/19 band result stands; the structural line is the new source
+      correctly missing from old artifacts.
+
 - [x] 3.7 Verify no `src/` behaviour changed anywhere in this section — docs, packaging metadata,
       tests and benchmarks only, so no downstream cascade to Pro or Platform
       Confirmed from the diff. `src/` carries exactly three changed lines: one package-README
