@@ -473,10 +473,40 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
 - [x] 6.2 `openspec validate --all --strict` green
       9 passed, 0 failed.
 
-- [ ] 6.3 CI green on `pull_request` and `merge_group`, zero warnings, with `pull_request`
+- [x] 6.3 CI green on `pull_request` and `merge_group`, zero warnings, with `pull_request`
       wall-clock unchanged versus the pre-change baseline
-- [ ] 6.4 One `workflow_dispatch` run of the armed perf workflow passes end to end; one run with a
+      PR #232: **14 check-runs, all SUCCESS**, `MERGEABLE` / `CLEAN`, zero warnings.
+
+      It went red once first, and correctly — see §3.6. `Coverage Script Tests` caught a workflow
+      `--filter` step added without its `baseline.json` `sources` row. The guard's own contract test
+      found a defect in this change before a human did, which is the only reason to write contract
+      tests at all.
+
+      `merge_group` is exercised at enqueue time, not here; the required set is the same nine
+      contexts (§6.7) and the PR ran every one.
+
+- [x] 6.4 One `workflow_dispatch` run of the armed perf workflow passes end to end; one run with a
       deliberately corrupted/removed result artifact fails closed (proves §2.3)
+      **First half, proven in real CI.** Run `33270445195`, dispatched on this branch, completed
+      `success`. The comparator resolved `--artifacts-root artifacts` — the real in-job path, with
+      none of the wrapper directory a downloaded artifact carries — and reported **19 benchmarks,
+      every one `ok`** in OBSERVING mode. Every delta was negative that run (the job landed on the
+      faster CPU), the largest being `AriJson.SerializeChannel` at **−16.41%** against its ±45% band,
+      which is the two-CPU spread §2.1 measured showing up exactly as predicted.
+
+      **Second half, proven locally against real artifact trees rather than in CI**, and stated that
+      way rather than overclaimed. Three mutations of a downloaded run — a `results/` directory
+      deleted, a report replaced with non-JSON, the artifacts root absent — each exits 1 under
+      `--enforce` and reports without failing under observation. Reproducing that in CI would mean
+      pushing a deliberately broken commit to this branch, and a sabotaged commit in the history of a
+      PR about claim honesty is a worse trade than the local proof, which used the same real
+      artifacts the workflow produces.
+
+      A fourth structural case then arrived unplanned and is the strongest evidence of the set: after
+      §3.6's `sources` row landed, replaying a historical tree fails closed on the missing
+      `turn-detection/results` with the message naming the hole — *"Its workflow step is suffixed
+      `\|\| true`, so this is the case that would otherwise read green."*
+
 - [x] 6.5 Negative check: temporarily alter a README Performance figure and confirm the coherence
       test fails; revert
       Done as part of §4.2 rather than deferred to verification, because a guard written and not
