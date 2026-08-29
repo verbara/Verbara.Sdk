@@ -451,27 +451,75 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
 
 ## 6. Verification
 
-- [ ] 6.1 `dotnet test Verbara.Sdk.slnx --filter "Category!=Functional&Category!=Integration"` green
+- [x] 6.1 `dotnet test Verbara.Sdk.slnx --filter "Category!=Functional&Category!=Integration"` green
       locally with **zero warnings** (`TreatWarningsAsErrors`)
-- [ ] 6.2 `openspec validate --all --strict` green
+      Release, CI filter: **30 assemblies, 3 300 passed, 0 failed, 0 skipped** — 3 295 at
+      `2e931bf7` plus the ONNX pin and the four coherence tests. Build **0 warnings** in Debug and
+      Release under `TreatWarningsAsErrors`. Script suites: 37 (comparator) + 27 (notifier).
+
+- [x] 6.2 `openspec validate --all --strict` green
+      9 passed, 0 failed.
+
 - [ ] 6.3 CI green on `pull_request` and `merge_group`, zero warnings, with `pull_request`
       wall-clock unchanged versus the pre-change baseline
 - [ ] 6.4 One `workflow_dispatch` run of the armed perf workflow passes end to end; one run with a
       deliberately corrupted/removed result artifact fails closed (proves §2.3)
-- [ ] 6.5 Negative check: temporarily alter a README Performance figure and confirm the coherence
+- [x] 6.5 Negative check: temporarily alter a README Performance figure and confirm the coherence
       test fails; revert
-- [ ] 6.6 Negative check: temporarily alter the ONNX hash constant and confirm the pin test fails;
+      Done as part of §4.2 rather than deferred to verification, because a guard written and not
+      falsified in the same sitting tends to stay unfalsified. Altering the AMI row to
+      `**1.99M events/sec** (500 ns)` fails with the recorded value named:
+
+      ```
+      Expected row.Cells " **1.99M events/sec** (500 ns) " to contain "617.6 ns"
+      ```
+
+      Second control, the one that matters more — adding a table row with no record entry:
+
+      ```
+      ... but {"Brand new unguarded row"} do(es) not match.
+      ```
+
+      Both reverted; 4/4 green.
+
+- [x] 6.6 Negative check: temporarily alter the ONNX hash constant and confirm the pin test fails;
       revert
-- [ ] 6.7 Confirm the branch-protection required-check set is unchanged (no context added, none
+      One character changed in the expected SHA-256 turns the pin red at index 63. Reverted and
+      re-run green.
+
+      **A mistake worth recording**: the first restore used `git checkout --` on a file whose new
+      test was not yet committed, which reverted the test along with the mutation. Caught by the
+      hash grep printing nothing, and the test was rewritten. A negative control that deletes the
+      thing it was proving is indistinguishable from a passing one.
+
+- [x] 6.7 Confirm the branch-protection required-check set is unchanged (no context added, none
       removed) — the ADR-0038 / verbara-meta/ADR-0003 reconciliation is deliberately not triggered
+      Queried live rather than inferred. The required set on `main` is nine contexts — `Unit Tests`,
+      `AOT Trim Check`, `Pack Warnings Gate`, `Analyze (C#)`, `Functional Tests (Testcontainers) (23)`,
+      `Audit Test Asserts`, `Coverage Ratchet`, `OpenSpec Validate`, `Coverage Script Tests` — and
+      this change adds and removes none. The workflow's `name:` values are byte-identical before and
+      after.
+
+      **Every guard added rides one of those nine**, which is the point of D3 rather than an
+      accident: the coherence tests and the ONNX pin ride `Unit Tests`, the comparator's 37 tests
+      ride `Coverage Script Tests` via `unittest discover`, and the notifier's 27 were placed in the
+      `coverage-scripts` job beside the two guards before it — so the guard's own guard gates too.
 
 ## 7. Close-out
 
 - [ ] 7.1 Flip `docs/decisions/0042-public-claim-guard-classes.md` to `Accepted` and add its entry to
       the `docs/decisions/README.md` catalog (deliberately not added while `Proposed`, and to avoid
       colliding with the parallel work owning ADR-0041 / ADR-0043)
-- [ ] 7.2 `CHANGELOG.md` entry. **No `Directory.Build.props` `PackageVersion` bump and no `v*` tag:**
+- [x] 7.2 `CHANGELOG.md` entry. **No `Directory.Build.props` `PackageVersion` bump and no `v*` tag:**
       this change touches docs, tests, benchmarks and one scheduled workflow — no shipped `src/`
       behaviour — so there is nothing to publish to nuget.org
+      Written. **No `PackageVersion` bump and no `v*` tag**, per the task: docs, tests, benchmarks,
+      one scheduled workflow and three lines of packaging metadata, with no shipped `src/` behaviour.
+
+      The entry leads with the nine false claims in a table rather than with the machinery, because
+      the machinery is the remedy and the claims are the finding. It also records the two figures
+      **deleted rather than restated** — the turn-detection latency and asterisk-java's star count —
+      each with what would bring it back.
+
 - [ ] 7.3 Archive the change (`openspec archive`) and confirm the `claim-guards` living spec
       materializes under `openspec/specs/`
