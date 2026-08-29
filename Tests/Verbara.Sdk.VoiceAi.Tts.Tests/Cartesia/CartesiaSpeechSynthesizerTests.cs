@@ -399,6 +399,35 @@ public class CartesiaSpeechSynthesizerTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// The precedence <c>streaming-session-lifecycle</c> states: a requested cancellation outranks
+    /// the empty-input shortcut. This synthesizer takes the shortcut first, so a caller who has
+    /// already cancelled receives an empty sequence — indistinguishable from "nothing to say", and
+    /// the SDK offers no other signal that would let it tell the two apart.
+    /// </summary>
+    /// <remarks>
+    /// The token is handed to the subject and <see cref="CancellationToken.None"/> to the
+    /// enumerator, so an <see cref="OperationCanceledException"/> observed here came out of
+    /// <c>SynthesizeAsync</c> rather than out of the consumer standing in for it (ADR-0052 F3).
+    /// The fake is asserted silent for the same reason the whitespace test above asserts it:
+    /// "it threw" alone would also pass if the client had opened a session and been lucky.
+    /// </remarks>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowOperationCanceled_WhenTextIsWhitespaceAndTokenAlreadyCancelled()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var synth = BuildSynthesizer();
+
+        var act = async () => await synth
+            .SynthesizeAsync("   \t\n ", AudioFormat.Slin16Mono8kHz, cts.Token)
+            .ToListAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        _server.ReceivedApiKey.Should().BeNull("the cancellation is observed before any session is opened");
+        _server.ReceivedJsonMessages.Should().BeEmpty();
+    }
+
+    /// <summary>
     /// The eighth WebSocket surface's first cancellation test — this class had none, so a caller
     /// cancelling Cartesia synthesis was the one provider whose behaviour nothing here stated.
     /// </summary>
