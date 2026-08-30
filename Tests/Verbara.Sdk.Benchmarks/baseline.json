@@ -1,0 +1,110 @@
+{
+  "_readme": "HUMAN-AUTHORED FILE. CI NEVER WRITES BACK (ADR-0042 D6). The update protocol — what a re-baseline PR must state — lives in baseline.README.md next to this file. Read it before changing a number here.",
+  "_what_these_numbers_are": "Hosted-runner (ubuntu-latest) means, in NANOSECONDS, with a per-benchmark tolerance band in PERCENT. They are deliberately NOT the workstation figures published in README.md / docs/README-technical.md (AMD Ryzen 9 9900X, 12C/24T), which are 1.97x-2.35x faster; gating against those would red this job permanently (ADR-0042 D4, Option D). Regression protection is this file's job; document-vs-record correspondence is COHERENCE's (D7). The two are separate failures and are detected separately.",
+  "schema_version": 1,
+  "calibration": {
+    "method": "Parsed the BenchmarkDotNet `-report-full-compressed.json` artifacts of 13 real runs of .github/workflows/perf-regression.yml — 12 scheduled (weekly cron) plus 1 workflow_dispatch. `mean_ns` is the mean of those per-run means; the band is set to cover the observed across-run spread with headroom.",
+    "runs": 13,
+    "run_breakdown": "12 scheduled + 1 workflow_dispatch",
+    "window_start": "2026-06-07",
+    "window_end": "2026-08-29",
+    "runner": "github-hosted ubuntu-latest",
+    "benchmarkdotnet_version": "0.15.8",
+    "processors_observed": [
+      "AMD EPYC 7763 (9 of 13 runs)",
+      "AMD EPYC 9V74 (4 of 13 runs)"
+    ],
+    "pooled_across_processors": true,
+    "why_the_bands_are_wide": "ubuntu-latest alternates between two CPU models and the EPYC 9V74 is uniformly faster — up to 20.7% on some benchmarks. Bands are POOLED across both fleets: one band per benchmark, wide enough for either CPU, because the workflow cannot choose its host. Within-run CV is 0.11%-0.67%; across-run CV is 0.5%-11.2%. This is why a band is NEVER derived from `Statistics.StandardDeviation` in a report — that is the within-run figure and is roughly 20x too tight, and a gate built on it would be red most weeks for reasons that have nothing to do with this repository's code.",
+    "verification": "0 breaches across all 13 runs under these bands; tightest headroom 5.8 percentage points.",
+    "two_sided": "Bands are two-sided. The SLOWER side is the regression this gate exists to catch. The FASTER side is a stale-baseline signal (ADR-0042 D6) or a benchmark whose work got optimised away — it is reported as its own kind of breach, not as good news."
+  },
+  "sources": {
+    "_comment": "artifacts subdirectory (relative to --artifacts-root) -> the BenchmarkDotNet type whose report MUST be there. One row per `--filter` step in .github/workflows/perf-regression.yml. Adding a filter step obliges a row here AND its baseline entries below; a row whose results/ directory or report file is missing is a HARD failure, which is what closes the `|| true` hole (ADR-0042 D4).",
+    "ami": "Verbara.Sdk.Benchmarks.AmiProtocolReaderBenchmark",
+    "ari-json": "Verbara.Sdk.Benchmarks.AriJsonBenchmark",
+    "ari-event": "Verbara.Sdk.Benchmarks.AriParseEventBenchmark",
+    "channel-manager": "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark",
+    "observer": "Verbara.Sdk.Benchmarks.ObserverDispatchBenchmark",
+    "turn-detection": "Verbara.Sdk.Benchmarks.TurnDetectionBenchmark",
+    "_turn_detection_note": "Present here with NO rows in \"benchmarks\" below, and that is deliberate rather than an oversight. The step must run and produce a report — a missing results/ directory is still a hard failure, which is the point — but its band cannot be calibrated yet: every other band in this file came from 13 observed runs and this benchmark has none. Its band is set in the PR that flips PERF_GATE_ENFORCE, from its own observations. Guessing one here would break the rule this file exists to enforce, in the change that wrote it."
+  },
+  "benchmarks": {
+    "Verbara.Sdk.Benchmarks.AmiProtocolReaderBenchmark.ParseSingleEvent": {
+      "mean_ns": 1484.0,
+      "tolerance_pct": 25
+    },
+    "Verbara.Sdk.Benchmarks.AmiProtocolReaderBenchmark.ParseResponse": {
+      "mean_ns": 981.16,
+      "tolerance_pct": 25
+    },
+    "Verbara.Sdk.Benchmarks.AmiProtocolReaderBenchmark.Parse100EventBatch": {
+      "mean_ns": 88642.0,
+      "tolerance_pct": 10
+    },
+    "Verbara.Sdk.Benchmarks.AriJsonBenchmark.DeserializeChannel": {
+      "mean_ns": 666.79,
+      "tolerance_pct": 20
+    },
+    "Verbara.Sdk.Benchmarks.AriJsonBenchmark.SerializeChannel": {
+      "mean_ns": 363.01,
+      "tolerance_pct": 45
+    },
+    "Verbara.Sdk.Benchmarks.AriJsonBenchmark.DeserializeBridge": {
+      "mean_ns": 562.22,
+      "tolerance_pct": 30
+    },
+    "Verbara.Sdk.Benchmarks.AriJsonBenchmark.SerializeBridge": {
+      "mean_ns": 264.5,
+      "tolerance_pct": 35
+    },
+    "Verbara.Sdk.Benchmarks.AriJsonBenchmark.Deserialize100Channels": {
+      "mean_ns": 64354.0,
+      "tolerance_pct": 15
+    },
+    "Verbara.Sdk.Benchmarks.AriParseEventBenchmark.ParseStasisStart": {
+      "mean_ns": 3947.0,
+      "tolerance_pct": 25
+    },
+    "Verbara.Sdk.Benchmarks.AriParseEventBenchmark.ParseChannelDtmf": {
+      "mean_ns": 1939.0,
+      "tolerance_pct": 25
+    },
+    "Verbara.Sdk.Benchmarks.AriParseEventBenchmark.ParseUnknownEvent": {
+      "mean_ns": 547.36,
+      "tolerance_pct": 25
+    },
+    "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark.Create1000Channels": {
+      "mean_ns": 353056.0,
+      "tolerance_pct": 30
+    },
+    "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark.Update1000ChannelStates": {
+      "mean_ns": 65925.0,
+      "tolerance_pct": 15
+    },
+    "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark.LookupByUniqueId": {
+      "mean_ns": 12.01,
+      "tolerance_pct": 15
+    },
+    "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark.LookupByName": {
+      "mean_ns": 14.69,
+      "tolerance_pct": 15
+    },
+    "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark.EnumerateByState": {
+      "mean_ns": 125710.0,
+      "tolerance_pct": 30
+    },
+    "Verbara.Sdk.Benchmarks.ObserverDispatchBenchmark.Dispatch_1Observer": {
+      "mean_ns": 0.94,
+      "tolerance_pct": 15
+    },
+    "Verbara.Sdk.Benchmarks.ObserverDispatchBenchmark.Dispatch_10Observers": {
+      "mean_ns": 5.67,
+      "tolerance_pct": 20
+    },
+    "Verbara.Sdk.Benchmarks.ObserverDispatchBenchmark.Dispatch_100Observers": {
+      "mean_ns": 47.61,
+      "tolerance_pct": 15
+    }
+  }
+}

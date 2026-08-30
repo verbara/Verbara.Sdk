@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — Nine public claims were false, and now something executes them
+
+`README.md` sells this SDK on numbers, and a number nobody executes decays silently: the code
+changes, the figure does not, and the first person to find out is a prospective user. Auditing every
+quantitative claim in the living public docs turned up nine that were already wrong.
+
+| claim | published | actual |
+|---|---|---|
+| AMI parse throughput (`README.md`) | 1.53M events/sec, 653 ns | **1.62M / 617.6 ns** — the published pair was the *pre-patch* figure, so the SDK understated itself by 6% |
+| turn-detection CPU latency | ~12 ms | **26.18–37.30 ms** depending on utterance length — the figure came from a vendor blog measuring raw ONNX on a different model version |
+| ADR count | 37 | 53 |
+| `EventPumpCapacity` default (`docs/README-technical.md`) | 10,000 | **20,000** — a reader sizing a buffer off the docs halved it |
+| "**all** VoiceAi packages expose an `ActivitySource`" | all | **3 of 7** — falsifiable against the very array the sentence cites as proof |
+| Push packages | 2 | 4 |
+| AMI surface (`docs/README-technical.md`) | 111 actions, 215 events | 148, 278 |
+| package count (`docs/README-commercial.md`, `CONTRIBUTING.md`) | 28 | 29 |
+| headline version (`README.md`) | v2.2.1 | 2.5.0, tagged |
+
+**What now executes.** `docs/claim-registry.md` is the single answer to "is this claim guarded?" —
+every quantitative figure in the living public docs, with a declared class and its guard.
+`PerformanceTableCoherenceTests` binds each README Performance figure to a committed measurement
+record and fails the build when they drift; a second test refuses a *new* table row that ships
+without a record entry, because walking the record alone would let one through. The bundled ONNX is
+pinned by content hash — by hash and not by length, because upstream's v3.1-cpu and v3.2-cpu are two
+bytes apart and a length pin would pass a silent downgrade from 94.26% to 90.66% accuracy. And
+`Tests/Verbara.Sdk.Benchmarks/baseline.json` gives the weekly performance workflow a baseline to diff
+against, closing the `|| true` hole where a benchmark that never ran read as green.
+
+**Numbers deleted rather than restated.** The turn-detection latency figure is gone from the README
+and not replaced: it is measured now, but its benchmark has no calibrated band yet, and publishing an
+enforceable claim with no gate behind it is the habit this change exists to break. asterisk-java's
+GitHub star count is gone too — a third party's metric about a third party's repository, wrong the
+day after it is written. Both deletions are recorded with what would bring the number back.
+
+**Accuracy is now stated as upstream's measurement**, cited to their per-version benchmark rather
+than to a model card that states no figure at all, and bound to the shipped artifact by the hash pin.
+
+No `PackageVersion` bump and no `v*` tag: this change touches docs, tests, benchmarks, one scheduled
+workflow and three lines of packaging metadata — no shipped `src/` behaviour, so there is nothing to
+publish to nuget.org.
+
 ### Fixed — A cancelled caller asking for blank text now faults on every TTS surface
 
 `CartesiaSpeechSynthesizer` and `SpeechmaticsSpeechSynthesizer` took their blank-text `yield break`

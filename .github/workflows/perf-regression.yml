@@ -3,15 +3,32 @@ name: Perf Regression
 # Guard #4 of Fase 1 — pins the marketing performance numbers cited in README.md
 # "Performance" section against a runnable BenchmarkDotNet suite.
 #
-# Why scheduled, not per-PR:
+# Why scheduled, not per-PR (ADR-0042 D2):
 #   BenchmarkDotNet runs take ~3-5 min per benchmark for stable numbers
 #   (warmup + multiple iterations). Five hot-path benchmarks = ~20-25 min per
 #   matrix dimension. Per-PR cost would add that to every queue entry — not
-#   worth the slowdown for a number that drifts slowly.
+#   worth the slowdown for a number that drifts slowly, and hosted-runner
+#   neighbour noise at PR granularity produces false reds anyway.
 #
-#   Instead: weekly scheduled run + downloadable JSON artifact. Operators
-#   compare manually for now; a regression-detection gate that diffs against
-#   `Tests/Verbara.Sdk.Benchmarks/baseline.json` is a follow-up issue.
+#   `merge_group` is worse, not better (ADR-0042, Option C): the queue is
+#   serial, so a 25-min job is paid per landing with nothing to hide behind.
+#
+# TRIGGERS ARE DELIBERATELY `schedule` + `workflow_dispatch` AND NOTHING ELSE
+# (openspec `enforce-unguarded-public-claims` §2.6; ADR-0042 D2-D3, ADR-0038,
+# verbara-meta/ADR-0003). No `pull_request`, no `merge_group` => this workflow's
+# check-run name never appears on a PR or on a queue entry, so it can never be a
+# required context and no branch-protection reconciliation is needed. Adding
+# either trigger here is not a tweak: it changes the required-check set, which is
+# the never-reporting-context failure mode that hangs the merge queue.
+#
+# WHAT CHANGED (2026-08, ADR-0042 D4/D5/D6): the "operators compare manually for
+# now" era is over. `Tests/Verbara.Sdk.Benchmarks/baseline.json` now exists and
+# `scripts/ci/check-perf-baseline.py` diffs every run against it, failing closed
+# on a missing/empty/unparseable result — because every benchmark step below is
+# suffixed `|| true`, so a benchmark that NEVER RAN would otherwise read green.
+# That is the hole this closes. The `|| true` stays: it is what lets one broken
+# filter still leave the other four benchmarks measurable, and the comparison
+# step is now what notices.
 #
 # Manual run: gh workflow run "Perf Regression"
 
@@ -22,11 +39,31 @@ on:
     - cron: '0 4 * * 0'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write   # ADR-0042 D5 — a breach files/updates an issue, not just a red run.
+
 jobs:
   benchmark:
     name: Run BenchmarkDotNet hot-paths
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      # ┌─────────────────────────────────────────────────────────────────────┐
+      # │  THE FLIP. This one line is the whole difference between observing  │
+      # │  and enforcing (openspec `enforce-unguarded-public-claims` §2.5).   │
+      # │                                                                     │
+      # │  'false' — the comparison runs, prints every delta, writes the run  │
+      # │            summary and still files the breach issue, but does NOT   │
+      # │            fail the job. A gate whose first act is a false red gets │
+      # │            routed around, then ignored, then deleted.               │
+      # │  'true'  — breaches and structural failures fail the job.           │
+      # │                                                                     │
+      # │  Flip to 'true' in its own PR, once TWO consecutive scheduled runs  │
+      # │  have passed under observation. Nothing else changes: the same flag │
+      # │  arms check-perf-baseline.py and report-perf-breach.sh together.    │
+      # └─────────────────────────────────────────────────────────────────────┘
+      PERF_GATE_ENFORCE: 'false'
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -43,7 +80,13 @@ jobs:
       # type) doesn't kill the whole job before the rest produce data.
       #
       # Filters use BenchmarkDotNet glob syntax: '*' is wildcard. Add new hot
-      # paths here when the README adds a new "Performance" table row.
+      # paths here when the README adds a new "Performance" table row — and add
+      # the matching `sources` row + baseline entries to
+      # Tests/Verbara.Sdk.Benchmarks/baseline.json in the SAME PR, or the
+      # comparison below cannot know the new benchmark was supposed to run.
+      #
+      # `|| true` is intentional and is NOT a hole any more: the comparison step
+      # fails closed on the empty artifacts directory a crashed step leaves.
       - name: AMI parse + dispatch
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
@@ -64,12 +107,65 @@ jobs:
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*ObserverDispatch*' --exporters json --artifacts ../../artifacts/observer || true
+      # Turn-detection inference latency (ADR-0042 D8 + change §3.5). Added WITHOUT a
+      # baseline.json entry on purpose: every other band here was calibrated from 13 real runs of
+      # this workflow, and this benchmark has none yet. Its band gets calibrated the same way, from
+      # its own observations, in the PR that flips PERF_GATE_ENFORCE. Until then it publishes a
+      # measurement and the comparator ignores it — a band guessed today would be the "calibrated
+      # from observation, never guessed" rule broken by the change that wrote it.
+      - name: Turn-detection end-of-utterance decision
+        run: |
+          cd Tests/Verbara.Sdk.Benchmarks
+          dotnet run -c Release --no-build -- --filter '*TurnDetection*' --exporters json --artifacts ../../artifacts/turn-detection || true
+
+      # ── The gate itself (ADR-0042 D4) ────────────────────────────────────────
+      # Relative-regression only: observed mean vs the committed HOSTED-RUNNER
+      # mean, inside a per-benchmark band calibrated from 13 real runs of this
+      # workflow. It does not compare against README.md's workstation figures
+      # (1.97x-2.35x faster — an absolute comparison would be permanently red).
+      # Fails closed: absent results/ dir, absent report, empty `Benchmarks`,
+      # a baselined FullName that never appeared, or a non-numeric
+      # `Statistics.Mean` are all breaches. Exit 2 (gate misconfigured) fails
+      # the job in BOTH modes — a guard that is broken must not read green.
+      - name: Compare against baseline
+        id: perf
+        # `!cancelled()` rather than `always()`: a benchmark step that CRASHED must still be
+        # compared (that is the whole point — no report is a breach), but a cancelled run has
+        # nothing to say and must not file an issue about it.
+        if: ${{ !cancelled() }}
+        run: |
+          python3 scripts/ci/check-perf-baseline.py \
+            --baseline Tests/Verbara.Sdk.Benchmarks/baseline.json \
+            --artifacts-root artifacts \
+            --markdown-out perf-baseline-report.md
+
+      - name: Publish comparison to the run summary
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f perf-baseline-report.md ]; then
+            cat perf-baseline-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "perf-baseline produced no report — see the previous step." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # ADR-0042 D5 — a weekly red nobody is told about is observational under
+      # another name. Reuses ONE open issue by exact title so the week-by-week
+      # trend accumulates in one place instead of filing a duplicate every
+      # Sunday. Runs in observing mode too: while the job stays green, this
+      # issue is the ONLY signal a breach happened.
+      - name: File or update the breach issue
+        if: ${{ !cancelled() && steps.perf.outputs.status == 'breach' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/report-perf-breach.sh perf-baseline-report.md
 
       - name: Upload BenchmarkDotNet JSON reports
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
           name: benchmark-reports-${{ github.run_id }}
-          path: artifacts/**/results/*.json
+          path: |
+            artifacts/**/results/*.json
+            perf-baseline-report.md
           if-no-files-found: warn
           retention-days: 90

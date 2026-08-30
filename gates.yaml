@@ -74,7 +74,12 @@ gates:
       web bundle). The nearest analogue — performance regression against README-cited BenchmarkDotNet
       numbers — exists (.github/workflows/perf-regression.yml) but is a WEEKLY scheduled report, not a
       per-PR budget gate (BenchmarkDotNet needs ~20-25 min for stable numbers; per-PR cost rejected).
-      A diff-vs-baseline.json gate is a documented follow-up, not a current gate.
+      Tests/Verbara.Sdk.Benchmarks/baseline.json + scripts/ci/check-perf-baseline.py now diff every
+      weekly run against committed hosted-runner bands and fail closed on a missing/empty result
+      (ADR-0042 D4), with a breach filing an issue (D5) — but the workflow stays schedule +
+      workflow_dispatch only and contributes NO required check, and the comparison is still
+      OBSERVING (PERF_GATE_ENFORCE='false') pending two clean scheduled runs. So: a gate exists,
+      it is not a per-PR budget gate, and G6 stays `na`.
 
   - id: G7
     class: publish-reality

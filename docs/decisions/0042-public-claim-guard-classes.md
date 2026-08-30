@@ -76,14 +76,36 @@ a claim actually obliges, and what happens when the honest answer is that it can
 
 Public quantitative claims are guarded by **class**, not uniformly. Concretely:
 
-- **D1 — Every quantitative public claim carries exactly one declared guard class.** The classes
-  are: **ENFORCING** (an executable gate fails when reality diverges), **COHERENCE** (a cheap,
-  per-PR consistency check that the published number equals a committed recorded measurement), and
+- **D1 — Every quantitative public claim carries exactly one declared class.** The classes are:
+  **ENFORCING** (an executable gate fails when reality diverges), **COHERENCE** (a cheap, per-PR
+  consistency check that the published number equals a committed recorded measurement),
   **ATTRIBUTED** (the number is a third party's measurement, cited as theirs and pinned to the
-  artifact it describes). A quantitative claim in a living public document with no declared class
-  MUST NOT ship. "Living" excludes dated `CHANGELOG` history and archived docs, which stay verbatim
-  as period-correct records — the same exclusion the `docs-brand-consistency` capability already
-  applies.
+  artifact it describes), and **EVIDENCE** (a dated record of a measurement we took ourselves
+  against something we do not control). A quantitative claim in a living public document with no
+  declared class MUST NOT ship. "Living" excludes dated `CHANGELOG` history and archived docs, which
+  stay verbatim as period-correct records — the same exclusion the `docs-brand-consistency`
+  capability already applies.
+
+- **D1a — EVIDENCE is a disposition, not a guard. It is declared per claim, never inferred from a
+  folder and never inherited from the document a claim sits in.** It applies only where none of the
+  other three *can* apply, and the test is the **subject** of the measurement: EVIDENCE requires that
+  what was measured is outside this repository's control — a live vendor service, a paid API, a third
+  party's system — so that re-measuring is not reachable under D2 and no committed record could stay
+  true anyway. A measurement whose subject is this repository's own code or contents is **never**
+  EVIDENCE: its record can always be committed, so it is COHERENCE at minimum, and "the document is
+  the record" is a choice the author made rather than a condition they found. A figure does not
+  become EVIDENCE because nobody committed a record, because the hardware was a workstation, or
+  because CI cannot reproduce it. An EVIDENCE claim carries no guard
+  obligation and stays verbatim, but it MUST carry the date and the conditions of the measurement,
+  because that is the whole of what makes it honest. It MUST NOT be used to excuse a number that
+  could be gated: a claim about this repo's own contents (test counts, package counts, surface
+  counts) is ENFORCING however inconvenient, even when it sits in a document whose other figures are
+  EVIDENCE. The provider guides under `docs/guides/` are the motivating case — dated wire captures
+  against live vendor APIs, whose subject is a vendor's service — and `provider-wire-conformance.md`'s
+  counts of *this repo's own tests* are the motivating counter-case: same document, different class,
+  because the subject differs. A first-party benchmark of our own code on our own workstation is the
+  case this clause exists to refuse: its subject is ours, so it is COHERENCE, and the remedy for "the
+  record was never committed" is to commit the record.
 
 - **D2 — Expensive measurement never runs per-PR.** Anything requiring statistically meaningful
   timing (BenchmarkDotNet, model inference over a corpus) runs on the existing weekly schedule plus
@@ -135,14 +157,43 @@ Public quantitative claims are guarded by **class**, not uniformly. Concretely:
   version; the current v3 / v3.2 split across README link, package `<Description>` and resource
   filename is exactly the drift this guards.
 
-- **D9 — Deferral is declared with its blocker.** When a first-party gate is not economically
-  reachable, the deferral is written down with the specific blocker and the condition that would
-  unblock it, and the claim MUST NOT be presented as first-party until the gate exists. For
-  turn-detection accuracy the blocker is stated plainly: no corpus of labelled turn-boundary speech
-  has been identified whose licence permits redistribution from a public MIT repository, and
-  recording one in-house raises consent and licensing questions this repo is not set up to answer.
-  Absent that corpus the figure stays ATTRIBUTED to upstream. This is an open question, not a
-  solved one.
+- **D9 — Deferral is declared with its blocker, and the blocker is the one that survives being
+  checked.** When a first-party gate is not economically reachable, the deferral is written down
+  with the specific blocker and the condition that would unblock it, and the claim MUST NOT be
+  presented as first-party until the gate exists.
+
+  For turn-detection accuracy, the blocker is **labelling, not licensing**. An earlier draft of this
+  ADR said no corpus had been identified whose licence permits redistribution from a public MIT
+  repository; the survey run for `enforce-unguarded-public-claims` §5.1 found that to be false.
+  **AMI, ICSI and HCRC Map Task are all CC BY 4.0**, which grants redistribution and commercial use
+  against attribution alone. The blocker that does survive:
+
+  > No corpus has been identified that combines a redistribution-permitting licence with ready-made
+  > turn-boundary labels. The three CC BY 4.0 conversational corpora may be redistributed from this
+  > repo but carry only word/segment timings and dialogue-act coding, so turn-end versus turn-mid
+  > labels would have to be derived and hand-verified by us — and derived specifically from the
+  > CC-BY-covered layers, since AMI and ICSI release "all of the signals and transcription, and
+  > **some** of the annotations" under that licence rather than the corpus entire. HCRC Map Task
+  > grants CC BY 4.0 on its downloads outright. The only corpus with the native label — Pipecat's own
+  > `smart-turn-data-v3.x`, whose `endpoint_bool` field is exactly the target and which was used to
+  > train the model actually shipped — declares no licence at all (the BSD-2-Clause covers the model
+  > repository, not the datasets), and carries a per-row `synthetic` flag indicating a large
+  > TTS-generated majority whose redistribution would be governed by the TTS vendors' terms rather
+  > than Pipecat's. The exact proportion is not published on the dataset card and would have to be
+  > computed from that flag before being relied on.
+
+  The unblocking condition is therefore a **decision**, not a search: derive roughly twenty clips
+  from AMI or Map Task under CC BY 4.0 with in-repo attribution, and accept that the gate's ground
+  truth is our own hand-derived labelling rather than a third party's. A second, cheaper path exists
+  and is worth pursuing in parallel: ask pipecat-ai to declare a licence on the dataset cards, which
+  they already describe as open source. Absent either, the figure stays ATTRIBUTED to upstream —
+  and, per D8, attributed to the **version actually shipped**, whose published accuracy differs from
+  its predecessor's by nearly nine percentage points.
+
+  LDC-distributed corpora (Switchboard, Fisher, CallHome, DIHARD) are excluded on a separate and
+  firmer ground: the LDC non-members agreement forbids redistribution outside the user's research
+  group, and its limited-excerpt allowance is scoped to non-commercial research publications, which
+  test fixtures in a shipped SDK are not.
 
 ## Consequences
 

@@ -4,24 +4,47 @@
 
 ### Requirement: Every quantitative public claim declares a guard class
 
-Every quantitative claim in a living public document SHALL declare exactly one guard class, and a
-quantitative claim with no declared class MUST NOT ship. The classes are exactly three: **ENFORCING**
+Every quantitative claim in a living public document SHALL declare exactly one class, and a
+quantitative claim with no declared class MUST NOT ship. The classes are exactly four: **ENFORCING**
 (an executable gate fails when reality diverges from the claim), **COHERENCE** (a per-PR check that
-the published number equals a committed record of the measurement it reports), and **ATTRIBUTED**
+the published number equals a committed record of the measurement it reports), **ATTRIBUTED**
 (the number is a third party's published measurement, cited as theirs and pinned to the artifact it
-describes). Living public documents are tracked `*.md` that a reader consumes as current — `README.md`,
-package and example READMEs, `docs/guides/`. Dated `CHANGELOG` history,
-`openspec/changes/archive/`, `docs/decisions/`, `docs/specs/`, `docs/research/` and
-`docs/plans/{completed,archived}/` are excluded as period-correct records and SHALL be left verbatim,
-matching the exclusion set the `docs-brand-consistency` capability already applies. The class
-declarations SHALL live in a single committed registry, so "is this claim guarded?" is answerable by
-reading one file rather than by searching the test projects, the canary and the workflows.
+describes), and **EVIDENCE** (a dated record of a first-party measurement of something outside this
+repo's control, carrying no guard obligation — see ADR-0042 D1a). Living public documents are tracked
+files a reader consumes as current — `README.md`, `CONTRIBUTING.md`, `docs/README-technical.md`,
+`docs/README-commercial.md`, package and example READMEs, `docs/guides/` in full, and the
+`<Description>` values in `src/*/*.csproj`, which are not Markdown but are published verbatim on
+nuget.org and are read as current there. Dated
+`CHANGELOG` history, `openspec/changes/archive/`, `docs/decisions/`, `docs/specs/`, `docs/research/`
+and `docs/plans/{completed,archived}/` are excluded as period-correct records and SHALL be left
+verbatim, matching the exclusion set the `docs-brand-consistency` capability already applies. The
+class declarations SHALL live in a single committed registry, so "is this claim guarded?" is
+answerable by reading one file rather than by searching the test projects, the canary and the
+workflows.
+
+A per-PR guard SHALL be reachable on a pull request that touches only the document it guards. A
+document whose claims carry a COHERENCE or ENFORCING class and that the docs-only CI fast path
+classifies as skippable has a decorative guard, not a real one, and the fast path's carve-out SHALL
+name it.
 
 #### Scenario: A new number added to the README without a class fails review
 
 - **GIVEN** a pull request that adds a throughput, latency, accuracy or count figure to `README.md`
 - **WHEN** the claim registry is not updated in the same pull request to declare that claim's guard class
 - **THEN** the change is a review defect and the claim does not ship
+
+#### Scenario: A guard the docs-only fast path skips is not a guard
+
+- **GIVEN** a living public document whose figures declare COHERENCE, guarded by a test on the `Unit Tests` job
+- **WHEN** a pull request changes one of those figures and touches no other file
+- **THEN** the fast path MUST NOT classify that pull request as docs-only, because a guard that does not run on the change that breaks it reports success for the one case it exists to catch
+
+#### Scenario: An EVIDENCE disposition does not excuse a gateable number
+
+- **GIVEN** a document whose vendor-capture figures are classed EVIDENCE
+- **AND** a figure in that same document counting this repository's own contents
+- **WHEN** the classes are applied
+- **THEN** the second figure is ENFORCING, because the class is declared per claim and not inherited from the document it sits in
 
 #### Scenario: Historical numbers in the CHANGELOG are not claims
 
