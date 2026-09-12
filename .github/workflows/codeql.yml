@@ -90,8 +90,9 @@ jobs:
       # .NET SDK's own source generators write under obj/**/generated/, which no change here can reach, and a
       # CodeQL config cannot exclude it: `paths`/`paths-ignore` are not honoured for a compiled language analysed
       # from a traced build, which the build step above is. So analyze writes its SARIF, the filter drops results
-      # in System.*/Microsoft.* generator output (our own generator's output stays analysed), and upload-sarif
-      # sends the rest.
+      # in System.*/Microsoft.* generator output whose rule resolves and is not security-relevant (our own
+      # generator's output stays analysed, and a security result is never dropped), and upload-sarif sends the
+      # rest.
       #
       # `upload: failure-only`, not `never`: on success analyze uploads nothing, and when analysis FAILS the
       # Action's post step still uploads the failed-run diagnostics under this category, as `always` did. The

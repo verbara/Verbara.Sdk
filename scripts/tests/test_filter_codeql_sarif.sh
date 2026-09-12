@@ -2,15 +2,17 @@
 # test_filter_codeql_sarif.sh — unit tests for scripts/ci/filter-codeql-sarif.sh (ADR-0051 addendum, 2026-09-12).
 #
 # The filter runs only in codeql.yml's `Analyze (C#)` job, between analysis and upload, and a wrong rule turns
-# nothing red: remove too much and alerts about this repository's own code close as "fixed" with nobody having
-# fixed them; remove too little and the .NET generator alerts come back. So every rule gets a case in both
-# directions, each beside a control result in our own code that must survive, and this runs in the ALWAYS-RUN
-# `Coverage Script Tests` job beside the other guard harnesses — on the very PR that edits the filter.
+# nothing red: remove too much and alerts about this repository's own code, or security alerts anywhere, close as
+# "fixed" with nobody having fixed them; remove too little and the .NET generator alerts come back. So every rule
+# gets a case in both directions, each beside a control result in our own code that must survive, and this runs in
+# the ALWAYS-RUN `Coverage Script Tests` job beside the other guard harnesses — on the very PR that edits the filter.
 #
 # Fixtures are SARIF 2.1.0 logs in the shape the CodeQL CLI writes (a uri relative to %SRCROOT% plus an index into
-# run.artifacts), built with jq. The .NET generator paths are real ones from main's analysis of 99162772. Pure
-# bash + jq (+ git for the project-name guard), no network, no .NET. FILTER_CODEQL_SARIF runs every case against
-# another copy of the filter: that is how a negative control shows the cases can fail.
+# run.artifacts; the rules in tool.extensions[0] beside an empty driver, each result naming its rule by id and by
+# toolComponent + index), built with jq. The .NET generator paths, and the metadata of the cs/* rules, are real
+# ones from main's analysis of 99162772. Pure bash + jq (+ git for the project-name guard), no network, no .NET.
+# FILTER_CODEQL_SARIF runs every case against another copy of the filter: that is how a negative control shows the
+# cases can fail.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,28 +36,58 @@ STJ=src/Verbara.Sdk.Ari/obj/Release/net10.0/generated/System.Text.Json.SourceGen
 OPTIONS=src/Verbara.Sdk.Ami/obj/Release/net10.0/generated/Microsoft.Extensions.Options.SourceGeneration/Microsoft.Extensions.Options.Generators.OptionsValidatorGenerator/Validators.g.cs
 REGEX=src/Verbara.Sdk.Sessions.Postgres/obj/Release/net10.0/generated/System.Text.RegularExpressions.Generator/System.Text.RegularExpressions.Generator.RegexGenerator/RegexGenerator.g.cs
 EXAMPLE=Examples/SessionExtensionsExample/obj/Release/net10.0/generated/System.Text.Json.SourceGeneration/System.Text.Json.SourceGeneration.JsonSourceGenerator/FileStoreJsonContext.CallSessionDto.g.cs
+# The [LoggerMessage] generator, where a data-flow security alert could end with its sink in generated code.
+LOGGING=src/Verbara.Sdk.Ari/obj/Release/net10.0/generated/Microsoft.Extensions.Logging.Generators/Microsoft.Extensions.Logging.Generators.LoggerMessageGenerator/LoggerMessage.g.cs
 # This repository's own generator writes into the same tree, and that output must stay analysed.
-AMI_GEN=src/Verbara.Sdk.Ami/obj/Release/net10.0/generated/Verbara.Sdk.Ami.SourceGenerators/Verbara.Sdk.Ami.SourceGenerators.EventRegistryGenerator/GeneratedEventRegistry.g.cs
+AMI_GEN_DIR=src/Verbara.Sdk.Ami/obj/Release/net10.0/generated/Verbara.Sdk.Ami.SourceGenerators/Verbara.Sdk.Ami.SourceGenerators.EventRegistryGenerator
+AMI_GEN=$AMI_GEN_DIR/GeneratedEventRegistry.g.cs
 # The segments every "kept" spelling below is a near miss of.
 TAIL=System.Text.Json.SourceGeneration/System.Text.Json.SourceGeneration.JsonSourceGenerator/AriJsonContext.g.cs
 ARI=src/Verbara.Sdk.Ari
 
-# result <rule-id> <uri> — one result whose primary location is <uri>, in the CLI's shape.
+# The rules of every log that `log` writes, in tool.extensions[0] ("codeql/csharp-queries") as the CLI writes them.
+# The first six carry the metadata main's analysis gave them: five maintainability or correctness rules, and
+# cs/log-forging, a security rule with both markers. Each test/* rule isolates one marker, or none.
+RULES="$(jq -cn '[
+  { id: "cs/useless-cast-to-self", properties: { tags: ["external/cwe/cwe-561", "maintainability", "quality", "useless-code"] } },
+  { id: "cs/useless-upcast", properties: { tags: ["external/cwe/cwe-561", "maintainability", "quality", "useless-code"] } },
+  { id: "cs/missed-ternary-operator", properties: { tags: ["language-features", "maintainability", "quality", "readability"] } },
+  { id: "cs/path-combine", properties: { tags: ["correctness", "quality", "reliability"] } },
+  { id: "cs/nested-if-statements", properties: { tags: ["language-features", "maintainability", "quality", "readability"] } },
+  { id: "cs/log-forging", properties: { tags: ["external/cwe/cwe-117", "security"], "security-severity": "6.1" } },
+  { id: "test/security-tag-only", properties: { tags: ["external/cwe/cwe-079", "security"] } },
+  { id: "test/security-severity-only", properties: { tags: ["correctness"], "security-severity": "7.5" } },
+  { id: "test/no-properties" }
+]')"
+
+# result <rule-id> <uri> — one result whose primary location is <uri>, in the CLI's shape: its rule named by id and
+# by toolComponent 0 + its index in $RULES. An id that is not in $RULES gets no index, so only its id can match.
 result() {
-  jq -cn --arg rule "$1" --arg uri "$2" '
-    { ruleId: $rule, rule: { id: $rule, index: 0 }, level: "note", message: { text: "a finding" },
-      locations: [ { physicalLocation: { artifactLocation: { uri: $uri, uriBaseId: "%SRCROOT%", index: 0 },
-                                         region: { startLine: 3, startColumn: 5, endColumn: 9 } } } ],
-      partialFingerprints: { primaryLocationLineHash: "a771138decb78ce4:1" } }'
+  jq -cn --arg rule "$1" --arg uri "$2" --argjson rules "$RULES" '
+    (first(range(0; $rules | length) | select($rules[.].id == $rule)) // null) as $index
+    | { ruleId: $rule,
+        rule: ({ id: $rule, toolComponent: { index: 0 } } + (if $index == null then {} else { index: $index } end)),
+        level: "note", message: { text: "a finding" },
+        locations: [ { physicalLocation: { artifactLocation: { uri: $uri, uriBaseId: "%SRCROOT%", index: 0 },
+                                           region: { startLine: 3, startColumn: 5, endColumn: 9 } } } ],
+        partialFingerprints: { primaryLocationLineHash: "a771138decb78ce4:1" } }'
+}
+
+# located <reference-json> [<uri>] — a result at <uri> (default: System.Text.Json output) whose rule reference is
+# exactly <reference-json>, merged in: `{}` names no rule at all.
+located() {
+  jq -cn --arg uri "${2:-$STJ}" --argjson reference "$1" \
+    '{ message: { text: "m" }, locations: [ { physicalLocation: { artifactLocation: { uri: $uri } } } ] } + $reference'
 }
 
 # log <result>... — writes $IN: one SARIF 2.1.0 log whose one run holds the given results, in order, beside the
 # other things a CLI run carries — so "every other field unchanged" is checked against something.
 log() {
-  printf '%s\n' "$@" | jq -cs --arg schema "$SCHEMA" --arg ours "$OURS" '
+  printf '%s\n' "$@" | jq -cs --arg schema "$SCHEMA" --arg ours "$OURS" --argjson rules "$RULES" '
     { "$schema": $schema, version: "2.1.0",
-      runs: [ { tool: { driver: { name: "CodeQL", semanticVersion: "2.27.0",
-                                  rules: [ { id: "cs/useless-cast-to-self" }, { id: "cs/useless-upcast" } ] } },
+      runs: [ { tool: { driver: { name: "CodeQL", semanticVersion: "2.27.0", rules: [] },
+                        extensions: [ { name: "codeql/csharp-queries", semanticVersion: "1.9.3", rules: $rules },
+                                      { name: "codeql/csharp-all", semanticVersion: "7.3.0", rules: [] } ] },
                 invocations: [ { executionSuccessful: true, toolExecutionNotifications: [] } ],
                 artifacts: [ { location: { uri: $ours, uriBaseId: "%SRCROOT%", index: 0 } } ],
                 automationDetails: { id: "/language:csharp/" },
@@ -63,6 +95,9 @@ log() {
                 properties: { "semmle.formatSpecifier": "sarif-latest" },
                 results: . } ] }' > "$IN"
 }
+
+# patch <jq> — rewrites $IN with <jq> applied.
+patch() { jq -c "$1" "$IN" > "$WORK/patched.sarif"; cp "$WORK/patched.sarif" "$IN"; }
 
 # run <expected-exit> <description> <args>... — runs the filter, asserts its exit status, leaves its output in $LOG.
 run() {
@@ -76,7 +111,18 @@ run() {
 }
 
 says()  { case "$LOG" in *"$1"*) ok ;; *) bad "$2 — output did not mention '$1'"; printf '%s\n' "$LOG" | sed 's/^/      | /' ;; esac; }
-lacks() { case "$LOG" in *"$1"*) bad "$2 — output mentioned '$1'" ;; *) ok ;; esac; }
+lacks() { case "$LOG" in *"$1"*) bad "$2 — output mentioned '$1'"; printf '%s\n' "$LOG" | sed 's/^/      | /' ;; *) ok ;; esac; }
+
+# warned <text> <description> — the output has exactly one ::warning:: line, and that line contains <text>.
+warned() {
+  local lines count
+  lines="$(grep '^::warning::' <<<"$LOG" || true)"
+  count="$(grep -c '^::warning::' <<<"$LOG" || true)"
+  if [ "$count" = 1 ] && case "$lines" in *"$1"*) true ;; *) false ;; esac; then ok; else
+    bad "$2 — expected exactly one ::warning:: containing '$1', got $count"
+    printf '%s\n' "$LOG" | sed 's/^/      | /'
+  fi
+}
 
 # expect_output <jq-transform> <description> — $OUT is exactly $IN with <transform> applied: same values, same order.
 expect_output() {
@@ -150,19 +196,21 @@ else
 fi
 
 # =============================================================================================
-# removed — .NET SDK generator output, wherever the build put it
+# location, removed — .NET SDK generator output, wherever the build put it
 # =============================================================================================
-# removed <uri> <why> / kept <uri> <why> — beside the control, the result at <uri> is removed (or kept), and the
-# rest of the log is exactly as it was.
+# removed <uri> <why> / kept <uri> <why> — beside the control, a non-security result at <uri> is removed (or kept),
+# the rest of the log is exactly as it was, and nothing is warned about.
 removed() {
   log "$(result cs/useless-cast-to-self "$OURS")" "$(result cs/useless-upcast "$1")"
   run 0 "removed: $2" "$IN" "$OUT"
   expect_output 'del(.runs[0].results[1])' "removed: $2 ($1)"
+  lacks "::warning::" "removed: $2 ($1)"
 }
 kept() {
   log "$(result cs/useless-cast-to-self "$OURS")" "$(result cs/useless-upcast "$1")"
   run 0 "kept: $2" "$IN" "$OUT"
   expect_output '.' "kept: $2 ($1)"
+  lacks "::warning::" "kept: $2 ($1)"
 }
 
 removed "$STJ" "System.Text.Json generator output under src/<project>/obj/"
@@ -174,13 +222,13 @@ removed "$ARI/obj/Debug/net10.0/generated/$TAIL" "a Debug build"
 removed "$ARI/obj/generated/$TAIL" "generated/ directly under obj/"
 removed "$ARI/obj/Release/net10.0/generated/System.Text.Json.SourceGeneration/System.Text.Json.SourceGeneration.JsonSourceGenerator/nested/AriJsonContext.g.cs" \
   "a hint name inside a subfolder"
-removed "$ARI/obj/Release/net10.0/generated/Microsoft.Extensions.Logging.Generators/Microsoft.Extensions.Logging.Generators.LoggerMessageGenerator/LoggerMessage.g.cs" \
-  "the [LoggerMessage] generator — any Microsoft.* generator, not only those seen on main"
+removed "$ARI/obj/Release/net10.0/generated/System.Text.Json.SourceGeneration/System.Text.Json.SourceGeneration.JsonSourceGenerator/generated/Verbara.Sdk.Ari/AriJsonContext.g.cs" \
+  "a .NET generator hint name with a generated/ subfolder of its own — the first generated/ after obj/ decides"
+removed "$LOGGING" "the [LoggerMessage] generator — any Microsoft.* generator, not only those seen on main"
 removed "file:///w/repo/$ARI/obj/Release/net10.0/generated/$TAIL" "an absolute file: uri"
 
-# The shape GitHub stores after upload: no uriBaseId, no index.
-log "$(result cs/useless-cast-to-self "$OURS")" \
-    "$(jq -cn --arg uri "$STJ" '{ ruleId: "cs/useless-upcast", message: { text: "m" }, locations: [ { physicalLocation: { artifactLocation: { uri: $uri } } } ] }')"
+# The shape GitHub stores after upload: no uriBaseId, no index, and the rule named by ruleId alone.
+log "$(result cs/useless-cast-to-self "$OURS")" "$(located '{"ruleId": "cs/useless-upcast"}')"
 run 0 "removed: a location with a uri and nothing else" "$IN" "$OUT"
 expect_output 'del(.runs[0].results[1])' "removed: a location with a uri and nothing else"
 
@@ -193,9 +241,13 @@ run 0 "removed: primary location in generator output, related location in our co
 expect_output 'del(.runs[0].results[1])' "removed: primary location in generator output, related location in our code"
 
 # =============================================================================================
-# kept — our own generator, and every near miss of the rule
+# location, kept — our own generator, and every near miss of the rule
 # =============================================================================================
 kept "$AMI_GEN" "this repository's own generator output (Verbara.Sdk.Ami.SourceGenerators)"
+kept "$AMI_GEN_DIR/generated/System.Events/Registry.g.cs" \
+  "our generator's output under a hint-name subfolder generated/System.*/ — only the first generated/ after obj/ counts"
+kept "$AMI_GEN_DIR/obj/generated/System.Events/Registry.g.cs" \
+  "our generator's output under a hint-name subfolder obj/generated/System.*/ — only the first obj/ counts"
 kept "$OURS" "ordinary source"
 kept "objects/Release/net10.0/generated/$TAIL" "a root objects/ directory"
 kept "$ARI/objects/Release/net10.0/generated/$TAIL" "objects/ inside a project"
@@ -250,21 +302,151 @@ shape_kept "$(jq -cn --arg stj "$STJ" --arg ours "$OURS" '{ ruleId: "cs/useless-
 # generator output: the rule never removes more than a uri shows.
 log "$(result cs/useless-cast-to-self "$OURS")" \
     '{"ruleId": "cs/useless-upcast", "message": {"text": "m"}, "locations": [{"physicalLocation": {"artifactLocation": {"index": 1}}}]}'
-jq -c --arg stj "$STJ" '.runs[0].artifacts += [ { location: { uri: $stj, uriBaseId: "%SRCROOT%" } } ]' "$IN" > "$WORK/indexed.sarif"
-cp "$WORK/indexed.sarif" "$IN"
+patch ".runs[0].artifacts += [ { location: { uri: \"$STJ\", uriBaseId: \"%SRCROOT%\" } } ]"
 run 0 "kept: a location that names its artifact only by index" "$IN" "$OUT"
 expect_output '.' "kept: a location that names its artifact only by index"
 
 # =============================================================================================
+# rule, kept — a result in generator output whose rule is security-relevant, or cannot be shown not to be
+# =============================================================================================
+SECURITY='its rule is security-relevant (tag "security" or a security-severity), and a security result is never removed.'
+UNRESOLVED='its rule does not resolve in tool.driver or tool.extensions, so it cannot be shown not to be security-relevant.'
+UNREADABLE='the properties or properties.tags of its rule have the wrong type, so the rule cannot be shown not to be security-relevant.'
+
+# guarded <why> <rule-label> <reason> <result> [<patch>] — beside the control, a result that the location rule alone
+# would remove is kept, the log is exactly as it was, and one ::warning:: names its rule, its uri and the reason.
+guarded() {
+  local uri
+  uri="$(jq -r '.locations[0].physicalLocation.artifactLocation.uri' <<<"$4")"
+  log "$(result cs/useless-cast-to-self "$OURS")" "$4"
+  [ -z "${5:-}" ] || patch "$5"
+  run 0 "kept: $1" "$IN" "$OUT"
+  expect_output '.' "kept: $1"
+  warned "::warning::filter-codeql-sarif: kept $2 at $uri although it lies in .NET source-generator output — $3" "kept: $1"
+  says "::notice::filter-codeql-sarif: removed nothing — 1 of the 2 result(s) lie in .NET source-generator output, and each was kept because its rule is security-relevant or cannot be shown not to be (see the warnings). Wrote $OUT." \
+    "kept: $1 — the notice counts it"
+}
+
+# dropped <why> <result> [<patch>] — beside the control, a result in generator output whose rule resolves and is not
+# security-relevant is removed, silently.
+dropped() {
+  log "$(result cs/useless-cast-to-self "$OURS")" "$2"
+  [ -z "${3:-}" ] || patch "$3"
+  run 0 "removed: $1" "$IN" "$OUT"
+  expect_output 'del(.runs[0].results[1])' "removed: $1"
+  lacks "::warning::" "removed: $1"
+}
+
+# Security-relevant, in the CLI's shape: tool.extensions, named by toolComponent + index.
+guarded "cs/log-forging (tag and security-severity) in the [LoggerMessage] generator's output" \
+  cs/log-forging "$SECURITY" "$(result cs/log-forging "$LOGGING")"
+guarded "a rule in tool.extensions tagged security, with no security-severity" \
+  test/security-tag-only "$SECURITY" "$(result test/security-tag-only "$STJ")"
+guarded "a rule in tool.extensions with a security-severity and no security tag" \
+  test/security-severity-only "$SECURITY" "$(result test/security-severity-only "$OPTIONS")"
+guarded "a security-severity whose value is null — the key is what counts" \
+  test/security-severity-only "$SECURITY" "$(result test/security-severity-only "$REGEX")" \
+  '.runs[0].tool.extensions[0].rules[7].properties["security-severity"] = null'
+guarded "a rule named only by id, security-relevant in tool.extensions" \
+  cs/log-forging "$SECURITY" "$(located '{"ruleId": "cs/log-forging"}')"
+
+# Security-relevant, in tool.driver with no tool.extensions: named by ruleIndex, by rule.index, or by the id alone.
+IN_DRIVER='.runs[0].tool |= (del(.extensions) | .driver.rules = [
+  { id: "cs/useless-upcast", properties: { tags: ["maintainability"] } },
+  { id: "test/driver-security", properties: { tags: ["security"] } } ])'
+guarded "a rule in tool.driver tagged security, named by ruleIndex" \
+  test/driver-security "$SECURITY" "$(located '{"ruleId": "test/driver-security", "ruleIndex": 1}')" "$IN_DRIVER"
+guarded "a rule in tool.driver tagged security, named by rule.index" \
+  test/driver-security "$SECURITY" "$(located '{"rule": {"id": "test/driver-security", "index": 1}}')" "$IN_DRIVER"
+guarded "a rule in tool.driver tagged security, named only by id" \
+  test/driver-security "$SECURITY" "$(located '{"ruleId": "test/driver-security"}')" "$IN_DRIVER"
+
+# An id matches in EVERY component, and one security-relevant match is enough.
+guarded "an id that matches a plain rule in tool.driver and in extensions[0], and a security rule in extensions[1]" \
+  cs/useless-upcast "$SECURITY" "$(located '{"ruleId": "cs/useless-upcast"}')" \
+  '.runs[0].tool.driver.rules = [ { id: "cs/useless-upcast" } ] | .runs[0].tool.extensions[1].rules = [ { id: "cs/useless-upcast", properties: { tags: ["security"] } } ]'
+
+# Unresolvable: nothing found, references that contradict each other, and references of the wrong type.
+guarded "a rule id that no rule has" test/unknown "$UNRESOLVED" "$(result test/unknown "$STJ")"
+guarded "a result that names no rule" "(no rule id)" "$UNRESOLVED" "$(located '{}')"
+guarded "an index past the end of the rules" cs/useless-upcast "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/useless-upcast", "rule": {"id": "cs/useless-upcast", "toolComponent": {"index": 0}, "index": 99}}')"
+guarded "an index that lands on a plain rule while the id names a security rule" cs/log-forging "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/log-forging", "rule": {"id": "cs/log-forging", "toolComponent": {"index": 0}, "index": 1}}')"
+guarded "ruleId and rule.id that differ" cs/useless-upcast "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/useless-upcast", "rule": {"id": "cs/log-forging", "toolComponent": {"index": 0}}}')"
+guarded "ruleIndex and rule.index that differ" cs/useless-upcast "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/useless-upcast", "ruleIndex": 5, "rule": {"id": "cs/useless-upcast", "toolComponent": {"index": 0}, "index": 1}}')"
+guarded "a toolComponent index with no such extension" cs/useless-upcast "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/useless-upcast", "rule": {"id": "cs/useless-upcast", "toolComponent": {"index": 7}, "index": 1}}')"
+guarded "a ruleIndex with no toolComponent, so into tool.driver, whose rules are empty" cs/useless-upcast "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/useless-upcast", "ruleIndex": 1}')"
+guarded "an index that is not an integer" cs/useless-upcast "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/useless-upcast", "rule": {"id": "cs/useless-upcast", "toolComponent": {"index": 0}, "index": 1.5}}')"
+guarded "an index that is a string" cs/useless-upcast "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/useless-upcast", "rule": {"id": "cs/useless-upcast", "toolComponent": {"index": 0}, "index": "1"}}')"
+guarded "a negative index other than -1" cs/useless-upcast "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/useless-upcast", "ruleIndex": -2}')"
+guarded "a rule id that is not a string" 7 "$UNRESOLVED" "$(located '{"ruleId": 7}')"
+guarded "a rule reference that is not an object" cs/useless-upcast "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/useless-upcast", "rule": "cs/useless-upcast"}')"
+guarded "a toolComponent that is not an object" cs/useless-upcast "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/useless-upcast", "rule": {"id": "cs/useless-upcast", "toolComponent": 0, "index": 1}}')"
+guarded "a toolComponent index that is a string" cs/useless-upcast "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/useless-upcast", "rule": {"id": "cs/useless-upcast", "toolComponent": {"index": "0"}, "index": 1}}')"
+guarded "a run with no tool" cs/useless-upcast "$UNRESOLVED" "$(result cs/useless-upcast "$STJ")" 'del(.runs[0].tool)'
+guarded "an id, with tool.extensions an object" cs/useless-upcast "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/useless-upcast"}')" '.runs[0].tool.extensions = { rules: [ { id: "cs/useless-upcast" } ] }'
+guarded "an id, with one searched extension whose rules are an object" cs/useless-upcast "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/useless-upcast"}')" '.runs[0].tool.extensions[1].rules = { id: "cs/log-forging" }'
+guarded "an id, with a tool.driver that is not an object" cs/useless-upcast "$UNRESOLVED" \
+  "$(located '{"ruleId": "cs/useless-upcast"}')" '.runs[0].tool.driver = "CodeQL"'
+
+# Unreadable: the rule is found, but its security markers cannot be read.
+guarded "a rule whose properties are a string" cs/useless-upcast "$UNREADABLE" "$(result cs/useless-upcast "$STJ")" \
+  '.runs[0].tool.extensions[0].rules[1].properties = "security"'
+guarded "a rule whose tags are a string" cs/useless-upcast "$UNREADABLE" "$(result cs/useless-upcast "$STJ")" \
+  '.runs[0].tool.extensions[0].rules[1].properties.tags = "security"'
+
+# =============================================================================================
+# rule, removed — every other way a non-security rule resolves
+# =============================================================================================
+dropped "a rule with no properties at all" "$(result test/no-properties "$STJ")"
+dropped "a rule named only by id, found in tool.extensions" "$(located '{"ruleId": "cs/nested-if-statements"}' "$REGEX")"
+dropped "a rule named only by rule.id" "$(located '{"rule": {"id": "cs/nested-if-statements"}}' "$REGEX")"
+dropped "a ruleIndex of -1, SARIF's 'not given', so the id decides" "$(located '{"ruleId": "cs/useless-upcast", "ruleIndex": -1}')"
+dropped "a toolComponent named without an index, so the id decides" \
+  "$(located '{"ruleId": "cs/missed-ternary-operator", "rule": {"id": "cs/missed-ternary-operator", "toolComponent": {"name": "codeql/csharp-queries"}, "index": 2}}')"
+dropped "ruleIndex and rule.index given and equal" \
+  "$(located '{"ruleId": "cs/useless-upcast", "ruleIndex": 1, "rule": {"id": "cs/useless-upcast", "toolComponent": {"index": 0}, "index": 1}}')"
+dropped "a plain rule in tool.driver, named by ruleIndex" "$(located '{"ruleId": "cs/useless-upcast", "ruleIndex": 0}')" "$IN_DRIVER"
+dropped "an index into tool.extensions does not read tool.driver, however malformed" \
+  "$(result cs/useless-upcast "$STJ")" '.runs[0].tool.driver = "CodeQL"'
+
+# A security result, or a result whose rule does not resolve, OUTSIDE generator output is never looked at: kept and
+# not warned about.
+log "$(result cs/log-forging "$OURS")" "$(result test/security-tag-only "$ARI/generated/$TAIL")" \
+    "$(result test/unknown "$AMI_GEN")" "$(located '{}' "$ARI/obj/Release/net10.0/$TAIL")"
+run 0 "security and unresolvable results outside generator output" "$IN" "$OUT"
+expect_output '.' "security and unresolvable results outside generator output are left as they are"
+lacks "::warning::" "a result outside generator output is never warned about"
+says "::notice::filter-codeql-sarif: removed nothing — none of the 4 result(s) lies in .NET source-generator output" \
+  "results outside generator output are not counted as held"
+
+# =============================================================================================
 # several runs, and runs with nothing to filter
 # =============================================================================================
-jq -cn --arg schema "$SCHEMA" --arg ours "$OURS" --arg stj "$STJ" --arg options "$OPTIONS" --arg regex "$REGEX" --arg amigen "$AMI_GEN" '
+# Each run resolves rules in its own tool: run 0 by id in tool.driver, run 1 by id in tool.extensions — which lacks
+# cs/useless-upcast, so that result is held even though run 0 knows the rule.
+jq -cn --arg schema "$SCHEMA" --arg ours "$OURS" --arg stj "$STJ" --arg options "$OPTIONS" --arg regex "$REGEX" --arg amigen "$AMI_GEN" \
+    --argjson rules "$RULES" '
   def r($rule; $uri): { ruleId: $rule, message: { text: "m" }, locations: [ { physicalLocation: { artifactLocation: { uri: $uri } } } ] };
   { "$schema": $schema, version: "2.1.0",
-    runs: [ { tool: { driver: { name: "CodeQL" } }, automationDetails: { id: "/language:csharp/" },
+    runs: [ { tool: { driver: { name: "CodeQL", rules: $rules } }, automationDetails: { id: "/language:csharp/" },
               results: [ r("cs/useless-cast-to-self"; $stj), r("cs/path-combine"; $ours), r("cs/useless-upcast"; $options) ] },
-            { tool: { driver: { name: "CodeQL" } }, automationDetails: { id: "/language:csharp/second/" },
-              results: [ r("cs/useless-cast-to-self"; $amigen), r("cs/missed-ternary-operator"; $regex) ] },
+            { tool: { driver: { name: "CodeQL" }, extensions: [ { name: "q", rules: [ $rules[0], $rules[2] ] } ] },
+              automationDetails: { id: "/language:csharp/second/" },
+              results: [ r("cs/useless-cast-to-self"; $amigen), r("cs/missed-ternary-operator"; $regex), r("cs/useless-upcast"; $options) ] },
             { tool: { driver: { name: "a run with no results property" } } },
             { tool: { driver: { name: "a run whose results are null" } }, results: null },
             { tool: { driver: { name: "a run with no results" } }, results: [] } ] }' > "$IN"
@@ -272,7 +454,9 @@ run 0 "several runs" "$IN" "$OUT"
 expect_output 'del(.runs[0].results[0], .runs[0].results[2], .runs[1].results[1])' "each run is filtered on its own, and the others are untouched"
 jq -e '(.runs[2] | has("results") | not) and (.runs[3] | has("results")) and .runs[3].results == null' "$OUT" >/dev/null 2>&1 && ok \
   || bad "a run with no results property gets none, and null results stay null"
-says "removed 3 of 5 result(s)" "the count spans every run"
+says "removed 3 of 6 result(s)" "the count spans every run"
+warned "kept cs/useless-upcast at $OPTIONS although it lies in .NET source-generator output — $UNRESOLVED" \
+  "a rule is resolved in its own run's tool, never another run's"
 
 printf '{"$schema": "%s", "version": "2.1.0", "runs": []}' "$SCHEMA" > "$IN"
 run 0 "a log with no runs" "$IN" "$OUT"
@@ -286,7 +470,7 @@ says "::notice::filter-codeql-sarif: removed nothing — none of the 1 result(s)
 lacks "::error::" "a pass reports no error"
 
 # =============================================================================================
-# the notice — counts by generator and by rule, and nothing in it can start a workflow command
+# the notice and the warnings — counts by generator and by rule, and nothing in them can start a workflow command
 # =============================================================================================
 log "$(result cs/useless-cast-to-self "$STJ")" "$(result cs/path-combine "$OURS")" "$(result cs/useless-upcast "$EXAMPLE")" \
     "$(result cs/missed-ternary-operator "$OPTIONS")" "$(result cs/useless-cast-to-self "$ARI/obj/Debug/net10.0/generated/$TAIL")" \
@@ -295,21 +479,47 @@ run 0 "a mixed log" "$IN" "$OUT"
 says "::notice::filter-codeql-sarif: removed 4 of 6 result(s) in .NET source-generator output, kept 2 — by generator: System.Text.Json.SourceGeneration 3, Microsoft.Extensions.Options.SourceGeneration 1; by rule: cs/useless-cast-to-self 2, cs/missed-ternary-operator 1, cs/useless-upcast 1. Wrote $OUT." \
   "the notice counts by generator and by rule, largest first"
 lacks "::error::" "a pass reports no error"
+lacks "::warning::" "a pass that holds nothing back warns about nothing"
 no_temp_left "a successful run"
 [ "$(jq -n '[inputs] | length' "$OUT")" = 1 ] && ok || bad "the output is exactly one JSON value"
 jq -e --arg schema "$SCHEMA" 'type == "object" and .version == "2.1.0" and .["$schema"] == $schema and (.runs | length) == 1' "$OUT" >/dev/null 2>&1 \
   && ok || bad "the output is still a SARIF 2.1.0 log: version, \$schema and runs kept"
 
+log "$(result cs/useless-cast-to-self "$STJ")" "$(result cs/log-forging "$LOGGING")" "$(result test/unknown "$OPTIONS")" \
+    "$(result cs/path-combine "$OURS")"
+run 0 "a log with results removed and results held" "$IN" "$OUT"
+expect_output 'del(.runs[0].results[0])' "only the plain result in generator output is removed"
+says "::notice::filter-codeql-sarif: removed 1 of 4 result(s) in .NET source-generator output, kept 3 — by generator: System.Text.Json.SourceGeneration 1; by rule: cs/useless-cast-to-self 1. 2 of the kept result(s) lie in that output too, and were kept because their rule is security-relevant or cannot be shown not to be (see the warnings). Wrote $OUT." \
+  "the notice counts the held results apart from the removed ones"
+[ "$(grep -c '^::warning::' <<<"$LOG" || true)" = 2 ] && ok || bad "one ::warning:: per held result"
+grep '^::warning::' <<<"$LOG" | sed -n 1p | grep -qF "kept cs/log-forging at $LOGGING" \
+  && grep '^::warning::' <<<"$LOG" | sed -n 2p | grep -qF "kept test/unknown at $OPTIONS" && ok \
+  || bad "the warnings follow the order of the results"
+tail -n 1 <<<"$LOG" | grep -q '^::notice::' && ok || bad "the notice comes after the warnings"
+
 log "$(result cs/useless-upcast "$OURS")" \
-    '{"rule": {"id": "cs/rule-by-reference"}, "message": {"text": "m"}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "obj/generated/System.Text.Json.SourceGeneration/Gen/A.g.cs"}}}]}' \
-    '{"message": {"text": "m"}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "obj/generated/System.Text.Json.SourceGeneration/Gen/B.g.cs"}}}]}'
-run 0 "results that name their rule only by reference, or not at all" "$IN" "$OUT"
-says "by rule: (no rule id) 1, cs/rule-by-reference 1" "rule.id stands in for ruleId, and a result with neither is still counted"
+    '{"rule": {"id": "cs/missed-ternary-operator"}, "message": {"text": "m"}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "obj/generated/System.Text.Json.SourceGeneration/Gen/A.g.cs"}}}]}' \
+    '{"rule": {"toolComponent": {"index": 0}, "index": 4}, "message": {"text": "m"}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "obj/generated/System.Text.Json.SourceGeneration/Gen/B.g.cs"}}}]}' \
+    '{"rule": {"toolComponent": {"index": 0}, "index": 8}, "message": {"text": "m"}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "obj/generated/System.Text.Json.SourceGeneration/Gen/C.g.cs"}}}]}'
+patch '.runs[0].tool.extensions[0].rules[8] |= del(.id)'
+run 0 "results that name their rule only by reference, or only by index" "$IN" "$OUT"
+expect_output 'del(.runs[0].results[1], .runs[0].results[2], .runs[0].results[3])' "rules named by reference or by index alone resolve"
+says "by rule: (no rule id) 1, cs/missed-ternary-operator 1, cs/nested-if-statements 1" \
+  "rule.id stands in for ruleId, an index alone reports the id of its rule, and a rule with no id is still counted"
 
 log "$(result "$(printf 'cs/forged\n::error::all red')" "$STJ")"
-run 0 "a rule id with a newline in it" "$IN" "$OUT"
-if grep -q '^::error::' <<<"$LOG"; then bad "a rule id started a workflow command of its own"; else ok; fi
-says 'cs/forged%0A::error::all red' "the newline is escaped for the workflow-command parser"
+run 0 "a rule id with a newline in it, whose rule does not resolve" "$IN" "$OUT"
+if grep -q '^::error::' <<<"$LOG"; then bad "a rule id started a workflow command of its own, from a ::warning::"; else ok; fi
+says 'kept cs/forged%0A::error::all red at' "the newline is escaped in the ::warning::"
+patch '.runs[0].tool.extensions[0].rules += [ { id: "cs/forged\n::error::all red" } ]'
+run 0 "a rule id with a newline in it, whose rule resolves" "$IN" "$OUT"
+if grep -q '^::error::' <<<"$LOG"; then bad "a rule id started a workflow command of its own, from the ::notice::"; else ok; fi
+says 'by rule: cs/forged%0A::error::all red 1' "the newline is escaped in the ::notice::"
+
+log "$(result cs/log-forging "$(printf 'obj/generated/System.Text.Json.SourceGeneration/Gen/A\n::error::uri.g.cs')")"
+run 0 "a uri with a newline in it, held back" "$IN" "$OUT"
+if grep -q '^::error::' <<<"$LOG"; then bad "a uri started a workflow command of its own, from a ::warning::"; else ok; fi
+says 'at obj/generated/System.Text.Json.SourceGeneration/Gen/A%0A::error::uri.g.cs although' "the newline in a uri is escaped in the ::warning::"
 
 # =============================================================================================
 # input the filter cannot read as one SARIF 2.1.0 log — exit 2, and nothing left to upload
@@ -339,8 +549,7 @@ bad_input '{"version": "2.1.0", "runs": [{"results": [{"locations": [{"physicalL
 
 # One malformed result among valid ones still refuses the whole log — never a partial filter.
 log "$(result cs/useless-cast-to-self "$OURS")" "$(result cs/useless-upcast "$STJ")"
-jq -c '.runs[0].results += [ { locations: [ { physicalLocation: { artifactLocation: { uri: 7 } } } ] } ]' "$IN" > "$WORK/one-bad.sarif"
-cp "$WORK/one-bad.sarif" "$IN"
+patch '.runs[0].results += [ { locations: [ { physicalLocation: { artifactLocation: { uri: 7 } } } ] } ]'
 fails_closed "one malformed result after two valid ones" "$IN" "$OUT"
 
 log "$(result cs/useless-upcast "$STJ")"
