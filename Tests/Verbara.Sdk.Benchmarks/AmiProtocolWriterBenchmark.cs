@@ -53,6 +53,29 @@ public class AmiProtocolWriterBenchmark
         _pipe.Reader.AdvanceTo(result.Buffer.End);
     }
 
+    /// <summary>
+    /// Same fields as <see cref="WriteActionWithFields"/>, produced the way the source-generated
+    /// action serializers produce them: a lazy <c>yield return</c> iterator, created per action.
+    /// </summary>
+    [Benchmark]
+    public async Task WriteActionWithIteratorFields()
+    {
+        await _writer.WriteActionAsync("Originate", "test-3", IterateOriginateFields());
+        _pipe.Reader.TryRead(out var result);
+        _pipe.Reader.AdvanceTo(result.Buffer.End);
+    }
+
+    private static IEnumerable<KeyValuePair<string, string>> IterateOriginateFields()
+    {
+        yield return new("Channel", "SIP/2000");
+        yield return new("Context", "default");
+        yield return new("Exten", "100");
+        yield return new("Priority", "1");
+        yield return new("CallerId", "Test <1234>");
+        yield return new("Timeout", "30000");
+        yield return new("Async", "true");
+    }
+
     [Benchmark]
     public async Task Write1000Actions()
     {

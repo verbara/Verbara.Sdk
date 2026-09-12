@@ -104,6 +104,7 @@ public sealed class AmiConnection : IAmiConnection
         _logger = logger;
     }
 
+    /// <inheritdoc />
     public async ValueTask ConnectAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_state == AmiConnectionState.Disconnected && _cts is null, this);
@@ -260,6 +261,7 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask<ManagerResponse> SendActionAsync(ManagerAction action, CancellationToken cancellationToken = default)
     {
         EnsureConnected();
@@ -302,6 +304,7 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask<TResponse> SendActionAsync<TResponse>(ManagerAction action, CancellationToken cancellationToken = default)
         where TResponse : ManagerResponse
     {
@@ -344,6 +347,7 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
+    /// <inheritdoc />
     public async IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
         ManagerAction action, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
