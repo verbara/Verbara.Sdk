@@ -89,7 +89,7 @@ public sealed class NatsBridgeConnectionTests(NatsContainerFixture fixture) : IC
             var snapshot = await ReadConnzAsync(http);
             if (done(snapshot) || DateTime.UtcNow >= deadline)
                 return snapshot;
-            await Task.Delay(PollInterval);
+            await Task.Delay(PollInterval); // fence-allow: LOOP-DRIVER — paces polling /connz, which the server updates asynchronously; SettleTimeout bounds the loop
         }
     }
 
