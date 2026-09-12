@@ -95,7 +95,7 @@ internal static class ResamplerCoefficients
     /// Series expansion: I0(x) = sum_{k=0..inf} ((x/2)^2k) / (k!)^2.
     /// Converges rapidly for the values used in Kaiser window design.
     /// </summary>
-    private static double BesselI0(double x)
+    internal static double BesselI0(double x)
     {
         double sum = 1.0;
         double term = 1.0;
@@ -103,7 +103,7 @@ internal static class ResamplerCoefficients
 
         for (int k = 1; k <= 30; k++)
         {
-            term *= halfXSquared / (k * k);
+            term *= halfXSquared / ((double)k * k);
             sum += term;
 
             if (term < 1e-12 * sum)

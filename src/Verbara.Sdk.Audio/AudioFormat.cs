@@ -31,7 +31,8 @@ public readonly record struct AudioFormat(
     public int BytesPerFrame(TimeSpan frameDuration)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(frameDuration, TimeSpan.Zero, nameof(frameDuration));
-        return (int)(SampleRate * BytesPerSample * frameDuration.TotalSeconds);
+        // Promote before multiplying: rate x bytes-per-sample must not wrap in int arithmetic.
+        return (int)((double)SampleRate * BytesPerSample * frameDuration.TotalSeconds);
     }
 
     /// <summary>Number of samples per frame of the given duration.</summary>
