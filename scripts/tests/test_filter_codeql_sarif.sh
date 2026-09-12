@@ -415,6 +415,8 @@ dropped "a rule with no properties at all" "$(result test/no-properties "$STJ")"
 dropped "a rule named only by id, found in tool.extensions" "$(located '{"ruleId": "cs/nested-if-statements"}' "$REGEX")"
 dropped "a rule named only by rule.id" "$(located '{"rule": {"id": "cs/nested-if-statements"}}' "$REGEX")"
 dropped "a ruleIndex of -1, SARIF's 'not given', so the id decides" "$(located '{"ruleId": "cs/useless-upcast", "ruleIndex": -1}')"
+dropped "a toolComponent index of -1, SARIF's 'not given', so the id decides" \
+  "$(located '{"ruleId": "cs/useless-upcast", "rule": {"id": "cs/useless-upcast", "toolComponent": {"index": -1}, "index": 1}}')"
 dropped "a toolComponent named without an index, so the id decides" \
   "$(located '{"ruleId": "cs/missed-ternary-operator", "rule": {"id": "cs/missed-ternary-operator", "toolComponent": {"name": "codeql/csharp-queries"}, "index": 2}}')"
 dropped "ruleIndex and rule.index given and equal" \

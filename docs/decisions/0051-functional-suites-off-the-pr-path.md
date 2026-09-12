@@ -183,10 +183,11 @@ build, which this job is. The filter removes a result only when both of these ho
    uses.
 2. *Rule.* Its rule resolves in its run's `tool` and is not security-relevant — no `security` in
    `properties.tags` and no `security-severity` key in `properties`. An index (`ruleIndex` or
-   `rule.index`) resolves into `tool.driver.rules`, or into
-   `tool.extensions[rule.toolComponent.index].rules` when the reference names a component by index,
-   and must land on a rule whose `id` matches the result's rule id when the result gives one; without
-   one, `ruleId` or `rule.id` resolves to every rule with exactly that `id` in `tool.driver.rules` and
+   `rule.index`) resolves into `tool.driver.rules` when the reference names no component, or into
+   `tool.extensions[rule.toolComponent.index].rules` when it names its component by index, and must
+   land on a rule whose `id` matches the result's rule id when the result gives one. When the reference
+   gives no index, or names its component some other way (by name, by guid, or with index -1),
+   `ruleId` or `rule.id` resolves to every rule with exactly that `id` in `tool.driver.rules` and
    every `tool.extensions[].rules`, and one security-relevant match is enough. A rule that does not
    resolve (nothing found, contradicting or wrong-typed references, a wrong-typed `tool` or component),
    or whose `properties` or `tags` have the wrong type, keeps its result just as a security-relevant

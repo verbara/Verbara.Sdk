@@ -16,18 +16,18 @@
 #     security-relevant: `properties` absent or an object, `properties.tags` absent or an array with no
 #     "security" in it, and no "security-severity" key in `properties`. The rule is resolved as follows.
 #     - By index. The index is `ruleIndex` or `rule.index` (absent, null or -1 means not given). Without a
-#       `rule.toolComponent` it indexes `tool.driver.rules`; with a `rule.toolComponent.index` it indexes
-#       `tool.extensions[rule.toolComponent.index].rules`. It resolves to the rule object found there, provided
-#       that rule's `id` equals the result's rule id whenever the result gives one.
+#       `rule.toolComponent` it indexes `tool.driver.rules`; with a `rule.toolComponent.index` (absent, null or
+#       -1 means not given) it indexes `tool.extensions[rule.toolComponent.index].rules`. It resolves to the rule
+#       object found there, provided that rule's `id` equals the result's rule id whenever the result gives one.
 #     - By id, when no index is given or `rule.toolComponent` gives no index. The id is `ruleId` or `rule.id`.
 #       It resolves to every rule object in `tool.driver.rules` and in every `tool.extensions[].rules` whose
 #       `id` is exactly that string.
 #     It does NOT resolve — so the result is kept — when nothing is found; when `ruleIndex` and `rule.index`,
-#     or `ruleId` and `rule.id`, are both given and differ; when an index (`rule.toolComponent.index` included)
-#     is not a non-negative integer, an id is not a string, or `rule` or `rule.toolComponent` is present but
-#     not an object; or when `tool`, or a component the lookup reads (the indexed one; for an id `tool.driver`
-#     and every `tool.extensions` entry), is not an object or has a `rules` property that is not an array, or,
-#     for an id, `tool.extensions` is neither absent nor an array.
+#     or `ruleId` and `rule.id`, are both given and differ; when a given index (`rule.toolComponent.index`
+#     included) is not a non-negative integer, an id is not a string, or `rule` or `rule.toolComponent` is
+#     present but not an object; or when `tool`, or a component the lookup reads (the indexed one; for an id
+#     `tool.driver` and every `tool.extensions` entry), is not an object or has a `rules` property that is not
+#     an array, or, for an id, `tool.extensions` is neither absent nor an array.
 #     Each result that matches the location rule but is kept by the rule check gets one ::warning:: with its
 #     rule id, its uri and the reason. A result outside generator output is never looked at, security or not.
 #
