@@ -110,9 +110,11 @@ public sealed class PerformanceTableCoherenceTests
     /// <summary>
     /// The header test above cannot see a row that was measured apart from the header: the table
     /// could keep crediting BenchmarkDotNet on the header's date for figures a <c>Stopwatch</c> took
-    /// months later. Such a row carries its own <c>provenance</c> in the record, and its date and
-    /// runtime must be stated in the Performance section itself — not anywhere else in README.md,
-    /// where a matching string would say nothing about the table.
+    /// months later. A row measured apart from the header declares its own <c>provenance</c> in the
+    /// record, and its date and runtime must be stated in the Performance section itself — not
+    /// anywhere else in README.md, where a matching string would say nothing about the table. A row
+    /// that declares no <c>provenance</c> is not checked here: deleting the object from the record
+    /// hands the row back to the header unnoticed.
     /// </summary>
     [Fact]
     public void EveryRowWithItsOwnProvenance_ShouldHaveItStatedInThePerformanceSection()

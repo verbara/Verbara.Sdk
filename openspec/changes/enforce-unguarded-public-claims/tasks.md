@@ -407,12 +407,13 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
       attribution limits are a dated addendum at the end of `benchmark-analysis.md`; §1c stays
       verbatim, marked superseded inside its first paragraph so no cited line moves.
 
-      **Postgres single-save latency did not move, because it is the disk.** 1.97 ms on Dapper,
+      **Postgres single-save latency did not move, because it is the WAL flush.** 1.97 ms on Dapper,
       1.965 ms on `NpgsqlExecutor`. `pg_test_fsync` on the same Docker storage puts fdatasync at
       2002 µs/op, and a single-row `pgbench` insert runs 499 tps with `synchronous_commit=on` against
       116,739 tps with it off: one `SaveAsync` is one autocommit UPSERT is one WAL flush, and §1c's
       "JSONB parse + índices" was wrong. Batch rose 9,491 → 13,489 sess/sec and is **not** credited
-      to the Dapper removal — Redis, whose store did not change, moved as much over the same months.
+      to the Dapper removal — Redis, whose store code did not change, moved comparably over the same
+      months, and the runtime, PostgreSQL (16 → 18), Npgsql, Docker and kernel moved too.
 
       **The Redis row was bound, green, and stale.** 4.1 bound it to April's record, and the test
       stayed green against figures the store no longer produces: today p50 30 µs (was 79) and batch
@@ -421,18 +422,20 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
       at that confidence.
 
       **The guard now reaches provenance, not only figures.** The header says BenchmarkDotNet,
-      .NET 10.0.5, 2026-04-18, and two rows were not measured that way. Both carry a `provenance`
-      object, README states it in the paragraph under the table (appended, so no README line moves),
-      and a fifth test, `EveryRowWithItsOwnProvenance_ShouldHaveItStatedInThePerformanceSection`,
-      requires the `## Performance` section — not the whole file — to carry each such row's date and
-      runtime. `deferred_rows` is empty; the test that walks it stays for the next deferral.
+      .NET 10.0.5, 2026-04-18, and three rows were not measured that way: the AMI row (4.1) and the
+      two session-store rows. Those two carry a `provenance` object, README states it in the
+      paragraph under the table (appended, so no README line moves), and a fifth test,
+      `EveryRowWithItsOwnProvenance_ShouldHaveItStatedInThePerformanceSection`, requires the
+      `## Performance` section — not the whole file — to carry each such row's date and runtime.
+      `deferred_rows` is empty; the test that walks it stays for the next deferral.
 
       Negative-tested, verbatim:
 
       ```
       Expected row.Cells " **~33.3K saves/sec** (p50 30 µs) / batch 91,022 sess/sec " to contain
-      "91,021 sess/sec" because README.md's 'Session store Redis `SaveAsync`' row must publish the
-      recorded batch
+      "batch 91,021 sess/sec" because README.md's 'Session store Redis `SaveAsync`' row must publish
+      the recorded batch; if the measurement changed, the record moves first, in its own reviewed
+      commit.
       ```
       ```
       ... to contain ".NET 10.0.12" because README.md's Performance section must state the runtime
@@ -444,9 +447,24 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
       ```
 
       A fourth mutation moved `.NET 10.0.12` out of the section into `## Observability` and failed
-      with the second message, so the scoping is real. Restored byte-identical each time, 5/5 green,
-      the project 27/27. Residual: the test binds only rows that *declare* `provenance`; deleting the
-      object from the record hands a row back to the header unnoticed.
+      with the second message, so the scoping is real. A fifth put a digit in front of a published
+      batch — `batch 191,021 sess/sec`, a 2.1× overclaim — and passed while the record held the bare
+      `91,021 sess/sec`, because the value test matches substrings. Both `batch` values in the record
+      now carry their `batch ` prefix, as `latency` carries `p50 `, and the same mutation fails:
+
+      ```
+      Expected row.Cells " **~33.3K saves/sec** (p50 30 µs) / batch 191,021 sess/sec " to contain
+      "batch 91,021 sess/sec" because README.md's 'Session store Redis `SaveAsync`' row must publish
+      the recorded batch; if the measurement changed, the record moves first, in its own reviewed
+      commit.
+      ```
+
+      Restored byte-identical each time, 5/5 green, the project 27/27. Residuals: the test binds
+      only rows that *declare* `provenance`, so deleting the object from the record hands a row back
+      to the header unnoticed (renaming the Postgres row's key stayed 5/5 green; `docs/claim-registry.md`
+      rows 107/108 state it); and `FindRow` takes the first table row with a matching operation
+      name, so a duplicate row carrying other figures still passes — closing that means changing the
+      row-accounting test, which this task leaves intact.
 
 ## 5. Deferred: first-party accuracy gate (investigation only — no code)
 

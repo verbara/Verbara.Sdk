@@ -342,22 +342,22 @@ re-measured with the same instrument, on the same machine model. The two session
 
 ### Environment
 
-| | 2026-09-12 | 2026-04-18 (§1c, `229145b8`) |
+| | 2026-09-12 | 2026-04-18 (§1c, `45e9aa38`) |
 |---|---|---|
 | Machine | AMD Ryzen 9 9900X (12C/24T), 64 GB, Debian 13 (trixie), kernel 6.12.107 | AMD Ryzen 9 9900X, Debian trixie |
 | .NET | SDK 10.0.401, runtime **10.0.12**, `-c Release` | .NET 10.0.5 |
 | Docker | 29.8.0 | 29.4 |
-| Postgres | `postgres:18-alpine` → **PostgreSQL 18.4** | `postgres:18-alpine` (Postgres 18) |
+| Postgres | `postgres:18-alpine` → **PostgreSQL 18.4** | `postgres:16-alpine` (PostgreSQL 16) — §1c's prose was relabelled to 18 by `3180a231` without a re-run |
 | Redis | `redis:7-alpine` → **Redis 7.4.8** | `redis:7-alpine` (Redis 7) |
 | Npgsql | 10.0.3 | 10.0.2 |
 | StackExchange.Redis | **3.1.13** | 2.12.14 — a major version apart |
-| Testcontainers | 4.13.0 | 4.11.0 |
+| Testcontainers | 4.13.0 | 4.3.0 |
 | Postgres data access | `NpgsqlExecutor` | Dapper |
 
-`src/` under test is identical to `944e54ad`. Between the two measurements
-`src/Verbara.Sdk.Sessions.Redis/`, both benchmark `Fact`s and their fixtures changed only in rebrand
-and documentation commits (`f86d0d87`, `3c4f690a`, `889b1786`) — no functional change to the Redis
-store or to either instrument.
+`src/` under test is identical to `944e54ad`. Between the two measurements both benchmark `Fact`s changed only in the rebrand
+(`f86d0d87`), and `src/Verbara.Sdk.Sessions.Redis/` only there and in README-only edits (`3c4f690a`, `889b1786`). The fixtures
+also changed in `b9c3fa24` (Testcontainers 4.3 → 4.11 constructor API; Postgres image 16 → 18) and in `25b8b27b` (the Postgres
+fixture's untimed schema migration and `TRUNCATE` moved off Dapper). No functional change to the Redis store or to either instrument's timed code.
 
 **Background load, disclosed rather than removed:** an unrelated, idle local Docker stack (~10
 containers) and a QEMU VM using ~10% of one core ran throughout. The 1-minute loadavg was 1.29–2.10
@@ -365,14 +365,14 @@ across the Postgres runs and 1.66–1.84 across the Redis runs.
 
 ### Instrument
 
-Unchanged since §1c apart from the 2026-05-05 rename — an xunit `Fact` + `Stopwatch`, not
+The `Fact`s are unchanged since §1c apart from the 2026-05-05 rename — an xunit `Fact` + `Stopwatch`, not
 BenchmarkDotNet: `Tests/Verbara.Sdk.Sessions.Postgres.Tests/PostgresLatencyBenchmark.cs` and
-`Tests/Verbara.Sdk.Sessions.Redis.Tests/RedisLatencyBenchmark.cs`.
+`Tests/Verbara.Sdk.Sessions.Redis.Tests/RedisLatencyBenchmark.cs`. The fixture under the Postgres one is not: its server image moved 16 → 18 (above).
 
 - `SaveAsync` / `GetAsync`: 1000 timed iterations after 10 warmup; percentile = `sorted[count × q]`.
 - `SaveBatchAsync`: 10 batches × 500 sessions; throughput = 5000 / (sum of the 10 batch times).
-- Fixtures: Testcontainers on a `localhost`-mapped port. Postgres runs with `SSL Mode=Disable` and the
-  image's default server settings (`fsync=on`, `synchronous_commit=on`, `wal_sync_method=fdatasync`).
+- Fixtures: Testcontainers on a `localhost`-mapped port — loopback and no TLS, so these figures are a best-case regression baseline, not
+  production sizing (§1c's caveat at :149 and :173-174). Postgres runs with `SSL Mode=Disable` and the image's default server settings (`fsync=on`, `synchronous_commit=on`, `wal_sync_method=fdatasync`).
 - Every run is a fresh process against a fresh container. The published figure is **the median of
   the five per-run values**.
 
@@ -394,7 +394,7 @@ BenchmarkDotNet: `Tests/Verbara.Sdk.Sessions.Postgres.Tests/PostgresLatencyBench
 
 ### Redis — five runs
 
-11:13:42–11:13:57 UTC, 1-minute loadavg 1.66–1.84; the set was started behind a loadavg < 2.0 gate.
+Runs started 11:13:42–11:13:54 UTC (these logs record no end time), 1-minute loadavg 1.66–1.84; the set was started behind a loadavg < 2.0 gate.
 All values in ms except sessions/sec.
 
 | run | Save p50 | p95 | p99 | max | Get p50 | p95 | p99 | max | Batch p50 | max | total (5000) | sessions/sec |
@@ -410,8 +410,8 @@ All values in ms except sessions/sec.
 §1c, for comparison: `SaveAsync` p50 79 µs · `GetAsync` p50 64 µs · batch 65,738 sessions/sec.
 
 **Three earlier Redis runs were not used.** They were taken straight after a full-solution Release
-build, at a 1-minute loadavg of ≈ 10.5–11.3. Their figures agree with the idle set above, and that
-agreement is the only use made of them.
+build, at a 1-minute loadavg of 10.5–12.1. Against the idle set above, their median `SaveAsync` and `GetAsync` p50s ran 20% and
+13% higher and their median batch was within 1%; that comparison is the only use made of them.
 
 ### Published figures
 
@@ -425,9 +425,9 @@ the measured sessions/sec.
 
 ### Why Postgres `SaveAsync` did not move: the WAL flush
 
-The single-save p50 was 1.97 ms on Dapper and is 1.965 ms on `NpgsqlExecutor`. That is not two
-implementations happening to agree: it is the storage's commit-durability rate, and it was measured
-directly rather than inferred.
+The single-save p50 was 1.97 ms on Dapper and is 1.965 ms on `NpgsqlExecutor`. Today's figure is the storage's
+commit-durability rate, measured directly below. That April's identical 1.97 ms was the same bound is inferred, from the same
+machine model and the same figure: no fsync probe was run then.
 
 1. `pg_test_fsync -s 3` inside `postgres:18-alpine`, on the same Docker storage: **fdatasync 499.4
    ops/sec (2002 µs/op)**, fsync 499.7 ops/sec (2001 µs/op), open_datasync 5632.7 ops/sec
@@ -450,7 +450,7 @@ per statement round trip today (1 / 13,489 sessions/sec).
 - **The Postgres batch gain, +42% (9,491 → 13,489 sessions/sec), is not attributable to the Dapper
   removal.** Redis, whose store code did not change, moved by a comparable or larger factor over the
   same period (`SaveAsync` p50 79 → 30 µs; batch 65,738 → 91,021), and the runtime (10.0.5 → 10.0.12),
-  Npgsql (10.0.2 → 10.0.3), Docker and the kernel all moved too.
+  PostgreSQL (16 → 18), Npgsql (10.0.2 → 10.0.3), Docker and the kernel all moved too.
 - **Redis's movement coincides with StackExchange.Redis 2.12.14 → 3.1.13**, a major-version change.
   That is a plausible cause and **not a verified one**: no A/B against the old client was run.
 
@@ -464,8 +464,8 @@ dotnet test Tests/Verbara.Sdk.Sessions.Postgres.Tests/ -c Release --filter "Cate
 dotnet test Tests/Verbara.Sdk.Sessions.Redis.Tests/ -c Release --filter "Category=Benchmark" --logger "console;verbosity=detailed"
 ```
 
-The WAL-flush proof. A `pgbench` run taken straight after the container starts can read low, so
-repeat each setting:
+The WAL-flush proof. Only `pg_test_fsync -s 3` and `pgbench -n -c 1 -T 8` were recorded from the original runs; the commands below are an
+equivalent reconstruction, checked to run on the same machine and to reproduce the ≈ 500 ops/sec and ≈ 500 tps bound (those check readings are not the figures above). A single `pgbench` run can read low, so repeat each setting:
 
 ```sh
 docker run --rm postgres:18-alpine pg_test_fsync -s 3 -f /var/lib/postgresql/pg_test_fsync.out
