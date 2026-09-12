@@ -146,7 +146,7 @@ Benchmark code: `Tests/Verbara.Sdk.Benchmarks/VoiceAiBenchmarks.cs`. Reproduce c
 
 ## 1c. Pluggable Session Backends — v1.11.0 (2026-04-18)
 
-En v1.11.0 se añadieron dos backends de `ISessionStore` para despliegues multi-instance: `Verbara.Sdk.Sessions.Redis` (StackExchange.Redis, pipelined batches, TTL-driven retention) y `Verbara.Sdk.Sessions.Postgres` (Npgsql + Dapper + JSONB, UPSERT on conflict, partial index para activas). Los benchmarks de latencia corren contra contenedores Docker locales (`redis:7-alpine` / `postgres:18-alpine`) vía Testcontainers, no contra infra remota — los números son "mejor caso" de CPU + loopback y sirven como baseline de regresión, no como sizing de producción.
+En v1.11.0 se añadieron dos backends de `ISessionStore` para despliegues multi-instance: `Verbara.Sdk.Sessions.Redis` (StackExchange.Redis, pipelined batches, TTL-driven retention) y `Verbara.Sdk.Sessions.Postgres` (Npgsql + Dapper + JSONB, UPSERT on conflict, partial index para activas). Los benchmarks de latencia corren contra contenedores Docker locales (`redis:7-alpine` / `postgres:18-alpine`) vía Testcontainers, no contra infra remota — los números son "mejor caso" de CPU + loopback y sirven como baseline de regresión, no como sizing de producción. **Superseded for published figures (2026-09-12): the Postgres store no longer uses Dapper, and both backends were re-measured — `README.md` and `performance-record.json` cite the addendum at the end of this document, not this section.**
 
 **Máquina:** AMD Ryzen 9 9900X · .NET 10.0.5 · Debian trixie · Docker 29.4 · 1000 iteraciones por punto · 10 warmup.
 
@@ -329,3 +329,152 @@ La libreria esta en el rango de **high-performance** para un SDK de Asterisk. Lo
 ### Area de mejora principal
 
 El string allocation en AMI parsing fue optimizado de 3.15 KB a 1.83 KB/event (-42%) mediante `AmiStringPool` (key/value interning) y span-based parsing. Ver `docs/plan-ami-string-optimization.md` para detalles.
+
+---
+
+## Addendum — Session backends re-measured (2026-09-12)
+
+§1c is kept verbatim as the record of v1.11.0. Its Postgres figures measured the store while it still
+ran on Dapper, which was removed repo-wide in v2.2.0 — the store moved to `Verbara.Sdk.Data.Npgsql`'s
+`NpgsqlExecutor` in `25b8b27b` — and its Redis figures were five months old. Both backends were
+re-measured with the same instrument, on the same machine model. The two session-store rows of
+`README.md`'s Performance table, and their entries in `performance-record.json`, cite this section.
+
+### Environment
+
+| | 2026-09-12 | 2026-04-18 (§1c, `229145b8`) |
+|---|---|---|
+| Machine | AMD Ryzen 9 9900X (12C/24T), 64 GB, Debian 13 (trixie), kernel 6.12.107 | AMD Ryzen 9 9900X, Debian trixie |
+| .NET | SDK 10.0.401, runtime **10.0.12**, `-c Release` | .NET 10.0.5 |
+| Docker | 29.8.0 | 29.4 |
+| Postgres | `postgres:18-alpine` → **PostgreSQL 18.4** | `postgres:18-alpine` (Postgres 18) |
+| Redis | `redis:7-alpine` → **Redis 7.4.8** | `redis:7-alpine` (Redis 7) |
+| Npgsql | 10.0.3 | 10.0.2 |
+| StackExchange.Redis | **3.1.13** | 2.12.14 — a major version apart |
+| Testcontainers | 4.13.0 | 4.11.0 |
+| Postgres data access | `NpgsqlExecutor` | Dapper |
+
+`src/` under test is identical to `944e54ad`. Between the two measurements
+`src/Verbara.Sdk.Sessions.Redis/`, both benchmark `Fact`s and their fixtures changed only in rebrand
+and documentation commits (`f86d0d87`, `3c4f690a`, `889b1786`) — no functional change to the Redis
+store or to either instrument.
+
+**Background load, disclosed rather than removed:** an unrelated, idle local Docker stack (~10
+containers) and a QEMU VM using ~10% of one core ran throughout. The 1-minute loadavg was 1.29–2.10
+across the Postgres runs and 1.66–1.84 across the Redis runs.
+
+### Instrument
+
+Unchanged since §1c apart from the 2026-05-05 rename — an xunit `Fact` + `Stopwatch`, not
+BenchmarkDotNet: `Tests/Verbara.Sdk.Sessions.Postgres.Tests/PostgresLatencyBenchmark.cs` and
+`Tests/Verbara.Sdk.Sessions.Redis.Tests/RedisLatencyBenchmark.cs`.
+
+- `SaveAsync` / `GetAsync`: 1000 timed iterations after 10 warmup; percentile = `sorted[count × q]`.
+- `SaveBatchAsync`: 10 batches × 500 sessions; throughput = 5000 / (sum of the 10 batch times).
+- Fixtures: Testcontainers on a `localhost`-mapped port. Postgres runs with `SSL Mode=Disable` and the
+  image's default server settings (`fsync=on`, `synchronous_commit=on`, `wal_sync_method=fdatasync`).
+- Every run is a fresh process against a fresh container. The published figure is **the median of
+  the five per-run values**.
+
+### Postgres — five runs
+
+11:05:41–11:06:26 UTC, 1-minute loadavg 1.29–2.10. All values in ms except sessions/sec.
+
+| run | Save p50 | p95 | p99 | max | Get p50 | p95 | p99 | max | Batch p50 | max | total (5000) | sessions/sec |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1.967 | 2.119 | 2.226 | 6.984 | 0.051 | 0.130 | 0.164 | 0.246 | 39.662 | 46.808 | 399.6 | 12513 |
+| 2 | 1.964 | 2.120 | 2.410 | 9.527 | 0.053 | 0.103 | 0.144 | 0.229 | 35.445 | 50.874 | 365.7 | 13672 |
+| 3 | 1.966 | 2.121 | 2.149 | 7.007 | 0.046 | 0.097 | 0.142 | 0.245 | 37.755 | 44.745 | 370.7 | 13489 |
+| 4 | 1.965 | 2.119 | 2.258 | 6.974 | 0.048 | 0.102 | 0.157 | 0.243 | 34.541 | 47.785 | 357.7 | 13980 |
+| 5 | 1.960 | 2.113 | 2.137 | 5.673 | 0.043 | 0.071 | 0.123 | 0.200 | 37.695 | 49.670 | 387.9 | 12889 |
+
+**Medians:** `SaveAsync` p50 **1.965 ms** (range 1.960–1.967) · `GetAsync` p50 **0.048 ms**
+(0.043–0.053) · `SaveBatchAsync` **13,489 sessions/sec** (12,513–13,980).
+§1c, for comparison: `SaveAsync` p50 1.97 ms · `GetAsync` p50 51 µs · batch 9,491 sessions/sec.
+
+### Redis — five runs
+
+11:13:42–11:13:57 UTC, 1-minute loadavg 1.66–1.84; the set was started behind a loadavg < 2.0 gate.
+All values in ms except sessions/sec.
+
+| run | Save p50 | p95 | p99 | max | Get p50 | p95 | p99 | max | Batch p50 | max | total (5000) | sessions/sec |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 0.030 | 0.052 | 0.077 | 2.820 | 0.026 | 0.046 | 0.067 | 3.931 | 4.767 | 8.489 | 53.4 | 93564 |
+| 2 | 0.038 | 0.054 | 0.082 | 2.649 | 0.039 | 0.070 | 0.105 | 4.093 | 4.921 | 8.764 | 54.9 | 91079 |
+| 3 | 0.030 | 0.065 | 0.101 | 2.559 | 0.032 | 0.052 | 0.072 | 4.116 | 5.530 | 9.528 | 60.2 | 82994 |
+| 4 | 0.029 | 0.049 | 0.088 | 2.503 | 0.031 | 0.041 | 0.063 | 5.080 | 5.046 | 9.301 | 54.9 | 91021 |
+| 5 | 0.031 | 0.042 | 0.077 | 2.534 | 0.026 | 0.038 | 0.064 | 4.141 | 5.552 | 9.443 | 60.1 | 83169 |
+
+**Medians:** `SaveAsync` p50 **0.030 ms** (0.029–0.038) · `GetAsync` p50 **0.031 ms** (0.026–0.039) ·
+`SaveBatchAsync` **91,021 sessions/sec** (82,994–93,564).
+§1c, for comparison: `SaveAsync` p50 79 µs · `GetAsync` p50 64 µs · batch 65,738 sessions/sec.
+
+**Three earlier Redis runs were not used.** They were taken straight after a full-solution Release
+build, at a 1-minute loadavg of ≈ 10.5–11.3. Their figures agree with the idle set above, and that
+agreement is the only use made of them.
+
+### Published figures
+
+Derivation unchanged from the table's existing rows: throughput = 1 / p50, written with `~`; batch =
+the measured sessions/sec.
+
+| row | published | derivation |
+|---|---|---|
+| Session store Redis `SaveAsync` | ~33.3K saves/sec (p50 30 µs) / batch 91,021 sess/sec | 1 / 30 µs = 33,333 |
+| Session store Postgres `SaveAsync` | ~500 saves/sec (p50 1.97 ms) / batch 13,489 sess/sec | 1 / 1.965 ms = 508.9 |
+
+### Why Postgres `SaveAsync` did not move: the WAL flush
+
+The single-save p50 was 1.97 ms on Dapper and is 1.965 ms on `NpgsqlExecutor`. That is not two
+implementations happening to agree: it is the storage's commit-durability rate, and it was measured
+directly rather than inferred.
+
+1. `pg_test_fsync -s 3` inside `postgres:18-alpine`, on the same Docker storage: **fdatasync 499.4
+   ops/sec (2002 µs/op)**, fsync 499.7 ops/sec (2001 µs/op), open_datasync 5632.7 ops/sec
+   (178 µs/op). `fdatasync` is the server's `wal_sync_method`.
+2. `pgbench -n -c 1 -T 8` against the same image (PostgreSQL 18.4), one autocommit single-row
+   `INSERT` per transaction:
+   - `synchronous_commit=on` → **499.07 tps**, latency average 2.004 ms
+   - `synchronous_commit=off` → **116,738.73 tps**, latency average 0.009 ms
+
+A single `SaveAsync` is one autocommit `UPSERT`, which is one WAL flush: ≈ 2.0 ms on this storage,
+against a measured p50 of 1.965 ms. The ~500 saves/sec figure is therefore this machine's
+commit-durability rate, not a property of the SDK's code — which is why it did not move across the
+Dapper → `NpgsqlExecutor` rewrite. §1c's attribution of it to "UPSERT con JSONB parse + índices" is
+wrong. `SaveBatchAsync` commits its 500 UPSERTs in one transaction — one flush — which comes to ~74 µs
+per statement round trip today (1 / 13,489 sessions/sec).
+
+### What can and cannot be attributed
+
+- **Postgres `SaveAsync` latency is attributable — to storage**, by the proof above.
+- **The Postgres batch gain, +42% (9,491 → 13,489 sessions/sec), is not attributable to the Dapper
+  removal.** Redis, whose store code did not change, moved by a comparable or larger factor over the
+  same period (`SaveAsync` p50 79 → 30 µs; batch 65,738 → 91,021), and the runtime (10.0.5 → 10.0.12),
+  Npgsql (10.0.2 → 10.0.3), Docker and the kernel all moved too.
+- **Redis's movement coincides with StackExchange.Redis 2.12.14 → 3.1.13**, a major-version change.
+  That is a plausible cause and **not a verified one**: no A/B against the old client was run.
+
+### Reproduce
+
+The figures — one run per command, each a fresh process against a fresh container; repeat five times
+and take the median of each value:
+
+```sh
+dotnet test Tests/Verbara.Sdk.Sessions.Postgres.Tests/ -c Release --filter "Category=Benchmark" --logger "console;verbosity=detailed"
+dotnet test Tests/Verbara.Sdk.Sessions.Redis.Tests/ -c Release --filter "Category=Benchmark" --logger "console;verbosity=detailed"
+```
+
+The WAL-flush proof. A `pgbench` run taken straight after the container starts can read low, so
+repeat each setting:
+
+```sh
+docker run --rm postgres:18-alpine pg_test_fsync -s 3 -f /var/lib/postgresql/pg_test_fsync.out
+
+docker run -d --name wal-probe -e POSTGRES_PASSWORD=postgres postgres:18-alpine
+until docker exec wal-probe pg_isready -h 127.0.0.1 -U postgres -q; do sleep 1; done
+docker exec wal-probe psql -U postgres -c "CREATE TABLE wal_probe (v int)"
+docker exec wal-probe sh -c 'echo "INSERT INTO wal_probe (v) VALUES (1);" > /tmp/insert.sql'
+docker exec wal-probe pgbench -U postgres -n -c 1 -T 8 -f /tmp/insert.sql postgres
+docker exec -e PGOPTIONS='-c synchronous_commit=off' wal-probe pgbench -U postgres -n -c 1 -T 8 -f /tmp/insert.sql postgres
+docker rm -f wal-probe
+```

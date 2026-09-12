@@ -9,7 +9,7 @@
     "date": "2026-04-18",
     "release": "v1.11.0",
     "source": "docs/research/benchmark-analysis.md",
-    "note": "The AMI row is the one exception to the header above: its post-patch figure was taken on .NET 10.0.6 with MediumRunJob (30 samples), recorded in benchmark-analysis.md section 1.1. Stated per row rather than hidden behind a single header."
+    "note": "Three rows are exceptions to the header above, each stated per row rather than hidden behind a single header. The AMI row's post-patch figure was taken on .NET 10.0.6 with MediumRunJob (30 samples), recorded in benchmark-analysis.md section 1.1. The two session-store rows were re-measured on 2026-09-12 with an xunit Fact + Stopwatch against local Docker on .NET 10.0.12, not BenchmarkDotNet; each carries its own provenance object, and PerformanceTableCoherenceTests requires README.md's Performance section to state that provenance's date and runtime."
   },
   "rows": [
     {
@@ -47,20 +47,38 @@
     },
     {
       "operation": "Session store Redis `SaveAsync`",
-      "latency": "p50 79 µs",
-      "throughput": "~12.6K saves/sec",
-      "batch": "65,738 sess/sec",
-      "record_ref": "benchmark-analysis.md:155, :157, :161",
-      "note": "Fact+Stopwatch against local Docker, not BenchmarkDotNet — the table header above does not describe this row's instrument. docs/guides/session-store-backends.md:179 publishes ~250 µs for the same measurement and is wrong."
-    }
-  ],
-  "deferred_rows": [
+      "latency": "p50 30 µs",
+      "throughput": "~33.3K saves/sec",
+      "batch": "91,021 sess/sec",
+      "provenance": {
+        "date": "2026-09-12",
+        "runtime": ".NET 10.0.12",
+        "instrument": "xunit Fact + Stopwatch (Tests/Verbara.Sdk.Sessions.Redis.Tests/RedisLatencyBenchmark.cs), not BenchmarkDotNet",
+        "machine": "AMD Ryzen 9 9900X (12C/24T)",
+        "server": "Redis 7.4.8 (redis:7-alpine) via Testcontainers on local Docker",
+        "runs": 5,
+        "aggregation": "median of the five per-run values"
+      },
+      "record_ref": "benchmark-analysis.md:408 (2026-09-12 addendum, medians), runs at :395, derivation at :423",
+      "note": "Fact+Stopwatch against local Docker, not BenchmarkDotNet — the table header does not describe this row's instrument, date or runtime, which is why the row carries its own provenance and README.md states it under the table. Re-measured 2026-09-12: since the 2026-04-18 figures this row published until then, p50 moved 79 µs → 30 µs and batch 65,738 → 91,021 sess/sec, so README understated single saves ~2.6× and batch ~1.4×. The Redis store and the instrument changed only in rebrand and docs commits in between. StackExchange.Redis moved 2.12.14 → 3.1.13, a major version, which is a plausible cause of the movement and not a verified one: no A/B against the old client was run, and the runtime, Docker and kernel moved too. docs/guides/session-store-backends.md:179 publishes ~250 µs for the same measurement where the record has 30 µs, and is wrong."
+    },
     {
       "operation": "Session store Postgres `SaveAsync`",
-      "published": "~500 saves/sec (p50 1.97 ms) / batch 9,491 sess/sec",
-      "why_not_bound": "The record measures code that no longer ships. benchmark-analysis.md:149 describes the store as 'Npgsql + Dapper + JSONB', and :157 attributes the batch figure to 'Dapper no tiene COPY'. Dapper was removed repo-wide in v2.2.0 under ADR-0022 Phase D. Binding this row would pin a public claim to a measurement of deleted code.",
-      "unblocking_condition": "Re-measure Verbara.Sdk.Sessions.Postgres on the current NpgsqlExecutor path (Testcontainers, postgres:18-alpine), commit the result here, then bind. Until then the figure stays published and unguarded, which is stated rather than hidden.",
-      "also_note": "docs/guides/session-store-backends.md:9-11 publishes Postgres read latency as 5-10 ms where the record has GetAsync p50 = 51 µs. That divergence is separate from the Dapper problem and outlives it."
+      "latency": "p50 1.97 ms",
+      "throughput": "~500 saves/sec",
+      "batch": "13,489 sess/sec",
+      "provenance": {
+        "date": "2026-09-12",
+        "runtime": ".NET 10.0.12",
+        "instrument": "xunit Fact + Stopwatch (Tests/Verbara.Sdk.Sessions.Postgres.Tests/PostgresLatencyBenchmark.cs), not BenchmarkDotNet",
+        "machine": "AMD Ryzen 9 9900X (12C/24T)",
+        "server": "PostgreSQL 18.4 (postgres:18-alpine, default fsync=on / synchronous_commit=on / wal_sync_method=fdatasync) via Testcontainers on local Docker",
+        "runs": 5,
+        "aggregation": "median of the five per-run values"
+      },
+      "record_ref": "benchmark-analysis.md:391 (2026-09-12 addendum, medians), runs at :379, derivation at :424, WAL-flush proof at :426",
+      "note": "Re-measured 2026-09-12 on the NpgsqlExecutor store that replaced Dapper, which is what moved this row out of deferred_rows. Fact+Stopwatch against local Docker, not BenchmarkDotNet. Single-save latency is bound by the measuring machine's WAL flush, not by SDK code: one SaveAsync is one autocommit UPSERT and so one fdatasync, measured at 2002 µs/op on the same storage, and single-row inserts run 499 tps with synchronous_commit=on against 116,739 tps with it off (proof at benchmark-analysis.md:426). That is why p50 1.97 ms did not move across the rewrite, and why section 1c's attribution to JSONB parsing and indexes is wrong. Batch rose 9,491 → 13,489 sess/sec since 2026-04-18; that delta is NOT attributable to the Dapper removal, because Redis, whose store code did not change, moved by a comparable or larger factor over the same period. docs/guides/session-store-backends.md:9-11 publishes Postgres read latency as 5-10 ms where the record has GetAsync p50 = 48 µs (benchmark-analysis.md:391); that divergence is separate from the store rewrite and still open."
     }
-  ]
+  ],
+  "deferred_rows": []
 }

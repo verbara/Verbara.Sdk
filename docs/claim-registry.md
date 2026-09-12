@@ -56,14 +56,14 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 | 67 | ~12 ms CPU inference | ENFORCING | `TurnDetectionBenchmark` | **DELETED** — measured at 26.18–37.30 ms; deferred, see *Deferrals* |
 | 72 | 148/152 AMI (97%), 94/98 ARI (96%), 46/46, 27/27, 278 events | ENFORCING | — | GAP |
 | 74 | **37 ADRs** | ENFORCING | — | WRONG — 53 on disk |
-| 98 | measurement provenance (Ryzen 9 9900X, .NET 10.0.5, BDN v0.14.0, 2026-04-18) | COHERENCE | — | GAP |
+| 98 | measurement provenance (Ryzen 9 9900X, .NET 10.0.5, BDN v0.14.0, 2026-04-18) | COHERENCE | `PerformanceTableCoherenceTests` — the header provenance test | OK — matched against the whole file rather than this line; the two session-store rows measured apart from it state their own at :110 |
 | 102 | AMI parse+dispatch 1.53M events/sec (653 ns) | ENFORCING + COHERENCE | `perf-regression.yml` `*AmiProtocolReader*` | GAP — observational only (`\|\| true`, no baseline) |
 | 103 | ARI deserialize Channel 3.54M ops/sec (283 ns) | ENFORCING + COHERENCE | `*AriJson*` | GAP — observational only |
 | 104 | ARI event parse 595K events/sec (1.68 µs), "2.7× faster than v1.0" | ENFORCING + COHERENCE | `*AriParseEvent*` | GAP — observational; the cross-version ratio has no guard at all |
 | 105 | 163.9M lookups/sec (6.1 ns) | ENFORCING + COHERENCE | `*ChannelManager*` | GAP — observational |
 | 106 | ~0.21 ns/observer, zero-alloc | ENFORCING + COHERENCE | `*ObserverDispatch*` | GAP — observational |
-| 107 | Redis SaveAsync ~12.6K/sec (p50 79 µs), batch 65,738/sec | COHERENCE | — | GAP — **no workflow filter of any kind** |
-| 108 | Postgres SaveAsync ~500/sec (p50 1.97 ms), batch 9,491/sec | COHERENCE | — | GAP — no filter; **and the record measures Dapper, removed in v2.2.0** |
+| 107 | Redis SaveAsync ~33.3K/sec (p50 30 µs), batch 91,021/sec | COHERENCE | `PerformanceTableCoherenceTests` — the value test, and the per-row provenance test for its date and runtime at :110 | OK — re-measured 2026-09-12; the April figures it replaced (~12.6K/sec, p50 79 µs, batch 65,738/sec) understated the store ~2.6× and ~1.4× |
+| 108 | Postgres SaveAsync ~500/sec (p50 1.97 ms), batch 13,489/sec | COHERENCE | `PerformanceTableCoherenceTests` — the value test, and the per-row provenance test for its date and runtime at :110 | OK — re-measured 2026-09-12 on the `NpgsqlExecutor` store, so no longer a measurement of Dapper; batch was 9,491/sec, and single-save latency is the machine's WAL flush |
 | 133 | 9 ActivitySources | ENFORCING | `MarketingClaimsTests.cs:45-50` | OK |
 | 134 | 15 Meters | ENFORCING | `MarketingClaimsTests.cs:52-57` | OK |
 | 135 | 11 IHealthChecks — 6 core + 5 VoiceAi | ENFORCING | `MarketingClaimsTests.cs:76-97` | PARTIAL — total pinned, the 6/5 split is not |
@@ -182,8 +182,8 @@ Missed by the first sweep — tracked, public, and read as current by every cont
 | `high-load-tuning.md:138-140` | pauseWriter 1 MB / resumeWriter 512 KB / segment 4 KB "hardcoded" | ENFORCING | GAP |
 | `high-load-tuning.md:197` | EventPumpCapacity 20,000 | ENFORCING | OK — matches source; `README-technical.md:503` is the wrong one |
 | `session-store-backends.md:5,56,70,76` | three backends, three overloads, three indexes, pageSize 500 | ENFORCING | GAP |
-| `session-store-backends.md:9-11,26,35` | read latency <0.1 ms / <1 ms / 5-10 ms | COHERENCE | WRONG — the record has Postgres `GetAsync` p50 = 51 µs, not 5-10 ms |
-| `session-store-backends.md:179-182` | Redis SaveAsync ~250 µs | COHERENCE | WRONG — `README.md:107` and the record both say 79 µs |
+| `session-store-backends.md:9-11,26,35` | read latency <0.1 ms / <1 ms / 5-10 ms | COHERENCE | WRONG — the record has Postgres `GetAsync` p50 = 48 µs (re-measured 2026-09-12), not 5-10 ms |
+| `session-store-backends.md:179-182` | Redis SaveAsync ~250 µs | COHERENCE | WRONG — `README.md:107` and the record both say 30 µs (re-measured 2026-09-12) |
 | `troubleshooting.md:152` | designed for zero trim warnings | ENFORCING | PARTIAL — 22/29 |
 | `troubleshooting.md:190,194-202` | 9 registered sources, enumerated by name | ENFORCING | PARTIAL — count pinned, the by-name list is not |
 | `troubleshooting.md:230` | reconcile burst over 5-30 seconds | — | GAP |
@@ -284,3 +284,5 @@ These carry no class yet. Each needs a decision before it can ship under D1.
 
 First compiled 2026-08-29 against `main` at `2e931bf7`, by full sweep of every file in *Scope* above.
 Figures marked WRONG were verified against the tree at that commit.
+
+Updated 2026-09-12 for the session-store re-measurement only — `README.md` rows 98, 107 and 108, and the two `session-store-backends.md` rows citing the record's figures; no other row was re-verified.
