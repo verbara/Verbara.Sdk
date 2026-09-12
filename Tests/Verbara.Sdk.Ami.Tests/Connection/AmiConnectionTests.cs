@@ -22,6 +22,11 @@ public sealed class AmiConnectionTests : IAsyncDisposable
 
     public AmiConnectionTests()
     {
+        _sut = CreateConnection(TimeSpan.FromSeconds(5));
+    }
+
+    private AmiConnection CreateConnection(TimeSpan responseTimeout)
+    {
         var socketConnection = Substitute.For<ISocketConnection>();
         socketConnection.Input.Returns(_serverToClient.Reader);
         socketConnection.Output.Returns(_clientToServer.Writer);
@@ -42,10 +47,10 @@ public sealed class AmiConnectionTests : IAsyncDisposable
             Username = "admin",
             Password = "secret",
             AutoReconnect = false,
-            DefaultResponseTimeout = TimeSpan.FromSeconds(5)
+            DefaultResponseTimeout = responseTimeout
         });
 
-        _sut = new AmiConnection(options, socketFactory, NullLogger<AmiConnection>.Instance);
+        return new AmiConnection(options, socketFactory, NullLogger<AmiConnection>.Instance);
     }
 
     public async ValueTask DisposeAsync()
@@ -177,6 +182,62 @@ public sealed class AmiConnectionTests : IAsyncDisposable
 
         var act = async () => await _sut.ConnectAsync();
         await act.Should().ThrowAsync<AmiAuthenticationException>();
+    }
+
+    /// <summary>Answers Challenge and Login, leaving the version probe to the caller.</summary>
+    private async Task SimulateLoginWithoutVersionAsync()
+    {
+        var writer = _serverToClient.Writer;
+        var reader = _clientToServer.Reader;
+
+        await WriteBytesAsync(writer, "Asterisk Call Manager/6.0.0\r\n");
+
+        var challengeId = ExtractActionId(await ReadActionAsync(reader));
+        await WriteResponseAsync(writer, "Success", challengeId, [new("Challenge", "abc123")]);
+
+        var loginId = ExtractActionId(await ReadActionAsync(reader));
+        await WriteResponseAsync(writer, "Success", loginId, [new("Message", "Authentication accepted")]);
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldThrowOperationCanceledException_WhenCancelledDuringVersionDetection()
+    {
+        using var cts = new CancellationTokenSource();
+        var server = Task.Run(async () =>
+        {
+            await SimulateLoginWithoutVersionAsync();
+
+            // CoreSettings is on the wire; the caller gives up before Asterisk answers it.
+            await ReadActionAsync(_clientToServer.Reader);
+            await cts.CancelAsync();
+        });
+
+        var act = async () => await _sut.ConnectAsync(cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        await server;
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldThrowOperationCanceledException_WhenCancelledDuringVersionFallback()
+    {
+        await using var sut = CreateConnection(TimeSpan.FromMilliseconds(200));
+        using var cts = new CancellationTokenSource();
+        var server = Task.Run(async () =>
+        {
+            await SimulateLoginWithoutVersionAsync();
+
+            // Leave CoreSettings unanswered so it times out, then give up during the CLI fallback.
+            await ReadActionAsync(_clientToServer.Reader);
+            var fallback = await ReadActionAsync(_clientToServer.Reader);
+            fallback.Should().Contain("core show version");
+            await cts.CancelAsync();
+        });
+
+        var act = async () => await sut.ConnectAsync(cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        await server;
     }
 
     [Fact]
