@@ -472,6 +472,80 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
       a duplicate row carrying other figures still passes — closing that means changing the
       row-accounting test, which this task leaves intact.
 
+- [x] 4.5 Bind the session-store guide's Benchmarks figures to the record, and delete the ones
+      nothing measures
+      `docs/guides/session-store-backends.md` published session-store figures that no record held
+      and no test read, and the registry had them WRONG: a Redis `SaveAsync` at ~250 µs where 4.4's
+      record has p50 30 µs, Postgres read latency at 5-10 ms where the addendum has `GetAsync` p50
+      48 µs.
+
+      **Deleted, not restated — the turn-detection precedent.** The backends table's `<0.1 ms` /
+      `<1 ms` / `5-10 ms` read latencies; and the Benchmarks table's InMemory column and its
+      `GetAsync`, `GetActiveAsync (1,000 active)` and `SaveBatchAsync (100 sessions)` rows. The
+      `Fact`s that table credited time only `SaveAsync`, `GetAsync` and 500-session batches, for
+      Redis and Postgres, and nothing times InMemory. `SessionsBackendsBenchmark` does define
+      `GetActive_1000` and `SaveBatch_100`, but it has no committed result, no baseline entry and no
+      workflow, and §1c records the BenchmarkDotNet attempt over Testcontainers failing 9 of 10
+      methods, so nothing in the repository records a measurement of either. `GetAsync` is measured,
+      but the record does not bind it, so the guide points to the addendum instead of publishing it.
+
+      The read-latency column now says what a read costs, checked against each store's source:
+      in-process with no I/O and no serialization; one `GET` for `GetAsync` and two for
+      `GetByLinkedIdAsync`; one `SELECT` per read, with each single save waiting on a WAL flush by
+      default. All three latency bullets in the decision guide were rewritten, not kept. Postgres's
+      "5-10 ms read latency is acceptable" now states its actual trade-off: each single save waits
+      for a durable commit, a `SaveBatchAsync` shares one, and reads are not the slow path.
+      Redis's "sub-millisecond reads" held on loopback but did not tell Redis apart, because
+      Postgres reads measure under a millisecond too; it now points at what does, the faster measured
+      single save. InMemory's "latency budget is sub-millisecond" had no measurement behind it and
+      the same flaw; it now says what InMemory avoids, a network hop and serialization.
+
+      **Bound.** The Benchmarks section publishes exactly the record's strings — `p50 30 µs`,
+      `batch 91,021 sess/sec`, `p50 1.97 ms`, `batch 13,489 sess/sec` — with 2026-09-12,
+      .NET 10.0.12, loopback Docker without TLS and the median of five runs, and it keeps "benchmark
+      on your topology". No line above `## Benchmarks` moved: lines 9-11, 22, 27 and 35 were edited in
+      place, so the registry row for `:5,56,70,76` still points at its claims. The read-latency row
+      had cited `:26`, which never held a latency claim; it now cites `:22` and `:27`.
+
+      **The guard.** A sixth test,
+      `EverySessionStoreRow_ShouldHaveItsFiguresAndProvenanceStatedInTheGuidesBenchmarksSection`,
+      takes every record row whose `operation` starts with `Session store` and requires the guide's
+      `## Benchmarks` section — not the whole file — to carry that row's `latency` and `batch` and
+      its provenance `date` and `runtime`, each as a whole figure through the value test's regex,
+      now one `WholeFigure` helper serving both. A record with no such row fails instead of passing
+      on an empty loop. Negative-tested, verbatim:
+
+      ```
+      Expected section to match regex "(?<![\d.,])batch\ 91,021\ sess/sec(?!\d)" because
+      docs/guides/session-store-backends.md's Benchmarks section must state the recorded batch of
+      'Session store Redis `SaveAsync`' ('batch 91,021 sess/sec') as a whole figure; if the
+      measurement changed, the record moves first, in its own reviewed commit, but "## Benchmarks
+      ```
+      ```
+      Expected section to match regex "(?<![\d.,])2026-09-12(?!\d)" because ... must state the
+      recorded date of 'Session store Redis `SaveAsync`' ('2026-09-12') as a whole figure; ...
+      ```
+      ```
+      Expected section to match regex "(?<![\d.,])batch\ 13,489\ sess/sec(?!\d)" because ... must
+      state the recorded batch of 'Session store Postgres `SaveAsync`' ('batch 13,489 sess/sec') ...
+      ```
+      ```
+      Expected sessionRows not to be empty because the record must still hold the session-store rows
+      the guide's Benchmarks section publishes — with none, this test would pass while binding nothing.
+      ```
+
+      The first put a digit in front of the Redis batch (`batch 191,021 sess/sec`), the second
+      deleted the date, and the third moved `batch 13,489 sess/sec` out of the table into the Write
+      path paragraph above the section, so the scoping is real; each failed this test alone, 5 of 6
+      green. The fourth renamed both record rows' `operation` so that none starts with
+      `Session store`, and ran this test on its own, because the value test fails on that rename too.
+      Restored byte-identical each time, 6/6 green, the project 28/28.
+
+      Residual, measured rather than assumed: the check is section-wide, so swapping the two
+      backends' figures between the table's rows — Redis at `p50 1.97 ms`, Postgres at `p50 30 µs` —
+      stayed 6/6 green. Machine, server versions, instrument and run count are stated, not asserted.
+      `docs/claim-registry.md` records both.
+
 ## 5. Deferred: first-party accuracy gate (investigation only — no code)
 
 - [x] 5.1 Survey candidate labelled turn-boundary speech corpora and record, per candidate, whether
