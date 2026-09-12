@@ -151,6 +151,21 @@ most recent), so the gate would have failed a perfectly good release for a maint
 `git tag -a` out of habit. It now peels `${GITHUB_SHA}^{commit}` first, which is a no-op on a
 lightweight tag and correct on an annotated one.
 
+### Security
+
+- **`Microsoft.SourceLink.GitHub` bumped `10.0.301` → `10.0.303` to clear
+  [GHSA-23fw-v26w-5fgq](https://github.com/advisories/GHSA-23fw-v26w-5fgq)** (CVE-2026-62900) —
+  MEDIUM, CVSS 5.9, CWE-212 information disclosure in `Microsoft.Build.Tasks.Git`, which
+  `Microsoft.SourceLink.GitHub` brings in at its own version. **Advisory drift, not a change of
+  ours**: it was published 2026-09-08, after `main`'s last green run, and under
+  `TreatWarningsAsErrors` NuGet audit's `NU1902` is a build error — so every `src/` project failed to
+  restore, the merge queue ejected the next pull request to reach it, and the weekly
+  `perf-regression.yml` run would have failed at build. **The package runs at build time only**:
+  `Directory.Build.props` references it with `PrivateAssets="all"`, so it is not a dependency of any
+  published package, and the `repository` URL in the published `Verbara.Sdk` 2.5.0 `.nuspec` carries
+  no credentials. `Verbara.Sdk.Pro` and `Verbara.Platform` reference no SourceLink package and are
+  unaffected.
+
 ## [2.5.0] - 2026-08-24
 
 ### Fixed — Tests: eight WebSocket fakes carried fences nobody had watched fail, and four of them could hang forever
