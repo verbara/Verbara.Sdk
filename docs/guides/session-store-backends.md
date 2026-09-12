@@ -6,9 +6,9 @@ The Session Engine tracks live call sessions (`CallSession`) from AMI/ARI events
 
 | Package | Backend | Multi-instance | Crash recovery | Read latency | Recommended for |
 |---------|---------|----------------|----------------|--------------|-----------------|
-| **`Verbara.Sdk.Sessions`** (default) | `InMemorySessionStore` | ❌ | ❌ | <0.1 ms | Single-process apps, tests, POCs |
-| **`Verbara.Sdk.Sessions.Redis`** | `RedisSessionStore` | ✅ | ✅ (with `completedRetention`) | <1 ms | HA deployments, low-latency SLAs |
-| **`Verbara.Sdk.Sessions.Postgres`** | `PostgresSessionStore` | ✅ | ✅ (durable) | 5-10 ms | Teams already running Postgres, regulatory/audit workloads |
+| **`Verbara.Sdk.Sessions`** (default) | `InMemorySessionStore` | ❌ | ❌ | In-process: no I/O, no serialization | Single-process apps, tests, POCs |
+| **`Verbara.Sdk.Sessions.Redis`** | `RedisSessionStore` | ✅ | ✅ (with `completedRetention`) | Network round trip: one `GET` for `GetAsync`, two for `GetByLinkedIdAsync` | HA deployments, low-latency SLAs |
+| **`Verbara.Sdk.Sessions.Postgres`** | `PostgresSessionStore` | ✅ | ✅ (durable) | Network I/O: one `SELECT` per read; by default each single save also waits for a WAL flush | Teams already running Postgres, regulatory/audit workloads |
 
 All three implement the public **`ISessionStore`** interface and derive from **`SessionStoreBase`** — the `SessionReconciliationService` and `CallSessionManager` are agnostic to the backend choice. Switching is a one-line DI change; no code outside the registration needs to move.
 
@@ -19,12 +19,12 @@ All three implement the public **`ISessionStore`** interface and derive from **`
 **Pick InMemory if:**
 - Running a single SDK instance (no horizontal scale)
 - Session loss on crash is acceptable (ops workflow handles resync)
-- Latency budget is sub-millisecond and every hop counts
+- Store calls must stay in-process: no network hop, no serialization
 - Development / integration tests
 
 **Pick Redis if:**
 - Multiple SDK instances must share session state (N:1 or active-active)
-- You want sub-millisecond reads on the hot path
+- Saves are on the hot path: of the two networked backends, Redis measures the faster single save (see [Benchmarks](#benchmarks))
 - You already operate a Redis fleet (managed cache, in-cluster, or AWS ElastiCache / Azure Cache)
 - Completed-session retention of minutes-to-hours is fine (Redis TTL handles GC)
 
@@ -32,7 +32,7 @@ All three implement the public **`ISessionStore`** interface and derive from **`
 - You already run Postgres (e.g. for Asterisk Realtime, CDR/CEL archive, application data)
 - You need durable audit of every session lifecycle (sessions survive Redis flush, cluster rebuild)
 - Query-by-column requirements beyond `session_id` / `linked_id` (e.g. analytics over `snapshot` JSONB)
-- 5-10 ms read latency is acceptable
+- Each single save can wait for a durable commit (one WAL flush, under the default `synchronous_commit=on`); a `SaveBatchAsync` shares one, and reads are not the slow path
 
 ---
 
@@ -172,13 +172,11 @@ The serialization DTO `CallSessionSnapshot` is `internal` to `Verbara.Sdk.Sessio
 
 ## Benchmarks
 
-See [`docs/research/benchmark-analysis.md`](../research/benchmark-analysis.md) for the full methodology. Quick reference on AMD Ryzen 9 9900X, Postgres 18 local, Redis 7 local:
+Two figures per networked backend, from the re-measurement in the addendum at the end of [`docs/research/benchmark-analysis.md`](../research/benchmark-analysis.md): measured 2026-09-12 on .NET 10.0.12, AMD Ryzen 9 9900X, with an xunit `Fact` + `Stopwatch` (`RedisLatencyBenchmark` / `PostgresLatencyBenchmark`) against loopback Docker with no TLS — Redis 7.4.8, PostgreSQL 18.4 — median of five runs. They are bound to `docs/research/performance-record.json`, as `README.md`'s Performance table is.
 
-| Operation | InMemory | Redis | Postgres |
-|-----------|----------|-------|----------|
-| `SaveAsync` (single session) | ~50 ns | ~250 μs | ~1.5 ms |
-| `GetAsync` (single) | ~30 ns | ~200 μs | ~1.2 ms |
-| `GetActiveAsync` (1,000 active) | ~10 μs | ~8 ms | ~12 ms |
-| `SaveBatchAsync` (100 sessions) | ~5 μs | ~3 ms | ~15 ms (single tx) |
+| Backend | `SaveAsync` (single session) | `SaveBatchAsync` (500 sessions) |
+|---------|------------------------------|---------------------------------|
+| Redis | p50 30 µs | batch 91,021 sess/sec |
+| Postgres | p50 1.97 ms | batch 13,489 sess/sec |
 
-Numbers are order-of-magnitude indicators from the `RedisLatencyBenchmark` / `PostgresLatencyBenchmark` smoke tests and will vary by network, cluster configuration, and hardware. **If latency matters, benchmark on your topology.**
+Postgres single-save latency is the measuring machine's WAL flush — one per commit — not SDK code; a batch commits once. `GetAsync`, the p95/p99/max percentiles, each of the five runs and the reproduce commands are in the addendum. Nothing records a measurement of InMemory, `GetActiveAsync` or batches of other sizes, so no figure is published for them. Loopback without TLS is a best-case baseline, not production sizing: **if latency matters, benchmark on your topology.**

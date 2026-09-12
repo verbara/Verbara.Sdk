@@ -8,7 +8,9 @@ namespace Verbara.Sdk.OpenTelemetry.Tests;
 /// Binds every absolute figure in <c>README.md</c>'s Performance table to
 /// <c>docs/research/performance-record.json</c> (ADR-0042 D7). The table asserts "this is what we
 /// measured, on this machine, on this date, and you can reproduce it"; this fails the build when
-/// the document and the record stop agreeing.
+/// the document and the record stop agreeing. It also requires the <c>## Benchmarks</c> section of
+/// <c>docs/guides/session-store-backends.md</c> to state each session-store row's figures, date and
+/// runtime — anywhere in that section, not in its own backend's table row.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -41,10 +43,8 @@ public sealed class PerformanceTableCoherenceTests
             {
                 if (!entry.TryGetProperty(field, out var value)) continue;
 
-                // A whole figure, not a substring: "11.62M events/sec" contains "1.62M events/sec",
-                // so a plain Contains would pass a 7x overclaim. No digit, dot or comma may touch it.
                 var figure = value.GetString()!;
-                row.Cells.Should().MatchRegex($@"(?<![\d.,]){Regex.Escape(figure)}(?!\d)",
+                row.Cells.Should().MatchRegex(WholeFigure(figure),
                     $"README.md's '{operation}' row must publish the recorded {field} ('{figure}') as a " +
                     "whole figure; if the measurement changed, the record moves first, in its own reviewed commit");
             }
@@ -142,6 +142,58 @@ public sealed class PerformanceTableCoherenceTests
         }
     }
 
+    /// <summary>
+    /// <c>docs/guides/session-store-backends.md</c> publishes the same two session-store measurements
+    /// as README.md, to the reader choosing a backend, and published different figures for them —
+    /// ~250 µs for a Redis save the record has at 30 µs — because nothing bound the guide. Its
+    /// <c>## Benchmarks</c> section must now carry each session-store row's latency and batch as whole
+    /// figures, and that row's date and runtime. A record with no session-store row fails rather than
+    /// passing on an empty loop.
+    /// </summary>
+    [Fact]
+    public void EverySessionStoreRow_ShouldHaveItsFiguresAndProvenanceStatedInTheGuidesBenchmarksSection()
+    {
+        var record = LoadRecord();
+        var section = ReadGuideBenchmarksSection();
+
+        var sessionRows = record.RootElement.GetProperty("rows").EnumerateArray()
+            .Where(e => e.GetProperty("operation").GetString()!.StartsWith("Session store", StringComparison.Ordinal))
+            .ToList();
+
+        sessionRows.Should().NotBeEmpty(
+            "the record must still hold the session-store rows the guide's Benchmarks section publishes — " +
+            "with none, this test would pass while binding nothing");
+
+        foreach (var entry in sessionRows)
+        {
+            var operation = entry.GetProperty("operation").GetString()!;
+            entry.TryGetProperty("provenance", out var provenance).Should().BeTrue(
+                $"'{operation}' was measured apart from README.md's table header and must record its provenance");
+
+            var required = new[]
+            {
+                ("latency", entry), ("batch", entry), ("date", provenance), ("runtime", provenance),
+            };
+
+            foreach (var (field, source) in required)
+            {
+                source.TryGetProperty(field, out var value).Should().BeTrue(
+                    $"'{operation}' must record its {field}");
+                var figure = value.GetString()!;
+                section.Should().MatchRegex(WholeFigure(figure),
+                    $"docs/guides/session-store-backends.md's Benchmarks section must state the recorded {field} " +
+                    $"of '{operation}' ('{figure}') as a whole figure; if the measurement changed, the record " +
+                    "moves first, in its own reviewed commit");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A whole figure, not a substring: "11.62M events/sec" contains "1.62M events/sec", so a plain
+    /// Contains would pass a 7x overclaim. No digit, dot or comma may touch it.
+    /// </summary>
+    private static string WholeFigure(string figure) => $@"(?<![\d.,]){Regex.Escape(figure)}(?!\d)";
+
     private static Row FindRow(string operation)
     {
         var row = ReadTableRows().FirstOrDefault(r => r.Operation == operation);
@@ -164,10 +216,17 @@ public sealed class PerformanceTableCoherenceTests
         }
     }
 
-    private static string ReadPerformanceSection()
+    private static string ReadPerformanceSection() => SectionOf(ReadReadme(), "## Performance", "README.md");
+
+    private static string ReadGuideBenchmarksSection() => SectionOf(
+        File.ReadAllText(Path.Combine(RepoRoot(), "docs", "guides", "session-store-backends.md")),
+        "## Benchmarks", "docs/guides/session-store-backends.md");
+
+    private static string SectionOf(string markdown, string heading, string document)
     {
-        var readme = ReadReadme();
-        var section = readme[readme.IndexOf("## Performance", StringComparison.Ordinal)..];
+        var start = markdown.IndexOf(heading, StringComparison.Ordinal);
+        start.Should().BeGreaterThanOrEqualTo(0, $"{document} must still have its '{heading}' section");
+        var section = markdown[start..];
         var end = section.IndexOf("\n## ", StringComparison.Ordinal);
         return end > 0 ? section[..end] : section;
     }
