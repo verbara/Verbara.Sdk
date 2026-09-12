@@ -320,3 +320,73 @@ target `refs/tags/v*`, rules `creation`, `update` and `deletion`, bypass limited
 admins. `v2.5.1` was the first tag cut under it. The Accepted body's `## What this does not claim`
 section ("D2's ruleset is still absent") and D2 itself ("The ruleset does not exist yet") describe the
 state before that date, not after it.
+
+## Addendum (2026-09-12) — "all 29 pack clean" was true of packing; validation covered 17
+
+D6 ends: "The baseline is moved to `2.5.0` here. All 29 packages pack clean against it." All 29 did pack.
+Package validation — the comparison the baseline exists for — ran for 17 of them. The other twelve set
+`<EnablePackageValidation>false</EnablePackageValidation>` in their own project file: `Verbara.Sdk.` +
+`Cluster.Postgres`, `Cluster.Primitives`, `Data.Npgsql`, `OpenTelemetry`, `Push`, `Push.AspNetCore`,
+`Push.Nats`, `Push.Webhooks`, `Resilience`, `Sessions.Postgres`, `Sessions.Redis` and
+`VoiceAi.TurnDetection`. A project with validation off downloads no baseline and runs no API compatibility
+check, and pack says nothing about it, because there is nothing to report. Measured two ways: the evaluated
+property (`dotnet msbuild -getProperty:EnablePackageValidation` is `false` for the twelve and `true` for the
+rest) and the restore graph (the twelve plan no baseline download; `Verbara.Sdk.Ami` plans itself at
+`[2.5.1, 2.5.1]`).
+
+Each opt-out went in while its package was new, between 2026-04-13 and 2026-05-23, most under the comment
+"New package — no baseline published yet; skip binary compatibility check". That was true on the day. It
+stopped being true once the package was on nuget.org at the baseline version, and nothing removed the opt-out
+when that happened: all twelve are on nuget.org at 2.5.0, so each could have gone in the PR that moved the
+baseline there. D6's check could not have noticed. It keeps the baseline *version* current and says nothing
+about which projects compare against it, so a stale opt-out goes quiet exactly the way a stale baseline does.
+
+**What changed.** The twelve opt-outs and their comments are removed. With the baseline at 2.5.1,
+`dotnet pack Verbara.Sdk.slnx -c Release` packs 29 packages, downloads all 29 baselines and reports no `CP` or
+`PKV` diagnostic. Whatever those twelve shipped before 2.5.1 was never compared, and is released history now.
+
+**The guard.** `scripts/ci/check-package-validation-coverage.sh` fails when a shipped project skips validation
+although its package is on nuget.org at the baseline version. That is exactly when validation becomes possible:
+a brand-new package can still opt out, and the PR that moves the baseline past a package's first release is
+the PR that has to drop its opt-out. It follows D6's check — exit 0 / 1 / 2, an unreachable feed is a warning
+and never a failure, an answer that is not a list of versions is not a pass — and a tree with no opt-out asks
+the feed nothing.
+
+"Skips validation" is read from MSBuild's evaluation (`dotnet msbuild -getProperty/-getItem`, about 0.3 s a
+project), not grepped from the project file. A grep sees one spelling in one file; the evaluation is asked what
+the SDK's own targets ask: `EnablePackageValidation`, compared case-insensitively and untrimmed as the SDK
+compares it; whether a `PackageDownload` of the package at the baseline is planned, which already accounts for
+`DisablePackageBaselineValidation` and every per-project baseline override; and `RunApiCompat`. Each of these
+was measured to stop the comparison without the spelling a grep looks for: the property set in a nested
+`Directory.Build.props` or through another property, ` true ` written with spaces, `PackAsTool` (the SDK sets
+the property false itself), `DisablePackageBaselineValidation` in `Directory.Build.targets`, and a per-project
+baseline version.
+
+`scripts/tests/test_package_validation_coverage.sh` has 56 cases against a stand-in for MSBuild and `file://`
+feeds, and 9 more against real MSBuild, one per route above. Three deliberately broken copies of the guard each
+turned it red: an opt-out on the feed treated as allowed (18 failures), the read regressed to a grep (40,
+including 6 real-MSBuild cases), and the download item ignored (8, including 2).
+
+**Where it runs.** As a step in `Pack Warnings Gate`. That context is required and runs on every PR that is not
+docs-only — a project or props change never is — so the guard blocks the PR that adds an opt-out rather than
+reporting it after the merge. The step before it runs the harness's real-MSBuild cases with that job's own SDK,
+so the read is re-proven wherever its verdict is used. The stand-in half runs in `Coverage Script Tests`, for
+the reason D7 gives.
+
+It is deliberately **not** added to `release-hygiene.yml`. Everything that can turn its verdict from pass to
+fail arrives in a PR — a project file, a props file, the baseline — and every such PR runs `Pack Warnings Gate`.
+Only the feed moves without a PR, and in one narrow case: a package still indexing while the PR that moves the
+baseline is checked reads as a new package, and passes. If that happens, the next non-docs PR fails with the
+package named. A post-merge run would get there first, at the price of installing .NET in a workflow that today
+needs only git and bash. The warning path is just as narrow where the guard does run: that job restores from
+nuget.org and downloads the baselines before the guard is reached.
+
+**What this does not claim.**
+
+- A global property on the pack command line (`-p:EnablePackageValidation=false`) belongs to no project, so the
+  guard cannot see it.
+- `CP` findings suppressed one at a time, through `NoWarn` or `CompatibilitySuppressions.xml`, are outside it:
+  the check still runs, and each suppression is reviewed in the PR that adds it.
+- A project that stops packing is not a shipped project to the guard.
+- The PublicAPI tracker is untouched. Ten of the twelve still have an empty `PublicAPI.Shipped.txt`; see the
+  ADR-0023 addendum of the same date.
