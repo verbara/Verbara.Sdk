@@ -27,6 +27,9 @@ await using var provider = services.BuildServiceProvider();
 // 2. Resolve the AMI connection
 var ami = provider.GetRequiredService<IAmiConnection>();
 
+// Outlives the try/finally below, so a second Ctrl+C during shutdown never reaches a disposed source.
+using var cts = new CancellationTokenSource();
+
 try
 {
     // 3. Connect to Asterisk
@@ -43,7 +46,8 @@ try
 
     // 6. Wait for some events
     Console.WriteLine("Listening for events (press Ctrl+C to stop)...");
-    await Task.Delay(Timeout.InfiniteTimeSpan, new CancellationTokenSource().Token);
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+    await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token);
 }
 catch (OperationCanceledException)
 {
