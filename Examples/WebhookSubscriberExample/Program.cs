@@ -27,7 +27,7 @@ const int listenerPort = 18080;
 var receivedTcs = new TaskCompletionSource<(string body, string? signature)>();
 
 // 1. Spin up a HttpListener playing the receiver role.
-var listener = new HttpListener();
+using var listener = new HttpListener();
 listener.Prefixes.Add($"http://localhost:{listenerPort}/hook/");
 listener.Start();
 Console.WriteLine($"Webhook receiver listening at http://localhost:{listenerPort}/hook/");

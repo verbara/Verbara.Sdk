@@ -81,7 +81,7 @@ using var subscription = sessionManager.Events.Subscribe(evt =>
 
 // 3. Periodic summary
 using var summaryTimer = new PeriodicTimer(TimeSpan.FromSeconds(10));
-var cts = new CancellationTokenSource();
+using var cts = new CancellationTokenSource();
 
 Console.CancelKeyPress += (_, e) =>
 {

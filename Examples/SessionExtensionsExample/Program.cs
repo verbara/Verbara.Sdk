@@ -85,7 +85,7 @@ using var subscription = sessionManager.Events.Subscribe(evt =>
 });
 
 // 3. Run until Ctrl+C, then print store summary
-var cts = new CancellationTokenSource();
+using var cts = new CancellationTokenSource();
 
 Console.CancelKeyPress += (_, e) =>
 {

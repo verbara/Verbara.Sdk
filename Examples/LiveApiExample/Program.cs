@@ -25,6 +25,9 @@ await using var provider = services.BuildServiceProvider();
 var ami = provider.GetRequiredService<IAmiConnection>();
 var server = provider.GetRequiredService<Verbara.Sdk.Live.Server.VerbaraServer>();
 
+// Outlives the try/finally below, so a second Ctrl+C during shutdown never reaches a disposed source.
+using var cts = new CancellationTokenSource();
+
 try
 {
     // 2. Connect to Asterisk AMI
@@ -42,7 +45,6 @@ try
 
     // 5. Monitor changes
     Console.WriteLine("\nMonitoring state changes (press Ctrl+C to stop)...");
-    var cts = new CancellationTokenSource();
     Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
     while (!cts.Token.IsCancellationRequested)

@@ -31,7 +31,7 @@ Console.WriteLine($"  exten => 102,1,AGI(agi://localhost:{port}/ivr-sales)");
 Console.WriteLine("Press Ctrl+C to stop.");
 
 // 3. Wait for shutdown
-var cts = new CancellationTokenSource();
+using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 try { await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token); }
 catch (OperationCanceledException) { }
