@@ -2,8 +2,6 @@
   <PropertyGroup>
     <Description>Verbara.Sdk.Push.Webhooks - outbound HTTP webhook delivery for Verbara.Sdk.Push. Consumes events from the Push bus, matches against WebhookSubscription topic patterns, POSTs with HMAC-SHA256 signature and exponential retry/backoff. AOT-safe.</Description>
     <PackageTags>asterisk;push;webhooks;hmac;retry;sdk</PackageTags>
-    <!-- New package — no baseline published yet; skip binary compatibility check -->
-    <EnablePackageValidation>false</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>

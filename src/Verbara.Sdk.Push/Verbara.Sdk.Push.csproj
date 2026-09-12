@@ -2,8 +2,6 @@
   <PropertyGroup>
     <Description>Verbara.Sdk.Push - Real-time push primitives: topic hierarchy, subscription management, authorization, in-memory event fan-out. AOT-safe, no aspnetcore dependency.</Description>
     <PackageTags>asterisk;push;sse;realtime;pubsub;sdk</PackageTags>
-    <!-- New package — no baseline published yet; skip binary compatibility check -->
-    <EnablePackageValidation>false</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>

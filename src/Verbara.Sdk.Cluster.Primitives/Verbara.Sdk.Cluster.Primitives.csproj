@@ -3,8 +3,6 @@
   <PropertyGroup>
     <Description>Verbara.Sdk.Cluster.Primitives - MIT abstractions for distributed cluster transport, membership, and distributed locking. AOT-safe, zero reflection, zero external dependencies beyond Microsoft.Extensions.* abstractions. Reference in-memory implementations included for tests and single-instance deployments.</Description>
     <PackageTags>asterisk;cluster;membership;transport;distributed-lock;sdk</PackageTags>
-    <!-- New package — no baseline published yet; skip binary compatibility check -->
-    <EnablePackageValidation>false</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>

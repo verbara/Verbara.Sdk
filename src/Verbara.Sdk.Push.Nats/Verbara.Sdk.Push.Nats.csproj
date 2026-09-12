@@ -2,8 +2,6 @@
   <PropertyGroup>
     <Description>Verbara.Sdk.Push.Nats - publishes Push bus events to a NATS subject hierarchy that mirrors the Push topic tree (asterisk.sdk.**). AOT-safe.</Description>
     <PackageTags>asterisk;push;nats;bridge;multi-node;sdk</PackageTags>
-    <!-- New package — no baseline published yet; skip binary compatibility check -->
-    <EnablePackageValidation>false</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>

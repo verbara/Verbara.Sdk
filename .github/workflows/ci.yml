@@ -213,6 +213,14 @@ jobs:
       - name: Run perf-baseline notifier unit tests (ADR-0042)
         run: bash scripts/tests/test_report_perf_breach.sh
 
+      # Package-validation coverage guard unit tests (ADR-0055 addendum "all 29 packed, but only 17 were
+      # validated"). The guard itself
+      # runs in Pack Warnings Gate; its logic is tested here, on every PR, for the reason the
+      # release-hygiene guards above are: a broken one passes silently, green. The half of the harness
+      # that needs a real `dotnet msbuild` runs where the guard does, with the same SDK (see pack-check).
+      - name: Run package-validation coverage guard unit tests (ADR-0055)
+        run: bash scripts/tests/test_package_validation_coverage.sh
+
   aot-check:
     name: AOT Trim Check
     runs-on: ubuntu-latest
@@ -249,6 +257,20 @@ jobs:
         run: dotnet pack Verbara.Sdk.slnx -c Release --no-build -p:TreatWarningsAsErrors=true -o ./artifacts
       - name: List produced packages
         run: ls -la ./artifacts/*.nupkg 2>/dev/null || true
+      # Every shipped package is actually compared against the baseline (ADR-0055 addendum "all 29 packed,
+      # but only 17 were validated").
+      # Pack cannot report this itself: a project with package validation switched off packs green, and
+      # twelve did for months after their packages shipped. It runs here rather than in
+      # release-hygiene.yml because it has to BLOCK the PR that adds an opt-out, and this required job
+      # runs on every PR that can add one — a project or props change is never docs-only. The first
+      # step re-proves, with this job's SDK, that the guard's evaluated read sees opt-outs a grep
+      # cannot; if it ever stops seeing them, the guard's verdict is not used.
+      - name: Prove the package-validation guard reads what MSBuild evaluates (ADR-0055)
+        env:
+          PKV_MSBUILD_CASES: '1'
+        run: bash scripts/tests/test_package_validation_coverage.sh
+      - name: Every shipped package runs package validation (ADR-0055)
+        run: bash scripts/ci/check-package-validation-coverage.sh
 
   audit-test-asserts:
     name: Audit Test Asserts

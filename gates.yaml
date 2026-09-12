@@ -88,9 +88,12 @@ gates:
       ci.yml "AOT Trim Check" (aot-check) runs tools/verify-aot.sh — a trim-safe self-contained
       dotnet publish of tools/AotCanary with /warnaserror + a smoke-run when host RID matches — proving
       the ship-shape (Native AOT) invariant at PR time, not release time; standalone aot-validate.yml
-      mirrors it on push:[main]. Directory.Build.props EnablePackageValidation (baseline 2.1.0) +
-      PublicApiAnalyzers, surfaced by "Pack Warnings Gate" (pack-check), catch breaking API/package
-      drift before publish.yml (tag-triggered nuget.org push) ever runs.
+      mirrors it on push:[main]. Directory.Build.props EnablePackageValidation + PublicApiAnalyzers,
+      surfaced by "Pack Warnings Gate" (pack-check), catch breaking API/package drift before publish.yml
+      (tag-triggered nuget.org push) ever runs. scripts/ci/check-package-validation-coverage.sh (Pack
+      Warnings Gate) fails a PR in which a package already on nuget.org at the baseline skips or silences
+      that validation, and scripts/ci/check-apicompat-baseline.sh (release-hygiene.yml, push:[main] +
+      weekly) keeps the baseline at the newest published release.
       "AOT Trim Check" and "Pack Warnings Gate" are ADR-0016-gated (they report skipped on docs-only
       diffs); aot-validate.yml's pull_request trigger additionally carries the ADR-0016 §2
       paths-ignore, while its push:[main] baseline stays unfiltered.
