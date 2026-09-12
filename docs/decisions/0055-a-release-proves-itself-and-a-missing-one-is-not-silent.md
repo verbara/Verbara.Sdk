@@ -321,7 +321,7 @@ admins. `v2.5.1` was the first tag cut under it. The Accepted body's `## What th
 section ("D2's ruleset is still absent") and D2 itself ("The ruleset does not exist yet") describe the
 state before that date, not after it.
 
-## Addendum (2026-09-12) — "all 29 pack clean" was true of packing; validation covered 17
+## Addendum (2026-09-12) — all 29 packed, but only 17 were validated
 
 D6 ends: "The baseline is moved to `2.5.0` here. All 29 packages pack clean against it." All 29 did pack.
 Package validation — the comparison the baseline exists for — ran for 17 of them. The other twelve set
@@ -343,7 +343,9 @@ about which projects compare against it, so a stale opt-out goes quiet exactly t
 
 **What changed.** The twelve opt-outs and their comments are removed. With the baseline at 2.5.1,
 `dotnet pack Verbara.Sdk.slnx -c Release` packs 29 packages, downloads all 29 baselines and reports no `CP` or
-`PKV` diagnostic. Whatever those twelve shipped before 2.5.1 was never compared, and is released history now.
+`PKV` diagnostic. None of the twelve was compared when its releases were cut. Compared afterwards against
+2.4.0 — build, then pack with warnings as errors — all 29 plan their 2.4.0 baseline and pack reports no `CP` or
+`PKV` diagnostic either; the releases before 2.4.0 remain unchecked.
 
 **The guard.** `scripts/ci/check-package-validation-coverage.sh` fails when a shipped project skips validation
 although its package is on nuget.org at the baseline version. That is exactly when validation becomes possible:
@@ -362,10 +364,24 @@ was measured to stop the comparison without the spelling a grep looks for: the p
 the property false itself), `DisablePackageBaselineValidation` in `Directory.Build.targets`, and a per-project
 baseline version.
 
-`scripts/tests/test_package_validation_coverage.sh` has 56 cases against a stand-in for MSBuild and `file://`
-feeds, and 9 more against real MSBuild, one per route above. Three deliberately broken copies of the guard each
-turned it red: an opt-out on the feed treated as allowed (18 failures), the read regressed to a grep (40,
-including 6 real-MSBuild cases), and the download item ignored (8, including 2).
+Letting validation run but report nothing counts as skipping it, and two settings do that. `RunApiCompat` in any
+spelling MSBuild reads as false — `false`, `off`, `no`, `!true`, `!on`, `!yes`, in any case — runs validation
+without comparing any API. A suppression file generated during pack — `ApiCompatGenerateSuppressionFile` reading
+as true (`true`, `on`, `yes`, `!false`, `!off`, `!no`), or, while that is empty, its older name
+`GenerateCompatibilitySuppressionFile`, which the SDK copies onto it inside a target where evaluation never
+shows it — turns every difference into a suppression written on the build machine, and that file never reaches
+the repository. Both reach the validation task as bool parameters, which is why those spellings apply. Against a
+package whose 1.1.0 removes a public method that 1.0.0 had, every spelling tried packed green without a
+`CP0002`, while `true`, `on` and `yes` for `RunApiCompat`, and `false` or `no` for the suppression switch,
+reported it.
+
+`scripts/tests/test_package_validation_coverage.sh` makes 106 checks against stand-ins for MSBuild and for the
+feed — a stand-in `curl` answering with the statuses nuget.org gives, a new package's 404 included — and 14 more
+against real MSBuild: a positive control, one case per route above, and the two blind spots below, pinned as
+passing. Ten deliberately broken copies of the guard each turned it red, among them an opt-out on the feed
+treated as allowed (48 failures, 10 of them real-MSBuild cases), the read regressed to a grep (52, including 6),
+curl called with `-f` so that a 404 ends the lookups (10), and `RunApiCompat` read only as the literal `false`
+(8, including 1).
 
 **Where it runs.** As a step in `Pack Warnings Gate`. That context is required and runs on every PR that is not
 docs-only — a project or props change never is — so the guard blocks the PR that adds an opt-out rather than
@@ -383,10 +399,13 @@ nuget.org and downloads the baselines before the guard is reached.
 
 **What this does not claim.**
 
-- A global property on the pack command line (`-p:EnablePackageValidation=false`) belongs to no project, so the
-  guard cannot see it.
-- `CP` findings suppressed one at a time, through `NoWarn` or `CompatibilitySuppressions.xml`, are outside it:
-  the check still runs, and each suppression is reviewed in the PR that adds it.
+- Anything decided after evaluation, or by a global property that pack sets, is invisible to the guard: a target
+  that switches validation off before `Pack`, a condition on `_IsPacking` (which only `dotnet pack` sets), or
+  `-p:EnablePackageValidation=false` on the pack command line. The first two were measured to pack green over a
+  removed public method; the harness pins the guard passing both.
+- `CP` findings suppressed one at a time, through `NoWarn` or a committed `CompatibilitySuppressions.xml`, are
+  outside it: the check still runs, and each lives in a committed file, so it shows in the diff of the PR that
+  adds it. A suppression file generated during pack does not, which is why the guard refuses that one.
 - A project that stops packing is not a shipped project to the guard.
 - The PublicAPI tracker is untouched. Ten of the twelve still have an empty `PublicAPI.Shipped.txt`; see the
   ADR-0023 addendum of the same date.

@@ -17,22 +17,28 @@ baseline, runs no API compatibility check and packs green, so the 2.5.1 release-
 packages pack clean against it" was true of packing, and validation covered 17.
 
 - **All 29 are validated now.** The twelve opt-outs are removed. Against the 2.5.1 baseline, pack downloads all
-  29 baselines and reports no `CP` or `PKV` diagnostic. What the twelve shipped before 2.5.1 was never
-  compared, and cannot be now.
+  29 baselines and reports no `CP` or `PKV` diagnostic. None of the twelve was compared when its releases were
+  cut; compared afterwards against 2.4.0, pack reports no `CP` or `PKV` diagnostic either, and the releases
+  before 2.4.0 remain unchecked.
 - **A guard keeps it that way.** `scripts/ci/check-package-validation-coverage.sh` fails when a shipped project
   skips validation although its package is on nuget.org at the baseline version. That is the moment validation
   becomes possible, so a new package can still opt out, and the PR that moves the baseline past its first
   release has to drop the opt-out. The guard reads MSBuild's evaluation rather than grepping the project,
   because validation can be switched off without that spelling: in an imported props file, through another
   property, by `PackAsTool` or `DisablePackageBaselineValidation`, by a per-project baseline, or with ` true `
-  written with spaces. It runs in the required `Pack Warnings Gate`, so it blocks the PR that adds an opt-out;
-  56 unit tests run in `Coverage Script Tests`, and 9 more against real MSBuild run next to the guard
-  (ADR-0055, addendum 2026-09-12).
-- **Still not checked:** `-p:EnablePackageValidation=false` on the pack command line, which belongs to no
-  project; `CP` findings suppressed one at a time through `NoWarn` or `CompatibilitySuppressions.xml`; and
-  behavioural breaks, which no API comparison sees. Ten of the twelve still have an empty
-  `PublicAPI.Shipped.txt` — everything they have released is listed as unshipped — and that is not repaired
-  here (ADR-0023, addendum 2026-09-12).
+  written with spaces. Letting validation run but report nothing counts as skipping it: `RunApiCompat` in any
+  spelling MSBuild reads as false (`no`, `off`, `!true`, …), or a suppression file generated during pack
+  (`ApiCompatGenerateSuppressionFile`, or its older name `GenerateCompatibilitySuppressionFile`, reading as
+  true) — each measured to pack green over a removed public method. It runs in the required
+  `Pack Warnings Gate`, so it blocks the PR that adds an opt-out; 106 checks run in `Coverage Script Tests`,
+  and 14 more against real MSBuild run next to the guard (ADR-0055 addendum "all 29 packed, but only 17 were
+  validated").
+- **Still not checked:** anything decided after evaluation or by a global property that pack sets — a target
+  that switches validation off before `Pack`, a condition on `_IsPacking`, `-p:EnablePackageValidation=false`
+  on the pack command line; `CP` findings suppressed one at a time through `NoWarn` or a committed
+  `CompatibilitySuppressions.xml`; and behavioural breaks, which no API comparison sees. Ten of the twelve
+  still have an empty `PublicAPI.Shipped.txt` — everything they have released is listed as unshipped — and
+  that is not repaired here (ADR-0023, addendum 2026-09-12).
 
 ### Fixed — A release is no longer blocked by checks that say nothing about its build
 
