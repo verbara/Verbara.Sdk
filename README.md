@@ -104,10 +104,10 @@ Benchmarked on AMD Ryzen 9 9900X (12C/24T), .NET 10.0.5, BenchmarkDotNet v0.14.0
 | ARI parse `StasisStart` event | **595K events/sec** (1.68 µs) — *2.7× faster than v1.0* |
 | `ChannelManager.GetById` (secondary index) | **163.9M lookups/sec** (6.1 ns) |
 | Observer dispatch (copy-on-write array) | **~0.21 ns / observer** (zero-alloc) |
-| Session store Redis `SaveAsync` | **~12.6K saves/sec** (p50 79 µs) / batch 65,738 sess/sec |
-| Session store Postgres `SaveAsync` | **~500 saves/sec** (p50 1.97 ms) / batch 9,491 sess/sec |
+| Session store Redis `SaveAsync` | **~33.3K saves/sec** (p50 30 µs) / batch 91,021 sess/sec |
+| Session store Postgres `SaveAsync` | **~500 saves/sec** (p50 1.97 ms) / batch 13,489 sess/sec |
 
-Full methodology, machine-readable results, and cross-language comparison (asterisk-java, asterisk-ami-client, pyst2) in [docs/research/benchmark-analysis.md](docs/research/benchmark-analysis.md). Raw BenchmarkDotNet reports are under `BenchmarkDotNet.Artifacts/results/`. Reproduce: `dotnet run -c Release --project Tests/Verbara.Sdk.Benchmarks/`.
+Full methodology, machine-readable results, and cross-language comparison (asterisk-java, asterisk-ami-client, pyst2) in [docs/research/benchmark-analysis.md](docs/research/benchmark-analysis.md). Raw BenchmarkDotNet reports are under `BenchmarkDotNet.Artifacts/results/`. Reproduce: `dotnet run -c Release --project Tests/Verbara.Sdk.Benchmarks/`. **Session-store rows:** re-measured 2026-09-12 on .NET 10.0.12 (same machine model) with an xunit `Fact` + `Stopwatch` against local Docker (loopback, no TLS) — PostgreSQL 18.4, Redis 7.4.8 — not BenchmarkDotNet, median of five runs; method, runs and reproduce commands are in that document's addendum. Postgres single-save latency is the measuring machine's WAL flush (one fsync per commit), not SDK code.
 
 ---
 

@@ -399,6 +399,79 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
       or disappears and the required-check set needs no reconciliation (ADR-0038,
       verbara-meta/ADR-0003).
 
+- [x] 4.4 Re-measure both session-store rows on the shipping code and bind them — Postgres out of
+      `deferred_rows`, Redis off its April figures — with their own provenance stated and guarded
+      Re-measured 2026-09-12 with the instrument 4.1 recorded (xunit `Fact` + `Stopwatch` against
+      Testcontainers), five fresh-process runs per store, medians published; same machine model as
+      April, now .NET 10.0.12, PostgreSQL 18.4, Redis 7.4.8. The runs, both environments and the
+      attribution limits are a dated addendum at the end of `benchmark-analysis.md`; §1c stays
+      verbatim, marked superseded inside its first paragraph so no cited line moves.
+
+      **Postgres single-save latency did not move, because it is the WAL flush.** 1.97 ms on Dapper,
+      1.965 ms on `NpgsqlExecutor`. `pg_test_fsync` on the same Docker storage puts fdatasync at
+      2002 µs/op, and a single-row `pgbench` insert runs 499 tps with `synchronous_commit=on` against
+      116,739 tps with it off: one `SaveAsync` is one autocommit UPSERT is one WAL flush, and §1c's
+      "JSONB parse + índices" was wrong. Batch rose 9,491 → 13,489 sess/sec and is **not** credited
+      to the Dapper removal — Redis, whose store code did not change, moved comparably over the same
+      months, and the runtime, PostgreSQL (16 → 18), Npgsql, Docker and kernel moved too.
+
+      **The Redis row was bound, green, and stale.** 4.1 bound it to April's record, and the test
+      stayed green against figures the store no longer produces: today p50 30 µs (was 79) and batch
+      91,021 (was 65,738), so README understated single saves ~2.6× and batch ~1.4×.
+      StackExchange.Redis went 2.12.14 → 3.1.13 in between — plausible, not verified, and recorded
+      at that confidence.
+
+      **The guard now reaches provenance, not only figures.** The header says BenchmarkDotNet,
+      .NET 10.0.5, 2026-04-18, and three rows were not measured that way: the AMI row (4.1) and the
+      two session-store rows. Those two carry a `provenance` object, README states it in the
+      paragraph under the table (appended, so no README line moves), and a fifth test,
+      `EveryRowWithItsOwnProvenance_ShouldHaveItStatedInThePerformanceSection`, requires the
+      `## Performance` section — not the whole file — to carry each such row's date and runtime.
+      `deferred_rows` is empty; the test that walks it stays for the next deferral.
+
+      Negative-tested, verbatim:
+
+      ```
+      Expected row.Cells to match regex "(?<![\d.,])batch\ 91,021\ sess/sec(?!\d)" because README.md's
+      'Session store Redis `SaveAsync`' row must publish the recorded batch ('batch 91,021 sess/sec') as
+      a whole figure; if the measurement changed, the record moves first, in its own reviewed commit,
+      but " **~33.3K saves/sec** (p50 30 µs) / batch 91,022 sess/sec " does not match.
+      ```
+      ```
+      ... to contain ".NET 10.0.12" because README.md's Performance section must state the runtime
+      of 'Session store Redis `SaveAsync`', which was measured apart from the table's header.
+      ```
+      ```
+      ... to contain "2026-09-12" because README.md's Performance section must state the date of
+      'Session store Redis `SaveAsync`', which was measured apart from the table's header.
+      ```
+
+      A fourth mutation moved `.NET 10.0.12` out of the section into `## Observability` and failed
+      with the second message, so the scoping is real. A fifth put a digit in front of a published
+      batch — `batch 191,021 sess/sec`, a 2.1× overclaim — and **passed**: the value test matched
+      substrings, and `191,021 sess/sec` contains `91,021 sess/sec`. The hole was not the batch's but
+      every row's — `**11.62M events/sec**` contains the AMI row's `1.62M events/sec` just as well.
+      The value test now matches a whole figure, with no digit, dot or comma touching it, and the
+      record's `batch` values also carry a `batch ` prefix, as `latency` carries `p50 `. Both
+      overclaims on the AMI row now fail:
+
+      ```
+      Expected row.Cells to match regex "(?<![\d.,])1\.62M\ events/sec(?!\d)" because README.md's
+      'AMI event parse + dispatch' row must publish the recorded throughput ('1.62M events/sec') as a
+      whole figure; if the measurement changed, the record moves first, in its own reviewed commit,
+      but " **11.62M events/sec** (617.6 ns) " does not match.
+      ```
+      ```
+      ... but " **1.62M events/sec** (1,617.6 ns) " does not match.
+      ```
+
+      Restored byte-identical each time, 5/5 green, the project 27/27. Residuals: the test binds
+      only rows that *declare* `provenance`, so deleting the object from the record hands a row back
+      to the header unnoticed (renaming the Postgres row's key stayed 5/5 green; `docs/claim-registry.md`
+      row 110 states it); and `FindRow` takes the first table row with a matching operation name, so
+      a duplicate row carrying other figures still passes — closing that means changing the
+      row-accounting test, which this task leaves intact.
+
 ## 5. Deferred: first-party accuracy gate (investigation only — no code)
 
 - [x] 5.1 Survey candidate labelled turn-boundary speech corpora and record, per candidate, whether

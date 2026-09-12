@@ -40,9 +40,13 @@ public sealed class PerformanceTableCoherenceTests
             foreach (var field in new[] { "latency", "throughput", "batch", "versus_v1_0" })
             {
                 if (!entry.TryGetProperty(field, out var value)) continue;
-                row.Cells.Should().Contain(value.GetString()!,
-                    $"README.md's '{operation}' row must publish the recorded {field}; " +
-                    "if the measurement changed, the record moves first, in its own reviewed commit");
+
+                // A whole figure, not a substring: "11.62M events/sec" contains "1.62M events/sec",
+                // so a plain Contains would pass a 7x overclaim. No digit, dot or comma may touch it.
+                var figure = value.GetString()!;
+                row.Cells.Should().MatchRegex($@"(?<![\d.,]){Regex.Escape(figure)}(?!\d)",
+                    $"README.md's '{operation}' row must publish the recorded {field} ('{figure}') as a " +
+                    "whole figure; if the measurement changed, the record moves first, in its own reviewed commit");
             }
         }
     }
@@ -70,8 +74,10 @@ public sealed class PerformanceTableCoherenceTests
     }
 
     /// <summary>
-    /// A deferral is only honest while it names what blocks it. This keeps the Postgres row's
-    /// "the record measures Dapper, which no longer ships" from decaying into a bare omission.
+    /// A deferral is only honest while it names what blocks it; this keeps one from decaying into a
+    /// bare omission. <c>deferred_rows</c> is empty today. Its one historical case was the Postgres
+    /// session-store row, deferred because its record measured the store on Dapper after Dapper had
+    /// stopped shipping, and bound once the store was re-measured. The test stays for the next one.
     /// </summary>
     [Fact]
     public void EveryDeferredRow_ShouldNameItsBlockerAndItsUnblockingCondition()
@@ -105,6 +111,37 @@ public sealed class PerformanceTableCoherenceTests
         }
     }
 
+    /// <summary>
+    /// The header test above cannot see a row that was measured apart from the header: the table
+    /// could keep crediting BenchmarkDotNet on the header's date for figures a <c>Stopwatch</c> took
+    /// months later. A row measured apart from the header declares its own <c>provenance</c> in the
+    /// record, and its date and runtime must be stated in the Performance section itself — not
+    /// anywhere else in README.md, where a matching string would say nothing about the table. A row
+    /// that declares no <c>provenance</c> is not checked here: deleting the object from the record
+    /// hands the row back to the header unnoticed.
+    /// </summary>
+    [Fact]
+    public void EveryRowWithItsOwnProvenance_ShouldHaveItStatedInThePerformanceSection()
+    {
+        var record = LoadRecord();
+        var section = ReadPerformanceSection();
+
+        foreach (var entry in record.RootElement.GetProperty("rows").EnumerateArray())
+        {
+            if (!entry.TryGetProperty("provenance", out var provenance)) continue;
+            var operation = entry.GetProperty("operation").GetString()!;
+
+            foreach (var field in new[] { "date", "runtime" })
+            {
+                provenance.TryGetProperty(field, out var value).Should().BeTrue(
+                    $"'{operation}' carries its own provenance, which must record its {field}");
+                section.Should().Contain(value.GetString()!,
+                    $"README.md's Performance section must state the {field} of '{operation}', " +
+                    "which was measured apart from the table's header");
+            }
+        }
+    }
+
     private static Row FindRow(string operation)
     {
         var row = ReadTableRows().FirstOrDefault(r => r.Operation == operation);
@@ -116,10 +153,7 @@ public sealed class PerformanceTableCoherenceTests
 
     private static IEnumerable<Row> ReadTableRows()
     {
-        var readme = ReadReadme();
-        var section = readme[readme.IndexOf("## Performance", StringComparison.Ordinal)..];
-        var end = section.IndexOf("\n## ", StringComparison.Ordinal);
-        if (end > 0) section = section[..end];
+        var section = ReadPerformanceSection();
 
         foreach (Match m in Regex.Matches(section, @"^\|\s*(?<op>[^|]+?)\s*\|(?<rest>.+)\|\s*$",
                      RegexOptions.Multiline))
@@ -128,6 +162,14 @@ public sealed class PerformanceTableCoherenceTests
             if (op is "Operation" || op.StartsWith("---", StringComparison.Ordinal)) continue;
             yield return new Row(op, m.Groups["rest"].Value);
         }
+    }
+
+    private static string ReadPerformanceSection()
+    {
+        var readme = ReadReadme();
+        var section = readme[readme.IndexOf("## Performance", StringComparison.Ordinal)..];
+        var end = section.IndexOf("\n## ", StringComparison.Ordinal);
+        return end > 0 ? section[..end] : section;
     }
 
     private static string ReadReadme() => File.ReadAllText(Path.Combine(RepoRoot(), "README.md"));

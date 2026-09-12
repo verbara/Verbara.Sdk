@@ -151,6 +151,24 @@ most recent), so the gate would have failed a perfectly good release for a maint
 `git tag -a` out of habit. It now peels `${GITHUB_SHA}^{commit}` first, which is a no-op on a
 lightweight tag and correct on an annotated one.
 
+### Fixed — Both session-store figures were re-measured, and the Postgres single-save figure was measuring the WAL flush
+
+The two session-store rows of `README.md`'s Performance table were re-measured on 2026-09-12 — same
+instrument and machine model as April, five runs each, median published — and both are now bound to
+the committed record, with their own date and runtime stated under the table and checked by
+`PerformanceTableCoherenceTests`.
+
+- **Redis was understated ~2.6× on single saves and ~1.4× on batch**: now **~33.3K saves/sec
+  (p50 30 µs) / batch 91,021 sess/sec**, where the table said ~12.6K (p50 79 µs) / 65,738. The Redis
+  store's code did not change in between; the StackExchange.Redis 2.12.14 → 3.1.13 bump is a
+  plausible, unverified cause.
+- **Postgres batch was understated by 42%**: the measured **13,489 sess/sec** is 42% above the
+  published 9,491. That rise is not credited to the Dapper removal: the runtime, PostgreSQL, Npgsql,
+  Docker and the kernel all moved too (see the addendum to `docs/research/benchmark-analysis.md`).
+- **Postgres single-save latency is unchanged — ~500 saves/sec (p50 1.97 ms) — because it is the
+  measuring machine's WAL flush rate**: one fsync per commit, ~2.0 ms on that storage, not SDK code.
+  The old attribution to JSONB parsing and indexes was wrong.
+
 ### Security
 
 - **`Microsoft.SourceLink.GitHub` bumped `10.0.301` → `10.0.303` to clear
