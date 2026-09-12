@@ -293,7 +293,9 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             var ttsStart = Stopwatch.GetTimestamp();
             using var ttsActivity = VoiceAiActivitySource.StartSynthesis(_tts.ProviderName, response.Length);
 
-            var ttsCts = new CancellationTokenSource();
+            // Disposed when this iteration's block ends: after the finally below has unpublished it
+            // under the gate, which is the order _ttsGate documents.
+            using var ttsCts = new CancellationTokenSource();
             lock (_ttsGate)
             {
                 // Publishing the source and observing an already-disposed pipeline have to happen
@@ -366,7 +368,6 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                     Stopwatch.GetElapsedTime(ttsStart).TotalMilliseconds);
                 lock (_ttsGate)
                     _ttsCts = null;
-                ttsCts.Dispose();
             }
 
             _state = PipelineState.Listening;

@@ -175,9 +175,12 @@ public sealed class PipelineSocketConnection : ISocketConnection
             await _pumpCts.CancelAsync();
         }
 
-        // Complete pipes to unblock any pending reads/writes
-        try { _inputPipe?.Writer.Complete(); } catch (InvalidOperationException) { }
-        try { _outputPipe?.Reader.Complete(); } catch (InvalidOperationException) { }
+        // Complete pipes to unblock any pending reads/writes. Best effort: the pumps own the other
+        // ends and may be completing them concurrently; they were cancelled above either way.
+        try { _inputPipe?.Writer.Complete(); }
+        catch (InvalidOperationException) { /* Read pump already completing its writer. */ }
+        try { _outputPipe?.Reader.Complete(); }
+        catch (InvalidOperationException) { /* Write pump already completing its reader. */ }
 
         // Wait for pump tasks to finish
         if (_readPumpTask is not null)

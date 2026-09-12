@@ -83,7 +83,7 @@ public sealed class AriOutboundListenerTests
         try
         {
             // Wrong path — client upgrade should fail.
-            var client = new ClientWebSocket();
+            using var client = new ClientWebSocket();
             var uri = new Uri($"ws://127.0.0.1:{listener.BoundPort}/wrong/path?app=myapp");
             var act = async () => await client.ConnectAsync(uri, CancellationToken.None);
 
@@ -108,7 +108,7 @@ public sealed class AriOutboundListenerTests
         try
         {
             var badAuth = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes("alice:wrong"));
-            var client = new ClientWebSocket();
+            using var client = new ClientWebSocket();
             client.Options.SetRequestHeader("Authorization", badAuth);
             var uri = new Uri($"ws://127.0.0.1:{listener.BoundPort}/ari/events?app=myapp");
 
@@ -130,7 +130,7 @@ public sealed class AriOutboundListenerTests
         await listener.StartAsync();
         try
         {
-            var client = new ClientWebSocket();
+            using var client = new ClientWebSocket();
             var uri = new Uri($"ws://127.0.0.1:{listener.BoundPort}/ari/events?app=other");
 
             var act = async () => await client.ConnectAsync(uri, CancellationToken.None);

@@ -43,7 +43,9 @@ try
 
     // 6. Wait for some events
     Console.WriteLine("Listening for events (press Ctrl+C to stop)...");
-    await Task.Delay(Timeout.InfiniteTimeSpan, new CancellationTokenSource().Token);
+    var cts = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+    await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token);
 }
 catch (OperationCanceledException)
 {

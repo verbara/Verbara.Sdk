@@ -281,12 +281,10 @@ internal static class AmiStringPool
     private static void BuildHashPool((byte[], string)[][] pool, string[] entries)
     {
         var buckets = new Dictionary<int, List<(byte[], string)>>();
-        var seen = new HashSet<string>();
 
-        foreach (var entry in entries)
+        // Runs once, from the static constructor. Distinct keeps the first occurrence of each key, in order.
+        foreach (var entry in entries.Distinct())
         {
-            if (!seen.Add(entry)) continue; // skip duplicates
-
             var utf8 = Encoding.UTF8.GetBytes(entry);
             var hash = Fnv1aHashArray(utf8);
             var idx = (int)(hash & KeyBucketMask);
@@ -309,9 +307,10 @@ internal static class AmiStringPool
     private static void BuildLengthPool((byte[], string)[]?[] pool, string[] entries)
     {
         var groups = new Dictionary<int, List<(byte[], string)>>();
-        foreach (var entry in entries)
+
+        // Runs once, from the static constructor. Values too long for the length index are not pooled.
+        foreach (var entry in entries.Where(e => e.Length < pool.Length))
         {
-            if (entry.Length >= pool.Length) continue;
             if (!groups.TryGetValue(entry.Length, out var list))
             {
                 list = [];

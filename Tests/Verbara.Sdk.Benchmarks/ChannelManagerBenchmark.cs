@@ -71,7 +71,7 @@ public class ChannelManagerBenchmark
     public int EnumerateByState()
     {
         int count = 0;
-        foreach (var ch in _preloaded.GetChannelsByState(ChannelState.Up))
+        foreach (var _ in _preloaded.GetChannelsByState(ChannelState.Up))
             count++;
         return count;
     }

@@ -486,7 +486,7 @@ public class DeepgramSpeechSynthesizerTests : IAsyncDisposable
         {
             // ADR-0052 F3: the token goes to SynthesizeAsync and nowhere else. The consumer holds
             // none, so a throw here is the synthesizer's own.
-            await foreach (var chunk in synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz, cts.Token))
+            await foreach (var _ in synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz, cts.Token))
             {
                 observed++;
                 stateAtCancel = _server.SocketState;

@@ -65,9 +65,10 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         using var wsWriteLock = new SemaphoreSlim(1, 1);
 
         var inputRate = _options.InputFormat.SampleRate;
-        // PolyphaseResampler implements IDisposable — dispose after session ends
-        var upsampler = inputRate != 24000 ? ResamplerFactory.Create(inputRate, 24000) : null;
-        var downsampler = inputRate != 24000 ? ResamplerFactory.Create(24000, inputRate) : null;
+        // PolyphaseResampler implements IDisposable. Disposed as the method exits, after the finally
+        // below — by then Task.WhenAll has seen both loops finish, or they never started.
+        using var upsampler = inputRate != 24000 ? ResamplerFactory.Create(inputRate, 24000) : null;
+        using var downsampler = inputRate != 24000 ? ResamplerFactory.Create(24000, inputRate) : null;
 
         var sessionFailed = false;
 
@@ -126,9 +127,6 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             RealtimeMetrics.SessionDurationMs.Record(
                 Stopwatch.GetElapsedTime(sessionStart).TotalMilliseconds);
             RealtimeLog.SessionEnded(_logger, channelId);
-
-            upsampler?.Dispose();
-            downsampler?.Dispose();
         }
     }
 

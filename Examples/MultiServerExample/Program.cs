@@ -19,7 +19,6 @@ services.AddVerbaraMultiServer();
 
 await using var provider = services.BuildServiceProvider();
 var pool = provider.GetRequiredService<VerbaraServerPool>();
-var logger = provider.GetRequiredService<ILogger<Program>>();
 
 try
 {

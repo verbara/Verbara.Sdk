@@ -127,17 +127,13 @@ public sealed class ResponseDeserializerGenerator : IIncrementalGenerator
 
     private static string GetFieldName(IPropertySymbol prop)
     {
-        foreach (var attr in prop.GetAttributes())
-        {
-            if (attr.AttributeClass?.ToDisplayString() ==
-                "Verbara.Sdk.Attributes.VerbaraMappingAttribute"
-                && attr.ConstructorArguments.Length > 0)
-            {
-                if (attr.ConstructorArguments[0].Value is string name && !string.IsNullOrEmpty(name))
-                    return name;
-            }
-        }
-        return prop.Name;
+        // The first non-empty [VerbaraMapping("Name")] on the property names the field; otherwise the property name does.
+        return prop.GetAttributes()
+            .Where(static attr => attr.AttributeClass?.ToDisplayString() == VerbaraMappingFqn
+                                  && attr.ConstructorArguments.Length > 0)
+            .Select(static attr => attr.ConstructorArguments[0].Value as string)
+            .FirstOrDefault(static name => !string.IsNullOrEmpty(name))
+            ?? prop.Name;
     }
 
     private static PropertyType ClassifyPropertyType(ITypeSymbol type)

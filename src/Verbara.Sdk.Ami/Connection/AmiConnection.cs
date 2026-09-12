@@ -113,8 +113,8 @@ public sealed class AmiConnection : IAmiConnection
 
         // Apply ConnectionTimeout to socket connect + banner read so the reconnect loop
         // never hangs indefinitely on a slow or unresponsive Asterisk instance.
-        var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts.Token);
-        try
+        // Block form on purpose: the timeout source is released here, before the pumps start.
+        using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts.Token))
         {
             connectCts.CancelAfter(_options.ConnectionTimeout);
             var connectToken = connectCts.Token;
@@ -136,11 +136,7 @@ public sealed class AmiConnection : IAmiConnection
             await LoginAsync(connectToken);
 
             // Detect Asterisk version
-            await DetectVersionAsync(connectToken);
-        }
-        finally
-        {
-            connectCts.Dispose();
+            await DetectVersionAsync(connectToken, cancellationToken);
         }
 
         _state = AmiConnectionState.Connected;
@@ -210,8 +206,10 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
-    private async ValueTask DetectVersionAsync(CancellationToken ct)
+    private async ValueTask DetectVersionAsync(CancellationToken ct, CancellationToken callerToken)
     {
+        // A probe that fails or times out falls back to the CLI command and then to "Unknown",
+        // but a caller who cancelled ConnectAsync must get that cancellation, not a connection.
         try
         {
             var actionId = NextActionId();
@@ -219,7 +217,7 @@ public sealed class AmiConnection : IAmiConnection
             var response = await ReadResponseAsync(actionId, ct);
             AsteriskVersion = response["AsteriskVersion"];
         }
-        catch
+        catch (Exception) when (!callerToken.IsCancellationRequested)
         {
             // Fallback: try CLI command
             try
@@ -230,7 +228,7 @@ public sealed class AmiConnection : IAmiConnection
                 var response = await ReadResponseAsync(actionId, ct);
                 AsteriskVersion = response.CommandOutput?.Trim();
             }
-            catch
+            catch (Exception) when (!callerToken.IsCancellationRequested)
             {
                 AsteriskVersion = "Unknown";
             }

@@ -10,7 +10,7 @@ public sealed class AriHttpExtensionsTests
     [Fact]
     public async Task EnsureAriSuccessAsync_ShouldNotThrow_WhenSuccessStatusCode()
     {
-        var response = new HttpResponseMessage(HttpStatusCode.OK);
+        using var response = new HttpResponseMessage(HttpStatusCode.OK);
 
         var act = async () => await response.EnsureAriSuccessAsync();
 
@@ -20,7 +20,7 @@ public sealed class AriHttpExtensionsTests
     [Fact]
     public async Task EnsureAriSuccessAsync_ShouldNotThrow_WhenNoContent()
     {
-        var response = new HttpResponseMessage(HttpStatusCode.NoContent);
+        using var response = new HttpResponseMessage(HttpStatusCode.NoContent);
 
         var act = async () => await response.EnsureAriSuccessAsync();
 
@@ -30,7 +30,7 @@ public sealed class AriHttpExtensionsTests
     [Fact]
     public async Task EnsureAriSuccessAsync_ShouldThrowAriNotFoundException_When404()
     {
-        var response = new HttpResponseMessage(HttpStatusCode.NotFound)
+        using var response = new HttpResponseMessage(HttpStatusCode.NotFound)
         {
             Content = new StringContent("Channel not found")
         };
@@ -45,7 +45,7 @@ public sealed class AriHttpExtensionsTests
     [Fact]
     public async Task EnsureAriSuccessAsync_ShouldThrowAriConflictException_When409()
     {
-        var response = new HttpResponseMessage(HttpStatusCode.Conflict)
+        using var response = new HttpResponseMessage(HttpStatusCode.Conflict)
         {
             Content = new StringContent("Bridge already exists")
         };
@@ -60,7 +60,7 @@ public sealed class AriHttpExtensionsTests
     [Fact]
     public async Task EnsureAriSuccessAsync_ShouldThrowAriException_When500()
     {
-        var response = new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        using var response = new HttpResponseMessage(HttpStatusCode.InternalServerError)
         {
             Content = new StringContent("Internal Server Error")
         };
@@ -74,7 +74,7 @@ public sealed class AriHttpExtensionsTests
     [Fact]
     public async Task EnsureAriSuccessAsync_ShouldThrowAriException_When422()
     {
-        var response = new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
+        using var response = new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
         {
             Content = new StringContent("Invalid parameters")
         };
@@ -89,7 +89,7 @@ public sealed class AriHttpExtensionsTests
     [Fact]
     public async Task EnsureAriSuccessAsync_ShouldThrowAriException_When400()
     {
-        var response = new HttpResponseMessage(HttpStatusCode.BadRequest)
+        using var response = new HttpResponseMessage(HttpStatusCode.BadRequest)
         {
             Content = new StringContent("Bad request")
         };

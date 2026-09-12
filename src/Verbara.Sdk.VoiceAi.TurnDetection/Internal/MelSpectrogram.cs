@@ -65,24 +65,8 @@ internal sealed class MelSpectrogram
             }
         }
 
-        // 3. Log10 scaling
-        for (int i = 0; i < melFrames.Length; i++)
-        {
-            melFrames[i] = MathF.Log10(MathF.Max(melFrames[i], 1e-10f));
-        }
-
-        // 4. Clamp to (max - 8.0) and normalize
-        float maxVal = float.MinValue;
-        for (int i = 0; i < melFrames.Length; i++)
-        {
-            if (melFrames[i] > maxVal) maxVal = melFrames[i];
-        }
-
-        float clampMin = maxVal - 8.0f;
-        for (int i = 0; i < melFrames.Length; i++)
-        {
-            melFrames[i] = (MathF.Max(melFrames[i], clampMin) + 4.0f) / 4.0f;
-        }
+        // 3–4. Log10 scaling, then clamp to (max - 8.0) and normalize
+        float clampMin = LogScaleAndNormalize(melFrames);
 
         // 5. Arrange into output [80, 800] with zero-padding at BEGINNING
         var output = new float[NMels * MaxFrames];
@@ -104,6 +88,32 @@ internal sealed class MelSpectrogram
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Steps 3–4: log10-scale the mel energies in place, clamp each to (max - 8.0) and normalize with
+    /// (x + 4) / 4. Returns the clamp floor, which step 5 pads with once normalized.
+    /// </summary>
+    private static float LogScaleAndNormalize(Span<float> melFrames)
+    {
+        for (int i = 0; i < melFrames.Length; i++)
+        {
+            melFrames[i] = MathF.Log10(MathF.Max(melFrames[i], 1e-10f));
+        }
+
+        float maxVal = float.MinValue;
+        for (int i = 0; i < melFrames.Length; i++)
+        {
+            if (melFrames[i] > maxVal) maxVal = melFrames[i];
+        }
+
+        float clampMin = maxVal - 8.0f;
+        for (int i = 0; i < melFrames.Length; i++)
+        {
+            melFrames[i] = (MathF.Max(melFrames[i], clampMin) + 4.0f) / 4.0f;
+        }
+
+        return clampMin;
     }
 
     /// <summary>Radix-2 in-place Cooley-Tukey FFT.</summary>

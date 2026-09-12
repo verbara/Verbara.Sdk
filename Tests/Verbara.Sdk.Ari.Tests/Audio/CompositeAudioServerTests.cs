@@ -3,6 +3,7 @@ using System.Reactive.Subjects;
 using Verbara.Sdk.Ari.Audio;
 using FluentAssertions;
 using NSubstitute;
+using NSubstitute.ReturnsExtensions;
 
 namespace Verbara.Sdk.Ari.Tests.Audio;
 
@@ -14,7 +15,7 @@ public sealed class CompositeAudioServerTests
         var mockStream = Substitute.For<IAudioStream>();
         var server1 = Substitute.For<IAudioServer>();
         var server2 = Substitute.For<IAudioServer>();
-        server1.GetStream("ch-1").Returns((IAudioStream?)null);
+        server1.GetStream("ch-1").ReturnsNull();
         server2.GetStream("ch-1").Returns(mockStream);
 
         var composite = new CompositeAudioServer([server1, server2]);
@@ -26,7 +27,7 @@ public sealed class CompositeAudioServerTests
     public void GetStream_ShouldReturnNull_WhenNoServerHasStream()
     {
         var server1 = Substitute.For<IAudioServer>();
-        server1.GetStream("ch-1").Returns((IAudioStream?)null);
+        server1.GetStream("ch-1").ReturnsNull();
 
         var composite = new CompositeAudioServer([server1]);
 
@@ -64,8 +65,8 @@ public sealed class CompositeAudioServerTests
     [Fact]
     public void OnStreamConnected_ShouldMergeAllServerStreams()
     {
-        var subject1 = new Subject<IAudioStream>();
-        var subject2 = new Subject<IAudioStream>();
+        using var subject1 = new Subject<IAudioStream>();
+        using var subject2 = new Subject<IAudioStream>();
         var server1 = Substitute.For<IAudioServer>();
         var server2 = Substitute.For<IAudioServer>();
         server1.OnStreamConnected.Returns(subject1);

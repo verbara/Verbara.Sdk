@@ -12,7 +12,7 @@ public sealed class AsyncServerSocket : IAsyncDisposable
     private TcpListener? _listener;
     private volatile bool _disposed;
 
-    private int _port;
+    private readonly int _port;
 
     /// <summary>The actual port the server is listening on (resolved after Start if 0 was passed).</summary>
     public int Port => _listener is not null
@@ -21,6 +21,7 @@ public sealed class AsyncServerSocket : IAsyncDisposable
 
     public bool IsListening => _listener?.Server.IsBound ?? false;
 
+    /// <summary>Creates a server socket that listens on <paramref name="port"/> once <see cref="Start"/> is called.</summary>
     /// <param name="port">Port to listen on. Use 0 to let the OS assign a free port.</param>
     public AsyncServerSocket(int port)
     {

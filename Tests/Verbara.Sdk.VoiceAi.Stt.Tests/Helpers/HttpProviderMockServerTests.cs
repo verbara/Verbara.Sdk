@@ -57,7 +57,8 @@ public class HttpProviderMockServerTests
         server.Stub(AuthenticatedTranscription(), HttpProviderResponse.Json(TranscriptionJson));
         using var client = server.CreateClient();
 
-        var response = await client.PostAsync(TranscriptionPath, new StringContent("audio"));
+        using var content = new StringContent("audio");
+        var response = await client.PostAsync(TranscriptionPath, content);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         server.UnmatchedRequests.Should().ContainSingle().Which.Path.Should().Be(TranscriptionPath);
@@ -96,7 +97,8 @@ public class HttpProviderMockServerTests
             HttpProviderResponse.Json(TranscriptionJson));
         using var client = server.CreateClient();
 
-        var response = await client.PostAsync("/v1/speech:recognize?key=other", new StringContent("{}"));
+        using var content = new StringContent("{}");
+        var response = await client.PostAsync("/v1/speech:recognize?key=other", content);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }

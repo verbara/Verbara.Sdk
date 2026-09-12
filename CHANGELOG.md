@@ -4,6 +4,56 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — A bidirectional NATS bridge opened a second connection and never closed it
+
+With `NatsBridgeOptions.Subscribe` set, `NatsBridge` opened two NATS connections instead of sharing one between
+its publisher and its subscriber, and the subscriber's connection stayed open after `StopAsync` and dispose, once
+per bridge instance. The public constructor built the default connection factories twice, each build with its own
+shared connection. It now builds them once, so the bridge holds one connection and closes it on stop; the public
+API is unchanged. A new integration test counts client connections through the NATS monitoring endpoint
+(`/connz`): 2 while running and 1 after stop and dispose before the fix, 1 and 0 now.
+
+- `NatsConnectionPublisher` no longer swallows exceptions from `NatsConnection.DisposeAsync`, so
+  `NatsBridge.StopAsync` now logs them through its existing dispose-failure warning (event id 6), which that empty
+  catch had kept from ever firing. No test makes `NatsConnection.DisposeAsync` throw, so that path is not exercised.
+
+### Fixed — BREAKING: `AmiConnection.ConnectAsync` completed as Connected when cancelled during version detection
+
+After login, `ConnectAsync` asks Asterisk for its version, falling back to a CLI command and then to "Unknown".
+Both fallbacks also caught the `OperationCanceledException` raised when the caller cancelled `ConnectAsync`, so
+the connect completed as Connected with version "Unknown"; with `AutoReconnect` on, the reader loop, already bound
+to the cancelled token, exited at once and handed over to the reconnect loop. `ConnectAsync` now throws
+`OperationCanceledException` once the caller's token is cancelled. A probe that fails or times out on its own still
+falls back as before, so `ConnectionTimeout` and `DefaultResponseTimeout` behave as they did.
+
+### Fixed — Disposing `AriClient` during a reconnect left the reconnect loop running
+
+`AriClient.DisposeAsync` did not stop a reconnect that was already backing off. The loop kept going, dialled
+Asterisk again after disposal and never disposed the new WebSocket. Disposal now stops it, and
+`AriClientStateTests` pins that.
+
+### Changed — `BasicAmiExample` stops gracefully on Ctrl+C
+
+Its wait used a cancellation token nothing could cancel, so its `finally` never disconnected on Ctrl+C.
+
+### Changed — CodeQL triage: behaviour-preserving cleanups, and a functional test that now proves its name
+
+- `LiveStateRecoveryTests.ChannelManager_ShouldClearOnReconnect` now proves that `VerbaraServer` clears tracked
+  channels on reconnect: it creates a tracked channel, cuts the AMI link through Toxiproxy before restarting
+  Asterisk, and fails with the clear disabled. The previous version originated to an extension the functional
+  dialplan does not have, so its channels were hung up at once and none was tracked when Asterisk restarted; it
+  passed even with the clear disabled.
+- `ConfigFileReader` resolves relative `#include` paths with `Path.Join`; absolute includes are unchanged and now
+  tested. `SessionReconciler.TryMarkTimedOut` merges its nested guard with the same short-circuit order.
+  `VerbaraOpenTelemetryBuilder` shares one add-if-absent helper. The AMI source generators read field-name
+  mappings with LINQ; the code they generate for `Verbara.Sdk.Ami` is byte-identical before and after.
+- Swallowed shutdown exceptions in the AMI and VoiceAi STT loops now say why in a comment. VoiceAi disposes its
+  synthesis and resampler sources with using declarations, and `MelSpectrogram.Compute` is split into its
+  log-scale and normalize steps.
+- Tests dispose what they own, drop unused locals and compare a float confidence with a tolerance.
+  `WebhookSubscriberExample` disposes its `HttpListener`, and `MultiServerExample` no longer resolves a logger it
+  never used.
+
 ### Fixed — Twelve shipped packages skipped package validation, and nothing noticed
 
 Package validation is the only check in this repo that catches an unintended binary break, and twelve of the

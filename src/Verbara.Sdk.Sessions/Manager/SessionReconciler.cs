@@ -24,15 +24,13 @@ internal sealed class SessionReconciler
     {
         lock (session.SyncRoot)
         {
-            if (session.State is CallSessionState.Dialing or CallSessionState.Ringing)
+            if (session.State is CallSessionState.Dialing or CallSessionState.Ringing
+                && session.TryTransition(CallSessionState.TimedOut))
             {
-                if (session.TryTransition(CallSessionState.TimedOut))
-                {
-                    session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
-                        CallSessionEventType.TimedOut, null, null, "timeout"));
-                    SessionMetrics.SessionsTimedOut.Add(1);
-                    return true;
-                }
+                session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
+                    CallSessionEventType.TimedOut, null, null, "timeout"));
+                SessionMetrics.SessionsTimedOut.Add(1);
+                return true;
             }
         }
         return false;

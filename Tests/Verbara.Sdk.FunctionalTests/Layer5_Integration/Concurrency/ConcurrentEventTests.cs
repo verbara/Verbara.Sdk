@@ -24,9 +24,8 @@ public sealed class ConcurrentEventTests : FunctionalTestBase
         {
             for (var cycle = 0; cycle < 10; cycle++)
             {
-                var sub = connection.Subscribe(new CollectingObserver());
+                using var sub = connection.Subscribe(new CollectingObserver());
                 await Task.Yield();
-                sub.Dispose();
             }
         });
 

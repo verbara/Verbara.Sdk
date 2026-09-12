@@ -108,29 +108,26 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
             var fqn = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var properties = new List<PropertyInfo>();
 
-            foreach (var member in type.GetMembers())
+            foreach (var prop in type.GetMembers().OfType<IPropertySymbol>().Where(static p =>
+                         p.DeclaredAccessibility == Accessibility.Public
+                         && p.SetMethod != null
+                         && p.SetMethod.DeclaredAccessibility == Accessibility.Public
+                         && !p.IsStatic
+                         && !p.IsIndexer))
             {
-                if (member is IPropertySymbol prop
-                    && prop.DeclaredAccessibility == Accessibility.Public
-                    && prop.SetMethod != null
-                    && prop.SetMethod.DeclaredAccessibility == Accessibility.Public
-                    && !prop.IsStatic
-                    && !prop.IsIndexer)
-                {
-                    // Skip ManagerEvent base properties (handled separately)
-                    // and the RawFields property
-                    var propName = prop.Name;
-                    if (propName == "RawFields" || propName == "EventType"
-                        || propName == "Privilege" || propName == "UniqueId"
-                        || propName == "Timestamp")
-                        continue;
+                // Skip ManagerEvent base properties (handled separately)
+                // and the RawFields property
+                var propName = prop.Name;
+                if (propName == "RawFields" || propName == "EventType"
+                    || propName == "Privilege" || propName == "UniqueId"
+                    || propName == "Timestamp")
+                    continue;
 
-                    var propType = ClassifyPropertyType(prop.Type);
-                    if (propType != PropertyType.Unsupported)
-                    {
-                        var fieldName = GetFieldName(prop);
-                        properties.Add(new PropertyInfo(propName, fieldName, propType));
-                    }
+                var propType = ClassifyPropertyType(prop.Type);
+                if (propType != PropertyType.Unsupported)
+                {
+                    var fieldName = GetFieldName(prop);
+                    properties.Add(new PropertyInfo(propName, fieldName, propType));
                 }
             }
 
@@ -144,17 +141,13 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
 
     private static string GetFieldName(IPropertySymbol prop)
     {
-        foreach (var attr in prop.GetAttributes())
-        {
-            if (attr.AttributeClass?.ToDisplayString() ==
-                "Verbara.Sdk.Attributes.VerbaraMappingAttribute"
-                && attr.ConstructorArguments.Length > 0)
-            {
-                if (attr.ConstructorArguments[0].Value is string name && !string.IsNullOrEmpty(name))
-                    return name;
-            }
-        }
-        return prop.Name;
+        // The first non-empty [VerbaraMapping("Name")] on the property names the field; otherwise the property name does.
+        return prop.GetAttributes()
+            .Where(static attr => attr.AttributeClass?.ToDisplayString() == VerbaraMappingFqn
+                                  && attr.ConstructorArguments.Length > 0)
+            .Select(static attr => attr.ConstructorArguments[0].Value as string)
+            .FirstOrDefault(static name => !string.IsNullOrEmpty(name))
+            ?? prop.Name;
     }
 
     private static PropertyType ClassifyPropertyType(ITypeSymbol type)
@@ -242,15 +235,14 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
         {
             foreach (var layer in evt.Hierarchy)
             {
-                if (!layer.IsLeaf && layer.Properties.Length > 0)
+                if (!layer.IsLeaf
+                    && layer.Properties.Length > 0
+                    && !intermediateTypes.ContainsKey(layer.FullyQualifiedTypeName))
                 {
-                    if (!intermediateTypes.ContainsKey(layer.FullyQualifiedTypeName))
-                    {
-                        intermediateTypes[layer.FullyQualifiedTypeName] = new IntermediateBaseInfo(
-                            layer.FullyQualifiedTypeName,
-                            layer.ClassName,
-                            layer.Properties);
-                    }
+                    intermediateTypes[layer.FullyQualifiedTypeName] = new IntermediateBaseInfo(
+                        layer.FullyQualifiedTypeName,
+                        layer.ClassName,
+                        layer.Properties);
                 }
             }
         }
@@ -259,9 +251,8 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
         if (intermediateTypes.Count > 0)
         {
             sb.AppendLine("        // Set intermediate base class properties");
-            foreach (var kvp in intermediateTypes.OrderBy(k => k.Key))
+            foreach (var baseInfo in intermediateTypes.OrderBy(k => k.Key).Select(k => k.Value))
             {
-                var baseInfo = kvp.Value;
                 var varName = ToCamelCase(baseInfo.ClassName);
                 sb.AppendLine($"        if (evt is {baseInfo.FullyQualifiedTypeName} {varName})");
                 sb.AppendLine("        {");

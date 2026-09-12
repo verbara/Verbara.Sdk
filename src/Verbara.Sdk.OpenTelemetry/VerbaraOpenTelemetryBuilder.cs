@@ -43,12 +43,10 @@ public sealed class VerbaraOpenTelemetryBuilder
     public VerbaraOpenTelemetryBuilder WithAllSources()
     {
         foreach (var name in VerbaraTelemetry.ActivitySourceNames)
-            if (!_activitySources.Contains(name, StringComparer.Ordinal))
-                _activitySources.Add(name);
+            AddIfAbsent(_activitySources, name);
 
         foreach (var name in VerbaraTelemetry.MeterNames)
-            if (!_meters.Contains(name, StringComparer.Ordinal))
-                _meters.Add(name);
+            AddIfAbsent(_meters, name);
 
         return this;
     }
@@ -57,8 +55,7 @@ public sealed class VerbaraOpenTelemetryBuilder
     public VerbaraOpenTelemetryBuilder AddActivitySource(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        if (!_activitySources.Contains(name, StringComparer.Ordinal))
-            _activitySources.Add(name);
+        AddIfAbsent(_activitySources, name);
         return this;
     }
 
@@ -66,9 +63,14 @@ public sealed class VerbaraOpenTelemetryBuilder
     public VerbaraOpenTelemetryBuilder AddMeter(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        if (!_meters.Contains(name, StringComparer.Ordinal))
-            _meters.Add(name);
+        AddIfAbsent(_meters, name);
         return this;
+    }
+
+    private static void AddIfAbsent(List<string> names, string name)
+    {
+        if (!names.Contains(name, StringComparer.Ordinal))
+            names.Add(name);
     }
 
     /// <summary>

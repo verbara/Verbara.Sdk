@@ -216,7 +216,7 @@ public sealed class QueueMemberTests : FunctionalTestBase
             server.Queues.GetByName(TestQueue2)!.Members.Should().ContainKey(TestInterface);
 
             // Re-query via QueueStatusAction to confirm status is consistent
-            await foreach (var evt in connection.SendEventGeneratingActionAsync(new QueueStatusAction()))
+            await foreach (var _ in connection.SendEventGeneratingActionAsync(new QueueStatusAction()))
             {
                 // Just consume to trigger state refresh via VerbaraServer event observer
             }

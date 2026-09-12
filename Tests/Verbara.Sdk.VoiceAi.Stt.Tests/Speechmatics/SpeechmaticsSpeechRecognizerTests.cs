@@ -614,7 +614,7 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         {
             // ADR-0052 F3: the token goes to StreamAsync and nowhere else. The consumer holds none,
             // so a throw here is the recognizer's own.
-            await foreach (var result in recognizer.StreamAsync(
+            await foreach (var _ in recognizer.StreamAsync(
                                SttFrameGenerators.EndlessFrames(), AudioFormat.Slin16Mono8kHz, cts.Token))
             {
                 observed++;

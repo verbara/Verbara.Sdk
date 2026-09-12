@@ -78,6 +78,30 @@ public class ConfigIncludeTests
     }
 
     [Fact]
+    public void Parse_ShouldExpandInclude_WhenIncludePathIsAbsolute()
+    {
+        var root = Path.Join(Path.GetTempPath(), "verbara-config-include-" + Guid.NewGuid().ToString("N"));
+        var elsewhere = Path.Join(root, "elsewhere");
+        Directory.CreateDirectory(elsewhere);
+        try
+        {
+            var included = Path.Join(elsewhere, "absolute.conf");
+            File.WriteAllText(included, "[absolute_section]\nabsolute_setting = yes\n");
+            var main = Path.Join(root, "main.conf");
+            File.WriteAllText(main, $"[main]\n#include \"{included}\"\n");
+
+            var file = ConfigFileReader.Parse(main);
+
+            file.GetCategory("absolute_section").Should().NotBeNull();
+            file.GetCategory("absolute_section")!.Variables["absolute_setting"].Should().Be("yes");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ParseAsync_ShouldSupportBothQuoteAndAngleBracketSyntax()
     {
         // happy-path uses "b.conf" (quoted) in a.conf and <c.conf> (angle) in b.conf.
