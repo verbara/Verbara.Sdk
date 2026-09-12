@@ -1,5 +1,6 @@
 namespace Verbara.Sdk.FunctionalTests.Layer5_Integration.Reconnection;
 
+using System.Diagnostics;
 using Verbara.Sdk;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Enums;
@@ -13,6 +14,9 @@ using Microsoft.Extensions.Logging;
 [Trait("Category", "Functional")]
 public sealed class LiveStateRecoveryTests : FunctionalTestBase
 {
+    private const string ProxyName = ToxiproxyFixture.AmiProxyName;
+    private const string LinkCutToxic = "live-state-link-cut";
+
     [Fact]
     public async Task VerbaraServer_ShouldReloadState_AfterReconnect()
     {
@@ -56,13 +60,20 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
     [Fact]
     public async Task ChannelManager_ShouldClearOnReconnect()
     {
-        // Connect through Toxiproxy: its port is stable across Asterisk restarts.
+        // Connect through Toxiproxy: its port is stable across Asterisk restarts, and it lets the
+        // test cut the AMI link before Asterisk stops.
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
         {
             opts.Hostname = ToxiproxyControl.ProxyListenHost;
             opts.Port = ToxiproxyControl.ProxyAmiPort;
             opts.AutoReconnect = true;
             opts.ReconnectInitialDelay = TimeSpan.FromSeconds(1);
+            // Short retry gaps, so the reconnect follows soon after the cut is lifted.
+            opts.ReconnectMaxDelay = TimeSpan.FromSeconds(2);
+            // The reset toxic drops an open link only once data flows through it, so ping every
+            // second. The default 10 s heartbeat timeout outlasts the 1 s reconnect delay, so the
+            // ping lost in the reset cannot end auto-reconnect before the reconnect loop starts.
+            opts.HeartbeatInterval = TimeSpan.FromSeconds(1);
         });
 
         await connection.ConnectAsync();
@@ -70,33 +81,43 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
         var server = new VerbaraServer(connection, LoggerFactory.CreateLogger<VerbaraServer>());
         await server.StartAsync();
 
-        // Originate a call to create a channel (will likely fail but may briefly create one)
-        try
+        // Extension 100 of [test-functional] answers and waits 30 s, so the originate creates a
+        // Local channel pair that stays up through the steps below.
+        var originate = await connection.SendActionAsync(new OriginateAction
         {
-            await connection.SendActionAsync(new OriginateAction
-            {
-                Channel = "Local/s@default",
-                Application = "Wait",
-                Data = "10",
-                IsAsync = true
-            });
-        }
-        catch
-        {
-            // Originate may fail if dialplan not configured; that's OK
-        }
+            Channel = "Local/100@test-functional",
+            Application = "Wait",
+            Data = "30",
+            IsAsync = true
+        });
+        originate.Response.Should().Be("Success", "the originate must be queued to create a channel");
 
-        await Task.Delay(TimeSpan.FromSeconds(1));
+        await WaitUntilAsync(() => server.Channels.ChannelCount > 0, TimeSpan.FromSeconds(10));
+        server.Channels.ChannelCount.Should().BeGreaterThan(0,
+            "a tracked channel must exist before the reconnect, or clearing proves nothing");
 
         var reconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         connection.Reconnected += () => reconnected.TrySetResult();
 
-        await DockerControl.RestartContainerAsync();
-        await DockerControl.WaitForHealthyAsync();
+        // Cut the AMI link before restarting Asterisk. A stopping Asterisk hangs up its channels,
+        // and those Hangup events would remove the channels even if the reconnect never cleared them.
+        await ToxiproxyControl.AddToxicAsync(ProxyName, LinkCutToxic, "reset_peer", "downstream",
+            new Dictionary<string, object> { ["timeout"] = 0 });
+        try
+        {
+            await WaitUntilAsync(() => connection.State != AmiConnectionState.Connected, TimeSpan.FromSeconds(10));
+            connection.State.Should().NotBe(AmiConnectionState.Connected, "the reset must drop the AMI link");
+            server.Channels.ChannelCount.Should().BeGreaterThan(0,
+                "no Hangup event can arrive over the cut link, so the channels are still tracked");
 
-        // Guard: reconnect may have completed before we start waiting
-        if (connection.State == AmiConnectionState.Connected)
-            reconnected.TrySetResult();
+            await DockerControl.RestartContainerAsync();
+            await DockerControl.WaitForHealthyAsync();
+        }
+        finally
+        {
+            // Lift the cut even on failure: the rest of the collection connects through this proxy.
+            await ToxiproxyControl.RemoveToxicAsync(ProxyName, LinkCutToxic);
+        }
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
         cts.Token.Register(() => reconnected.TrySetCanceled());
@@ -105,11 +126,10 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
         // Give a moment for state reload to complete
         await Task.Delay(TimeSpan.FromSeconds(2));
 
-        // After restart, all previous channels should be gone (Asterisk restarted clean)
-        // The clear happens in OnReconnected before reload
-        // Channels should be 0 since Asterisk was freshly restarted with no active calls
+        // The restarted Asterisk has no channels, so the reload adds none: only the clear on
+        // reconnect can remove the channels tracked before the cut.
         server.Channels.ChannelCount.Should().Be(0,
-            "channels should be cleared after container restart with no active calls");
+            "the reconnect must clear channels whose Hangup events never arrived");
     }
 
     [Fact]
@@ -224,6 +244,13 @@ public sealed class LiveStateRecoveryTests : FunctionalTestBase
 
             void OnReconnected() => reconnected.TrySetResult();
         }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var start = Stopwatch.GetTimestamp();
+        while (!condition() && Stopwatch.GetElapsedTime(start) < timeout)
+            await Task.Delay(TimeSpan.FromMilliseconds(100));
     }
 
     /// <summary>Simple observer implementation for collecting events in tests.</summary>
