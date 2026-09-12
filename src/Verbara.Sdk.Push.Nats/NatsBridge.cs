@@ -84,10 +84,31 @@ public sealed partial class NatsBridge : BackgroundService
             options,
             serializer,
             deserializer,
+            loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory)),
+            DefaultFactories(loggerFactory))
+    {
+    }
+
+    // Takes both factories from one DefaultFactories call. Each call has its own shared
+    // connection, so a publisher and subscriber taken from two calls open two connections,
+    // and the subscriber's one (ownsConnection: false) is never closed.
+    private NatsBridge(
+        IPushEventBus bus,
+        IOptions<NatsBridgeOptions> options,
+        INatsPayloadSerializer serializer,
+        INatsPayloadDeserializer deserializer,
+        ILoggerFactory loggerFactory,
+        (Func<NatsBridgeOptions, CancellationToken, ValueTask<INatsPublisher>> publisher,
+            Func<NatsBridgeOptions, CancellationToken, ValueTask<INatsSubscriber>> subscriber) factories)
+        : this(
+            bus,
+            options,
+            serializer,
+            deserializer,
             new NatsMetrics(),
-            (loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory))).CreateLogger<NatsBridge>(),
-            DefaultFactories(loggerFactory).publisher,
-            DefaultFactories(loggerFactory).subscriber)
+            loggerFactory.CreateLogger<NatsBridge>(),
+            factories.publisher,
+            factories.subscriber)
     {
     }
 
@@ -306,8 +327,10 @@ public sealed partial class NatsBridge : BackgroundService
         ILoggerFactory loggerFactory)
     {
         // Share one NatsConnection across publisher + subscriber to halve the
-        // connection count per bridge. The publisher owns the lifetime; the
-        // subscriber's Dispose is a no-op unless it is the sole user.
+        // connection count per bridge. Sharing holds only within one call, so a bridge
+        // must take both factories from the same call. The publisher owns the lifetime;
+        // the subscriber is created with ownsConnection: false, so its Dispose leaves
+        // the connection for the publisher to close.
         NatsConnection? shared = null;
         var gate = new SemaphoreSlim(1, 1);
 

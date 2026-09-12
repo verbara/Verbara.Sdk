@@ -16,13 +16,20 @@ public sealed class NatsContainerFixture : IAsyncLifetime
     public string Url =>
         $"nats://{_container!.Hostname}:{_container.GetMappedPublicPort(4222)}";
 
+    /// <summary>Base URL of the server's HTTP monitoring endpoints (<c>/varz</c>, <c>/connz</c>, ...).</summary>
+    public string MonitorUrl =>
+        $"http://{_container!.Hostname}:{_container.GetMappedPublicPort(8222)}";
+
     public async Task InitializeAsync()
     {
+        // The image's default config (/etc/nats/nats-server.conf) serves monitoring on 8222.
         _container = new ContainerBuilder("nats:2.10-alpine")
             .WithPortBinding(4222, true)
+            .WithPortBinding(8222, true)
             .WithWaitStrategy(
                 Wait.ForUnixContainer()
-                    .UntilInternalTcpPortIsAvailable(4222))
+                    .UntilInternalTcpPortIsAvailable(4222)
+                    .UntilInternalTcpPortIsAvailable(8222))
             .Build();
 
         await _container.StartAsync();
