@@ -8,7 +8,9 @@ namespace Verbara.Sdk.OpenTelemetry.Tests;
 /// Binds every absolute figure in <c>README.md</c>'s Performance table to
 /// <c>docs/research/performance-record.json</c> (ADR-0042 D7). The table asserts "this is what we
 /// measured, on this machine, on this date, and you can reproduce it"; this fails the build when
-/// the document and the record stop agreeing.
+/// the document and the record stop agreeing. It also requires the <c>## Benchmarks</c> section of
+/// <c>docs/guides/session-store-backends.md</c> to state each session-store row's figures, date and
+/// runtime — anywhere in that section, not in its own backend's table row.
 /// </summary>
 /// <remarks>
 /// <para>

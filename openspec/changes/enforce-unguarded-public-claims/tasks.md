@@ -496,7 +496,7 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
       "5-10 ms read latency is acceptable" now states its actual trade-off: each single save waits
       for a durable commit, a `SaveBatchAsync` shares one, and reads are not the slow path.
       Redis's "sub-millisecond reads" held on loopback but did not tell Redis apart, because
-      Postgres reads measure under a millisecond too; it now points at what does, the faster measured
+      Postgres `GetAsync` measures under a millisecond too; it now points at what does, the faster measured
       single save. InMemory's "latency budget is sub-millisecond" had no measurement behind it and
       the same flaw; it now says what InMemory avoids, a network hop and serialization.
 
@@ -505,7 +505,13 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
       .NET 10.0.12, loopback Docker without TLS and the median of five runs, and it keeps "benchmark
       on your topology". No line above `## Benchmarks` moved: lines 9-11, 22, 27 and 35 were edited in
       place, so the registry row for `:5,56,70,76` still points at its claims. The read-latency row
-      had cited `:26`, which never held a latency claim; it now cites `:22` and `:27`.
+      had cited `:26`, which never held a latency claim; it now cites `:22` and `:27`, and is pinned
+      to `e250182e`, as the old Benchmarks figures' DELETED row is, because both sets of lines hold
+      other text today. The words that replaced the read figures are still claims, with rows of their
+      own: what each store call costs at `:9-11,22,35` — no I/O, one `GET` or two, one `SELECT`, one
+      WAL flush — describes this repository's own code, so ENFORCING, GAP; and `:27`'s faster single
+      save is COHERENCE, PARTIAL, because the guard below does not check which backend holds which
+      figure.
 
       **The guard.** A sixth test,
       `EverySessionStoreRow_ShouldHaveItsFiguresAndProvenanceStatedInTheGuidesBenchmarksSection`,
@@ -541,10 +547,17 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
       `Session store`, and ran this test on its own, because the value test fails on that rename too.
       Restored byte-identical each time, 6/6 green, the project 28/28.
 
-      Residual, measured rather than assumed: the check is section-wide, so swapping the two
-      backends' figures between the table's rows — Redis at `p50 1.97 ms`, Postgres at `p50 30 µs` —
-      stayed 6/6 green. Machine, server versions, instrument and run count are stated, not asserted.
-      `docs/claim-registry.md` records both.
+      Residuals, measured rather than assumed, each 6/6 green and restored byte-identical. The check
+      is section-wide, so swapping the two backends' figures between the table's rows — Redis at
+      `p50 1.97 ms`, Postgres at `p50 30 µs` — passes, and so does an unbound figure added to the
+      section: an `| InMemory | ~50 ns | ~5 µs |` table row, and "Redis `GetAsync` takes ~200 µs" in
+      the paragraph under it. It binds only record rows whose `operation` starts with
+      `Session store`, and a single remaining row satisfies the no-empty check: renaming the Postgres
+      row to "Postgres session store `SaveAsync`" in the record and in `README.md`, and then writing
+      `| Postgres | p50 0.5 ms | batch 99,999 sess/sec |` into the guide, passes. Machine, server
+      versions, instrument, loopback-without-TLS, run count and the batch size are stated, not
+      asserted: the header rewritten to `(100 sessions)`, with `PostgreSQL 16.2`, passes, and the
+      record holds no batch size. `docs/claim-registry.md` records all of them.
 
 ## 5. Deferred: first-party accuracy gate (investigation only — no code)
 
