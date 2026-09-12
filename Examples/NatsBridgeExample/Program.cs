@@ -44,7 +44,7 @@ Console.WriteLine($"Push.Nats bridge started → {natsUrl} (prefix: {subjectPref
 await using var natsConn = new NatsConnection(new NatsOpts { Url = natsUrl });
 await natsConn.ConnectAsync();
 
-using var cts = new CancellationTokenSource();
+var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
 _ = Task.Run(async () =>

@@ -25,7 +25,7 @@ Console.WriteLine("  exten => 100,1,AGI(agi://localhost/hello)");
 Console.WriteLine("Press Ctrl+C to stop.");
 
 // 3. Wait for shutdown signal
-using var cts = new CancellationTokenSource();
+var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
 try

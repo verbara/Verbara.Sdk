@@ -59,7 +59,7 @@ Console.WriteLine("Configure Asterisk ari.conf + res_websocket_client and trigge
 Console.WriteLine($"Active connections: {listener.ActiveConnectionCount}");
 Console.WriteLine("Press Ctrl+C to stop.");
 
-using var cts = new CancellationTokenSource();
+var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 try { await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token); }
 catch (OperationCanceledException) { }

@@ -20,9 +20,6 @@ services.AddVerbaraMultiServer();
 await using var provider = services.BuildServiceProvider();
 var pool = provider.GetRequiredService<VerbaraServerPool>();
 
-// Outlives the try/finally below, so a second Ctrl+C during shutdown never reaches a disposed source.
-using var cts = new CancellationTokenSource();
-
 try
 {
     // 2. Add multiple Asterisk servers to the pool
@@ -90,6 +87,7 @@ try
 
     // 8. Wait for events across all servers
     Console.WriteLine("\nMonitoring all servers (press Ctrl+C to stop)...");
+    var cts = new CancellationTokenSource();
     Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
     try { await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token); }
     catch (OperationCanceledException) { }
