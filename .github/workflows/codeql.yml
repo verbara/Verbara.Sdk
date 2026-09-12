@@ -86,7 +86,46 @@ jobs:
       - name: Build solution
         run: dotnet build Verbara.Sdk.slnx -c Release --no-incremental
 
+      # Analyse, filter, THEN upload (ADR-0051 addendum, 2026-09-12). 633 of main's 1,082 alerts sat in code the
+      # .NET SDK's own source generators write under obj/**/generated/, which no change here can reach, and a
+      # CodeQL config cannot exclude it: `paths`/`paths-ignore` are not honoured for a compiled language analysed
+      # from a traced build, which the build step above is. So analyze writes its SARIF, the filter drops results
+      # in System.*/Microsoft.* generator output whose rule resolves and is not security-relevant (our own
+      # generator's output stays analysed, and a security result is never dropped), and upload-sarif sends the
+      # rest.
+      #
+      # `upload: failure-only`, not `never`: on success analyze uploads nothing, and when analysis FAILS the
+      # Action's post step still uploads the failed-run diagnostics under this category, as `always` did. The
+      # category must stay identical on both steps — the Action refuses a second upload for one category in a job,
+      # and a different category would start a second analysis and strand every existing alert open under this
+      # one. scripts/tests/test_filter_codeql_sarif.sh asserts the wiring.
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4.37.9
         with:
+          category: "/language:csharp"
+          upload: failure-only
+          output: ${{ runner.temp }}/codeql-sarif
+
+      # Fails closed: a file the filter cannot read as one SARIF 2.1.0 log exits 2 and writes nothing, so this job
+      # goes red and the upload below never runs — the baseline is never replaced by an unfiltered log.
+      - name: Drop results in .NET source-generator output
+        env:
+          RAW_SARIF_DIR: ${{ runner.temp }}/codeql-sarif
+          FILTERED_SARIF_DIR: ${{ runner.temp }}/codeql-sarif-filtered
+        run: |
+          shopt -s nullglob
+          sarifs=("$RAW_SARIF_DIR"/*.sarif)
+          if [ "${#sarifs[@]}" -eq 0 ]; then
+            echo "::error::analyze wrote no .sarif file to $RAW_SARIF_DIR — nothing to filter, so nothing is uploaded."
+            exit 1
+          fi
+          mkdir -p "$FILTERED_SARIF_DIR"
+          for sarif in "${sarifs[@]}"; do
+            bash ./scripts/ci/filter-codeql-sarif.sh "$sarif" "$FILTERED_SARIF_DIR/$(basename "$sarif")"
+          done
+
+      - name: Upload filtered CodeQL results
+        uses: github/codeql-action/upload-sarif@v4.37.9
+        with:
+          sarif_file: ${{ runner.temp }}/codeql-sarif-filtered
           category: "/language:csharp"

@@ -157,3 +157,72 @@ labelled-PR path — the one that has to survive `github.event.pull_request.labe
 on a `pull_request` event while staying inert on `merge_group` — is reasoned, not verified, for the
 same reason. First branch that touches the AMI/ARI surface should use it deliberately and confirm
 the heavy steps run.
+
+## Addendum (2026-09-12) — the security baseline D3 protects holds only results this repository can act on
+
+D3 keeps `codeql.yml`'s `push:[main]` and weekly runs uncancellable because they maintain the
+default-branch security baseline. On `99162772` that baseline held 1,082 open alerts, and 633 of them
+were in code the .NET SDK's own source generators write under `obj/**/generated/` during the build:
+613 from `System.Text.Json.SourceGeneration`, 19 from `Microsoft.Extensions.Options.SourceGeneration`
+and 1 from `System.Text.RegularExpressions.Generator` (`cs/useless-cast-to-self` 443,
+`cs/useless-upcast` 184, `cs/missed-ternary-operator` 5, `cs/nested-if-statements` 1). No change in
+this repository can reach that code.
+
+**Decision.** `Analyze (C#)` analyses, filters, then uploads. `analyze` runs with
+`upload: failure-only` and only writes its SARIF; `upload-sarif` sends what
+`scripts/ci/filter-codeql-sarif.sh` leaves under the unchanged category `/language:csharp`, so every
+other alert keeps its history and the generator ones close as fixed. A CodeQL config was not an
+option: `paths` and `paths-ignore` are not honoured for a compiled language analysed from a traced
+build, which this job is. The filter removes a result only when both of these hold:
+
+1. *Location.* In the uri of its primary location, read as `/`-separated segments, the first `obj`
+   segment is followed, at the first `generated` segment after it, by a folder whose name starts with
+   `System.` or `Microsoft.` and then at least one more segment. Only that first `obj` and that first
+   `generated` count, so no hint name of this repository's own generator
+   (`Verbara.Sdk.Ami.SourceGenerators`) can bring its output under the rule, whatever subfolders it
+   uses.
+2. *Rule.* Its rule resolves in its run's `tool` and is not security-relevant — no `security` in
+   `properties.tags` and no `security-severity` key in `properties`. An index (`ruleIndex` or
+   `rule.index`) resolves into `tool.driver.rules` when the reference names no component, or into
+   `tool.extensions[rule.toolComponent.index].rules` when it names its component by index, and must
+   land on a rule whose `id` matches the result's rule id when the result gives one. When the reference
+   gives no index, or names its component some other way (by name, by guid, or with index -1),
+   `ruleId` or `rule.id` resolves to every rule with exactly that `id` in `tool.driver.rules` and
+   every `tool.extensions[].rules`, and one security-relevant match is enough. A rule that does not
+   resolve (nothing found, contradicting or wrong-typed references, a wrong-typed `tool` or component),
+   or whose `properties` or `tags` have the wrong type, keeps its result just as a security-relevant
+   rule does. Each result the location rule matches but this check keeps gets one `::warning::` naming
+   its rule id, its uri and the reason.
+
+**What holds it in place.**
+
+- *Never a security result.* "No change here can reach that code" holds for a note about the
+  generated code itself. It does not hold for a data-flow alert whose sink lies in generator output
+  while its source, and its fix, lie in this repository — a `[LoggerMessage]` method expands, through
+  a `Microsoft.*` generator, into an `ILogger` call. On `99162772` no result the location rule matches
+  has a security rule (55 of the 164 rules carry the `security` tag, 53 a `security-severity`, and all
+  633 results cite one of four maintainability rules), so the check removes nothing more and nothing
+  less there today.
+- *Fail closed.* Input the filter cannot read as one SARIF 2.1.0 log exits 2 and leaves no output, so
+  the job goes red and nothing is uploaded: the baseline is never replaced by an unfiltered or partial
+  log. When analysis itself fails, `failure-only` keeps what `always` did — the Action's post step
+  uploads the failed-run diagnostics.
+- *One category, one upload.* The Action refuses a second upload for one category in a job, and a
+  different category would strand every existing alert open under the old one.
+  `scripts/tests/test_filter_codeql_sarif.sh`, in the always-run `Coverage Script Tests` job, asserts
+  that wiring, every rule in both directions, and that no project here is named `System.*` or
+  `Microsoft.*` — the rule matches the generator's assembly name, so such a project's output would
+  be hidden.
+- The required context is still `Analyze (C#)`, so no branch-protection edit is needed.
+
+**Measured offline, not yet on GitHub.** On the SARIF of main's analysis of `99162772` (CodeQL 2.27.0)
+the filter keeps 449 of 1,082 results and prints no warning; an independent regex over the same uris
+selects the same 633, every other field of the log is unchanged, and no kept result has an `obj` or
+`generated` segment. Anchoring the location rule and adding the rule check left that output
+byte-identical. The harness passes 445 checks. Run against scratch copies of the filter, it fails 102
+on the first version of the rule (no anchor, no rule check); 13 with the generator-name condition
+deleted and 4 with `obj` matched as a substring; 2 when any `generated` after any `obj` counts and 1
+when the first `generated` after each `obj` does; 15 without the `security` tag and 6 without
+`security-severity`; 65 when a rule that does not resolve is removable and 6 when one with
+wrong-typed metadata is; 35 without the warnings. That the 633 close as fixed, and nothing else
+does, is reasoned until the first `push:[main]` run after the merge shows it.

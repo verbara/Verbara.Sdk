@@ -76,6 +76,33 @@ failed check that is being re-run: the latest attempt replaces it as soon as the
 fix takes effect from the next release, because a tag push runs `publish.yml` as it exists in the
 tagged commit. ADR-0055 addendum (2026-09-12).
 
+### Changed — CodeQL no longer reports notes on code the .NET SDK generates
+
+633 of main's 1,082 open CodeQL alerts (at `99162772`) were in code the .NET SDK's own source generators
+write under `obj/**/generated/`: 613 from System.Text.Json, 19 from Microsoft.Extensions.Options and 1 from
+System.Text.RegularExpressions. All were maintainability notes (`cs/useless-cast-to-self` 443,
+`cs/useless-upcast` 184, `cs/missed-ternary-operator` 5, `cs/nested-if-statements` 1) about code no change
+here can reach. A CodeQL `paths-ignore` cannot exclude them: it is not honoured for a compiled language
+analysed from a traced build, which is what `codeql.yml` runs.
+
+- **Analyse, filter, then upload.** `Analyze (C#)` runs `analyze` with `upload: failure-only`, passes the
+  SARIF through `scripts/ci/filter-codeql-sarif.sh`, and `upload-sarif` sends the result under the same
+  `/language:csharp` category, so every other alert keeps its history and the generator ones close as fixed.
+- **Only the .NET SDK's generators.** A result can be removed only if its primary location is under the first
+  `obj` segment of its uri, at the first `generated` segment after it, in a folder whose name starts with
+  `System.` or `Microsoft.`. Output from this repository's own generator (`Verbara.Sdk.Ami.SourceGenerators`)
+  stays analysed whatever subfolders its hint names use, and the harness fails a PR that gives a project here
+  a `System.*` or `Microsoft.*` name.
+- **Never a security result.** Even there, a result is removed only if its rule resolves in the run's `tool`
+  and carries neither a `security` tag nor a `security-severity`. A result whose rule does not resolve, whose
+  references contradict each other, or whose rule metadata has the wrong type is kept, with a `::warning::`.
+- **Fails closed.** Input that is not one readable SARIF 2.1.0 log makes the filter exit 2 and write nothing,
+  so the job goes red and nothing unfiltered is uploaded. A failed analysis still uploads its diagnostics.
+- **Tested.** `scripts/tests/test_filter_codeql_sarif.sh` runs 448 checks in `Coverage Script Tests`, both
+  conditions in both directions. On main's SARIF the filter keeps 449 of 1,082 results and prints no warning.
+- **Still not checked:** that exactly those 633 alerts close. The first analysis of `main` after this lands
+  shows it (ADR-0051 addendum, 2026-09-12).
+
 ### Fixed — The session-store guide no longer publishes figures nothing measured
 
 `docs/guides/session-store-backends.md` published session-store figures that no record held and no

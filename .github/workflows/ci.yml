@@ -221,6 +221,12 @@ jobs:
       - name: Run package-validation coverage guard unit tests (ADR-0055)
         run: bash scripts/tests/test_package_validation_coverage.sh
 
+      # CodeQL SARIF filter unit tests (ADR-0051 addendum, 2026-09-12). The filter runs only inside codeql.yml's
+      # Analyze (C#) job, between analysis and upload, and a wrong rule turns nothing red: it closes alerts about
+      # our own code as "fixed", or lets the .NET generator ones back. Same job, same reason as the guards above.
+      - name: Run CodeQL SARIF filter unit tests (ADR-0051)
+        run: bash scripts/tests/test_filter_codeql_sarif.sh
+
   aot-check:
     name: AOT Trim Check
     runs-on: ubuntu-latest
