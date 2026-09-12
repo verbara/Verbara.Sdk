@@ -40,9 +40,13 @@ public sealed class PerformanceTableCoherenceTests
             foreach (var field in new[] { "latency", "throughput", "batch", "versus_v1_0" })
             {
                 if (!entry.TryGetProperty(field, out var value)) continue;
-                row.Cells.Should().Contain(value.GetString()!,
-                    $"README.md's '{operation}' row must publish the recorded {field}; " +
-                    "if the measurement changed, the record moves first, in its own reviewed commit");
+
+                // A whole figure, not a substring: "11.62M events/sec" contains "1.62M events/sec",
+                // so a plain Contains would pass a 7x overclaim. No digit, dot or comma may touch it.
+                var figure = value.GetString()!;
+                row.Cells.Should().MatchRegex($@"(?<![\d.,]){Regex.Escape(figure)}(?!\d)",
+                    $"README.md's '{operation}' row must publish the recorded {field} ('{figure}') as a " +
+                    "whole figure; if the measurement changed, the record moves first, in its own reviewed commit");
             }
         }
     }

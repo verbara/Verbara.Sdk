@@ -432,10 +432,10 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
       Negative-tested, verbatim:
 
       ```
-      Expected row.Cells " **~33.3K saves/sec** (p50 30 µs) / batch 91,022 sess/sec " to contain
-      "batch 91,021 sess/sec" because README.md's 'Session store Redis `SaveAsync`' row must publish
-      the recorded batch; if the measurement changed, the record moves first, in its own reviewed
-      commit.
+      Expected row.Cells to match regex "(?<![\d.,])batch\ 91,021\ sess/sec(?!\d)" because README.md's
+      'Session store Redis `SaveAsync`' row must publish the recorded batch ('batch 91,021 sess/sec') as
+      a whole figure; if the measurement changed, the record moves first, in its own reviewed commit,
+      but " **~33.3K saves/sec** (p50 30 µs) / batch 91,022 sess/sec " does not match.
       ```
       ```
       ... to contain ".NET 10.0.12" because README.md's Performance section must state the runtime
@@ -448,22 +448,28 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
 
       A fourth mutation moved `.NET 10.0.12` out of the section into `## Observability` and failed
       with the second message, so the scoping is real. A fifth put a digit in front of a published
-      batch — `batch 191,021 sess/sec`, a 2.1× overclaim — and passed while the record held the bare
-      `91,021 sess/sec`, because the value test matches substrings. Both `batch` values in the record
-      now carry their `batch ` prefix, as `latency` carries `p50 `, and the same mutation fails:
+      batch — `batch 191,021 sess/sec`, a 2.1× overclaim — and **passed**: the value test matched
+      substrings, and `191,021 sess/sec` contains `91,021 sess/sec`. The hole was not the batch's but
+      every row's — `**11.62M events/sec**` contains the AMI row's `1.62M events/sec` just as well.
+      The value test now matches a whole figure, with no digit, dot or comma touching it, and the
+      record's `batch` values also carry a `batch ` prefix, as `latency` carries `p50 `. Both
+      overclaims on the AMI row now fail:
 
       ```
-      Expected row.Cells " **~33.3K saves/sec** (p50 30 µs) / batch 191,021 sess/sec " to contain
-      "batch 91,021 sess/sec" because README.md's 'Session store Redis `SaveAsync`' row must publish
-      the recorded batch; if the measurement changed, the record moves first, in its own reviewed
-      commit.
+      Expected row.Cells to match regex "(?<![\d.,])1\.62M\ events/sec(?!\d)" because README.md's
+      'AMI event parse + dispatch' row must publish the recorded throughput ('1.62M events/sec') as a
+      whole figure; if the measurement changed, the record moves first, in its own reviewed commit,
+      but " **11.62M events/sec** (617.6 ns) " does not match.
+      ```
+      ```
+      ... but " **1.62M events/sec** (1,617.6 ns) " does not match.
       ```
 
       Restored byte-identical each time, 5/5 green, the project 27/27. Residuals: the test binds
       only rows that *declare* `provenance`, so deleting the object from the record hands a row back
       to the header unnoticed (renaming the Postgres row's key stayed 5/5 green; `docs/claim-registry.md`
-      rows 107/108 state it); and `FindRow` takes the first table row with a matching operation
-      name, so a duplicate row carrying other figures still passes — closing that means changing the
+      row 110 states it); and `FindRow` takes the first table row with a matching operation name, so
+      a duplicate row carrying other figures still passes — closing that means changing the
       row-accounting test, which this task leaves intact.
 
 ## 5. Deferred: first-party accuracy gate (investigation only — no code)
