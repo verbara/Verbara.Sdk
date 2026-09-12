@@ -126,19 +126,22 @@ jobs:
           # `conclusion: null`, and this workflow's own check run is one of them —
           # counting either as a failure would make the gate self-blocking.
           #
-          # Nor do release-hygiene.yml's check runs count. That workflow runs on the push
-          # that lands the release commit, before the tag exists, so its liveness check is
-          # red on exactly the commit being released — by design, as a notification
-          # (ADR-0055 D5) — and its baseline check is red instead if it runs after the tag.
-          # Counted here, that blocked v2.5.1. They are excluded by WORKFLOW PATH (check
-          # run -> check suite -> workflow run -> path), never by name, which is why this
-          # job holds `actions: read`. ADR-0055 addendum (2026-09-12).
+          # Nor do two kinds of check run that say nothing about whether this commit was
+          # built. release-hygiene.yml runs on the push that lands the release commit, before
+          # the tag exists, so its liveness check is red on exactly the commit being released
+          # — by design, as a notification (ADR-0055 D5) — and its baseline check is red
+          # instead if it runs after the tag; counted here, that blocked v2.5.1. Dependabot's
+          # update runs (GitHub-assigned path dynamic/dependabot/dependabot-updates) attach to
+          # whatever commit is main's HEAD and often end cancelled. Both are excluded by
+          # WORKFLOW PATH (check run -> check suite -> workflow run -> path), never by name,
+          # which is why this job holds `actions: read`. ADR-0055 addendum (2026-09-12).
           #
           # This step only fetches; the rules live in the script, where they are
           # unit-tested (scripts/tests/test_release_provenance.sh). `--jq '.x[]'` prints
           # one JSON value per run, so `--paginate`'s page concatenation leaves no trace.
           # `filter=latest` is the API default, spelled out because the gate relies on it:
-          # a re-run's result supersedes the attempt it re-ran, this workflow's own included.
+          # a re-run replaces the attempt it re-runs as soon as it STARTS, this workflow's own
+          # included — so a failure that is being re-run is not seen until the re-run completes.
           CHECK_RUNS="$RUNNER_TEMP/provenance-check-runs.json"
           WORKFLOW_RUNS="$RUNNER_TEMP/provenance-workflow-runs.json"
 
@@ -156,7 +159,7 @@ jobs:
 
           bash scripts/ci/check-release-provenance.sh "$SHA" "$CHECK_RUNS" "$WORKFLOW_RUNS"
 
-          echo "::notice::$SHA is on main and its check runs are green."
+          echo "::notice::$SHA is on main, and every check run this gate counts is green."
 
       - name: Restore
         run: dotnet restore Verbara.Sdk.slnx

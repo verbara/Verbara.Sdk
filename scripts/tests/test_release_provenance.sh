@@ -36,6 +36,8 @@ AOT_PUSH=93990069617     # .github/workflows/aot-validate.yml, push
 HYGIENE_PUSH=93990069616 # .github/workflows/release-hygiene.yml, push
 PUBLISH=93990198232      # .github/workflows/publish.yml, push (the tag)
 OTHER=555
+DEPENDABOT=dynamic/dependabot/dependabot-updates # GitHub-assigned: no workflow file can have it
+DEPENDABOT_SUITE=666     # a Dependabot version-update run, attached to whatever commit is main's HEAD
 
 fresh() { : > "$CHECKS"; : > "$RUNS"; }
 
@@ -117,6 +119,12 @@ no_error_names() {
 # contract
 # =============================================================================================
 [ -x "$GATE" ] && ok || bad "check-release-provenance.sh must be committed executable (mode 100755)"
+
+# The exclusions are exact paths. The hygiene path names a file in this repository, so renaming it must
+# fail HERE, on the PR that renames it, rather than silently ending the exclusion at the next release.
+[ -f "$SCRIPT_DIR/../../$HYGIENE" ] && ok || bad "$HYGIENE must exist — the gate ignores check runs by that exact path"
+grep -qxF "HYGIENE_WORKFLOW='$HYGIENE'" "$GATE" && ok || bad "the gate's HYGIENE_WORKFLOW must be '$HYGIENE'"
+grep -qxF "DEPENDABOT_WORKFLOW='$DEPENDABOT'" "$GATE" && ok || bad "the gate's DEPENDABOT_WORKFLOW must be '$DEPENDABOT'"
 
 # =============================================================================================
 # green — and the notice appears only when something was ignored
@@ -227,6 +235,50 @@ lacks "::notice::" "nothing ignored without workflow runs"
 check "$HYGIENE_PUSH" "Publish Liveness" completed failure
 run 1 "an empty workflow-runs document does not ignore a release-hygiene.yml failure"
 errors_name '"Publish Liveness" concluded failure — no workflow run' "the unmapped failure is named"
+
+# =============================================================================================
+# Dependabot's update runs — a GitHub-assigned path, attached to main's HEAD, often cancelled
+# =============================================================================================
+landed
+workflow "$DEPENDABOT_SUITE" "$DEPENDABOT"
+check "$DEPENDABOT_SUITE" "Dependabot" completed cancelled
+run 0 "a cancelled Dependabot update run on the release commit (v2.5.0's commit carries one)"
+says "::notice::release-provenance: ignored 1 check run(s) from $DEPENDABOT" "the Dependabot exclusion is announced, with its path"
+says '"Dependabot" (cancelled)' "the notice names the run it ignored"
+lacks "::error::" "the ignored cancellation is not an error"
+
+release_2_5_1 failure success
+workflow "$DEPENDABOT_SUITE" "$DEPENDABOT"
+check "$DEPENDABOT_SUITE" "Dependabot" completed failure
+run 0 "both exclusions at once: release-hygiene.yml red and Dependabot red"
+says "ignored 2 check run(s) from $HYGIENE" "the hygiene exclusion is announced on its own line"
+says "ignored 1 check run(s) from $DEPENDABOT" "the Dependabot exclusion is announced on its own line"
+
+landed
+workflow "$DEPENDABOT_SUITE" "$DEPENDABOT"
+check "$DEPENDABOT_SUITE" "Dependabot" completed cancelled
+check "$AOT_PUSH" "aot-check" completed failure
+run 1 "a Dependabot run hides nothing next to it"
+errors_name '"aot-check" concluded failure — .github/workflows/aot-validate.yml' "the real failure is named"
+no_error_names "Dependabot" "the ignored run is not given as the reason"
+
+fresh
+cp "$WORK/suites.json" "$RUNS"
+workflow "$DEPENDABOT_SUITE" "$DEPENDABOT"
+check "$DEPENDABOT_SUITE" "Dependabot" completed success
+check "$PUBLISH" "Pack and push to nuget.org" in_progress
+run 1 "only a Dependabot run completed — no evidence, even green"
+errors_name "No completed check runs for $SHA outside $DEPENDABOT — nothing proves this commit was ever built." "the evidence error names what was set aside"
+
+# Only that exact GitHub-assigned path: a repository workflow named after Dependabot, a sibling
+# dynamic path, and other dynamic workflows (CodeQL's default setup) all still count.
+for path in .github/workflows/dependabot-updates.yml dynamic/dependabot/other \
+            "$DEPENDABOT/extra" dynamic/github-code-scanning/codeql " $DEPENDABOT"; do
+  landed
+  workflow "$OTHER" "$path"
+  check "$OTHER" "Dependabot" completed cancelled
+  run 1 "only Dependabot's exact path is ignored — not '$path'"
+done
 
 # =============================================================================================
 # only completed runs are evidence — in both directions

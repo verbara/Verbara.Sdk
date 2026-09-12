@@ -15,6 +15,12 @@ name: Release Hygiene
 #
 # The weekly schedule covers the case a push trigger structurally cannot: a staged release on a
 # repo that has gone quiet. That is the state 2.5.0 was actually in near the end.
+#
+# publish.yml's provenance gate IGNORES this workflow's check runs, matched by this file's exact
+# path (scripts/ci/check-release-provenance.sh, ADR-0055 addendum 2026-09-12): on a release commit
+# they are red by design, before the tag or after it. Only add a job here if the same is true of
+# it — a build or test job in this file would stop counting towards a release. Renaming or moving
+# this file ends the exclusion; scripts/tests/test_release_provenance.sh fails on the PR that does.
 on:
   push:
     branches: [main]
