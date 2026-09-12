@@ -389,6 +389,14 @@ public sealed class AriClient : IAriClient
     public async ValueTask DisposeAsync()
     {
         if (IsConnected) await DisconnectAsync();
+
+        // DisconnectAsync only runs for a connected client. Between connections the reconnect
+        // loop is still waiting on _cts: stop it here, or it dials again after disposal and the
+        // ClientWebSocket it opens is never disposed.
+        if (_cts is not null) await _cts.CancelAsync();
+        if (_eventLoop is not null)
+            await _eventLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
         await _pump.DisposeAsync();
         _eventSubject.OnCompleted();
         _eventSubject.Dispose();
