@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.5.1] - 2026-09-12
+
 ### Fixed — Nine public claims were false, and now something executes them
 
 `README.md` sells this SDK on numbers, and a number nobody executes decays silently: the code
