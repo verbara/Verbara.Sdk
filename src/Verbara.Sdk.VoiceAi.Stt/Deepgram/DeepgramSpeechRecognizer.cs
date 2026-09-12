@@ -134,8 +134,8 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
                 await ws.SendAsync(CloseStreamFrame, WebSocketMessageType.Text, true, ct)
                     .ConfigureAwait(false);
         }
-        catch (OperationCanceledException) { }
-        catch (WebSocketException) { }
+        catch (OperationCanceledException) { /* the caller's own instruction — not a failure (ADR-0050 E6) */ }
+        catch (WebSocketException) { /* the receive loop reports why the session died (ADR-0050 E1) */ }
     }
 
     /// <summary>

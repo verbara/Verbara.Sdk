@@ -158,8 +158,8 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
             if (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
                 await ws.SendAsync(DoneFrame, WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) { }
-        catch (WebSocketException) { }
+        catch (OperationCanceledException) { /* the caller cancelled, or the receive loop ended the session */ }
+        catch (WebSocketException) { /* the receive loop reports why the session died (ADR-0050 E1) */ }
     }
 
     /// <summary>
