@@ -3,8 +3,6 @@
   <PropertyGroup>
     <Description>Verbara.Sdk.Resilience - Composable circuit breaker + retry/backoff + timeout primitives. AOT-safe, zero reflection, TimeProvider-based for testability. No Polly dependency.</Description>
     <PackageTags>asterisk;resilience;circuit-breaker;retry;timeout;sdk</PackageTags>
-    <!-- New package — no baseline published yet; skip binary compatibility check -->
-    <EnablePackageValidation>false</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>

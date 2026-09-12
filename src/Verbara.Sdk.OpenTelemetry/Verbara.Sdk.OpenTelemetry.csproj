@@ -2,8 +2,6 @@
   <PropertyGroup>
     <Description>Verbara.Sdk.OpenTelemetry - batteries-included OpenTelemetry wiring for Verbara.Sdk. One-line AddVerbaraOpenTelemetry(...) enrolls every ActivitySource and Meter from VerbaraTelemetry and provides convenience helpers for Console, OTLP, and Prometheus exporters.</Description>
     <PackageTags>asterisk;opentelemetry;otel;prometheus;otlp;observability;sdk</PackageTags>
-    <!-- New package - no baseline published yet; skip binary compatibility check -->
-    <EnablePackageValidation>false</EnablePackageValidation>
     <!-- NU5104: OpenTelemetry.Exporter.Prometheus.AspNetCore is published as beta by the
          OpenTelemetry .NET project (the Prometheus exporter is experimental upstream).
          This package remains stable overall; suppress only the prerelease-dependency check. -->

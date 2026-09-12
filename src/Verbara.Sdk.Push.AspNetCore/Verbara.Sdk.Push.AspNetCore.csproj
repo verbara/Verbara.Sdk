@@ -2,8 +2,6 @@
   <PropertyGroup>
     <Description>Verbara.Sdk.Push.AspNetCore - SSE push delivery endpoints for ASP.NET Core. Maps IPushEventBus events to Server-Sent Events with topic filtering and JWT authorization.</Description>
     <PackageTags>asterisk;push;sse;aspnetcore;realtime;sdk</PackageTags>
-    <!-- New package — no baseline published yet; skip binary compatibility check -->
-    <EnablePackageValidation>false</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>
