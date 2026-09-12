@@ -62,7 +62,7 @@ public sealed class SessionLifecycleSmokeTests : IAsyncLifetime
     [Fact]
     public void Infrastructure_ShouldAssociateBridge_WhenChannelsEnterBridge()
     {
-        var (_, _, bridgeId) = _fixture.SimulateInboundCallAnswered(
+        _fixture.SimulateInboundCallAnswered(
             linkedId: "linked-4", bridgeId: "br-004");
 
         var session = _fixture.SessionManager.GetByLinkedId("linked-4")!;
