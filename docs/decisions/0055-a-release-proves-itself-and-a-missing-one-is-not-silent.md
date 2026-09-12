@@ -217,8 +217,8 @@ and so cannot block the PR that breaks them.
 
 ## Addendum (2026-09-12) — D1 counted D5's notification, and blocked the first release cut under both
 
-`v2.5.1` was the first release cut through this ADR's gates, and D1 refused it. Nothing was wrong
-with the commit. D1 and D5 are each right on their own and wrong together; this addendum records how,
+`v2.5.1` was the first release cut with both D1's gate and D5's check in place — `v2.5.0` passed D1
+before `release-hygiene.yml` existed — and D1 refused it. Nothing was wrong with the commit. D1 and D5 are each right on their own and wrong together; this addendum records how,
 the change that resolves it, and that D2's outstanding action is done.
 
 **What happened.** `v2.5.1` was tagged (lightweight) on `019fb697`, the squash-merge commit of the
@@ -260,14 +260,23 @@ always-run `Coverage Script Tests` job, for D7's reason. `publish.yml` now only 
 - **Fail closed.** A check run whose suite has no workflow run (a third-party app's check) is not
   ignored, and neither is a suite claimed by more than one path. Unreadable input, input that is not
   JSON, or input of the wrong shape exits "cannot tell" and blocks.
-- **Evidence is still required.** If no completed check run remains once release-hygiene's are set
+- **Evidence is still required.** If no completed check run remains once the ignored ones are set
   aside, the gate fails with the same "nothing proves this commit was ever built" error as before.
 - **A failure names what failed.** Each non-green check run is reported with its workflow path, and
   what the gate ignored is announced as a notice rather than applied silently.
+- **Dependabot's update runs are ignored too, by the same rule** — found in review, and the same
+  failure in another form. Dependabot's scheduled version-update jobs run as dynamic workflows at the
+  GitHub-assigned path `dynamic/dependabot/dependabot-updates`, attach to whatever commit is the HEAD
+  of `main` when they start, and often end `cancelled`. They judge the dependency graph against the
+  registries, not whether the commit was built. Counted, one refuses a release that is fine:
+  `v2.5.0`'s commit `d8fc879b` carries a cancelled one, so re-running that publish would be refused.
+  A workflow file in this repository always has a `.github/workflows/` path, so none can claim this
+  one, and no other dynamic workflow is ignored.
 
-Replayed against the real check runs as attempt 1 saw them — rebuilt from the `filter=all` view, with
-anything completed after 14:19:55Z put back in flight — the old logic reproduces `1 failure` and
-`14 success`, and the new script passes: thirteen judged, two ignored, three still running. The
+Replayed against the real check runs as attempt 1 saw them — rebuilt from the `filter=all` view,
+keeping only the check runs that existed at 14:19:55Z and the latest attempt of each per suite and
+name, with anything completed after that put back in flight — the old logic reproduces `1 failure`
+and `14 success`, and the new script passes: thirteen judged, two ignored, three still running. The
 change applies from the first tag cut on a commit that contains it, because on a tag push
 `publish.yml` runs as it exists in the tagged commit (D2).
 
@@ -281,19 +290,33 @@ change applies from the first tag cut on a commit that contains it, because on a
   existing before that run starts.
 - **Excluding by check-run name.** Names are not unique (above), and an ordinary job rename in any
   other workflow would be enough to make a real failure invisible to the gate.
+- **Ignoring every `dynamic/` workflow.** GitHub assigns such paths to more than Dependabot — CodeQL's
+  default setup among them — and those can be real signals about the commit. Only Dependabot's update
+  runs are known to say nothing about it.
 
 **What this does not claim.**
 
 - **It does not require `ci.yml`, or any particular workflow, to have run.** One green completed
-  check run from any workflow other than release-hygiene is enough evidence. On the intended path — a
-  squash merge through the merge queue — `ci.yml`'s `merge_group` run is among them, but nothing
-  asserts it.
+  check run that neither ignored workflow produced is enough evidence — including a check from an app
+  with no workflow run at all. On the intended path — a squash merge through the merge queue —
+  `ci.yml`'s `merge_group` run is among them, but nothing asserts it.
+- **It does not see a failure that is being re-run.** The check-runs API's latest attempt replaces the
+  one being re-run as soon as the re-run starts, and a run in flight is not evidence, so a tag pushed —
+  or a publish re-run — while a failed check is re-running passes over it. The gate's own recovery
+  depends on the same behaviour.
+- **It does not forgive an earlier failed publish.** A `workflow_dispatch` dry run of `publish.yml` that
+  failed on the release commit, or the run of a tag deleted and pushed again, stays a red check in its
+  own suite and refuses the gate until it is re-run green. That one is a real signal, so it is not
+  excluded.
 - **It does not silence release-hygiene.** Its failures still arrive the way D5 intends — a red run on
   `main` and an email — and still mean what they say. They no longer decide a publish.
-- **The exclusion is one exact path.** Renaming or moving `release-hygiene.yml` ends it with no edit
-  here, and the gate fails closed: the 2.5.1 block again, this time naming the check.
+- **The exclusions are two exact paths.** Renaming or moving `release-hygiene.yml` would end its
+  exclusion and the gate would fail closed — the 2.5.1 block again, this time naming the check — but
+  `scripts/tests/test_release_provenance.sh` now fails first, on the PR that renames it. Any job added
+  to `release-hygiene.yml` stops counting towards a release; the workflow file says so.
 
 **D2's outstanding action is done.** The `release-tags` repository ruleset was created on 2026-09-12:
 target `refs/tags/v*`, rules `creation`, `update` and `deletion`, bypass limited to organization
-admins. `v2.5.1` was the first tag cut under it. The first bullet of *What this does not claim*
-above — "D2's ruleset is still absent" — describes the state before that date, not after it.
+admins. `v2.5.1` was the first tag cut under it. The Accepted body's `## What this does not claim`
+section ("D2's ruleset is still absent") and D2 itself ("The ruleset does not exist yet") describe the
+state before that date, not after it.
