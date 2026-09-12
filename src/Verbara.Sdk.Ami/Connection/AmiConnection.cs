@@ -113,8 +113,8 @@ public sealed class AmiConnection : IAmiConnection
 
         // Apply ConnectionTimeout to socket connect + banner read so the reconnect loop
         // never hangs indefinitely on a slow or unresponsive Asterisk instance.
-        var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts.Token);
-        try
+        // Block form on purpose: the timeout source is released here, before the pumps start.
+        using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts.Token))
         {
             connectCts.CancelAfter(_options.ConnectionTimeout);
             var connectToken = connectCts.Token;
@@ -137,10 +137,6 @@ public sealed class AmiConnection : IAmiConnection
 
             // Detect Asterisk version
             await DetectVersionAsync(connectToken, cancellationToken);
-        }
-        finally
-        {
-            connectCts.Dispose();
         }
 
         _state = AmiConnectionState.Connected;
