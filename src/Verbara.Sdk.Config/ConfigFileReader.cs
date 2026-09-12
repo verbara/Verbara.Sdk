@@ -126,9 +126,10 @@ public sealed class ConfigFileReader
         int lineNumber)
     {
         var parentDir = Path.GetDirectoryName(parentFilePath) ?? string.Empty;
+        // Rooted includes are taken as-is; Join (unlike Combine) never discards parentDir.
         var resolved = Path.IsPathRooted(directive.Path)
             ? directive.Path
-            : Path.Combine(parentDir, directive.Path);
+            : Path.Join(parentDir, directive.Path);
         var canonical = Path.GetFullPath(resolved);
 
         if (!File.Exists(canonical))
