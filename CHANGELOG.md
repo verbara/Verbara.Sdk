@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — The session-store guide no longer publishes figures nothing measured
+
+`docs/guides/session-store-backends.md` published session-store figures that no record held and no
+test checked, and where 2.5.1's re-measurement of both session-store rows did reach them they were
+wrong: a Redis save at ~250 µs against p50 30 µs, Postgres reads at 5-10 ms against a `GetAsync` p50
+of 48 µs.
+
+- **Deleted, not restated:** the backends table's `<0.1 ms` / `<1 ms` / `5-10 ms` read latencies,
+  and the Benchmarks table's InMemory column and its `GetAsync`, `GetActiveAsync (1,000 active)` and
+  `SaveBatchAsync (100 sessions)` rows. Nothing in the repository records a measurement of InMemory,
+  `GetActiveAsync` or a 100-session batch. `GetAsync` is measured, in the `benchmark-analysis.md`
+  addendum, but the record binds neither backend's, so the guide points there; and the read latencies
+  claimed every read where the only read with a committed measurement, `GetAsync` over loopback, has
+  Postgres at p50 48 µs. The read-latency column now says what a read costs, in words checked against
+  each store's source, and the decision-guide bullets that leaned on "sub-millisecond" and "5-10 ms"
+  state each backend's actual trade-off instead.
+- **Bound:** the guide's Benchmarks section now publishes only the record's Redis and Postgres
+  `SaveAsync` p50 and 500-session batch, with their date and runtime, and
+  `PerformanceTableCoherenceTests` fails the build when that section stops stating any of them as a
+  whole figure. It checks the section as a whole, not each table row, so a figure placed under the
+  wrong backend, or an unbound figure added beside the bound ones, still passes
+  (`docs/claim-registry.md`). The percentiles stay in the addendum, which the record does not bind.
+
 ## [2.5.1] - 2026-09-12
 
 ### Fixed — Nine public claims were false, and now something executes them
@@ -170,28 +193,6 @@ the committed record, with their own date and runtime stated under the table and
 - **Postgres single-save latency is unchanged — ~500 saves/sec (p50 1.97 ms) — because it is the
   measuring machine's WAL flush rate**: one fsync per commit, ~2.0 ms on that storage, not SDK code.
   The old attribution to JSONB parsing and indexes was wrong.
-
-### Fixed — The session-store guide no longer publishes figures nothing measured
-
-`docs/guides/session-store-backends.md` published session-store figures that no record held and no
-test checked, and where the re-measurement above did reach them they were wrong: a Redis save at
-~250 µs against p50 30 µs, Postgres reads at 5-10 ms against a `GetAsync` p50 of 48 µs.
-
-- **Deleted, not restated:** the backends table's `<0.1 ms` / `<1 ms` / `5-10 ms` read latencies,
-  and the Benchmarks table's InMemory column and its `GetAsync`, `GetActiveAsync (1,000 active)` and
-  `SaveBatchAsync (100 sessions)` rows. Nothing in the repository records a measurement of InMemory,
-  `GetActiveAsync` or a 100-session batch. `GetAsync` is measured, in the `benchmark-analysis.md`
-  addendum, but the record binds neither backend's, so the guide points there; and the read latencies
-  claimed every read where the only read with a committed measurement, `GetAsync` over loopback, has
-  Postgres at p50 48 µs. The read-latency column now says what a read costs, in words checked against
-  each store's source, and the decision-guide bullets that leaned on "sub-millisecond" and "5-10 ms"
-  state each backend's actual trade-off instead.
-- **Bound:** the guide's Benchmarks section now publishes only the record's Redis and Postgres
-  `SaveAsync` p50 and 500-session batch, with their date and runtime, and
-  `PerformanceTableCoherenceTests` fails the build when that section stops stating any of them as a
-  whole figure. It checks the section as a whole, not each table row, so a figure placed under the
-  wrong backend, or an unbound figure added beside the bound ones, still passes
-  (`docs/claim-registry.md`). The percentiles stay in the addendum, which the record does not bind.
 
 ### Security
 
