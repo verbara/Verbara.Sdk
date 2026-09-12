@@ -131,18 +131,14 @@ public sealed class ActionSerializerGenerator : IIncrementalGenerator
 
     private static string GetFieldName(IPropertySymbol prop)
     {
-        foreach (var attr in prop.GetAttributes())
-        {
-            if (attr.AttributeClass?.ToDisplayString() ==
-                "Verbara.Sdk.Attributes.VerbaraMappingAttribute"
-                && attr.ConstructorArguments.Length > 0)
-            {
-                if (attr.ConstructorArguments[0].Value is string name && !string.IsNullOrEmpty(name))
-                    return name;
-            }
-        }
-        // Default: property name is the AMI field name
-        return prop.Name;
+        // The first non-empty [VerbaraMapping("Name")] on the property names the field;
+        // by default the property name is the AMI field name.
+        return prop.GetAttributes()
+            .Where(static attr => attr.AttributeClass?.ToDisplayString() == VerbaraMappingFqn
+                                  && attr.ConstructorArguments.Length > 0)
+            .Select(static attr => attr.ConstructorArguments[0].Value as string)
+            .FirstOrDefault(static name => !string.IsNullOrEmpty(name))
+            ?? prop.Name;
     }
 
     private static PropertyType ClassifyPropertyType(ITypeSymbol type)
@@ -246,12 +242,9 @@ public sealed class ActionSerializerGenerator : IIncrementalGenerator
         sb.AppendLine("    };");
         sb.AppendLine();
 
-        // Per-action serialization methods
-        foreach (var action in sorted)
+        // Per-action serialization methods (actions with nothing to write map to Array.Empty above)
+        foreach (var action in sorted.Where(static a => a.Properties.Length > 0 || a.HasExtraFields))
         {
-            if (action.Properties.Length == 0 && !action.HasExtraFields)
-                continue;
-
             sb.AppendLine($"    private static IEnumerable<KeyValuePair<string, string>> Serialize{action.ClassName}({action.FullyQualifiedTypeName} a)");
             sb.AppendLine("    {");
 
