@@ -1,5 +1,6 @@
 using System.IO.Pipelines;
 using System.Text;
+using Verbara.Sdk.Agi.Commands;
 using Verbara.Sdk.Agi.Server;
 using FluentAssertions;
 
@@ -247,5 +248,63 @@ public class AgiChannelConvenienceTests
 
         await act.Should().ThrowAsync<AgiException>()
             .WithMessage("*Connection closed*");
+    }
+
+    // ── Line breaks: rejected before the wire, and the channel stays usable ──
+
+    [Theory]
+    [InlineData("\r")]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public async Task SendCommandAsync_ShouldThrowArgumentExceptionAndStayUsable_WhenCommandPropertyContainsLineBreak(string lineBreak)
+    {
+        var cmdPipe = new Pipe();
+        var replyPipe = new Pipe();
+        var channel = new AgiChannel(new FastAgiWriter(cmdPipe.Writer), new FastAgiReader(replyPipe.Reader));
+
+        // Were the command sent, the channel would wait for a reply that never comes: the token turns
+        // that wait into a failure instead of a hang.
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var act = async () => await channel.SendCommandAsync(
+            new SayAlphaCommand { Text = "7qz9xw" + lineBreak + "3jkvb5", EscapeDigits = "#" }, cts.Token);
+
+        var thrown = (await act.Should().ThrowAsync<ArgumentException>()).Which;
+        thrown.Message.Should().NotContain("7qz9xw").And.NotContain("3jkvb5");
+        cmdPipe.Writer.UnflushedBytes.Should().Be(0, "no byte of a rejected command may reach the wire");
+
+        await replyPipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("200 result=0\n"));
+        var reply = await channel.SendCommandAsync(new SayAlphaCommand { Text = "abc", EscapeDigits = "#" }, cts.Token);
+
+        reply.IsSuccess.Should().BeTrue("the channel must stay usable after a rejected command");
+        (await ReadSentCommand(cmdPipe)).Should().Be("SAY ALPHA abc #");
+        await replyPipe.Writer.CompleteAsync();
+    }
+
+    [Theory]
+    [InlineData("\r")]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public async Task SetVariableAsync_ShouldThrowArgumentExceptionAndStayUsable_WhenValueContainsLineBreak(string lineBreak)
+    {
+        var cmdPipe = new Pipe();
+        var replyPipe = new Pipe();
+        var channel = new AgiChannel(new FastAgiWriter(cmdPipe.Writer), new FastAgiReader(replyPipe.Reader));
+
+        // Were the command sent, the channel would wait for a reply that never comes: the token turns
+        // that wait into a failure instead of a hang.
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var act = async () => await channel.SetVariableAsync("GREETING", "7qz9xw" + lineBreak + "3jkvb5", cts.Token);
+
+        var thrown = (await act.Should().ThrowAsync<ArgumentException>()).Which;
+        thrown.Message.Should().NotContain("7qz9xw").And.NotContain("3jkvb5");
+        cmdPipe.Writer.UnflushedBytes.Should().Be(0, "no byte of a rejected command may reach the wire");
+
+        await replyPipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("200 result=1\n"));
+        await channel.SetVariableAsync("GREETING", "hello", cts.Token);
+
+        (await ReadSentCommand(cmdPipe)).Should().Be("SET VARIABLE GREETING \"hello\"");
+        await replyPipe.Writer.CompleteAsync();
     }
 }
