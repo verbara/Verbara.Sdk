@@ -211,8 +211,8 @@ public sealed partial class NatsBridge : BackgroundService
         var filters = ResolveFilters(subOpts.SubjectFilters, _options.SubjectPrefix);
         foreach (var filter in filters)
         {
-            var capturedFilter = filter;
-            _ = Task.Run(() => ConsumeFromNatsAsync(capturedFilter, subOpts, stoppingToken), stoppingToken);
+            // The foreach variable is fresh per iteration, so the closure captures each filter.
+            _ = Task.Run(() => ConsumeFromNatsAsync(filter, subOpts, stoppingToken), stoppingToken);
         }
     }
 
