@@ -281,7 +281,7 @@ public sealed class AmiConnectionTests : IAsyncDisposable
         await loginTask;
 
         var observer = Substitute.For<IObserver<ManagerEvent>>();
-        var subscription = _sut.Subscribe(observer);
+        using var subscription = _sut.Subscribe(observer);
         subscription.Should().NotBeNull();
 
         subscription.Dispose();

@@ -15,7 +15,8 @@ public class ConfigQuotedSemicolonTests
             normal = value ; this is a comment
             """;
 
-        var result = ConfigFileReader.Parse(new StringReader(input));
+        using var reader = new StringReader(input);
+        var result = ConfigFileReader.Parse(reader);
         var section = result.GetCategory("general");
 
         section.Should().NotBeNull();
@@ -32,7 +33,8 @@ public class ConfigQuotedSemicolonTests
             key = val ; comment
             """;
 
-        var result = ConfigFileReader.Parse(new StringReader(input));
+        using var reader = new StringReader(input);
+        var result = ConfigFileReader.Parse(reader);
         var section = result.GetCategory("test");
 
         section.Should().NotBeNull();

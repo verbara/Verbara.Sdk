@@ -22,7 +22,7 @@ public class InMemorySubscriptionRegistryTests
     public void Dispose_ShouldDecrementActiveCount_WhenSubscriberDisposed()
     {
         var reg = new InMemorySubscriptionRegistry();
-        var t1 = reg.Register(Sub("tenant-1"));
+        using var t1 = reg.Register(Sub("tenant-1"));
         reg.ActiveCount.Should().Be(1);
 
         t1.Dispose();

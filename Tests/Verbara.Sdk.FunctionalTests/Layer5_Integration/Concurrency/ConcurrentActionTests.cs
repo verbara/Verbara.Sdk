@@ -89,17 +89,14 @@ public sealed class ConcurrentActionTests : FunctionalTestBase
         await connection.ConnectAsync();
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        var subscriptions = new ConcurrentBag<IDisposable>();
 
         // Task group 1: rapid subscribe/unsubscribe
         var subscribeTask = Task.Run(async () =>
         {
             for (var i = 0; i < 50 && !cts.IsCancellationRequested; i++)
             {
-                var sub = connection.Subscribe(new NoOpObserver());
-                subscriptions.Add(sub);
+                using var sub = connection.Subscribe(new NoOpObserver());
                 await Task.Yield();
-                sub.Dispose();
             }
         }, cts.Token);
 

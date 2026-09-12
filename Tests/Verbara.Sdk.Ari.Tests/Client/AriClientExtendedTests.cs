@@ -126,8 +126,11 @@ public sealed class AriClientExtendedTests
     {
         await using var sut = CreateClient("http://192.0.2.1:1");
 
-        var act = async () => await sut.ConnectAsync(
-            new CancellationTokenSource(TimeSpan.FromMilliseconds(500)).Token);
+        var act = async () =>
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+            await sut.ConnectAsync(cts.Token);
+        };
         await act.Should().ThrowAsync<Exception>();
     }
 

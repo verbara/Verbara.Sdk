@@ -151,7 +151,7 @@ public class RxPushEventBusTests
     [Fact]
     public async Task Dispose_ShouldCompleteSubscribers_WhenCalled()
     {
-        var bus = CreateBus();
+        using var bus = CreateBus();
         var obs = new CapturingObserver<PushEvent>();
         using var sub = bus.AsObservable().Subscribe(obs);
 
