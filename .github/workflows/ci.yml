@@ -197,10 +197,17 @@ jobs:
       - name: Run release-hygiene guard unit tests (ADR-0055)
         run: bash scripts/tests/test_release_hygiene.sh
 
+      # Release provenance gate unit tests (ADR-0055 addendum, 2026-09-12). The gate in publish.yml
+      # runs only on a tag push, so no PR ever exercises it, and a broken one is found while a release
+      # waits on it — blocked by a check that should not count, as v2.5.1 was, or waved past one that
+      # should. Same job, same reason as the two harnesses above.
+      - name: Run release provenance gate unit tests (ADR-0055)
+        run: bash scripts/tests/test_release_provenance.sh
+
       # Perf-baseline guard unit tests (ADR-0042 D4/D5). The comparison itself runs weekly in
       # perf-regression.yml, which is `schedule` + `workflow_dispatch` only and can therefore never
       # tell a PR that its guard is broken. Its Python half rides the `unittest discover` step
-      # above; the notifier is bash and needs naming, like the two guards before it. NO new job and
+      # above; the notifier is bash and needs naming, like the guards before it. NO new job and
       # NO new check-run name (ADR-0042 D3) — a guard that costs a branch-protection edit is not
       # cheap, whatever its runtime.
       - name: Run perf-baseline notifier unit tests (ADR-0042)

@@ -26,6 +26,10 @@ jobs:
     permissions:
       contents: write # the final step creates the GitHub Release object for the tag
       checks: read # the provenance gate reads this sha's check runs
+      # ...and maps each one to the workflow run that produced it, to set release-hygiene.yml's
+      # aside by path. Job-level permissions are exhaustive: without this scope the gate FAILS,
+      # it does not degrade (ADR-0055 D1 and its 2026-09-12 addendum).
+      actions: read
     env:
       CI: true
     steps:
@@ -83,7 +87,7 @@ jobs:
       # ---------------------------------------------------------------------
       # Gate 2 — provenance. A tag can be cut from any commit in the repo,
       # including one that never passed CI on `main`. Two seconds of `git` and
-      # one API call buy what re-running the test suite here only approximates:
+      # two API calls buy what re-running the test suite here only approximates:
       # this exact sha reached `main`, and `main`'s checks were green on it.
       #
       # Deliberately NOT a mirrored `dotnet test` run: the unit filter in `ci.yml`
@@ -121,21 +125,41 @@ jobs:
           # Only COMPLETED runs are evidence. A run still in flight reports
           # `conclusion: null`, and this workflow's own check run is one of them —
           # counting either as a failure would make the gate self-blocking.
-          CONCLUSIONS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" \
-            --paginate -q '.check_runs[] | select(.status == "completed") | .conclusion' || true)"
+          #
+          # Nor do two kinds of check run that say nothing about whether this commit was
+          # built. release-hygiene.yml runs on the push that lands the release commit, before
+          # the tag exists, so its liveness check is red on exactly the commit being released
+          # — by design, as a notification (ADR-0055 D5) — and its baseline check is red
+          # instead if it runs after the tag; counted here, that blocked v2.5.1. Dependabot's
+          # update runs (GitHub-assigned path dynamic/dependabot/dependabot-updates) attach to
+          # whatever commit is main's HEAD and often end cancelled. Both are excluded by
+          # WORKFLOW PATH (check run -> check suite -> workflow run -> path), never by name,
+          # which is why this job holds `actions: read`. ADR-0055 addendum (2026-09-12).
+          #
+          # This step only fetches; the rules live in the script, where they are
+          # unit-tested (scripts/tests/test_release_provenance.sh). `--jq '.x[]'` prints
+          # one JSON value per run, so `--paginate`'s page concatenation leaves no trace.
+          # `filter=latest` is the API default, spelled out because the gate relies on it:
+          # a re-run replaces the attempt it re-runs as soon as it STARTS, this workflow's own
+          # included — so a failure that is being re-run is not seen until the re-run completes.
+          CHECK_RUNS="$RUNNER_TEMP/provenance-check-runs.json"
+          WORKFLOW_RUNS="$RUNNER_TEMP/provenance-workflow-runs.json"
 
-          if [ -z "$CONCLUSIONS" ]; then
-            echo "::error::No completed check runs for $SHA — nothing proves this commit was ever built."
+          if ! gh api --paginate "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?filter=latest&per_page=100" \
+                 --jq '.check_runs[]' > "$CHECK_RUNS"; then
+            echo "::error::Could not list the check runs for $SHA — nothing can prove this commit was built, so the gate refuses."
             exit 1
           fi
 
-          if printf '%s\n' "$CONCLUSIONS" | grep -qvE '^(success|skipped|neutral)$'; then
-            echo "::error::$SHA has non-green check runs:"
-            printf '%s\n' "$CONCLUSIONS" | sort | uniq -c
+          if ! gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${SHA}&per_page=100" \
+                 --jq '.workflow_runs[]' > "$WORKFLOW_RUNS"; then
+            echo "::error::Could not list the workflow runs for $SHA (this job needs actions: read) — the gate refuses."
             exit 1
           fi
 
-          echo "::notice::$SHA is on main and its check runs are green."
+          bash scripts/ci/check-release-provenance.sh "$SHA" "$CHECK_RUNS" "$WORKFLOW_RUNS"
+
+          echo "::notice::$SHA is on main, and every check run this gate counts is green."
 
       - name: Restore
         run: dotnet restore Verbara.Sdk.slnx
