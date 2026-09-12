@@ -124,44 +124,63 @@ public sealed class AmiConnectionLineBreakTests : IAsyncDisposable
 
     [Theory]
     [MemberData(nameof(LineBreakPlacements))]
-    public Task SendActionAsync_ShouldThrowArgumentExceptionAndStayUsable_WhenActionContainsLineBreak(
-        string placement, string lineBreak) =>
-        ShouldRejectAndStayUsableAsync(
-            CreateActionWithLineBreak(placement, lineBreak),
-            async (action, ct) => await _sut.SendActionAsync(action, ct));
-
-    [Theory]
-    [MemberData(nameof(LineBreakPlacements))]
-    public Task SendActionAsyncOfTResponse_ShouldThrowArgumentExceptionAndStayUsable_WhenActionContainsLineBreak(
-        string placement, string lineBreak) =>
-        ShouldRejectAndStayUsableAsync(
-            CreateActionWithLineBreak(placement, lineBreak),
-            async (action, ct) => await _sut.SendActionAsync<ManagerResponse>(action, ct));
-
-    [Theory]
-    [MemberData(nameof(LineBreakPlacements))]
-    public Task SendEventGeneratingActionAsync_ShouldThrowArgumentExceptionAndStayUsable_WhenActionContainsLineBreak(
-        string placement, string lineBreak) =>
-        ShouldRejectAndStayUsableAsync(
-            CreateActionWithLineBreak(placement, lineBreak),
-            async (action, ct) =>
-            {
-                var events = new List<ManagerEvent>();
-                await foreach (var evt in _sut.SendEventGeneratingActionAsync(action, ct))
-                    events.Add(evt);
-            });
-
-    private async Task ShouldRejectAndStayUsableAsync(
-        ManagerAction action, Func<ManagerAction, CancellationToken, Task> send)
+    public async Task SendActionAsync_ShouldThrowArgumentExceptionAndStayUsable_WhenActionContainsLineBreak(
+        string placement, string lineBreak)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var login = SimulateSuccessfulLoginAsync(cts.Token);
-        await _sut.ConnectAsync(cts.Token);
-        await login;
+        await ConnectWithSuccessfulLoginAsync(cts.Token);
+        var action = CreateActionWithLineBreak(placement, lineBreak);
 
-        var act = () => send(action, cts.Token);
+        var act = async () => await _sut.SendActionAsync(action, cts.Token);
 
         var thrown = (await act.Should().ThrowAsync<ArgumentException>()).Which;
+        await ShouldLeaveNothingBehindAndStayUsableAsync(thrown, cts.Token);
+    }
+
+    [Theory]
+    [MemberData(nameof(LineBreakPlacements))]
+    public async Task SendActionAsyncOfTResponse_ShouldThrowArgumentExceptionAndStayUsable_WhenActionContainsLineBreak(
+        string placement, string lineBreak)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await ConnectWithSuccessfulLoginAsync(cts.Token);
+        var action = CreateActionWithLineBreak(placement, lineBreak);
+
+        var act = async () => await _sut.SendActionAsync<ManagerResponse>(action, cts.Token);
+
+        var thrown = (await act.Should().ThrowAsync<ArgumentException>()).Which;
+        await ShouldLeaveNothingBehindAndStayUsableAsync(thrown, cts.Token);
+    }
+
+    [Theory]
+    [MemberData(nameof(LineBreakPlacements))]
+    public async Task SendEventGeneratingActionAsync_ShouldThrowArgumentExceptionAndStayUsable_WhenActionContainsLineBreak(
+        string placement, string lineBreak)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await ConnectWithSuccessfulLoginAsync(cts.Token);
+        var action = CreateActionWithLineBreak(placement, lineBreak);
+
+        var act = async () =>
+        {
+            var events = new List<ManagerEvent>();
+            await foreach (var evt in _sut.SendEventGeneratingActionAsync(action, cts.Token))
+                events.Add(evt);
+        };
+
+        var thrown = (await act.Should().ThrowAsync<ArgumentException>()).Which;
+        await ShouldLeaveNothingBehindAndStayUsableAsync(thrown, cts.Token);
+    }
+
+    private async Task ConnectWithSuccessfulLoginAsync(CancellationToken ct)
+    {
+        var login = SimulateSuccessfulLoginAsync(ct);
+        await _sut.ConnectAsync(ct);
+        await login;
+    }
+
+    private async Task ShouldLeaveNothingBehindAndStayUsableAsync(ArgumentException thrown, CancellationToken ct)
+    {
         thrown.Message.Should().NotContain(Head).And.NotContain(Tail);
 
         _clientToServer.Writer.UnflushedBytes.Should().Be(0, "no byte of the rejected action may reach the transport");
@@ -174,12 +193,12 @@ public sealed class AmiConnectionLineBreakTests : IAsyncDisposable
         // The next action on the same connection completes, and it is all that reaches the wire.
         var server = Task.Run(async () =>
         {
-            var text = await ReadActionAsync(_clientToServer.Reader, cts.Token);
+            var text = await ReadActionAsync(_clientToServer.Reader, ct);
             await WriteResponseAsync(_serverToClient.Writer, "Success", ExtractActionId(text), [new("Ping", "Pong")]);
             return text;
-        }, cts.Token);
+        }, ct);
 
-        var response = await _sut.SendActionAsync(new PingAction(), cts.Token);
+        var response = await _sut.SendActionAsync(new PingAction(), ct);
         var sent = await server;
 
         response.Response.Should().Be("Success");
