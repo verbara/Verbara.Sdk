@@ -157,3 +157,43 @@ labelled-PR path — the one that has to survive `github.event.pull_request.labe
 on a `pull_request` event while staying inert on `merge_group` — is reasoned, not verified, for the
 same reason. First branch that touches the AMI/ARI surface should use it deliberately and confirm
 the heavy steps run.
+
+## Addendum (2026-09-12) — the security baseline D3 protects holds only results this repository can act on
+
+D3 keeps `codeql.yml`'s `push:[main]` and weekly runs uncancellable because they maintain the
+default-branch security baseline. On `99162772` that baseline held 1,082 open alerts, and 633 of them
+were in code the .NET SDK's own source generators write under `obj/**/generated/` during the build:
+613 from `System.Text.Json.SourceGeneration`, 19 from `Microsoft.Extensions.Options.SourceGeneration`
+and 1 from `System.Text.RegularExpressions.Generator` (`cs/useless-cast-to-self` 443,
+`cs/useless-upcast` 184, `cs/missed-ternary-operator` 5, `cs/nested-if-statements` 1). No change in
+this repository can reach that code.
+
+**Decision.** `Analyze (C#)` analyses, filters, then uploads. `analyze` runs with
+`upload: failure-only` and only writes its SARIF; `scripts/ci/filter-codeql-sarif.sh` removes a result
+only when its primary location lies below an `obj` segment, then a `generated` segment, in a folder
+named `System.*` or `Microsoft.*`; `upload-sarif` sends the rest under the unchanged category
+`/language:csharp`, so every other alert keeps its history and the generator ones close as fixed. This
+repository's own generator output (`Verbara.Sdk.Ami.SourceGenerators`) stays analysed. A CodeQL config
+was not an option: `paths` and `paths-ignore` are not honoured for a compiled language analysed from a
+traced build, which this job is.
+
+**What holds it in place.**
+
+- *Fail closed.* Input the filter cannot read as one SARIF 2.1.0 log exits 2 and leaves no output, so
+  the job goes red and nothing is uploaded: the baseline is never replaced by an unfiltered or partial
+  log. When analysis itself fails, `failure-only` keeps what `always` did — the Action's post step
+  uploads the failed-run diagnostics.
+- *One category, one upload.* The Action refuses a second upload for one category in a job, and a
+  different category would strand every existing alert open under the old one.
+  `scripts/tests/test_filter_codeql_sarif.sh`, in the always-run `Coverage Script Tests` job, asserts
+  that wiring, every rule in both directions, and that no project here is named `System.*` or
+  `Microsoft.*` — the rule matches the generator's assembly name, so such a project's output would
+  be hidden.
+- The required context is still `Analyze (C#)`, so no branch-protection edit is needed.
+
+**Measured offline, not yet on GitHub.** On the SARIF of main's analysis of `99162772` (CodeQL 2.27.0)
+the filter keeps 449 of 1,082 results; an independent regex over the same uris selects the same 633,
+every other field of the log is unchanged, and no kept result has an `obj` or `generated` segment.
+The harness passes 237 checks; with the generator-name condition deleted 9 fail, and with `obj`
+matched as a substring 4 fail. That the 633 close as fixed, and nothing else does, is reasoned until
+the first `push:[main]` run after the merge shows it.
