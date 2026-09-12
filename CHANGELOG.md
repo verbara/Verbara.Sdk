@@ -40,6 +40,58 @@ packages pack clean against it" was true of packing, and validation covered 17.
   still have an empty `PublicAPI.Shipped.txt` — everything they have released is listed as unshipped — and
   that is not repaired here (ADR-0023, addendum 2026-09-12).
 
+### Fixed — BREAKING: every resampler came out 6 to 15.6 dB quieter than it went in
+
+`ResamplerCoefficients` built each polyphase filter from `sin(2π·Fc·x)/(π·x)`, an impulse response that already
+carries its passband scale, and then multiplied it by `2·Fc·L` under a comment saying this made the gain unity.
+The scale was applied twice, so every branch summed to about `2·Fc` instead of 1, and every rate pair
+`ResamplerFactory` supports attenuated what it resampled. Measured before the fix with DC and a 300 Hz tone:
+
+| Pair (both directions) | Output level |
+|---|---|
+| 8 kHz ↔ 16 kHz, 24 kHz ↔ 48 kHz | −6.0 dB |
+| 8 kHz ↔ 24 kHz, 16 kHz ↔ 24 kHz, 16 kHz ↔ 48 kHz | −9.5 dB |
+| 8 kHz ↔ 48 kHz | −15.6 dB |
+
+- **Output is now at the input level.** The filter is scaled by `L` alone. Every branch of all twelve tables
+  sums to 1 within 2.8e-5. DC comes out at 0.0000 dB on every pair, and 300 Hz and 1 kHz within 0.09 dB.
+- **BREAKING in the plain sense.** No API changes, but the same PCM in now produces louder PCM out, by the figure
+  in the table. Affected:
+  - `OpenAiRealtimeBridge`, in both directions, whenever the caller rate is not 24 kHz. An 8 kHz or 16 kHz call
+    reached the model 9.5 dB low and heard the model's reply 9.5 dB low; a 48 kHz call lost 6.0 dB each way.
+    With `VadMode.ServerSide`, the default, OpenAI's voice activity detection now hears an 8 kHz or 16 kHz
+    caller 9.5 dB louder than in 2.5.1, so speech start and barge-in may trigger on quieter sound than before.
+    That consequence was not measured against the live API.
+  - `SmartTurnDetector`: its 8 kHz → 16 kHz resample fed the model's mel front-end 6.0 dB low. Its silence and
+    barge-in checks read the 8 kHz input directly and are unaffected.
+  - Any direct `ResamplerFactory` or `PolyphaseResampler` caller.
+- **Remove any gain added downstream to make up for the loss.** Otherwise the audio is boosted by the same
+  amount, and near full scale it clips: `Process` saturates to the 16-bit range rather than wrapping.
+- **The fix also removes headroom the bug was hiding.** In 2.5.1 every measured output peaked at least 4 dB
+  below its input. Speech normalised to 0 dBFS now clamps a few samples at inter-sample peaks: at most 12
+  samples in 3.76 s, by up to 0.75 dB, and none once normalised to −1 dBFS. Full-scale square waves and steps
+  overshoot by up to 2.4 dB and are clamped.
+- **Turn detection barely moves.** On the suite's model test (six frames of a 440 Hz tone, then silence) the
+  end-of-turn probability goes from 0.7287846 to 0.7286941, EndOfUtterance both times. On four recorded speech
+  clips at 8 kHz, every EndOfUtterance fired on the same frame before and after the fix; the largest probability
+  shift was 0.681 → 0.651.
+- **The tests now check level instead of coefficient values.** The tests that pinned coefficient values give
+  way to level tests on all twelve pairs: every branch sums to 1; DC, 300 Hz, 1 kHz and 0.8 of the lower
+  Nyquist come out at the input level; image and alias rejection at the tested tones is no worse than before.
+  A pair added to the factory without level rows fails the suite, and with the old factor restored 60 of the
+  project's 155 tests fail. The frame-continuity test's fixed bound of 2000 sat just above a real step at full
+  level (1928 inside a frame); the bound is now computed from the tone.
+
+Not changed: the filter's shape. Each table is multiplied by one constant, so rejection at the tested tones
+moves by at most 0.017 dB. Images of a tone at 0.65 of the lower Nyquist are 88.5 to 89.9 dB down (106.7 dB for
+24 kHz → 16 kHz), and aliases of tones at 1.4 to 2.1 times the output Nyquist are 83.6 to 89.0 dB down. Closer
+to the output Nyquist every decimating pair rejects far less, before and after the fix: 24 kHz → 8 kHz returns
+a 5 kHz component at 3 kHz only 23 dB down, and 48 kHz → 8 kHz only 12 dB down. Rejection reaches 80 dB at
+about 1.25 times the output Nyquist for 24 kHz → 16 kHz, 1.35 times for 16 → 8 and 48 → 24 kHz, 1.5 times for
+24 → 8 and 48 → 16 kHz, and 2 times for 48 → 8 kHz. The five pairs that filter with a single 32-tap branch at
+the input rate (16 → 8, 24 → 8, 48 → 8, 48 → 16 and 48 → 24 kHz) also roll off before the band edge, by −0.33 to
+−2.92 dB at 0.8 of the output Nyquist.
+
 ### Fixed — A release is no longer blocked by checks that say nothing about its build
 
 `v2.5.1` did not publish on its first attempt. `publish.yml`'s provenance gate refuses a commit with
