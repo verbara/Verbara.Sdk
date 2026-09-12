@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — A release is no longer blocked by the check that reports it has not been tagged yet
+
+`v2.5.1` did not publish on its first attempt. `publish.yml`'s provenance gate refuses a commit with
+any non-green check run, and it counted `release-hygiene.yml`'s — a workflow that runs on the push
+landing the release commit, a minute before the tag exists, and so reports "staged but never tagged"
+on exactly that commit, by design. The gate printed `1 failure` and `14 success` without naming the
+check, and nothing reached nuget.org until both runs were re-run by hand. Had the hygiene run landed
+after the tag instead, its ApiCompat Baseline check would have failed for the same reason and blocked
+the gate the same way.
+
+- **The gate now ignores `release-hygiene.yml`'s check runs, identified by workflow path.** Each check
+  run is mapped to its check suite and to the workflow run that owns it. Check-run names are not
+  unique — two appear twice on the 2.5.1 commit itself — so a check called `Publish Liveness` in any
+  other workflow still counts. The job gains `actions: read` to read workflow runs.
+- **It fails closed.** A check from an app with no workflow run is not ignored; unreadable or wrongly
+  shaped input blocks the release; and if nothing completed is left after the exclusion, the gate
+  still fails with "nothing proves this commit was ever built".
+- **A failure names what failed.** Each non-green check run is reported with its workflow path, and
+  what the gate ignored is reported as a notice instead of applied silently.
+- **The rules are tested on the PR that edits them.** They moved from inline workflow shell into
+  `scripts/ci/check-release-provenance.sh`, covered by `scripts/tests/test_release_provenance.sh` in
+  the always-run `Coverage Script Tests` job: the exact 2.5.1 shape, its mirror, a hygiene failure
+  beside a real one, a borrowed check name, pagination and malformed input. Replayed against the
+  real check runs attempt 1 saw, it passes.
+
+Still not checked: that any particular workflow ran — one green check run from any workflow other
+than `release-hygiene.yml` is enough evidence. The fix takes effect from the next release, because a
+tag push runs `publish.yml` as it exists in the tagged commit. ADR-0055 addendum (2026-09-12).
+
 ### Fixed — The session-store guide no longer publishes figures nothing measured
 
 `docs/guides/session-store-backends.md` published session-store figures that no record held and no
