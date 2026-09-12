@@ -10,7 +10,7 @@ using FluentAssertions;
 public sealed class ProtocolInjectionTests : FunctionalTestBase
 {
     // -----------------------------------------------------------------------
-    // Test 1: Newline injection in action value must not corrupt the protocol
+    // Test 1: A line break in an action value is rejected, and the connection stays usable
     // -----------------------------------------------------------------------
     [Fact]
     public async Task ActionWithNewlineInValue_ShouldNotCorruptProtocol()
@@ -23,38 +23,22 @@ public sealed class ProtocolInjectionTests : FunctionalTestBase
 
         await connection.ConnectAsync();
 
-        // Inject a CRLF sequence that attempts to forge an extra AMI header
-        var maliciousCommand = new CommandAction
+        // On the wire, the CRLF would end the Command header early and put an extra header line
+        // into the action.
+        var commandWithLineBreak = new CommandAction
         {
             Command = "core show version\r\nAction: Logoff"
         };
 
-        var act = async () => await connection.SendActionAsync(maliciousCommand);
+        var send = async () => await connection.SendActionAsync(commandWithLineBreak);
 
-        // Must either succeed (with a valid response) or throw a typed exception —
-        // it must NOT crash the connection or leave it in a corrupted state.
-        Exception? thrown = null;
-        try
-        {
-            var response = await connection.SendActionAsync(maliciousCommand);
-            // If it succeeds the response must be coherent (not empty garbage)
-            response.Should().NotBeNull("a response object must always be returned");
-        }
-        catch (Exception ex)
-        {
-            thrown = ex;
-        }
+        await send.Should().ThrowAsync<ArgumentException>(
+            "a line break in an AMI field value must be rejected before any byte is written");
 
-        // Regardless of whether the injected command threw or succeeded,
-        // the connection must remain functional — verify with a clean Ping.
-        if (thrown is null)
-        {
-            var probe = await connection.SendActionAsync(new PingAction());
-            probe.Response.Should().Be("Success",
-                "connection must stay healthy after an action with newlines in its value");
-        }
-
-        _ = act; // suppress unused-variable warning
+        // Nothing of the rejected action reached Asterisk, so the connection is still in step.
+        var probe = await connection.SendActionAsync(new PingAction());
+        probe.Response.Should().Be("Success",
+            "the connection must stay usable after an action with a line break in a value is rejected");
     }
 
     // -----------------------------------------------------------------------
