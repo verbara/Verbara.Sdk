@@ -214,3 +214,86 @@ and so cannot block the PR that breaks them.
   of it. Recorded so the omission is a decision rather than an oversight.
 - **Split the CHANGELOG.** Rejected once the cap was measured correctly — see D4. It is per section,
   so there is nothing to split.
+
+## Addendum (2026-09-12) — D1 counted D5's notification, and blocked the first release cut under both
+
+`v2.5.1` was the first release cut through this ADR's gates, and D1 refused it. Nothing was wrong
+with the commit. D1 and D5 are each right on their own and wrong together; this addendum records how,
+the change that resolves it, and that D2's outstanding action is done.
+
+**What happened.** `v2.5.1` was tagged (lightweight) on `019fb697`, the squash-merge commit of the
+release PR #238. The push that landed that commit on `main` started `release-hygiene.yml`, whose
+Publish Liveness job ran 14:18:38–14:18:45Z. The tag was pushed at 14:19:38Z, a minute later, so the
+job failed exactly as D5 designed it to, in its "staged, never cut" state: version 2.5.1 "is staged
+but never tagged … 0 commit(s) ago". `publish.yml` run `34698957202` then failed at step 5, "Verify
+the tagged commit shipped through main", printing `019fb697… has non-green check runs:` followed by
+`1 failure` and `14 success`. It named no check. Nothing reached nuget.org. Recovery took two
+commands:
+
+    gh run rerun 34698903778 --failed   # release-hygiene.yml — the job fetches tags, so it now passed
+    gh run rerun 34698957202            # publish.yml attempt 2 — passed the gate, published 29/29
+
+The re-run was enough because the check-runs API's default filter returns only the latest attempt of
+each check within its check suite; `&filter=all` still shows the superseded failure.
+
+**Why D1 and D5 collide.** D5 prices one red run "on a release already being cut" at 20 minutes of
+annoyance and calls the check "a notification, not a merge gate". D1's gate counts every completed
+check run on the tagged commit — that notification included — and the notification runs on the very
+push that lands the release commit. On the intended path, then, the annoyance D5 accepted is a hard
+block on D1's publish. The race has a mirror image: if release-hygiene runs after the tag is pushed,
+Publish Liveness passes and `check-apicompat-baseline.sh` fails instead (the newest stable tag is now
+above `PackageValidationBaselineVersion`), which blocks the gate the same way.
+
+**The change.** The provenance gate ignores check runs whose check suite belongs to a workflow run of
+`.github/workflows/release-hygiene.yml`. Those checks judge the repository against its tags — a
+release not cut, a baseline not moved — not whether the commit was built. The rules moved out of
+`publish.yml`'s inline shell into `scripts/ci/check-release-provenance.sh`, which reads the two API
+documents with no network and is covered by `scripts/tests/test_release_provenance.sh` in the
+always-run `Coverage Script Tests` job, for D7's reason. `publish.yml` now only fetches.
+
+- **By workflow path, not by check-run name.** Each check run maps to its `check_suite.id`, the suite
+  to the workflow run carrying that `check_suite_id`, and that run to its `path`. Names are not
+  unique: on `019fb697` itself, `Analyze (C#)` and `Docs-only gate (CodeQL)` each appear in two check
+  suites. A check called `Publish Liveness` or `ApiCompat Baseline` in any other workflow still
+  counts. Reading workflow runs needs `actions: read`, which the job now holds — D1's rule that
+  job-level permissions are exhaustive, applied a second time.
+- **Fail closed.** A check run whose suite has no workflow run (a third-party app's check) is not
+  ignored, and neither is a suite claimed by more than one path. Unreadable input, input that is not
+  JSON, or input of the wrong shape exits "cannot tell" and blocks.
+- **Evidence is still required.** If no completed check run remains once release-hygiene's are set
+  aside, the gate fails with the same "nothing proves this commit was ever built" error as before.
+- **A failure names what failed.** Each non-green check run is reported with its workflow path, and
+  what the gate ignored is announced as a notice rather than applied silently.
+
+Replayed against the real check runs as attempt 1 saw them — rebuilt from the `filter=all` view, with
+anything completed after 14:19:55Z put back in flight — the old logic reproduces `1 failure` and
+`14 success`, and the new script passes: thirteen judged, two ignored, three still running. The
+change applies from the first tag cut on a commit that contains it, because on a tag push
+`publish.yml` runs as it exists in the tagged commit (D2).
+
+**Alternatives rejected.**
+
+- **A grace period in the liveness check.** D5 chose "no grace period" deliberately, and a grace
+  period would not reach the mirror race: once the tag exists, the baseline check's failure is
+  correct whatever the liveness check does.
+- **Reordering the release.** The tag must point at a commit already on `main` — D1's ancestor check
+  — and release-hygiene runs on the push that puts it there. No order of operations has the tag
+  existing before that run starts.
+- **Excluding by check-run name.** Names are not unique (above), and an ordinary job rename in any
+  other workflow would be enough to make a real failure invisible to the gate.
+
+**What this does not claim.**
+
+- **It does not require `ci.yml`, or any particular workflow, to have run.** One green completed
+  check run from any workflow other than release-hygiene is enough evidence. On the intended path — a
+  squash merge through the merge queue — `ci.yml`'s `merge_group` run is among them, but nothing
+  asserts it.
+- **It does not silence release-hygiene.** Its failures still arrive the way D5 intends — a red run on
+  `main` and an email — and still mean what they say. They no longer decide a publish.
+- **The exclusion is one exact path.** Renaming or moving `release-hygiene.yml` ends it with no edit
+  here, and the gate fails closed: the 2.5.1 block again, this time naming the check.
+
+**D2's outstanding action is done.** The `release-tags` repository ruleset was created on 2026-09-12:
+target `refs/tags/v*`, rules `creation`, `update` and `deletion`, bypass limited to organization
+admins. `v2.5.1` was the first tag cut under it. The first bullet of *What this does not claim*
+above — "D2's ruleset is still absent" — describes the state before that date, not after it.
