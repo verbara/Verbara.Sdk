@@ -47,10 +47,8 @@ public sealed class EventPumpSoakTests : IAsyncDisposable
             return ValueTask.CompletedTask;
         });
 
-        // Force collection and take baseline after warm-up.
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        // Take the baseline after warm-up. GetTotalMemory(true) collects and runs pending
+        // finalizers before it measures.
         var baseline = GC.GetTotalMemory(true);
 
         for (var batch = 0; batch < batches; batch++)
@@ -63,9 +61,6 @@ public sealed class EventPumpSoakTests : IAsyncDisposable
                 await batchDone.WaitAsync(TimeSpan.FromSeconds(10));
         }
 
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
         var afterMemory = GC.GetTotalMemory(true);
 
         var growthMb = (afterMemory - baseline) / (1024.0 * 1024.0);
