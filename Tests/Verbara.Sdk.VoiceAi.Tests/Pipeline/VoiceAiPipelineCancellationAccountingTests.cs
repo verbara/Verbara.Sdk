@@ -171,9 +171,11 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
         }
         catch (IOException)
         {
+            // The session was already torn down, so the hangup frame could not be written.
         }
         catch (ObjectDisposedException)
         {
+            // The same torn-down session, surfacing as a disposed stream instead of a failed write.
         }
     }
 

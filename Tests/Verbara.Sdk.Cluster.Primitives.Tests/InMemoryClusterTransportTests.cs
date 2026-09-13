@@ -132,7 +132,7 @@ public sealed class InMemoryClusterTransportTests
             {
                 await foreach (var _ in transport.SubscribeAsync(cts.Token).ConfigureAwait(false)) { }
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException) { /* cancellation is the expected exit; SubscriberCount is asserted below */ }
         });
 
         await WaitForSubscribersAsync(transport, 1, CancellationToken.None);
