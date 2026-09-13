@@ -46,8 +46,8 @@ internal static class SrcTreeSource
         var dir = new DirectoryInfo(start);
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, SolutionFile)))
-                return Path.Combine(dir.FullName, "src");
+            if (File.Exists(Path.Join(dir.FullName, SolutionFile)))
+                return Path.Join(dir.FullName, "src");
 
             dir = dir.Parent;
         }

@@ -28,7 +28,7 @@ public sealed class ConformanceRecordGuardTests
     public void Guard_ShouldRecordEveryProviderClientType_InSrcTree()
     {
         var repoRoot = Directory.GetParent(SrcTreeSource.SrcRoot())!.FullName;
-        var record = File.ReadAllText(Path.Combine(repoRoot, RecordPath));
+        var record = File.ReadAllText(Path.Join(repoRoot, RecordPath));
 
         var violations = new List<UnrecordedProviderViolation>();
         foreach (var file in SrcTreeSource.EnumerateSrcSources())
@@ -56,7 +56,7 @@ public sealed class ConformanceRecordGuardTests
     public void Guard_ShouldLoadTheRealRecord_WhenResolvingItsPath()
     {
         var repoRoot = Directory.GetParent(SrcTreeSource.SrcRoot())!.FullName;
-        var recordFile = Path.Combine(repoRoot, RecordPath);
+        var recordFile = Path.Join(repoRoot, RecordPath);
 
         File.Exists(recordFile).Should().BeTrue(
             "the conformance record must be found at '{0}'; a moved or renamed record turns this " +
@@ -72,7 +72,7 @@ public sealed class ConformanceRecordGuardTests
         // The reverse direction: a row whose client type no longer exists in src/ is a row nobody
         // will ever be forced to update, and it reads as coverage of a provider that shipped away.
         var repoRoot = Directory.GetParent(SrcTreeSource.SrcRoot())!.FullName;
-        var record = File.ReadAllText(Path.Combine(repoRoot, RecordPath));
+        var record = File.ReadAllText(Path.Join(repoRoot, RecordPath));
 
         var declared = new HashSet<string>(StringComparer.Ordinal);
         foreach (var file in SrcTreeSource.EnumerateSrcSources())

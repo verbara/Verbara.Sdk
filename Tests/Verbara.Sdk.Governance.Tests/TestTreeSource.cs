@@ -45,8 +45,8 @@ internal static class TestTreeSource
         var dir = new DirectoryInfo(start);
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, SolutionFile)))
-                return Path.Combine(dir.FullName, "Tests");
+            if (File.Exists(Path.Join(dir.FullName, SolutionFile)))
+                return Path.Join(dir.FullName, "Tests");
 
             dir = dir.Parent;
         }
