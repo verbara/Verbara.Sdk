@@ -163,9 +163,8 @@ public sealed class AmiConnectionLineBreakTests : IAsyncDisposable
 
         var act = async () =>
         {
-            var events = new List<ManagerEvent>();
             await foreach (var evt in _sut.SendEventGeneratingActionAsync(action, cts.Token))
-                events.Add(evt);
+                Assert.Fail($"A rejected action is never sent, so no {evt.EventType} event can answer it.");
         };
 
         var thrown = (await act.Should().ThrowAsync<ArgumentException>()).Which;
