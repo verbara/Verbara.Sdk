@@ -44,6 +44,25 @@ caller got a normal return. The receive failure now reaches `HandleSessionAsync`
 - A requested cancellation on a healthy connection and a close frame from the far end still count as completed,
   and the session still ends when its input loop ends.
 
+### Fixed — `AriClient` kept reconnecting after Asterisk refused its credentials
+
+When Asterisk answered a reconnect with `401 Unauthorized`, `AriClient` logged `[ARI] WebSocket error` at Error and
+`[ARI] Reconnecting: ...` at Warning, then dialled again. With the default `MaxReconnectAttempts` of 0 it never
+stopped: `State` stayed `Reconnecting`, `AriHealthCheck` reported Degraded, and `ari.reconnections` kept rising.
+The check meant to stop on refused credentials caught an `HttpRequestException`, which `ClientWebSocket` never
+raises for a refused upgrade.
+
+- The first reconnect answered `401` now logs `[ARI] Reconnect rejected: status_code=401, not retrying` at Error,
+  moves `State` to `Faulted`, and stops dialling. `AriHealthCheck` reports Unhealthy, and `ari.reconnections` stops
+  at the refused attempt.
+- **A `401` on reconnect is now final for that client instance.** Before, the loop reconnected on its own if
+  Asterisk accepted the credentials again on a later attempt. Observers still get no `OnError` or `OnCompleted`
+  when the loop stops; watch `State` or the health check.
+- Unchanged: other refused upgrades, such as `403` and `503`, transport errors and a dropped events socket are still
+  retried with the existing backoff and `MaxReconnectAttempts`. An initial `ConnectAsync` answered `401` still
+  throws `WebSocketException` to the caller and leaves `State` at `Connecting`. ARI REST calls answered `401` still
+  throw `AriException`.
+
 ### Changed — Examples dispose their Ctrl+C token source, and a failing example exits non-zero
 
 Thirteen examples never disposed the `CancellationTokenSource` their Ctrl+C handler cancels; they now do. In all
