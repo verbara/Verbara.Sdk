@@ -103,24 +103,15 @@ public sealed class ConcurrentManagerTests : FunctionalTestBase
         await Task.Delay(TimeSpan.FromSeconds(2));
 
         // Concurrent reads while writes may still be happening
-        var readExceptions = new ConcurrentBag<Exception>();
-
         var readTasks = Enumerable.Range(0, 50).Select(async readIdx =>
         {
-            try
-            {
-                // Mix of different read operations — exercise all read paths concurrently
-                _ = server.Channels.ChannelCount;
-                _ = server.Channels.ActiveChannels.ToList();
-                _ = server.Channels.GetByUniqueId("nonexistent");
-                _ = server.Channels.GetByName("nonexistent");
-                _ = server.Channels.GetChannelsByState(ChannelState.Up).ToList();
-                await Task.Yield();
-            }
-            catch (Exception ex)
-            {
-                readExceptions.Add(ex);
-            }
+            // Mix of different read operations — exercise all read paths concurrently
+            _ = server.Channels.ChannelCount;
+            _ = server.Channels.ActiveChannels.ToList();
+            _ = server.Channels.GetByUniqueId("nonexistent");
+            _ = server.Channels.GetByName("nonexistent");
+            _ = server.Channels.GetChannelsByState(ChannelState.Up).ToList();
+            await Task.Yield();
         });
 
         // Concurrent writes (more originates)
@@ -143,9 +134,9 @@ public sealed class ConcurrentManagerTests : FunctionalTestBase
             }
         });
 
-        await Task.WhenAll(readTasks.Concat(writeTasks));
-
-        readExceptions.Should().BeEmpty("concurrent reads during writes must not throw");
+        // A read or a write that throws faults its task, and awaiting WhenAll rethrows that exception.
+        var act = () => Task.WhenAll(readTasks.Concat(writeTasks));
+        await act.Should().NotThrowAsync("concurrent reads and writes must not throw");
     }
 
     [Fact]
@@ -220,23 +211,14 @@ public sealed class ConcurrentManagerTests : FunctionalTestBase
 
         // Read queue state concurrently from multiple threads
         // (queue state comes from QueueStatusAction during StartAsync)
-        var exceptions = new ConcurrentBag<Exception>();
-
         var tasks = Enumerable.Range(0, 50).Select(async readIdx =>
         {
-            try
-            {
-                _ = server.Queues.QueueCount;
-                _ = server.Queues.Queues.ToList();
-                _ = server.Queues.GetByName("nonexistent-queue");
-                _ = server.Queues.GetQueuesForMember("SIP/nonexistent").ToList();
-                _ = server.Queues.GetQueueObjectsForMember("SIP/nonexistent").ToList();
-                await Task.Yield();
-            }
-            catch (Exception ex)
-            {
-                exceptions.Add(ex);
-            }
+            _ = server.Queues.QueueCount;
+            _ = server.Queues.Queues.ToList();
+            _ = server.Queues.GetByName("nonexistent-queue");
+            _ = server.Queues.GetQueuesForMember("SIP/nonexistent").ToList();
+            _ = server.Queues.GetQueueObjectsForMember("SIP/nonexistent").ToList();
+            await Task.Yield();
         });
 
         // Concurrently send QueueStatus actions to trigger queue event updates
@@ -256,10 +238,9 @@ public sealed class ConcurrentManagerTests : FunctionalTestBase
             }
         });
 
-        await Task.WhenAll(tasks.Concat(updateTasks));
-
-        exceptions.Should().BeEmpty(
-            "concurrent queue reads and updates must not throw");
+        // A read or an update that throws faults its task, and awaiting WhenAll rethrows that exception.
+        var act = () => Task.WhenAll(tasks.Concat(updateTasks));
+        await act.Should().NotThrowAsync("concurrent queue reads and updates must not throw");
     }
 
     [Fact]
