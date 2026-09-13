@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — `WebSocketAudioServer` left a session open after its subscriber threw or its channel id was taken
+
+When an `OnStreamConnected` subscriber threw, the session stayed registered with its socket open. It kept counting
+against `ActiveStreamCount` and `MaxConcurrentStreams` until another connection ended or the server stopped. It is
+now removed and disposed at once, which closes the peer's socket and completes its `StateChanges`.
+
+A connection whose channel id was already registered never disposed its own session. That session is now disposed
+when the connection ends, and the registered session stays in place.
+
+Each connection now cleans up only its own session. Before, every connection that ended swept the whole table and
+disposed any session that was no longer connected.
+
+- `StopAsync`, `DisposeAsync` and `AriAudioHostedService.StopAsync` now wait for every connection handler, so a
+  session whose client is still connected is already disposed when they return.
+- If the token passed to `StopAsync` is cancelled first, it stops waiting and disposes the sessions still
+  registered. `AriAudioHostedService` passes the host's shutdown token.
+- `DisposeAsync` and `StopAsync()` without a token still wait without a bound, including for a subscriber that has
+  not returned.
+- Handlers dispose their sessions concurrently, so `StateChanges` completes on handler threads rather than on the
+  caller's.
+- `WebSocketAudioSession.DisposeAsync` now disposes only once when it is called concurrently, for example by the
+  server and by a consumer holding the session as an `IAudioStream`.
+- Disposing a session whose peer never answers the close frame now gives up after 2 seconds and aborts the socket.
+  Before, it could wait for that answer forever.
+
 ### Changed — Examples dispose their Ctrl+C token source, and a failing example exits non-zero
 
 Thirteen examples never disposed the `CancellationTokenSource` their Ctrl+C handler cancels; they now do. In all
@@ -14,6 +39,11 @@ cannot reach a disposed source.
 `MultiServerExample` no longer catch every exception just to print its message. A failure, such as no Asterisk to
 connect to, now ends the example with the runtime's exception report and a non-zero exit code, instead of
 `Error: <message>` and exit code 0. Each one still disconnects in its `finally`.
+
+### Changed — `QueueManager.GetQueueObjectsForMember` reads the member's queue set live
+
+It is still lazy and returns the same queues. It now walks the member's queue set directly instead of a locked
+copy, so a queue added to or removed from that member during enumeration may or may not appear.
 
 ## [2.5.2] - 2026-09-13
 

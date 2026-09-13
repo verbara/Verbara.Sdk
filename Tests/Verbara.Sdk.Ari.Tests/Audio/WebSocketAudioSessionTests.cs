@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Reactive.Linq;
 using System.Text;
@@ -194,6 +196,29 @@ public class WebSocketAudioSessionTests
         await sut.DisposeAsync();
 
         ws.State.Should().Be(WebSocketState.Closed);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ShouldFinish_WhenPeerNeverAnswersCloseFrame()
+    {
+        // A real server-side socket whose peer never reads, and no Start(): nothing is receiving, so
+        // cancelling the read pump cannot abort the socket, and CloseAsync is left waiting for a
+        // close frame the peer never sends. Disposal has to give up on that handshake.
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        using var peer = new TcpClient();
+        var accepting = listener.AcceptTcpClientAsync();
+        await peer.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port);
+        using var accepted = await accepting;
+        using var serverSocket = WebSocket.CreateFromStream(accepted.GetStream(), new WebSocketCreationOptions { IsServer = true });
+        var sut = new WebSocketAudioSession(serverSocket, "ch-silent-peer", "slin16");
+        var stateCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = sut.StateChanges.Subscribe(static _ => { }, () => stateCompleted.TrySetResult());
+
+        // Bounded, so a close handshake that waits forever fails here instead of hanging the run.
+        await sut.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10));
+
+        stateCompleted.Task.IsCompleted.Should().BeTrue("disposal completes the state stream once the close handshake is abandoned");
     }
 
     [Fact]

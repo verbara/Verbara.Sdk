@@ -25,12 +25,12 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private Task? _readPumpTask;
-    private volatile bool _disposed;
+    private int _disposed;
 
     public string ChannelId { get; }
     public string Format { get; }
     public int SampleRate { get; }
-    public bool IsConnected => !_disposed && _webSocket.State == WebSocketState.Open;
+    public bool IsConnected => Volatile.Read(ref _disposed) == 0 && _webSocket.State == WebSocketState.Open;
     public IObservable<AudioStreamState> StateChanges => _state;
     public IObservable<ChanWebSocketControlMessage> ControlMessages => _controlSubject;
 
@@ -258,8 +258,9 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
 
     public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
-        _disposed = true;
+        // Atomic: the connection handler that owns this session disposes it on its way out, and a
+        // consumer holding it as an IAudioStream can dispose it at the same moment.
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         await _cts.CancelAsync();
         _audioInChannel.Writer.TryComplete();
@@ -268,7 +269,11 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         {
             try
             {
-                await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                // Bounded: a read pump that has not started receiving yet is not aborted by the
+                // cancellation above, so the socket is still open here and CloseAsync waits for the
+                // peer's close frame, which a peer that is not reading never sends.
+                using var closeCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", closeCts.Token);
             }
             catch { /* Best effort */ }
         }
