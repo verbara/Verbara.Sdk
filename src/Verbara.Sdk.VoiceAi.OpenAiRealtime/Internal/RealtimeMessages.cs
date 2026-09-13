@@ -33,6 +33,18 @@ internal sealed class ResponseCreateRequest
     public string Type { get; init; } = RealtimeProtocol.ResponseCreate;
 }
 
+/// <summary>
+/// The <c>function_call_output</c> sent when a function handler throws: <c>{"error":"…"}</c>.
+/// Serialized rather than spliced into a string, so any exception message yields valid JSON, and
+/// serialized through <see cref="OpenAiRealtimeBridge.ReadableOutputContext"/> so the model reads
+/// apostrophes, plus signs, angle brackets, ampersands and letters in the Basic Multilingual Plane
+/// without the escapes an HTML-safe encoder would add.
+/// </summary>
+internal sealed class FunctionCallErrorOutput
+{
+    public string Error { get; init; } = "";
+}
+
 // ─── Inbound (OpenAI → client) ────────────────────────────────────────────────
 // Only the fields the bridge actually reads are mapped — extra fields are ignored.
 

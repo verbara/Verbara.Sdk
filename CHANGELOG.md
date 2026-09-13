@@ -29,6 +29,32 @@ disposed any session that was no longer connected.
 - Disposing a session whose peer never answers the close frame now gives up after 2 seconds and aborts the socket.
   Before, it could wait for that answer forever.
 
+### Fixed — `OpenAiRealtimeBridge` sent broken JSON for a function error holding a backslash or a control character
+
+When an `IRealtimeFunctionHandler` threw, the bridge built the `function_call_output` by splicing the exception
+message into `{"error":"..."}`, escaping only the double quote. A backslash started an escape sequence, so
+`C:\temp\new` decoded to a tab and a line break, and a trailing backslash swallowed the closing quote. A tab, a line
+break or any other character below U+0020 made the output invalid JSON. `RealtimeFunctionCalledEvent.ResultJson`
+carried the same text.
+
+- The output is now serialized, so it is valid JSON for every message. Its `error` value decodes to the exception
+  message whenever that message is well-formed UTF-16; a lone surrogate decodes as U+FFFD, which is what reached the
+  model before.
+- A handler exception whose `Message` returns null used to throw `NullReferenceException` inside the bridge's own
+  catch block. No output was sent, the session faulted, `openai_realtime.sessions.failed` rose and `SessionError`
+  was logged. The bridge now sends the exception's type name as the error, and the session carries on.
+- **For some messages the output text changes, although it was already valid.** The output is written with a
+  relaxed encoder, so apostrophes, plus signs, `<`, `>`, `&` and letters in the Basic Multilingual Plane still reach
+  the model as the handler wrote them. These characters are now written as `\uXXXX` escapes that decode to the same
+  character, so the model reads the escape text:
+  - DEL and U+0080 to U+009F;
+  - space separators other than U+0020, such as the U+202F that en-US short times like 10:30 AM carry;
+  - U+2028, U+2029 and U+FEFF;
+  - private-use and unassigned code points;
+  - every character outside the Basic Multilingual Plane, such as an emoji.
+- Unchanged: the output of a handler that returns normally, which frames are sent and in what order, and every
+  log, metric and event id for a handler that throws with a message.
+
 ### Fixed — BREAKING: a Realtime session whose connection died mid-stream counted as completed
 
 When the far end dropped the connection in the middle of a session, `OpenAiRealtimeBridge` ended its output

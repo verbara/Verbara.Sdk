@@ -156,6 +156,32 @@ public sealed class RealtimeMessageSerializationTests
         json.Should().Contain("\"call_id\":");
     }
 
+    // ── FunctionCallErrorOutput ──────────────────────────────────────────────
+
+    /// <summary>
+    /// The bridge writes this type through <see cref="OpenAiRealtimeBridge.ReadableOutputContext"/>
+    /// rather than <see cref="RealtimeJsonContext.Default"/>. The model reads the text as written, so an
+    /// HTML-safe encoder's escapes for the apostrophe, the plus sign, <c>&gt;</c> and a non-ASCII letter
+    /// would reach it verbatim; the backslash and the control character are escaped because a JSON
+    /// string requires it.
+    /// </summary>
+    [Fact]
+    public void FunctionCallErrorOutput_ShouldSerializeAsReadableErrorProperty_WhenWrittenThroughReadableOutputContext()
+    {
+        var output = new FunctionCallErrorOutput
+        {
+            Error = "Can't transfer Jos\u00E9's call to +15551234567: retries > 3 at C:\\queues\u0007",
+        };
+
+        var json = JsonSerializer.Serialize(output, OpenAiRealtimeBridge.ReadableOutputContext.FunctionCallErrorOutput);
+
+        json.Should().Be("""{"error":"Can't transfer José's call to +15551234567: retries > 3 at C:\\queues\u0007"}""");
+        using var document = JsonDocument.Parse(json);
+        document.RootElement.EnumerateObject().Should().ContainSingle()
+            .Which.Name.Should().Be("error", "the options replace the context's own, and must keep its snake_case naming");
+        document.RootElement.GetProperty("error").GetString().Should().Be(output.Error);
+    }
+
     // ── FunctionCallArgumentsDoneEvent ────────────────────────────────────────
 
     [Fact]
