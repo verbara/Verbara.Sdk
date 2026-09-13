@@ -17,6 +17,9 @@ public sealed class ToxiproxyFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        try { await ToxiproxyControl.ResetAsync(); } catch { }
+        // Best effort: collection fixtures are disposed in no guaranteed order. Once
+        // FunctionalTestFixture is disposed, TOXIPROXY_API_URL is cleared, so the reset goes to the
+        // default URL, where nothing normally listens. Each network test also removes its own toxic.
+        await ToxiproxyControl.TryResetAsync();
     }
 }

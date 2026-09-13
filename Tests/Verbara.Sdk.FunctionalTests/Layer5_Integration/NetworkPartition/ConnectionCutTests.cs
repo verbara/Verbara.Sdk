@@ -78,7 +78,7 @@ public sealed class ConnectionCutTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "tcp-reset"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "tcp-reset");
         }
     }
 
@@ -115,7 +115,7 @@ public sealed class ConnectionCutTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "silent-drop"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "silent-drop");
         }
     }
 
@@ -187,7 +187,7 @@ public sealed class ConnectionCutTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "partition"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "partition");
         }
     }
 }

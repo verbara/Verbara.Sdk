@@ -67,7 +67,7 @@ public sealed class ThroughputTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "bandwidth-limit"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "bandwidth-limit");
         }
     }
 
@@ -103,7 +103,7 @@ public sealed class ThroughputTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "slicer"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "slicer");
         }
     }
 
@@ -149,7 +149,7 @@ public sealed class ThroughputTests : FunctionalTestBase
             }
 
             // Remove the one-shot toxic (may already be gone) so reconnection can work
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "limit-data"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "limit-data");
 
             // Check if already reconnected
             if (connection.State == AmiConnectionState.Connected)
@@ -164,7 +164,7 @@ public sealed class ThroughputTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "limit-data"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "limit-data");
         }
     }
 
@@ -206,7 +206,7 @@ public sealed class ThroughputTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "infinite-timeout"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "infinite-timeout");
         }
     }
 }

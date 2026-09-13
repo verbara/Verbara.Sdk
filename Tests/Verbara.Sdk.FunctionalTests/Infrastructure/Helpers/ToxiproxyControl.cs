@@ -52,6 +52,37 @@ public static class ToxiproxyControl
         response.EnsureSuccessStatusCode();
     }
 
+    // DELETE /proxies/{name}/toxics/{toxicName} for cleanup. A toxic that is already gone (404)
+    // counts as removed, which is the usual case in a finally once the test removed it itself.
+    // Returns false instead of throwing when the API is unreachable or the request times out.
+    public static async Task<bool> TryRemoveToxicAsync(string proxyName, string toxicName)
+    {
+        try
+        {
+            using var response = await _http.DeleteAsync($"{ApiUrl}/proxies/{proxyName}/toxics/{toxicName}");
+            return response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
+    // POST /reset for teardown. Returns false instead of throwing when the API is unreachable or
+    // the request times out, as it is once the Toxiproxy container has been stopped.
+    public static async Task<bool> TryResetAsync()
+    {
+        try
+        {
+            using var response = await _http.PostAsync($"{ApiUrl}/reset", content: null);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
     // Check if API is reachable (TCP check on 8474)
     public static bool IsAvailable()
     {
