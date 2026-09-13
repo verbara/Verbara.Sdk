@@ -53,16 +53,20 @@ internal static class ResamplerCoefficients
         {
             float x = n - center;
 
-            // Sinc function: sin(2*pi*Fc*x) / (pi*x)
+            // Ideal lowpass impulse response for cutoff Fc: sin(2*pi*Fc*x) / (pi*x), which tends to 2*Fc at x = 0.
+            // It already carries the passband scale: its taps sum to about 1. (Tap counts here are even, so the
+            // centre falls between two taps and x is never 0.)
             float sinc = Math.Abs(x) < 1e-6f
-                ? 1.0f
+                ? 2.0f * cutoff
                 : (float)(Math.Sin(2.0 * Math.PI * cutoff * x) / (Math.PI * x));
 
             // Kaiser window
             float window = KaiserWindow(n, totalTaps, beta);
 
-            // Gain normalization: scale by 2*Fc*L so the passband gain is unity
-            prototype[n] = sinc * window * 2.0f * cutoff * L;
+            // Scale by L only. Each output sample comes from one polyphase branch holding every L-th tap, so the
+            // prototype must sum to L for every branch to sum to 1, which is unity gain. The 2*Fc is already in
+            // the sinc: multiplying by it again leaves each branch summing to 2*Fc instead (-6 to -15.6 dB).
+            prototype[n] = sinc * window * L;
         }
 
         // Rearrange into polyphase order:
@@ -95,7 +99,7 @@ internal static class ResamplerCoefficients
     /// Series expansion: I0(x) = sum_{k=0..inf} ((x/2)^2k) / (k!)^2.
     /// Converges rapidly for the values used in Kaiser window design.
     /// </summary>
-    private static double BesselI0(double x)
+    internal static double BesselI0(double x)
     {
         double sum = 1.0;
         double term = 1.0;
@@ -103,7 +107,7 @@ internal static class ResamplerCoefficients
 
         for (int k = 1; k <= 30; k++)
         {
-            term *= halfXSquared / (k * k);
+            term *= halfXSquared / ((double)k * k);
             sum += term;
 
             if (term < 1e-12 * sum)
