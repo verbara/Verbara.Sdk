@@ -47,8 +47,8 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     }
 
     /// <summary>
-    /// Initializes a new instance whose accept backoff waits on <paramref name="timeProvider"/>, so a
-    /// test can drive the waits with a fake clock.
+    /// Initializes a new instance whose accept backoff and per-connection UUID timeout both wait on
+    /// <paramref name="timeProvider"/>, so a test can drive those waits with a fake clock.
     /// </summary>
     internal AudioSocketServer(AudioSocketOptions options, ILogger<AudioSocketServer> logger, TimeProvider timeProvider)
     {
@@ -131,11 +131,16 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     private ValueTask<TcpClient> AcceptAsync(CancellationToken ct) =>
         AcceptOverride?.Invoke(ct) ?? _listener!.AcceptTcpClientAsync(ct);
 
-    private async Task HandleConnectionAsync(TcpClient client, CancellationToken ct)
+    /// <summary>
+    /// Serves one accepted connection; <paramref name="ct"/> is the server's stopping token. Internal so
+    /// a test can hand it a connection and its own token, then end the wait for the UUID frame at a
+    /// moment it controls: by cancelling that token, or by moving a fake clock past the timeout.
+    /// </summary>
+    internal async Task HandleConnectionAsync(TcpClient client, CancellationToken ct)
     {
         try
         {
-            using var timeout = new CancellationTokenSource(_options.ConnectionTimeout);
+            using var timeout = new CancellationTokenSource(_options.ConnectionTimeout, _timeProvider);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
 
             var stream = client.GetStream();
@@ -145,7 +150,18 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
 
             while (!linked.Token.IsCancellationRequested && !gotUuid)
             {
-                var result = await reader.ReadAsync(linked.Token).ConfigureAwait(false);
+                ReadResult result;
+                try
+                {
+                    result = await reader.ReadAsync(linked.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (linked.IsCancellationRequested)
+                {
+                    // The wait for the UUID frame is over: the timeout fired or the server is
+                    // stopping. Neither is a connection error; the no-UUID check below sorts them.
+                    break;
+                }
+
                 var buffer = result.Buffer;
 
                 if (AudioSocketFrameCodec.TryReadFrame(ref buffer, out var frame) &&
@@ -165,7 +181,10 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
 
             if (!gotUuid)
             {
-                AudioSocketLog.NoUuidFrame(_logger);
+                // A stopping server closes the connection quietly: the client missed no deadline.
+                if (!ct.IsCancellationRequested)
+                    AudioSocketLog.NoUuidFrame(_logger);
+
                 client.Dispose();
                 return;
             }
