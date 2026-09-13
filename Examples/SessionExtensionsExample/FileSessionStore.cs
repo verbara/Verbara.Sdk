@@ -172,9 +172,8 @@ internal sealed class FileSessionStore : SessionStoreBase
 
             foreach (var session in _cache.Values)
             {
-                var dto = CallSessionDto.FromSession(session);
-                var json = JsonSerializer.Serialize(dto, FileStoreJsonContext.Default.CallSessionDto);
-                writer.WriteLine(json);
+                writer.WriteLine(JsonSerializer.Serialize(
+                    CallSessionDto.FromSession(session), FileStoreJsonContext.Default.CallSessionDto));
             }
         }
     }
