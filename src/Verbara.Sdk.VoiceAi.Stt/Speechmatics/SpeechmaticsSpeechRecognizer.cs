@@ -294,8 +294,11 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
             // number's meaning without a line announcing it.
             var confSum = 0f;
             var confCount = 0;
-            foreach (var r in msg.Results)
+            // Indexed rather than a Where: this runs for every transcript message of every session,
+            // and a Where would allocate an iterator per message to skip the same results.
+            for (var i = 0; i < msg.Results.Length; i++)
             {
+                var r = msg.Results[i];
                 if (r.Alternatives is null || r.Alternatives.Length == 0) continue;
                 confSum += r.Alternatives[0].Confidence;
                 confCount++;
@@ -345,8 +348,9 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
     private static string AssembleFromTokens(SpeechmaticsResult[] results, string wordDelimiter)
     {
         var sb = new StringBuilder();
-        foreach (var r in results)
+        for (var i = 0; i < results.Length; i++)
         {
+            var r = results[i];
             if (r.Alternatives is null || r.Alternatives.Length == 0) continue;
             var content = r.Alternatives[0].Content;
             if (string.IsNullOrEmpty(content)) continue;
