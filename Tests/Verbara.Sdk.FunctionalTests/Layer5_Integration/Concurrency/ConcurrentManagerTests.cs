@@ -188,11 +188,8 @@ public sealed class ConcurrentManagerTests : FunctionalTestBase
             byName.Should().NotBeNull("channel {0} must be in name index", ch.Name);
             byId.Should().NotBeNull("channel {0} must be in UniqueId index", ch.UniqueId);
 
-            if (byName is not null && byId is not null)
-            {
-                ReferenceEquals(byName, byId).Should().BeTrue(
-                    "name and UniqueId indices must reference the same channel object");
-            }
+            ReferenceEquals(byName, byId).Should().BeTrue(
+                "name and UniqueId indices must reference the same channel object");
         }
     }
 

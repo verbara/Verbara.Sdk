@@ -219,11 +219,8 @@ public sealed class ChannelEventOrderTests : FunctionalTestBase
             byName.Should().NotBeNull(
                 "channel {0} must be accessible by current name '{1}'", ch.UniqueId, ch.Name);
 
-            if (byId is not null && byName is not null)
-            {
-                ReferenceEquals(byId, byName).Should().BeTrue(
-                    "UniqueId and name indices must reference the same channel object after any renames");
-            }
+            ReferenceEquals(byId, byName).Should().BeTrue(
+                "UniqueId and name indices must reference the same channel object after any renames");
         }
 
         // ChannelCount must match enumeration — no stale/duplicate entries

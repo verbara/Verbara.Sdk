@@ -248,18 +248,20 @@ public sealed class QueueCallerTests : FunctionalTestBase
             await Task.Delay(TimeSpan.FromSeconds(1));
 
             // Send QueueSummaryAction and collect events
-            QueueSummaryEvent? summaryEvent = null;
+            var summaries = new List<QueueSummaryEvent>();
             await foreach (var evt in connection.SendEventGeneratingActionAsync(
                                new QueueSummaryAction { Queue = TestQueue }))
             {
                 if (evt is QueueSummaryEvent qse && string.Equals(qse.Queue, TestQueue, StringComparison.OrdinalIgnoreCase))
                 {
-                    summaryEvent = qse;
+                    summaries.Add(qse);
                 }
             }
 
-            summaryEvent.Should().NotBeNull("QueueSummaryEvent should be received for test-queue");
-            summaryEvent!.LoggedIn.Should().BeGreaterThanOrEqualTo(1,
+            summaries.Should().NotBeEmpty("QueueSummaryEvent should be received for test-queue");
+            // If more than one arrives, the last one is checked.
+            var summaryEvent = summaries[^1];
+            summaryEvent.LoggedIn.Should().BeGreaterThanOrEqualTo(1,
                 "at least one member should be logged in");
             summaryEvent.Available.Should().BeGreaterThanOrEqualTo(0);
             summaryEvent.Callers.Should().BeGreaterThanOrEqualTo(0);
