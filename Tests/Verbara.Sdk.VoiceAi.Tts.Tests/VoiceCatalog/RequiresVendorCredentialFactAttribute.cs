@@ -14,6 +14,9 @@ namespace Verbara.Sdk.VoiceAi.Tts.Tests.VoiceCatalog;
 /// </remarks>
 public sealed class RequiresVendorCredentialFactAttribute : FactAttribute
 {
+    /// <summary>
+    /// Skips the decorated test when <paramref name="environmentVariable"/> is unset or blank.
+    /// </summary>
     /// <param name="environmentVariable">Name of the environment variable holding the key.</param>
     public RequiresVendorCredentialFactAttribute(string environmentVariable)
     {

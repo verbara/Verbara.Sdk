@@ -180,17 +180,11 @@ public sealed class VoiceCatalogConformanceTests
             ? root
             : root.GetProperty(collection);
 
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var element in array.EnumerateArray())
-        {
-            if (element.TryGetProperty(field, out var value) &&
-                value.GetString() is { Length: > 0 } id)
-            {
-                ids.Add(id);
-            }
-        }
-
-        return ids;
+        return array.EnumerateArray()
+            .Select(element => element.TryGetProperty(field, out var value) ? value.GetString() : null)
+            .OfType<string>()
+            .Where(id => id.Length > 0)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>

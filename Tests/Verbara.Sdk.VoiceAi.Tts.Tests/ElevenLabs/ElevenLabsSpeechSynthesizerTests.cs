@@ -202,9 +202,8 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
             .Equal(audio.Take(ElevenLabsFakeServer.AudioFrameSize),
                 "the frame's audio is the first chunk of the sibling recording, not a second waveform");
 
-        foreach (var name in new[] { "alignment", "normalizedAlignment" })
+        foreach (var alignment in new[] { root.GetProperty("alignment"), root.GetProperty("normalizedAlignment") })
         {
-            var alignment = root.GetProperty(name);
             var starts = alignment.GetProperty("charStartTimesMs").EnumerateArray().Count();
             var durations = alignment.GetProperty("charDurationsMs").EnumerateArray().Count();
             var chars = alignment.GetProperty("chars").EnumerateArray().Count();
