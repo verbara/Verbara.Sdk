@@ -434,19 +434,14 @@ internal sealed class WebhookHarness : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        try
+        // Nothing here is expected to throw: BackgroundService.StopAsync does not rethrow what
+        // ExecuteAsync ended with. If something does, the test should fail on it rather than pass
+        // over it, and the using statements still dispose both, in the order they always had.
+        await using (_provider)
+        using (_cts)
         {
-            _cts.Cancel();
+            await _cts.CancelAsync();
             await _delivery.StopAsync(CancellationToken.None);
-        }
-        catch
-        {
-            // best-effort teardown
-        }
-        finally
-        {
-            _cts.Dispose();
-            await _provider.DisposeAsync();
         }
     }
 }

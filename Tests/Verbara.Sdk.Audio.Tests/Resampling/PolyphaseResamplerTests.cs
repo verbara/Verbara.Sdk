@@ -306,10 +306,9 @@ public sealed class PolyphaseResamplerTests
         var accepted = new List<string>();
         foreach (var inputRate in rates)
         {
-            foreach (var outputRate in rates)
+            foreach (var outputRate in rates.Where(rate => ResamplerFactory.IsSupported(inputRate, rate)))
             {
-                if (ResamplerFactory.IsSupported(inputRate, outputRate))
-                    accepted.Add($"{inputRate}->{outputRate}");
+                accepted.Add($"{inputRate}->{outputRate}");
             }
         }
 

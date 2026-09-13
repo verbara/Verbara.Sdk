@@ -214,7 +214,7 @@ internal sealed class RealtimeFakeServer : IAsyncDisposable
             // fence-allow: GUARD-TIMEOUT — Timeout.Infinite; the server's own token is the only arm
             try { await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { /* disposed: release the socket */ }
-            try { await receiveTask.ConfigureAwait(false); } catch { /* already torn down */ }
+            try { await receiveTask.ConfigureAwait(false); } catch (OperationCanceledException) { /* the token was cancelled before the loop started */ }
             return;
         }
 
@@ -224,7 +224,7 @@ internal sealed class RealtimeFakeServer : IAsyncDisposable
         // HttpListener substrate (§1.4). Sending the close frame and then draining until the client's
         // own close arrives keeps a single receiver and still completes the handshake.
         await CloseOutputAsync(ws).ConfigureAwait(false);
-        try { await receiveTask.ConfigureAwait(false); } catch { /* connection may already be closed */ }
+        try { await receiveTask.ConfigureAwait(false); } catch (OperationCanceledException) { /* the token was cancelled before the loop started */ }
     }
 
     private async Task WaitForSessionUpdateOrTimeoutAsync(CancellationToken ct)
@@ -255,9 +255,11 @@ internal sealed class RealtimeFakeServer : IAsyncDisposable
                 {
                     result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
                 }
-                catch
+                catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or ObjectDisposedException)
                 {
-                    break; // connection closed or cancelled
+                    // The socket's own ends: peer closed or aborted, token cancelled, socket disposed.
+                    // Anything else is not a normal end of the session, so it faults this task.
+                    break;
                 }
 
                 if (result.MessageType == WebSocketMessageType.Close)

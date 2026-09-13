@@ -85,12 +85,12 @@ using var subscription = sessionManager.Events.Subscribe(evt =>
 });
 
 // 3. Run until Ctrl+C, then print store summary
-var cts = new CancellationTokenSource();
+using var cts = new CancellationTokenSource();
 
 Console.CancelKeyPress += (_, e) =>
 {
     e.Cancel = true;
-    cts.Cancel();
+    if (!cts.IsCancellationRequested) cts.Cancel();
 };
 
 Console.WriteLine("Monitoring sessions (press Ctrl+C to stop)...");
@@ -100,7 +100,10 @@ try
 {
     await app.RunAsync(cts.Token);
 }
-catch (OperationCanceledException) { }
+catch (OperationCanceledException) { /* Ctrl+C during StartAsync; once the host is running, RunAsync returns normally on the token */ }
+
+// The host can also stop on its own (SIGTERM, for example); cancel the source before it is disposed.
+await cts.CancelAsync();
 
 // Print summary of all sessions stored in the custom file store
 fileStore.PrintSummary();

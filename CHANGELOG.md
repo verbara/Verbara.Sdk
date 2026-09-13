@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — Examples dispose their Ctrl+C token source, and a failing example exits non-zero
+
+Thirteen examples never disposed the `CancellationTokenSource` their Ctrl+C handler cancels; they now do. In all
+fourteen that handle Ctrl+C, the handler skips `Cancel` once the source is cancelled, so a second Ctrl+C during exit
+cannot reach a disposed source.
+
+`AmiAdvancedExample`, `AriChannelControlExample`, `AriStasisExample`, `BasicAmiExample`, `LiveApiExample` and
+`MultiServerExample` no longer catch every exception just to print its message. A failure, such as no Asterisk to
+connect to, now ends the example with the runtime's exception report and a non-zero exit code, instead of
+`Error: <message>` and exit code 0. Each one still disconnects in its `finally`.
+
 ## [2.5.2] - 2026-09-13
 
 ### Fixed — A bidirectional NATS bridge opened a second connection and never closed it

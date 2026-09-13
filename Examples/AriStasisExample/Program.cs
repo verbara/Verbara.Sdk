@@ -22,6 +22,7 @@ http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.Authentic
     "Basic", Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes("asterisk:asterisk")));
 
 var client = new AriClient(options, Microsoft.Extensions.Logging.Abstractions.NullLogger<AriClient>.Instance);
+using var cts = new CancellationTokenSource();
 
 try
 {
@@ -39,15 +40,10 @@ try
 
     // 5. Wait for events
     Console.WriteLine("Press Ctrl+C to stop.");
-    var cts = new CancellationTokenSource();
-    Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; if (!cts.IsCancellationRequested) cts.Cancel(); };
     await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token);
 }
-catch (OperationCanceledException) { }
-catch (Exception ex)
-{
-    Console.Error.WriteLine($"Error: {ex.Message}");
-}
+catch (OperationCanceledException) { /* Ctrl+C: the normal exit; the finally below disconnects */ }
 finally
 {
     await client.DisconnectAsync();

@@ -19,6 +19,7 @@ services.AddVerbaraMultiServer();
 
 await using var provider = services.BuildServiceProvider();
 var pool = provider.GetRequiredService<VerbaraServerPool>();
+using var cts = new CancellationTokenSource();
 
 try
 {
@@ -87,19 +88,14 @@ try
 
     // 8. Wait for events across all servers
     Console.WriteLine("\nMonitoring all servers (press Ctrl+C to stop)...");
-    var cts = new CancellationTokenSource();
-    Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; if (!cts.IsCancellationRequested) cts.Cancel(); };
     try { await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token); }
-    catch (OperationCanceledException) { }
+    catch (OperationCanceledException) { /* Ctrl+C ends the wait; the demo goes on to RemoveServerAsync */ }
 
     // 9. Remove a server from the pool
     Console.WriteLine("\n--- Removing pbx-west ---");
     await pool.RemoveServerAsync("pbx-west");
     Console.WriteLine($"Pool now has {pool.ServerCount} server(s).");
-}
-catch (Exception ex)
-{
-    Console.Error.WriteLine($"Error: {ex.Message}");
 }
 finally
 {

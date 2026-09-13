@@ -30,6 +30,7 @@ services.AddVerbara(options =>
 
 await using var provider = services.BuildServiceProvider();
 var ari = provider.GetRequiredService<IAriClient>();
+using var cts = new CancellationTokenSource();
 
 try
 {
@@ -85,14 +86,9 @@ try
 
     // 11. Wait for more events
     Console.WriteLine("\nListening for events (press Ctrl+C to stop)...");
-    var cts = new CancellationTokenSource();
-    Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; if (!cts.IsCancellationRequested) cts.Cancel(); };
     try { await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token); }
-    catch (OperationCanceledException) { }
-}
-catch (Exception ex)
-{
-    Console.Error.WriteLine($"Error: {ex.Message}");
+    catch (OperationCanceledException) { /* Ctrl+C: the intended exit; the finally below still disconnects */ }
 }
 finally
 {

@@ -72,7 +72,7 @@ public sealed class DocSnippetCompilationTests
 
         foreach (var relativePath in sources)
         {
-            var fullPath = Path.Combine(repoRoot, relativePath);
+            var fullPath = Path.Join(repoRoot, relativePath);
             if (!File.Exists(fullPath)) continue;
 
             var lines = File.ReadAllLines(fullPath);
@@ -284,7 +284,7 @@ public sealed class DocSnippetCompilationTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "Verbara.Sdk.slnx")))
+            if (File.Exists(Path.Join(dir.FullName, "Verbara.Sdk.slnx")))
             {
                 return dir.FullName;
             }

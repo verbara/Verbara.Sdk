@@ -15,7 +15,7 @@ public class ConfigIncludeTests
         parts[0] = baseDir;
         parts[1] = "Fixtures";
         Array.Copy(segments, 0, parts, 2, segments.Length);
-        return Path.Combine(parts);
+        return Path.Join(parts);
     }
 
     [Fact]

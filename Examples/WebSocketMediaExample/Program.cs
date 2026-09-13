@@ -78,11 +78,11 @@ Console.WriteLine($"chan_websocket server listening on port {options.WebSocketPo
 Console.WriteLine("Configure Asterisk 22.8+/23.2+ to WebSocket(ws://host:9093/audio,slin16) and call.");
 Console.WriteLine("Press Ctrl+C to stop.");
 
-var cts = new CancellationTokenSource();
-Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+using var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) => { e.Cancel = true; if (!cts.IsCancellationRequested) cts.Cancel(); };
 
 try { await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token); }
-catch (OperationCanceledException) { }
+catch (OperationCanceledException) { /* Ctrl+C: the intended exit; server.DisposeAsync follows */ }
 
 await server.DisposeAsync();
 Console.WriteLine("Server stopped.");

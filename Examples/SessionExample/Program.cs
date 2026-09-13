@@ -81,12 +81,12 @@ using var subscription = sessionManager.Events.Subscribe(evt =>
 
 // 3. Periodic summary
 using var summaryTimer = new PeriodicTimer(TimeSpan.FromSeconds(10));
-var cts = new CancellationTokenSource();
+using var cts = new CancellationTokenSource();
 
 Console.CancelKeyPress += (_, e) =>
 {
     e.Cancel = true;
-    cts.Cancel();
+    if (!cts.IsCancellationRequested) cts.Cancel();
 };
 
 Console.WriteLine("Monitoring sessions (press Ctrl+C to stop)...\n");
@@ -105,7 +105,7 @@ try
             $"[{DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture)}] --- Active: {active}  |  Recent completed: {recent} ---");
     }
 }
-catch (OperationCanceledException) { }
+catch (OperationCanceledException) { /* Ctrl+C: WaitForNextTickAsync throws on the cancelled token, which ends the summary loop */ }
 
 Console.WriteLine("\nShutting down...");
 
