@@ -29,6 +29,21 @@ disposed any session that was no longer connected.
 - Disposing a session whose peer never answers the close frame now gives up after 2 seconds and aborts the socket.
   Before, it could wait for that answer forever.
 
+### Fixed — BREAKING: a Realtime session whose connection died mid-stream counted as completed
+
+When the far end dropped the connection in the middle of a session, `OpenAiRealtimeBridge` ended its output
+loop silently. Once the input loop ended, the session counted in `openai_realtime.sessions.completed`, and the
+caller got a normal return. The receive failure now reaches `HandleSessionAsync` instead.
+
+- **`openai_realtime.sessions.failed` changes meaning.** It now also counts sessions whose connection died
+  mid-stream, including when the host cancels the session after the connection has already died. These sessions
+  used to count in `openai_realtime.sessions.completed`, so a dashboard of failed sessions will rise.
+- `HandleSessionAsync` now rethrows the failure as `WebSocketException` with
+  `WebSocketErrorCode.ConnectionClosedPrematurely`, logs `SessionError` and sets the session activity to `Error`.
+  `VoiceAiSessionBroker` logs the fault as well.
+- A requested cancellation on a healthy connection and a close frame from the far end still count as completed,
+  and the session still ends when its input loop ends.
+
 ### Changed — Examples dispose their Ctrl+C token source, and a failing example exits non-zero
 
 Thirteen examples never disposed the `CancellationTokenSource` their Ctrl+C handler cancels; they now do. In all
@@ -44,6 +59,16 @@ connect to, now ends the example with the runtime's exception report and a non-z
 
 It is still lazy and returns the same queues. It now walks the member's queue set directly instead of a locked
 copy, so a queue added to or removed from that member during enumeration may or may not appear.
+
+### Changed — `AudioSocketServer` waits between failed accepts
+
+After an accept failure other than a cancellation, `AudioSocketServer` still logs `AcceptError` and keeps
+accepting. It now waits before the next attempt: 100 ms at first, doubling up to 5 s, and back to 100 ms after a
+successful accept. `StopAsync` cancels a pending wait at once.
+
+- Under a persistent failure, such as running out of file descriptors, the log grows by at most 12 entries a
+  minute. Before, it grew by one entry per retry, without limit.
+- A connection that arrives during a wait stays in the listen backlog until the wait ends.
 
 ## [2.5.2] - 2026-09-13
 

@@ -181,6 +181,27 @@ internal sealed class RealtimeFakeServer : IAsyncDisposable
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Tears down the server side of the live session with no close frame, so the client's pending
+    /// read meets a connection that ended mid-stream.
+    /// </summary>
+    /// <remarks>
+    /// This is the transport dying under a session, as opposed to the far end closing it politely.
+    /// <see cref="System.Net.WebSockets.WebSocket.Abort"/> disposes the stream beneath the socket, and
+    /// that stream owns the TCP connection, so the client reads end-of-stream rather than a close
+    /// handshake. Use it with <see cref="HoldOpenUntilDisposed"/>: without the hold, the session has
+    /// already closed by the time a test could call this, and nothing is left to tear down. Abort
+    /// does not write to the socket, so unlike <see cref="SendEventAsync"/> it cannot race the
+    /// <see cref="EventsToSend"/> burst.
+    /// </remarks>
+    public void Abort()
+    {
+        var ws = _socket ?? throw new InvalidOperationException(
+            "No session has been accepted yet — wait on SessionUpdateReceived first.");
+
+        ws.Abort();
+    }
+
     private async Task HandleSessionAsync(WebSocketTestSession session)
     {
         var ws = session.WebSocket;
