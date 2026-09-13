@@ -27,24 +27,26 @@ await using var provider = services.BuildServiceProvider();
 // 2. Resolve the AMI connection
 var ami = provider.GetRequiredService<IAmiConnection>();
 
+// Ctrl+C cancels whatever the example is waiting on, so the finally below always disconnects.
+using var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
 try
 {
     // 3. Connect to Asterisk
     Console.WriteLine("Connecting to Asterisk AMI...");
-    await ami.ConnectAsync();
+    await ami.ConnectAsync(cts.Token);
     Console.WriteLine($"Connected! Asterisk version: {ami.AsteriskVersion}");
 
     // 4. Subscribe to events
     using var subscription = ami.Subscribe(new EventPrinter());
 
     // 5. Send a PingAction
-    var response = await ami.SendActionAsync(new PingAction());
+    var response = await ami.SendActionAsync(new PingAction(), cts.Token);
     Console.WriteLine($"Ping response: {response.Response} - {response.Message}");
 
     // 6. Wait for some events
     Console.WriteLine("Listening for events (press Ctrl+C to stop)...");
-    var cts = new CancellationTokenSource();
-    Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
     await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token);
 }
 catch (OperationCanceledException)
