@@ -90,11 +90,8 @@ internal static class FakeServerCaptureScanner
         var root = CSharpSyntaxTree.ParseText(source).GetRoot();
         var violations = new List<FakeServerCaptureViolation>();
 
-        foreach (var type in root.DescendantNodes().OfType<TypeDeclarationSyntax>())
+        foreach (var type in root.DescendantNodes().OfType<TypeDeclarationSyntax>().Where(IsFakeServerType))
         {
-            if (!IsFakeServerType(type))
-                continue;
-
             var mutated = CollectMutatedNames(type);
             var privateMutableFields = CollectPrivateMutableFields(type);
 
@@ -171,7 +168,7 @@ internal static class FakeServerCaptureScanner
 
         var typeName = RootTypeName(declaredType);
         var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
-        var isMutableType = typeName == ArrayTypeName || MutableCollectionTypes.Contains(typeName);
+        var isMutableType = IsMutableCollection(typeName);
         var isReadOnlyType = ReadOnlyCollectionTypes.Contains(typeName);
 
         if (!isMutableType && !isReadOnlyType)
@@ -275,59 +272,40 @@ internal static class FakeServerCaptureScanner
     /// </remarks>
     private static HashSet<string> CollectMutatedNames(TypeDeclarationSyntax type)
     {
-        var names = new HashSet<string>(StringComparer.Ordinal);
+        // IsInsideConstructor is asked of the member access and of the assignment target. Each is a
+        // direct child of the invocation or assignment, which is never itself a constructor, so its
+        // answer is the same as for the invocation or assignment.
+        var mutatingCallTargets = type.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Select(invocation => invocation.Expression)
+            .OfType<MemberAccessExpressionSyntax>()
+            .Where(access => MutatingMethods.Contains(access.Name.Identifier.Text) && !IsInsideConstructor(access))
+            .Select(access => SimpleName(access.Expression));
 
-        foreach (var invocation in type.DescendantNodes().OfType<InvocationExpressionSyntax>())
-        {
-            if (invocation.Expression is not MemberAccessExpressionSyntax access)
-                continue;
-            if (!MutatingMethods.Contains(access.Name.Identifier.Text))
-                continue;
-            if (IsInsideConstructor(invocation))
-                continue;
+        var indexerTargets = type.DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Select(assignment => assignment.Left)
+            .OfType<ElementAccessExpressionSyntax>()
+            .Where(element => !IsInsideConstructor(element))
+            .Select(element => SimpleName(element.Expression));
 
-            var target = SimpleName(access.Expression);
-            if (target is not null)
-                names.Add(target);
-        }
-
-        foreach (var assignment in type.DescendantNodes().OfType<AssignmentExpressionSyntax>())
-        {
-            if (assignment.Left is not ElementAccessExpressionSyntax element)
-                continue;
-            if (IsInsideConstructor(assignment))
-                continue;
-
-            var target = SimpleName(element.Expression);
-            if (target is not null)
-                names.Add(target);
-        }
-
-        return names;
+        return mutatingCallTargets.Concat(indexerTargets).OfType<string>().ToHashSet(StringComparer.Ordinal);
     }
 
     private static bool IsInsideConstructor(SyntaxNode node) =>
         node.Ancestors().OfType<ConstructorDeclarationSyntax>().Any();
 
-    private static HashSet<string> CollectPrivateMutableFields(TypeDeclarationSyntax type)
-    {
-        var names = new HashSet<string>(StringComparer.Ordinal);
+    private static HashSet<string> CollectPrivateMutableFields(TypeDeclarationSyntax type) =>
+        type.Members
+            .OfType<FieldDeclarationSyntax>()
+            .Where(field => !IsExposed(field.Modifiers) && IsMutableCollection(RootTypeName(field.Declaration.Type)))
+            .SelectMany(field => field.Declaration.Variables)
+            .Select(variable => variable.Identifier.Text)
+            .ToHashSet(StringComparer.Ordinal);
 
-        foreach (var field in type.Members.OfType<FieldDeclarationSyntax>())
-        {
-            if (IsExposed(field.Modifiers))
-                continue;
-
-            var typeName = RootTypeName(field.Declaration.Type);
-            if (typeName != ArrayTypeName && !MutableCollectionTypes.Contains(typeName))
-                continue;
-
-            foreach (var variable in field.Declaration.Variables)
-                names.Add(variable.Identifier.Text);
-        }
-
-        return names;
-    }
+    /// <summary>True for an array or a mutable collection type, as reduced by <see cref="RootTypeName"/>.</summary>
+    private static bool IsMutableCollection(string typeName) =>
+        typeName == ArrayTypeName || MutableCollectionTypes.Contains(typeName);
 
     /// <summary>
     /// Expressions a property getter hands back, reduced to bare member names. Only a bare
@@ -341,21 +319,22 @@ internal static class FakeServerCaptureScanner
         if (property.ExpressionBody is not null)
             AddIfSimple(names, property.ExpressionBody.Expression);
 
-        foreach (var accessor in property.AccessorList?.Accessors ?? default)
+        var getters = property.AccessorList?.Accessors.Where(a => a.IsKind(SyntaxKind.GetAccessorDeclaration)) ?? [];
+        foreach (var accessor in getters)
         {
-            if (!accessor.IsKind(SyntaxKind.GetAccessorDeclaration))
-                continue;
-
             if (accessor.ExpressionBody is not null)
                 AddIfSimple(names, accessor.ExpressionBody.Expression);
 
             if (accessor.Body is null)
                 continue;
 
-            foreach (var statement in accessor.Body.DescendantNodes().OfType<ReturnStatementSyntax>())
+            // A bare 'return;' has no expression; OfType<ExpressionSyntax>() drops its null.
+            foreach (var expression in accessor.Body.DescendantNodes()
+                .OfType<ReturnStatementSyntax>()
+                .Select(statement => statement.Expression)
+                .OfType<ExpressionSyntax>())
             {
-                if (statement.Expression is not null)
-                    AddIfSimple(names, statement.Expression);
+                AddIfSimple(names, expression);
             }
         }
 

@@ -72,29 +72,22 @@ internal static class CancellationProvenanceScanner
 
             var cancelledTokens = CollectCancelledTokenAliases(method, cancelledSources);
 
-            foreach (var invocation in method.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            // One violation per enumeration call, however many of its arguments carry the token.
+            foreach (var (invocation, helper) in method.DescendantNodes()
+                .OfType<InvocationExpressionSyntax>()
+                .Select(i => (Invocation: i, Helper: EnumerationHelper(i)))
+                .Where(t => t.Helper is not null
+                    && t.Invocation.ArgumentList.Arguments.Any(
+                        a => IsCancelledToken(a.Expression, cancelledSources, cancelledTokens))))
             {
-                if (invocation.Expression is not MemberAccessExpressionSyntax access)
-                    continue;
-                if (!EnumeratingMethods.Contains(access.Name.Identifier.Text))
-                    continue;
-
-                foreach (var argument in invocation.ArgumentList.Arguments)
-                {
-                    if (!IsCancelledToken(argument.Expression, cancelledSources, cancelledTokens))
-                        continue;
-
-                    var line = invocation.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
-                    violations.Add(new CancellationProvenanceViolation(
-                        path,
-                        line,
-                        method.Identifier.Text,
-                        $"'{access.Name.Identifier.Text}' receives the same token the test cancels, so it " +
-                        "throws OperationCanceledException whether or not the subject does — a silent " +
-                        "'yield break' passes this assertion identically to a propagated throw. Pass the " +
-                        "token to the subject only; enumerate with CancellationToken.None."));
-                    break;
-                }
+                violations.Add(new CancellationProvenanceViolation(
+                    path,
+                    invocation.GetLocation().GetLineSpan().StartLinePosition.Line + 1,
+                    method.Identifier.Text,
+                    $"'{helper}' receives the same token the test cancels, so it " +
+                    "throws OperationCanceledException whether or not the subject does — a silent " +
+                    "'yield break' passes this assertion identically to a propagated throw. Pass the " +
+                    "token to the subject only; enumerate with CancellationToken.None."));
             }
         }
 
@@ -113,32 +106,34 @@ internal static class CancellationProvenanceScanner
         var root = CSharpSyntaxTree.ParseText(source).GetRoot();
         return root.DescendantNodes()
             .OfType<InvocationExpressionSyntax>()
-            .Count(i => i.Expression is MemberAccessExpressionSyntax access
-                && EnumeratingMethods.Contains(access.Name.Identifier.Text));
+            .Count(i => EnumerationHelper(i) is not null);
     }
+
+    /// <summary>
+    /// The enumeration helper <paramref name="invocation"/> calls — <c>ToListAsync</c> for
+    /// <c>x.ToListAsync(ct)</c> — or <see langword="null"/> when it calls anything else. The scan and
+    /// <see cref="CountEnumerationSites"/> both recognise a site through this one predicate, so the
+    /// liveness count cannot drift away from what the scan actually checks.
+    /// </summary>
+    private static string? EnumerationHelper(InvocationExpressionSyntax invocation) =>
+        invocation.Expression is MemberAccessExpressionSyntax access
+        && EnumeratingMethods.Contains(access.Name.Identifier.Text)
+            ? access.Name.Identifier.Text
+            : null;
 
     /// <summary>
     /// Names of the sources this method cancels. Nested lambdas count: the cancel-on-first-frame
     /// trigger is written as <c>Task.Run(async () =&gt; … await cts.CancelAsync())</c>.
     /// </summary>
-    private static HashSet<string> CollectCancelledSources(MethodDeclarationSyntax method)
-    {
-        var names = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var invocation in method.DescendantNodes().OfType<InvocationExpressionSyntax>())
-        {
-            if (invocation.Expression is not MemberAccessExpressionSyntax access)
-                continue;
-            if (!CancellingMethods.Contains(access.Name.Identifier.Text))
-                continue;
-
-            var target = SimpleName(access.Expression);
-            if (target is not null)
-                names.Add(target);
-        }
-
-        return names;
-    }
+    private static HashSet<string> CollectCancelledSources(MethodDeclarationSyntax method) =>
+        method.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Select(invocation => invocation.Expression)
+            .OfType<MemberAccessExpressionSyntax>()
+            .Where(access => CancellingMethods.Contains(access.Name.Identifier.Text))
+            .Select(access => SimpleName(access.Expression))
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Locals that alias a cancelled source's token (<c>var token = cts.Token;</c>), so renaming the
@@ -146,20 +141,12 @@ internal static class CancellationProvenanceScanner
     /// </summary>
     private static HashSet<string> CollectCancelledTokenAliases(
         MethodDeclarationSyntax method,
-        HashSet<string> cancelledSources)
-    {
-        var names = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var declarator in method.DescendantNodes().OfType<VariableDeclaratorSyntax>())
-        {
-            if (declarator.Initializer?.Value is not { } value)
-                continue;
-            if (IsSourceToken(value, cancelledSources))
-                names.Add(declarator.Identifier.Text);
-        }
-
-        return names;
-    }
+        HashSet<string> cancelledSources) =>
+        method.DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Where(declarator => declarator.Initializer?.Value is { } value && IsSourceToken(value, cancelledSources))
+            .Select(declarator => declarator.Identifier.Text)
+            .ToHashSet(StringComparer.Ordinal);
 
     private static bool IsCancelledToken(
         ExpressionSyntax expression,

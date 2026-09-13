@@ -36,7 +36,7 @@ public sealed class SyncFenceRegressionGuardTests
                 currentCounts[relative] = count;
         }
 
-        var baseline = LoadBaseline(Path.Combine(repoRoot, BaselineFileName));
+        var baseline = LoadBaseline(Path.Join(repoRoot, BaselineFileName));
 
         // A file fails only if its current unmarked-barrier count EXCEEDS its grandfathered
         // baseline (missing file => baseline 0). Files at or below baseline pass.

@@ -58,40 +58,16 @@ internal static class SyncFenceScanner
         // Valid allow-markers are REAL single-line comment trivia (never string/XML-doc text).
         // We collect their 0-based start lines so a marker only excuses a call on its own line
         // span or the single immediately-preceding physical line.
-        var markerLines = new HashSet<int>();
-        foreach (var trivia in root.DescendantTrivia())
-        {
-            if (trivia.IsKind(SyntaxKind.SingleLineCommentTrivia)
-                && AllowMarker.IsMatch(trivia.ToString()))
-            {
-                markerLines.Add(trivia.GetLocation().GetLineSpan().StartLinePosition.Line);
-            }
-        }
+        var markerLines = root.DescendantTrivia()
+            .Where(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia) && AllowMarker.IsMatch(t.ToString()))
+            .Select(t => t.GetLocation().GetLineSpan().StartLinePosition.Line)
+            .ToHashSet();
 
         // (a) Banned invocations.
-        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
-        {
-            if (invocation.Expression is not MemberAccessExpressionSyntax mae)
-                continue;
-
-            var method = mae.Name.Identifier.Text;
-            var receiver = TrailingReceiver(mae.Expression);
-            if (receiver is null)
-                continue;
-
-            if (!IsBanned(receiver, method))
-                continue;
-
-            if (IsAllowed(invocation, markerLines))
-                continue;
-
-            var line = LineSpan(invocation).StartLinePosition.Line + 1;
-            violations.Add(new FenceViolation(
-                path,
-                line,
-                $"{receiver}.{method}",
-                $"wall-clock barrier '{receiver}.{method}(...)' — replace with a causal signal (FakeTimeProvider / WaitForXAsync) or annotate."));
-        }
+        violations.AddRange(root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Select(invocation => UnmarkedBannedCall(invocation, path, markerLines))
+            .OfType<FenceViolation>());
 
         // (b) Best-effort Stopwatch spin-loop (while / do). Gate the heuristic on a Stopwatch
         // actually being present in the file (pure-syntax identifier-token probe; comments and
@@ -136,32 +112,63 @@ internal static class SyncFenceScanner
         }
 
         // (c) Threading-alias proxy (never marker-excused).
-        foreach (var directive in root.DescendantNodes().OfType<UsingDirectiveSyntax>())
+        foreach (var directive in root.DescendantNodes().OfType<UsingDirectiveSyntax>().Where(IsThreadingAlias))
         {
-            if (directive.Name is null)
-                continue;
-
-            var nameText = directive.Name.ToString();
-            var isStaticThread =
-                directive.StaticKeyword.IsKind(SyntaxKind.StaticKeyword)
-                && nameText.EndsWith("System.Threading.Thread", StringComparison.Ordinal);
-            var isAliasedBarrier =
-                directive.Alias is not null
-                && (nameText.EndsWith("System.Threading.Thread", StringComparison.Ordinal)
-                    || nameText.EndsWith("System.Threading.Tasks.Task", StringComparison.Ordinal));
-
-            if (!isStaticThread && !isAliasedBarrier)
-                continue;
-
-            var line = directive.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
             violations.Add(new FenceViolation(
                 path,
-                line,
+                directive.GetLocation().GetLineSpan().StartLinePosition.Line + 1,
                 "ThreadingAlias",
                 "threading alias / static import could smuggle a wall-clock barrier past the syntactic match — not allowed (no legitimate test use)."));
         }
 
         return violations;
+    }
+
+    /// <summary>
+    /// The violation <paramref name="invocation"/> is, or <see langword="null"/> when it is not a
+    /// banned call or a valid marker excuses it. The marker lines are consulted only once the call is
+    /// known to be banned, which is the order the scan has always checked them in.
+    /// </summary>
+    private static FenceViolation? UnmarkedBannedCall(
+        InvocationExpressionSyntax invocation,
+        string path,
+        HashSet<int> markerLines)
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax mae)
+            return null;
+
+        var method = mae.Name.Identifier.Text;
+        var receiver = TrailingReceiver(mae.Expression);
+        if (receiver is null || !IsBanned(receiver, method) || IsAllowed(invocation, markerLines))
+            return null;
+
+        return new FenceViolation(
+            path,
+            LineSpan(invocation).StartLinePosition.Line + 1,
+            $"{receiver}.{method}",
+            $"wall-clock barrier '{receiver}.{method}(...)' — replace with a causal signal (FakeTimeProvider / WaitForXAsync) or annotate.");
+    }
+
+    /// <summary>
+    /// True for a <c>using static</c> import of <c>System.Threading.Thread</c> and for an alias of
+    /// <c>Thread</c> or <c>Task</c>: either one lets a barrier be called under a name the syntactic
+    /// match does not know.
+    /// </summary>
+    private static bool IsThreadingAlias(UsingDirectiveSyntax directive)
+    {
+        if (directive.Name is not { } name)
+            return false;
+
+        var nameText = name.ToString();
+        var isStaticThread =
+            directive.StaticKeyword.IsKind(SyntaxKind.StaticKeyword)
+            && nameText.EndsWith("System.Threading.Thread", StringComparison.Ordinal);
+        var isAliasedBarrier =
+            directive.Alias is not null
+            && (nameText.EndsWith("System.Threading.Thread", StringComparison.Ordinal)
+                || nameText.EndsWith("System.Threading.Tasks.Task", StringComparison.Ordinal));
+
+        return isStaticThread || isAliasedBarrier;
     }
 
     private static bool IsBanned(string receiver, string method)

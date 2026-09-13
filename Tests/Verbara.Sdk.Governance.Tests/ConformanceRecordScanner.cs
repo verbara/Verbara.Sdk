@@ -83,14 +83,10 @@ internal static class ConformanceRecordScanner
     {
         ArgumentNullException.ThrowIfNull(record);
 
-        var types = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var cell in ClientTypeCells(record))
-        {
-            if (cell.Length > 2 && cell[0] == '`' && cell[^1] == '`')
-                types.Add(cell[1..^1]);
-        }
-
-        return types;
+        return ClientTypeCells(record)
+            .Where(cell => cell.Length > 2 && cell[0] == '`' && cell[^1] == '`')
+            .Select(cell => cell[1..^1])
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     private static List<(string ClientType, int Line)> Declarations(string source, string path)
@@ -98,47 +94,34 @@ internal static class ConformanceRecordScanner
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(path);
 
-        var declarations = new List<(string, int)>();
         if (path.Contains(TestingPackage, StringComparison.Ordinal))
-            return declarations;
+            return [];
 
-        var tree = CSharpSyntaxTree.ParseText(source);
-        var root = tree.GetRoot();
-
-        foreach (var declaration in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
-        {
-            if (declaration.Modifiers.Any(m => m.IsKind(SyntaxKind.AbstractKeyword)))
-                continue;
-            if (!DerivesFromProviderBase(declaration))
-                continue;
-
-            var line = declaration.Identifier.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
-            declarations.Add((declaration.Identifier.Text, line));
-        }
-
-        return declarations;
+        return CSharpSyntaxTree.ParseText(source).GetRoot().DescendantNodes()
+            .OfType<ClassDeclarationSyntax>()
+            .Where(declaration => !declaration.Modifiers.Any(m => m.IsKind(SyntaxKind.AbstractKeyword))
+                && DerivesFromProviderBase(declaration))
+            .Select(declaration => (
+                ClientType: declaration.Identifier.Text,
+                Line: declaration.Identifier.GetLocation().GetLineSpan().StartLinePosition.Line + 1))
+            .ToList();
     }
 
-    private static bool DerivesFromProviderBase(ClassDeclarationSyntax declaration)
+    private static bool DerivesFromProviderBase(ClassDeclarationSyntax declaration) =>
+        declaration.BaseList is { } baseList
+        && baseList.Types.Any(baseType => BaseTypeName(baseType.Type) is { } name && Array.IndexOf(ProviderBases, name) >= 0);
+
+    /// <summary>
+    /// The simple name a base-list entry ends in — <c>SpeechRecognizer</c> for both
+    /// <c>SpeechRecognizer</c> and <c>Verbara.Sdk.VoiceAi.SpeechRecognizer</c> — or
+    /// <see langword="null"/> for any other shape.
+    /// </summary>
+    private static string? BaseTypeName(TypeSyntax type) => type switch
     {
-        if (declaration.BaseList is null)
-            return false;
-
-        foreach (var baseType in declaration.BaseList.Types)
-        {
-            var name = baseType.Type switch
-            {
-                SimpleNameSyntax simple => simple.Identifier.Text,
-                QualifiedNameSyntax qualified => qualified.Right.Identifier.Text,
-                _ => null,
-            };
-
-            if (name is not null && Array.IndexOf(ProviderBases, name) >= 0)
-                return true;
-        }
-
-        return false;
-    }
+        SimpleNameSyntax simple => simple.Identifier.Text,
+        QualifiedNameSyntax qualified => qualified.Right.Identifier.Text,
+        _ => null,
+    };
 
     /// <summary>
     /// True when the record carries the type in the <b>Client type</b> COLUMN of a table row — the
@@ -191,9 +174,8 @@ internal static class ConformanceRecordScanner
         const int noTable = -1;
         var column = noTable;
 
-        foreach (var line in record.Split('\n'))
+        foreach (var trimmed in record.Split('\n').Select(line => line.TrimEnd('\r')))
         {
-            var trimmed = line.TrimEnd('\r');
             if (!trimmed.StartsWith('|'))
             {
                 column = noTable;          // prose or a blank line ends the table

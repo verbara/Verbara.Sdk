@@ -46,72 +46,65 @@ internal static class ReflectionBanScanner
         // Valid allow-markers are REAL single-line comment trivia (never string/XML-doc text).
         // We collect their 0-based start lines so a marker only excuses a node on its own line
         // span or the single immediately-preceding physical line.
-        var markerLines = new HashSet<int>();
-        foreach (var trivia in root.DescendantTrivia())
-        {
-            if (trivia.IsKind(SyntaxKind.SingleLineCommentTrivia)
-                && AllowMarker.IsMatch(trivia.ToString()))
-            {
-                markerLines.Add(trivia.GetLocation().GetLineSpan().StartLinePosition.Line);
-            }
-        }
+        var markerLines = root.DescendantTrivia()
+            .Where(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia) && AllowMarker.IsMatch(t.ToString()))
+            .Select(t => t.GetLocation().GetLineSpan().StartLinePosition.Line)
+            .ToHashSet();
 
         // (a) Banned invocations: Activator.CreateInstance (non-generic), Type.GetType (static),
         //     MakeGenericType, MakeGenericMethod.
-        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
-        {
-            if (invocation.Expression is not MemberAccessExpressionSyntax mae)
-                continue;
-
-            var (api, detail) = ClassifyInvocation(mae);
-            if (api is null)
-                continue;
-
-            if (IsAllowed(invocation, markerLines))
-                continue;
-
-            var line = LineSpan(invocation).StartLinePosition.Line + 1;
-            violations.Add(new ReflectionViolation(path, line, api, detail!));
-        }
+        violations.AddRange(root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Select(invocation => UnmarkedBannedInvocation(invocation, path, markerLines))
+            .OfType<ReflectionViolation>());
 
         // (b) Banned object creation: new DynamicMethod(...).
-        foreach (var creation in root.DescendantNodes().OfType<ObjectCreationExpressionSyntax>())
+        foreach (var creation in root.DescendantNodes()
+            .OfType<ObjectCreationExpressionSyntax>()
+            .Where(c => TrailingTypeName(c.Type) == "DynamicMethod" && !IsAllowed(c, markerLines)))
         {
-            if (TrailingTypeName(creation.Type) != "DynamicMethod")
-                continue;
-
-            if (IsAllowed(creation, markerLines))
-                continue;
-
-            var line = LineSpan(creation).StartLinePosition.Line + 1;
             violations.Add(new ReflectionViolation(
                 path,
-                line,
+                LineSpan(creation).StartLinePosition.Line + 1,
                 "Reflection.Emit.DynamicMethod",
                 "AOT-breaking: 'new DynamicMethod(...)' emits IL at runtime — not resolvable by the AOT compiler; use a source generator or annotate."));
         }
 
         // (c) Banned import: using [static] …System.Reflection.Emit.
-        foreach (var directive in root.DescendantNodes().OfType<UsingDirectiveSyntax>())
+        foreach (var directive in root.DescendantNodes()
+            .OfType<UsingDirectiveSyntax>()
+            .Where(d => d.Name is { } name
+                && name.ToString().EndsWith("System.Reflection.Emit", StringComparison.Ordinal)
+                && !IsAllowed(d, markerLines)))
         {
-            if (directive.Name is null)
-                continue;
-
-            if (!directive.Name.ToString().EndsWith("System.Reflection.Emit", StringComparison.Ordinal))
-                continue;
-
-            if (IsAllowed(directive, markerLines))
-                continue;
-
-            var line = directive.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
             violations.Add(new ReflectionViolation(
                 path,
-                line,
+                directive.GetLocation().GetLineSpan().StartLinePosition.Line + 1,
                 "using System.Reflection.Emit",
                 "AOT-breaking: 'System.Reflection.Emit' generates IL at runtime — banned in shippable AOT code; use a source generator or annotate."));
         }
 
         return violations;
+    }
+
+    /// <summary>
+    /// The violation <paramref name="invocation"/> is, or <see langword="null"/> when it calls no
+    /// banned API or a valid marker excuses it. The marker lines are consulted only once the call is
+    /// known to be banned, which is the order the scan has always checked them in.
+    /// </summary>
+    private static ReflectionViolation? UnmarkedBannedInvocation(
+        InvocationExpressionSyntax invocation,
+        string path,
+        HashSet<int> markerLines)
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax mae)
+            return null;
+
+        var (api, detail) = ClassifyInvocation(mae);
+        if (api is null || IsAllowed(invocation, markerLines))
+            return null;
+
+        return new ReflectionViolation(path, LineSpan(invocation).StartLinePosition.Line + 1, api, detail!);
     }
 
     /// <summary>
