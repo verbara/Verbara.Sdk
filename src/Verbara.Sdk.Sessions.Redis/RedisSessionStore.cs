@@ -163,12 +163,11 @@ public sealed class RedisSessionStore : SessionStoreBase
         batch.Execute();
         await Task.WhenAll(getTasks).WaitAsync(ct).ConfigureAwait(false);
 
-        foreach (var task in getTasks)
-        {
-            var snapshot = Deserialize(task.Result);
-            if (snapshot is not null)
-                sessions.Add(snapshot.ToSession());
-        }
+        // Every task has completed by now, so Result does not block.
+        sessions.AddRange(getTasks
+            .Select(static task => Deserialize(task.Result))
+            .OfType<CallSessionSnapshot>()
+            .Select(static snapshot => snapshot.ToSession()));
 
         return sessions;
     }

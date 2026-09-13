@@ -21,8 +21,7 @@ public sealed class CompositeMappingStrategy : IMappingStrategy
     {
         foreach (var strategy in _strategies)
         {
-            var script = strategy.Resolve(request);
-            if (script is not null)
+            if (strategy.Resolve(request) is { } script)
                 return script;
         }
 
