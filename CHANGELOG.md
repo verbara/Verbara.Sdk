@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.5.2] - 2026-09-13
+
 ### Fixed — A bidirectional NATS bridge opened a second connection and never closed it
 
 With `NatsBridgeOptions.Subscribe` set, `NatsBridge` opened two NATS connections instead of sharing one between
