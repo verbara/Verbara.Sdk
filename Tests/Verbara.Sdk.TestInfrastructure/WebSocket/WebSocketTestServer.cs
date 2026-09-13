@@ -118,45 +118,43 @@ public sealed class WebSocketTestServer : IAsyncDisposable
     {
         try
         {
-            client.NoDelay = true;
-            var stream = client.GetStream();
-
-            var (wsKey, requestUri, headers) = await ReadUpgradeRequestAsync(stream, _cts.Token).ConfigureAwait(false);
-            if (wsKey is null)
+            // Both disposables unwind when this block exits, the socket before the client, and that
+            // is ahead of the catch and the finally: SessionCompleted still completes only after the
+            // connection has been released. A fault in either Dispose reaches the catch below.
+            using (client)
             {
-                client.Dispose();
-                return;
-            }
+                client.NoDelay = true;
+                var stream = client.GetStream();
 
-            await SendUpgradeResponseAsync(stream, wsKey, _cts.Token).ConfigureAwait(false);
+                var (wsKey, requestUri, headers) = await ReadUpgradeRequestAsync(stream, _cts.Token).ConfigureAwait(false);
+                if (wsKey is null)
+                {
+                    return;
+                }
 
-            var raw = System.Net.WebSockets.WebSocket.CreateFromStream(
-                stream,
-                new WebSocketCreationOptions { IsServer = true });
+                await SendUpgradeResponseAsync(stream, wsKey, _cts.Token).ConfigureAwait(false);
 
-            var ws = OutboundGate is { } gate
-                ? new GatedWebSocket(raw, gate, _cts.Token)
-                : raw;
+                var raw = System.Net.WebSockets.WebSocket.CreateFromStream(
+                    stream,
+                    new WebSocketCreationOptions { IsServer = true });
 
-            _currentSocket = ws;
-            var session = new WebSocketTestSession(ws, requestUri, headers, _cts.Token);
-            try
-            {
+                using var ws = OutboundGate is { } gate
+                    ? new GatedWebSocket(raw, gate, _cts.Token)
+                    : raw;
+
+                _currentSocket = ws;
+                var session = new WebSocketTestSession(ws, requestUri, headers, _cts.Token);
                 await _onConnection(session).ConfigureAwait(false);
             }
-            finally
-            {
-                try { ws.Dispose(); } catch { }
-            }
         }
-        catch (OperationCanceledException) { }
+        // An OperationCanceledException from _cts, when the server is disposed mid-session, is the
+        // normal shutdown path and lands in this clause too.
         catch (Exception)
         {
             // Swallow per-connection failures; the test asserts on observable side effects.
         }
         finally
         {
-            try { client.Dispose(); } catch { }
             _sessionCompleted.TrySetResult();
         }
     }
