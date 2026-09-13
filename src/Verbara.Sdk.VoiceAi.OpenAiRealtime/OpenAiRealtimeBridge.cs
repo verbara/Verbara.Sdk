@@ -194,8 +194,11 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 {
                     result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
                 }
+                // Only a cancellation the caller asked for ends this loop quietly. A transport that dies
+                // mid-session faults it instead, and once InputLoop has ended too, HandleSessionAsync
+                // counts the session as failed and rethrows. A bare catch here used to report that
+                // ending as a session that completed normally.
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
-                catch { return; }
 
                 if (result.MessageType == WebSocketMessageType.Close) return;
                 if (result.MessageType != WebSocketMessageType.Text)

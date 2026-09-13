@@ -4,6 +4,7 @@ using Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Internal;
 using FluentAssertions;
 using FluentAssertions.Execution;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -344,6 +345,64 @@ public sealed class OpenAiRealtimeBridgeTests
         await audioServer.StopAsync(CancellationToken.None);
     }
 
+    /// <summary>
+    /// The far end's connection dying in the middle of a session. <c>OutputLoop</c> used to swallow
+    /// that with a bare <c>catch</c>, so the session ended as if nothing had gone wrong: counted as
+    /// completed, no error logged, nothing thrown to the caller.
+    /// </summary>
+    /// <remarks>
+    /// The caller hangs up after the abort, so <c>InputLoop</c> ends on its own and the token is
+    /// never cancelled. That leaves the classification to what <c>OutputLoop</c> does with the dead
+    /// socket, and to nothing else: the hangup alone completes a session, and no audio is sent, so
+    /// no write can fail on the dead socket and fault the session by another route.
+    /// </remarks>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldCountAFailureAndRethrow_WhenTheTransportDiesMidSession()
+    {
+        // Arrange — the fake holds the socket open, so the abort lands on a live session
+        await using var fakeOpenAi = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        fakeOpenAi.EventsToSend.Add(LoopsRunningMarkerEvent);
+        fakeOpenAi.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        var log = new RecordingLogger<OpenAiRealtimeBridge>();
+        await using var bridge = CreateBridge(fakeOpenAi, logger: log);
+        using var metrics = new MeterCapture(MeterName);
+        using var loopsRunning = new RealtimeEventCollector(
+            bridge.Events, e => e.OfType<RealtimeSpeechStartedEvent>().Any());
+
+        // Act — an uncancelled token throughout: nothing here is a requested shutdown
+        var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
+        await loopsRunning.Satisfied.WaitAsync(SignalTimeout);
+        fakeOpenAi.SocketState.Should().Be(
+            WebSocketState.Open, "the transport has to die under a running session, not after it closed");
+
+        fakeOpenAi.Abort();
+        await client.SendHangupAsync();
+
+        var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+        // Assert
+        using (new AssertionScope())
+        {
+            fault.Should().BeOfType<WebSocketException>(
+                "the caller has to learn the session broke rather than ended");
+            metrics.Get("openai_realtime.sessions.failed").Should()
+                .Be(1, "a connection lost mid-session is what this counter is for");
+            metrics.Get("openai_realtime.sessions.completed").Should()
+                .Be(0, "counting it as completed is the misreading the bare catch produced");
+            log.Entries.Should().Contain(e => e.EventId.Name == "SessionError");
+            log.Entries.Should().Contain(e => e.EventId.Name == "SessionEnded");
+        }
+
+        ((WebSocketException)fault!).WebSocketErrorCode.Should().Be(
+            WebSocketError.ConnectionClosedPrematurely, "the socket read end-of-stream with no close handshake");
+
+        // Cleanup
+        await client.DisposeAsync();
+        await audioServer.StopAsync(CancellationToken.None);
+    }
+
     private static async Task<(AudioSocketSession session, AudioSocketServer audioServer, AudioSocketClient client)>
         CreateAudioSessionAsync()
     {
@@ -369,7 +428,8 @@ public sealed class OpenAiRealtimeBridgeTests
 
     private static OpenAiRealtimeBridge CreateBridge(
         RealtimeFakeServer fakeOpenAi,
-        IEnumerable<IRealtimeFunctionHandler>? handlers = null)
+        IEnumerable<IRealtimeFunctionHandler>? handlers = null,
+        ILogger<OpenAiRealtimeBridge>? logger = null)
     {
         var options = Options.Create(new OpenAiRealtimeOptions
         {
@@ -379,7 +439,7 @@ public sealed class OpenAiRealtimeBridgeTests
             InputFormat = Audio.AudioFormat.Slin16Mono8kHz,
         });
         var registry = new RealtimeFunctionRegistry(handlers ?? []);
-        var bridge = new OpenAiRealtimeBridge(options, registry, NullLogger<OpenAiRealtimeBridge>.Instance);
+        var bridge = new OpenAiRealtimeBridge(options, registry, logger ?? NullLogger<OpenAiRealtimeBridge>.Instance);
         bridge.BaseUri = new Uri($"ws://127.0.0.1:{fakeOpenAi.Port}/");
         return bridge;
     }
