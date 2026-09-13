@@ -253,7 +253,7 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
                         break;
                     }
                 }
-                catch { break; }
+                catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { break; }
             }
         });
 
@@ -280,7 +280,10 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
         if (ErrorFrameJson is { } errorFrame)
         {
             try { await SendTextFrameAsync(ws, errorFrame, ct).ConfigureAwait(false); }
-            catch { }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
+            {
+                // The peer is already gone; CloseSessionAsync below still runs.
+            }
 
             await CloseSessionAsync(ws, receiveTask).ConfigureAwait(false);
             return;
@@ -319,7 +322,10 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
         if (AbortAfterSend)
         {
             ws.Abort();
-            try { await receiveTask.ConfigureAwait(false); } catch { }
+
+            // Nothing to catch: the loop ends on its own socket faults, and its task was started
+            // without a token, so it cannot be cancelled before it runs.
+            await receiveTask.ConfigureAwait(false);
             return;
         }
 
@@ -348,9 +354,14 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
                     .ConfigureAwait(false);
             }
         }
-        catch { }
+        catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
+        {
+            // The peer already closed or reset the socket; nothing is left to hand-shake.
+        }
 
-        try { await receiveTask.ConfigureAwait(false); } catch { }
+        // Nothing to catch: the loop ends on its own socket faults, and its task was started
+        // without a token, so it cannot be cancelled before it runs.
+        await receiveTask.ConfigureAwait(false);
     }
 
     /// <summary>

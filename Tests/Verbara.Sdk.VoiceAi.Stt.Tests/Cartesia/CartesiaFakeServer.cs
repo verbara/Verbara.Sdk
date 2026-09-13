@@ -227,7 +227,7 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
                 await ws.SendAsync(failure.AsMemory(), WebSocketMessageType.Text, true, ct)
                     .ConfigureAwait(false);
             }
-            catch { return; }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { return; }
 
             await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
             return;
@@ -271,7 +271,7 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
             {
                 result = await ws.ReceiveAsync(buf.AsMemory(), ceiling.Token).ConfigureAwait(false);
             }
-            catch { break; }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { break; }
 
             if (result.MessageType == WebSocketMessageType.Binary)
             {
@@ -294,15 +294,18 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
                     // sending it here is what finally puts the client's tolerance of the
                     // acknowledgement under test instead of under a comment.
                     ReceivedTerminatorText = text;
+
+                    // Read before the try: a missing recording is a defect in the suite, not a
+                    // peer that went away, so it must fail the session rather than close it normally.
+                    var ack = Encoding.UTF8.GetBytes(ReadFrame(DoneFrame));
                     try
                     {
-                        var ack = Encoding.UTF8.GetBytes(ReadFrame(DoneFrame));
                         await ws.SendAsync(ack.AsMemory(), WebSocketMessageType.Text, true, ct)
                             .ConfigureAwait(false);
                         await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
                             .ConfigureAwait(false);
                     }
-                    catch { break; }
+                    catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { break; }
                     continue;
                 }
 
@@ -324,20 +327,9 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
     /// Closes the server side with <see cref="CloseStatus"/> — normal closure unless a test asked for
     /// another code.
     /// </summary>
-    private async Task CloseWithConfiguredStatusAsync(System.Net.WebSockets.WebSocket ws)
-    {
-        var status = CloseStatus ?? WebSocketCloseStatus.NormalClosure;
-
-        if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
-        {
-            try
-            {
-                await ws.CloseAsync(status, CloseStatusDescription, CancellationToken.None)
-                    .ConfigureAwait(false);
-            }
-            catch { }
-        }
-    }
+    private Task CloseWithConfiguredStatusAsync(System.Net.WebSockets.WebSocket ws)
+        => WebSocketTestServer.CloseIfOpenAsync(
+            ws, CloseStatus ?? WebSocketCloseStatus.NormalClosure, CloseStatusDescription);
 
     /// <summary>Read a recorded frame verbatim from the suite's <c>Recordings/</c> tree.</summary>
     public static string ReadFrame(string relativePath) => RecordingsTree.Value.ReadText(relativePath);

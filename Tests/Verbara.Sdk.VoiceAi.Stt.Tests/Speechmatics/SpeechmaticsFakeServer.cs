@@ -222,7 +222,7 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
             if (first.MessageType == WebSocketMessageType.Text)
                 ReceivedStartRecognitionJson = Encoding.UTF8.GetString(buf, 0, first.Count);
         }
-        catch { return; }
+        catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { return; }
 
         if (EndSessionSilently)
         {
@@ -241,7 +241,7 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
                 await ws.SendAsync(failure.AsMemory(), WebSocketMessageType.Text, true, ct)
                     .ConfigureAwait(false);
             }
-            catch { return; }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { return; }
 
             await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
             return;
@@ -253,7 +253,7 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
         {
             await ws.SendAsync(started.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
         }
-        catch { return; }
+        catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { return; }
 
         // Send caller-supplied transcript messages (snapshot to avoid races).
         var messages = ResultMessages.ToList();
@@ -265,7 +265,7 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
             {
                 await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
             }
-            catch { return; }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { return; }
         }
 
         if (AbortAfterSend)
@@ -286,7 +286,7 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
             {
                 result = await ws.ReceiveAsync(buf.AsMemory(), ceiling.Token).ConfigureAwait(false);
             }
-            catch { break; }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { break; }
 
             if (result.MessageType == WebSocketMessageType.Binary)
             {
@@ -299,15 +299,18 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
                 // frame instead would be asserting the half-close as the contract, which is the
                 // defect §3.6d measured (twenty partials, not one AddTranscript).
                 ReceivedEndOfStreamJson = Encoding.UTF8.GetString(buf, 0, result.Count);
+
+                // Read before the try: a missing recording is a defect in the suite, not a peer
+                // that went away, so it must fail the session rather than close it normally.
+                var endOfTranscript = Encoding.UTF8.GetBytes(BuildEndOfTranscriptJson());
                 try
                 {
-                    var endOfTranscript = Encoding.UTF8.GetBytes(BuildEndOfTranscriptJson());
                     await ws.SendAsync(endOfTranscript.AsMemory(), WebSocketMessageType.Text, true, ct)
                         .ConfigureAwait(false);
                     await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
                         .ConfigureAwait(false);
                 }
-                catch { break; }
+                catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { break; }
             }
             else if (result.MessageType == WebSocketMessageType.Close)
             {
@@ -323,20 +326,9 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
     /// Closes the server side with <see cref="CloseStatus"/> — normal closure unless a test asked for
     /// another code.
     /// </summary>
-    private async Task CloseWithConfiguredStatusAsync(System.Net.WebSockets.WebSocket ws)
-    {
-        var status = CloseStatus ?? WebSocketCloseStatus.NormalClosure;
-
-        if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
-        {
-            try
-            {
-                await ws.CloseAsync(status, CloseStatusDescription, CancellationToken.None)
-                    .ConfigureAwait(false);
-            }
-            catch { }
-        }
-    }
+    private Task CloseWithConfiguredStatusAsync(System.Net.WebSockets.WebSocket ws)
+        => WebSocketTestServer.CloseIfOpenAsync(
+            ws, CloseStatus ?? WebSocketCloseStatus.NormalClosure, CloseStatusDescription);
 
     /// <summary>Read a recorded frame verbatim from the suite's <c>Recordings/</c> tree.</summary>
     public static string ReadFrame(string relativePath) => RecordingsTree.Value.ReadText(relativePath);

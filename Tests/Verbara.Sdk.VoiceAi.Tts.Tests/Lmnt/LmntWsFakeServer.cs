@@ -224,7 +224,10 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
             // while the client is still writing its remaining request frames.
             var buf = new byte[65536];
             try { await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false); }
-            catch { /* client may have already gone; abort regardless */ }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
+            {
+                // The client may have already gone; abort regardless.
+            }
             ws.Abort();
             return;
         }
@@ -244,10 +247,14 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
         {
             var bytes = Encoding.UTF8.GetBytes(errorFrame);
             try { await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false); }
-            catch { /* peer may already be gone; the close below still runs */ }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
+            {
+                // The peer may already be gone; the close below still runs.
+            }
 
             await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
-            try { await receiveTask.ConfigureAwait(false); } catch { }
+            try { await receiveTask.ConfigureAwait(false); }
+            catch (OperationCanceledException) { /* server token cancelled before the loop started */ }
             return;
         }
 
@@ -280,7 +287,7 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
             {
                 result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
             }
-            catch { break; }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { break; }
 
             if (result.MessageType == WebSocketMessageType.Text)
             {
@@ -318,7 +325,8 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
         if (AbortAfterSend)
         {
             ws.Abort();
-            try { await receiveTask.ConfigureAwait(false); } catch { }
+            try { await receiveTask.ConfigureAwait(false); }
+            catch (OperationCanceledException) { /* server token cancelled before the loop started */ }
             return;
         }
 
@@ -341,12 +349,14 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
             // fence-allow: GUARD-TIMEOUT — Timeout.Infinite; the cancellation token is the only arm
             try { await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { /* disposed: release the socket */ }
-            try { await receiveTask.ConfigureAwait(false); } catch { }
+            try { await receiveTask.ConfigureAwait(false); }
+            catch (OperationCanceledException) { /* server token cancelled before the loop started */ }
             return;
         }
 
         await SendFinishAndCloseAsync(ws, ct).ConfigureAwait(false);
-        try { await receiveTask.ConfigureAwait(false); } catch { }
+        try { await receiveTask.ConfigureAwait(false); }
+        catch (OperationCanceledException) { /* server token cancelled before the loop started */ }
     }
 
     private async Task SendFinishAndCloseAsync(System.Net.WebSockets.WebSocket ws, CancellationToken ct)
@@ -355,7 +365,10 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
         {
             var finish = Encoding.UTF8.GetBytes(ReadFrame(FinishFrame));
             try { await ws.SendAsync(finish.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false); }
-            catch { /* peer may have closed mid-send; swallow and proceed to close handshake */ }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
+            {
+                // The peer may have closed mid-send; proceed to the close handshake.
+            }
         }
 
         await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
@@ -371,10 +384,10 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
 
         if (ws.State == WebSocketState.Open)
             try { await ws.CloseAsync(status, CloseStatusDescription, CancellationToken.None).ConfigureAwait(false); }
-            catch { /* peer already closed abruptly */ }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { /* peer already closed abruptly */ }
         else if (ws.State == WebSocketState.CloseReceived)
             try { await ws.CloseOutputAsync(status, CloseStatusDescription, CancellationToken.None).ConfigureAwait(false); }
-            catch { /* peer already closed abruptly */ }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { /* peer already closed abruptly */ }
     }
 
     public async ValueTask DisposeAsync()
