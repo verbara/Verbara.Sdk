@@ -108,9 +108,10 @@ public sealed class WebSocketTestServer : IAsyncDisposable
                 _ = Task.Run(() => HandleConnectionAsync(client), _cts.Token);
             }
         }
-        catch (OperationCanceledException) { }
-        catch (ObjectDisposedException) { }
-        catch (SocketException) { }
+        // DisposeAsync cancels _cts and stops the listener only after this loop has ended, so the loop
+        // sees disposal only as that cancellation: the while check above, or this exception from the
+        // cancelled accept. Anything else escapes to DisposeAsync, which awaits the loop with no catch.
+        catch (OperationCanceledException) { /* DisposeAsync cancelled the pending accept */ }
     }
 
     private async Task HandleConnectionAsync(TcpClient client)
@@ -295,16 +296,27 @@ public sealed class WebSocketTestServer : IAsyncDisposable
         await stream.FlushAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>Stop the listener and cancel any in-flight handlers.</summary>
+    /// <summary>Cancel any in-flight handlers, wait for the accept loop to end, then stop the listener.</summary>
     public async ValueTask DisposeAsync()
     {
-        try { _listener.Stop(); } catch { }
+        // Cancel first, stop last. Stop must not overlap an accept: it clears the listener's active
+        // flag and then nulls its socket, while an accept checks the flag and then reads the socket,
+        // so the two can interleave into a NullReferenceException. The loop ends on the cancellation
+        // alone, and Stop runs only once it has, when nothing can call accept again.
         await _cts.CancelAsync().ConfigureAwait(false);
 
-        if (_acceptLoop is not null)
+        try
         {
-            try { await _acceptLoop.ConfigureAwait(false); }
-            catch { }
+            // No catch: anything that escapes the loop is unexpected and fails the fixture instead of
+            // vanishing.
+            if (_acceptLoop is not null)
+                await _acceptLoop.ConfigureAwait(false);
+        }
+        finally
+        {
+            // Also after a faulted loop, so a failing fixture does not leave its port bound.
+            try { _listener.Stop(); }
+            catch (SocketException) { /* the one failure TcpListener.Stop documents; disposal carries on */ }
         }
 
         _cts.Dispose();
