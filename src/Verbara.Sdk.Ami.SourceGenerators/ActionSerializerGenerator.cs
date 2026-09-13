@@ -105,26 +105,26 @@ public sealed class ActionSerializerGenerator : IIncrementalGenerator
         // Process from base to leaf so base properties come first
         typeChain.Reverse();
 
-        var seen = new HashSet<string>();
-        foreach (var type in typeChain)
+        // The first declaration of each name wins. GroupBy yields groups in the order their keys
+        // first appear and keeps each group's elements in source order, so g.First() is the
+        // base-most declaration and the emitted order stays base-to-leaf.
+        var firstDeclarations = typeChain
+            .SelectMany(static type => type.GetMembers().OfType<IPropertySymbol>())
+            .Where(static prop => prop.DeclaredAccessibility == Accessibility.Public
+                                  && prop.GetMethod != null
+                                  && !prop.IsStatic
+                                  && !prop.IsIndexer)
+            .GroupBy(static prop => prop.Name)
+            .Select(static group => group.First());
+
+        foreach (var prop in firstDeclarations)
         {
-            foreach (var member in type.GetMembers())
+            var propType = ClassifyPropertyType(prop.Type);
+            if (propType != PropertyType.Unsupported)
             {
-                if (member is IPropertySymbol prop
-                    && prop.DeclaredAccessibility == Accessibility.Public
-                    && prop.GetMethod != null
-                    && !prop.IsStatic
-                    && !prop.IsIndexer
-                    && seen.Add(prop.Name))
-                {
-                    var propType = ClassifyPropertyType(prop.Type);
-                    if (propType != PropertyType.Unsupported)
-                    {
-                        // Check if property has [VerbaraMapping] for custom field name
-                        var fieldName = GetFieldName(prop);
-                        properties.Add(new PropertyInfo(prop.Name, fieldName, propType));
-                    }
-                }
+                // Check if property has [VerbaraMapping] for custom field name
+                var fieldName = GetFieldName(prop);
+                properties.Add(new PropertyInfo(prop.Name, fieldName, propType));
             }
         }
     }

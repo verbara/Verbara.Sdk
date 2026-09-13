@@ -229,23 +229,20 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
 
         var sorted = events.OrderBy(e => e.MappingName).ToArray();
 
-        // Collect all unique intermediate base types (non-leaf layers) across all events
-        var intermediateTypes = new Dictionary<string, IntermediateBaseInfo>();
-        foreach (var evt in sorted)
-        {
-            foreach (var layer in evt.Hierarchy)
-            {
-                if (!layer.IsLeaf
-                    && layer.Properties.Length > 0
-                    && !intermediateTypes.ContainsKey(layer.FullyQualifiedTypeName))
-                {
-                    intermediateTypes[layer.FullyQualifiedTypeName] = new IntermediateBaseInfo(
-                        layer.FullyQualifiedTypeName,
-                        layer.ClassName,
-                        layer.Properties);
-                }
-            }
-        }
+        // Collect all unique intermediate base types (non-leaf layers) across all events. The first
+        // occurrence of each type wins: GroupBy keeps the order keys first appear in and each
+        // group's elements in source order.
+        var intermediateTypes = sorted
+            .SelectMany(static e => e.Hierarchy)
+            .Where(static layer => !layer.IsLeaf && layer.Properties.Length > 0)
+            .GroupBy(static layer => layer.FullyQualifiedTypeName)
+            .Select(static group => group.First())
+            .ToDictionary(
+                static layer => layer.FullyQualifiedTypeName,
+                static layer => new IntermediateBaseInfo(
+                    layer.FullyQualifiedTypeName,
+                    layer.ClassName,
+                    layer.Properties));
 
         // Generate intermediate base class property assignment
         if (intermediateTypes.Count > 0)

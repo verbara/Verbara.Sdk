@@ -96,31 +96,28 @@ public sealed class ResponseDeserializerGenerator : IIncrementalGenerator
 
         typeChain.Reverse();
 
-        var seen = new HashSet<string>();
-        foreach (var type in typeChain)
-        {
-            foreach (var member in type.GetMembers())
-            {
-                if (member is IPropertySymbol prop
-                    && prop.DeclaredAccessibility == Accessibility.Public
-                    && prop.SetMethod != null
-                    && prop.SetMethod.DeclaredAccessibility == Accessibility.Public
-                    && !prop.IsStatic
-                    && !prop.IsIndexer
-                    && seen.Add(prop.Name))
-                {
-                    // Skip ManagerResponse base properties (handled separately)
-                    if (prop.Name == "ActionId" || prop.Name == "Response"
-                        || prop.Name == "Message" || prop.Name == "RawFields")
-                        continue;
+        // The first declaration of each name wins (GroupBy keeps first-key order and source order
+        // within a group, so g.First() is the base-most declaration). ManagerResponse base
+        // properties are handled separately: a redeclaration of one is dropped before grouping,
+        // which skips that name exactly as recording it and then skipping it did.
+        var firstDeclarations = typeChain
+            .SelectMany(static type => type.GetMembers().OfType<IPropertySymbol>())
+            .Where(static prop => prop.DeclaredAccessibility == Accessibility.Public
+                                  && prop.SetMethod != null
+                                  && prop.SetMethod.DeclaredAccessibility == Accessibility.Public
+                                  && !prop.IsStatic
+                                  && !prop.IsIndexer
+                                  && prop.Name is not ("ActionId" or "Response" or "Message" or "RawFields"))
+            .GroupBy(static prop => prop.Name)
+            .Select(static group => group.First());
 
-                    var propType = ClassifyPropertyType(prop.Type);
-                    if (propType != PropertyType.Unsupported)
-                    {
-                        var fieldName = GetFieldName(prop);
-                        properties.Add(new PropertyInfo(prop.Name, fieldName, propType));
-                    }
-                }
+        foreach (var prop in firstDeclarations)
+        {
+            var propType = ClassifyPropertyType(prop.Type);
+            if (propType != PropertyType.Unsupported)
+            {
+                var fieldName = GetFieldName(prop);
+                properties.Add(new PropertyInfo(prop.Name, fieldName, propType));
             }
         }
     }
