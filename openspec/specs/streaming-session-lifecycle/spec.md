@@ -41,7 +41,9 @@ telemetry consequence read from the other end: two implementations behind one in
 an identical shutdown as a failure and as a completion respectively, and a caller reading the number
 cannot see which handler produced it. Both are cases of the ending being inferred from where it was
 observed rather than from who caused it (ADR-0054).
+
 ## Requirements
+
 ### Requirement: A hangup that overtakes the first read ends the audio stream, it does not fault it
 A streaming audio session SHALL treat every ending that the consumer did not ask for — a hangup or
 error frame from the far end, an application-initiated hangup, an owner disposal, or a transport EOF
@@ -160,3 +162,45 @@ cancelled one are different answers and the consumer has no other way to tell th
 - **WHEN** it is put to each speech synthesizer the package ships
 - **THEN** all of them raise `OperationCanceledException`, asserted per surface rather than assumed from one, so a synthesizer added later inherits the assertion instead of the convention
 
+### Requirement: A synthesizer's own cancellation is a synthesis failure, not a barge-in
+A voice pipeline SHALL report a synthesis as failed when the synthesizer ends it with its own
+`OperationCanceledException` while neither the caller's token nor the synthesis's own source is
+cancelled. It SHALL NOT report as failed a synthesis that ends with an `OperationCanceledException`
+while a requested cancellation (a barge-in, disposing the pipeline, or the caller's token) is visible.
+Among `OperationCanceledException`s the ending is classified by which source is cancelled when the
+pipeline classifies it, never by the exception's concrete type, message, inner exception or token.
+Exceptions of any other type are outside this requirement.
+
+#### Scenario: A synthesizer's own deadline elapses while nobody asked it to stop
+- **GIVEN** a pipeline session whose caller token is never cancelled, with no barge-in and no disposal
+- **WHEN** the synthesizer raises an `OperationCanceledException` of its own, such as a `TaskCanceledException` whose inner exception is a `TimeoutException` and whose token belongs to a source the synthesizer cancelled, before yielding any audio or after yielding some
+- **THEN** the synthesis is reported as failed: the pipeline publishes one `PipelineErrorEvent` with source `Tts` carrying that exception, increments `tts.syntheses.failed`, logs the error at Warning and sets the synthesis activity to `Error`
+- **AND** it publishes no `SynthesisEndedEvent` for that turn and does not increment `tts.syntheses.completed`
+
+#### Scenario: The session outlives the failed synthesis
+- **GIVEN** a synthesis that failed because the synthesizer cancelled itself
+- **WHEN** the session later ends normally
+- **THEN** the failure was not rethrown to the caller of the session handler, and the session is counted in `voiceai.sessions.completed`, not in `voiceai.sessions.failed`
+- **AND** the pipeline goes on to recognise, handle and synthesise the caller's next utterance
+
+#### Scenario: A barge-in is not a synthesis failure
+- **GIVEN** a synthesis in flight
+- **WHEN** the caller speaks over it and the synthesis ends with an `OperationCanceledException` because its own source was cancelled
+- **THEN** `tts.syntheses.failed` does not move, no `PipelineErrorEvent` is published, nothing is logged at Warning, and the synthesis activity is not set to `Error`
+
+#### Scenario: Disposing the pipeline during a synthesis is not a synthesis failure
+- **GIVEN** a synthesis in flight
+- **WHEN** the pipeline is disposed and the synthesis ends with an `OperationCanceledException` because its own source was cancelled
+- **THEN** `tts.syntheses.failed` does not move, nothing is logged at Warning, the synthesis activity is not set to `Error`, and the session is not counted as failed
+
+#### Scenario: The caller's cancellation during a synthesis is not a synthesis failure
+- **GIVEN** a synthesis in flight
+- **WHEN** the caller cancels the token it handed the session handler and the synthesis ends with an `OperationCanceledException`
+- **THEN** `tts.syntheses.failed` does not move, no `PipelineErrorEvent` is published, nothing is logged at Warning, and the synthesis activity is not set to `Error`
+- **AND** the session handler returns without throwing and the session is counted in `voiceai.sessions.completed`
+
+#### Scenario: A requested cancellation outranks the provider's own while it unwinds
+- **GIVEN** a synthesizer that has raised its own `OperationCanceledException`, and whose sequence the pipeline is still disposing
+- **WHEN** a barge-in, disposing the pipeline, or the caller's token cancels before that disposal completes
+- **THEN** the synthesis is not reported as failed: `tts.syntheses.failed` does not move, no `PipelineErrorEvent` is published, nothing is logged at Warning, and the synthesis activity is not set to `Error`
+- **AND** the session handler returns without throwing and the session is not counted in `voiceai.sessions.failed`
