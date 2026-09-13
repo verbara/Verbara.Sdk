@@ -283,10 +283,13 @@
 
       `Totals: 10 passed, 0 failed (10 items)`.
 
-- [ ] 3.6 CI green.
+- [x] 3.6 CI green.
+      #262 passed the merge queue and landed on `main` as b4cec64a on 2026-09-13.
 
 ## 4. Close-out
 
-- [ ] 4.1 CHANGELOG `[Unreleased]` entry that states the telemetry change, with the PR number.
-- [ ] 4.2 `openspec archive tts-own-cancellation-is-a-synthesis-failure --yes` once the fix is on
-      `main`.
+- [x] 4.1 CHANGELOG `[Unreleased]` entry that states the telemetry change, with the PR number.
+      Landed with #262. As with every `[Unreleased]` heading, the number is in the squash commit's
+      subject rather than in the entry.
+- [x] 4.2 `openspec archive tts-own-cancellation-is-a-synthesis-failure --yes` once the fix is on
+      `main`. Done in the archive commit, after #262 landed.
