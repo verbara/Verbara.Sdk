@@ -52,6 +52,13 @@ public sealed partial class CallSessionManager : ICallSessionManager
         {
             await _store.SaveAsync(session, _shutdownToken);
         }
+        catch (OperationCanceledException) when (_shutdownToken.IsCancellationRequested)
+        {
+            // The shutdown token (with the SDK's hosted service, the host's StartAsync token) was
+            // cancelled, for example by a stop requested before startup completed. The save was cut
+            // short on purpose, so it is not a persistence failure and is not logged. A cancellation
+            // while the token is still live, such as a store-side timeout, is still logged below.
+        }
         catch (Exception ex)
         {
             LogPersistError(ex, session.SessionId);

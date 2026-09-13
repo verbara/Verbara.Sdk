@@ -55,6 +55,19 @@ cannot reach a disposed source.
 connect to, now ends the example with the runtime's exception report and a non-zero exit code, instead of
 `Error: <message>` and exit code 0. Each one still disconnects in its `finally`.
 
+### Fixed — `CallSessionManager` logged a save cut short by a stop during startup as a persistence failure
+
+With `Verbara.Sdk.Hosting`, a stop requested while the host was still starting cancelled the session manager's
+shutdown token. That covers `StopApplication`, SIGTERM or Ctrl+C during startup, and `HostOptions.StartupTimeout`
+elapsing. Every session save that the token cut short, or that started after it was cancelled, was logged at Error
+as `Failed to persist session {SessionId}` with an `OperationCanceledException`. Such a save now ends without a log
+entry. It is still not retried.
+
+- Any other failure of `SessionStoreBase.SaveAsync` is still logged at Error. That includes a cancellation raised
+  while the shutdown token is live, such as a store-side timeout.
+- A normal stop after startup completed never cancelled this token, so it did not log this error before and does
+  not now.
+
 ### Changed — `QueueManager.GetQueueObjectsForMember` reads the member's queue set live
 
 It is still lazy and returns the same queues. It now walks the member's queue set directly instead of a locked
