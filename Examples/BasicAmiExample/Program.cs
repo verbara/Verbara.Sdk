@@ -29,7 +29,7 @@ var ami = provider.GetRequiredService<IAmiConnection>();
 
 // Ctrl+C cancels whatever the example is waiting on, so the finally below always disconnects.
 using var cts = new CancellationTokenSource();
-Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+Console.CancelKeyPress += (_, e) => { e.Cancel = true; if (!cts.IsCancellationRequested) cts.Cancel(); };
 
 try
 {
@@ -52,10 +52,6 @@ try
 catch (OperationCanceledException)
 {
     // Normal shutdown
-}
-catch (Exception ex)
-{
-    Console.Error.WriteLine($"Error: {ex.Message}");
 }
 finally
 {

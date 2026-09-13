@@ -24,6 +24,7 @@ await using var provider = services.BuildServiceProvider();
 
 var ami = provider.GetRequiredService<IAmiConnection>();
 var server = provider.GetRequiredService<Verbara.Sdk.Live.Server.VerbaraServer>();
+using var cts = new CancellationTokenSource();
 
 try
 {
@@ -42,8 +43,7 @@ try
 
     // 5. Monitor changes
     Console.WriteLine("\nMonitoring state changes (press Ctrl+C to stop)...");
-    var cts = new CancellationTokenSource();
-    Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; if (!cts.IsCancellationRequested) cts.Cancel(); };
 
     while (!cts.Token.IsCancellationRequested)
     {
@@ -52,11 +52,7 @@ try
                           $"Queues={server.Queues.QueueCount}, Agents={server.Agents.AgentCount}");
     }
 }
-catch (OperationCanceledException) { }
-catch (Exception ex)
-{
-    Console.Error.WriteLine($"Error: {ex.Message}");
-}
+catch (OperationCanceledException) { /* Ctrl+C: the cancelled delay in the monitor loop is the intended exit */ }
 finally
 {
     await server.DisposeAsync();

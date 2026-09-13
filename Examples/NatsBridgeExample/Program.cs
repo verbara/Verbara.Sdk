@@ -44,8 +44,8 @@ Console.WriteLine($"Push.Nats bridge started → {natsUrl} (prefix: {subjectPref
 await using var natsConn = new NatsConnection(new NatsOpts { Url = natsUrl });
 await natsConn.ConnectAsync();
 
-var cts = new CancellationTokenSource();
-Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+using var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) => { e.Cancel = true; if (!cts.IsCancellationRequested) cts.Cancel(); };
 
 _ = Task.Run(async () =>
 {
@@ -77,7 +77,7 @@ foreach (var topic in new[] { "calls.inbound.started", "agents.42.state", "queue
 
 Console.WriteLine("Waiting for NATS echoes (Ctrl+C to stop)...");
 try { await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token); }
-catch (OperationCanceledException) { }
+catch (OperationCanceledException) { /* Ctrl+C: the intended exit; host.StopAsync follows */ }
 
 await host.StopAsync();
 Console.WriteLine("Host stopped.");

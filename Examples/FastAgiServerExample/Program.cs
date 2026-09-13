@@ -25,14 +25,14 @@ Console.WriteLine("  exten => 100,1,AGI(agi://localhost/hello)");
 Console.WriteLine("Press Ctrl+C to stop.");
 
 // 3. Wait for shutdown signal
-var cts = new CancellationTokenSource();
-Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+using var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) => { e.Cancel = true; if (!cts.IsCancellationRequested) cts.Cancel(); };
 
 try
 {
     await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token);
 }
-catch (OperationCanceledException) { }
+catch (OperationCanceledException) { /* Ctrl+C: the intended exit; StopAsync follows */ }
 
 // 4. Stop gracefully
 await server.StopAsync();
