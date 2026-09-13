@@ -349,14 +349,33 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             {
                 throw;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (ttsCts.IsCancellationRequested)
             {
-                // Barge-in — _ttsCts was cancelled
+                // A requested ending: a barge-in or a disposal. Nothing else cancels this source, and
+                // both reach it only through CancelSynthesis or, when the pipeline was already
+                // disposed, at publication above. It is still undisposed here: it is released when
+                // this iteration's block ends, after the finally below.
+                //
+                // The filter reads the source rather than comparing ex.CancellationToken. A synthesizer
+                // is handed the linked token, never ttsCts.Token, and one that links sources of its own
+                // raises whichever token it observed, so comparing tokens would miss a genuine barge-in
+                // (ADR-0053 records the same trap for the bridge's ConnectAsync).
+                //
+                // Counting it completed is today's accounting, not a claim that the caller heard the
+                // answer: ADR-0050 E9 records it as debt.
                 SpeechSynthesisMetrics.SynthesesCompleted.Add(1);
                 Publish(new SynthesisEndedEvent(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow - synthStart));
             }
             catch (Exception ex)
             {
+                // Also reached by an OperationCanceledException that neither filter above explains:
+                // the synthesizer cancelled itself (an HttpClient.Timeout, a connect deadline it set)
+                // while nobody asked it to stop, so the synthesis failed. ADR-0050 E6/E8 make the
+                // tokens the pipeline holds the discriminator, not the exception's shape or token.
+                //
+                // The filters run only once await foreach has awaited the enumerator's DisposeAsync,
+                // so a barge-in, a disposal or the caller's cancellation that lands while such a
+                // cancellation is still unwinding is visible to them, and wins.
                 SpeechSynthesisMetrics.SynthesesFailed.Add(1);
                 ttsActivity?.SetStatus(ActivityStatusCode.Error);
                 VoiceAiLog.PipelineError(_logger, PipelineErrorSource.Tts, channelId, ex.Message);

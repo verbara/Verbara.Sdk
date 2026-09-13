@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: `VoiceAiPipeline` counted a synthesizer's own cancellation as a completed synthesis
+
+When a synthesizer cancelled itself while no one had asked it to, `VoiceAiPipeline` booked that turn as if a
+barge-in had cut it short. That happens with an elapsed `HttpClient.Timeout`, or with a provider's own connect
+deadline such as Deepgram's `ConnectTimeoutSeconds`, when neither the caller's token nor a barge-in cancelled the
+synthesis. The caller heard nothing for the turn, and the pipeline reported a successful synthesis with no error
+anywhere. The turn is now reported as a synthesis failure.
+
+- **`tts.syntheses.failed` and `tts.syntheses.completed` change meaning.** Such a synthesis now counts in
+  `tts.syntheses.failed` instead of `tts.syntheses.completed`, so a dashboard of TTS failures will rise for a
+  provider that times out.
+- Instead of `SynthesisEndedEvent`, the turn publishes one `PipelineErrorEvent` with
+  `Source = PipelineErrorSource.Tts` and the exception. It also logs
+  `VoiceAi pipeline error [Tts] for channel {ChannelId}: {Message}` at Warning, and ends its `voiceai.tts.synthesis`
+  activity with status `Error`. The same holds when the synthesizer had already yielded audio before it cancelled
+  itself.
+- The session keeps running and still completes. Nothing is rethrown, `voiceai.sessions.*` counts the session as
+  before, and the failed turn is still left out of the conversation history.
+- Unchanged: a genuine barge-in, disposing the pipeline during a synthesis, and the caller cancelling its token. If
+  a barge-in has already cancelled the synthesis by the time the provider's own cancellation is classified, the turn
+  still counts as a barge-in.
+
 ### Fixed — `WebSocketAudioServer` left a session open after its subscriber threw or its channel id was taken
 
 When an `OnStreamConnected` subscriber threw, the session stayed registered with its socket open. It kept counting
