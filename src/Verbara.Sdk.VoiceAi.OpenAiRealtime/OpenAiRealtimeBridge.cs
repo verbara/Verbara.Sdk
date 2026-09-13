@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Reactive.Subjects;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Verbara.Sdk.Audio.Resampling;
 using Verbara.Sdk.VoiceAi.AudioSocket;
@@ -25,6 +26,27 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime;
 public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 {
     private static readonly Uri DefaultBaseUri = new("wss://api.openai.com/v1/realtime");
+
+    /// <summary>
+    /// Writes the <c>function_call_output</c> text for a handler that threw.
+    /// </summary>
+    /// <remarks>
+    /// That text reaches the model as-is: nothing decodes it a second time, so every escape the
+    /// encoder writes is an escape the model reads. The relaxed encoder leaves apostrophes, plus
+    /// signs, angle brackets, ampersands and letters in the Basic Multilingual Plane as they are. It
+    /// still escapes the double quote, the backslash, U+0000 to U+001F, U+007F to U+009F, space
+    /// separators other than U+0020, U+2028, U+2029, U+FEFF, private-use and unassigned code points,
+    /// and every character outside the Basic Multilingual Plane, and it writes a lone surrogate as the
+    /// escape for U+FFFD. Options handed to a context replace the
+    /// ones <see cref="RealtimeJsonContext"/> declares, so the naming policy is repeated here. The
+    /// <c>conversation.item.create</c> frame that carries the text is still written by
+    /// <see cref="RealtimeJsonContext.Default"/>.
+    /// </remarks>
+    internal static readonly RealtimeJsonContext ReadableOutputContext = new(new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    });
 
     private readonly OpenAiRealtimeOptions _options;
     private readonly RealtimeFunctionRegistry _registry;
@@ -345,7 +367,10 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            resultJson = $"{{\"error\":\"{ex.Message.Replace("\"", "\\\"", StringComparison.Ordinal)}\"}}";
+            // Message is overridable and may return null; the type name still tells the model the call failed.
+            resultJson = JsonSerializer.Serialize(
+                new FunctionCallErrorOutput { Error = ex.Message ?? ex.GetType().Name },
+                ReadableOutputContext.FunctionCallErrorOutput);
         }
 
         var itemCreate = new ConversationItemCreateRequest
