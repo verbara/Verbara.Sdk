@@ -108,54 +108,53 @@ public sealed class WebSocketTestServer : IAsyncDisposable
                 _ = Task.Run(() => HandleConnectionAsync(client), _cts.Token);
             }
         }
-        catch (OperationCanceledException) { }
-        catch (ObjectDisposedException) { }
-        catch (SocketException) { }
+        // DisposeAsync cancels _cts and stops the listener only after this loop has ended, so the loop
+        // sees disposal only as that cancellation: the while check above, or this exception from the
+        // cancelled accept. Anything else escapes to DisposeAsync, which awaits the loop with no catch.
+        catch (OperationCanceledException) { /* DisposeAsync cancelled the pending accept */ }
     }
 
     private async Task HandleConnectionAsync(TcpClient client)
     {
         try
         {
-            client.NoDelay = true;
-            var stream = client.GetStream();
-
-            var (wsKey, requestUri, headers) = await ReadUpgradeRequestAsync(stream, _cts.Token).ConfigureAwait(false);
-            if (wsKey is null)
+            // Both disposables unwind when this block exits, the socket before the client, and that
+            // is ahead of the catch and the finally: SessionCompleted still completes only after the
+            // connection has been released. A fault in either Dispose reaches the catch below.
+            using (client)
             {
-                client.Dispose();
-                return;
-            }
+                client.NoDelay = true;
+                var stream = client.GetStream();
 
-            await SendUpgradeResponseAsync(stream, wsKey, _cts.Token).ConfigureAwait(false);
+                var (wsKey, requestUri, headers) = await ReadUpgradeRequestAsync(stream, _cts.Token).ConfigureAwait(false);
+                if (wsKey is null)
+                {
+                    return;
+                }
 
-            var raw = System.Net.WebSockets.WebSocket.CreateFromStream(
-                stream,
-                new WebSocketCreationOptions { IsServer = true });
+                await SendUpgradeResponseAsync(stream, wsKey, _cts.Token).ConfigureAwait(false);
 
-            var ws = OutboundGate is { } gate
-                ? new GatedWebSocket(raw, gate, _cts.Token)
-                : raw;
+                var raw = System.Net.WebSockets.WebSocket.CreateFromStream(
+                    stream,
+                    new WebSocketCreationOptions { IsServer = true });
 
-            _currentSocket = ws;
-            var session = new WebSocketTestSession(ws, requestUri, headers, _cts.Token);
-            try
-            {
+                using var ws = OutboundGate is { } gate
+                    ? new GatedWebSocket(raw, gate, _cts.Token)
+                    : raw;
+
+                _currentSocket = ws;
+                var session = new WebSocketTestSession(ws, requestUri, headers, _cts.Token);
                 await _onConnection(session).ConfigureAwait(false);
             }
-            finally
-            {
-                try { ws.Dispose(); } catch { }
-            }
         }
-        catch (OperationCanceledException) { }
+        // An OperationCanceledException from _cts, when the server is disposed mid-session, is the
+        // normal shutdown path and lands in this clause too.
         catch (Exception)
         {
             // Swallow per-connection failures; the test asserts on observable side effects.
         }
         finally
         {
-            try { client.Dispose(); } catch { }
             _sessionCompleted.TrySetResult();
         }
     }
@@ -295,16 +294,27 @@ public sealed class WebSocketTestServer : IAsyncDisposable
         await stream.FlushAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>Stop the listener and cancel any in-flight handlers.</summary>
+    /// <summary>Cancel any in-flight handlers, wait for the accept loop to end, then stop the listener.</summary>
     public async ValueTask DisposeAsync()
     {
-        try { _listener.Stop(); } catch { }
+        // Cancel first, stop last. Stop must not overlap an accept: it clears the listener's active
+        // flag and then nulls its socket, while an accept checks the flag and then reads the socket,
+        // so the two can interleave into a NullReferenceException. The loop ends on the cancellation
+        // alone, and Stop runs only once it has, when nothing can call accept again.
         await _cts.CancelAsync().ConfigureAwait(false);
 
-        if (_acceptLoop is not null)
+        try
         {
-            try { await _acceptLoop.ConfigureAwait(false); }
-            catch { }
+            // No catch: anything that escapes the loop is unexpected and fails the fixture instead of
+            // vanishing.
+            if (_acceptLoop is not null)
+                await _acceptLoop.ConfigureAwait(false);
+        }
+        finally
+        {
+            // Also after a faulted loop, so a failing fixture does not leave its port bound.
+            try { _listener.Stop(); }
+            catch (SocketException) { /* the one failure TcpListener.Stop documents; disposal carries on */ }
         }
 
         _cts.Dispose();

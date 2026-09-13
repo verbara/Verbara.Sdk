@@ -48,13 +48,13 @@ public sealed class AsteriskContainer : IAsyncDisposable
 
     // Cache the image build so parallel fixture initializations (e.g. FunctionalCollection +
     // RealtimeCollection in the same test assembly) share one build instead of competing.
+    // The cache is read only under _buildLock: a few fixtures per assembly call this, so a
+    // lock-free fast path in front of the lock would save nothing worth an unsynchronised read.
     private static IImage? _cachedImage;
     private static readonly SemaphoreSlim _buildLock = new(1, 1);
 
     public static async Task<IImage> CreateImageAsync(CancellationToken ct = default)
     {
-        if (_cachedImage is not null) return _cachedImage;
-
         await _buildLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
