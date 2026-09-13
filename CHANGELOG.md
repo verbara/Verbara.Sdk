@@ -70,6 +70,19 @@ successful accept. `StopAsync` cancels a pending wait at once.
   minute. Before, it grew by one entry per retry, without limit.
 - A connection that arrives during a wait stays in the listen backlog until the wait ends.
 
+### Fixed — `AudioSocketServer` logged a client that never sent its UUID as a connection error
+
+In `Verbara.Sdk.VoiceAi.AudioSocket`, a client that connected and sent no UUID frame within
+`AudioSocketOptions.ConnectionTimeout` was logged at Error as `[AudioSocket] Error handling connection`, with an
+`OperationCanceledException`. It is now logged at Warning, as designed:
+`[AudioSocket] Connection did not send UUID frame within timeout, closing`.
+
+- Stopping the server while a connection still waited for its UUID logged that Error once per waiting connection.
+  Those connections are now closed with no warning and no error.
+- An exception after the UUID arrives, including an `OperationCanceledException` from an `OnSessionStarted`
+  subscriber, is still logged as a connection error. A connection that ends before sending its UUID still does not
+  count as an accepted session.
+
 ## [2.5.2] - 2026-09-13
 
 ### Fixed — A bidirectional NATS bridge opened a second connection and never closed it

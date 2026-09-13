@@ -67,7 +67,10 @@ public sealed class AudioSocketServerAcceptBackoffTests
     [Fact]
     public async Task AcceptLoopAsync_ShouldStartTheWaitOver_WhenAnAcceptSucceeds()
     {
-        // Arrange — three failures, then a real loopback connection, then failures again
+        // Arrange — three failures, then a real loopback connection, then failures again. The accepted
+        // connection goes to the handler, whose UUID timeout waits on the same fake clock and is created
+        // at a moment that races the loop's next wait; its due time is set apart from every backoff wait
+        // so the test can tell the two timers apart.
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         using var peer = new TcpClient();
@@ -75,7 +78,11 @@ public sealed class AudioSocketServerAcceptBackoffTests
         using var accepted = await listener.AcceptTcpClientAsync();
 
         var time = new FakeTimeProvider();
-        await using var server = new AudioSocketServer(new AudioSocketOptions { Port = 0 }, new AcceptErrorCounter(), time);
+        var uuidTimeout = TimeSpan.FromHours(1);
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { Port = 0, ConnectionTimeout = uuidTimeout },
+            new AcceptErrorCounter(),
+            time);
         var attempts = 0;
         server.AcceptOverride = _ =>
             Interlocked.Increment(ref attempts) == 4 ? ValueTask.FromResult(accepted) : FailedAccept();
@@ -86,7 +93,7 @@ public sealed class AudioSocketServerAcceptBackoffTests
         var waits = new List<TimeSpan>();
         for (var wait = 1; wait <= 4; wait++)
         {
-            var timer = await NextTimerAsync(time);
+            var timer = await NextBackoffTimerAsync(time, uuidTimeout);
             waits.Add(timer.DueTime);
 
             if (wait < 4)
@@ -136,6 +143,20 @@ public sealed class AudioSocketServerAcceptBackoffTests
 
     private static Task<FakeTimeProvider.FakeTimer> NextTimerAsync(FakeTimeProvider time) =>
         time.TimersCreated.ReadAsync().AsTask().WaitAsync(SignalTimeout);
+
+    /// <summary>
+    /// The next timer on <paramref name="time"/> that is a backoff wait. A handler serving an accepted
+    /// connection creates its UUID timeout on the same clock, so a timer due after
+    /// <paramref name="uuidTimeout"/> is that one and is passed over.
+    /// </summary>
+    private static async Task<FakeTimeProvider.FakeTimer> NextBackoffTimerAsync(FakeTimeProvider time, TimeSpan uuidTimeout)
+    {
+        var timer = await NextTimerAsync(time);
+        while (timer.DueTime == uuidTimeout)
+            timer = await NextTimerAsync(time);
+
+        return timer;
+    }
 
     private static TimeSpan[] Milliseconds(params int[] values) =>
         [.. values.Select(ms => TimeSpan.FromMilliseconds(ms))];
