@@ -46,13 +46,10 @@ public sealed class ConnectionCutTests : FunctionalTestBase
             // Without heartbeat, the RST may not propagate until the next I/O.
             if (connection.State == AmiConnectionState.Connected)
             {
-                // Force I/O to detect the broken connection
-                try
-                {
-                    using var pingCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                    await connection.SendActionAsync(new PingAction(), pingCts.Token);
-                }
-                catch { /* Expected: connection may be dead */ }
+                // Force I/O to detect the broken connection. The ping itself may fail, since the
+                // connection may already be dead.
+                using var pingCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await BestEffort.SendAsync(connection, new PingAction(), pingCts.Token);
                 await Task.Delay(TimeSpan.FromSeconds(2));
             }
 
@@ -78,7 +75,7 @@ public sealed class ConnectionCutTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "tcp-reset"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "tcp-reset");
         }
     }
 
@@ -115,7 +112,7 @@ public sealed class ConnectionCutTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "silent-drop"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "silent-drop");
         }
     }
 
@@ -187,7 +184,7 @@ public sealed class ConnectionCutTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "partition"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "partition");
         }
     }
 }

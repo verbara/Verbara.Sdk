@@ -85,8 +85,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         }
         finally
         {
-            try { await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" }); }
-            catch { /* best effort */ }
+            await BestEffort.SendAsync(connection, new CommandAction { Command = "channel request hangup all" });
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
     }
@@ -139,22 +138,19 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         await Task.Delay(TimeSpan.FromSeconds(4));
 
         // Hang up all entered channels
-        foreach (var enter in enterEvents)
+        foreach (var enter in enterEvents.Where(e => e.Channel is not null))
         {
-            if (enter.Channel is not null)
+            try
             {
-                try
+                await connection.SendActionAsync(new HangupAction
                 {
-                    await connection.SendActionAsync(new HangupAction
-                    {
-                        Channel = enter.Channel,
-                        Cause = 16
-                    });
-                }
-                catch (OperationCanceledException)
-                {
-                    // Channel may already have hung up
-                }
+                    Channel = enter.Channel,
+                    Cause = 16
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // Channel may already have hung up
             }
         }
 
@@ -218,8 +214,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         }
         finally
         {
-            try { await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" }); }
-            catch { /* best effort */ }
+            await BestEffort.SendAsync(connection, new CommandAction { Command = "channel request hangup all" });
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
     }
@@ -292,8 +287,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         }
         finally
         {
-            try { await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" }); }
-            catch { /* best effort */ }
+            await BestEffort.SendAsync(connection, new CommandAction { Command = "channel request hangup all" });
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
     }
@@ -348,8 +342,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         }
         finally
         {
-            try { await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" }); }
-            catch { /* best effort */ }
+            await BestEffort.SendAsync(connection, new CommandAction { Command = "channel request hangup all" });
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
     }
@@ -401,22 +394,19 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         await Task.Delay(TimeSpan.FromSeconds(4));
 
         // Hang up all entered channels to trigger leave + destroy
-        foreach (var enter in enterEvents)
+        foreach (var enter in enterEvents.Where(e => e.Channel is not null))
         {
-            if (enter.Channel is not null)
+            try
             {
-                try
+                await connection.SendActionAsync(new HangupAction
                 {
-                    await connection.SendActionAsync(new HangupAction
-                    {
-                        Channel = enter.Channel,
-                        Cause = 16
-                    });
-                }
-                catch (OperationCanceledException)
-                {
-                    // Channel may already have hung up
-                }
+                    Channel = enter.Channel,
+                    Cause = 16
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // Channel may already have hung up
             }
         }
 

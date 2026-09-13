@@ -76,9 +76,8 @@ public sealed class ChannelManagerSoakTests
         }
 
         _manager.Clear();
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        // forceFullCollection: GetTotalMemory collects and runs pending finalizers before it
+        // measures, here and for the final measurement below.
         var baselineMemory = GC.GetTotalMemory(forceFullCollection: true);
 
         for (var cycle = 0; cycle < cycles; cycle++)
@@ -95,9 +94,6 @@ public sealed class ChannelManagerSoakTests
             _manager.ChannelCount.Should().Be(0);
         }
 
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
         var finalMemory = GC.GetTotalMemory(forceFullCollection: true);
 
         var growth = finalMemory - baselineMemory;

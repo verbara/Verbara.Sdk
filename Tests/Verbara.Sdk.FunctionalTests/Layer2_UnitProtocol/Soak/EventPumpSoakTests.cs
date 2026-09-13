@@ -8,6 +8,10 @@ public sealed class EventPumpSoakTests : IAsyncDisposable
 {
     private AsyncEventPump? _pump;
 
+    // The semaphore a test's handler waits on or releases. The handler runs on the pump's consumer
+    // task, so the semaphore is disposed in DisposeAsync, after the pump has stopped that task.
+    private SemaphoreSlim? _gate;
+
     [Fact]
     public async Task ProcessTenThousandEvents_ShouldNotLeak()
     {
@@ -40,6 +44,7 @@ public sealed class EventPumpSoakTests : IAsyncDisposable
         const int batchSize = 1_000;
 
         var batchDone = new SemaphoreSlim(0);
+        _gate = batchDone;
 
         _pump.Start(_ =>
         {
@@ -47,10 +52,8 @@ public sealed class EventPumpSoakTests : IAsyncDisposable
             return ValueTask.CompletedTask;
         });
 
-        // Force collection and take baseline after warm-up.
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        // Take the baseline after warm-up. GetTotalMemory(true) collects and runs pending
+        // finalizers before it measures.
         var baseline = GC.GetTotalMemory(true);
 
         for (var batch = 0; batch < batches; batch++)
@@ -63,9 +66,6 @@ public sealed class EventPumpSoakTests : IAsyncDisposable
                 await batchDone.WaitAsync(TimeSpan.FromSeconds(10));
         }
 
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
         var afterMemory = GC.GetTotalMemory(true);
 
         var growthMb = (afterMemory - baseline) / (1024.0 * 1024.0);
@@ -81,6 +81,7 @@ public sealed class EventPumpSoakTests : IAsyncDisposable
 
         // Block the consumer so the channel fills up and drops start occurring.
         var blocker = new SemaphoreSlim(0);
+        _gate = blocker;
         _pump.Start(async _ => await blocker.WaitAsync());
 
         // Give the consumer task a moment to start and block on the first event.
@@ -104,5 +105,8 @@ public sealed class EventPumpSoakTests : IAsyncDisposable
     {
         if (_pump is not null)
             await _pump.DisposeAsync();
+
+        // Only after the pump: its consumer task is the one that waits on or releases the gate.
+        _gate?.Dispose();
     }
 }

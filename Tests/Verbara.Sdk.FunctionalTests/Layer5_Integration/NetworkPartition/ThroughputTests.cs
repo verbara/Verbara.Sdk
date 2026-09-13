@@ -67,7 +67,7 @@ public sealed class ThroughputTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "bandwidth-limit"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "bandwidth-limit");
         }
     }
 
@@ -103,7 +103,7 @@ public sealed class ThroughputTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "slicer"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "slicer");
         }
     }
 
@@ -130,16 +130,10 @@ public sealed class ThroughputTests : FunctionalTestBase
             await ToxiproxyControl.AddToxicAsync(ProxyName, "limit-data", "limit_data", "downstream",
                 new Dictionary<string, object> { ["bytes"] = 500 });
 
-            // Generate traffic to trigger the byte limit
-            try
-            {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await connection.SendActionAsync(new PingAction(), cts.Token);
-            }
-            catch
-            {
-                // Expected: connection may be cut mid-response
-            }
+            // Generate traffic to trigger the byte limit. The ping itself may fail, since the
+            // connection may be cut mid-response.
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await BestEffort.SendAsync(connection, new PingAction(), cts.Token);
 
             // Wait for state to transition (limit_data closes the connection)
             using var stateCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -149,7 +143,7 @@ public sealed class ThroughputTests : FunctionalTestBase
             }
 
             // Remove the one-shot toxic (may already be gone) so reconnection can work
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "limit-data"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "limit-data");
 
             // Check if already reconnected
             if (connection.State == AmiConnectionState.Connected)
@@ -164,7 +158,7 @@ public sealed class ThroughputTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "limit-data"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "limit-data");
         }
     }
 
@@ -206,7 +200,7 @@ public sealed class ThroughputTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "infinite-timeout"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "infinite-timeout");
         }
     }
 }

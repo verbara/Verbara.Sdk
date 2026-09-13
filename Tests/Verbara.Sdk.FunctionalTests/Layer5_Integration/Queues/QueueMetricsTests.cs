@@ -172,15 +172,11 @@ public sealed class QueueMetricsTests : FunctionalTestBase
         }
         finally
         {
-            try
+            await BestEffort.SendAsync(connection, new QueueRemoveAction
             {
-                await connection.SendActionAsync(new QueueRemoveAction
-                {
-                    Queue = TestQueue,
-                    Interface = TestInterface
-                });
-            }
-            catch { /* best effort */ }
+                Queue = TestQueue,
+                Interface = TestInterface
+            });
         }
     }
 }

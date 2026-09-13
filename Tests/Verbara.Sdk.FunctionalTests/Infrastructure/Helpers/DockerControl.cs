@@ -105,7 +105,11 @@ public static class DockerControl
                 await probe.ConnectAsync(amiHost, amiPort, cts.Token).ConfigureAwait(false);
                 return;
             }
-            catch (Exception) { /* container not yet ready — retry */ }
+            catch (Exception ex) when (ex is System.Net.Sockets.SocketException or OperationCanceledException or IOException)
+            {
+                // Container not yet ready: the AMI port refused the probe, the probe timed out, or
+                // reading the docker exec output failed. Retry until the deadline.
+            }
             await Task.Delay(1000).ConfigureAwait(false);
         }
 

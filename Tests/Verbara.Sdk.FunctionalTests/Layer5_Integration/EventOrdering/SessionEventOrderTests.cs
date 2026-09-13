@@ -169,12 +169,9 @@ public sealed class SessionEventOrderTests : FunctionalTestBase
                     "participant channel {0} must map back to a session via GetByChannelId",
                     participant.UniqueId);
 
-                if (lookup is not null)
-                {
-                    lookup.SessionId.Should().Be(session.SessionId,
-                        "channel {0} must belong to session {1}, not {2}",
-                        participant.UniqueId, session.SessionId, lookup.SessionId);
-                }
+                lookup!.SessionId.Should().Be(session.SessionId,
+                    "channel {0} must belong to session {1}, not {2}",
+                    participant.UniqueId, session.SessionId, lookup.SessionId);
             }
 
             // LinkedId lookup must also work

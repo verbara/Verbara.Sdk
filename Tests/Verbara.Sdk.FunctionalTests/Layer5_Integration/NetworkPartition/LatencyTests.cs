@@ -44,7 +44,7 @@ public sealed class LatencyTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "high-latency"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "high-latency");
         }
     }
 
@@ -75,7 +75,7 @@ public sealed class LatencyTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "moderate-latency"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "moderate-latency");
         }
     }
 
@@ -146,7 +146,7 @@ public sealed class LatencyTests : FunctionalTestBase
         }
         finally
         {
-            try { await ToxiproxyControl.RemoveToxicAsync(ProxyName, "latency-spike"); } catch { }
+            await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "latency-spike");
         }
     }
 }

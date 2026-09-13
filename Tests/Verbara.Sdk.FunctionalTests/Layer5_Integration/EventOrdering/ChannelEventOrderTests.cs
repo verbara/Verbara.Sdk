@@ -73,18 +73,16 @@ public sealed class ChannelEventOrderTests : FunctionalTestBase
         channelCount.Should().Be(activeList.Count,
             "ChannelCount and ActiveChannels must agree — no phantom channels");
 
-        // Every channel that was hung up must be gone from the manager
-        foreach (var channelName in createdChannels)
+        // Every channel that was hung up must be gone from the manager. One that is still in the
+        // name index must not be a stale entry: cross-check it against the UniqueId index.
+        foreach (var lookup in createdChannels
+                     .Select(name => server.Channels.GetByName(name))
+                     .OfType<AsteriskChannel>())
         {
-            var lookup = server.Channels.GetByName(channelName);
-            // A channel that was explicitly hung up should not be in the index
-            if (lookup is not null)
-            {
-                // Verify it is not still tracked as active by cross-checking UniqueId index
-                var byId = server.Channels.GetByUniqueId(lookup.UniqueId);
-                byId.Should().NotBeNull(
-                    "if name index has the channel, UniqueId index must also have it (no stale entry)");
-            }
+            var byId = server.Channels.GetByUniqueId(lookup.UniqueId);
+            byId.Should().NotBeNull(
+                "if name index has the channel {0}, UniqueId index must also have it (no stale entry)",
+                lookup.Name);
         }
     }
 
@@ -219,11 +217,8 @@ public sealed class ChannelEventOrderTests : FunctionalTestBase
             byName.Should().NotBeNull(
                 "channel {0} must be accessible by current name '{1}'", ch.UniqueId, ch.Name);
 
-            if (byId is not null && byName is not null)
-            {
-                ReferenceEquals(byId, byName).Should().BeTrue(
-                    "UniqueId and name indices must reference the same channel object after any renames");
-            }
+            ReferenceEquals(byId, byName).Should().BeTrue(
+                "UniqueId and name indices must reference the same channel object after any renames");
         }
 
         // ChannelCount must match enumeration — no stale/duplicate entries

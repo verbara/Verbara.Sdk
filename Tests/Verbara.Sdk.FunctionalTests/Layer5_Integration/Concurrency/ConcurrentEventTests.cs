@@ -180,10 +180,7 @@ public sealed class ConcurrentEventTests : FunctionalTestBase
             // Verify by checking arrival indices are monotonically increasing
             foreach (var group in channelEvents)
             {
-                var indices = group
-                    .Select(e => observer.Events.IndexOf(e))
-                    .ToList();
-                indices.Should().BeInAscendingOrder(
+                group.Select(e => observer.Events.IndexOf(e)).ToList().Should().BeInAscendingOrder(
                     "events for the same channel must maintain causal order");
             }
         }

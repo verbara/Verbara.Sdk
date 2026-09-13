@@ -34,32 +34,6 @@ public static class SippControl
         return new SippResult(exitCode, stdOut, stdErr);
     }
 
-    /// <summary>
-    /// Check whether the functional-sipp container is running and reachable.
-    /// </summary>
-    public static bool IsAvailable()
-    {
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = "docker",
-                Arguments = $"inspect --format={{{{.State.Running}}}} {ContainerName}",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            })!;
-            var output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(5000);
-            return process.ExitCode == 0 && output.Trim() == "true";
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     private static async Task<(int ExitCode, string StdOut, string StdErr)> RunDockerAsync(
         string args, TimeSpan timeout)
     {
@@ -88,7 +62,17 @@ public static class SippControl
         }
         catch (OperationCanceledException)
         {
-            try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException
+                or System.ComponentModel.Win32Exception or AggregateException)
+            {
+                // Best effort: the process, or part of its tree, could not be killed. The timeout
+                // result below is returned either way.
+            }
+
             return (-1, string.Empty, "Timed out waiting for docker exec to complete");
         }
     }
