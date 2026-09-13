@@ -35,7 +35,7 @@ public sealed class ProviderRecordings
         var probe = new DirectoryInfo(AppContext.BaseDirectory);
         while (probe is not null)
         {
-            var candidate = Path.Combine(probe.FullName, folderName);
+            var candidate = Path.Join(probe.FullName, folderName);
             if (System.IO.Directory.Exists(candidate))
                 return new ProviderRecordings(candidate);
 
@@ -78,7 +78,7 @@ public sealed class ProviderRecordings
         var normalised = relativePath
             .Replace('/', Path.DirectorySeparatorChar)
             .Replace('\\', Path.DirectorySeparatorChar);
-        var full = Path.Combine(Directory, normalised);
+        var full = Path.Join(Directory, normalised);
 
         if (!File.Exists(full))
             throw new FileNotFoundException($"Recording '{relativePath}' not found under '{Directory}'.", full);
