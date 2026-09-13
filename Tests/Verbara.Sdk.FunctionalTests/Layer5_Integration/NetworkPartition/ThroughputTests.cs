@@ -130,16 +130,10 @@ public sealed class ThroughputTests : FunctionalTestBase
             await ToxiproxyControl.AddToxicAsync(ProxyName, "limit-data", "limit_data", "downstream",
                 new Dictionary<string, object> { ["bytes"] = 500 });
 
-            // Generate traffic to trigger the byte limit
-            try
-            {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await connection.SendActionAsync(new PingAction(), cts.Token);
-            }
-            catch
-            {
-                // Expected: connection may be cut mid-response
-            }
+            // Generate traffic to trigger the byte limit. The ping itself may fail, since the
+            // connection may be cut mid-response.
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await BestEffort.SendAsync(connection, new PingAction(), cts.Token);
 
             // Wait for state to transition (limit_data closes the connection)
             using var stateCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));

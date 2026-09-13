@@ -245,21 +245,13 @@ public sealed class CelSequenceTests : FunctionalTestBase
         }
         finally
         {
-            try
-            {
-                await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
-            }
-            catch { /* best effort */ }
+            await BestEffort.SendAsync(connection, new CommandAction { Command = "channel request hangup all" });
             await Task.Delay(TimeSpan.FromSeconds(1));
-            try
+            await BestEffort.SendAsync(connection, new QueueRemoveAction
             {
-                await connection.SendActionAsync(new QueueRemoveAction
-                {
-                    Queue = testQueue,
-                    Interface = testInterface
-                });
-            }
-            catch { /* best effort cleanup */ }
+                Queue = testQueue,
+                Interface = testInterface
+            });
         }
     }
 

@@ -85,15 +85,11 @@ public sealed class QueueCallFlowTests : FunctionalTestBase
         }
         finally
         {
-            try
+            await BestEffort.SendAsync(connection, new QueueRemoveAction
             {
-                await connection.SendActionAsync(new QueueRemoveAction
-                {
-                    Queue = TestQueue,
-                    Interface = TestInterface
-                });
-            }
-            catch { /* best effort cleanup */ }
+                Queue = TestQueue,
+                Interface = TestInterface
+            });
         }
     }
 
@@ -108,11 +104,7 @@ public sealed class QueueCallFlowTests : FunctionalTestBase
         await connection.ConnectAsync();
 
         // Clear any channels left by prior tests in this Asterisk instance
-        try
-        {
-            await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
-        }
-        catch { /* best effort */ }
+        await BestEffort.SendAsync(connection, new CommandAction { Command = "channel request hangup all" });
         await Task.Delay(TimeSpan.FromSeconds(2));
 
         var server = new VerbaraServer(connection, LoggerFactory.CreateLogger<VerbaraServer>());
@@ -170,11 +162,7 @@ public sealed class QueueCallFlowTests : FunctionalTestBase
         finally
         {
             // Cleanup: hangup all channels
-            try
-            {
-                await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
-            }
-            catch { /* best effort */ }
+            await BestEffort.SendAsync(connection, new CommandAction { Command = "channel request hangup all" });
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
     }
@@ -285,21 +273,13 @@ public sealed class QueueCallFlowTests : FunctionalTestBase
         }
         finally
         {
-            try
-            {
-                await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
-            }
-            catch { /* best effort */ }
+            await BestEffort.SendAsync(connection, new CommandAction { Command = "channel request hangup all" });
             await Task.Delay(TimeSpan.FromSeconds(1));
-            try
+            await BestEffort.SendAsync(connection, new QueueRemoveAction
             {
-                await connection.SendActionAsync(new QueueRemoveAction
-                {
-                    Queue = TestQueue,
-                    Interface = TestInterface
-                });
-            }
-            catch { /* best effort */ }
+                Queue = TestQueue,
+                Interface = TestInterface
+            });
         }
     }
 

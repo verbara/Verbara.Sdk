@@ -102,19 +102,13 @@ public sealed class QueueMemberTests : FunctionalTestBase
         }
         finally
         {
-            // Best-effort cleanup in case removal failed
-            try
+            // Best-effort cleanup in case removal failed. A member that is already removed gets an
+            // error response, which is not an exception.
+            await BestEffort.SendAsync(connection, new QueueRemoveAction
             {
-                await connection.SendActionAsync(new QueueRemoveAction
-                {
-                    Queue = TestQueue,
-                    Interface = TestInterface
-                });
-            }
-            catch
-            {
-                // Ignore — member may already be removed
-            }
+                Queue = TestQueue,
+                Interface = TestInterface
+            });
         }
     }
 
@@ -161,19 +155,12 @@ public sealed class QueueMemberTests : FunctionalTestBase
         finally
         {
             // Unpause then remove
-            try
+            await BestEffort.SendAsync(connection, new QueuePauseAction
             {
-                await connection.SendActionAsync(new QueuePauseAction
-                {
-                    Queue = TestQueue,
-                    Interface = TestInterface,
-                    Paused = false
-                });
-            }
-            catch
-            {
-                // Ignore
-            }
+                Queue = TestQueue,
+                Interface = TestInterface,
+                Paused = false
+            });
 
             await connection.SendActionAsync(new QueueRemoveAction
             {

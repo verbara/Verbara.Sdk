@@ -85,8 +85,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         }
         finally
         {
-            try { await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" }); }
-            catch { /* best effort */ }
+            await BestEffort.SendAsync(connection, new CommandAction { Command = "channel request hangup all" });
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
     }
@@ -218,8 +217,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         }
         finally
         {
-            try { await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" }); }
-            catch { /* best effort */ }
+            await BestEffort.SendAsync(connection, new CommandAction { Command = "channel request hangup all" });
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
     }
@@ -292,8 +290,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         }
         finally
         {
-            try { await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" }); }
-            catch { /* best effort */ }
+            await BestEffort.SendAsync(connection, new CommandAction { Command = "channel request hangup all" });
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
     }
@@ -348,8 +345,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
         }
         finally
         {
-            try { await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" }); }
-            catch { /* best effort */ }
+            await BestEffort.SendAsync(connection, new CommandAction { Command = "channel request hangup all" });
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
     }

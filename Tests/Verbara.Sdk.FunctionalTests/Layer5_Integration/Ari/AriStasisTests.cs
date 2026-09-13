@@ -59,7 +59,7 @@ public sealed class AriStasisTests : FunctionalTestBase
         evt.Channel!.Id.Should().NotBeNullOrEmpty("channel ID must not be empty");
 
         // Cleanup
-        try { await ariClient.Channels.HangupAsync(evt.Channel.Id); } catch { /* already gone */ }
+        await BestEffort.AriAsync(() => ariClient.Channels.HangupAsync(evt.Channel.Id));
     }
 
     /// <summary>
@@ -158,7 +158,7 @@ public sealed class AriStasisTests : FunctionalTestBase
         await act.Should().NotThrowAsync("answering a Stasis channel should succeed");
 
         // Cleanup
-        try { await ariClient.Channels.HangupAsync(channelId); } catch { /* already gone */ }
+        await BestEffort.AriAsync(() => ariClient.Channels.HangupAsync(channelId));
     }
 
     /// <summary>
@@ -278,7 +278,7 @@ public sealed class AriStasisTests : FunctionalTestBase
         if (result != tcs.Task)
         {
             // Cleanup bridge even if channel never arrived
-            try { await ariClient.Bridges.DestroyAsync(bridge.Id); } catch { /* best effort */ }
+            await BestEffort.AriAsync(() => ariClient.Bridges.DestroyAsync(bridge.Id));
             return;
         }
 
@@ -305,8 +305,8 @@ public sealed class AriStasisTests : FunctionalTestBase
         }
         finally
         {
-            try { await ariClient.Channels.HangupAsync(channelId); } catch { /* already gone */ }
-            try { await ariClient.Bridges.DestroyAsync(bridge.Id); } catch { /* already gone */ }
+            await BestEffort.AriAsync(() => ariClient.Channels.HangupAsync(channelId));
+            await BestEffort.AriAsync(() => ariClient.Bridges.DestroyAsync(bridge.Id));
         }
     }
 
