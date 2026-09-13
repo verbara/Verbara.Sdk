@@ -46,24 +46,16 @@ internal static class ProjectGraph
     {
         ArgumentNullException.ThrowIfNull(csprojXml);
 
-        var refs = new List<string>();
-        var doc = XDocument.Parse(csprojXml);
-        foreach (var element in doc.Descendants())
-        {
-            if (element.Name.LocalName != "ProjectReference")
-                continue;
-
-            var include = element.Attribute("Include")?.Value;
-            if (string.IsNullOrEmpty(include))
-                continue;
-
-            if (IsAnalyzerReference(element))
-                continue;
-
-            refs.Add(BaseName(include));
-        }
-
-        return refs;
+        // OfType<string>() drops a missing Include and the Length check an empty one. Both
+        // predicates are pure, so testing IsAnalyzerReference first selects the same elements.
+        return XDocument.Parse(csprojXml)
+            .Descendants()
+            .Where(element => element.Name.LocalName == "ProjectReference" && !IsAnalyzerReference(element))
+            .Select(element => element.Attribute("Include")?.Value)
+            .OfType<string>()
+            .Where(include => include.Length > 0)
+            .Select(BaseName)
+            .ToList();
     }
 
     private static bool IsAnalyzerReference(XElement element)

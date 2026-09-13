@@ -39,11 +39,7 @@ public sealed class LayeringGuardTests
             if (IsProvider(package))
                 continue;
 
-            foreach (var reference in references)
-            {
-                if (IsProvider(reference))
-                    violations.Add($"{package} -> {reference}");
-            }
+            violations.AddRange(references.Where(IsProvider).Select(reference => $"{package} -> {reference}"));
         }
 
         violations.Should().BeEmpty(BuildFailureMessage(violations));
