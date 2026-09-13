@@ -96,16 +96,10 @@ public sealed class ProtocolInjectionTests : FunctionalTestBase
         var largeValue = new string('A', 64 * 1024);
         var largeCommand = new CommandAction { Command = largeValue };
 
-        // The action may succeed or fail (Asterisk may reject it), but must not
-        // crash the process or leave the connection in a broken state.
-        try
-        {
-            await connection.SendActionAsync(largeCommand);
-        }
-        catch (Exception)
-        {
-            // Acceptable — Asterisk may reject an oversized payload
-        }
+        // Asterisk may answer the oversized action with an error response, or not at all before the
+        // response timeout, and either is acceptable. Any other exception fails the test, as does a
+        // connection left unusable.
+        await BestEffort.SendAsync(connection, largeCommand);
 
         // Connection must still respond to a follow-up Ping
         var probe = await connection.SendActionAsync(new PingAction());
