@@ -160,8 +160,8 @@ public class HttpProviderMockServerTests
         var folder = CreateTemporaryRecordingsFolder();
         try
         {
-            Directory.CreateDirectory(Path.Combine(folder, "whisper"));
-            await File.WriteAllTextAsync(Path.Combine(folder, "whisper", "transcription.json"), TranscriptionJson);
+            Directory.CreateDirectory(Path.Join(folder, "whisper"));
+            await File.WriteAllTextAsync(Path.Join(folder, "whisper", "transcription.json"), TranscriptionJson);
 
             await using var server = HttpProviderMockServer.Start(ProviderRecordings.At(folder));
             server.StubRecordedJson(AuthenticatedTranscription(), "whisper/transcription.json");
@@ -185,7 +185,7 @@ public class HttpProviderMockServerTests
         var folder = CreateTemporaryRecordingsFolder();
         try
         {
-            await File.WriteAllBytesAsync(Path.Combine(folder, "azure-tts.wav"), audio);
+            await File.WriteAllBytesAsync(Path.Join(folder, "azure-tts.wav"), audio);
 
             await using var server = HttpProviderMockServer.Start(ProviderRecordings.At(folder));
             server.StubRecordedBytes(AuthenticatedTranscription(), "azure-tts.wav", "audio/wav");
@@ -257,7 +257,7 @@ public class HttpProviderMockServerTests
 
     private static string CreateTemporaryRecordingsFolder()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "verbara-recordings-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Join(Path.GetTempPath(), "verbara-recordings-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         return folder;
     }
