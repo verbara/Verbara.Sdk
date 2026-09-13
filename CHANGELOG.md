@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.5.3] - 2026-09-13
+
 ### Fixed — BREAKING: `VoiceAiPipeline` counted a synthesizer's own cancellation as a completed synthesis
 
 When a synthesizer cancelled itself while no one had asked it to, `VoiceAiPipeline` booked that turn as if a
