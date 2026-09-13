@@ -250,7 +250,7 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
                 {
                     result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
                 }
-                catch { break; }
+                catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { break; }
 
                 if (result.MessageType == WebSocketMessageType.Text)
                 {
@@ -293,7 +293,10 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
         if (ErrorFrameJson is { } errorFrame)
         {
             try { await SendTextFrameAsync(ws, errorFrame, ct).ConfigureAwait(false); }
-            catch { }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
+            {
+                // The peer is already gone; CloseSessionAsync below still runs.
+            }
 
             await CloseSessionAsync(ws, receiveTask).ConfigureAwait(false);
             return;
@@ -330,7 +333,8 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
         if (AbortAfterSend)
         {
             ws.Abort();
-            try { await receiveTask.ConfigureAwait(false); } catch { }
+            try { await receiveTask.ConfigureAwait(false); }
+            catch (OperationCanceledException) { /* server token cancelled before the loop started */ }
             return;
         }
 
@@ -340,7 +344,10 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
             {
                 await SendTextFrameAsync(ws, ReadFrame(DoneFrame), ct).ConfigureAwait(false);
             }
-            catch { }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
+            {
+                // The peer closed before the terminator; the close handshake below still runs.
+            }
         }
 
         await CloseSessionAsync(ws, receiveTask).ConfigureAwait(false);
@@ -363,9 +370,13 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
                 await ws.CloseOutputAsync(status, CloseStatusDescription, CancellationToken.None)
                     .ConfigureAwait(false);
         }
-        catch { }
+        catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
+        {
+            // The peer already closed or reset the socket; nothing is left to hand-shake.
+        }
 
-        try { await receiveTask.ConfigureAwait(false); } catch { }
+        try { await receiveTask.ConfigureAwait(false); }
+        catch (OperationCanceledException) { /* server token cancelled before the loop started */ }
     }
 
     /// <summary>

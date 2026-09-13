@@ -216,7 +216,7 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
             await TrySendTextAsync(ws, errorFrame, ct).ConfigureAwait(false);
             await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
             try { await receiveTask.ConfigureAwait(false); }
-            catch (Exception) { /* connection may already be closed */ }
+            catch (OperationCanceledException) { /* server token cancelled before the loop started */ }
             return;
         }
 
@@ -227,14 +227,14 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
         {
             ws.Abort();
             try { await receiveTask.ConfigureAwait(false); }
-            catch (Exception) { /* abort is expected */ }
+            catch (OperationCanceledException) { /* server token cancelled before the loop started */ }
             return;
         }
 
         await SendOptionalFlushedAsync(ws, ct).ConfigureAwait(false);
         await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
         try { await receiveTask.ConfigureAwait(false); }
-        catch (Exception) { /* connection may already be closed */ }
+        catch (OperationCanceledException) { /* server token cancelled before the loop started */ }
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
@@ -265,7 +265,7 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
                 {
                     result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
                 }
-                catch (Exception)
+                catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
                 {
                     break; // connection closed or cancelled
                 }
@@ -305,7 +305,7 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
                 await ws.SendAsync(frame.AsMemory(), WebSocketMessageType.Binary, true, ct)
                     .ConfigureAwait(false);
             }
-            catch (Exception)
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
             {
                 break; // connection closed mid-send
             }
@@ -327,7 +327,7 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
             await ws.SendAsync(Encoding.UTF8.GetBytes(json).AsMemory(), WebSocketMessageType.Text, true, ct)
                 .ConfigureAwait(false);
         }
-        catch (Exception)
+        catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
         {
             // Connection closed before we could send — not an error.
         }
@@ -350,7 +350,7 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
                 await ws.CloseOutputAsync(status, CloseStatusDescription, CancellationToken.None)
                     .ConfigureAwait(false);
         }
-        catch (Exception)
+        catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
         {
             // Socket may already be gone — not an error.
         }
