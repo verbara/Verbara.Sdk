@@ -212,7 +212,7 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
                 await ws.SendAsync(failure.AsMemory(), WebSocketMessageType.Text, true, ct)
                     .ConfigureAwait(false);
             }
-            catch { return; }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { return; }
 
             await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
             return;
@@ -260,7 +260,7 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
             {
                 result = await ws.ReceiveAsync(buf.AsMemory(), ceiling.Token).ConfigureAwait(false);
             }
-            catch { break; }
+            catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { break; }
 
             if (result.MessageType == WebSocketMessageType.Binary)
             {
@@ -284,15 +284,18 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
                 // frame instead would be asserting the half-close as the contract, which is the
                 // defect §3.6d measured (0/10 digits, no end-of-turn message at all).
                 ReceivedTerminatorText = Encoding.UTF8.GetString(buf, 0, result.Count);
+
+                // Read before the try: a missing recording is a defect in the suite, not a peer
+                // that went away, so it must fail the session rather than close it normally.
+                var termination = Encoding.UTF8.GetBytes(BuildTerminationJson());
                 try
                 {
-                    var termination = Encoding.UTF8.GetBytes(BuildTerminationJson());
                     await ws.SendAsync(termination.AsMemory(), WebSocketMessageType.Text, true, ct)
                         .ConfigureAwait(false);
                     await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
                         .ConfigureAwait(false);
                 }
-                catch { break; }
+                catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { break; }
             }
             else if (result.MessageType == WebSocketMessageType.Close)
             {
@@ -308,20 +311,9 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
     /// Closes the server side with <see cref="CloseStatus"/> — normal closure unless a test asked for
     /// another code.
     /// </summary>
-    private async Task CloseWithConfiguredStatusAsync(System.Net.WebSockets.WebSocket ws)
-    {
-        var status = CloseStatus ?? WebSocketCloseStatus.NormalClosure;
-
-        if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
-        {
-            try
-            {
-                await ws.CloseAsync(status, CloseStatusDescription, CancellationToken.None)
-                    .ConfigureAwait(false);
-            }
-            catch { }
-        }
-    }
+    private Task CloseWithConfiguredStatusAsync(System.Net.WebSockets.WebSocket ws)
+        => WebSocketTestServer.CloseIfOpenAsync(
+            ws, CloseStatus ?? WebSocketCloseStatus.NormalClosure, CloseStatusDescription);
 
     /// <summary>Read a recorded frame verbatim from the suite's <c>Recordings/</c> tree.</summary>
     public static string ReadFrame(string relativePath) => RecordingsTree.Value.ReadText(relativePath);

@@ -161,6 +161,63 @@ public sealed class WebSocketTestServer : IAsyncDisposable
     }
 
     /// <summary>
+    /// Whether <paramref name="exception"/> means the session is ending — the peer closed, reset or
+    /// dropped the connection, the socket was aborted or disposed, or the server or a ceiling
+    /// cancelled the wait — rather than a defect in the fake or the test.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Fakes filter their socket catches on this instead of catching everything, so an exception
+    /// that does not mean the session is over — a missing recording, an invalid close code — leaves
+    /// the handler and reaches the per-connection boundary instead of passing for a peer that went
+    /// away.
+    /// </para>
+    /// <para>
+    /// The three types are the whole set these sockets produce, read from the runtime's
+    /// <c>ManagedWebSocket</c> rather than assumed. A stream fault surfaces as
+    /// <see cref="WebSocketException"/> with <see cref="WebSocketError.ConnectionClosedPrematurely"/>,
+    /// and a call in the wrong state as <see cref="WebSocketException"/> with
+    /// <see cref="WebSocketError.InvalidState"/>. Cancellation, and any fault after <c>Abort</c>,
+    /// surfaces as <see cref="OperationCanceledException"/>. A call that races a dispose past the state
+    /// check throws <see cref="ObjectDisposedException"/> — the substrate's dispose, or the socket's own
+    /// when its close completes — which a background receive loop can meet in the middle of a session.
+    /// <see cref="OutboundFrameGate"/> adds only <see cref="OperationCanceledException"/>. Receives
+    /// queue behind one another rather than throwing, so a receive loop that overlaps a close
+    /// handshake needs nothing more.
+    /// </para>
+    /// </remarks>
+    public static bool IsSessionEnding(Exception exception) =>
+        exception is WebSocketException or OperationCanceledException or ObjectDisposedException;
+
+    /// <summary>
+    /// Closes <paramref name="webSocket"/> with <paramref name="status"/> if it is open or has only
+    /// received the peer's close, and returns quietly if the session ends first.
+    /// </summary>
+    /// <remarks>
+    /// <c>CloseAsync</c> waits for the peer's answering close frame, so a client that disposes before
+    /// sending one ends the handshake with a <see cref="WebSocketException"/>, and the state can
+    /// change between the check and the call. Both mean the session is ending, which is all this
+    /// swallows — see <see cref="IsSessionEnding"/>.
+    /// </remarks>
+    public static async Task CloseIfOpenAsync(
+        System.Net.WebSockets.WebSocket webSocket, WebSocketCloseStatus status, string? statusDescription)
+    {
+        ArgumentNullException.ThrowIfNull(webSocket);
+
+        if (webSocket.State is not (WebSocketState.Open or WebSocketState.CloseReceived))
+            return;
+
+        try
+        {
+            await webSocket.CloseAsync(status, statusDescription, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsSessionEnding(ex))
+        {
+            // Best effort: the peer may already have closed, reset or aborted the socket.
+        }
+    }
+
+    /// <summary>
     /// Read the HTTP/1.1 upgrade request, returning the <c>Sec-WebSocket-Key</c> header value,
     /// the full request-target (path + query) for callers that need to assert on URL params, and
     /// every request header for callers that need to assert on the credential the client sent.
