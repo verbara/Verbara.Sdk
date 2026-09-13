@@ -57,38 +57,30 @@ internal static class LoopbackSeamScanner
         var violations = new List<LoopbackSeamViolation>();
 
         // (a) Interpolated strings whose loopback port is a hole => a fake-server port.
-        foreach (var interpolated in root.DescendantNodes().OfType<InterpolatedStringExpressionSyntax>())
+        foreach (var interpolated in root.DescendantNodes()
+            .OfType<InterpolatedStringExpressionSyntax>()
+            .Where(i => BuildShape(i).Contains(InterpolatedLoopbackShape, StringComparison.OrdinalIgnoreCase)))
         {
-            if (!BuildShape(interpolated).Contains(InterpolatedLoopbackShape, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var line = interpolated.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
             violations.Add(new LoopbackSeamViolation(
                 path,
-                line,
+                interpolated.GetLocation().GetLineSpan().StartLinePosition.Line + 1,
                 "LoopbackInterpolation",
                 "Fake-server seam dials 'localhost' with an interpolated port — 'localhost' resolves ::1 first, which the IPv4-only test listener does not own. Use the literal '127.0.0.1'."));
         }
 
-        // (b) HttpListener prefix registrations: '<x>.Prefixes.Add(<arg naming localhost>)'.
-        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        // (b) HttpListener prefix registrations: '<x>.Prefixes.Add(<arg naming localhost>)'. One
+        //     violation per registration, however many of its arguments name the host.
+        foreach (var invocation in root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Where(i => IsPrefixesAdd(i.Expression)
+                && i.ArgumentList.Arguments.Any(
+                    a => a.Expression.ToString().Contains(LoopbackHostToken, StringComparison.OrdinalIgnoreCase))))
         {
-            if (!IsPrefixesAdd(invocation.Expression))
-                continue;
-
-            foreach (var argument in invocation.ArgumentList.Arguments)
-            {
-                if (!argument.Expression.ToString().Contains(LoopbackHostToken, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var line = invocation.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
-                violations.Add(new LoopbackSeamViolation(
-                    path,
-                    line,
-                    "HttpListenerPrefix",
-                    "HttpListener prefix binds 'localhost' — it would claim a port number the IPv4-only fakes already hold on 127.0.0.1, cross-wiring two servers instead of raising EADDRINUSE. Use the literal '127.0.0.1'."));
-                break;
-            }
+            violations.Add(new LoopbackSeamViolation(
+                path,
+                invocation.GetLocation().GetLineSpan().StartLinePosition.Line + 1,
+                "HttpListenerPrefix",
+                "HttpListener prefix binds 'localhost' — it would claim a port number the IPv4-only fakes already hold on 127.0.0.1, cross-wiring two servers instead of raising EADDRINUSE. Use the literal '127.0.0.1'."));
         }
 
         return violations;

@@ -106,11 +106,8 @@ internal static class ProviderEndpointScanner
         // would buy syntactic tidiness by making the reason worse.
         var markerLines = new HashSet<int>();
         var commentLines = new HashSet<int>();
-        foreach (var trivia in root.DescendantTrivia())
+        foreach (var trivia in root.DescendantTrivia().Where(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia)))
         {
-            if (!trivia.IsKind(SyntaxKind.SingleLineCommentTrivia))
-                continue;
-
             var line = trivia.GetLocation().GetLineSpan().StartLinePosition.Line;
             commentLines.Add(line);
             if (AllowMarker.IsMatch(trivia.ToString()))
