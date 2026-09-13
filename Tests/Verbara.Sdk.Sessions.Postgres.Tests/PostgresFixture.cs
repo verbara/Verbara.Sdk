@@ -46,7 +46,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         _dataSource = NpgsqlDataSource.Create(ConnectionString);
 
         // Run migration shipped with the package (copied to bin/.../Migrations/).
-        var migrationPath = Path.Combine(AppContext.BaseDirectory, "Migrations", "001_create_sessions_table.sql");
+        var migrationPath = Path.Join(AppContext.BaseDirectory, "Migrations", "001_create_sessions_table.sql");
         var migrationSql = await File.ReadAllTextAsync(migrationPath);
 
         // Retry the first real connection — CI runners sometimes reset the TCP stream

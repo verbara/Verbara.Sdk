@@ -219,7 +219,7 @@ public sealed class PerformanceTableCoherenceTests
     private static string ReadPerformanceSection() => SectionOf(ReadReadme(), "## Performance", "README.md");
 
     private static string ReadGuideBenchmarksSection() => SectionOf(
-        File.ReadAllText(Path.Combine(RepoRoot(), "docs", "guides", "session-store-backends.md")),
+        File.ReadAllText(Path.Join(RepoRoot(), "docs", "guides", "session-store-backends.md")),
         "## Benchmarks", "docs/guides/session-store-backends.md");
 
     private static string SectionOf(string markdown, string heading, string document)
@@ -231,17 +231,17 @@ public sealed class PerformanceTableCoherenceTests
         return end > 0 ? section[..end] : section;
     }
 
-    private static string ReadReadme() => File.ReadAllText(Path.Combine(RepoRoot(), "README.md"));
+    private static string ReadReadme() => File.ReadAllText(Path.Join(RepoRoot(), "README.md"));
 
     private static JsonDocument LoadRecord() => JsonDocument.Parse(
-        File.ReadAllText(Path.Combine(RepoRoot(), "docs", "research", "performance-record.json")));
+        File.ReadAllText(Path.Join(RepoRoot(), "docs", "research", "performance-record.json")));
 
     private static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "Verbara.Sdk.slnx"))) return dir.FullName;
+            if (File.Exists(Path.Join(dir.FullName, "Verbara.Sdk.slnx"))) return dir.FullName;
             dir = dir.Parent;
         }
         throw new InvalidOperationException("Could not locate repo root (Verbara.Sdk.slnx).");
