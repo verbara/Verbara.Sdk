@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
+using WireMock.Exceptions;
 using WireMock.Logging;
 using WireMock.Server;
 using WireMock.Settings;
@@ -97,9 +98,12 @@ public sealed class HttpProviderMockServer : IAsyncDisposable
 
                 return new HttpProviderMockServer(server, port, recordings);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is WireMockException or TimeoutException)
             {
                 // Another process took the port between the probe and the bind; try a new one.
+                // WireMock reports a failed bind as a WireMockException once StartTimeout expires,
+                // and a start that never reports "started" as a TimeoutException. Anything else is
+                // not a port race, so it surfaces on the first attempt instead of being retried.
                 lastFailure = ex;
             }
         }
