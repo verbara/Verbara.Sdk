@@ -38,9 +38,29 @@ public sealed class WebSocketTestServer : IAsyncDisposable
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? _acceptLoop;
     private volatile System.Net.WebSockets.WebSocket? _currentSocket;
+    private Exception? _handlerFault;
 
     /// <summary>The TCP port the server is listening on (loopback only).</summary>
     public int Port { get; }
+
+    /// <summary>
+    /// The first exception that escaped a connection handler, or <see langword="null"/> while every
+    /// session so far has ended without one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The per-connection boundary still swallows the fault, so one broken session cannot take the
+    /// server down. Before this property the fault was simply lost: a defect in a fake's handler ended
+    /// the session exactly the way a peer hanging up does, and a test could only see that it ended.
+    /// </para>
+    /// <para>
+    /// Only the first fault is kept. It is recorded by the boundary's exception filter, which runs
+    /// before the connection is released, so once a client has seen its connection drop, the fault
+    /// behind the drop is already readable here. Disposing the server mid-session cancels the handler,
+    /// and that cancellation is recorded like any other fault: read this before disposing.
+    /// </para>
+    /// </remarks>
+    public Exception? HandlerFault => Volatile.Read(ref _handlerFault);
 
     /// <summary>
     /// Parks outbound delivery after a chosen number of messages, so a test can cancel while this
@@ -149,14 +169,29 @@ public sealed class WebSocketTestServer : IAsyncDisposable
         }
         // An OperationCanceledException from _cts, when the server is disposed mid-session, is the
         // normal shutdown path and lands in this clause too.
-        catch (Exception)
+        catch (Exception ex) when (RecordFault(ex))
         {
-            // Swallow per-connection failures; the test asserts on observable side effects.
+            // Swallowed so one broken session cannot take the server down; tests assert on observable
+            // side effects. The filter has already kept the first fault: read it from HandlerFault.
         }
         finally
         {
             _sessionCompleted.TrySetResult();
         }
+    }
+
+    /// <summary>
+    /// Keeps <paramref name="ex"/> as <see cref="HandlerFault"/> unless a fault is already kept.
+    /// </summary>
+    /// <remarks>
+    /// Used as an exception filter for its side effect, so it always returns <see langword="true"/>
+    /// and the clause still catches. A filter runs before the <c>using</c> blocks it guards unwind,
+    /// which is what makes the fault readable by the time the peer sees the connection close.
+    /// </remarks>
+    private bool RecordFault(Exception ex)
+    {
+        Interlocked.CompareExchange(ref _handlerFault, ex, null);
+        return true;
     }
 
     /// <summary>
