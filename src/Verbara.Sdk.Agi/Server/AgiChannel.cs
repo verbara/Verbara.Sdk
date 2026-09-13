@@ -33,6 +33,11 @@ public sealed class AgiChannel : IAgiChannel
     }
 
     /// <summary>Send an AGI command and wait for the reply.</summary>
+    /// <exception cref="System.ArgumentException">
+    /// The command text built by <paramref name="command"/> contains a line break (CR or LF), for
+    /// example from one of its property values, which would split one command into several on the
+    /// wire. Nothing is sent, no reply is awaited, and the channel stays usable.
+    /// </exception>
     public async ValueTask<AgiReply> SendCommandAsync(AgiCommandBase command, CancellationToken cancellationToken = default)
     {
         var cmd = command.BuildCommand();
@@ -48,6 +53,10 @@ public sealed class AgiChannel : IAgiChannel
     }
 
     /// <summary>Send a raw command string and wait for the reply.</summary>
+    /// <exception cref="System.ArgumentException">
+    /// <paramref name="command"/> contains a line break (CR or LF), which would split one command into
+    /// several on the wire. Nothing is sent, no reply is awaited, and the channel stays usable.
+    /// </exception>
     public async ValueTask<AgiReply> SendCommandAsync(string command, CancellationToken cancellationToken = default)
     {
         if (_logger is not null) AgiChannelLog.CommandSending(_logger, command);
@@ -77,28 +86,33 @@ public sealed class AgiChannel : IAgiChannel
             AgiChannelLog.CommandFailed(_logger, command, reply.StatusCode, reply.RawLine);
     }
 
+    /// <inheritdoc />
     public async ValueTask AnswerAsync(CancellationToken cancellationToken = default)
     {
         var reply = await SendCommandAsync("ANSWER", cancellationToken);
         if (!reply.IsSuccess) throw new AgiException($"ANSWER failed: {reply.RawLine}");
     }
 
+    /// <inheritdoc />
     public async ValueTask HangupAsync(CancellationToken cancellationToken = default)
     {
         await SendCommandAsync("HANGUP", cancellationToken);
     }
 
+    /// <inheritdoc />
     public async ValueTask<string> GetVariableAsync(string name, CancellationToken cancellationToken = default)
     {
         var reply = await SendCommandAsync($"GET VARIABLE {name}", cancellationToken);
         return reply.Extra ?? reply.Result;
     }
 
+    /// <inheritdoc />
     public async ValueTask SetVariableAsync(string name, string value, CancellationToken cancellationToken = default)
     {
         await SendCommandAsync($"SET VARIABLE {name} \"{value}\"", cancellationToken);
     }
 
+    /// <inheritdoc />
     public async ValueTask<char> StreamFileAsync(string file, string escapeDigits = "", CancellationToken cancellationToken = default)
     {
         var cmd = string.IsNullOrEmpty(escapeDigits)
@@ -108,6 +122,7 @@ public sealed class AgiChannel : IAgiChannel
         return reply.ResultAsChar;
     }
 
+    /// <inheritdoc />
     public async ValueTask<string> GetDataAsync(string file, int timeout = 0, int maxDigits = 0, CancellationToken cancellationToken = default)
     {
         var cmd = timeout > 0
@@ -117,6 +132,7 @@ public sealed class AgiChannel : IAgiChannel
         return reply.Result;
     }
 
+    /// <inheritdoc />
     public async ValueTask ExecAsync(string application, string args = "", CancellationToken cancellationToken = default)
     {
         var cmd = string.IsNullOrEmpty(args) ? $"EXEC {application}" : $"EXEC {application} {args}";

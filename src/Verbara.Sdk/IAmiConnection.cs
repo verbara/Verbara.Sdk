@@ -14,16 +14,39 @@ public interface IAmiConnection : IAsyncDisposable
     string? AsteriskVersion { get; }
 
     /// <summary>Connect and authenticate to the Asterisk AMI.</summary>
+    /// <exception cref="System.ArgumentException">
+    /// The configured username contains a line break (CR or LF), which would split the login action
+    /// into several on the wire. The login action is not sent.
+    /// </exception>
     ValueTask ConnectAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Send an action and wait for the response.</summary>
+    /// <exception cref="System.ArgumentException">
+    /// The action's ActionID, or a key or value among the fields it serializes to, contains a line
+    /// break (CR or LF), which would split one action into several on the wire. Nothing of the action
+    /// is sent, no response is awaited, and the connection stays usable. The message names the field
+    /// but never includes its value.
+    /// </exception>
     ValueTask<ManagerResponse> SendActionAsync(ManagerAction action, CancellationToken cancellationToken = default);
 
     /// <summary>Send an action and wait for a typed response.</summary>
+    /// <exception cref="System.ArgumentException">
+    /// The action's ActionID, or a key or value among the fields it serializes to, contains a line
+    /// break (CR or LF), which would split one action into several on the wire. Nothing of the action
+    /// is sent, no response is awaited, and the connection stays usable. The message names the field
+    /// but never includes its value.
+    /// </exception>
     ValueTask<TResponse> SendActionAsync<TResponse>(ManagerAction action, CancellationToken cancellationToken = default)
         where TResponse : ManagerResponse;
 
     /// <summary>Send an event-generating action and stream the resulting events.</summary>
+    /// <exception cref="System.ArgumentException">
+    /// Surfaced by the first <c>MoveNextAsync</c> of the returned sequence: the action's ActionID, or
+    /// a key or value among the fields it serializes to, contains a line break (CR or LF), which would
+    /// split one action into several on the wire. Nothing of the action is sent, no events are
+    /// awaited, and the connection stays usable. The message names the field but never includes its
+    /// value.
+    /// </exception>
     IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
         ManagerAction action, CancellationToken cancellationToken = default);
 

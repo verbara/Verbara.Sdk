@@ -228,6 +228,32 @@ of 48 µs.
   wrong backend, or an unbound figure added beside the bound ones, still passes
   (`docs/claim-registry.md`). The percentiles stay in the addendum, which the record does not bind.
 
+### Security — A line break inside an AMI action or an AGI command is now rejected before anything is written
+
+On the wire an AMI header ends at CR LF, an action ends at an empty line, and an AGI command ends at LF, so a CR
+or LF inside a value turned one action or command into several. That matters wherever an application passes
+externally sourced text into an AMI field or an AGI command.
+
+- **Where it is checked.** `AmiProtocolWriter.WriteActionAsync` and `WriteFieldsAsync` check the action name, the
+  ActionID and every field key and value, and `FastAgiWriter.SendCommandAsync` checks the command, before the
+  first byte reaches the `PipeWriter`. Every public path goes through them: `IAmiConnection.SendActionAsync`,
+  `SendActionAsync<TResponse>` and `SendEventGeneratingActionAsync` (on its first `MoveNextAsync`); the login in
+  `ConnectAsync`; `AgiChannel.SendCommandAsync` for command objects and raw strings, and its convenience methods;
+  and AsyncAGI over AMI, where the command travels as an AMI field value.
+- **What the caller sees.** An `ArgumentException` whose message names the field, or its position when the key
+  itself holds the break, and never includes a value. After a send rejects a line break nothing is left pending,
+  no lock is held, and the connection or channel stays usable. A configured username with a line break makes
+  `ConnectAsync` fail the way any other login failure does: the Login action is not sent.
+- **Valid input is unchanged on the wire.** Every other character is written as before, including other control
+  characters and U+0085, U+2028 and U+2029, whose UTF-8 bytes contain no CR or LF: all 148 generated AMI actions
+  and all 53 AGI command types produce byte-identical output before and after. `AmiProtocolWriterBenchmark` shows
+  no slowdown and no added allocation per action. A null action name, ActionID or `WriteFieldsAsync` field
+  sequence now throws `ArgumentNullException` before anything is written.
+- **If you pass externally sourced text into AMI fields or AGI commands**, strip or reject line breaks before
+  calling. Code that catches exceptions broadly around a send now sees an `ArgumentException` there.
+- **Not changed:** with Debug logging (AGI) or Trace logging (AMI) enabled, the command or field text is logged
+  before the check runs, so a rejected value can still reach a log sink.
+
 ## [2.5.1] - 2026-09-12
 
 ### Fixed — Nine public claims were false, and now something executes them
