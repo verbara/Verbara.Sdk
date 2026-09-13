@@ -91,7 +91,10 @@ public sealed class AriClient : IAriClient
         _options = options.Value;
         _logger = logger;
 
-        _httpClient = new HttpClient(new AriLoggingHandler(logger)) { BaseAddress = new Uri(_options.BaseUrl.TrimEnd('/') + "/ari/") };
+        // The HttpClient disposes the logging handler, and the logging handler its inner handler.
+        var handler = new AriLoggingHandler(logger);
+        handler.InnerHandler = new HttpClientHandler();
+        _httpClient = new HttpClient(handler) { BaseAddress = new Uri(_options.BaseUrl.TrimEnd('/') + "/ari/") };
         var authBytes = Encoding.UTF8.GetBytes($"{_options.Username}:{_options.Password}");
         _httpClient.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));

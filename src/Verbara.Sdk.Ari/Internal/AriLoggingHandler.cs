@@ -18,8 +18,9 @@ internal static partial class AriHttpLog
 
 /// <summary>
 /// DelegatingHandler that logs and traces all ARI HTTP requests and responses.
+/// The creator assigns <see cref="DelegatingHandler.InnerHandler"/>, which disposing this handler disposes.
 /// </summary>
-internal sealed class AriLoggingHandler(ILogger logger) : DelegatingHandler(new HttpClientHandler())
+internal sealed class AriLoggingHandler(ILogger logger) : DelegatingHandler
 {
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {

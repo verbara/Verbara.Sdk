@@ -48,13 +48,7 @@ internal sealed class NatsConnectionSubscriber : INatsSubscriber
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         if (!_ownsConnection) return;
 
-        try
-        {
-            await _connection.DisposeAsync().ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            // Shutdown path — nothing upstream can react.
-        }
+        // No catch here: NatsBridge.StopAsync, the only caller, logs a failed dispose.
+        await _connection.DisposeAsync().ConfigureAwait(false);
     }
 }

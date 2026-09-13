@@ -155,13 +155,7 @@ public sealed class PostgresSessionStore : SessionStoreBase
         ct.ThrowIfCancellationRequested();
         var jsons = await _dataSource.QueryListAsync(_getActiveSql,
             static _ => { }, static r => r.GetStringOrNull("snapshot"), ct).ConfigureAwait(false);
-        var sessions = new List<CallSession>();
-        foreach (var json in jsons)
-        {
-            var snapshot = Deserialize(json);
-            if (snapshot is not null) sessions.Add(snapshot.ToSession());
-        }
-        return sessions;
+        return jsons.Select(Deserialize).OfType<CallSessionSnapshot>().Select(static s => s.ToSession()).ToList();
     }
 
     /// <inheritdoc />

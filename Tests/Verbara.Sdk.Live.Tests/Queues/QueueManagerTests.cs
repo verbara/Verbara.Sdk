@@ -159,6 +159,19 @@ public class QueueManagerTests
     }
 
     [Fact]
+    public void GetQueueObjectsForMember_ShouldLookUpMemberWhenEnumerated_WhenMemberIsAddedAfterCall()
+    {
+        // The result is lazy: each enumeration looks the member up again, so a sequence taken
+        // before the member existed sees the member's queue once it is added.
+        var queues = _sut.GetQueueObjectsForMember("PJSIP/agent01");
+        queues.Should().BeEmpty();
+
+        _sut.OnMemberAdded("sales", "PJSIP/agent01", "Agent 01", 0, false, 1);
+
+        queues.Select(q => q.Name).Should().Equal("sales");
+    }
+
+    [Fact]
     public void OnMemberRemoved_ShouldUpdateReverseIndex()
     {
         _sut.OnMemberAdded("sales", "PJSIP/agent01", "Agent 01", 0, false, 1);

@@ -21,8 +21,7 @@ public sealed class CompositeAudioServer : IAudioServer
     {
         foreach (var server in _servers)
         {
-            var stream = server.GetStream(channelId);
-            if (stream is not null) return stream;
+            if (server.GetStream(channelId) is { } stream) return stream;
         }
         return null;
     }

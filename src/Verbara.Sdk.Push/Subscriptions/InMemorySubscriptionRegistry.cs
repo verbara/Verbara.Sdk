@@ -29,13 +29,7 @@ public sealed class InMemorySubscriptionRegistry : ISubscriptionRegistry
     public int CountByTenant(string tenantId)
     {
         ArgumentNullException.ThrowIfNull(tenantId);
-        var count = 0;
-        foreach (var kv in _subscribers)
-        {
-            if (string.Equals(kv.Value.TenantId, tenantId, StringComparison.Ordinal))
-                count++;
-        }
-        return count;
+        return _subscribers.Count(kv => string.Equals(kv.Value.TenantId, tenantId, StringComparison.Ordinal));
     }
 
     public IDisposable Register(SubscriberContext subscriber)

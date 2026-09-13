@@ -114,11 +114,8 @@ public static class SsePushEndpoints
     {
         var patterns = new List<TopicPattern>();
 
-        foreach (var topicStr in query["topic"])
+        foreach (var topicStr in query["topic"].OfType<string>().Where(static t => !string.IsNullOrWhiteSpace(t)))
         {
-            if (string.IsNullOrWhiteSpace(topicStr))
-                continue;
-
             TopicPattern pattern;
             try
             {

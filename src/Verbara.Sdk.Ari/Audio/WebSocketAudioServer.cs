@@ -39,6 +39,9 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     private readonly ILogger<WebSocketAudioServer> _logger;
     private readonly ConcurrentDictionary<string, WebSocketAudioSession> _streams = new();
     private readonly Subject<IAudioStream> _streamSubject = new();
+    // Connection handlers that have not finished. Each handler removes and disposes its own session
+    // on its way out, so StopAsync waits for these until its token is cancelled.
+    private readonly ConcurrentDictionary<Task, byte> _connections = new();
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
@@ -92,73 +95,90 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                     continue;
                 }
 
-                _ = HandleConnectionAsync(client, ct);
+                TrackConnection(HandleConnectionAsync(client, ct));
             }
         }
         catch (OperationCanceledException) { }
         catch (ObjectDisposedException) { }
     }
 
+    /// <summary>
+    /// Keeps a connection handler in <see cref="_connections"/> until it completes. The handler is
+    /// added before the removal is attached, and a continuation attached to a task that has already
+    /// completed runs at once, so a handler that finished synchronously is still removed.
+    /// </summary>
+    private void TrackConnection(Task connection)
+    {
+        _connections.TryAdd(connection, 0);
+        _ = connection.ContinueWith(
+            static (completed, state) => ((ConcurrentDictionary<Task, byte>)state!).TryRemove(completed, out _),
+            _connections,
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
     private async Task HandleConnectionAsync(TcpClient client, CancellationToken ct)
     {
-        try
+        using (client)
         {
-            var stream = client.GetStream();
-
-            // Read HTTP upgrade request
-            var (wsKey, channelId) = await ReadUpgradeRequestAsync(stream, ct);
-            if (wsKey is null || channelId is null)
+            WebSocketAudioSession? session = null;
+            try
             {
-                WebSocketAudioServerLog.InvalidUpgrade(_logger);
-                client.Dispose();
-                return;
-            }
+                var stream = client.GetStream();
 
-            // Send HTTP 101 response
-            await SendUpgradeResponseAsync(stream, wsKey, ct);
-
-            // Create ManagedWebSocket
-            var webSocket = WebSocket.CreateFromStream(stream, new WebSocketCreationOptions { IsServer = true });
-
-            var session = new WebSocketAudioSession(webSocket, channelId, _options.DefaultFormat);
-            session.Start();
-
-            var endpoint = client.Client.RemoteEndPoint?.ToString();
-            WebSocketAudioServerLog.ConnectionAccepted(_logger, endpoint, channelId);
-
-            _streams.TryAdd(channelId, session);
-            _streamSubject.OnNext(session);
-
-            // Wait for session to disconnect
-            var tcs = new TaskCompletionSource();
-            using var sub = session.StateChanges.Subscribe(state =>
-            {
-                if (state is AudioStreamState.Disconnected or AudioStreamState.Error)
-                    tcs.TrySetResult();
-            });
-
-            if (!session.IsConnected)
-                tcs.TrySetResult();
-
-            await tcs.Task.WaitAsync(ct);
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception ex)
-        {
-            WebSocketAudioServerLog.ConnectionError(_logger, ex);
-        }
-        finally
-        {
-            // Clean up — find and remove any session associated with this connection
-            foreach (var kvp in _streams)
-            {
-                if (!kvp.Value.IsConnected)
+                // Read HTTP upgrade request
+                var (wsKey, channelId) = await ReadUpgradeRequestAsync(stream, ct);
+                if (wsKey is null || channelId is null)
                 {
-                    if (_streams.TryRemove(kvp.Key, out var removed))
-                        await removed.DisposeAsync();
+                    WebSocketAudioServerLog.InvalidUpgrade(_logger);
+                    return;
+                }
+
+                // Send HTTP 101 response
+                await SendUpgradeResponseAsync(stream, wsKey, ct);
+
+                // Create ManagedWebSocket
+                var webSocket = WebSocket.CreateFromStream(stream, new WebSocketCreationOptions { IsServer = true });
+
+                session = new WebSocketAudioSession(webSocket, channelId, _options.DefaultFormat);
+                session.Start();
+
+                var endpoint = client.Client.RemoteEndPoint?.ToString();
+                WebSocketAudioServerLog.ConnectionAccepted(_logger, endpoint, channelId);
+
+                _streams.TryAdd(channelId, session);
+                _streamSubject.OnNext(session);
+
+                // Wait for session to disconnect
+                var tcs = new TaskCompletionSource();
+                using var sub = session.StateChanges.Subscribe(state =>
+                {
+                    if (state is AudioStreamState.Disconnected or AudioStreamState.Error)
+                        tcs.TrySetResult();
+                });
+
+                if (!session.IsConnected)
+                    tcs.TrySetResult();
+
+                await tcs.Task.WaitAsync(ct);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                WebSocketAudioServerLog.ConnectionError(_logger, ex);
+            }
+            finally
+            {
+                // Each connection cleans up its own session and no other. The pair overload removes
+                // the entry only while it still maps to this session, so a connection that lost the
+                // TryAdd race for a channel id leaves the session that won it registered.
+                if (session is not null)
+                {
+                    _streams.TryRemove(new KeyValuePair<string, WebSocketAudioSession>(session.ChannelId, session));
+                    await session.DisposeAsync();
                 }
             }
-            client.Dispose();
         }
     }
 
@@ -219,6 +239,11 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
         await stream.FlushAsync(ct);
     }
 
+    /// <summary>
+    /// Stops accepting connections, cancels the connection handlers and waits for them to finish,
+    /// which disposes their sessions. Cancelling <paramref name="cancellationToken"/> ends that wait,
+    /// and the sessions still registered are then disposed directly.
+    /// </summary>
     public async ValueTask StopAsync(CancellationToken cancellationToken = default)
     {
         _listener?.Stop();
@@ -226,9 +251,21 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
         if (_cts is not null)
             await _cts.CancelAsync();
 
+        // Both waits below end when the token is cancelled. An OnStreamConnected subscriber that
+        // blocks holds its handler, and a handler whose upgrade request was already buffered runs on
+        // the accept loop until it reaches that subscriber, so either wait can be the one held.
         if (_acceptLoop is not null)
-            await _acceptLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            await _acceptLoop.WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
+        // Once the accept loop has ended, every handler it started is tracked and no new one can
+        // start. Cancellation has reached them; each one removes and disposes its own session in its
+        // finally, so this wait is what makes a still-connected session disposed by the time
+        // StopAsync returns.
+        await Task.WhenAll(_connections.Keys).WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+        // Empty unless a wait was cancelled. A session disposed here makes its handler's own dispose a
+        // no-op, and a handler that registers a session after this point still disposes it, because
+        // its token is already cancelled.
         foreach (var session in _streams.Values)
             await session.DisposeAsync();
         _streams.Clear();

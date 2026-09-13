@@ -68,14 +68,11 @@ public sealed class QueueManager
     /// <summary>Get queue objects where a member interface is registered.</summary>
     public IEnumerable<AsteriskQueue> GetQueueObjectsForMember(string memberInterface)
     {
-        if (_queuesByMember.TryGetValue(memberInterface, out var queueNames))
-        {
-            foreach (var name in queueNames.Keys)
-            {
-                if (_queues.TryGetValue(name, out var queue))
-                    yield return queue;
-            }
-        }
+        if (!_queuesByMember.TryGetValue(memberInterface, out var queueNames))
+            yield break;
+
+        foreach (var queue in queueNames.Select(entry => _queues.GetValueOrDefault(entry.Key)).OfType<AsteriskQueue>())
+            yield return queue;
     }
 
     /// <summary>Handle QueueParams event (queue configuration snapshot).</summary>
