@@ -39,10 +39,7 @@ public sealed class AriLoggingHandlerTests
             Content = new StringContent("ok")
         };
 
-        var handler = new AriLoggingHandler(NullLogger.Instance);
-        // Replace the inner handler
-        var innerField = typeof(DelegatingHandler).GetProperty("InnerHandler");
-        innerField!.SetValue(handler, new FakeHandler(response));
+        var handler = new AriLoggingHandler(NullLogger.Instance) { InnerHandler = new FakeHandler(response) };
 
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8088") };
         var result = await client.GetAsync("/ari/channels");
@@ -58,9 +55,7 @@ public sealed class AriLoggingHandlerTests
             Content = new StringContent("Not Found")
         };
 
-        var handler = new AriLoggingHandler(NullLogger.Instance);
-        var innerField = typeof(DelegatingHandler).GetProperty("InnerHandler");
-        innerField!.SetValue(handler, new FakeHandler(response));
+        var handler = new AriLoggingHandler(NullLogger.Instance) { InnerHandler = new FakeHandler(response) };
 
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8088") };
         var result = await client.GetAsync("/ari/channels/nonexistent");
@@ -76,9 +71,7 @@ public sealed class AriLoggingHandlerTests
             Content = new StringContent("Internal Server Error")
         };
 
-        var handler = new AriLoggingHandler(NullLogger.Instance);
-        var innerField = typeof(DelegatingHandler).GetProperty("InnerHandler");
-        innerField!.SetValue(handler, new FakeHandler(response));
+        var handler = new AriLoggingHandler(NullLogger.Instance) { InnerHandler = new FakeHandler(response) };
 
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:8088") };
         var result = await client.PostAsync("/ari/channels", null);

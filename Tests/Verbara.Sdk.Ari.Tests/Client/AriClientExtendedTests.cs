@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using Verbara.Sdk.Ari.Client;
 using Verbara.Sdk.Enums;
 using FluentAssertions;
@@ -8,6 +11,8 @@ namespace Verbara.Sdk.Ari.Tests.Client;
 
 public sealed class AriClientExtendedTests
 {
+    private static readonly TimeSpan WaitLimit = TimeSpan.FromSeconds(10);
+
     private static AriClient CreateClient(string baseUrl = "http://localhost:8088")
     {
         var options = Options.Create(new AriClientOptions
@@ -139,5 +144,47 @@ public sealed class AriClientExtendedTests
     {
         await using var sut = CreateClient("http://localhost:8088/");
         sut.State.Should().Be(AriConnectionState.Initial);
+    }
+
+    [Fact]
+    public async Task GenerateUserEventAsync_ShouldReachServer_WhenSentThroughClientHandlerChain()
+    {
+        // A real listener rather than a fake handler: the request has to go through the handler
+        // chain the AriClient constructor builds, so a logging handler left without its inner
+        // handler fails here with InvalidOperationException before anything reaches the socket.
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        await using var sut = CreateClient($"http://127.0.0.1:{port}");
+        var served = AnswerOneRequestWithNoContentAsync(listener);
+
+        using var guard = new CancellationTokenSource(WaitLimit);
+        await sut.GenerateUserEventAsync("probe", "test-app", cancellationToken: guard.Token);
+        var requestHead = await served.WaitAsync(WaitLimit);
+
+        requestHead.Should().StartWith("POST /ari/events/user/probe?application=test-app HTTP/1.1\r\n");
+        requestHead.Should().Contain("Authorization: Basic ");
+    }
+
+    /// <summary>
+    /// Accepts one connection, reads the request head and answers 204 No Content. Returns the
+    /// request head so the test can check what the client sent.
+    /// </summary>
+    private static async Task<string> AnswerOneRequestWithNoContentAsync(TcpListener listener)
+    {
+        using var accepted = await listener.AcceptTcpClientAsync();
+        var stream = accepted.GetStream();
+        var buffer = new byte[8192];
+        var total = 0;
+        while (total < buffer.Length
+               && !Encoding.ASCII.GetString(buffer, 0, total).Contains("\r\n\r\n", StringComparison.Ordinal))
+        {
+            var read = await stream.ReadAsync(buffer.AsMemory(total));
+            if (read == 0) break;
+            total += read;
+        }
+
+        await stream.WriteAsync("HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"u8.ToArray());
+        return Encoding.ASCII.GetString(buffer, 0, total);
     }
 }
