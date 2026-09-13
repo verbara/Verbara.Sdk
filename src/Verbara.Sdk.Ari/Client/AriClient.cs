@@ -43,6 +43,9 @@ internal static partial class AriClientLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[ARI] Reconnect gave up: max_attempts={MaxAttempts}")]
     public static partial void ReconnectGaveUp(ILogger logger, int maxAttempts);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[ARI] Reconnect rejected: status_code={StatusCode}, not retrying")]
+    public static partial void ReconnectRejected(ILogger logger, Exception exception, int statusCode);
 }
 
 /// <summary>
@@ -62,6 +65,13 @@ public sealed class AriClient : IAriClient
 
     public AriConnectionState State => (AriConnectionState)Volatile.Read(ref _state);
     public bool IsConnected => State == AriConnectionState.Connected;
+
+    /// <summary>
+    /// The events loop started by <see cref="ConnectAsync"/>, reconnects included. It completes only when
+    /// the client will neither receive nor dial again: cancelled, auto-reconnect off, given up, or refused.
+    /// Tests wait on it instead of a clock.
+    /// </summary>
+    internal Task? EventLoop => _eventLoop;
 
     private void SetState(AriConnectionState newState) =>
         Interlocked.Exchange(ref _state, (int)newState);
@@ -231,14 +241,21 @@ public sealed class AriClient : IAriClient
                 return;
             }
 
+            // The socket dialled in this iteration. The 401 filter reads its status from here, not from
+            // _webSocket, which a concurrent ConnectAsync may already have replaced.
+            ClientWebSocket? socket = null;
             try
             {
                 // Dispose old WebSocket
                 _webSocket?.Dispose();
-                _webSocket = new ClientWebSocket();
+                socket = new ClientWebSocket();
+                _webSocket = socket;
+
+                // A refused upgrade surfaces only as WebSocketException; keep its HTTP status.
+                socket.Options.CollectHttpResponseDetails = true;
 
                 var authBytes = Encoding.UTF8.GetBytes($"{_options.Username}:{_options.Password}");
-                _webSocket.Options.SetRequestHeader("Authorization",
+                socket.Options.SetRequestHeader("Authorization",
                     "Basic " + Convert.ToBase64String(authBytes));
 
                 var wsUrl = _options.BaseUrl.TrimEnd('/')
@@ -246,7 +263,7 @@ public sealed class AriClient : IAriClient
                     .Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase);
                 var uri = new Uri($"{wsUrl}/ari/events?api_key={Uri.EscapeDataString(_options.Username)}:{Uri.EscapeDataString(_options.Password)}&app={Uri.EscapeDataString(_options.Application)}");
 
-                await _webSocket.ConnectAsync(uri, ct);
+                await socket.ConnectAsync(uri, ct);
                 SetState(AriConnectionState.Connected);
                 AriClientLog.ReconnectedSuccess(_logger, attempt);
 
@@ -258,10 +275,10 @@ public sealed class AriClient : IAriClient
             {
                 return;
             }
-            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+            catch (WebSocketException ex) when (socket?.HttpStatusCode == HttpStatusCode.Unauthorized)
             {
-                // 401 Unauthorized — credentials are wrong, do not retry
-                AriClientLog.WebSocketError(_logger, ex);
+                // 401 Unauthorized — credentials are wrong, do not retry. Final for this client instance.
+                AriClientLog.ReconnectRejected(_logger, ex, (int)HttpStatusCode.Unauthorized);
                 SetState(AriConnectionState.Faulted);
                 return;
             }
