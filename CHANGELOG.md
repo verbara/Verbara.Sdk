@@ -34,7 +34,8 @@ Asterisk again after disposal and never disposed the new WebSocket. Disposal now
 
 ### Changed — `BasicAmiExample` stops gracefully on Ctrl+C
 
-Its wait used a cancellation token nothing could cancel, so its `finally` never disconnected on Ctrl+C.
+Its wait used a cancellation token nothing could cancel, so its `finally` never disconnected on Ctrl+C. Ctrl+C
+now cancels the connect, the ping and the wait alike, and the example disposes its cancellation source.
 
 ### Changed — CodeQL triage: behaviour-preserving cleanups, and a functional test that now proves its name
 

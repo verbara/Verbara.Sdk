@@ -33,8 +33,7 @@ public sealed class NatsBridgeConnectionTests(NatsContainerFixture fixture) : IC
         using var http = new HttpClient();
         ConnzSnapshot running;
 
-        var host = BuildHost();
-        try
+        using (var host = BuildHost())
         {
             await host.StartAsync();
 
@@ -43,10 +42,6 @@ public sealed class NatsBridgeConnectionTests(NatsContainerFixture fixture) : IC
             running = await WaitForAsync(http, static s => s.Subscriptions.Contains(Filter));
 
             await host.StopAsync();
-        }
-        finally
-        {
-            host.Dispose();
         }
 
         var afterStopAndDispose = await WaitForAsync(http, static s => s.Connections == 0);
