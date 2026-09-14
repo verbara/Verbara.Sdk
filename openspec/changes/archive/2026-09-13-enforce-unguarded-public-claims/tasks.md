@@ -710,9 +710,12 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
 
 ## 7. Close-out
 
-- [ ] 7.1 Flip `docs/decisions/0042-public-claim-guard-classes.md` to `Accepted` and add its entry to
+- [x] 7.1 Flip `docs/decisions/0042-public-claim-guard-classes.md` to `Accepted` and add its entry to
       the `docs/decisions/README.md` catalog (deliberately not added while `Proposed`, and to avoid
       colliding with the parallel work owning ADR-0041 / ADR-0043)
+      Flipped to `Accepted`, with the acceptance date recorded next to the original proposal date.
+      The catalog entry was already in place from the parallel ADR-0041/0043 work, so only the
+      status line moved.
 - [x] 7.2 `CHANGELOG.md` entry. **No `Directory.Build.props` `PackageVersion` bump and no `v*` tag:**
       this change touches docs, tests, benchmarks and one scheduled workflow — no shipped `src/`
       behaviour — so there is nothing to publish to nuget.org
@@ -724,5 +727,9 @@ Phase A foundation (§1, batch) → Phase B the two claims (§2–§3, focused) 
       **deleted rather than restated** — the turn-detection latency and asterisk-java's star count —
       each with what would bring it back.
 
-- [ ] 7.3 Archive the change (`openspec archive`) and confirm the `claim-guards` living spec
+- [x] 7.3 Archive the change (`openspec archive`) and confirm the `claim-guards` living spec
       materializes under `openspec/specs/`
+      Archived as `2026-09-13-enforce-unguarded-public-claims`. `openspec/specs/claim-guards/spec.md`
+      was created with 7 requirements, and its `## Purpose` is written rather than left as the
+      placeholder the CLI emits — `openspec validate --all --strict` treats that placeholder as a
+      failure.
