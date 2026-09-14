@@ -52,7 +52,10 @@ publish/
 ## cross-repo/commercial leakage; explicitly tracked plans can live in
 ## docs/plans/active|completed|archived/ after review — use `git add -f`.
 ## Anything referencing private-repo paths, commercial roadmap, pricing or
-## partner info lives in docs/superpowers/ (never pushed).
+## partner info lives in the private verbara-meta repo (roadmap rows, research,
+## product decisions), never here. docs/superpowers/ stays ignored as a guard:
+## the superpowers skills default to writing designs and plans there, while this
+## workspace keeps specs in openspec/ and plans in docs/plans/.
 docs/plans/
 docs/superpowers/
 .superpowers/
