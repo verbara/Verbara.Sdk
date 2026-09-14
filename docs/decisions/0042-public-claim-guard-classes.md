@@ -1,7 +1,7 @@
 # ADR-0042: Public quantitative claims carry a declared guard class
 
-- **Status:** Proposed
-- **Date:** 2026-08-02
+- **Status:** Accepted
+- **Date:** 2026-08-02 (accepted 2026-09-13, with `enforce-unguarded-public-claims`)
 - **Deciders:** Harol A. Reina H.
 - **Related:** ADR-0038 (CI pipeline slimming — the PR wall-clock budget this decision spends
   against), ADR-0039 (Dependabot CI load — the per-PR job multiplier), ADR-0009 (three-tier test
