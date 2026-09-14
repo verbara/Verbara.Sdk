@@ -3,7 +3,7 @@ tier: MEDIANO
 owner: Harol
 approver: Harol
 stakeholder: Operators who page on ARI health, applications that poll `AriClient.State` to decide whether to retry or fail over, and anyone reading the ARI package's exception handling
-decision_ref: Sdk/ADR-0057
+decision_ref: Sdk/ADR-0053
 ---
 
 # Proposal: ari-failed-connect-and-silent-catches
@@ -138,7 +138,7 @@ comment nobody checked.
   concurrent-socket reconnect test. `Tests/Verbara.Sdk.Ari.Tests/Audio/AudioSocketSessionTests.cs`:
   the `ReadFrameAsync` empty-channel case the combined condition needs.
 - `Tests/Verbara.Sdk.IntegrationTests/Ari/`: one Docker-gated test against a real Asterisk.
-- `docs/decisions/0057-*.md` and its `README.md` row. `CHANGELOG.md`: one `[Unreleased]` entry which
+- `docs/decisions/0056-*.md` and its `README.md` row. `CHANGELOG.md`: one `[Unreleased]` entry which
   also amends the 2.5.3 sentence that documents today's behaviour.
 - **An observable change for anyone reading `State`.** After a failed first connect it reads `Faulted`
   or `Disconnected` instead of `Connecting`. A supervisor that polls for "still `Connecting`" stops

@@ -159,23 +159,25 @@ finding for the owner with its alert left open. Silencing is not the goal.
 
 ## 7. Decision record and changelog
 
-- [ ] 7.1 Write `docs/decisions/0057-<kebab-title>.md` — **ADR-0057**, the `decision_ref` of this
-      proposal. It records: a connect attempt that ends without a connection leaves a terminal state;
+- [ ] 7.1 Write `docs/decisions/0056-<kebab-title>.md` — **ADR-0056**, the decision this change rests
+      on. It records: a connect attempt that ends without a connection leaves a terminal state;
       the ending is classified by who ended it, read from the caller's token and never from the
       exception; a withdrawal leaves `Disconnected` and everything else `Faulted`; the terminal value
       is a statement and not a gate; and the two rejected alternatives — `Faulted` for a withdrawal
       too (rejected: it would page on a routine shutdown, walking back ADR-0053) and `Initial` for a
       withdrawal (rejected: the client opened a socket and a linked source, so it is not as-created).
       Relate it to ADR-0010, ADR-0050 E6, ADR-0052, ADR-0053 and ADR-0054.
-- [ ] 7.2 Add the ADR-0057 row to `docs/decisions/README.md` in numeric order, matching the style of
+- [ ] 7.2 Add the ADR-0056 row to `docs/decisions/README.md` in numeric order, matching the style of
       the surrounding rows.
-- [ ] 7.3 `CHANGELOG.md` `[Unreleased]`: one entry stating the observable change — after a failed
+- [ ] 7.3 Repoint this change's `decision_ref` to `Sdk/ADR-0056` once that file exists, so the
+      proposal cites the decision it rests on rather than the closest neighbour
+- [ ] 7.4 `CHANGELOG.md` `[Unreleased]`: one entry stating the observable change — after a failed
       first connect, `State` reads `Faulted`, or `Disconnected` when the caller cancelled, instead of
       `Connecting`; `AriHealthCheck` is `Unhealthy` before and after and only its message moves;
       `IsConnected` is unchanged; the exception reaches the caller unchanged. Say explicitly that this
       amends the sentence in the 2.5.3 entry *"`AriClient` kept reconnecting after Asterisk refused
       its credentials"* which documents the old behaviour. Leave the `(#N)` citation for close-out.
-- [ ] 7.4 Put the release tier to the owner before merging: this changes an observable that consumers
+- [ ] 7.5 Put the release tier to the owner before merging: this changes an observable that consumers
       were told to watch, with no API change. ADR-0050's precedent calls a behavioural break minor
       rather than patch; 2.5.3 shipped one as a patch. Record the answer rather than assuming it.
 

@@ -70,7 +70,7 @@
       terminate sets (`:232`), and the transport it disposes last (`:236`) is the exception's only
       other origin. Record that a transport failure on a still-connected session surfaces as
       `IOException`/`SocketException`, is not caught, and stays a synthesis failure — and that the
-      narrow race between the guard and the flush is the residual ADR-0058 records.
+      narrow race between the guard and the flush is the residual ADR-0057 records.
 
 - [ ] 2.4 Sweep `Verbara.Sdk.VoiceAi` for any other write to the audio session that sits inside a
       clause classifying a synthesis or a session. Fix it here only if it is inside `VoiceAiPipeline`;
@@ -80,8 +80,8 @@
 
 ## 3. Decision record
 
-- [ ] 3.1 Land `docs/decisions/0058-a-write-to-a-departed-session-is-an-ending-not-a-failure.md`
-      (**Sdk/ADR-0058**, Accepted). It records: the write-side guard fires for every ending while the
+- [ ] 3.1 Land `docs/decisions/0057-a-write-to-a-departed-session-is-an-ending-not-a-failure.md`
+      (**Sdk/ADR-0057**, Accepted). It records: the write-side guard fires for every ending while the
       read-side guard fires only for the owner's disposal, so ADR-0053 R2's reading of
       `ObjectDisposedException` does not carry across unchanged; a write that finds the session gone
       is ADR-0053 R3's ending seen from the other side; the ending is accounted as a barge-in is,
@@ -89,10 +89,10 @@
       `ObjectDisposedException` is untouched; and the flush-race residual, written down rather than
       left as a gap. Related: ADR-0053, ADR-0054, ADR-0050.
 
-- [ ] 3.2 Add the ADR-0058 row to `docs/decisions/README.md` in numeric order, matching the format of
+- [ ] 3.2 Add the ADR-0057 row to `docs/decisions/README.md` in numeric order, matching the format of
       the existing rows.
 
-- [ ] 3.3 Repoint this change's `decision_ref` to `Sdk/ADR-0058` once that file exists, so the
+- [ ] 3.3 Repoint this change's `decision_ref` to `Sdk/ADR-0057` once that file exists, so the
       proposal cites the decision it rests on rather than the closest neighbour
 ## 4. Verification
 

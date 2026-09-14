@@ -59,7 +59,7 @@
 
 ## 3. Decision record
 
-- [ ] 3.1 Land `docs/decisions/0059-a-stopping-token-never-gates-a-handoff.md` (`Sdk/ADR-0059`) in this
+- [ ] 3.1 Land `docs/decisions/0058-a-stopping-token-never-gates-a-handoff.md` (`Sdk/ADR-0058`) in this
       change, and add its row to `docs/decisions/README.md`. One page: the rule (a token that stops a
       server never gates a hand-off carrying ownership of a resource the server already acquired — it
       is passed *into* the handler instead), the two rejected alternatives (checking the token in the
@@ -67,9 +67,9 @@
       accepted connection, matching ADR-0053's rule for a session's transport, extended to the
       connection that has not become a session yet), and the two sites that now agree
       (`AudioSocketServer`, `AriOutboundListener`). Reference `Sdk/ADR-0053`, which this change's
-      `decision_ref` cites and which ADR-0059 extends.
+      `decision_ref` cites and which ADR-0058 extends.
 
-- [ ] 3.2 Repoint this change's `decision_ref` to `Sdk/ADR-0059` once that file exists
+- [ ] 3.2 Repoint this change's `decision_ref` to `Sdk/ADR-0058` once that file exists
 - [ ] 3.3 At archive time, widen the `streaming-session-lifecycle` `## Purpose` so it covers
       the server accept path this requirement files under it — or, if the owner prefers, split the
       requirement into its own capability before archiving
