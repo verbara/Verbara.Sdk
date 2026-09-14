@@ -46,7 +46,7 @@
       defect reads in production: with the **unfixed** service on a real host, does a normal stop
       cancel the token the manager is holding (the combined start token still linked to
       `ApplicationStopping`) or not (that source released at the end of the start)? Record the
-      measured answer here and carry it into ADR-0060. Under the first reading today's code cuts
+      measured answer here and carry it into ADR-0059. Under the first reading today's code cuts
       every in-flight save short at the first instant of shutdown; under the second it never cuts one
       short at all. The proposal's claim — that the filter's intended case is unreachable — holds
       either way, and 744b9d81's body asserts the second; this task turns that assertion into a
@@ -68,7 +68,7 @@
 - [ ] 2.3 Implement `IDisposable` on the service: dispose the registration, cancel `_shutdown`, then
       dispose it. Cancelling before releasing is the load-bearing order. Record in this file what a
       save started *after* that disposal does (`CancellationToken.Register` on the token of a
-      disposed-but-cancelled source), measured, and carry the answer into ADR-0060 — no new
+      disposed-but-cancelled source), measured, and carry the answer into ADR-0059 — no new
       behaviour is scoped for it here.
 - [ ] 2.4 Correct the two comments in `src/Verbara.Sdk.Sessions/Manager/CallSessionManager.cs` that
       describe the old wiring: the XML doc on `SetShutdownToken` (line 43) should say which phase
@@ -87,7 +87,7 @@
 - [ ] 2.6 Record, without changing it, that `AddVerbaraSessionsMultiServer`
       (`src/Verbara.Sdk.Hosting/ServiceCollectionExtensions.cs:201-213`) registers no hosted service,
       so on that path `_shutdownToken` stays `default` and no save is ever cut short. Carry it into
-      ADR-0060 as a known gap so it is not rediscovered as a bug.
+      ADR-0059 as a known gap so it is not rediscovered as a bug.
 
 ## 3. Verification
 
@@ -107,7 +107,7 @@
 
 ## 4. Decision record
 
-- [ ] 4.1 Land `docs/decisions/0060-a-lifetime-token-is-cancelled-by-the-phase-it-names.md` (0055 is
+- [ ] 4.1 Land `docs/decisions/0059-a-lifetime-token-is-cancelled-by-the-phase-it-names.md` (0055 is
       the highest id on this branch). Status Accepted; Related: ADR-0054 (one owner for a
       cancellation source — this ADR applies the same rule to a token handed across a lifetime
       boundary), ADR-0053 (an ending is classified by who ended it). It states the rule — a component
@@ -115,7 +115,7 @@
       stored — and carries the three measurements this change makes: 1.7 (what the host's start token
       does today), 2.3 (a save started after disposal) and 2.6 (the multi-server path has no lifetime
       token at all).
-- [ ] 4.2 Update this change's `proposal.md` `decision_ref` to `Sdk/ADR-0060` once that file exists,
+- [ ] 4.2 Update this change's `proposal.md` `decision_ref` to `Sdk/ADR-0059` once that file exists,
       so the living record points at the ADR this change wrote rather than at its nearest neighbour.
 
 ## 5. Close-out

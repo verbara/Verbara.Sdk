@@ -107,7 +107,7 @@ already ended by another cause.
 - `Tests/Verbara.Sdk.VoiceAi.Tests/Pipeline/VoiceAiPipelineCancellationAccountingTests.cs`: the
   regression test and two controls, in the class that already owns this family and its xUnit
   collection.
-- `docs/decisions/`: ADR-0058 and its index row.
+- `docs/decisions/`: ADR-0057 and its index row.
 - **A telemetry change in the same family as ADR-0053 and ADR-0054.** A turn the caller hung up on
   moves from `tts.syntheses.failed` to `tts.syntheses.completed`, publishes `SynthesisEndedEvent`
   instead of `PipelineErrorEvent`, and stops logging at Warning. A dashboard whose TTS failure rate
@@ -121,7 +121,7 @@ already ended by another cause.
 - **Residual, recorded not fixed:** a hangup that lands between the guard and the flush can surface as
   `IOException` instead, and still counts as a synthesis failure. Closing it would mean asking the
   session whether it is still connected as well as reading the exception's type, and no test available
-  today can tell that conjunct from its absence. It is written down in ADR-0058 rather than left as a
+  today can tell that conjunct from its absence. It is written down in ADR-0057 rather than left as a
   gap someone re-discovers.
 
 ## Architectural Risk

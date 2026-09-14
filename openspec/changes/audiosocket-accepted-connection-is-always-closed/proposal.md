@@ -94,7 +94,7 @@ became a session, so ADR-0053's terminate — the thing that releases it — doe
    time and the only thing that can close the connection is the server closing it; and the peer's read
    reaching end of stream as the happens-after edge on that close. One control keeps the fix from
    over-correcting into closing connections the server is still serving.
-7. `Sdk/ADR-0059` records the durable rule: a token that stops a server never gates a hand-off that
+7. `Sdk/ADR-0058` records the durable rule: a token that stops a server never gates a hand-off that
    carries ownership of a resource the server has already acquired.
 
 ## Impact
@@ -104,7 +104,7 @@ became a session, so ADR-0053's terminate — the thing that releases it — doe
 - `Tests/Verbara.Sdk.VoiceAi.AudioSocket.Tests/AudioSocketServerEdgeCaseTests.cs`: the regression test
   and one control, on the harness that class already has (`SignalTimeout`, `ReadFromServerAsync`,
   `NextTimerAsync`, `CapturingLogger`).
-- `docs/decisions/0059-*.md` plus its index row in `docs/decisions/README.md`.
+- `docs/decisions/0058-*.md` plus its index row in `docs/decisions/README.md`.
 - **Behaviour changes only at shutdown.** A connection accepted in the same moment the server stops is
   now closed by the server instead of being left to finalization. Each such connection runs its handler
   briefly and creates one short-lived timeout source, which the handler's `using` releases when it
