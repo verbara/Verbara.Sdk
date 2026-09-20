@@ -58,7 +58,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ## Status
 
-**v2.2.1** — 29 NuGet packages, 0 build warnings, 0 trim warnings, ~2,924 unit tests + 154 functional + 65 integration (Testcontainers). Latest releases:
+**v2.5.3** — 29 NuGet packages, 0 build warnings, 0 trim warnings, ~2,924 unit tests + 154 functional + 65 integration (Testcontainers). Latest releases:
 
 - **v2.2.1** (2026-05-23) — **`Verbara.Sdk.Cluster.Postgres`** (new): Postgres-backed implementation of the cluster primitives shipped in v2.2.0, with `PostgresDistributedLock` (advisory-lock-backed `IDistributedLock`) running on `Verbara.Sdk.Data.Npgsql` — zero Dapper, AOT-clean. Plus CI hardening (merge queue activation on `main`, Dependabot auto-merge for analyzers/actions, LFS-in-CI for the ONNX model) and the v2.2.0+ dependency bump train (OnnxRuntime 1.22→1.26, NATS 2.7.3→2.8, microsoft-extensions, etc.).
 - **v2.2.0** (2026-05-20) — **ADR-0022 Phase D: Dapper removed cross-repo.** New **`Verbara.Sdk.Data.Npgsql`** package — reflection-free Postgres facade with a `NpgsqlExecutor` (Dapper-parity surface) + name-based `NpgsqlDataReader` getters + hand-written `static Map(NpgsqlDataReader)` row mapping. `Verbara.Sdk.Sessions.Postgres` migrated off Dapper; the dead `Verbara.Sdk.Dapper.Stubs` canary was removed; a permanent `BanDapperPackageReferences` MSBuild guard makes the ban load-bearing.
@@ -71,7 +71,7 @@ For historical v1.x releases (Asterisk.Sdk era), see [`CHANGELOG.md`](CHANGELOG.
 
 API coverage (cumulative): 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%), 27/27 ARI models (100%), 278 AMI events covering Asterisk 18-23. Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` JSON control protocol both supported. Compatible with **Asterisk 18, 20, 22 LTS, and 23 Standard** — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for lifecycle and break-change risk areas.
 
-Architecture decisions: **37 ADRs** in [`docs/decisions/`](docs/decisions/) covering AOT-first design, source-generator-over-reflection policy, three-tier test strategy, push-bus design, cadence commitment, resilience/cluster primitive split between MIT and Pro, the rebrand to Verbara, and the cross-repo ADR reference convention.
+Architecture decisions: **53 ADRs** in [`docs/decisions/`](docs/decisions/) covering AOT-first design, source-generator-over-reflection policy, three-tier test strategy, push-bus design, cadence commitment, resilience/cluster primitive split between MIT and Pro, the rebrand to Verbara, and the cross-repo ADR reference convention.
 
 ---
 
