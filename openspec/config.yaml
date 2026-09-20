@@ -13,6 +13,9 @@ context: |
   - Dapper is BANNED across the ecosystem (MSBuild guard). Use Verbara.Sdk.Data.Npgsql for Postgres.
   - TreatWarningsAsErrors=true, WarningLevel=9999 — zero warnings.
   - Public, MIT — never accept Pro/closed-source concepts into this repo (open-core boundary).
+  - Before any commit or push, run the fast, deterministic, non-service steps of this repo's own
+    .github/workflows/ci.yml on the integrated branch — build plus the touched tests plus
+    `openspec validate` is a strict subset, because a tree-scanning guard is tripped by a change anywhere.
 
   Cross-repo standards live in the private verbara-meta repo as ADRs.
 
@@ -35,7 +38,8 @@ rules:
     - "When the change spans repos, spell out the cross-repo sequence: edit Sdk -> dotnet pack to local-nuget-feed -> clear NuGet cache -> dotnet restore Pro and Platform."
     - "Verification tasks MUST include `dotnet test` green and CI green, with zero warnings (TreatWarningsAsErrors)."
     - "A release task MUST bump Directory.Build.props PackageVersion and add a CHANGELOG entry — publishing to nuget.org triggers only on a `v*` tag push (or manual workflow_dispatch) via .github/workflows/publish.yml, so merging to main without bumping/tagging is a silent no-op."
-    - "Use Subagent-Driven Development with FCM batching: Phase A foundation (batch) -> Phase B critical components (focused) -> Phase C integration (batch)."
+    - "Order execution in three phases — A foundation (batched), B critical components (one focused subagent each), C integration (batched) — with a fresh subagent per task, never inline in the main session."
+    - "For a bug fix, write the failing regression test first, against the unfixed code, and paste its failure verbatim into `tasks.md`. For new capability, tests may batch into Phase C."
 
 operations:
   apply:
