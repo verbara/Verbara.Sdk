@@ -101,6 +101,27 @@ times (`gh workflow run "Perf Regression"`) and use the observed across-run spre
 configuration error (exit 2), because its report would never be looked for and its absence would go
 unnoticed.
 
+## Removing a band without removing the benchmark
+
+A benchmark whose mean has fallen to BenchmarkDotNet's resolution floor can no longer carry a
+percentage band: the band then tracks the harness rather than the code, and every fleet or codegen
+change reads as a breach. Drop its `benchmarks` entry and leave its `--filter` step and its
+`sources` row in place — the step still runs, the report is still required, and the comparison
+reports it as *measured but not baselined*.
+
+Three obligations, in the same PR:
+
+1. state the evidence in the PR description — the observed mean, the observed StdDev, and the
+   BenchmarkDotNet warning (`ZeroMeasurement`) if it fired;
+2. record the absence as deliberate with a `_`-prefixed note at the top level of `baseline.json`,
+   the way `sources._turn_detection_note` does for a band that cannot be calibrated *yet*;
+3. say where the published figure it backed is guarded instead, or delete that figure.
+
+This is not a re-baseline and does not use the table above: no number moves. Removing the
+`--filter` step or the `sources` row as well is a different change — that stops the measurement
+entirely, and the `|| true` hole reopens.
+
+
 ## How it fails closed
 
 Every benchmark step in the workflow is suffixed `|| true`, so a benchmark that never ran — bad

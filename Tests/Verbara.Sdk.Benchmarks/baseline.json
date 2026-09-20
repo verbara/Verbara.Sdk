@@ -1,6 +1,7 @@
 {
   "_readme": "HUMAN-AUTHORED FILE. CI NEVER WRITES BACK (ADR-0042 D6). The update protocol — what a re-baseline PR must state — lives in baseline.README.md next to this file. Read it before changing a number here.",
   "_what_these_numbers_are": "Hosted-runner (ubuntu-latest) means, in NANOSECONDS, with a per-benchmark tolerance band in PERCENT. They are deliberately NOT the workstation figures published in README.md / docs/README-technical.md (AMD Ryzen 9 9900X, 12C/24T), which are 1.97x-2.35x faster; gating against those would red this job permanently (ADR-0042 D4, Option D). Regression protection is this file's job; document-vs-record correspondence is COHERENCE's (D7). The two are separate failures and are detected separately.",
+  "_dispatch_1_observer_note": "ObserverDispatchBenchmark.Dispatch_1Observer is measured but deliberately NOT baselined, so the comparison reports it as measured-but-not-baselined rather than gating it. Its mean sits at BenchmarkDotNet's resolution floor: on 2026-09-20 it read 0.2145 ns with a StdDev of 1.6012 ns - seven times the mean - and BenchmarkDotNet raised ZeroMeasurement, \"the method duration is indistinguishable from the empty method duration\". A percentage band around a figure that small tracks the harness, not the code: it produced the two largest breaches in issue #275 (+77.19% and +66.49% FASTER) on runs where nothing in this repository changed. The published ~0.21 ns/observer figure (README.md) is unaffected - it is COHERENCE against docs/research/performance-record.json (ADR-0042 D7) - and dispatch cost stays gated by Dispatch_10Observers and Dispatch_100Observers. Restore a band only if the benchmark is rewritten to measure a workload above the floor.",
   "schema_version": 1,
   "calibration": {
     "method": "Parsed the BenchmarkDotNet `-report-full-compressed.json` artifacts of 13 real runs of .github/workflows/perf-regression.yml — 12 scheduled (weekly cron) plus 1 workflow_dispatch. `mean_ns` is the mean of those per-run means; the band is set to cover the observed across-run spread with headroom.",
@@ -93,10 +94,6 @@
     "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark.EnumerateByState": {
       "mean_ns": 125710.0,
       "tolerance_pct": 30
-    },
-    "Verbara.Sdk.Benchmarks.ObserverDispatchBenchmark.Dispatch_1Observer": {
-      "mean_ns": 0.94,
-      "tolerance_pct": 15
     },
     "Verbara.Sdk.Benchmarks.ObserverDispatchBenchmark.Dispatch_10Observers": {
       "mean_ns": 5.67,
