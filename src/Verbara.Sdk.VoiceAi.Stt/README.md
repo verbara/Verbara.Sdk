@@ -6,7 +6,7 @@ Speech-to-text providers for [Verbara.Sdk.VoiceAi](https://www.nuget.org/package
 
 | Provider | Mode | Notes |
 |----------|------|-------|
-| **Deepgram** | Streaming WebSocket | Nova-2 model. Production default. Lowest latency in the catalog (~150ms). |
+| **Deepgram** | Streaming WebSocket | Nova-2 model. Production default. Deepgram publishes first-word latency near 150 ms for streaming ([Deepgram — Understanding and Reducing Latency in Speech-to-Text APIs](https://deepgram.com/learn/understanding-and-reducing-latency-in-speech-to-text-apis), accessed 2026-09-20). |
 | **Whisper** (local) | Batch | Self-hosted whisper.cpp / OpenAI Whisper API endpoint. Air-gapped option. |
 | **Azure Whisper** | Batch | Azure OpenAI Whisper deployments. Same format as `Whisper` with Azure auth. |
 | **Google Speech** | Streaming gRPC over HTTP/2 | Standard model. Multi-language support. |

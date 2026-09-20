@@ -58,16 +58,9 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ## Status
 
-**v2.5.3** — 29 NuGet packages, 0 build warnings, 0 trim warnings, ~2,924 unit tests + 154 functional + 65 integration (Testcontainers). Latest releases:
+**v2.5.3** — 29 NuGet packages, 0 build warnings, 0 trim warnings, ~2,924 unit tests + 154 functional + 65 integration (Testcontainers).
 
-- **v2.2.1** (2026-05-23) — **`Verbara.Sdk.Cluster.Postgres`** (new): Postgres-backed implementation of the cluster primitives shipped in v2.2.0, with `PostgresDistributedLock` (advisory-lock-backed `IDistributedLock`) running on `Verbara.Sdk.Data.Npgsql` — zero Dapper, AOT-clean. Plus CI hardening (merge queue activation on `main`, Dependabot auto-merge for analyzers/actions, LFS-in-CI for the ONNX model) and the v2.2.0+ dependency bump train (OnnxRuntime 1.22→1.26, NATS 2.7.3→2.8, microsoft-extensions, etc.).
-- **v2.2.0** (2026-05-20) — **ADR-0022 Phase D: Dapper removed cross-repo.** New **`Verbara.Sdk.Data.Npgsql`** package — reflection-free Postgres facade with a `NpgsqlExecutor` (Dapper-parity surface) + name-based `NpgsqlDataReader` getters + hand-written `static Map(NpgsqlDataReader)` row mapping. `Verbara.Sdk.Sessions.Postgres` migrated off Dapper; the dead `Verbara.Sdk.Dapper.Stubs` canary was removed; a permanent `BanDapperPackageReferences` MSBuild guard makes the ban load-bearing.
-- **v2.1.2** (2026-05-08) — `SmartTurnDetectorOptionsValidator` (`[OptionsValidator]` + `[Range]` + `ValidateOnStart()`), Hann window aligned to the periodic formula (`2πi/N`) matching HuggingFace WhisperFeatureExtractor + librosa, 8 dedicated `MelFilterBank` tests + 7 options-validation tests, ONNX model (8.3 MB) migrated to Git LFS.
-- **v2.1.1** (2026-05-07) — Package metadata fix: `RepositoryUrl` and `PackageProjectUrl` corrected to `verbara/Verbara.Sdk`.
-- **v2.1.0** (2026-05-07) — **`Verbara.Sdk.VoiceAi.TurnDetection`** (new): ML-based turn detector using the [Pipecat smart-turn-v3.2-cpu](https://huggingface.co/pipecat-ai/smart-turn-v3/blob/main/benchmarks/smart-turn-v3.2-cpu.md) ONNX model. Pipecat publish 94.26% English accuracy for this model version on their 31,527-sample benchmark. CPU inference latency on this SDK's own path is measured but not published — see [the claim registry](docs/claim-registry.md#deferrals--declared-with-their-blocker-adr-0042-d9). Drop-in replacement for `SilenceTurnDetector` via `services.AddSmartTurnDetection()`. Package validation enabled with v2.0.0 baseline.
-- **v2.0.0** (2026-05-06) — **Full rebrand** from `Asterisk.Sdk.*` → `Verbara.Sdk.*` (ADR-0036). Breaking change: all namespaces, assemblies, and NuGet packages renamed. Pluggable turn detection: `ITurnDetector` interface + `SilenceTurnDetector` default + `FakeTurnDetector` in `Verbara.Sdk.VoiceAi.Testing`. 26 NuGet packages, 2,868 unit tests passing.
-
-For historical v1.x releases (Asterisk.Sdk era), see [`CHANGELOG.md`](CHANGELOG.md).
+Release history — every version, with what changed and why — is in [`CHANGELOG.md`](CHANGELOG.md). It is not restated here: a second copy in the README is one nobody updates, and this block had drifted three releases behind before anyone noticed.
 
 API coverage (cumulative): 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%), 27/27 ARI models (100%), 278 AMI events covering Asterisk 18-23. Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` JSON control protocol both supported. Compatible with **Asterisk 18, 20, 22 LTS, and 23 Standard** — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for lifecycle and break-change risk areas.
 
@@ -467,7 +460,7 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 | **Verbara.Sdk.VoiceAi** | Pipeline orchestration (`VoiceAiPipeline`), `ISessionHandler`, `IConversationHandler`, `ITurnDetector` (pluggable turn detection) |
 | **Verbara.Sdk.VoiceAi.AudioSocket** | AudioSocket + `chan_websocket` (JSON control protocol) servers with `System.IO.Pipelines` bidirectional streaming |
 | **Verbara.Sdk.VoiceAi.Stt** | STT providers: AssemblyAI, Cartesia (Ink-Whisper), Deepgram, Google Speech, Speechmatics, Whisper (cloud REST), Azure Whisper |
-| **Verbara.Sdk.VoiceAi.Tts** | TTS providers: ElevenLabs (Flash 2.5), Azure, Cartesia (Sonic-3, 40-90 ms TTFA), Speechmatics, Deepgram (Aura 2 WS), LMNT (WS+HTTP) |
+| **Verbara.Sdk.VoiceAi.Tts** | TTS providers: ElevenLabs (Flash 2.5), Azure, Cartesia (Sonic-3), Speechmatics, Deepgram (Aura 2 WS), LMNT (WS+HTTP; vendor shut down). Vendor-published latencies, cited and dated, are in that package's README |
 | **Verbara.Sdk.VoiceAi.OpenAiRealtime** | OpenAI Realtime API bridge (GPT-4o): dual-loop WebSocket, function calling, observability events |
 | **Verbara.Sdk.VoiceAi.TurnDetection** | ML-based turn detector using the Pipecat [smart-turn-v3.2-cpu](https://huggingface.co/pipecat-ai/smart-turn-v3/blob/main/benchmarks/smart-turn-v3.2-cpu.md) ONNX model, for which Pipecat publish 94.26% English accuracy. Replaces `SilenceTurnDetector` via `AddSmartTurnDetection()`. |
 | **Verbara.Sdk.VoiceAi.Testing** | Fake STT/TTS/handler/turn-detector implementations for unit testing pipelines |

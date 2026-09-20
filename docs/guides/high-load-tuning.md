@@ -10,6 +10,12 @@ Both AMI (`AsyncEventPump`) and ARI (`AriEventPump`) use bounded `Channel<T>` bu
 
 ### Recommended `EventPumpCapacity` by Scale
 
+> The **Events/sec** column describes *your* PBX, not this SDK.
+> Those are planning assumptions for a typical contact centre, offered so the capacity column has a
+> derivation you can check against your own traffic — they are not measurements of anything in this
+> repository, and nothing here guards them (ADR-0042 D1a: the subject is outside this repo).
+> Measure your own event rate and re-derive.
+
 | Agents | Events/sec (est.) | `EventPumpCapacity` | RAM per buffer (est.) |
 |--------|-------------------|---------------------|-----------------------|
 | 100 | ~50-200 | 20,000 (default) | ~5 MB |
@@ -248,7 +254,7 @@ services.AddVerbara(options =>
 Key considerations:
 - **Multi-server:** Use `VerbaraServerPool` to federate N servers with agent routing
 - **Observer speed:** Keep event handlers fast (< 10ms). Offload heavy work to background queues
-- **VarSet filtering:** `VarSet` events can be 50%+ of total volume. Filter early in observers
+- **VarSet filtering:** `VarSet` events are typically the largest single share of event volume on a busy dialplan. Filter early in observers
 - **GC tuning:** Consider `ServerGC` and `gcServer=true` in `runtimeconfig.json`
 
 ```json

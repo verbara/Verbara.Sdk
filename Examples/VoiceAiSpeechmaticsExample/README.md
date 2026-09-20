@@ -1,6 +1,6 @@
 # VoiceAiSpeechmaticsExample
 
-Speechmatics full stack: Realtime v2 WebSocket STT + REST TTS, from the same vendor. Pitched for **enterprise multilingual deployments where cost per character matters** — Speechmatics publishes list prices roughly 27× below ElevenLabs at sub-150ms latency on their Enhanced tier, with 55+ languages on the STT side.
+Speechmatics full stack: Realtime v2 WebSocket STT + REST TTS, from the same vendor. Pitched for **enterprise multilingual deployments**, with 55+ languages on the STT side.
 
 This example uses Spanish with the `enhanced` operating point (best accuracy at ~150ms latency) and the `eleanor` voice for TTS.
 
@@ -37,9 +37,9 @@ Point Asterisk's `AudioSocket()` dialplan at `127.0.0.1:9092`.
 
 ## Why Speechmatics
 
-- **Price floor.** At ~$0.011 per 1K characters of TTS, roughly 27× cheaper than ElevenLabs at the same quality tier. STT pricing is similarly below the premium providers.
+- **Cost.** Speechmatics positions itself below the premium providers on list price. No figure is published here: a price is a third party's, it changes without notice, and a ratio between two vendors' price lists is our arithmetic on their data rather than anyone's published measurement (ADR-0042 D8 as amended).
 - **Language coverage.** 55+ STT languages, including colloquial Latin-American Spanish variants that most providers collapse into a single Castilian model.
-- **Latency.** Sub-150ms first-result on Enhanced, comparable to Deepgram Nova-2 / Cartesia Ink.
+- **Latency.** Speechmatics documents partial transcripts returned in **under 500 ms** and final transcripts **as fast as 0.7 s**, with `max_delay` configurable between 0.7 s and 4 s ([Output – Realtime](https://docs.speechmatics.com/features/realtime-latency), accessed 2026-09-20). For voice agents the vendor recommends a `max_delay` of 0.7-1.5 s.
 - **No official C# SDK.** This provider is a hand-rolled, AOT-clean wrapper per ADR-0014.
 
 ## Key SDK Packages Used

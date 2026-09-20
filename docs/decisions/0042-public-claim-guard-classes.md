@@ -252,3 +252,38 @@ Public quantitative claims are guarded by **class**, not uniformly. Concretely:
   **Deferred, not rejected** (D9). It is the only path to a genuine first-party accuracy claim, but
   human speech committed to a public MIT repository raises consent, licensing and Git-LFS budget
   questions that must be answered before any recording happens — not after.
+
+## Amendment (2026-09-20) — D8's pin leg, for a claim whose subject is a live third-party service
+
+D8 requires three things together, and its third — a pin binding the citation to the artifact
+actually shipped — was written for the bundled ONNX model, where "the artifact" is a file in this
+repository and a content hash pins it exactly.
+
+**That leg has no meaning for a vendor-service claim.** What ships here is our WebSocket client;
+Cartesia can change Sonic-3's latency, and Speechmatics its `max_delay` floor, with no commit in
+this repository to pin anything to. Under the unamended D8 those claims were unclassifiable, so
+they sat in `docs/claim-registry.md` as owed rulings rather than as guarded or deleted figures —
+which is the "left bare" state D8 exists to forbid.
+
+**D8a — for a quantitative claim whose subject is a third party's live service, leg (c) is
+satisfied by an access date carried in the citation.** Legs (a) and (b) are unchanged and remain
+mandatory. The figure MUST be the vendor's own published number, quoted as theirs; an access date
+does not license a number we derived, rounded, widened or averaged.
+
+What this deliberately does **not** cover, and why the same sweep deleted rather than dated:
+
+- **A ratio or comparison we computed** between two vendors' published figures ("27× cheaper than
+  ElevenLabs"). The arithmetic is first-party even when both inputs are cited, and it goes stale
+  when either input moves, silently.
+- **A market ranking in our own voice** ("the lowest measured in the 2026 provider landscape").
+  Nobody measured it; "measured" is doing work no evidence supports.
+- **Prices.** They change monthly and without notice, and a dated price is worse than no price: it
+  reads as current until the reader checks the date.
+- **Our own measurement of a third-party service** ("200-400 ms end-to-end on this example"). That
+  is first-party EVIDENCE and needs D1a's date and conditions, not a vendor citation.
+
+**The obligation the date creates.** A dated citation is a claim that ages in public, so the sweep
+that re-reads it is the point, not a formality. The 2026-09-20 sweep that this amendment came out
+of found that **five of six** published TTS latency figures did not match what the vendor publishes,
+and that one vendor (LMNT) had shut down entirely while its provider still shipped. A citation with
+no re-read is a slower version of the same failure.
