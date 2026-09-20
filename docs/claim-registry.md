@@ -50,12 +50,12 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 | 61 | 0 build warnings | ENFORCING | `Directory.Build.props` `TreatWarningsAsErrors` + `Pack Warnings Gate` | OK |
 | 61 | 0 trim warnings | ENFORCING | AotCanary | PARTIAL — 22/29 |
 | 61 | ~2,924 unit + 154 functional + 65 integration | COHERENCE | — | WRONG — the suite runs **3,295** (measured 2026-08-29); note nothing in-tree *records* that number until §4.1 commits the record |
-| 61 | headline version **v2.2.1** | COHERENCE | — | WRONG — `Directory.Build.props` is 2.5.0 and v2.5.0 is tagged |
+| 61 | headline version **v2.5.3** | COHERENCE | `StatusBlockCoherenceTests` — against `Directory.Build.props` `<PackageVersion>` | **OK** |
 | 65 | ONNX model 8.3 MB | COHERENCE | — | GAP — actual 8,679,182 B |
 | 67 | 94.26% English accuracy, in upstream's voice | ATTRIBUTED | citation to upstream's per-version benchmark + the content-hash pin in `OnnxSessionManagerTests` | **OK** — all three D8 legs present |
 | 67 | ~12 ms CPU inference | ENFORCING | `TurnDetectionBenchmark` | **DELETED** — measured at 26.18–37.30 ms; deferred, see *Deferrals* |
 | 72 | 148/152 AMI (97%), 94/98 ARI (96%), 46/46, 27/27, 278 events | ENFORCING | — | GAP |
-| 74 | **37 ADRs** | ENFORCING | — | WRONG — 53 on disk |
+| 74 | **53 ADRs** | ENFORCING | `StatusBlockCoherenceTests` — counts `docs/decisions/*.md`, excluding the catalog `README.md` | **OK** |
 | 98 | measurement provenance (Ryzen 9 9900X, .NET 10.0.5, BDN v0.14.0, 2026-04-18) | COHERENCE | `PerformanceTableCoherenceTests` — the header provenance test | PARTIAL — matched against the whole file rather than this line, and blind to the AMI row's .NET 10.0.6 MediumRunJob exception (`performance-record.json:12`); the two session-store rows measured apart from it state their own at :110 |
 | 102 | AMI parse+dispatch 1.53M events/sec (653 ns) | ENFORCING + COHERENCE | `perf-regression.yml` `*AmiProtocolReader*` | GAP — observational only (`\|\| true`, no baseline) |
 | 103 | ARI deserialize Channel 3.54M ops/sec (283 ns) | ENFORCING + COHERENCE | `*AriJson*` | GAP — observational only |
@@ -292,3 +292,5 @@ Figures marked WRONG were verified against the tree at that commit.
 Updated 2026-09-12 for the session-store re-measurement only — `README.md` rows 98, 107 and 108, the new row 110 for the provenance statement that re-measurement added, and the two `session-store-backends.md` rows citing the record's figures; no other row was re-verified.
 
 Updated 2026-09-12 again, for `docs/guides/session-store-backends.md` only — its read-latency row, re-cited from `:9-11,26,35` to `:9-11,22,27,35` because `:26` never held a latency claim, marked DELETED and pinned to `e250182e`; two new rows for the words that replaced those figures, the store-call costs at `:9-11,22,35` and the comparison at `:27`; its Benchmarks row, now bound; and a new DELETED row for the old Benchmarks figures nothing records, also pinned to `e250182e`. No line above `## Benchmarks` moved, so the row for `:5,56,70,76` still points at its claims and was left as it was; no other row was re-verified.
+
+Updated 2026-09-20 for the `README.md` Status block only — rows 61 (headline version) and 74 (ADR count), both WRONG since before the 2026-08-29 sweep and both now bound by `StatusBlockCoherenceTests`. Re-verified against the tree at that date: the headline read v2.2.1 while `Directory.Build.props` `<PackageVersion>` and the latest tag were both 2.5.3, and "37 ADRs" against 53 files in `docs/decisions/` excluding the catalog. The `29 NuGet packages` figure on the same line was re-counted and is correct (29 projects under `src/`, none `IsPackable=false`), so its row is unchanged and still a GAP. The test-count figure on that same line is still WRONG and is NOT fixed here: it is COHERENCE with nothing to cohere against, and committing that record is its own change. No other row was re-verified.
