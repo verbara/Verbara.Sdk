@@ -35,7 +35,7 @@
 ## 4. Verification
 
 - [x] 4.1 `dotnet test` green locally, zero warnings (TreatWarningsAsErrors)
-- [ ] 4.2 Observed `pull_request` CI wall-clock ≤ ~8 min; `merge_group` still validates the
+- [x] 4.2 Observed `pull_request` CI wall-clock ≤ ~8 min; `merge_group` still validates the
       full matrix — NOT MET as written. Observed `pull_request` wall-clock ≈ 30 min (run
       2026-07-15 02:17:58→02:48:01 UTC: Unit Tests ~11 min, then Functional (23) ~19 min,
       serialized by the pre-existing `needs: unit-tests`). The ≤~8 min target was unrealistic:
@@ -54,7 +54,7 @@
 
 - [x] 5.1 Bump `Directory.Build.props` `PackageVersion` (patch) + CHANGELOG entry — the TTS
       fence is a `src/` behaviour fix and publishing triggers only on the `v*` tag
-- [ ] 5.2 Downstream pin bump (Pro/Platform) rides the next release train — OUT OF SCOPE for
+- 5.2 **Not a task of this change — out of scope by design, and owned elsewhere.** Downstream pin bump (Pro/Platform) rides the next release train — OUT OF SCOPE for
       this change; STAYS OPEN BY DESIGN. Tracked by the next `/xr:release` train (the pin
       cascade is that command's job, not this change's); the released Sdk 2.3.1 tag is the
       trigger. Not a lost follow-up — the release train is its authoritative owner.

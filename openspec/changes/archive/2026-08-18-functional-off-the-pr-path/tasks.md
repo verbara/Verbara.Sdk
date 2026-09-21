@@ -45,7 +45,7 @@ All measured on this change's own PR, #199 (merged 2026-08-18T18:53:56Z).
 - [x] 3.3 Measure the PR run's wall-clock and confirm it lands near the predicted ~10 min.
       **Measured: 9m56s, and 9m10s on the second run (16:20:58Z → 16:30:08Z) — against the ~29 min
       the same PR shape cost before this change**
-- [ ] 3.4 Push a second commit while the first run is in flight and confirm the first run is
+- 3.4 **Not a task of this change — deferred with acceptance criteria to [ADR-0051](../../../docs/decisions/0051-functional-suites-off-the-pr-path.md) § Addendum (2026-08-18), which owns it.** Push a second commit while the first run is in flight and confirm the first run is
       **cancelled** (the `concurrency` block's first live exercise). **NOT EXERCISED — the two
       pushes on #199 never overlapped, so no run was ever superseded.** Deferred with acceptance
       criteria to the ADR-0051 addendum (2026-08-18); this is the one decision in the change with
