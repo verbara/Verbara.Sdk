@@ -55,7 +55,7 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 | ~~67~~ | 94.26% English accuracy, in upstream's voice | — | — | **DELETED** — lived in the release bullets, cut by the 2026-09-20 ruling on `README.md` release history. The figure survives at `:465` (row below) with its citation and hash pin; this was the duplicate. |
 | ~~67~~ | ~12 ms CPU inference | — | `TurnDetectionBenchmark` | **DELETED** — measured at 26.18–37.30 ms; deferred, see *Deferrals*. Its line was also removed with the release bullets on 2026-09-20. |
 | 65 | 148/152 AMI (97%), 94/98 ARI (96%), 46/46, 27/27, 278 events | ENFORCING | — | GAP |
-| 67 | **54 ADRs** | ENFORCING | `StatusBlockCoherenceTests` — counts `docs/decisions/*.md`, excluding the catalog `README.md` | **OK** |
+| 67 | **55 ADRs** | ENFORCING | `StatusBlockCoherenceTests` — counts `docs/decisions/*.md`, excluding the catalog `README.md` | **OK** |
 | 91 | measurement provenance (Ryzen 9 9900X, .NET 10.0.5, BDN v0.14.0, 2026-04-18) | COHERENCE | `PerformanceTableCoherenceTests` — the header provenance test | PARTIAL — matched against the whole file rather than this line, and blind to the AMI row's .NET 10.0.6 MediumRunJob exception (`performance-record.json:12`); the two session-store rows measured apart from it state their own at :110 |
 | 95 | AMI parse+dispatch 1.62M events/sec (617.6 ns) | ENFORCING + COHERENCE | `perf-regression.yml` `*AmiProtocolReader*` | GAP — observational only (`\|\| true`, no baseline) |
 | 96 | ARI deserialize Channel 3.54M ops/sec (283 ns) | ENFORCING + COHERENCE | `*AriJson*` | GAP — observational only |
