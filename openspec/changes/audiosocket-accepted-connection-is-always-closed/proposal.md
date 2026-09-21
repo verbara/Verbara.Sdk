@@ -3,7 +3,7 @@ tier: PEQUEÑO
 owner: Harol
 approver: Harol
 stakeholder: Operators who stop or restart an AudioSocket host while calls are still arriving, and the far ends whose connections the server would otherwise forget
-decision_ref: Sdk/ADR-0053
+decision_ref: Sdk/ADR-0058
 ---
 
 # Proposal: audiosocket-accepted-connection-is-always-closed
@@ -70,6 +70,15 @@ became a session, so ADR-0053's terminate — the thing that releases it — doe
    closed at once through the branch at `AudioSocketServer.cs:182-189`, and closed quietly, because
    that branch suppresses its warning when the stopping token is cancelled. One owner per accepted
    connection, and the stopping token reaches it as an argument rather than as a gate.
+
+   > **Correction (2026-09-21, during task 2.1) — the call quoted above does not compile in this
+   > repo.** `CA2016` is an error under `AnalysisLevel=latest-recommended` with
+   > `TreatWarningsAsErrors`, and its remedy is the explicit token that item 2's sibling listener
+   > already passes. What landed is
+   > `_ = Task.Run(() => HandleConnectionAsync(client, ct), CancellationToken.None);` — the same
+   > unconditional hand-off, written the one way the build accepts (`Sdk/ADR-0058` R2). The
+   > analyzer's message is transcribed verbatim under task 2.1 in `tasks.md`.
+
 2. This is the shape this repo's other accept loop already uses:
    `src/Verbara.Sdk.Ari/Outbound/AriOutboundListener.cs:149` hands its accepted connection over with
    `CancellationToken.None` while passing the stopping token into the handler. The fix makes the two
