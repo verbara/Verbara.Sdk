@@ -48,7 +48,7 @@ most of them — and a pager tuned to that counter stops firing on normal call e
   the single write call, so none of them is absorbed.
 - No public API change. `voiceai.sessions.*` is unaffected — the exception never reached the session layer.
 
-### Fixed — a session save in flight at shutdown was governed by a token only an aborted start could cancel
+### Fixed — a session save in flight at shutdown was governed by a token only an aborted start could cancel (#286)
 
 `SessionManagerHostedService` stored the token the host hands `StartAsync` and gave it to
 `CallSessionManager`, which runs **every** session save under it — not only the ones at shutdown. That

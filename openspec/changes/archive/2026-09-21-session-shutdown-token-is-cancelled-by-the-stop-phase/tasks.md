@@ -778,7 +778,7 @@
       surface, which no `PublicAPI` file tracks, is unchanged. The behaviour behind it moves; the
       shape does not.
 
-- [ ] 3.6 CI green through the merge queue. Enqueue it **alone**: the open changes that add a **new** ADR
+- [x] 3.6 CI green through the merge queue. Enqueue it **alone**: the open changes that add a **new** ADR
       file (0046, 0047, 0056, 0057, 0058, 0059) all bump the same `**N ADRs**` figure, and the queue
       squashes. Whether git even sees the collision depends on where the two catalog rows land: rows
       inserted at the same spot conflict textually and the queue ejects the second before it builds;
@@ -788,6 +788,14 @@
       ADR-adding change in the queue at a time, and re-count the figure after any rebase, because
       `strict:false` does not force one. Order does not otherwise matter — the guard counts files,
       not a contiguous sequence — so this change keeps ADR-0059 whenever it lands.
+
+      **Done.** PR #286, enqueued alone as required — it was the only ADR-adding change in the queue
+      at any point. 14 required contexts green on the PR, then the queue built and merged it as
+      `f3e8dd96` (2026-09-21T12:07:11Z). `classify-docs-only.sh` returned `docs_only=false`, so the
+      full lane ran. The ADR figure went 55 → 56 in the same PR, re-counted after the rebase onto
+      `b86f8906` exactly as this task requires; `ADR-0056` was left as a gap for
+      `ari-failed-connect-and-silent-catches`. `check-patch-coverage.py`, which is vacuous on an
+      uncommitted tree, ran for real here and passed.
 
 ## 4. Decision record
 
@@ -890,7 +898,7 @@
       a save in flight when the host stops now keeps the host's shutdown budget and is cut short when
       that budget expires, instead of being governed by a token that only an aborted start cancels.
       Leave the `(#N)` citation for close-out.
-- [ ] 5.2 `openspec archive session-shutdown-token-is-cancelled-by-the-stop-phase --yes` once the fix
+- [x] 5.2 `openspec archive session-shutdown-token-is-cancelled-by-the-stop-phase --yes` once the fix
       is on `main` (the CLI, never the agent archive path). This change creates a new capability, so
       after the archive check that `openspec/specs/session-persistence-lifecycle/spec.md` exists and
       author its `## Purpose` to match the other living specs, then re-run
