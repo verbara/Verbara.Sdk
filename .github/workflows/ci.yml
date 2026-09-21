@@ -423,3 +423,9 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - name: Validate specs and changes (strict)
         run: npx -y @fission-ai/openspec@1.13.1 validate --all --strict --no-interactive
+
+      # Archived changes must carry no unticked task. ADR-0023 §7 deferred this gate per
+      # repo until that repo reached rc=0; this one is the last of the five, cleared in the
+      # same PR that adds the step.
+      - name: Validate archived changes (no unticked tasks)
+        run: npx -y @fission-ai/openspec@1.13.1 validate --archived --no-interactive
