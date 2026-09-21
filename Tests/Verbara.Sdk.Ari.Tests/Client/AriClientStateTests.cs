@@ -159,6 +159,126 @@ public sealed class AriClientStateTests
         }
     }
 
+    [Fact]
+    public async Task ConnectAsync_ShouldFaultAndStopReconnecting_WhenTheRefusedDialIsNotTheCurrentSocket()
+    {
+        using var server = new TcpListener(IPAddress.Loopback, 0);
+        server.Start();
+        using var serverStop = new CancellationTokenSource();
+        using var concurrentCaller = new CancellationTokenSource();
+
+        var port = ((IPEndPoint)server.LocalEndpoint).Port;
+        var logger = new RecordingLogger();
+        var sut = new AriClient(Options.Create(new AriClientOptions
+        {
+            BaseUrl = $"http://127.0.0.1:{port}",
+            Username = "asterisk",
+            Password = "asterisk",
+            Application = "test-app",
+            ReconnectInitialDelay = TimeSpan.FromMilliseconds(20),
+            ReconnectMaxDelay = TimeSpan.FromMilliseconds(20),
+            // Backstop: a loop that kept dialling past the 401 ends here, through ReconnectGaveUp,
+            // instead of hanging out the wait limit. The fixed loop never reaches attempt 2.
+            MaxReconnectAttempts = 3
+        }), logger);
+
+        var dropFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reconnectDialed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // One listener, three dials in a fixed order, and the server orders the whole race itself:
+        // every step below is released by a previous step completing, never by a clock.
+        var serverSide = Task.Run(async () =>
+        {
+            // Dial 1 — the initial ConnectAsync. Upgraded, then held until the test says to drop it,
+            // which is what takes the client into its reconnect loop.
+            using (var first = await server.AcceptTcpClientAsync(serverStop.Token))
+            {
+                var firstStream = first.GetStream();
+                var (wsKey, _) = await WebSocketAudioServer.ReadUpgradeRequestAsync(firstStream, serverStop.Token);
+                await WebSocketAudioServer.SendUpgradeResponseAsync(firstStream, wsKey!, serverStop.Token);
+                await dropFirst.Task.WaitAsync(serverStop.Token);
+            }
+
+            // Dial 2 — the reconnect loop's first dial. Its request is read and then left unanswered,
+            // so the loop stays inside ClientWebSocket.ConnectAsync and cannot reach the listener again.
+            using var held = await server.AcceptTcpClientAsync(serverStop.Token);
+            var heldStream = held.GetStream();
+            await WebSocketAudioServer.ReadUpgradeRequestAsync(heldStream, serverStop.Token);
+            reconnectDialed.SetResult();
+
+            // Dial 3 — the concurrent ConnectAsync, never answered. Accepting it is the happens-before
+            // edge the 401 waits on: ConnectAsync assigns _webSocket before its only await, so a dial
+            // that reached this listener proves the field no longer holds the socket dial 2 opened.
+            using var current = await server.AcceptTcpClientAsync(serverStop.Token);
+            await WebSocketAudioServer.ReadUpgradeRequestAsync(current.GetStream(), serverStop.Token);
+
+            // Only now refuse the held dial, so the filter runs against a field that is not its socket.
+            await heldStream.WriteAsync(RefusalBytes("401 Unauthorized"), serverStop.Token);
+
+            // Anything arriving after this is a loop that did not stop; refuse it at once so the
+            // backstop ends the run instead of leaving it to time out.
+            while (!serverStop.IsCancellationRequested)
+            {
+                using var extra = await server.AcceptTcpClientAsync(serverStop.Token);
+                await RefuseUpgradeAsync(extra.GetStream(), "503 Service Unavailable", serverStop.Token);
+            }
+        });
+
+        Task? concurrentConnect = null;
+        try
+        {
+            await sut.ConnectAsync();
+
+            // Captured before the second ConnectAsync: that call replaces _cts, and on any path where
+            // its dial completed it would replace _eventLoop too. This is the reconnect loop's task.
+            var reconnectLoop = sut.EventLoop!;
+            dropFirst.SetResult();
+            await reconnectDialed.Task.WaitAsync(WaitLimit);
+
+            // Replaces _webSocket synchronously, before its only await: the field the filter would
+            // read is this socket from here on, while the iteration in flight still owns dial 2's.
+            concurrentConnect = sut.ConnectAsync(concurrentCaller.Token).AsTask();
+
+            // The loop ends on its own, at the 401 or at the backstop; nothing here cancels it first.
+            await reconnectLoop.WaitAsync(WaitLimit);
+
+            using (new AssertionScope())
+            {
+                sut.State.Should().Be(
+                    AriConnectionState.Faulted,
+                    "the 401 belongs to the socket this iteration dialled, whatever the field now holds");
+                logger.Entries
+                    .Where(e => e.EventId.Name == "Reconnecting")
+                    .Select(e => e.Properties.Single(p => p.Key == "Attempt").Value)
+                    .Should().Equal([1], "the loop stops at the 401 and dials no second time");
+                logger.Entries.Should().NotContain(
+                    e => e.EventId.Name == "ReconnectGaveUp", "the loop stops at the 401, not at MaxReconnectAttempts");
+            }
+
+            var rejection = logger.Entries.Should().ContainSingle(e => e.EventId.Name == "ReconnectRejected").Subject;
+            rejection.Level.Should().Be(LogLevel.Error);
+            rejection.Properties.Should().ContainSingle(p => p.Key == "StatusCode").Which.Value.Should().Be(401);
+            rejection.Exception.Should().BeOfType<WebSocketException>();
+        }
+        finally
+        {
+            // The concurrent attempt is withdrawn first and its outcome is never asserted: its socket
+            // belongs to a client this test deliberately drives from two callers at once. Its state
+            // write lands after every assertion above, which is why they are read inside the try.
+            await concurrentCaller.CancelAsync();
+            if (concurrentConnect is not null)
+            {
+                await concurrentConnect.ConfigureAwait(
+                    ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            }
+
+            await sut.DisposeAsync();
+            await serverStop.CancelAsync();
+            await serverSide.ConfigureAwait(
+                ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+        }
+    }
+
     [Theory]
     [InlineData("401 Unauthorized")]
     [InlineData("503 Service Unavailable")]
@@ -451,8 +571,14 @@ public sealed class AriClientStateTests
     private static async Task RefuseUpgradeAsync(NetworkStream stream, string status, CancellationToken ct)
     {
         await WebSocketAudioServer.ReadUpgradeRequestAsync(stream, ct);
-        await stream.WriteAsync(Encoding.ASCII.GetBytes($"HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"), ct);
+        await stream.WriteAsync(RefusalBytes(status), ct);
     }
+
+    /// <summary>
+    /// The bytes of an HTTP refusal, for a dial whose upgrade request has already been read.
+    /// </summary>
+    private static byte[] RefusalBytes(string status) =>
+        Encoding.ASCII.GetBytes($"HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
 
     /// <summary>
     /// Keeps what the client logged. <see cref="Entries"/> hands out a copy taken under the write lock.

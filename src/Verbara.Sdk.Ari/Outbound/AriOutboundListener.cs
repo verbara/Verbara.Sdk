@@ -35,6 +35,9 @@ internal static partial class AriOutboundListenerLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[AriOutbound] Connection error: remote={RemoteEndpoint}")]
     public static partial void ConnectionError(ILogger logger, Exception exception, string remoteEndpoint);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[AriOutbound] Accept failed — the listener stays bound and accepts again after a backoff")]
+    public static partial void AcceptLoopFailed(ILogger logger, Exception exception);
 }
 
 /// <summary>
@@ -53,8 +56,15 @@ public sealed class AriOutboundListener : IAriOutboundListener
 {
     private const string WebSocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
+    /// <summary>The wait after the first of a run of failed accepts.</summary>
+    internal static readonly TimeSpan InitialAcceptBackoff = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>The longest wait between failed accepts, however long the run.</summary>
+    internal static readonly TimeSpan MaxAcceptBackoff = TimeSpan.FromSeconds(5);
+
     private readonly AriOutboundListenerOptions _options;
     private readonly ILogger<AriOutboundListener> _logger;
+    private readonly TimeProvider _timeProvider;
     private readonly ConcurrentDictionary<Guid, TrackedConnection> _connections = new();
     private readonly Subject<AriOutboundConnection> _connectionSubject = new();
     private TcpListener? _listener;
@@ -65,10 +75,29 @@ public sealed class AriOutboundListener : IAriOutboundListener
     public AriOutboundListener(
         IOptions<AriOutboundListenerOptions> options,
         ILogger<AriOutboundListener> logger)
+        : this(options, logger, TimeProvider.System)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance whose accept backoff waits on <paramref name="timeProvider"/>, so a
+    /// test can drive that wait with a fake clock instead of sitting out a real one.
+    /// </summary>
+    internal AriOutboundListener(
+        IOptions<AriOutboundListenerOptions> options,
+        ILogger<AriOutboundListener> logger,
+        TimeProvider timeProvider)
     {
         _options = options.Value;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
+
+    /// <summary>
+    /// Replaces the listener's accept when set. Settable by tests (via InternalsVisibleTo), so a test
+    /// can make accepts fail on demand instead of exhausting file descriptors to get a failure.
+    /// </summary>
+    internal Func<CancellationToken, ValueTask<TcpClient>>? AcceptOverride { get; set; }
 
     public bool IsRunning => Volatile.Read(ref _running) == 1;
 
@@ -109,7 +138,11 @@ public sealed class AriOutboundListener : IAriOutboundListener
         if (Interlocked.Exchange(ref _running, 0) == 0)
             return;
 
-        try { _listener?.Stop(); } catch (SocketException) { }
+        // Stopping a listener that is already down: the platform closed the socket under us, or a
+        // concurrent DisposeAsync got there first. Either way the listener is not accepting, which is
+        // the state this method exists to reach, so there is nothing to do and nothing to report.
+        try { _listener?.Stop(); }
+        catch (SocketException) { /* Best effort — the listener is already down */ }
 
         if (_cts is not null)
             await _cts.CancelAsync();
@@ -140,77 +173,146 @@ public sealed class AriOutboundListener : IAriOutboundListener
 
     private async Task AcceptLoopAsync(CancellationToken ct)
     {
-        try
+        var backoff = InitialAcceptBackoff;
+        while (!ct.IsCancellationRequested)
         {
-            while (!ct.IsCancellationRequested)
+            try
             {
-                var client = await _listener!.AcceptTcpClientAsync(ct);
+                var client = await AcceptAsync(ct);
+                backoff = InitialAcceptBackoff;
                 client.NoDelay = true;
+
+                // CancellationToken.None on the hand-off, and deliberately so: this work item carries
+                // the only reference to a connection already accepted, and a Task.Run token that
+                // skipped it would leave that connection with no owner and nothing to close it. `ct`
+                // travels with it as an argument instead. The sibling accept loop
+                // (AudioSocketServer.AcceptLoopAsync) passes None for the same reason.
                 _ = Task.Run(() => HandleConnectionAsync(client, ct), CancellationToken.None);
+                continue;
             }
+            catch (OperationCanceledException)
+            {
+                // The stop path. `ct` is _cts.Token, cancelled by StopAsync (and so by DisposeAsync),
+                // and the pending accept ended with it. Nothing is meant to be accepted after that, so
+                // the loop ends rather than backing off.
+                break;
+            }
+            catch (ObjectDisposedException)
+            {
+                // The Windows shape of that same stop: Stop() disposes the underlying socket under a
+                // pending accept, and the accept surfaces the disposal. NOT reached on Linux, where
+                // Stop() on a pending accept raises SocketException(OperationAborted) and the filtered
+                // catch below takes it instead — this block is live on Windows, not dead code.
+                break;
+            }
+            catch (SocketException) when (!IsRunning)
+            {
+                // The Linux shape of the stop: StopAsync clears _running BEFORE it calls Stop(), so an
+                // accept aborted by that Stop() always arrives with IsRunning already false. IsRunning
+                // is the discriminator and not `ct`, because StopAsync cancels _cts only after Stop()
+                // returns — a filter on ct.IsCancellationRequested would race that ordering.
+                break;
+            }
+            catch (SocketException ex)
+            {
+                // An accept that failed while the listener is still meant to be running: EMFILE/ENFILE,
+                // a connection aborted in the backlog, ENOBUFS. Ending the loop here would leave
+                // IsRunning reporting true over a socket still in LISTEN — the kernel would keep
+                // completing handshakes nobody reads, so Asterisk's outbound connectors would hang
+                // instead of being refused, and StartAsync could not restart it because _running is
+                // already 1. So it is logged and the loop keeps accepting.
+                AriOutboundListenerLog.AcceptLoopFailed(_logger, ex);
+            }
+
+            // A failure that persists fails every accept at once, and without a pause this loop would
+            // spin and log without bound. The wait doubles with each consecutive failure up to the cap,
+            // and a successful accept above starts it over.
+            try
+            {
+                await Task.Delay(backoff, _timeProvider, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // Same stop path as above, caught while waiting out a backoff rather than while
+                // accepting: _cts was cancelled by StopAsync. The loop ends.
+                break;
+            }
+
+            backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, MaxAcceptBackoff.Ticks));
         }
-        catch (OperationCanceledException) { }
-        catch (ObjectDisposedException) { }
-        catch (SocketException) { }
     }
+
+    private ValueTask<TcpClient> AcceptAsync(CancellationToken ct) =>
+        AcceptOverride?.Invoke(ct) ?? _listener!.AcceptTcpClientAsync(ct);
 
     private async Task HandleConnectionAsync(TcpClient client, CancellationToken ct)
     {
-        var remoteEndpoint = client.Client.RemoteEndPoint?.ToString() ?? "unknown";
-        NetworkStream? stream = null;
-        try
+        // The unconditional close, and now the only one: every ending below — the two rejected
+        // handshakes, a swallowed stop, a logged failure, or the read pump returning — leaves this
+        // block, so the connection is released before the method returns, exactly where the
+        // hand-written `finally` released it. By then ReadPumpAsync's own `finally` has already
+        // disposed the connection wrapping this client's stream, so the order is unchanged too.
+        // This is ADR-0058 R4 — "exactly one place disposes it, and that place is the handler" —
+        // now satisfied literally rather than approximately: one dispose site instead of three.
+        using (client)
         {
-            stream = client.GetStream();
-
-            var upgradeRequest = await ReadUpgradeRequestAsync(stream, ct);
-            if (upgradeRequest is null)
+            var remoteEndpoint = client.Client.RemoteEndPoint?.ToString() ?? "unknown";
+            NetworkStream? stream = null;
+            try
             {
-                AriOutboundListenerLog.UpgradeRejected(_logger, remoteEndpoint, "malformed HTTP upgrade");
-                client.Dispose();
-                return;
-            }
+                stream = client.GetStream();
 
-            var (rejectReason, appName) = Validate(upgradeRequest, _options);
-            if (rejectReason is not null)
+                var upgradeRequest = await ReadUpgradeRequestAsync(stream, ct);
+                if (upgradeRequest is null)
+                {
+                    AriOutboundListenerLog.UpgradeRejected(_logger, remoteEndpoint, "malformed HTTP upgrade");
+                    return;
+                }
+
+                var (rejectReason, appName) = Validate(upgradeRequest, _options);
+                if (rejectReason is not null)
+                {
+                    AriOutboundListenerLog.UpgradeRejected(_logger, remoteEndpoint, rejectReason);
+                    await SendErrorResponseAsync(stream, rejectReason, ct);
+                    return;
+                }
+
+                await SendUpgradeResponseAsync(stream, upgradeRequest.WebSocketKey!, ct);
+
+                var webSocket = WebSocket.CreateFromStream(
+                    stream,
+                    new WebSocketCreationOptions { IsServer = true });
+
+                var subject = new Subject<AriEvent>();
+                var connection = new AriOutboundConnection(appName!, remoteEndpoint, webSocket, subject);
+                var tracked = new TrackedConnection(Guid.NewGuid(), connection, client, subject);
+                _connections.TryAdd(tracked.Id, tracked);
+
+                AriOutboundListenerLog.ConnectionAccepted(_logger, remoteEndpoint, appName!);
+                _connectionSubject.OnNext(connection);
+
+                await ReadPumpAsync(tracked, webSocket, subject, ct);
+            }
+            catch (OperationCanceledException)
             {
-                AriOutboundListenerLog.UpgradeRejected(_logger, remoteEndpoint, rejectReason);
-                await SendErrorResponseAsync(stream, rejectReason, ct);
-                client.Dispose();
-                return;
+                // The stop token, `ct` — _cts.Token, cancelled by StopAsync and DisposeAsync. Every
+                // await above is the handshake or the read pump under that token, so this is the
+                // listener being stopped while this connection was being served. The `using (client)`
+                // this method opens with still closes it.
+                /* Best effort — the listener is stopping */
             }
-
-            await SendUpgradeResponseAsync(stream, upgradeRequest.WebSocketKey!, ct);
-
-            var webSocket = WebSocket.CreateFromStream(
-                stream,
-                new WebSocketCreationOptions { IsServer = true });
-
-            var subject = new Subject<AriEvent>();
-            var connection = new AriOutboundConnection(appName!, remoteEndpoint, webSocket, subject);
-            var tracked = new TrackedConnection(Guid.NewGuid(), connection, client, subject);
-            _connections.TryAdd(tracked.Id, tracked);
-
-            AriOutboundListenerLog.ConnectionAccepted(_logger, remoteEndpoint, appName!);
-            _connectionSubject.OnNext(connection);
-
-            await ReadPumpAsync(tracked, webSocket, subject, ct);
-        }
-        catch (OperationCanceledException) { }
-        catch (WebSocketException ex)
-        {
-            AriOutboundListenerLog.ConnectionError(_logger, ex, remoteEndpoint);
-        }
-        catch (IOException ex)
-        {
-            AriOutboundListenerLog.ConnectionError(_logger, ex, remoteEndpoint);
-        }
-        catch (Exception ex)
-        {
-            AriOutboundListenerLog.ConnectionError(_logger, ex, remoteEndpoint);
-        }
-        finally
-        {
-            try { client.Dispose(); } catch (ObjectDisposedException) { }
+            catch (WebSocketException ex)
+            {
+                AriOutboundListenerLog.ConnectionError(_logger, ex, remoteEndpoint);
+            }
+            catch (IOException ex)
+            {
+                AriOutboundListenerLog.ConnectionError(_logger, ex, remoteEndpoint);
+            }
+            catch (Exception ex)
+            {
+                AriOutboundListenerLog.ConnectionError(_logger, ex, remoteEndpoint);
+            }
         }
     }
 
@@ -280,7 +382,14 @@ public sealed class AriOutboundListener : IAriOutboundListener
                 }
             }
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            // The stop token, `ct` — _cts.Token, cancelled by StopAsync and DisposeAsync — and only
+            // that. The idle timeout is the OTHER ending a cancellation can mean here, and it is
+            // already taken by the filtered `when (!ct.IsCancellationRequested)` catch inside the loop
+            // above, which logs it and breaks; anything reaching here is the listener stopping.
+            /* Best effort — the listener is stopping */
+        }
         catch (WebSocketException ex)
         {
             AriOutboundListenerLog.ConnectionError(_logger, ex, tracked.Connection.RemoteEndpoint);
@@ -349,10 +458,14 @@ public sealed class AriOutboundListener : IAriOutboundListener
         if (!string.Equals(request.Path, options.Path, StringComparison.Ordinal))
             return ($"path mismatch: expected={options.Path} actual={request.Path}", null);
 
-        if (options.ExpectedUsername is not null || options.ExpectedPassword is not null)
+        // The parentheses are load-bearing, not style: `&&` binds tighter than `||`, so dropping them
+        // would parse this as `ExpectedUsername is not null || (ExpectedPassword is not null && !IsAuthorized(…))`
+        // and invert the method. As written, `&&` short-circuits exactly where the outer `if` used to
+        // guard — a listener with neither expectation configured still never consults the header.
+        if ((options.ExpectedUsername is not null || options.ExpectedPassword is not null) &&
+            !IsAuthorized(request.Authorization, options.ExpectedUsername, options.ExpectedPassword))
         {
-            if (!IsAuthorized(request.Authorization, options.ExpectedUsername, options.ExpectedPassword))
-                return ("basic auth mismatch", null);
+            return ("basic auth mismatch", null);
         }
 
         var appName = ExtractApp(request.Query);

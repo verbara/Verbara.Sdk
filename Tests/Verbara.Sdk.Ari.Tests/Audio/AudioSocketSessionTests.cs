@@ -54,6 +54,26 @@ public class AudioSocketSessionTests
     }
 
     [Fact]
+    public async Task ReadFrameAsync_ShouldReturnEmpty_WhenTheChannelIsCompleted()
+    {
+        // A lone Hangup frame is this transport's close frame: the read pump publishes Disconnected
+        // and completes the audio channel's writer, so WaitToReadAsync resolves false and the
+        // combined condition short-circuits before TryRead is ever consulted. This is the false
+        // branch of ReadFrameAsync; Session_ShouldParseUuidAndReadAudio covers the true branch.
+        var hangupFrame = BuildFrame(AudioFrameType.Hangup, []);
+        await using var memStream = new MemoryStream(hangupFrame);
+        var session = new AudioSocketSession(memStream, "slin16");
+        session.Start();
+
+        // Causal, not timed: channel completion is exactly what resolves this await, so no settling
+        // delay is needed. The bound is a hang guard and is never reached on the happy path.
+        var frame = await session.ReadFrameAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+
+        frame.IsEmpty.Should().BeTrue();
+        await session.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Session_ShouldReportDisconnectedOnHangup()
     {
         var uuidFrame = BuildFrame(AudioFrameType.Uuid, Guid.NewGuid().ToByteArray());

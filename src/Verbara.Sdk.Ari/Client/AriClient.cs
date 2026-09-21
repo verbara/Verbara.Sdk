@@ -148,6 +148,13 @@ public sealed class AriClient : IAriClient
         {
             await _webSocket.ConnectAsync(uri, cancellationToken);
             connected = true;
+
+            // Written inside the try, not after it. A finally runs BEFORE the statement that
+            // follows its block, so a terminal write left unguarded out here would land on the
+            // success path and be overwritten a statement later — undetectable by any test, since
+            // no observer exists between the two writes. Keeping the success write inside the try
+            // puts the finally last on every path, which is what makes that mutation observable.
+            SetState(AriConnectionState.Connected);
         }
         finally
         {
@@ -164,8 +171,6 @@ public sealed class AriClient : IAriClient
                     : AriConnectionState.Faulted);
             }
         }
-
-        SetState(AriConnectionState.Connected);
 
         _pump.OnEventDropped = evt => AriMetrics.EventsDropped.Add(1);
         _pump.Start(evt =>
@@ -218,7 +223,16 @@ public sealed class AriClient : IAriClient
                 }
             }
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            // The client's own teardown. `ct` is `_cts.Token`, a source linked to the token the caller
+            // handed `ConnectAsync` and cancelled by `DisconnectAsync`, by `DisposeAsync`, or by that
+            // caller's own token — so a cancellation reaching here is the receive loop being told to
+            // stop, never a socket that failed. Swallowing it is what lets control fall through to the
+            // auto-reconnect check below, which re-reads the same `ct`: a cancelled loop leaves the
+            // method without dialling.
+            /* Best effort — the client is disconnecting */
+        }
         catch (WebSocketException ex)
         {
             AriClientLog.WebSocketError(_logger, ex);
