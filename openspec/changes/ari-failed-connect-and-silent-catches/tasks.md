@@ -169,15 +169,25 @@ finding for the owner with its alert left open. Silencing is not the goal.
       Relate it to ADR-0010, ADR-0050 E6, ADR-0052, ADR-0053 and ADR-0054.
 - [ ] 7.2 Add the ADR-0056 row to `docs/decisions/README.md` in numeric order, matching the style of
       the surrounding rows.
-- [ ] 7.3 Repoint this change's `decision_ref` to `Sdk/ADR-0056` once that file exists, so the
+- [ ] 7.3 Land the ADR-count guard's other two edits **in this same PR**:
+      `StatusBlockCoherenceTests.ThePublishedAdrCount_ShouldMatchTheDecisionsOnDisk` (#279) counts
+      `docs/decisions/*.md` against the figure `README.md` publishes, and ADR-0042 D1 requires a
+      changed figure's registry row to move with it.
+      - bump the `**N ADRs**` figure in `README.md`;
+      - update its row in `docs/claim-registry.md`.
+      Key both edits to the **figure**, never to a line number — the same rule as task 1.2. #280 has
+      just moved this claim from `README.md:74` to `:67` and re-based the registry's line pointers
+      with it, so a number recorded here goes stale on the next docs PR. Adding 7.1's ADR file without these two fails the
+      `Unit Tests` job that task 8.2 requires green.
+- [ ] 7.4 Repoint this change's `decision_ref` to `Sdk/ADR-0056` once that file exists, so the
       proposal cites the decision it rests on rather than the closest neighbour
-- [ ] 7.4 `CHANGELOG.md` `[Unreleased]`: one entry stating the observable change — after a failed
+- [ ] 7.5 `CHANGELOG.md` `[Unreleased]`: one entry stating the observable change — after a failed
       first connect, `State` reads `Faulted`, or `Disconnected` when the caller cancelled, instead of
       `Connecting`; `AriHealthCheck` is `Unhealthy` before and after and only its message moves;
       `IsConnected` is unchanged; the exception reaches the caller unchanged. Say explicitly that this
       amends the sentence in the 2.5.3 entry *"`AriClient` kept reconnecting after Asterisk refused
       its credentials"* which documents the old behaviour. Leave the `(#N)` citation for close-out.
-- [ ] 7.5 Put the release tier to the owner before merging: this changes an observable that consumers
+- [ ] 7.6 Put the release tier to the owner before merging: this changes an observable that consumers
       were told to watch, with no API change. ADR-0050's precedent calls a behavioural break minor
       rather than patch; 2.5.3 shipped one as a patch. Record the answer rather than assuming it.
 
@@ -197,7 +207,16 @@ finding for the owner with its alert left open. Silencing is not the goal.
 
 ## 9. Close-out and the post-merge alert check
 
-- [ ] 9.1 Land the change; record the PR number.
+- [ ] 9.1 Land the change; record the PR number. Enqueue it **alone**: the open changes that add a **new** ADR
+      file (0046, 0047, 0056, 0057, 0058, 0059) all bump the same `**N ADRs**` figure, and the queue
+      squashes. Whether git even sees the collision depends on where the two catalog rows land: rows
+      inserted at the same spot conflict textually and the queue ejects the second before it builds;
+      rows at different spots — the common case, since every one of those tasks adds its row *in
+      numeric order* — merge cleanly and the second then fails `Unit Tests` inside the queue, a
+      semantic conflict rather than a textual one. Either way the practice is the same: one
+      ADR-adding change in the queue at a time, and re-count the figure after any rebase, because
+      `strict:false` does not force one. Order does not otherwise matter — the guard counts files,
+      not a contiguous sequence — so this change keeps ADR-0056 whenever it lands.
 - [ ] 9.2 **After the merge**, once code scanning has analysed `main`, list the open alerts again and
       check them off against the record from 4.7 by rule + file + member. Every alert whose block was
       commented, converted to a `using`, or combined should be gone; the ones deliberately left open
