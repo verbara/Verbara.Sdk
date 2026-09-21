@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed — `AudioSocketServer` left a connection open when it was accepted in the moment the server stopped
+### Fixed — `AudioSocketServer` left a connection open when it was accepted in the moment the server stopped (#281)
 
 `AcceptLoopAsync` handed each accepted connection to its handler through `Task.Run(…, ct)`, gated on the server's
 stopping token. That token cancels a work item that has not started yet, so a stop landing between the accept and the

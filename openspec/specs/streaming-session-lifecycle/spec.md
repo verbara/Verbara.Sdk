@@ -42,6 +42,18 @@ an identical shutdown as a failure and as a completion respectively, and a calle
 cannot see which handler produced it. Both are cases of the ending being inferred from where it was
 observed rather than from who caused it (ADR-0054).
 
+A later requirement joined from one layer **earlier** than the rest — the server's accept path — and
+it belongs here for the same reason, not despite arriving before the session exists. A connection is
+a resource with an owner from the moment it is accepted, and the rule ADR-0053 states for a session's
+transport (exactly one owner releases it) is that rule read before there is a session to state it
+about. A server that hands an accepted connection to its handler through a work item gated on its own
+stopping token can have that hand-off skipped, and because every dispose site lives inside the
+handler, nothing closes the connection and nothing counts it: no counter moves, no gauge moves, no
+session is ever registered, and the far end holds a connection the server has forgotten. That is this
+capability's failure mode arriving one layer early — an ending unaccounted for because of *where* the
+code stopped running rather than *who* ended it — which is why the accept path files here rather than
+under a capability of its own (ADR-0058).
+
 ## Requirements
 
 ### Requirement: A hangup that overtakes the first read ends the audio stream, it does not fault it
@@ -204,3 +216,39 @@ Exceptions of any other type are outside this requirement.
 - **WHEN** a barge-in, disposing the pipeline, or the caller's token cancels before that disposal completes
 - **THEN** the synthesis is not reported as failed: `tts.syntheses.failed` does not move, no `PipelineErrorEvent` is published, nothing is logged at Warning, and the synthesis activity is not set to `Error`
 - **AND** the session handler returns without throwing and the session is not counted in `voiceai.sessions.failed`
+
+### Requirement: A connection the server accepts is closed even when it is never served
+An audio server SHALL close every connection it accepts, including one accepted in the moment it is
+asked to stop and therefore never served. Handing an accepted connection to the code that owns its
+disposal MUST NOT be gated on the server's stopping token: a hand-off a cancelled token skips leaves
+that connection with no owner — nothing closes it, no counter or gauge moves, and the far end keeps a
+connection the server has forgotten. The connection handler MUST still receive that token, so a
+connection it takes over while the server is stopping is closed at once rather than at the end of the
+wait for the identifying frame. Accepting and serving a connection while the server is running is
+unchanged, and so is the wait between failed accepts.
+
+#### Scenario: The server is asked to stop between the accept and the hand-off
+- **GIVEN** an accept loop whose stopping token is cancelled in the same moment an accept returns a connection
+- **WHEN** the loop hands that connection to the connection handler
+- **THEN** the connection is closed — the far end's read reaches end of stream — rather than being left open with no owner and released only if the socket handle is eventually finalized
+- **AND** the loop then ends without attempting another accept
+
+#### Scenario: Closing a connection the server never served is quiet
+- **GIVEN** a connection closed because the server was already stopping when it was accepted
+- **WHEN** the server finishes stopping
+- **THEN** nothing is logged at Warning or above for that connection: it missed no deadline and failed in no way
+
+#### Scenario: A connection accepted while the server is running is still served
+- **GIVEN** a running server whose stopping token is not cancelled
+- **WHEN** it accepts a connection
+- **THEN** the connection handler takes it over and begins its bounded wait for the identifying frame, and the connection stays open for as long as that wait lasts
+
+#### Scenario: The stopping token still reaches the handler
+- **GIVEN** a connection the handler took over and is waiting on for the identifying frame
+- **WHEN** the server is asked to stop before that frame arrives and before the wait's deadline
+- **THEN** the connection is closed on the stop rather than at the deadline, so a shutdown does not wait out the connection timeout
+
+#### Scenario: The wait between failed accepts is unchanged
+- **GIVEN** a run of consecutive failed accepts
+- **WHEN** the loop backs off between them
+- **THEN** the wait starts at 100 ms, doubles with each consecutive failure up to 5 s, starts over after an accept succeeds, and ends at once when the stopping token is cancelled during it

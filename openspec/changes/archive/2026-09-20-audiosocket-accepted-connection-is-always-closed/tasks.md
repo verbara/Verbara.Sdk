@@ -532,9 +532,19 @@
       `docs/decisions/0058-a-stopping-token-never-gates-a-handoff.md` exists (task 3.1), so the
       reference resolves. ADR-0053 is not lost: ADR-0058 cites it as the decision it extends, and the
       proposal's Why section still reads the defect as "the ADR-0053 family one layer earlier".
-- [ ] 3.5 At archive time, widen the `streaming-session-lifecycle` `## Purpose` so it covers
+- [x] 3.5 At archive time, widen the `streaming-session-lifecycle` `## Purpose` so it covers
       the server accept path this requirement files under it — or, if the owner prefers, split the
       requirement into its own capability before archiving
+
+      **Done — the owner ruled (a): widen, do not split.** A paragraph was added to
+      `openspec/specs/streaming-session-lifecycle/spec.md` `## Purpose` placing the accept path in
+      this capability explicitly: a connection is a resource with an owner from the moment it is
+      accepted, so ADR-0053's one-owner rule read *before* there is a session is the same rule, and
+      the failure mode — an ending unaccounted for because of where the code stopped rather than who
+      ended it — is this capability's, arriving one layer early. Splitting was rejected: it would
+      have produced a one-requirement capability and suggested that ADR-0058 states a different rule
+      from ADR-0053 when it states the same one earlier.
+
 ## 4. Verification
 
 - [x] 4.1 `dotnet build Verbara.Sdk.slnx -c Release`: 0 warnings, 0 errors
@@ -845,7 +855,7 @@
       ticks is `[INFO]` notes that some requirement texts run over 500 characters, which are advisory
       and appear on the pre-existing specs too. `openspec/` carries no absolute machine path — checked
       across the whole tree, not just the files this change touched.
-- [ ] 4.6 CI green through the merge queue. Enqueue it **alone**: the open changes that add a **new**
+- [x] 4.6 CI green through the merge queue. Enqueue it **alone**: the open changes that add a **new**
       ADR file (0046, 0047, 0056, 0057, 0058, 0059) all bump the same `**N ADRs**` figure, and the
       queue squashes. Whether git even sees the collision depends on where the two catalog rows land:
       rows inserted at the same spot conflict textually and the queue ejects the second before it
@@ -856,6 +866,11 @@
       `strict:false` does not force one. Order does not otherwise matter — the guard counts files,
       not a contiguous sequence — so this change keeps ADR-0058 whenever it lands.
 
+      **Done.** PR #281, enqueued alone as required. 14 required contexts green on the PR, then the
+      queue built and merged it as `375998ad` (2026-09-21T03:14:24Z). No other ADR-adding change was
+      in the queue at any point. `classify-docs-only.sh` returned `docs_only=false`, so the full lane
+      ran rather than being skipped.
+
 ## 5. Close-out
 
 - [x] 5.1 `CHANGELOG.md` `[Unreleased]` entry under `### Fixed`, stating that a connection accepted in
@@ -863,6 +878,6 @@
       that a connection whose socket had already failed can now be logged once as a connection error.
       Leave the `(#N)` citation for close-out. No `PackageVersion` bump here: publishing is the
       release train's job (`Sdk/ADR-0055`), and this change ships no public API.
-- [ ] 5.2 `openspec archive audiosocket-accepted-connection-is-always-closed --yes` once the fix is on
+- [x] 5.2 `openspec archive audiosocket-accepted-connection-is-always-closed --yes` once the fix is on
       `main`, as its own `docs(openspec):` PR, with the feature PR's number backfilled into the
       CHANGELOG entry.
