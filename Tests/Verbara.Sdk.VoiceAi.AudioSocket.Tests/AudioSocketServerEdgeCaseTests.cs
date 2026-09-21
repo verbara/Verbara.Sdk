@@ -122,6 +122,98 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task AcceptLoopAsync_ShouldCloseTheAcceptedConnection_WhenTheServerStopsBeforeTheHandoffRuns()
+    {
+        // Arrange — a real loopback pair whose server end is what the accept returns. The override
+        // cancels the loop's own token and then returns that connection in the same call, so the
+        // hand-off that follows always sees a cancelled token: the ordering is built, not timed. The
+        // UUID timeout runs on a fake clock the test never advances, and is set far above any wait the
+        // loop could ask for, so nothing here can end on a clock — the only thing that can close the
+        // connection is the server closing it.
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        using var peer = new TcpClient();
+        await peer.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port);
+        using var accepted = await listener.AcceptTcpClientAsync();
+
+        var time = new FakeTimeProvider();
+        var logger = new CapturingLogger();
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { Port = 0, ConnectionTimeout = TimeSpan.FromHours(1) },
+            logger,
+            time);
+        using var serverStopping = new CancellationTokenSource();
+        var attempts = 0;
+        server.AcceptOverride = _ =>
+        {
+            Interlocked.Increment(ref attempts);
+            serverStopping.Cancel();
+            return ValueTask.FromResult(accepted);
+        };
+
+        // Act — the loop runs with the test's own token, which is the one StartAsync hands it
+        var loop = Task.Run(() => server.AcceptLoopAsync(serverStopping.Token));
+        var loopFault = await Record.ExceptionAsync(() => loop.WaitAsync(SignalTimeout));
+
+        // Assert
+        (await ReadFromServerAsync(peer)).Should().Be(
+            0,
+            "a connection the server accepted is closed even when the stop landed before the hand-off ran");
+        Volatile.Read(ref attempts).Should().Be(1, "the loop ends on the cancelled token rather than accepting again");
+        loopFault.Should().BeNull("a cancelled token ends the loop; it neither hangs nor escapes as an exception");
+        loop.Status.Should().Be(TaskStatus.RanToCompletion);
+        logger.Entries.Should().NotContain(
+            entry => entry.Level >= LogLevel.Warning,
+            "a connection closed because the server was already stopping missed no deadline and failed in no way");
+    }
+
+    [Fact]
+    public async Task AcceptLoopAsync_ShouldLeaveTheConnectionOpen_WhileTheHandlerIsServingIt()
+    {
+        // Arrange — the same harness with the loop's token live. The override returns the connection
+        // on its first call and afterwards parks on an accept that ends only when that token does, so
+        // no second connection and no backoff wait can appear: the handler's UUID timeout is the only
+        // timer the fake clock ever sees, and its due time is far above every backoff wait anyway.
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        using var peer = new TcpClient();
+        await peer.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port);
+        using var accepted = await listener.AcceptTcpClientAsync();
+
+        var time = new FakeTimeProvider();
+        var connectionTimeout = TimeSpan.FromHours(1);
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { Port = 0, ConnectionTimeout = connectionTimeout },
+            new CapturingLogger(),
+            time);
+        using var serverStopping = new CancellationTokenSource();
+        var attempts = 0;
+        server.AcceptOverride = token => Interlocked.Increment(ref attempts) == 1
+            ? ValueTask.FromResult(accepted)
+            : ParkUntilCancelledAsync(token);
+
+        // The read is outstanding from before the loop starts, so the check below covers the whole
+        // hand-off rather than an instant of it. The server never writes, so only its close ends it.
+        var peerRead = ReadFromServerAsync(peer);
+
+        // Act — the handler taking the connection over is what creates the UUID timeout
+        var loop = Task.Run(() => server.AcceptLoopAsync(serverStopping.Token));
+        var uuidTimeout = await NextTimerAsync(time);
+
+        // Assert — the connection is being served, so it is still open
+        uuidTimeout.DueTime.Should().Be(connectionTimeout, "the handler bounds its wait for the UUID frame by ConnectionTimeout");
+        peerRead.IsCompleted.Should().BeFalse("a connection the handler is serving is not closed under it");
+
+        // Act — the stop is the only thing that ends the wait
+        await serverStopping.CancelAsync();
+
+        // Assert
+        (await peerRead).Should().Be(0, "the handler closes the connection once the server stops");
+        var loopFault = await Record.ExceptionAsync(() => loop.WaitAsync(SignalTimeout));
+        loopFault.Should().BeNull("a cancelled accept ends the loop; it neither hangs nor escapes as an exception");
+    }
+
+    [Fact]
     public async Task Server_ShouldLogHandleConnectionError_WhenOnSessionStartedThrowsOperationCanceledException()
     {
         // Arrange — a subscriber runs only once the UUID frame has arrived, so an
@@ -226,6 +318,18 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncDisposable
             bytes += frame.Length;
 
         return bytes;
+    }
+
+    /// <summary>
+    /// An accept that never returns a connection and ends only when <paramref name="token"/> does, so
+    /// a loop parked on it attempts nothing further and puts no wait on any clock, fake or real. The
+    /// park is the token's own registration rather than a delay, so nothing here is timed.
+    /// </summary>
+    private static async ValueTask<TcpClient> ParkUntilCancelledAsync(CancellationToken token)
+    {
+        var parked = new TaskCompletionSource<TcpClient>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = token.Register(() => parked.TrySetCanceled(token));
+        return await parked.Task.ConfigureAwait(false);
     }
 
     /// <summary>The next timer created on <paramref name="time"/>, as soon as it exists.</summary>

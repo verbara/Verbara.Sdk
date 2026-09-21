@@ -105,7 +105,18 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
             {
                 var client = await AcceptAsync(ct).ConfigureAwait(false);
                 backoff = InitialAcceptBackoff;
-                _ = Task.Run(() => HandleConnectionAsync(client, ct), ct);
+
+                // CancellationToken.None on the hand-off, and deliberately so. Task.Run's token cancels
+                // a work item that has not started yet, and this work item carries the only reference to
+                // a connection the server has already accepted: skip it and nothing ever closes that
+                // connection — no owner, no counter, and a far end still attached to a server that has
+                // forgotten it. Ownership passes to the handler unconditionally, which is why `ct`
+                // travels with it as an argument instead of gating it here: the handler is what closes a
+                // connection taken over while the server is stopping, at the no-UUID branch below,
+                // rather than waiting the timeout out. Putting `ct` back on Task.Run re-opens the leak;
+                // the sibling accept loop (AriOutboundListener.AcceptLoopAsync) passes None for the
+                // same reason.
+                _ = Task.Run(() => HandleConnectionAsync(client, ct), CancellationToken.None);
                 continue;
             }
             catch (OperationCanceledException) { break; }

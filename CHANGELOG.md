@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — `AudioSocketServer` left a connection open when it was accepted in the moment the server stopped
+
+`AcceptLoopAsync` handed each accepted connection to its handler through `Task.Run(…, ct)`, gated on the server's
+stopping token. That token cancels a work item that has not started yet, so a stop landing between the accept and the
+hand-off — or between the hand-off and the thread pool picking the item up — dropped the handler entirely. The handler
+is the only owner of an accepted connection: all three of its dispose sites sit inside the method the token could
+skip, and such a connection never joins the session table, so `StopAsync` never saw it either. The connection stayed
+open with no owner until its socket handle was eventually finalized, and the far end kept a connection a stopped
+server would never read from or answer.
+
+The hand-off is now unconditional. The stopping token still travels into the handler as an argument, so a connection
+taken over while the server is stopping is closed at once — and closed quietly, because it missed no deadline and
+failed in no way — rather than at the end of the wait for the identifying frame. Both of this repo's accept loops now
+hand over the same way; `AriOutboundListener` already did.
+
+- A connection whose socket had **already** failed at that moment now reaches the handler's catch-all and is logged
+  once as a connection error, at Error, where before nothing ran and nothing was logged.
+- No counter, gauge, activity or event changes. These connections never reached `ConnectionsAccepted`,
+  `ActiveSessionCount` or `OnSessionStarted` before the fix and do not reach them after it.
+- No public API change, and the difference is visible only while the server is stopping.
+
 ## [2.5.3] - 2026-09-13
 
 ### Fixed — BREAKING: `VoiceAiPipeline` counted a synthesizer's own cancellation as a completed synthesis
