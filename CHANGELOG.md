@@ -25,6 +25,29 @@ hand over the same way; `AriOutboundListener` already did.
   `ActiveSessionCount` or `OnSessionStarted` before the fix and do not reach them after it.
 - No public API change, and the difference is visible only while the server is stopping.
 
+### Fixed — a caller hanging up mid-playback was reported as a synthesis failure
+
+`VoiceAiPipeline` wrote every synthesized chunk to the audio session from inside the same `try` whose last clause
+books a synthesis failure. So the most ordinary way a call ends — the caller hangs up while the assistant is still
+speaking — found the session already torn down on the next write and was accounted as though the synthesizer had
+broken. An ending nobody in the process asked for is a termination of the playback, not a fault of the provider
+(`Sdk/ADR-0057`).
+
+**`tts.syntheses.failed` changes meaning, downwards.** A turn the caller hung up on no longer counts there, no longer
+publishes a `PipelineErrorEvent` with `Source = PipelineErrorSource.Tts`, no longer logs
+`VoiceAi pipeline error [Tts] …` at Warning, and no longer ends its `voiceai.tts.synthesis` activity with status
+`Error`. A dashboard of TTS failures will fall for any deployment where callers hang up during playback — which is
+most of them — and a pager tuned to that counter stops firing on normal call endings.
+
+- The ending is accounted exactly as a barge-in is, and is visible in the log at Debug: *"Playback stopped for
+  channel …: the audio session had already ended"*.
+- Playback now stops rather than draining the rest of the answer: the pipeline releases the synthesizer's sequence
+  for that turn instead of synthesizing audio nobody can hear.
+- **Unchanged, and pinned by controls:** a failure the synthesizer itself raises, a transport failure while the
+  session is still connected, a barge-in, disposal, and the caller cancelling its own token. The catch is scoped to
+  the single write call, so none of them is absorbed.
+- No public API change. `voiceai.sessions.*` is unaffected — the exception never reached the session layer.
+
 ## [2.5.3] - 2026-09-13
 
 ### Fixed — BREAKING: `VoiceAiPipeline` counted a synthesizer's own cancellation as a completed synthesis

@@ -3,7 +3,7 @@ tier: PEQUEÑO
 owner: Harol
 approver: Harol
 stakeholder: Operators who page on VoiceAi synthesis telemetry, and applications that subscribe to VoiceAiPipeline.Events to learn that a turn went wrong
-decision_ref: Sdk/ADR-0053
+decision_ref: Sdk/ADR-0057
 ---
 
 # Proposal: hangup-mid-playback-is-not-a-synthesis-failure

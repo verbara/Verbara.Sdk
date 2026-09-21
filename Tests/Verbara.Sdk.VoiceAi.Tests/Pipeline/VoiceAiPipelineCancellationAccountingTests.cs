@@ -575,6 +575,229 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
         await CleanupAsync(client, server);
     }
 
+    // ---- A write that finds the audio session already gone: the far end left, nothing failed ----
+
+    /// <summary>
+    /// The regression. The commonest ending a call has — the caller hangs up while the assistant is
+    /// still speaking — reaches <c>session.WriteAudioAsync</c> as an
+    /// <see cref="ObjectDisposedException"/>. Nobody in the process asked for that ending, so it
+    /// cancels neither the caller's token nor the synthesis's own source and neither cancellation
+    /// filter can see it; the write therefore lands in the clause that books a synthesis failure
+    /// (<c>ADR-0057</c>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ordered by construction, never by a delay. <c>AudioSocketSession</c>'s teardown runs for every
+    /// ending it has, sets its disposed flag as its first statement, and only then fires
+    /// <c>OnHangup</c> (<c>AudioSocketSession.cs:197-204</c>, <c>:232</c>). A subscription taken
+    /// before the session starts therefore turns that event into the proof that the next write must
+    /// throw, rather than a hint that it probably will.
+    /// </para>
+    /// <para>
+    /// The synthesizer parks between its two chunks, so the first is written to a session that is
+    /// still live and the second to one that has already been torn down — the single fact the whole
+    /// test is built to establish.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldNotReportASynthesisFailure_WhenTheFarEndHangsUpMidPlayback()
+    {
+        // Arrange — no barge-in, no disposal, and a caller token that is never cancelled, so the
+        // only thing that can end this playback is the far end leaving.
+        var detector = new ScriptedTurnDetector(TurnAction.SpeechStarted, TurnAction.EndOfUtterance);
+        await using var tts = new KeepsSpeakingAfterTheParkSpeechSynthesizer();
+        var logger = new RecordingLogger();
+        await using var pipeline = BuildPipeline(tts, detector, logger);
+        var (session, server, client) = await CreateAudioSessionAsync();
+        using var sessionMetrics = new MeterCapture(MeterName);
+        using var ttsMetrics = new MeterCapture(TtsMeterName);
+        using var activities = new SynthesisActivityRecorder();
+        using var capture = new PipelineEventCapture(pipeline);
+
+        // Subscribed before the session starts, so the event cannot be missed, and read as an
+        // ordering primitive: the flag the next write reads is already set when this completes.
+        TaskCompletionSource hungUp = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.OnHangup += () => hungUp.TrySetResult();
+
+        var sessionTask = pipeline.HandleSessionAsync(session, CancellationToken.None).AsTask();
+        await client.SendAudioAsync(VoiceFrame());
+        await detector.Analyzed(0).WaitAsync(SignalTimeout);
+        await client.SendAudioAsync(VoiceFrame());
+        await detector.Analyzed(1).WaitAsync(SignalTimeout);
+
+        // The first chunk has been written, to a session that was still connected.
+        await tts.Parked.WaitAsync(SignalTimeout);
+
+        // Act — the caller hangs up mid-answer, and only once the session has genuinely torn its
+        // transport down does the rest of the answer arrive.
+        await client.SendHangupAsync();
+        await hungUp.Task.WaitAsync(SignalTimeout);
+        tts.Release();
+
+        var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+        // Assert — all of it in one scope, so a pre-fix run reports the whole defect at once.
+        using (new AssertionScope())
+        {
+            fault.Should().BeNull("the caller hanging up is how a call ends, not how it fails");
+            ttsMetrics.Get("tts.syntheses.failed").Should()
+                .Be(0, "nothing failed — the far end left while the assistant was still speaking");
+            capture.Events.OfType<PipelineErrorEvent>().Should()
+                .BeEmpty("a departed session is not a provider letting the pipeline down");
+            logger.Entries.Should().NotContain(
+                e => e.Level >= LogLevel.Warning,
+                "the way every call normally ends must not reach the stream an operator pages on");
+            logger.Entries.Should().ContainSingle(
+                e => e.Level == LogLevel.Debug
+                     && e.Message.Contains("the audio session had already ended", StringComparison.Ordinal),
+                "the requirement asks for the ending to be visible in the log below Warning, so the "
+                + "entry must be written and not merely available to write");
+            activities.Statuses.Should().ContainSingle().Which.Should().NotBe(ActivityStatusCode.Error);
+            sessionMetrics.Get("voiceai.sessions.failed").Should().Be(0);
+            sessionMetrics.Get("voiceai.sessions.completed").Should().Be(1);
+
+            // Playback stops rather than draining an answer nobody can hear. An async iterator's
+            // DisposeAsync unwinds through `finally` blocks only, so the third increment — the one
+            // after the second `yield return` — runs if and only if the pipeline asked again.
+            tts.ChunksPulled.Should().Be(
+                2, "the pipeline stops pulling audio once the far end is gone");
+
+            // Today's accounting, pinned so that changing it is a decision; the requirement does not
+            // ask for it. ADR-0050 E9 records counting a cut-short synthesis as completed as debt.
+            ttsMetrics.Get("tts.syntheses.completed").Should().Be(1);
+            capture.Events.OfType<SynthesisEndedEvent>().Should().ContainSingle();
+        }
+
+        await CleanupAsync(client, server);
+    }
+
+    /// <summary>
+    /// The control that keeps the write's guard scoped to the write: an
+    /// <see cref="ObjectDisposedException"/> raised by the <em>synthesizer</em> — a provider client
+    /// used after its own disposal — on a session that is still connected is a synthesis failure like
+    /// any other. Green before the fix and after it.
+    /// </summary>
+    /// <remarks>
+    /// The exception's type is the discriminator only at the write, where both of its origins are the
+    /// session's own teardown. Widening the guard from the write to the whole synthesis would absorb
+    /// this one, which is exactly what this test refuses.
+    /// </remarks>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldPublishTtsPipelineError_WhenTheSynthesizerIsUsedAfterItsOwnDisposal()
+    {
+        // Arrange
+        var detector = new ScriptedTurnDetector(TurnAction.SpeechStarted, TurnAction.EndOfUtterance);
+        await using var tts = new SelfDisposedSpeechSynthesizer();
+        var logger = new RecordingLogger();
+        await using var pipeline = BuildPipeline(tts, detector, logger);
+        var (session, server, client) = await CreateAudioSessionAsync();
+        using var sessionMetrics = new MeterCapture(MeterName);
+        using var ttsMetrics = new MeterCapture(TtsMeterName);
+        using var activities = new SynthesisActivityRecorder();
+        using var capture = new PipelineEventCapture(pipeline);
+
+        // Act — no caller token, no barge-in, no disposal and no hangup until the turn is over.
+        var sessionTask = pipeline.HandleSessionAsync(session, CancellationToken.None).AsTask();
+        await client.SendAudioAsync(VoiceFrame());
+        await detector.Analyzed(0).WaitAsync(SignalTimeout);
+        await client.SendAudioAsync(VoiceFrame());
+        await detector.Analyzed(1).WaitAsync(SignalTimeout);
+
+        // Either ending of the response cycle completes this wait, so a pipeline that absorbed the
+        // provider's exception fails on the assertions below rather than on the bound.
+        await capture.WaitForResponseCycle().WaitAsync(SignalTimeout);
+
+        // Read before the hangup: the premise of this control is that the transport was fine.
+        var connectedWhenTheProviderFailed = session.IsConnected;
+
+        await client.SendHangupAsync();
+        var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+        // Assert
+        using (new AssertionScope())
+        {
+            connectedWhenTheProviderFailed.Should()
+                .BeTrue("the provider failed while the far end was still there");
+            fault.Should().BeNull("a failed synthesis is reported, not rethrown");
+            ttsMetrics.Get("tts.syntheses.failed").Should().Be(1);
+            capture.Events.OfType<PipelineErrorEvent>().Should().ContainSingle(
+                e => e.Source == PipelineErrorSource.Tts && ReferenceEquals(e.Exception, tts.OwnDisposal));
+            capture.Events.OfType<SynthesisEndedEvent>().Should()
+                .BeEmpty("a synthesis that failed did not end");
+            ttsMetrics.Get("tts.syntheses.completed").Should().Be(0);
+            logger.Entries.Should().ContainSingle(
+                e => e.Level == LogLevel.Warning && e.Message.Contains("[Tts]", StringComparison.Ordinal));
+            activities.Statuses.Should().Equal(ActivityStatusCode.Error);
+            sessionMetrics.Get("voiceai.sessions.failed").Should()
+                .Be(0, "a failed synthesis fails its turn, not the session");
+            sessionMetrics.Get("voiceai.sessions.completed").Should().Be(1);
+        }
+
+        await CleanupAsync(client, server);
+    }
+
+    /// <summary>
+    /// The control that keeps the write's guard from widening to every exception raised there: a
+    /// write the caller's own token cancels still belongs to the caller's clause, which rethrows and
+    /// lets the session count itself completed (<c>ADR-0054</c> R1).
+    /// </summary>
+    /// <remarks>
+    /// The synthesizer ignores the token it is handed and parks on a signal of its own, so the
+    /// cancellation is still unobserved when the next chunk reaches the write — which is the point:
+    /// <c>HandleSessionAsync_ShouldNotReportASynthesisFailure_WhenTheCallerCancelsIt</c> already
+    /// covers the synthesizer observing it, and this one covers the write.
+    /// </remarks>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldNotReportASynthesisFailure_WhenTheCallerCancelsTheWrite()
+    {
+        // Arrange
+        var detector = new ScriptedTurnDetector(TurnAction.SpeechStarted, TurnAction.EndOfUtterance);
+        await using var tts = new TokenIgnoringParkingSpeechSynthesizer();
+        var logger = new RecordingLogger();
+        await using var pipeline = BuildPipeline(tts, detector, logger);
+        var (session, server, client) = await CreateAudioSessionAsync();
+        using var sessionMetrics = new MeterCapture(MeterName);
+        using var ttsMetrics = new MeterCapture(TtsMeterName);
+        using var activities = new SynthesisActivityRecorder();
+        using var capture = new PipelineEventCapture(pipeline);
+        using var cts = new CancellationTokenSource();
+
+        var sessionTask = pipeline.HandleSessionAsync(session, cts.Token).AsTask();
+        await client.SendAudioAsync(VoiceFrame());
+        await detector.Analyzed(0).WaitAsync(SignalTimeout);
+        await client.SendAudioAsync(VoiceFrame());
+        await detector.Analyzed(1).WaitAsync(SignalTimeout);
+        await tts.Parked.WaitAsync(SignalTimeout);
+
+        // Act — the cancelled token goes to the subject and nowhere else (ADR-0052 F3). Nothing has
+        // torn the session down, so the next write finds a live session and a cancelled token.
+        await cts.CancelAsync();
+        tts.Release();
+
+        var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+        // Assert
+        using (new AssertionScope())
+        {
+            fault.Should().BeNull("a cancellation the caller asked for is not a fault");
+            capture.Events.OfType<PipelineErrorEvent>().Should().BeEmpty();
+            ttsMetrics.Get("tts.syntheses.failed").Should()
+                .Be(0, "the caller asked the write to stop");
+            sessionMetrics.Get("voiceai.sessions.failed").Should().Be(0);
+            sessionMetrics.Get("voiceai.sessions.completed").Should().Be(1);
+            logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
+            activities.Statuses.Should().ContainSingle().Which.Should().NotBe(ActivityStatusCode.Error);
+
+            // Today's accounting, not a requirement: the caller's clause counts the synthesis as
+            // neither completed nor failed, and publishes nothing for it. These two are what a guard
+            // widened to `catch (Exception)` at the write would move.
+            ttsMetrics.Get("tts.syntheses.completed").Should().Be(0);
+            capture.Events.OfType<SynthesisEndedEvent>().Should().BeEmpty();
+        }
+
+        await CleanupAsync(client, server);
+    }
+
     // ---- Harness ----
 
     /// <summary>
@@ -838,6 +1061,139 @@ file sealed class UnwindingSelfCancellingSpeechSynthesizer : SpeechSynthesizer
             owner._unwinding.TrySetResult();
             await owner._release.Task.ConfigureAwait(false);
         }
+    }
+}
+
+/// <summary>
+/// Yields one chunk, parks until released, then yields a second — the shape of
+/// <c>ParkingSpeechSynthesizer</c> with audio still to play after the park.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The two chunks straddle the ending a test stages while it is parked: the first is written to a
+/// session that is still live, the second to one that has already been torn down.
+/// </para>
+/// <para>
+/// <see cref="ChunksPulled"/> is what makes "the pipeline stopped pulling" observable. An async
+/// iterator's <c>DisposeAsync</c> unwinds through <c>finally</c> blocks only and never resumes the
+/// body after a <c>yield return</c>, so the third increment runs if and only if the pipeline asked
+/// for another chunk after the write that found the session gone.
+/// </para>
+/// </remarks>
+file sealed class KeepsSpeakingAfterTheParkSpeechSynthesizer : SpeechSynthesizer
+{
+    private readonly TaskCompletionSource _parked = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _chunksPulled;
+
+    public override string ProviderName => "KeepsSpeakingAfterThePark";
+
+    /// <summary>Completes once the first chunk has been consumed and the synthesis is parked.</summary>
+    public Task Parked => _parked.Task;
+
+    /// <summary>How many chunks the pipeline has pulled from this synthesis.</summary>
+    public int ChunksPulled => Volatile.Read(ref _chunksPulled);
+
+    /// <summary>Ends the park. Safe to call when the synthesis was already cancelled.</summary>
+    public void Release() => _release.TrySetResult();
+
+    public override async IAsyncEnumerable<ReadOnlyMemory<byte>> SynthesizeAsync(
+        string text,
+        AudioFormat outputFormat,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        Interlocked.Increment(ref _chunksPulled);
+        yield return new byte[320];
+
+        _parked.TrySetResult();
+        await _release.Task.WaitAsync(ct).ConfigureAwait(false);
+
+        Interlocked.Increment(ref _chunksPulled);
+        yield return new byte[320];
+
+        // Reached only on a third MoveNextAsync: a pipeline that went on draining the answer after
+        // the write that found the session gone.
+        Interlocked.Increment(ref _chunksPulled);
+    }
+
+    public override ValueTask DisposeAsync()
+    {
+        Release();
+        return base.DisposeAsync();
+    }
+}
+
+/// <summary>
+/// A synthesizer whose own provider client was disposed under it: it yields one chunk to a live
+/// session, then raises an <see cref="ObjectDisposedException"/> of its own from the next
+/// <c>MoveNextAsync</c>.
+/// </summary>
+/// <remarks>
+/// The exception is the same type a departed session raises at the write, and this is the control
+/// that says so is not enough on its own: it comes out of the synthesis, not out of the write, and
+/// the session it ran against was connected throughout.
+/// </remarks>
+file sealed class SelfDisposedSpeechSynthesizer : SpeechSynthesizer
+{
+    public override string ProviderName => "SelfDisposed";
+
+    /// <summary>The exception the synthesis ends with — the provider's, never the session's.</summary>
+    public ObjectDisposedException OwnDisposal { get; } = new(
+        "ProviderStreamingClient",
+        "The provider client was disposed before this synthesis ended.");
+
+    public override async IAsyncEnumerable<ReadOnlyMemory<byte>> SynthesizeAsync(
+        string text,
+        AudioFormat outputFormat,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        // One chunk first, so the failure lands after audio has reached a live session.
+        yield return new byte[320];
+        await Task.CompletedTask.ConfigureAwait(false);
+        throw OwnDisposal;
+    }
+}
+
+/// <summary>
+/// Parks between its two chunks on a signal of its own, ignoring the token it was handed.
+/// </summary>
+/// <remarks>
+/// A cancellation that lands while it is parked is therefore still unobserved when the second chunk
+/// reaches <c>session.WriteAudioAsync</c>, which is what moves the observation from the synthesizer
+/// to the write.
+/// </remarks>
+file sealed class TokenIgnoringParkingSpeechSynthesizer : SpeechSynthesizer
+{
+    private readonly TaskCompletionSource _parked = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public override string ProviderName => "TokenIgnoringParking";
+
+    /// <summary>Completes once the first chunk has been consumed and the synthesis is parked.</summary>
+    public Task Parked => _parked.Task;
+
+    /// <summary>Ends the park. Safe to call more than once.</summary>
+    public void Release() => _release.TrySetResult();
+
+    public override async IAsyncEnumerable<ReadOnlyMemory<byte>> SynthesizeAsync(
+        string text,
+        AudioFormat outputFormat,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        yield return new byte[320];
+
+        _parked.TrySetResult();
+
+        // No WaitAsync(ct), deliberately: this synthesizer is the one that does not look.
+        await _release.Task.ConfigureAwait(false);
+
+        yield return new byte[320];
+    }
+
+    public override ValueTask DisposeAsync()
+    {
+        Release();
+        return base.DisposeAsync();
     }
 }
 
