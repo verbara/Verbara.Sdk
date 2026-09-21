@@ -778,7 +778,7 @@
       Exit 0. The only diagnostics in the output are `[INFO]` "requirement text is very long" notes on
       six pre-existing specs; this change's own items carry none.
 
-- [ ] 4.6 CI green; record the PR number and the commit that landed on `main`. Enqueue it **alone**: the open changes that add a **new** ADR
+- [x] 4.6 CI green; record the PR number and the commit that landed on `main`. Enqueue it **alone**: the open changes that add a **new** ADR
       file (0046, 0047, 0056, 0057, 0058, 0059) all bump the same `**N ADRs**` figure, and the queue
       squashes. Whether git even sees the collision depends on where the two catalog rows land: rows
       inserted at the same spot conflict textually and the queue ejects the second before it builds;
@@ -789,6 +789,12 @@
       `strict:false` does not force one. Order does not otherwise matter — the guard counts files,
       not a contiguous sequence — so this change keeps ADR-0057 whenever it lands.
 
+      **Done.** PR #284, enqueued alone as required — it was the only ADR-adding change in the queue
+      at any point. 14 required contexts green on the PR, then the queue built and merged it as
+      `b86f8906` (2026-09-21T09:38:08Z). `classify-docs-only.sh` returned `docs_only=false`, so the
+      full lane ran rather than being skipped. The ADR figure went 54 → 55 in the same PR, and
+      `ADR-0056` was left as a gap for `ari-failed-connect-and-silent-catches`.
+
 ## 5. Close-out
 
 - [x] 5.1 `CHANGELOG.md` `[Unreleased]` entry stating the telemetry change in both directions: a turn
@@ -796,6 +802,6 @@
       `PipelineErrorEvent` and a Warning line; every provider failure, including a synthesizer's own
       cancellation, is unchanged. Leave the `(#N)` citation for close-out.
 
-- [ ] 5.2 Reconcile the living spec and run
+- [x] 5.2 Reconcile the living spec and run
       `openspec archive hangup-mid-playback-is-not-a-synthesis-failure --yes` once the fix is on
       `main`, as its own `docs(openspec):` PR.

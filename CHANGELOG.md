@@ -25,7 +25,7 @@ hand over the same way; `AriOutboundListener` already did.
   `ActiveSessionCount` or `OnSessionStarted` before the fix and do not reach them after it.
 - No public API change, and the difference is visible only while the server is stopping.
 
-### Fixed — a caller hanging up mid-playback was reported as a synthesis failure
+### Fixed — a caller hanging up mid-playback was reported as a synthesis failure (#284)
 
 `VoiceAiPipeline` wrote every synthesized chunk to the audio session from inside the same `try` whose last clause
 books a synthesis failure. So the most ordinary way a call ends — the caller hangs up while the assistant is still
