@@ -138,7 +138,32 @@ public sealed class AriClient : IAriClient
             .Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase);
         var uri = new Uri($"{wsUrl}/ari/events?api_key={Uri.EscapeDataString(_options.Username)}:{Uri.EscapeDataString(_options.Password)}&app={Uri.EscapeDataString(_options.Application)}");
 
-        await _webSocket.ConnectAsync(uri, cancellationToken);
+        // Nothing is caught here: the exception, its type and its stack reach the caller exactly as
+        // they did before. The flag is the only thing the dial reports back, and it is set after the
+        // await, so the finally can tell an attempt that ended without a connection from one that did
+        // connect. An attempt that ended without a connection is over — a first dial starts no
+        // reconnect loop — so it leaves a terminal state instead of reading as one still dialling.
+        var connected = false;
+        try
+        {
+            await _webSocket.ConnectAsync(uri, cancellationToken);
+            connected = true;
+        }
+        finally
+        {
+            if (!connected)
+            {
+                // Which terminal state is decided by who ended the attempt, read from the caller's
+                // own token — never from the exception. A cancellation raised inside the transport
+                // carries a token the caller never held (ADR-0053 records that trap for a bridge's
+                // ConnectAsync), so neither the exception's type nor its own CancellationToken can
+                // say whether the caller withdrew. A withdrawal the caller asked for is not a
+                // failure, and rests where DisconnectAsync leaves the client; anything else faulted.
+                SetState(cancellationToken.IsCancellationRequested
+                    ? AriConnectionState.Disconnected
+                    : AriConnectionState.Faulted);
+            }
+        }
 
         SetState(AriConnectionState.Connected);
 

@@ -4,9 +4,11 @@ using System.Net.WebSockets;
 using System.Text;
 using Verbara.Sdk.Ari.Audio;
 using Verbara.Sdk.Ari.Client;
+using Verbara.Sdk.Ari.Diagnostics;
 using Verbara.Sdk.Enums;
 using FluentAssertions;
 using FluentAssertions.Execution;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -154,6 +156,275 @@ public sealed class AriClientStateTests
             await sut.DisposeAsync();
             await serverStop.CancelAsync();
             await reconnects.ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+        }
+    }
+
+    [Theory]
+    [InlineData("401 Unauthorized")]
+    [InlineData("503 Service Unavailable")]
+    public async Task ConnectAsync_ShouldLeaveStateFaulted_WhenTheUpgradeIsRefused(string status)
+    {
+        using var server = new TcpListener(IPAddress.Loopback, 0);
+        server.Start();
+
+        var port = ((IPEndPoint)server.LocalEndpoint).Port;
+        await using var sut = new AriClient(Options.Create(new AriClientOptions
+        {
+            BaseUrl = $"http://127.0.0.1:{port}",
+            Username = "asterisk",
+            Password = "asterisk",
+            Application = "test-app"
+        }), NullLogger<AriClient>.Instance);
+
+        // The single dial the client makes is answered with a refusal instead of 101.
+        var refusal = Task.Run(async () =>
+        {
+            using var accepted = await server.AcceptTcpClientAsync();
+            await RefuseUpgradeAsync(accepted.GetStream(), status, CancellationToken.None);
+        });
+
+        var connect = async () => await sut.ConnectAsync();
+        await connect.Should().ThrowAsync<WebSocketException>("a refused upgrade never becomes a connection");
+        await refusal;
+
+        var health = await new AriHealthCheck(sut).CheckHealthAsync(new HealthCheckContext());
+
+        using (new AssertionScope())
+        {
+            sut.State.Should().Be(
+                AriConnectionState.Faulted,
+                "an attempt that ended without a connection is over, and nothing dials again");
+            sut.IsConnected.Should().BeFalse();
+            health.Status.Should().Be(HealthStatus.Unhealthy);
+            health.Description.Should().Contain("Faulted", "the health message names the terminal state");
+        }
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldLeaveStateFaulted_WhenTheDialIsRefused()
+    {
+        // Bind on port 0 to take a port nothing else holds, then give it up: a dial there is
+        // refused by the loopback stack at once, with no listener and no timing window.
+        int port;
+        using (var vacated = new TcpListener(IPAddress.Loopback, 0))
+        {
+            vacated.Start();
+            port = ((IPEndPoint)vacated.LocalEndpoint).Port;
+        }
+
+        await using var sut = new AriClient(Options.Create(new AriClientOptions
+        {
+            BaseUrl = $"http://127.0.0.1:{port}",
+            Username = "asterisk",
+            Password = "asterisk",
+            Application = "test-app"
+        }), NullLogger<AriClient>.Instance);
+
+        var connect = async () => await sut.ConnectAsync();
+        await connect.Should().ThrowAsync<WebSocketException>("a refused dial never becomes a connection");
+
+        using (new AssertionScope())
+        {
+            sut.State.Should().Be(
+                AriConnectionState.Faulted, "a connection the stack refused is an ending, not an attempt in progress");
+            sut.IsConnected.Should().BeFalse();
+        }
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldLeaveStateDisconnected_WhenTheCallerCancelsTheAttempt()
+    {
+        using var server = new TcpListener(IPAddress.Loopback, 0);
+        server.Start();
+
+        var port = ((IPEndPoint)server.LocalEndpoint).Port;
+        var logger = new RecordingLogger();
+        await using var sut = new AriClient(Options.Create(new AriClientOptions
+        {
+            BaseUrl = $"http://127.0.0.1:{port}",
+            Username = "asterisk",
+            Password = "asterisk",
+            Application = "test-app"
+        }), logger);
+
+        // The dial is accepted and then left unanswered, so the only thing that can end the attempt
+        // is the token the caller handed in. The accept is the signal the test waits on, not a clock.
+        var accepted = new TaskCompletionSource();
+        var release = new TaskCompletionSource();
+        var silence = Task.Run(async () =>
+        {
+            using var held = await server.AcceptTcpClientAsync();
+            accepted.SetResult();
+            await release.Task;
+        });
+
+        try
+        {
+            using var caller = new CancellationTokenSource();
+            var connect = sut.ConnectAsync(caller.Token).AsTask();
+            await accepted.Task.WaitAsync(WaitLimit);
+            await caller.CancelAsync();
+
+            var withdrawn = async () => await connect;
+            await withdrawn.Should().ThrowAsync<OperationCanceledException>("the caller withdrew the attempt");
+
+            using (new AssertionScope())
+            {
+                sut.State.Should().Be(
+                    AriConnectionState.Disconnected, "an ending the caller asked for is not a fault");
+                sut.IsConnected.Should().BeFalse();
+                logger.Entries.Should().NotContain(
+                    e => e.Level == LogLevel.Error, "a withdrawal the caller asked for is not an error");
+            }
+        }
+        finally
+        {
+            release.TrySetResult();
+            await silence.WaitAsync(WaitLimit).ConfigureAwait(
+                ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+        }
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldLeaveStateConnected_WhenTheUpgradeSucceeds()
+    {
+        using var server = new TcpListener(IPAddress.Loopback, 0);
+        server.Start();
+
+        var port = ((IPEndPoint)server.LocalEndpoint).Port;
+        var sut = new AriClient(Options.Create(new AriClientOptions
+        {
+            BaseUrl = $"http://127.0.0.1:{port}",
+            Username = "asterisk",
+            Password = "asterisk",
+            Application = "test-app"
+        }), NullLogger<AriClient>.Instance);
+
+        // The upgrade is answered and the socket is then held open, so the events loop stays in its
+        // receive for the whole of the assertions instead of racing them into the reconnect backoff.
+        var release = new TaskCompletionSource();
+        var upgrade = Task.Run(async () =>
+        {
+            using var accepted = await server.AcceptTcpClientAsync();
+            var stream = accepted.GetStream();
+            var (wsKey, _) = await WebSocketAudioServer.ReadUpgradeRequestAsync(stream, CancellationToken.None);
+            await WebSocketAudioServer.SendUpgradeResponseAsync(stream, wsKey!, CancellationToken.None);
+            await release.Task;
+        });
+
+        try
+        {
+            await sut.ConnectAsync();
+
+            using (new AssertionScope())
+            {
+                sut.State.Should().Be(AriConnectionState.Connected, "the dial succeeded");
+                sut.IsConnected.Should().BeTrue();
+                sut.EventLoop.Should().NotBeNull("a successful connect starts the events loop");
+                sut.EventLoop!.IsCompleted.Should().BeFalse("the events loop runs while the socket is open");
+            }
+        }
+        finally
+        {
+            release.TrySetResult();
+            await upgrade.WaitAsync(WaitLimit).ConfigureAwait(
+                ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldNotDialAgain_WhenTheFirstAttemptFailed()
+    {
+        using var server = new TcpListener(IPAddress.Loopback, 0);
+        server.Start();
+
+        var port = ((IPEndPoint)server.LocalEndpoint).Port;
+        // AutoReconnect stays at its default true and the backoff is short, so a client that did
+        // start a reconnect loop after a failed first dial would be back well inside the window below.
+        await using var sut = new AriClient(Options.Create(new AriClientOptions
+        {
+            BaseUrl = $"http://127.0.0.1:{port}",
+            Username = "asterisk",
+            Password = "asterisk",
+            Application = "test-app",
+            ReconnectInitialDelay = TimeSpan.FromMilliseconds(20),
+            ReconnectMaxDelay = TimeSpan.FromMilliseconds(20)
+        }), NullLogger<AriClient>.Instance);
+
+        // 503 is a refusal the reconnect loop retries, and the listener stays up: a second dial
+        // would be accepted here, which is what makes its absence evidence rather than a dead port.
+        var refusal = Task.Run(async () =>
+        {
+            using var accepted = await server.AcceptTcpClientAsync();
+            await RefuseUpgradeAsync(accepted.GetStream(), "503 Service Unavailable", CancellationToken.None);
+        });
+
+        var connect = async () => await sut.ConnectAsync();
+        await connect.Should().ThrowAsync<WebSocketException>("a refused upgrade never becomes a connection");
+        await refusal;
+
+        using var window = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var redial = async () =>
+        {
+            using var late = await server.AcceptTcpClientAsync(window.Token);
+        };
+        await redial.Should().ThrowAsync<OperationCanceledException>("a failed first connect starts no reconnect loop");
+        sut.EventLoop.Should().BeNull("the events loop is started only after a dial that succeeded");
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldConnect_WhenRetriedAfterAFailedAttempt()
+    {
+        using var server = new TcpListener(IPAddress.Loopback, 0);
+        server.Start();
+
+        var port = ((IPEndPoint)server.LocalEndpoint).Port;
+        var sut = new AriClient(Options.Create(new AriClientOptions
+        {
+            BaseUrl = $"http://127.0.0.1:{port}",
+            Username = "asterisk",
+            Password = "asterisk",
+            Application = "test-app"
+        }), NullLogger<AriClient>.Instance);
+
+        // One listener, two dials: the first refused, the second answered 101 and then held open.
+        var release = new TaskCompletionSource();
+        var dials = Task.Run(async () =>
+        {
+            using (var refused = await server.AcceptTcpClientAsync())
+            {
+                await RefuseUpgradeAsync(refused.GetStream(), "503 Service Unavailable", CancellationToken.None);
+            }
+
+            using var answered = await server.AcceptTcpClientAsync();
+            var stream = answered.GetStream();
+            var (wsKey, _) = await WebSocketAudioServer.ReadUpgradeRequestAsync(stream, CancellationToken.None);
+            await WebSocketAudioServer.SendUpgradeResponseAsync(stream, wsKey!, CancellationToken.None);
+            await release.Task;
+        });
+
+        try
+        {
+            var first = async () => await sut.ConnectAsync();
+            await first.Should().ThrowAsync<WebSocketException>("the first dial is refused");
+
+            await sut.ConnectAsync();
+
+            using (new AssertionScope())
+            {
+                sut.State.Should().Be(
+                    AriConnectionState.Connected,
+                    "the state a failed attempt leaves is a statement about that attempt, not a gate on the next one");
+                sut.IsConnected.Should().BeTrue();
+            }
+        }
+        finally
+        {
+            release.TrySetResult();
+            await dials.WaitAsync(WaitLimit).ConfigureAwait(
+                ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            await sut.DisposeAsync();
         }
     }
 
