@@ -9,5 +9,8 @@
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="coverlet.collector" />
+    <!-- The concrete host (HostBuilder), so the session tests can pin the start/stop token
+         wiring end to end through a real IHost. Version comes from Directory.Packages.props. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
   </ItemGroup>
 </Project>

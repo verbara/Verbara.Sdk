@@ -3,7 +3,7 @@ tier: PEQUEÑO
 owner: Harol
 approver: Harol
 stakeholder: Operators who run the SDK as a hosted process and read its persistence error log at shutdown, and applications whose session state has to survive a stop
-decision_ref: Sdk/ADR-0054
+decision_ref: Sdk/ADR-0059
 ---
 
 # Proposal: session-shutdown-token-is-cancelled-by-the-stop-phase
@@ -110,7 +110,13 @@ borrowed from the start phase is not that.
   a committed test: keeping the start token fails the abort test and the stop test; cancelling the
   source on entry to `StopAsync` fails the in-budget control; forgetting the registration fails the
   stop test; releasing the source without cancelling it fails the teardown test; moving the detach
-  after the registration fails the ordering scenario. Two residuals are written down rather than
-  guarded: `Cancel()` inside `Dispose` surfaces an `AggregateException` if a store's own cancellation
-  callback throws, and what happens to a save started *after* the service is disposed is measured and
+  after the registration fails
+  `StopAsync_ShouldNotStartASave_WhenTheStopTokenIsAlreadyCancelledAndAnEventArrivesInline`. That
+  last test was added by the mutation check that found this sentence to be wrong as first written:
+  it had claimed the ordering control caught that mistake, and it does not — the control's stop token
+  is never cancelled, so the registration never fires and both statements have run by the time
+  `StopAsync` returns. The order is load-bearing, it was unbound until that test was written, and the
+  test was proved red against the mutation before being accepted.
+  Two residuals are written down rather than guarded: `Cancel()` inside `Dispose` surfaces an
+  `AggregateException` if a store's own cancellation callback throws, and what happens to a save started *after* the service is disposed is measured and
   recorded in the ADR rather than asserted here.
