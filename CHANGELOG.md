@@ -48,6 +48,34 @@ most of them — and a pager tuned to that counter stops firing on normal call e
   the single write call, so none of them is absorbed.
 - No public API change. `voiceai.sessions.*` is unaffected — the exception never reached the session layer.
 
+### Fixed — a session save in flight at shutdown was governed by a token only an aborted start could cancel
+
+`SessionManagerHostedService` stored the token the host hands `StartAsync` and gave it to
+`CallSessionManager`, which runs **every** session save under it — not only the ones at shutdown. That
+token's documented meaning is that the *start* was aborted, and the host releases its source when the
+start returns, so after a completed start nothing could cancel it. A save still running when the host
+stopped was therefore never cut short: it outlived the shutdown budget and was abandoned when the
+process exited. The shutdown filter added in 2.5.2 could not fire in the phase it was written for.
+
+The service now owns the source behind that token. A graceful stop does not cancel it — an in-flight
+save is exactly what a shutdown budget is for — and the host cancelling its own stop token, meaning
+the shutdown is no longer graceful, cancels it through a registration. Disposal cancels before
+releasing, behind an idempotency gate.
+
+- **What an operator sees:** a save in flight when the host stops now keeps the host's shutdown
+  budget and is cut short when that budget expires, instead of running under a token nothing could
+  cancel. A save begun after the service is disposed ends at its first cancellation check rather than
+  running on.
+- Unchanged: aborting a *start* no longer cancels the token every save runs under, which is what the
+  host's `StartAsync` token was being read to mean.
+- **Known gap, unchanged by this release:** the multi-server registrations
+  (`AddVerbaraSessionsMultiServer` and `AddVerbaraSessionsMultiServerBuilder`) register no hosted
+  service, so their manager's persistence token stays `default` — never cancellable, so those
+  deployments see strictly more persistence errors at shutdown, never fewer. Recorded rather than
+  closed (`Sdk/ADR-0059`).
+- No public API change: the service is `internal sealed` and `SetShutdownToken` is `internal`, so no
+  `PublicAPI` surface moves and nothing downstream recompiles.
+
 ## [2.5.3] - 2026-09-13
 
 ### Fixed — BREAKING: `VoiceAiPipeline` counted a synthesizer's own cancellation as a completed synthesis

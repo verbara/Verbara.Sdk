@@ -40,7 +40,12 @@ public sealed partial class CallSessionManager : ICallSessionManager
         _correlator = new SessionCorrelator(_options);
     }
 
-    /// <summary>Sets the cancellation token used for persistence operations during shutdown.</summary>
+    /// <summary>
+    /// Sets the token <em>every</em> persistence call runs under, not only the ones at shutdown.
+    /// With the SDK's hosted service the token comes from a source that service owns, and the stop
+    /// phase is what cancels it: the host withdrawing its graceful shutdown, or that service's own
+    /// teardown. An aborted start does not cancel it.
+    /// </summary>
     internal void SetShutdownToken(CancellationToken token) => _shutdownToken = token;
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to persist session {SessionId}")]
@@ -54,8 +59,8 @@ public sealed partial class CallSessionManager : ICallSessionManager
         }
         catch (OperationCanceledException) when (_shutdownToken.IsCancellationRequested)
         {
-            // The shutdown token (with the SDK's hosted service, the host's StartAsync token) was
-            // cancelled, for example by a stop requested before startup completed. The save was cut
+            // The persistence token was cancelled — with the SDK's hosted service, by the host
+            // withdrawing its graceful shutdown or by that service's teardown. The save was cut
             // short on purpose, so it is not a persistence failure and is not logged. A cancellation
             // while the token is still live, such as a store-side timeout, is still logged below.
         }
