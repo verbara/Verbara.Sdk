@@ -310,6 +310,7 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             {
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, ttsCts.Token);
                 var ttfaRecorded = false;
+                var farEndGone = false;
                 await foreach (var audioChunk in _tts.SynthesizeAsync(
                     response, _options.OutputFormat, linked.Token).ConfigureAwait(false))
                 {
@@ -321,29 +322,73 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                         // TODO(R1.5+): expose tts.model tag when SpeechSynthesizer exposes a Model property (non-breaking additive virtual property).
                         ttfaRecorded = true;
                     }
-                    await session.WriteAudioAsync(audioChunk, linked.Token).ConfigureAwait(false);
+
+                    try
+                    {
+                        await session.WriteAudioAsync(audioChunk, linked.Token).ConfigureAwait(false);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // ADR-0057: the write found the session already gone. For this sealed session
+                        // type that can only mean its own teardown has run — the guard at
+                        // AudioSocketSession.cs:118 reads a flag none but that private terminate sets
+                        // (:232), and the transport a flush would touch is what the same terminate
+                        // closes last (:236). Nobody in the process asked for that ending, so it
+                        // cancels neither token and neither filter below can see it: it is ADR-0053 R3's
+                        // ending seen from the write side, not a fault of the synthesizer.
+                        //
+                        // Scoped to this one call deliberately. An ObjectDisposedException raised by the
+                        // *synthesizer* — a provider client used after its own disposal — still reaches
+                        // the failure clause it belongs to, and a transport that breaks while the session
+                        // is still connected surfaces as IOException/SocketException, is not caught here,
+                        // and stays a synthesis failure.
+                        farEndGone = true;
+                        break;
+                    }
                 }
 
-                // ADR-0050 E9, and the whole reason it is additive: reaching this line means the
-                // synthesizer finished, was not cancelled and threw nothing, so the eight WebSocket
-                // clients in this SDK cannot arrive here empty — they raise
-                // SpeechProviderEmptyResultException and land in the catch below. What can arrive here
-                // empty is the residual: an HTTP-backed synthesizer, or any third-party subclass of the
-                // public base, returning silence in silence. `ttfaRecorded` is the flag to test because
-                // it is set exactly once, on the first chunk yielded.
-                //
-                // Only the provider is tagged. The two-type discriminator that E8 substitutes for D2's
-                // is not a variable at this site — nothing was thrown here, which is precisely what
-                // makes the sample worth taking.
-                if (!ttfaRecorded)
+                if (farEndGone)
                 {
-                    SpeechSynthesisMetrics.SynthesesSilent.Add(1,
-                        new KeyValuePair<string, object?>("voiceai.provider", _tts.ProviderName));
+                    // Leaving the enumeration above disposed the provider sequence rather than
+                    // draining an answer nobody can hear.
+                    //
+                    // Accounted exactly as the barge-in clause below accounts its ending: both are
+                    // someone outside the pipeline ending this playback, and tying the two together
+                    // means one future instrument separating "the caller heard the answer" from "the
+                    // caller heard part of it" moves both at once. Counting it completed is today's
+                    // accounting, not a claim the caller heard the answer (ADR-0050 E9 debt).
+                    //
+                    // Not the normal-completion tail below: that one adds the turn to the conversation
+                    // history and guards tts.syntheses.silent, and neither belongs to a turn whose
+                    // listener has gone. The ending is visible at Debug and nowhere an operator pages.
+                    VoiceAiLog.PlaybackStoppedSessionEnded(_logger, channelId);
+                    SpeechSynthesisMetrics.SynthesesCompleted.Add(1);
+                    Publish(new SynthesisEndedEvent(
+                        DateTimeOffset.UtcNow, DateTimeOffset.UtcNow - synthStart));
                 }
+                else
+                {
+                    // ADR-0050 E9, and the whole reason it is additive: reaching this line means the
+                    // synthesizer finished, was not cancelled and threw nothing, so the eight WebSocket
+                    // clients in this SDK cannot arrive here empty — they raise
+                    // SpeechProviderEmptyResultException and land in the catch below. What can arrive here
+                    // empty is the residual: an HTTP-backed synthesizer, or any third-party subclass of the
+                    // public base, returning silence in silence. `ttfaRecorded` is the flag to test because
+                    // it is set exactly once, on the first chunk yielded.
+                    //
+                    // Only the provider is tagged. The two-type discriminator that E8 substitutes for D2's
+                    // is not a variable at this site — nothing was thrown here, which is precisely what
+                    // makes the sample worth taking.
+                    if (!ttfaRecorded)
+                    {
+                        SpeechSynthesisMetrics.SynthesesSilent.Add(1,
+                            new KeyValuePair<string, object?>("voiceai.provider", _tts.ProviderName));
+                    }
 
-                SpeechSynthesisMetrics.SynthesesCompleted.Add(1);
-                Publish(new SynthesisEndedEvent(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow - synthStart));
-                history.Add(new ConversationTurn(transcript, response, DateTimeOffset.UtcNow));
+                    SpeechSynthesisMetrics.SynthesesCompleted.Add(1);
+                    Publish(new SynthesisEndedEvent(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow - synthStart));
+                    history.Add(new ConversationTurn(transcript, response, DateTimeOffset.UtcNow));
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
