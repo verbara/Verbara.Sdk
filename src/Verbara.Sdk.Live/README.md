@@ -6,7 +6,7 @@ Real-time domain objects for Asterisk PBX, built on AMI events.
 
 - Live tracking of channels, queues, agents, and conferences
 - `AsteriskServer` aggregates all managers from a single AMI connection
-- `AsteriskServerPool` federates multiple servers with agent routing (100K+ agents)
+- `AsteriskServerPool` federates multiple servers with agent routing (designed for 100K+ agents; sizing guidance in [`high-load-tuning.md`](../../docs/guides/high-load-tuning.md) — no load test at that scale exists)
 - Thread-safe with per-entity locks and `ConcurrentDictionary`
 - Lazy queries: `GetAgentsByState()`, `GetChannelsByState()`, `GetQueuesForMember()`
 - `System.Diagnostics.Metrics` for observable gauges (active channels, queue sizes)

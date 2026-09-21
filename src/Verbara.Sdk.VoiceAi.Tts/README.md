@@ -4,14 +4,23 @@ Text-to-speech providers for [Verbara.Sdk.VoiceAi](https://www.nuget.org/package
 
 ## Providers
 
-| Provider | Mode | TTFA target | Notes |
+| Provider | Mode | Latency, as the vendor publishes it | Notes |
 |----------|------|------------|-------|
-| **ElevenLabs** | Streaming WebSocket | ~150 ms (Flash 2.5) | Production default. Premium quality. Multi-language. Flash 2.5 default since v1.15.3. |
-| **Cartesia (Sonic-3)** | Streaming WebSocket | **40-90 ms** | Lowest TTFA in the catalog. Production-grade quality. |
-| **Speechmatics** | Streaming WebSocket | ~200 ms | Enterprise-grade with multi-locale. |
-| **Azure** | REST batch | ~500 ms | Microsoft Cognitive Services TTS. Mature, broad locale support. Batch mode (no streaming). |
-| **Deepgram Aura 2** | Streaming WebSocket | ~150-200 ms | New in v1.15.3. Aura 2 voices via `wss://api.deepgram.com/v1/speak`. Token-by-token input streaming. |
-| **LMNT** | Streaming WebSocket (HTTP fallback) | **sub-200 ms** | New in v1.15.3. Sub-200 ms TTFA target for conversational AI agents. |
+| **ElevenLabs** | Streaming WebSocket | ~75 ms *model inference* (Flash v2.5) [^el] | Production default. Premium quality. Multi-language. Flash 2.5 default since v1.15.3. The vendor states this figure excludes network round-trip, which it puts at 20-200 ms. |
+| **Cartesia (Sonic-3)** | Streaming WebSocket | sub-90 ms [^ca] | Production-grade quality. The fastest figure any vendor in this table publishes. |
+| **Speechmatics** | Streaming WebSocket | — | Enterprise-grade with multi-locale. The vendor publishes no TTS latency figure we could cite. |
+| **Azure** | REST, non-streaming | — | Microsoft Cognitive Services TTS. Mature, broad locale support. Returns the full clip in one response. Microsoft publishes latency for its *batch synthesis* API, which this provider does not use — it calls the real-time endpoint `/cognitiveservices/v1`. |
+| **Deepgram Aura 2** | Streaming WebSocket | sub-200 ms TTFB [^dg] | New in v1.15.3. Aura 2 voices via `wss://api.deepgram.com/v1/speak`. Token-by-token input streaming. Deepgram's own latency *documentation* walks through an example measuring 277 ms first-byte, so treat sub-200 ms as its target, not a guarantee. |
+| **LMNT** | Streaming WebSocket (HTTP fallback) | — | **The vendor has shut down** ("Our speech generation journey has come to an end", [docs.lmnt.com](https://docs.lmnt.com/intro), accessed 2026-09-20). The provider code still ships; do not start new work against it. |
+
+[^el]: [ElevenLabs — Models](https://elevenlabs.io/docs/overview/models), accessed 2026-09-20.
+[^ca]: [Cartesia — Sonic](https://www.cartesia.ai/sonic), accessed 2026-09-20.
+[^dg]: [Deepgram — Introducing Aura-2](https://deepgram.com/learn/introducing-aura-2-enterprise-text-to-speech) and [Text to Speech Latency](https://developers.deepgram.com/docs/text-to-speech-latency), both accessed 2026-09-20.
+
+Every figure above is the **vendor's own published number**, cited and dated, never a measurement of this
+SDK (ADR-0042 D8 as amended). A dash means the vendor publishes nothing we could cite — not that the
+provider is slow. None of these are comparable to each other: they measure different things (model
+inference, time-to-first-audio, time-to-first-byte) under conditions each vendor chose.
 
 TTFA = Time-To-First-Audio. Streaming providers begin returning PCM bytes mid-synthesis; batch providers return the full clip in one response. All providers report metrics via the `Verbara.Sdk.VoiceAi.Tts` `Meter` (latency histogram, TTFA histogram, request counters, byte throughput tagged by provider name). Health checks (`TtsHealthCheck`) auto-registered when the synthesizer is added through DI.
 
@@ -70,15 +79,16 @@ services.AddAzureTtsSpeechSynthesizer(o => { ... });
 
 ## Choosing a provider
 
-- **Best TTFA** → Cartesia Sonic-3 (40-90 ms). Lowest perceived latency for interactive AI agents.
+- **Lowest published latency** → Cartesia Sonic-3 (sub-90 ms, the vendor's figure). Note that the
+  vendors do not measure the same quantity, so this ranks their claims, not their performance.
 - **Best quality / familiarity** → ElevenLabs (Flash 2.5 is fast; Multilingual v2 is premium).
-- **Best language coverage** → Azure TTS (broad locale support; batch-only).
+- **Best language coverage** → Azure TTS (broad locale support; non-streaming).
 - **Mid-market enterprise** → Speechmatics (good balance).
 
 ## Examples
 
 - `Examples/VoiceAiExample/` — ElevenLabs + Deepgram + echo handler (default demo).
-- `Examples/VoiceAiCartesiaExample/` — Cartesia Sonic-3 with sub-100 ms TTFA.
+- `Examples/VoiceAiCartesiaExample/` — Cartesia Sonic-3 (vendor-published sub-90 ms).
 - `Examples/VoiceAiSpeechmaticsExample/` — Speechmatics TTS.
 
 ## Native AOT

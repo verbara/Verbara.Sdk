@@ -51,27 +51,27 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 | 61 | 0 trim warnings | ENFORCING | AotCanary | PARTIAL — 22/29 |
 | 61 | ~2,924 unit + 154 functional + 65 integration | COHERENCE | — | WRONG — the suite runs **3,295** (measured 2026-08-29); note nothing in-tree *records* that number until §4.1 commits the record |
 | 61 | headline version **v2.5.3** | COHERENCE | `StatusBlockCoherenceTests` — against `Directory.Build.props` `<PackageVersion>` | **OK** |
-| 65 | ONNX model 8.3 MB | COHERENCE | — | GAP — actual 8,679,182 B |
-| 67 | 94.26% English accuracy, in upstream's voice | ATTRIBUTED | citation to upstream's per-version benchmark + the content-hash pin in `OnnxSessionManagerTests` | **OK** — all three D8 legs present |
-| 67 | ~12 ms CPU inference | ENFORCING | `TurnDetectionBenchmark` | **DELETED** — measured at 26.18–37.30 ms; deferred, see *Deferrals* |
-| 72 | 148/152 AMI (97%), 94/98 ARI (96%), 46/46, 27/27, 278 events | ENFORCING | — | GAP |
-| 74 | **53 ADRs** | ENFORCING | `StatusBlockCoherenceTests` — counts `docs/decisions/*.md`, excluding the catalog `README.md` | **OK** |
-| 98 | measurement provenance (Ryzen 9 9900X, .NET 10.0.5, BDN v0.14.0, 2026-04-18) | COHERENCE | `PerformanceTableCoherenceTests` — the header provenance test | PARTIAL — matched against the whole file rather than this line, and blind to the AMI row's .NET 10.0.6 MediumRunJob exception (`performance-record.json:12`); the two session-store rows measured apart from it state their own at :110 |
-| 102 | AMI parse+dispatch 1.53M events/sec (653 ns) | ENFORCING + COHERENCE | `perf-regression.yml` `*AmiProtocolReader*` | GAP — observational only (`\|\| true`, no baseline) |
-| 103 | ARI deserialize Channel 3.54M ops/sec (283 ns) | ENFORCING + COHERENCE | `*AriJson*` | GAP — observational only |
-| 104 | ARI event parse 595K events/sec (1.68 µs), "2.7× faster than v1.0" | ENFORCING + COHERENCE | `*AriParseEvent*` | GAP — observational; the cross-version ratio has no guard at all |
-| 105 | 163.9M lookups/sec (6.1 ns) | ENFORCING + COHERENCE | `*ChannelManager*` | GAP — observational |
-| 106 | ~0.21 ns/observer, zero-alloc | ENFORCING + COHERENCE | `*ObserverDispatch*` | GAP — observational |
-| 107 | Redis SaveAsync ~33.3K/sec (p50 30 µs), batch 91,021/sec | COHERENCE | `PerformanceTableCoherenceTests` — the value test | OK — re-measured 2026-09-12; the April figures it replaced (~12.6K/sec, p50 79 µs, batch 65,738/sec) understate today's measurement of the same store code ~2.6× and ~1.4×. Its provenance is row 110 |
-| 108 | Postgres SaveAsync ~500/sec (p50 1.97 ms), batch 13,489/sec | COHERENCE | `PerformanceTableCoherenceTests` — the value test | OK — re-measured 2026-09-12 on the `NpgsqlExecutor` store, so no longer a measurement of Dapper; batch was 9,491/sec and its rise is not attributed to the rewrite. Its provenance is row 110 |
-| 110 | session-store provenance: re-measured 2026-09-12, .NET 10.0.12, xunit Fact + Stopwatch against local Docker, PostgreSQL 18.4 / Redis 7.4.8, median of five runs; Postgres single-save latency is the WAL flush | COHERENCE | `PerformanceTableCoherenceTests` — the per-row provenance test | PARTIAL — date and runtime asserted against the Performance section; server versions, run count and the WAL-flush attribution stated, not asserted; and the check is opt-in, so deleting `provenance` from the record unbinds this line unnoticed |
-| 133 | 9 ActivitySources | ENFORCING | `MarketingClaimsTests.cs:45-50` | OK |
-| 134 | 15 Meters | ENFORCING | `MarketingClaimsTests.cs:52-57` | OK |
-| 135 | 11 IHealthChecks — 6 core + 5 VoiceAi | ENFORCING | `MarketingClaimsTests.cs:76-97` | PARTIAL — total pinned, the 6/5 split is not |
-| 136 | 60 const strings, 14 nested classes, "14+ unit tests" | ENFORCING | `MarketingClaimsTests.cs:59-74` | PARTIAL — the "14+ tests" sub-claim is unpinned |
-| 164 | "First contact in 10 lines" | COHERENCE | — | WRONG — the snippet at :166-182 is 14 lines |
-| 470 | Cartesia Sonic-3 40-90 ms TTFA | ATTRIBUTED | — | GAP |
-| 472 | smart-turn-v3.2-cpu, 94.26% in upstream's voice | ATTRIBUTED | citation + hash pin | **OK** — this line previously carried the figure with no citation at all |
+| ~~65~~ | ONNX model 8.3 MB | — | — | **DELETED** — lived in the release bullets, cut by the 2026-09-20 ruling on `README.md` release history |
+| ~~67~~ | 94.26% English accuracy, in upstream's voice | — | — | **DELETED** — lived in the release bullets, cut by the 2026-09-20 ruling on `README.md` release history. The figure survives at `:465` (row below) with its citation and hash pin; this was the duplicate. |
+| ~~67~~ | ~12 ms CPU inference | — | `TurnDetectionBenchmark` | **DELETED** — measured at 26.18–37.30 ms; deferred, see *Deferrals*. Its line was also removed with the release bullets on 2026-09-20. |
+| 65 | 148/152 AMI (97%), 94/98 ARI (96%), 46/46, 27/27, 278 events | ENFORCING | — | GAP |
+| 67 | **53 ADRs** | ENFORCING | `StatusBlockCoherenceTests` — counts `docs/decisions/*.md`, excluding the catalog `README.md` | **OK** |
+| 91 | measurement provenance (Ryzen 9 9900X, .NET 10.0.5, BDN v0.14.0, 2026-04-18) | COHERENCE | `PerformanceTableCoherenceTests` — the header provenance test | PARTIAL — matched against the whole file rather than this line, and blind to the AMI row's .NET 10.0.6 MediumRunJob exception (`performance-record.json:12`); the two session-store rows measured apart from it state their own at :110 |
+| 95 | AMI parse+dispatch 1.62M events/sec (617.6 ns) | ENFORCING + COHERENCE | `perf-regression.yml` `*AmiProtocolReader*` | GAP — observational only (`\|\| true`, no baseline) |
+| 96 | ARI deserialize Channel 3.54M ops/sec (283 ns) | ENFORCING + COHERENCE | `*AriJson*` | GAP — observational only |
+| 97 | ARI event parse 595K events/sec (1.68 µs), "2.7× faster than v1.0" | ENFORCING + COHERENCE | `*AriParseEvent*` | GAP — observational; the cross-version ratio has no guard at all |
+| 98 | 163.9M lookups/sec (6.1 ns) | ENFORCING + COHERENCE | `*ChannelManager*` | GAP — observational |
+| 99 | ~0.21 ns/observer, zero-alloc | ENFORCING + COHERENCE | `*ObserverDispatch*` | GAP — observational |
+| 100 | Redis SaveAsync ~33.3K/sec (p50 30 µs), batch 91,021/sec | COHERENCE | `PerformanceTableCoherenceTests` — the value test | OK — re-measured 2026-09-12; the April figures it replaced (~12.6K/sec, p50 79 µs, batch 65,738/sec) understate today's measurement of the same store code ~2.6× and ~1.4×. Its provenance is row 110 |
+| 101 | Postgres SaveAsync ~500/sec (p50 1.97 ms), batch 13,489/sec | COHERENCE | `PerformanceTableCoherenceTests` — the value test | OK — re-measured 2026-09-12 on the `NpgsqlExecutor` store, so no longer a measurement of Dapper; batch was 9,491/sec and its rise is not attributed to the rewrite. Its provenance is row 110 |
+| 103 | session-store provenance: re-measured 2026-09-12, .NET 10.0.12, xunit Fact + Stopwatch against local Docker, PostgreSQL 18.4 / Redis 7.4.8, median of five runs; Postgres single-save latency is the WAL flush | COHERENCE | `PerformanceTableCoherenceTests` — the per-row provenance test | PARTIAL — date and runtime asserted against the Performance section; server versions, run count and the WAL-flush attribution stated, not asserted; and the check is opt-in, so deleting `provenance` from the record unbinds this line unnoticed |
+| 126 | 9 ActivitySources | ENFORCING | `MarketingClaimsTests.cs:45-50` | OK |
+| 127 | 15 Meters | ENFORCING | `MarketingClaimsTests.cs:52-57` | OK |
+| 128 | 11 IHealthChecks — 6 core + 5 VoiceAi | ENFORCING | `MarketingClaimsTests.cs:76-97` | PARTIAL — total pinned, the 6/5 split is not |
+| 129 | 60 const strings, 14 nested classes, "14+ unit tests" | ENFORCING | `MarketingClaimsTests.cs:59-74` | PARTIAL — the "14+ tests" sub-claim is unpinned |
+| 157 | "First contact in 10 lines" | COHERENCE | — | WRONG — the snippet at :166-182 is 14 lines |
+| 463 | Cartesia Sonic-3, no figure | — | — | **DELETED** — the figure moved to `src/Verbara.Sdk.VoiceAi.Tts/README.md`, cited; `40-90 ms` was never Cartesia's number (they publish sub-90 ms) |
+| 465 | smart-turn-v3.2-cpu, 94.26% in upstream's voice | ATTRIBUTED | citation + hash pin | **OK** — this line previously carried the figure with no citation at all |
 
 ## `docs/README-technical.md`
 
@@ -114,7 +114,7 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 | 32, 58 | ~2,924 unit + 154 functional + 65 integration | COHERENCE | — | WRONG — stale by ~370 |
 | 32 | zero compiler warnings | ENFORCING | `TreatWarningsAsErrors` + `Pack Warnings Gate` | OK |
 | 32 | passes AOT trim analysis cleanly | ENFORCING | AotCanary | PARTIAL — 22/29 |
-| 32 | "**tested** for … exceeding 100,000 concurrent agents" | — | — | GAP — nothing executes a load test at any scale; "designed for" is supported, "tested" is not |
+| 32 | "**designed for** … exceeding 100,000 concurrent agents" | EVIDENCE | — | **OK** — reworded 2026-09-20: "tested" removed, deferral declared with its blocker (D9). Was: GAP — nothing executes a load test at any scale; "designed for" is supported, "tested" is not |
 | 50 | "start in under 10 milliseconds" | — | — | GAP — **no startup measurement exists anywhere in the repo** |
 | 54 | four Roslyn source generators | ENFORCING | — | GAP — correct |
 | 56 | **28** composable NuGet packages | ENFORCING | — | WRONG — 29 |
@@ -207,6 +207,21 @@ Missed by the first sweep — tracked, public, and read as current by every cont
 
 ## Deferrals — declared with their blocker (ADR-0042 D9)
 
+**The 100,000-concurrent-agent figure** (`src/Verbara.Sdk.Live/README.md:9`,
+`docs/README-commercial.md:32`, and the scope statements in `docs/guides/high-load-tuning.md`).
+Reworded 2026-09-20 from "designed **and tested** for" to "designed for"; the word *tested* was
+false and is gone.
+
+- **Blocker:** no load harness exists at any scale, and a 100K-agent Asterisk estate is not
+  reachable in CI under D2 — this is the blocker that survives being argued with, not the absence
+  of a number. The sizing arithmetic in `high-load-tuning.md` is a derivation, not a measurement,
+  and one of its own inputs (the per-agent event rate) is itself an unguarded planning assumption,
+  so a COHERENCE guard against it would assert arithmetic and look like evidence.
+- **Unblocking condition:** a harness that can generate agent load and report a sustained rate.
+  The open change `openspec/changes/longevity-soak-and-chaos/` is the natural vehicle if it adopts
+  a scale target; until it does, nothing in flight discharges this.
+
+
 **Turn-detection CPU inference latency.** The `~12 ms` figure was **removed from `README.md:67` and
 `:472` and not replaced.** It was 2.2×–3.1× optimistic: `TurnDetectionBenchmark` measures the path a
 caller actually pays — 8 kHz→16 kHz resample and accumulation, mel front-end, ONNX session — at
@@ -259,30 +274,41 @@ work entirely.
 
 These carry no class yet. Each needs a decision before it can ship under D1.
 
-1. **Vendor latency and pricing under D8's pin.** Citation and third-party wording are achievable;
-   the pin — "binding the citation to the artifact actually shipped" — has no meaning when what ships
-   is our WebSocket client and the vendor can change Sonic-3's latency with no commit here. Either
-   D8's pin leg is waived for vendor-service claims (with the citation carrying an access date), or
-   these are deleted.
-2. **Scale claims ("100K+ agents").** First-party, so not ATTRIBUTED; a 100K-agent load test does
-   not exist and is not reachable under D2. The only backing is an extrapolation at
-   `docs/research/benchmark-analysis.md:323`. COHERENCE against that stated derivation, or a D9
-   deferral.
-3. **Behavioural constants in package READMEs** (`Resilience/README.md:8`,
-   `high-load-tuning.md:138-140`). Checkable against source, but they read as API documentation. If
-   D1 covers them, the registry grows by every documented constant in the repo.
-4. **The `README.md` Status release bullets (`:63-68`).** Dated release history restated inside the
-   acquisition surface. D1 excludes dated `CHANGELOG` history; this block is the same content in a
-   living document, and `:65`/`:67` carry real claims.
-5. **AMI surface counts need a counting definition before any of them can be guarded.** Responses:
-   18 files in `Responses/`, 17 `public sealed class` — one file is a helper type. Events: 278 files,
-   but 270 concrete events plus 8 abstract bases under `Events/Base/`, so the published 278 is a
-   *file* count. Actions: 148 concrete classes across 149 files. Every published figure here is
-   defensible under some definition and indefensible under another, and a gate cannot be written
-   until the definition is chosen. This blocks the §1.2 rows for `README.md:45`, `:72` and
-   `src/Verbara.Sdk.Ami/README.md:7`.
-6. **Workload estimates in `high-load-tuning.md`** (events/sec per tier, the 200K/sec storm, VarSet
-   at 50%+). These describe the reader's PBX, not this SDK. Out of scope, or delete.
+1. **Behavioural constants in package READMEs** (`src/Verbara.Sdk.Resilience/README.md:8`,
+   `docs/guides/high-load-tuning.md:138-140`). Checkable against source, but they read as API
+   documentation. If D1 covers them, the registry grows by every documented constant in the repo.
+   *(Note, 2026-09-20: whichever way this goes, a guard on `src/*/README.md` does not currently run —
+   `scripts/ci/classify-docs-only.sh:25` treats `*/README.md` as docs-only, so the PR that breaks
+   such a figure skips `Unit Tests`. The carve-out has to move in the same change.)*
+2. **AMI surface counts need a counting definition before any of them can be guarded.** Responses:
+   18 files in `Responses/`, 17 `public sealed class` — one file is a helper type. Events: 278
+   files, of which **269** are `public sealed class` and **9** are shared base types (the 8 under
+   `Events/Base/` plus `Events/ResponseEvent.cs`, base of 60 events). Actions: 148 concrete classes
+   across 149 files. Every published figure here is defensible under some definition and
+   indefensible under another, and a gate cannot be written until the definition is chosen. This
+   blocks the §1.2 rows for `README.md:45`, `:72` and `src/Verbara.Sdk.Ami/README.md:7`.
+   *(Corrected 2026-09-20: this entry previously read "270 concrete plus 8 abstract bases under
+   `Events/Base/`". Neither half held — `grep -rn 'abstract class' Events` returns nothing, and the
+   ninth base sits outside `Events/Base/`. `EventRegistryGenerator` already implements one
+   executable definition: `[VerbaraMapping]` and not `IsAbstract`, which yields 269.)*
+
+## Rulings settled 2026-09-20
+
+Four of the six were decided and discharged in one change; each is recorded where it applies, and
+the rows above and in the tables carry the result.
+
+- **Vendor latency and pricing under D8's pin** → split. Latency stays as the vendor's own figure,
+  cited with an access date, licensed by the new **D8a** ([ADR-0042 amendment](decisions/0042-public-claim-guard-classes.md)).
+  Prices, cross-vendor ratios, market rankings in our own voice, and our own undated measurements of
+  a third-party service were deleted. The sweep that settled this found **five of six** TTS latency
+  figures did not match the vendor's published number, and that LMNT has shut down.
+- **Scale claims ("100K+ agents")** → design target, not a measurement. "tested" removed; deferral
+  declared below.
+- **`README.md` Status release bullets** → cut. Release history lives in `CHANGELOG.md` only. The
+  block had drifted three releases behind; the 94.26% figure it carried survives at `README.md:472`
+  with its citation and hash pin intact.
+- **Workload estimates in `high-load-tuning.md`** → out of scope as planning assumptions, with the
+  label written into the guide above the table rather than only recorded here.
 
 ## Inventory provenance
 
@@ -294,3 +320,27 @@ Updated 2026-09-12 for the session-store re-measurement only — `README.md` row
 Updated 2026-09-12 again, for `docs/guides/session-store-backends.md` only — its read-latency row, re-cited from `:9-11,26,35` to `:9-11,22,27,35` because `:26` never held a latency claim, marked DELETED and pinned to `e250182e`; two new rows for the words that replaced those figures, the store-call costs at `:9-11,22,35` and the comparison at `:27`; its Benchmarks row, now bound; and a new DELETED row for the old Benchmarks figures nothing records, also pinned to `e250182e`. No line above `## Benchmarks` moved, so the row for `:5,56,70,76` still points at its claims and was left as it was; no other row was re-verified.
 
 Updated 2026-09-20 for the `README.md` Status block only — rows 61 (headline version) and 74 (ADR count), both WRONG since before the 2026-08-29 sweep and both now bound by `StatusBlockCoherenceTests`. Re-verified against the tree at that date: the headline read v2.2.1 while `Directory.Build.props` `<PackageVersion>` and the latest tag were both 2.5.3, and "37 ADRs" against 53 files in `docs/decisions/` excluding the catalog. The `29 NuGet packages` figure on the same line was re-counted and is correct (29 projects under `src/`, none `IsPackable=false`), so its row is unchanged and still a GAP. The test-count figure on that same line is still WRONG and is NOT fixed here: it is COHERENCE with nothing to cohere against, and committing that record is its own change. No other row was re-verified.
+
+Updated 2026-09-20 again, for the four rulings settled that day — the vendor-latency and pricing
+surface (`README.md:470`, `src/Verbara.Sdk.VoiceAi.Tts/README.md` table and `Choosing a provider`,
+`src/Verbara.Sdk.VoiceAi.Stt/README.md:9`, both `Examples/VoiceAi*Example/README.md`), the
+100K-agent scale claim (`src/Verbara.Sdk.Live/README.md:9`, `docs/README-commercial.md:32`), the
+`README.md` release bullets (`:63-68`, deleted, taking row 65 with them), and the
+`high-load-tuning.md` load column. Every vendor figure that survived was re-verified against the
+vendor's own page on that date and the access date is carried in the citation; five of the six TTS
+latency figures did **not** match and were corrected or removed, and LMNT was found to have shut
+down. The AMI counting-definition entry under *Unresolved* was corrected against the tree (269 + 9,
+not 270 + 8). No other row was re-verified.
+
+**Line pointers re-based 2026-09-20.** Cutting the `README.md` release bullets removed seven lines
+(six bullets and a blank), so every row in the `README.md` section pointing below the cut moved by
+−7. All eighteen were re-pointed in that same change and each was checked against the line it now
+names; two rows that lived *inside* the cut (`~~65~~` the ONNX size, `~~67~~` the duplicated 94.26%)
+are struck through, and the 94.26% figure survives at `:465` with its citation and hash pin. A
+registry keyed by line number does not survive an edit above the line it points at, and nothing
+enforces that — the check is manual and belongs in any PR that adds or removes README lines.
+
+Corrected in the same pass, and **pre-existing** rather than caused by that edit: the AMI
+parse+dispatch row transcribed the claim as `1.53M events/sec (653 ns)` while `README.md` has said
+`1.62M events/sec (617.6 ns)` on `main` for some time. The registry's own copy of a figure had
+drifted from the figure — the exact failure it exists to detect, one level up.
