@@ -71,9 +71,9 @@ numbers.
 
 The same package already shows what the remedy looks like. `AriOutboundListener` carries five catch
 blocks that swallow with a comment saying why (`:126`, `:127`, `:267`, `:268`, `:294`) and **none of
-them raises an alert**, while its six bare ones (`:152`, `:153`, `:154`, `:198`, `:213`, `:283`) each
-raise one. The query's complaint is that an empty block hides intent; stating the intent is the fix,
-and the two already-merged sweeps of the test tree (#254, #255) took the same route.
+them raises an alert**, while its seven bare ones (`:112`, `:152`, `:153`, `:154`, `:198`, `:213`,
+`:283`) each raise one. The query's complaint is that an empty block hides intent; stating the intent
+is the fix, and the two already-merged sweeps of the test tree (#254, #255) took the same route.
 
 But stating intent only works where there *is* a defensible intent. Two of the eighteen are not
 obviously teardown: `AriOutboundListener.AcceptLoopAsync`'s `SocketException` ends the accept loop

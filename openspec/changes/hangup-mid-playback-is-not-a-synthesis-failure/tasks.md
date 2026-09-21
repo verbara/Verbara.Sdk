@@ -92,7 +92,17 @@
 - [ ] 3.2 Add the ADR-0057 row to `docs/decisions/README.md` in numeric order, matching the format of
       the existing rows.
 
-- [ ] 3.3 Repoint this change's `decision_ref` to `Sdk/ADR-0057` once that file exists, so the
+- [ ] 3.3 Land the ADR-count guard's other two edits **in this same PR**:
+      `StatusBlockCoherenceTests.ThePublishedAdrCount_ShouldMatchTheDecisionsOnDisk` (#279) counts
+      `docs/decisions/*.md` against the figure `README.md` publishes, and ADR-0042 D1 requires a
+      changed figure's registry row to move with it.
+      - bump the `**N ADRs**` figure in `README.md`;
+      - update its row in `docs/claim-registry.md`.
+      Key both edits to the **figure**, never to a line number: #280 has just moved this claim from
+      `README.md:74` to `:67` and re-based the registry's line pointers with it, so a number recorded
+      here goes stale on the next docs PR. Adding ADR-0057's file without these two fails the `Unit Tests` job.
+
+- [ ] 3.4 Repoint this change's `decision_ref` to `Sdk/ADR-0057` once that file exists, so the
       proposal cites the decision it rests on rather than the closest neighbour
 ## 4. Verification
 
@@ -118,7 +128,16 @@
 
 - [ ] 4.5 `openspec validate --all --strict` green.
 
-- [ ] 4.6 CI green; record the PR number and the commit that landed on `main`.
+- [ ] 4.6 CI green; record the PR number and the commit that landed on `main`. Enqueue it **alone**: the open changes that add a **new** ADR
+      file (0046, 0047, 0056, 0057, 0058, 0059) all bump the same `**N ADRs**` figure, and the queue
+      squashes. Whether git even sees the collision depends on where the two catalog rows land: rows
+      inserted at the same spot conflict textually and the queue ejects the second before it builds;
+      rows at different spots — the common case, since every one of those tasks adds its row *in
+      numeric order* — merge cleanly and the second then fails `Unit Tests` inside the queue, a
+      semantic conflict rather than a textual one. Either way the practice is the same: one
+      ADR-adding change in the queue at a time, and re-count the figure after any rebase, because
+      `strict:false` does not force one. Order does not otherwise matter — the guard counts files,
+      not a contiguous sequence — so this change keeps ADR-0057 whenever it lands.
 
 ## 5. Close-out
 

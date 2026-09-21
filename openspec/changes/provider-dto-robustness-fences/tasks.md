@@ -247,12 +247,24 @@ The three packages are executed **in sequence, not in parallel** — `Stt`, then
       this programme exists to surface. No observed instance is on record in this repo
 - [ ] 9.4 Add the ADR-0046 row to `docs/decisions/README.md` in numeric order, matching the existing
       row format
-- [ ] 9.5 `CHANGELOG.md` — one `[Unreleased]` entry. This one is **not** test-only: it changes shipped
+- [ ] 9.5 Land the ADR-count guard's other two edits **in this same PR**:
+      `StatusBlockCoherenceTests.ThePublishedAdrCount_ShouldMatchTheDecisionsOnDisk` (#279) counts
+      `docs/decisions/*.md` against the figure `README.md` publishes, and ADR-0042 D1 requires a
+      changed figure's registry row to move with it.
+      - bump the `**N ADRs**` figure in `README.md`;
+      - update its row in `docs/claim-registry.md`.
+      Key both edits to the **figure**, never to a line number — those numbers have moved twice in a
+      day. Adding ADR-0046's file without these two fails the `Unit Tests` job. And
+      `TheDecisionCatalog_ShouldListEveryAdrOnDisk`, which landed with
+      `audiosocket-accepted-connection-is-always-closed`, fails separately if the catalog row from
+      task 9.4 is missing — file, row and figure travel together or the lane is red.
+
+- [ ] 9.6 `CHANGELOG.md` — one `[Unreleased]` entry. This one is **not** test-only: it changes shipped
       deserialization behaviour and receive-loop failure handling in three packages, so it belongs
       under a `### Changed` heading describing the behaviour change for consumers, not under a tests
       heading. State that request serialization is unchanged, because that is the question a consumer
       will ask
-- [ ] 9.6 State the residue explicitly: on surfaces with no openly-licensed vendor contract, and on
+- [ ] 9.7 State the residue explicitly: on surfaces with no openly-licensed vendor contract, and on
       union DTOs regardless of contract, a rename remains undetectable at parse time. Name those
       surfaces and point at `provider-schema-drift-train`
 
@@ -272,3 +284,5 @@ The three packages are executed **in sequence, not in parallel** — `Stt`, then
 - [ ] 10.6 `openspec validate provider-dto-robustness-fences --type change --strict` clean
 - [ ] 10.7 CI green on the PR, zero warnings; enqueue with `gh pr merge <pr> --auto` (merge queue —
       never `--squash` / `--delete-branch`)
+      Enqueue this PR **alone** among the ADR-adding changes: it bumps the same `**N ADRs**` figure
+      they all bump, and an unrebased sibling is green in its own CI and fails only inside the queue.

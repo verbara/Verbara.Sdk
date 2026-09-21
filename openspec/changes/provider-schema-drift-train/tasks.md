@@ -222,12 +222,24 @@ proves nothing.
       lesson worth recording
 - [ ] 7.3 Add the ADR-0047 row to `docs/decisions/README.md` in numeric order, matching the existing
       row format
-- [ ] 7.4 `CHANGELOG.md` — one `[Unreleased]` entry. No version bump: no `src/` change
-- [ ] 7.5 A `contracts/README.md` stating what the directory is, that its contents are third-party
+- [ ] 7.4 Land the ADR-count guard's other two edits **in this same PR**:
+      `StatusBlockCoherenceTests.ThePublishedAdrCount_ShouldMatchTheDecisionsOnDisk` (#279) counts
+      `docs/decisions/*.md` against the figure `README.md` publishes, and ADR-0042 D1 requires a
+      changed figure's registry row to move with it.
+      - bump the `**N ADRs**` figure in `README.md`;
+      - update its row in `docs/claim-registry.md`.
+      Key both edits to the **figure**, never to a line number — those numbers have moved twice in a
+      day. Adding ADR-0047's file without these two fails the `Unit Tests` job. And
+      `TheDecisionCatalog_ShouldListEveryAdrOnDisk`, which landed with
+      `audiosocket-accepted-connection-is-always-closed`, fails separately if the catalog row from
+      task 7.3 is missing — file, row and figure travel together or the lane is red.
+
+- [ ] 7.5 `CHANGELOG.md` — one `[Unreleased]` entry. No version bump: no `src/` change
+- [ ] 7.6 A `contracts/README.md` stating what the directory is, that its contents are third-party
       material under their own licenses, how a contract is re-pinned, what a scope manifest is for,
       and what to do when the drift job fails. This directory is the most likely thing in the repo for
       an outside reader to misunderstand
-- [ ] 7.6 While in `CHANGELOG.md`: `[Unreleased]` currently carries two separate `### Changed — CI`
+- [ ] 7.7 While in `CHANGELOG.md`: `[Unreleased]` currently carries two separate `### Changed — CI`
       headings. Merge them, or leave them and say why — but do not add a third alongside them
 
 ## 8. Verification
@@ -252,3 +264,5 @@ proves nothing.
       `openspec validate --all --strict` still clean after the §6 amendments to a sibling change
 - [ ] 8.10 CI green on the PR, zero warnings; enqueue with `gh pr merge <pr> --auto` (merge queue —
       never `--squash` / `--delete-branch`)
+      Enqueue this PR **alone** among the ADR-adding changes: it bumps the same `**N ADRs**` figure
+      they all bump, and an unrebased sibling is green in its own CI and fails only inside the queue.

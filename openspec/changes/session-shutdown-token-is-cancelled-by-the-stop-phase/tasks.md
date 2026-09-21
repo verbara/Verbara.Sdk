@@ -105,6 +105,17 @@
 - [ ] 3.5 Prove the public surface did not move: `git diff --stat -- '*PublicAPI*'` is empty, so
       neither Pro nor Platform needs a recompile or a pin bump.
 
+- [ ] 3.6 CI green through the merge queue. Enqueue it **alone**: the open changes that add a **new** ADR
+      file (0046, 0047, 0056, 0057, 0058, 0059) all bump the same `**N ADRs**` figure, and the queue
+      squashes. Whether git even sees the collision depends on where the two catalog rows land: rows
+      inserted at the same spot conflict textually and the queue ejects the second before it builds;
+      rows at different spots — the common case, since every one of those tasks adds its row *in
+      numeric order* — merge cleanly and the second then fails `Unit Tests` inside the queue, a
+      semantic conflict rather than a textual one. Either way the practice is the same: one
+      ADR-adding change in the queue at a time, and re-count the figure after any rebase, because
+      `strict:false` does not force one. Order does not otherwise matter — the guard counts files,
+      not a contiguous sequence — so this change keeps ADR-0059 whenever it lands.
+
 ## 4. Decision record
 
 - [ ] 4.1 Land `docs/decisions/0059-a-lifetime-token-is-cancelled-by-the-phase-it-names.md` (0055 is
@@ -115,7 +126,22 @@
       stored — and carries the three measurements this change makes: 1.7 (what the host's start token
       does today), 2.3 (a save started after disposal) and 2.6 (the multi-server path has no lifetime
       token at all).
-- [ ] 4.2 Update this change's `proposal.md` `decision_ref` to `Sdk/ADR-0059` once that file exists,
+- [ ] 4.2 Add the ADR-0059 row to `docs/decisions/README.md` in numeric order, matching the
+      format of the existing rows. `TheDecisionCatalog_ShouldListEveryAdrOnDisk`, which landed with
+      `audiosocket-accepted-connection-is-always-closed`, fails when a file has no row, so the
+      omission is red rather than silent — but writing the row is still this task's job, and this
+      change was the one of the four that did not carry the step.
+- [ ] 4.3 Land the ADR-count guard's other two edits **in this same PR**:
+      `StatusBlockCoherenceTests.ThePublishedAdrCount_ShouldMatchTheDecisionsOnDisk` (#279) counts
+      `docs/decisions/*.md` against the figure `README.md` publishes, and ADR-0042 D1 requires a
+      changed figure's registry row to move with it.
+      - bump the `**N ADRs**` figure in `README.md`;
+      - update its row in `docs/claim-registry.md`.
+      Key both edits to the **figure**, never to a line number: #280 has just moved this claim from
+      `README.md:74` to `:67` and re-based the registry's line pointers with it, so a number recorded
+      here goes stale on the next docs PR. Adding ADR-0059's file without these two fails the `Unit Tests` job.
+
+- [ ] 4.4 Update this change's `proposal.md` `decision_ref` to `Sdk/ADR-0059` once that file exists,
       so the living record points at the ADR this change wrote rather than at its nearest neighbour.
 
 ## 5. Close-out
