@@ -74,7 +74,15 @@ internal sealed class AudioSocketSession : IAudioStream
                 if (result.IsCompleted || result.IsCanceled) break;
             }
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            // The session's own teardown. `ct` is `_cts.Token`, a source this type creates and that
+            // only `DisposeAsync` cancels — directly, or through the server's `StopAsync` walking its
+            // sessions — so a cancellation here is the session being disposed, never a read that
+            // failed. The `finally` still completes the pipe writer, which is what lets the read pump
+            // on the other end of the pipe finish instead of waiting for bytes that stopped coming.
+            /* Best effort — the session is being disposed */
+        }
         catch (IOException) { }
         finally
         {
@@ -129,7 +137,15 @@ internal sealed class AudioSocketSession : IAudioStream
                 if (result.IsCompleted) break;
             }
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            // The same teardown as `FillPipeAsync`'s: `ct` is `_cts.Token`, owned by this type and
+            // cancelled only by `DisposeAsync`, so it is the session being disposed and not a frame
+            // that failed to parse. The `finally` still completes the reader, closes the audio channel
+            // and moves a still-connected session to Disconnected, which is the ending a consumer
+            // waiting on `StateChanges` is watching for.
+            /* Best effort — the session is being disposed */
+        }
         catch (IOException) { }
         finally
         {
@@ -142,10 +158,10 @@ internal sealed class AudioSocketSession : IAudioStream
 
     public async ValueTask<ReadOnlyMemory<byte>> ReadFrameAsync(CancellationToken cancellationToken = default)
     {
-        if (await _audioInChannel.Reader.WaitToReadAsync(cancellationToken))
+        if (await _audioInChannel.Reader.WaitToReadAsync(cancellationToken)
+            && _audioInChannel.Reader.TryRead(out var frame))
         {
-            if (_audioInChannel.Reader.TryRead(out var frame))
-                return frame;
+            return frame;
         }
         return ReadOnlyMemory<byte>.Empty;
     }

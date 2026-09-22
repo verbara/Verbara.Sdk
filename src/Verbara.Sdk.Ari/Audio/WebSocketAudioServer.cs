@@ -98,8 +98,25 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 TrackConnection(HandleConnectionAsync(client, ct));
             }
         }
-        catch (OperationCanceledException) { }
-        catch (ObjectDisposedException) { }
+        catch (OperationCanceledException)
+        {
+            // The stop path. `ct` is `_cts.Token`, cancelled by `StopAsync` and so by `DisposeAsync`,
+            // and the pending accept ended with it. Nothing is meant to be accepted after that, so the
+            // loop being over is the whole of what this catch absorbs.
+            /* Best effort — the server is stopping */
+        }
+        catch (ObjectDisposedException)
+        {
+            // The Windows shape of that same stop: `Stop()` disposes the underlying socket under a
+            // pending accept and the accept surfaces the disposal. NOT reached on Linux, and measured
+            // rather than assumed — a probe reproducing `StopAsync`'s `Stop()`-then-`CancelAsync()`
+            // ordering on a real loopback listener raised the `OperationCanceledException` above on 3
+            // of 10 runs and `SocketException(OperationAborted)` on the other 7, and this type not
+            // once. So the block is live on Windows, not dead code. The `SocketException` arm reaches
+            // no catch in this method: the loop task faults, and the `SuppressThrowing` await in
+            // `StopAsync` absorbs it, which ends the loop by the same door.
+            /* Best effort — the server is stopping */
+        }
     }
 
     /// <summary>
@@ -163,7 +180,17 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
 
                 await tcs.Task.WaitAsync(ct);
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException)
+            {
+                // The stop token, and only that. Unlike the AudioSocket server's counterpart this
+                // method schedules no idle deadline, so no second source is linked into `ct` and no
+                // second ending arrives here. `ct` is `_cts.Token`, cancelled by `StopAsync` and
+                // `DisposeAsync`; every await in the `try` is the upgrade request, the 101 response or
+                // the wait for the session to disconnect, each under that token. The `finally` still
+                // deregisters and disposes the session, and the enclosing `using (client)` still
+                // closes the connection.
+                /* Best effort — the server is stopping */
+            }
             catch (Exception ex)
             {
                 WebSocketAudioServerLog.ConnectionError(_logger, ex);

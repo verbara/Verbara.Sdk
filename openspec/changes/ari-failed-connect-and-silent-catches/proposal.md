@@ -3,7 +3,7 @@ tier: MEDIANO
 owner: Harol
 approver: Harol
 stakeholder: Operators who page on ARI health, applications that poll `AriClient.State` to decide whether to retry or fail over, and anyone reading the ARI package's exception handling
-decision_ref: Sdk/ADR-0053
+decision_ref: Sdk/ADR-0056
 ---
 
 # Proposal: ari-failed-connect-and-silent-catches

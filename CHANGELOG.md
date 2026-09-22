@@ -76,6 +76,69 @@ releasing, behind an idempotency gate.
 - No public API change: the service is `internal sealed` and `SetShutdownToken` is `internal`, so no
   `PublicAPI` surface moves and nothing downstream recompiles.
 
+### Fixed — BREAKING: a first `ConnectAsync` that never connected left `AriClient` reporting `Connecting` for good
+
+`AriClient.ConnectAsync` wrote `Connecting`, dialled the events socket, and wrote `Connected` on the next
+statement. A throw from that dial skips the next statement, so `Connecting` was the last state the instance ever
+published: the events loop starts *after* the dial and the reconnect loop is reached only from it, so a first
+dial that fails starts nothing that could write again. `State` said an attempt was in progress when none was and
+none would be, for the life of the client.
+
+The dial now sits in a `try`/`finally` that catches nothing. An attempt that ends without a connection leaves a
+terminal state, and which terminal state is decided by who ended the attempt — read from the caller's own token,
+never from the exception (`Sdk/ADR-0056`).
+
+- **`State` is the only observable that moves, and moving it is a break for anyone who reads it.** After a
+  failed first connect it now reads `Faulted` — a refused upgrade such as `401` or `503`, nothing listening, a
+  name that does not resolve — or `Disconnected` when the caller cancelled the attempt. Every one of them left
+  `Connecting` before.
+- **This amends the 2.5.3 entry *"`AriClient` kept reconnecting after Asterisk refused its credentials"*.** Its
+  last bullet reads *"An initial `ConnectAsync` answered `401` still throws `WebSocketException` to the caller
+  and leaves `State` at `Connecting`"* — the throw is still exactly that, and the state it names is not. The
+  same entry told consumers to *"watch `State` or the health check"* because observers get no `OnError` when the
+  loop stops, so this moves something callers were pointed at.
+- **`AriHealthCheck` reports the same status and a different message.** `Connecting`, `Faulted` and
+  `Disconnected` all fall to its `Unhealthy` arm, so a failed first connect was Unhealthy before and is Unhealthy
+  after. Only the interpolated text moves, from `"ARI state: Connecting"` to `"ARI state: Faulted"` or
+  `"ARI state: Disconnected"`.
+- **The exception reaches the caller unchanged** — same type, same message, same stack. Nothing is caught; the
+  `finally` holds one state write and one read of the caller's token, neither of which can throw. It runs before
+  the exception is observable to the awaiting caller, so a caller's own `catch` already reads the terminal state.
+- `IsConnected` is unchanged. It was false under `Connecting` and is false under both terminal values, so
+  `DisposeAsync`'s `if (IsConnected)` behaves exactly as it did.
+- The terminal value is a statement about that attempt, not a gate on the next one: `ConnectAsync` writes
+  `Connecting` before it reads anything, so a retry on a faulted client proceeds as the first attempt did.
+- No counter, gauge, activity or event changes, and no public API change — no new type, no new member, no
+  changed signature, and `AriConnectionState` itself is untouched.
+
+### Changed — BREAKING: `AriOutboundListener` keeps accepting after an accept fails
+
+`AcceptLoopAsync` wrapped its whole `while` in a `try` whose last clause was `catch (SocketException) { }`,
+outside the loop. One transient accept failure while the listener was meant to be running — `EMFILE`, `ENOBUFS`,
+a connection aborted in the backlog — ended the loop silently and for good, with `IsRunning` still reporting
+`true` over a socket still in `LISTEN`. The kernel kept completing handshakes nobody would ever read, so an
+outbound connector hung instead of being refused, and `StartAsync` could not restart the listener because it was
+still marked running.
+
+Such a failure is now logged at Error as *"[AriOutbound] Accept failed — the listener stays bound and accepts
+again after a backoff"*, waited out, and the loop **keeps accepting**. The wait doubles from 100 ms up to a 5 s
+cap with each consecutive failure and starts over after a successful accept — the same schedule
+`Verbara.Sdk.VoiceAi.AudioSocket`'s `AudioSocketServer` took in 2.5.3.
+
+- **What an operator sees under a persistent failure:** one Error line per failed accept, at most 12 a minute
+  once the wait reaches its cap, instead of a listener that reports `IsRunning` true and accepts nothing. A
+  connection that arrives during a wait stays in the listen backlog until the wait ends.
+- The stop path is unchanged and still ends the loop at once. `StopAsync` clears the running flag before it
+  stops the listener, so an accept aborted by that stop is told apart from a failure by `IsRunning`, never by the
+  token.
+- The rest of this change is behaviour-preserving triage of the 22 CodeQL alerts open under
+  `src/Verbara.Sdk.Ari`: every swallowed exception now says in a comment what it absorbs, two hand-written
+  disposes became `using` statements, and two nested conditions were merged. 20 of the 22 close. The two
+  `catch (IOException) { }` blocks in `AudioSocketSession` are deliberately left open with a written finding
+  rather than dismissed.
+- No public API change here either: the backoff bounds, the accept seam and the `TimeProvider` constructor the
+  wait runs on are all `internal`.
+
 ## [2.5.3] - 2026-09-13
 
 ### Fixed — BREAKING: `VoiceAiPipeline` counted a synthesizer's own cancellation as a completed synthesis

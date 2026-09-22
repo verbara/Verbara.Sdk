@@ -87,66 +87,94 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
                 _ = HandleConnectionAsync(client, ct);
             }
         }
-        catch (OperationCanceledException) { }
-        catch (ObjectDisposedException) { }
+        catch (OperationCanceledException)
+        {
+            // The stop path. `ct` is `_cts.Token`, cancelled by `StopAsync` and so by `DisposeAsync`,
+            // and the pending accept ended with it. Nothing is meant to be accepted after that, so the
+            // loop being over is the whole of what this catch absorbs.
+            /* Best effort — the server is stopping */
+        }
+        catch (ObjectDisposedException)
+        {
+            // The Windows shape of that same stop: `Stop()` disposes the underlying socket under a
+            // pending accept and the accept surfaces the disposal. NOT reached on Linux, and measured
+            // rather than assumed — a probe reproducing `StopAsync`'s `Stop()`-then-`CancelAsync()`
+            // ordering on a real loopback listener raised the `OperationCanceledException` above on 3
+            // of 10 runs and `SocketException(OperationAborted)` on the other 7, and this type not
+            // once. So the block is live on Windows, not dead code. The `SocketException` arm reaches
+            // no catch in this method: the loop task faults, and the `SuppressThrowing` await in
+            // `StopAsync` absorbs it, which ends the loop by the same door.
+            /* Best effort — the server is stopping */
+        }
     }
 
     private async Task HandleConnectionAsync(TcpClient client, CancellationToken ct)
     {
-        var session = new AudioSocketSession(client.GetStream(), _options.DefaultFormat);
-        session.Start();
-
-        try
+        using (client)
         {
-            // Wait for UUID frame to set ChannelId
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeoutCts.CancelAfter(_options.IdleTimeout);
+            await using var session = new AudioSocketSession(client.GetStream(), _options.DefaultFormat);
+            session.Start();
 
-            // Poll for ChannelId to be set (set by ReadPump when UUID frame arrives)
-            while (string.IsNullOrEmpty(session.ChannelId) && !timeoutCts.Token.IsCancellationRequested)
+            try
             {
-                await Task.Delay(10, timeoutCts.Token);
-            }
+                // Wait for UUID frame to set ChannelId
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(_options.IdleTimeout);
 
-            if (string.IsNullOrEmpty(session.ChannelId))
-            {
-#pragma warning disable IDISP016 // False positive — session was just created, this is the first dispose
-                await session.DisposeAsync();
-#pragma warning restore IDISP016
-                client.Dispose();
-                return;
-            }
+                // Poll for ChannelId to be set (set by ReadPump when UUID frame arrives)
+                while (string.IsNullOrEmpty(session.ChannelId) && !timeoutCts.Token.IsCancellationRequested)
+                {
+                    await Task.Delay(10, timeoutCts.Token);
+                }
 
-            var endpoint = client.Client.RemoteEndPoint?.ToString();
-            AudioSocketServerLog.ConnectionAccepted(_logger, endpoint, session.ChannelId);
+                if (string.IsNullOrEmpty(session.ChannelId))
+                    return;
 
-            _streams.TryAdd(session.ChannelId, session);
-            _streamSubject.OnNext(session);
+                var endpoint = client.Client.RemoteEndPoint?.ToString();
+                AudioSocketServerLog.ConnectionAccepted(_logger, endpoint, session.ChannelId);
 
-            // Wait for session to disconnect
-            var tcs = new TaskCompletionSource();
-            using var sub = session.StateChanges.Subscribe(state =>
-            {
-                if (state is AudioStreamState.Disconnected or AudioStreamState.Error)
+                _streams.TryAdd(session.ChannelId, session);
+                _streamSubject.OnNext(session);
+
+                // Wait for session to disconnect
+                var tcs = new TaskCompletionSource();
+                using var sub = session.StateChanges.Subscribe(state =>
+                {
+                    if (state is AudioStreamState.Disconnected or AudioStreamState.Error)
+                        tcs.TrySetResult();
+                });
+
+                // If already disconnected
+                if (!session.IsConnected)
                     tcs.TrySetResult();
-            });
 
-            // If already disconnected
-            if (!session.IsConnected)
-                tcs.TrySetResult();
-
-            await tcs.Task.WaitAsync(ct);
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception ex)
-        {
-            AudioSocketServerLog.ConnectionError(_logger, ex);
-        }
-        finally
-        {
-            _streams.TryRemove(session.ChannelId, out _);
-            await session.DisposeAsync();
-            client.Dispose();
+                await tcs.Task.WaitAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // Two endings share this catch, and both are this one connection being wound up
+                // rather than anything the server needs to report. The first is the stop token:
+                // `ct` is `_cts.Token`, cancelled by `StopAsync` and `DisposeAsync`, and it is what
+                // ends `await tcs.Task.WaitAsync(ct)`, the wait for the session to disconnect. The
+                // second is the idle deadline this method schedules itself at the top of the `try`,
+                // `timeoutCts.CancelAfter(_options.IdleTimeout)`: a connection that never sends its
+                // UUID frame is abandoned when it expires, and the in-flight
+                // `Task.Delay(10, timeoutCts.Token)` is what raises it. That deadline's other route
+                // out — expiring between two delays, so the `while` condition simply goes false —
+                // already returns silently a few lines below, so neither of its routes is reported
+                // and this catch adds no silence of its own. The `finally` deregisters the session
+                // on every path, and the enclosing `await using` and `using (client)` release it
+                // and then close the connection.
+                /* Best effort — the connection is being wound up */
+            }
+            catch (Exception ex)
+            {
+                AudioSocketServerLog.ConnectionError(_logger, ex);
+            }
+            finally
+            {
+                _streams.TryRemove(session.ChannelId, out _);
+            }
         }
     }
 
