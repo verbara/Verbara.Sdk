@@ -633,7 +633,7 @@ public sealed class AriOutboundListenerTests
         // accept's; everything past the seam is a real socket failing for real.
         using var pair = new TcpListener(IPAddress.Loopback, 0);
         pair.Start();
-        var peer = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        using var peer = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         await peer.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)pair.LocalEndpoint).Port);
         using var accepted = await pair.AcceptTcpClientAsync();
 
@@ -641,6 +641,12 @@ public sealed class AriOutboundListenerTests
         // TcpClient.Dispose shuts the socket down before it closes it, which puts a FIN on the wire
         // and produces the graceful ending this test is NOT about. Socket.Dispose closes without
         // that shutdown, so the linger-zero option is honoured and the peer aborts.
+        //
+        // The explicit Dispose below is the ACT — it is what puts the RST on the wire, once
+        // LingerState is set. The `using` above is only the throw guard: it covers the paths where
+        // ConnectAsync or AcceptTcpClientAsync raise before that line is reached, which otherwise
+        // leak the socket (cs/dispose-not-called-on-throw). Socket.Dispose is idempotent, so the
+        // second release at scope exit is a no-op and the abort semantics are unchanged.
         peer.LingerState = new LingerOption(enable: true, seconds: 0);
         peer.Dispose();
 
