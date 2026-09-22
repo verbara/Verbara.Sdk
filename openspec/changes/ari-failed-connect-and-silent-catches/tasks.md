@@ -1719,6 +1719,113 @@ finding for the owner with its alert left open. Silencing is not the goal.
       The two-sided band matters here and passed on the low side with room: 83.9% against a floor of
       83.0%. A change that had added code without tests would have pushed it under.
 
+      **Re-run after the last two commits: the patch-coverage gate failed, and closing it took six
+      tests.** The figure above (100%, 6/6 changed lines) predates `1b8781ee` and `be6433ca`. On PR
+      #291 the `Coverage Ratchet` job reported **81.0% (102/125 changed lines, floor 85.0%)**, and
+      the same measurement locally reported **83.0% (104/125)**. Both are under the floor.
+
+      **Why 125 changed lines and not 6.** Section 5 converted both `HandleConnectionAsync` methods
+      to `using (client)`, which re-indented every line of both method bodies. `diff-cover` reads a
+      re-indented line as a changed line, so the whole of both methods entered the patch — including
+      `catch` arms that are not new code and that had never had a test. The gate is right to count
+      them: that is precisely how a restructuring smuggles untested code past review. So the 21
+      uncovered lines were treated as what they are — error paths with no test — and the floor,
+      `coverage-exclusion-baseline.json` and `[ExcludeFromCodeCoverage]` were all left alone.
+
+      **Six tests added, all under `<repo>/Tests/Verbara.Sdk.Ari.Tests/`.** In
+      `Outbound/AriOutboundListenerTests.cs`:
+      - `HandleConnectionAsync_ShouldReportItOnce_WhenTheConnectionDiesUnderTheHandshake` — a real
+        loopback peer aborts with a linger-zero close, so the handshake read meets an RST and fails
+        with `IOException`. Pins one `ConnectionError` at Error and no `AcceptLoopFailed`. Covers the
+        `catch (IOException)` arm.
+      - `HandleConnectionAsync_ShouldReportItAndKeepListening_WhenAnObserverOfAcceptedConnectionsThrows`
+        — a consumer's `OnConnectionAccepted` subscription throws on the first connection only; the
+        second connection is the evidence the listener survived. Covers the `catch (Exception)` arm.
+      - `HandleConnectionAsync_ShouldCloseItSilently_WhenTheListenerStopsMidHandshake` — the stop
+        lands while a connection is still handshaking; the peer's read returning 0 is the causal
+        wait. Covers the `catch (OperationCanceledException)` arm, which other tests had been
+        reaching only incidentally and not on every run.
+      - `PublicConstructor_ShouldBindAndAccept_WhenGivenOnlyOptionsAndALogger` — the two-argument
+        constructor consumers resolve from DI. Every other test in the file reaches past it for the
+        internal three-argument overload, so the delegation to `TimeProvider.System` was exercised by
+        nothing.
+
+      In `Audio/AudioSocketServerTests.cs` (which gained a `CapturingLogger`, and a `logger:`
+      parameter on its `CreateServer` helper):
+      - `HandleConnection_ShouldReportIt_WhenAnObserverOfNewStreamsThrows` — a consumer's
+        `OnStreamConnected` subscription throws. Covers the `catch (Exception)` arm and pins that the
+        `finally` still deregisters the session.
+      - `HandleConnection_ShouldWindUpAtOnce_WhenThePeerHangsUpAsSoonAsItIdentifies` — a peer that
+        sends its UUID frame and half-closes in the same breath, with the idle deadline set to 30 s
+        so a handler that needed the deadline would blow the 10 s wait.
+
+      No test uses `Task.Delay` or `Thread.Sleep`: every wait is either the existing `WaitForAsync`
+      loop driver or a causal signal — a read returning 0 once the server released the connection, or
+      a `TaskCompletionSource` completed by the accept seam. `sync-fence-baseline.json` is unchanged.
+
+      | figure | before | after |
+      |---|---|---|
+      | patch coverage (local) | **83.0%** — 104/125 | **92.0%** — 115/125, floor 85.0% |
+      | patch coverage (CI, PR #291) | **81.0%** — 102/125 | not yet re-run |
+      | unit lane | Failed: 0, Passed: 3603 | **Failed: 0, Passed: 3609**, 30 assemblies |
+      | build | 0 Warning(s), 0 Error(s) | **0 Warning(s), 0 Error(s)** |
+      | line coverage | 83.9% | **84.01%**, band `[83.0, 86.0]` |
+      | branch coverage | 68.46% | **68.41%**, floor 64.0% |
+      | `Verbara.Sdk.Governance.Tests` | 129 / 129 | **129 / 129** |
+      | coverage-exclusion markers | 0, baseline 0 | **0**, baseline 0, 865 files |
+      | `tools/audit-test-asserts.sh` | 0 violations | **0 violations**, 445 files, ~2944 facts |
+
+      `diff-cover` missing lines, before → after:
+      - `Outbound/AriOutboundListener.cs` 82.4% → **92.6%**: `78, 80, 145, 304, 306-308, 310-312,
+        314-315` → `145, 214, 304, 306-307`
+      - `Audio/AudioSocketServer.cs` 78.8% → **90.9%**: `97, 108, 131, 149, 170, 172-173` →
+        `97, 108, 131`
+      - `Audio/WebSocketAudioServer.cs` 66.7% → **66.7%**: `108, 119` → `108, 119`
+      - `Audio/AudioSocketSession.cs` and `Client/AriClient.cs`: 100% before and after
+
+      **What was left uncovered, and why — none of it faked.**
+      - `AudioSocketServer.cs:97,108` and `WebSocketAudioServer.cs:108,119` are the
+        `catch (ObjectDisposedException)` teardown arms. Task 4.2 already measured that this is the
+        **Windows** shape of a stop and is not reached on Linux — a 10-run probe against a real
+        loopback listener produced `SocketException(OperationAborted)` 7 times,
+        `OperationCanceledException` 3 times and this type zero times. Reaching them from a Linux test
+        would mean calling `Dispose()` by hand, which proves nothing about the path the catch exists
+        for.
+      - `AriOutboundListener.cs:145` is `catch (SocketException)` around `_listener?.Stop()` in
+        `StopAsync`. `StopAsync` is guarded by an `Interlocked.Exchange` so it runs its body once, and
+        `TcpListener.Stop()` on an already-stopped listener does not throw. No honest route in.
+      - `AudioSocketServer.cs:131` is the `return;` taken when the UUID frame never arrived. The idle
+        deadline's normal route out is `Task.Delay(10, timeoutCts.Token)` raising
+        `OperationCanceledException`, which lands in the `catch` below; line 131 is reached only if
+        the deadline fires in the gap between a delay completing and the `while` condition being
+        re-read. That is a race, not a behaviour, and a test that won it would win it by luck.
+      - `AriOutboundListener.cs:304,306-307` is `catch (WebSocketException)` in
+        `HandleConnectionAsync`, and it appears **unreachable by construction** rather than merely
+        untested: `ReadPumpAsync` has its own `catch (WebSocketException)`, its `finally`'s
+        `DisposeAsync` swallows that type inside `AriOutboundConnection.DisconnectAsync`, the three
+        handshake helpers are on a `NetworkStream` and raise `IOException`, and
+        `WebSocket.CreateFromStream` does not raise it. The only way in is a consumer throwing that
+        exact type from an `OnConnectionAccepted` subscription, which would be a test faking its way
+        into the arm. Left uncovered and recorded rather than staged.
+
+      **Two things the re-run found that are not coverage.** Neither was fixed here; both are
+      reported for a ruling.
+      1. `AriOutboundListener.HandleConnectionAsync` adds the connection to `_connections` and logs
+         `ConnectionAccepted` **before** `_connectionSubject.OnNext(connection)`. When a consumer's
+         subscription throws, the `catch (Exception)` arm logs and the `using (client)` closes the
+         socket, but the entry stays in `_connections` and the `AriOutboundConnection` is never
+         disposed — `ActiveConnectionCount` then reports a connection that is already closed, until
+         `StopAsync` sweeps it. The sibling `WebSocketAudioServer` does not have this: its own
+         subscriber-throws test asserts the session is removed and disposed. The new test asserts
+         only the log and the listener's survival, so it does not bless the leak.
+      2. Two of the changed lines are covered only on some runs, which is what the 2-line gap between
+         CI's 102/125 and the local 104/125 is: `:296,303` (the handler's `OperationCanceledException`
+         arm) was uncovered on one local run and covered on another, and `:214` (the
+         `catch (SocketException) when (!IsRunning)` break) flipped the other way on the final run.
+         Both are the Linux stop racing between its two shapes — the same 7/3 split 4.2 measured. The
+         handler arm now has a deterministic test of its own; `:214` still does not, and it is the
+         reason the margin was taken to 92.0% rather than to just over the floor.
+
 - [x] 8.3 The new `AriClientStateTests` cases pass 20 runs in a row. They open loopback sockets, so
       record the per-run time as well as the pass count.
 
@@ -1841,7 +1948,28 @@ finding for the owner with its alert left open. Silencing is not the goal.
            one descriptor per iteration and the loop continues, where before it exited after one. Same
            defect class section 5 just fixed one level down.
 
-      10. **The written release-tier rule has been contradicted twice and followed once — record what
+      11. **A connection whose observer throws stays in `_connections` after its socket closes.**
+          `AriOutboundListener.HandleConnectionAsync` does `_connections.TryAdd` and logs
+          `ConnectionAccepted` **before** `_connectionSubject.OnNext`. If a subscriber throws, the
+          `catch (Exception)` arm logs it and `using (client)` closes the socket — but the entry stays
+          in `_connections` and its `AriOutboundConnection` is never disposed, so
+          `ActiveConnectionCount` reports a connection that is already closed until `StopAsync` sweeps
+          it. The sibling `WebSocketAudioServer` does **not** have this hole and has a committed test
+          asserting removal *and* disposal
+          (`HandleConnectionAsync_ShouldRemoveAndDisposeSession_WhenStreamConnectedSubscriberThrows`).
+          Found while covering that catch arm for the patch-coverage gate; pre-existing, not introduced
+          here. The test added for coverage deliberately asserts only the log and the listener's
+          survival, so it does not bless the leak.
+
+      12. **`AriOutboundListener.HandleConnectionAsync`'s `catch (WebSocketException)` looks
+          unreachable by construction**, not merely untested: `ReadPumpAsync` carries its own
+          `catch (WebSocketException)`; its `finally`'s `DisposeAsync` swallows that type inside
+          `AriOutboundConnection.DisconnectAsync`; the three handshake helpers run on a `NetworkStream`
+          and raise `IOException`; and `WebSocket.CreateFromStream` does not raise it. The only route in
+          is a consumer throwing that exact type from a subscription. Pre-existing defensive
+          duplication — worth deleting or proving, but not in a change about accept failures.
+
+            10. **The written release-tier rule has been contradicted twice and followed once — record what
           the history actually does.** ADR-0050 and ADR-0052 F4 both say a behavioural break takes a
           minor. But `2.5.2` and `2.5.3`, both 2026-09-13 and both *after* those ADRs, shipped
           `Fixed — BREAKING` entries as **patches** — one of them `AmiConnection.ConnectAsync`

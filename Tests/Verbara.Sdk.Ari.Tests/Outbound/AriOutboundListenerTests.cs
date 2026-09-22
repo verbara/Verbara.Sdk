@@ -619,6 +619,222 @@ public sealed class AriOutboundListenerTests
             "the stop ran to the end rather than being left behind by a loop still waiting");
     }
 
+    // ------------------------------------------------ a connection that fails after it was accepted
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldReportItOnce_WhenTheConnectionDiesUnderTheHandshake()
+    {
+        // Arrange — a real loopback connection whose peer aborts it with a linger-zero close, which
+        // puts an RST on the wire instead of a FIN. The FIN ending already has a test of its own: a
+        // read of zero bytes is a malformed upgrade, refused with a warning and no response. An RST is
+        // the other ending, and the one this test exists for — the connection did not end, it died,
+        // and the listener's own read of the upgrade request is what discovers it. The accept seam
+        // hands the dead connection over so the failure is the handshake read's and never the
+        // accept's; everything past the seam is a real socket failing for real.
+        using var pair = new TcpListener(IPAddress.Loopback, 0);
+        pair.Start();
+        var peer = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        await peer.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)pair.LocalEndpoint).Port);
+        using var accepted = await pair.AcceptTcpClientAsync();
+
+        // A raw Socket rather than a TcpClient, and the reason is the whole point of the test:
+        // TcpClient.Dispose shuts the socket down before it closes it, which puts a FIN on the wire
+        // and produces the graceful ending this test is NOT about. Socket.Dispose closes without
+        // that shutdown, so the linger-zero option is honoured and the peer aborts.
+        peer.LingerState = new LingerOption(enable: true, seconds: 0);
+        peer.Dispose();
+
+        var logger = new CapturingLogger();
+        var (listener, _) = CreateListener(logger: logger);
+        var attempts = 0;
+        listener.AcceptOverride = token => Interlocked.Increment(ref attempts) == 1
+            ? ValueTask.FromResult(accepted)
+            : ParkUntilCancelledAsync(token);
+
+        await listener.StartAsync();
+        try
+        {
+            // Act — the handler reads the upgrade request that is never coming and meets the reset
+            (await WaitForAsync(
+                    () => logger.Entries.Any(entry => entry.EventName == "ConnectionError"),
+                    SignalTimeout))
+                .Should().BeTrue(
+                    "a connection that dies mid-handshake is reported rather than lost — all the " +
+                    "listener logged was [{0}]",
+                    string.Join(", ", logger.Entries.Select(e => e.EventName)));
+
+            // Assert
+            logger.Entries.Should().ContainSingle(
+                entry => entry.Level == LogLevel.Error
+                    && entry.EventName == "ConnectionError"
+                    && entry.ExceptionType == nameof(IOException),
+                "the transport failing under a connection is that connection's ending, so it is " +
+                "logged exactly once, at Error, as a connection error");
+            logger.Entries.Should().NotContain(
+                entry => entry.EventName == "AcceptLoopFailed",
+                "the connection failed, not the accept — reporting it as an accept failure would " +
+                "point at the listener when the fault is one peer's");
+            listener.IsRunning.Should().BeTrue(
+                "one connection dying is not the listener dying");
+            listener.ActiveConnectionCount.Should().Be(
+                0,
+                "a connection that never reached the upgrade response is never tracked");
+        }
+        finally
+        {
+            await listener.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldReportItAndKeepListening_WhenAnObserverOfAcceptedConnectionsThrows()
+    {
+        // Arrange — OnConnectionAccepted is published from inside the handler, synchronously, so a
+        // consumer's subscription throwing is an exception the handler is left holding. It throws on
+        // the first connection only, which makes what happens to the SECOND one the evidence: a
+        // listener that survived a consumer's fault still accepts, and one that did not, does not.
+        var logger = new CapturingLogger();
+        var (listener, _) = CreateListener(logger: logger);
+        var observed = 0;
+        using var sub = listener.OnConnectionAccepted.Subscribe(_ =>
+        {
+            if (Interlocked.Increment(ref observed) == 1)
+                throw new InvalidOperationException("the consumer's handler failed");
+        });
+
+        await listener.StartAsync();
+        try
+        {
+            // Act
+            using var first = await ConnectClientAsync(listener.BoundPort, app: "first");
+
+            (await WaitForAsync(
+                    () => logger.Entries.Any(entry => entry.EventName == "ConnectionError"),
+                    SignalTimeout))
+                .Should().BeTrue("the observer's failure reached the handler and was reported");
+
+            // Assert
+            logger.Entries.Should().ContainSingle(
+                entry => entry.Level == LogLevel.Error
+                    && entry.EventName == "ConnectionError"
+                    && entry.ExceptionType == nameof(InvalidOperationException),
+                "a failure that is neither the stop nor the transport is still the loss of that " +
+                "connection, so it is logged at Error instead of escaping into the unobserved " +
+                "Task.Run the accept loop started the handler in");
+
+            using var second = await ConnectClientAsync(listener.BoundPort, app: "second");
+
+            (await WaitForAsync(() => listener.GetByApplication("second").Any(), SignalTimeout))
+                .Should().BeTrue(
+                    "one observer throwing costs the connection it threw on and nothing else — the " +
+                    "listener is still accepting");
+            listener.IsRunning.Should().BeTrue();
+        }
+        finally
+        {
+            await listener.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldCloseItSilently_WhenTheListenerStopsMidHandshake()
+    {
+        // Arrange — a real loopback connection, handed over by the accept seam, whose peer sends
+        // nothing. The handler is therefore parked inside the upgrade-request read, on the stop
+        // token, when the stop lands; and if the stop lands before the handler even gets there, the
+        // first read under an already-cancelled token ends the same way. Both orderings reach the
+        // same arm, so this test has no race to lose — which is the point, because the arm was
+        // reached only incidentally by other tests before it, and not on every run.
+        using var pair = new TcpListener(IPAddress.Loopback, 0);
+        pair.Start();
+        using var peer = new TcpClient();
+        await peer.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)pair.LocalEndpoint).Port);
+        using var accepted = await pair.AcceptTcpClientAsync();
+
+        var logger = new CapturingLogger();
+        var (listener, _) = CreateListener(logger: logger);
+        var attempts = 0;
+        var handedOver = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        listener.AcceptOverride = token =>
+        {
+            if (Interlocked.Increment(ref attempts) > 1)
+                return ParkUntilCancelledAsync(token);
+
+            handedOver.TrySetResult();
+            return ValueTask.FromResult(accepted);
+        };
+
+        await listener.StartAsync();
+        try
+        {
+            // The hand-off is awaited rather than assumed: StartAsync only queues the accept loop, so
+            // a stop issued before that loop's first iteration would cancel it while it was still a
+            // queued work item, and nothing would ever be handed to a handler. Measured — without
+            // this wait the test fails under a loaded run roughly half the time, on the connection
+            // never being served at all rather than on anything it asserts.
+            await handedOver.Task.WaitAsync(SignalTimeout);
+
+            // Act
+            await listener.StopAsync().AsTask().WaitAsync(SignalTimeout);
+
+            // Assert — the peer's read returns 0 only once the handler has released its end, so the
+            // wait is on that release and not on a clock. The release is the `using (client)` block.
+            var buffer = new byte[1];
+            var read = await peer.GetStream().ReadAsync(buffer).AsTask().WaitAsync(SignalTimeout);
+
+            read.Should().Be(
+                0,
+                "a connection the listener was still handshaking is closed by the stop rather than " +
+                "left open on a listener that no longer accepts");
+            logger.Entries.Should().NotContain(
+                entry => entry.EventName == "ConnectionError",
+                "a handshake cut short by the listener stopping is the stop, not a connection " +
+                "error, so it is swallowed rather than reported");
+            logger.Entries.Should().Contain(
+                entry => entry.EventName == "ListenerStopped",
+                "the stop ran to the end");
+            listener.IsRunning.Should().BeFalse();
+        }
+        finally
+        {
+            await listener.DisposeAsync();
+        }
+    }
+
+    // ------------------------------------------------------- the constructor consumers actually use
+
+    [Fact]
+    public async Task PublicConstructor_ShouldBindAndAccept_WhenGivenOnlyOptionsAndALogger()
+    {
+        // The two-argument constructor is the one a consumer resolves from DI; every other test in
+        // this file reaches past it for the internal three-argument overload that takes a clock. So
+        // until this test nothing exercised the delegation, and nothing said that a listener built
+        // the way consumers build it binds and accepts at all. A real handshake is the assertion
+        // because completing one is the whole of what the delegated construction has to produce.
+        var options = new AriOutboundListenerOptions
+        {
+            ListenAddress = "127.0.0.1",
+            Port = 0, // ephemeral
+            Path = "/ari/events",
+            ConnectionIdleTimeout = TimeSpan.FromSeconds(30)
+        };
+
+        await using var listener = new AriOutboundListener(
+            Options.Create(options),
+            NullLogger<AriOutboundListener>.Instance);
+
+        await listener.StartAsync();
+
+        using var client = await ConnectClientAsync(listener.BoundPort);
+
+        client.State.Should().Be(
+            WebSocketState.Open,
+            "the delegated construction produced a listener that completes the upgrade");
+        (await WaitForAsync(() => listener.ActiveConnectionCount == 1, SignalTimeout))
+            .Should().BeTrue("and one that tracks what it accepted");
+        listener.IsRunning.Should().BeTrue();
+    }
+
     // ------------------------------------------------------------------------------------ helpers
 
     /// <summary>
