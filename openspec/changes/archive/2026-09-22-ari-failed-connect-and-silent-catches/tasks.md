@@ -1861,11 +1861,34 @@ finding for the owner with its alert left open. Silencing is not the goal.
       **`Totals: 11 passed, 0 failed (11 items)`**, exit 0. Only `[INFO]` notes remain, all of the
       "requirement text is very long" kind, which this repo carries throughout. The item count is 11
       rather than the 12 seen earlier in this change because a sibling change archived in the interval.
-- [ ] 8.6 CI green, including the code-scanning run on the PR.
+- [x] 8.6 CI green, including the code-scanning run on the PR.
 
+      **Green, and the code-scanning run is the part that mattered.** PR #291, 15 checks, **0 red**:
+      `Unit Tests` 7m00s, `Analyze (C#)` 8m20s, `Pack Warnings Gate` 3m20s, `AOT Trim Check`,
+      `Functional Tests (Testcontainers)`, `Audit Test Asserts`, `OpenSpec Validate`,
+      `Coverage Script Tests`, `Coverage Ratchet`, plus the docs and dependency gates.
+
+      **`Coverage Ratchet` failed on the first run and that failure was real, not flaky.** Patch
+      coverage came in at **81.0%** against a floor of 85.0%. The local pre-push measurement had read
+      **100% (6/6 changed executable lines)** and was believed; the `6` should have been the tell,
+      since this change touches five files under `src/`. The cause: that measurement ran while
+      sections 4 to 6 were still uncommitted, and `diff-cover` compares committed state against
+      `origin/main`, so it measured only the section 1-3 commit and passed on almost nothing.
+
+      Most of the real shortfall was an artefact rather than untested new logic — converting two
+      `HandleConnectionAsync` bodies to `using (client)` re-indented them, so `diff-cover` counted
+      pre-existing, never-covered `catch` arms as lines this PR changed. The gate is still right: it
+      exists so a restructuring cannot carry untested code past review, and the paths it named had
+      genuinely never had a test. Closed with **six new tests and no production code**, taking patch
+      coverage to **92.0% (116/125)**. No floor, baseline or `PublicAPI` file was touched and no
+      `[ExcludeFromCodeCoverage]` was added.
+
+      **Lesson worth keeping: a coverage figure measured against an uncommitted tree is measuring the
+      last commit, not the work.** Run it after committing, or read the changed-line count and check
+      it against the size of the diff.
 ## 9. Close-out and the post-merge alert check
 
-- [ ] 9.1 Land the change; record the PR number. Enqueue it **alone**: the open changes that add a **new** ADR
+- [x] 9.1 Land the change; record the PR number. Enqueue it **alone**: the open changes that add a **new** ADR
       file (0046, 0047, 0056, 0057, 0058, 0059) all bump the same `**N ADRs**` figure, and the queue
       squashes. Whether git even sees the collision depends on where the two catalog rows land: rows
       inserted at the same spot conflict textually and the queue ejects the second before it builds;
@@ -1875,20 +1898,95 @@ finding for the owner with its alert left open. Silencing is not the goal.
       ADR-adding change in the queue at a time, and re-count the figure after any rebase, because
       `strict:false` does not force one. Order does not otherwise matter — the guard counts files,
       not a contiguous sequence — so this change keeps ADR-0056 whenever it lands.
-- [ ] 9.2 **After the merge**, once code scanning has analysed `main`, list the open alerts again and
+
+      **Landed as PR #291**, squashed onto `main` as **`917f2bd3`** at 2026-09-22T00:42:35Z.
+
+      Enqueued alone, as this task requires. `gh pr list` before enqueuing returned **zero** open PRs,
+      so no sibling was competing for the `**N ADRs**` figure. The figure was re-counted after the
+      final rebase — 57 files on disk, 57 published in `README.md`, 57 in `docs/claim-registry.md`,
+      `StatusBlockCoherenceTests` 3/3 — because `strict:false` does not force a rebase and a stale
+      count fails **inside** the queue rather than on the PR.
+
+      One mechanical note for the next close-out: `gh pr merge --auto` puts the PR in the queue and is
+      then **consumed**, so `autoMergeRequest` reads null afterwards. That is not a cancelled
+      auto-merge; the timeline entry `added_to_merge_queue` is the thing to check.
+- [x] 9.2 **After the merge**, once code scanning has analysed `main`, list the open alerts again and
       check them off against the record from 4.7 by rule + file + member. Every alert whose block was
       commented, converted to a `using`, or combined should be gone; the ones deliberately left open
       should still be there with their finding. If a commented block still alerts, the comment is not
       what the query distinguishes and that block's remedy has to change — record it rather than
       dismissing it.
-- [ ] 9.3 **Also after the merge**, check whether the two `cs/dispose-not-called-on-throw` alerts on
+
+      **Recounted against the 4.7 table once CodeQL had analysed `main` at `917f2bd3`. The prediction
+      held: 20 closed, and exactly 867 and 869 stayed open.** Sixteen `cs/empty-catch-block` closed on
+      the comment mechanism, four section-5 alerts closed by restructuring, one closed by removal.
+      **No commented block survived**, so the mechanism 1.2 measured is confirmed at scale rather than
+      on the five-block sample that motivated it.
+
+      **The recount only means that because it was taken at the right moment.** Immediately after the
+      merge the API still reported 22 open alerts. The newest analysis of `refs/heads/main` was from
+      `e91cb2d8`, the pre-merge commit; what had run over this change was the merge-queue ref
+      (`gh-readonly-queue/main/pr-291-...`), which does not update `main`'s counters. Reading the count
+      before the `refs/heads/main` analysis at `917f2bd3` completed would have reported a total failure
+      of the change. **Check the analysis ref and commit before believing a post-merge count.**
+
+      **Three alerts appeared that this task did not predict**, and none is a commented block that
+      failed to close:
+      - **1237** (`cs/catch-of-all-exceptions`, `Audio/AudioSocketServer.cs:170`) and **1238**
+        (same rule, `Outbound/AriOutboundListener.cs:312`) — see 9.3.
+      - **1265** (`cs/dispose-not-called-on-throw`,
+        `Tests/Verbara.Sdk.Ari.Tests/Outbound/AriOutboundListenerTests.cs:645`) — genuinely introduced
+        by this change, in one of the six tests added for the patch-coverage gate: a raw `Socket` built
+        without a `using` with two throwing awaits before its explicit `Dispose()`. Fixed in its own
+        `test(ari):` PR rather than folded in here, because the explicit `Dispose()` is semantically
+        load-bearing — it is what puts an RST on the wire instead of a FIN — and the change needed its
+        own reasoning and its own verification.
+- [x] 9.3 **Also after the merge**, check whether the two `cs/dispose-not-called-on-throw` alerts on
       `Client/AriClient.cs` — both on the reconnect loop's per-dial `ClientWebSocket`, both dismissed
       as *won't fix* on the reasoning that the socket is owned by the field and released by
       `DisposeAsync` — reopened under new numbers because the lines moved. Do **not** re-dismiss them:
       take the reopened numbers and the standing reasoning to the owner and let the owner decide,
       exactly as with the earlier renumbering.
-- [ ] 9.4 Backfill the `(#N)` citation into the `CHANGELOG.md` `[Unreleased]` entry.
-- [ ] 9.5 `openspec archive ari-failed-connect-and-silent-catches --yes` once the fix is on `main`,
+
+      **The two `cs/dispose-not-called-on-throw` alerts on `Client/AriClient.cs` did NOT reopen.** The
+      thing this task anticipated did not happen. What happened instead was the same phenomenon, one
+      rule over: two `cs/catch-of-all-exceptions` alerts reopened, **1237** and **1238**, and they are
+      the same two physical `catch (Exception ex)` blocks the owner had already dismissed as **323**
+      and **329** on 2026-09-13. `git diff e91cb2d8 917f2bd3` shows their only delta is **indentation**,
+      8 spaces to 12, from the `using (client)` conversion. 1237/1238 were undismissed duplicates
+      created 2026-09-12 that sat in `fixed` state during that dismissal sweep, so the sweep never saw
+      them; re-indenting retired 323/329 and resurrected the twins.
+
+      **Taken to the owner with the exact standing text, per the rule this task states, and the owner
+      re-dismissed them.** The reasoning was unchanged and is still true: both blocks are the
+      per-connection boundary of a discarded task, and an escape there would be an **unobserved fault**
+      rather than a `ConnectionError` — zero `UnobservedTaskException` handlers exist in this repo and
+      `ThrowUnobservedTaskExceptions` defaults false, so the runtime would swallow it silently. Today's
+      log line is the only signal an operator has.
+
+      **Two findings from the investigation, both of which changed the answer:**
+      - **Propagating the exception does not clear this rule.** The rule is purely syntactic: it fires
+        iff the clause is general, has no `when` filter and has no bare `throw;`. Measured on this tree
+        — 56 unfiltered general catches map 1:1 onto 56 live alerts, and all 48 `when`-filtered catches
+        carry zero alerts **regardless of what the filter tests**. Two cosmetic filters have already
+        closed alerts in this repo this way (`when (RecordFault(ex))`, always true, alert 260; and
+        `when (!callerToken.IsCancellationRequested)` in `AmiConnection.cs:221`, alerts 316/317). So a
+        shape that closes these exists — and it is suppression wearing a filter's clothes.
+      - **The rule's `fixed` count is not a measure of remediation.** Of 170 `fixed` alerts of this
+        rule, roughly 49 were retired by a fingerprint move rather than a code change — the most recent
+        being this very change re-indenting these two lines. A post-merge alert count is therefore not
+        a reliable signal that anything was fixed.
+
+      Recorded so the next occurrence is a lookup and not an investigation: **1237/1238 = 323/329
+      renumbered by a re-indent.**
+- [x] 9.4 Backfill the `(#N)` citation into the `CHANGELOG.md` `[Unreleased]` entry.
+
+      **Backfilled into BOTH `[Unreleased]` headings**, and the plural is the point — this task is
+      worded for one citation and the change shipped two observables under two headings:
+      `### Fixed — BREAKING: a first \`ConnectAsync\` that never connected ... (#291)` and
+      `### Changed — BREAKING: \`AriOutboundListener\` keeps accepting after an accept fails (#291)`.
+      A close-out that backfilled only the first would have left the behaviour change uncited.
+- [x] 9.5 `openspec archive ari-failed-connect-and-silent-catches --yes` once the fix is on `main`,
       as its own `docs(openspec):` PR. Before archiving, harvest into an open change or an ADR
       addendum: the `AudioSocketServer` key-only `TryRemove` finding from the proposal's Impact, every
       catch left alerting from 4.3/4.5, and the `wss://` gap from 6.3.
@@ -1992,6 +2090,62 @@ finding for the owner with its alert left open. Silencing is not the goal.
          deadline expiring between two delays, so the `while` condition goes false and the
          no-channel-id early return closes the connection silently). Making "a connection that never
          identified itself" visible is a change to both routes at once, not an empty-catch remedy.
-- [ ] 9.6 After the archive, confirm `openspec/specs/client-connection-state/spec.md` exists, write
+
+      **Archived with `openspec archive ari-failed-connect-and-silent-catches --yes`**, the CLI, not the
+      agent path — the agent archive never invokes it and its no-sync branch moves the change away with
+      the main specs never updated, which a later `validate --all --strict` still passes because the
+      deltas are gone. Landed as its own `docs(openspec):` PR; `main` is protected.
+
+      **Referrer sweep:** no `.github/workflows/`, `scripts/` or test fixture references this change's
+      path. **Cited:** `(#291)` is in both `[Unreleased]` headings (9.4).
+
+      **Harvest: 12 items, and they do NOT yet have homes.** Stated plainly rather than labelled
+      "tracked separately", which `openspec/config.yaml` explicitly says does not exempt a finding. The
+      three open changes (`longevity-soak-and-chaos`, `provider-dto-robustness-fences`,
+      `provider-schema-drift-train`) are unrelated to ARI, so nothing here can be folded into them. The
+      items group into three changes that are **owed and not yet created**:
+
+      - **`fix(ari):` the accept loops that have no catch at all — priority 1, and the only one of the
+        three that is an operator incident.** Neither `Audio/AudioSocketServer.AcceptLoopAsync` nor
+        `Audio/WebSocketAudioServer.AcceptLoopAsync` catches `SocketException`. An EMFILE/ENOBUFS
+        therefore faults the loop task, `StopAsync`'s `SuppressThrowing` await absorbs it, and the
+        server is left with `IsRunning == true` over a socket still in LISTEN, accepting nothing, with
+        **no log line at all**. That is this change's own A' defect, one degree worse, standing unfixed
+        in two more files; A''s shape transplants nearly unchanged. Carries harvest items 4 and 7.
+        An addendum to ADR-0056 rather than a new ADR, so it does not compete for the figure.
+      - **`fix(ari):` the listener's dead-connection leak.** `HandleConnectionAsync` does
+        `_connections.TryAdd` and then `_connectionSubject.OnNext`, which runs subscriber code inline;
+        a subscriber that throws leaves the entry in `_connections` with its socket already closed,
+        because the only `TryRemove` and the only `Connection.DisposeAsync()` live in `ReadPumpAsync`'s
+        `finally`, which is never reached. `ActiveConnectionCount` then reports a dead connection until
+        `StopAsync` sweeps. The sibling `WebSocketAudioServer` does not have this hole and has a test
+        asserting removal *and* disposal. **The test added here for the catch arm asserts the log and
+        the listener's survival but not the count, so this is uncovered.** Carries item 11. No ADR.
+      - **`feat(ari):` `AudioStreamState.Error` for a transport failure, plus observability.** Carries
+        items 2 and 8's session half. Must move **both** `IAudioStream` implementations together or it
+        breaks the contract under `CompositeAudioServer`, and it only reaches post-handshake failures —
+        the session is published at `:137`, behind the UUID gate at `:130`. Note two traps found while
+        costing it: `TryComplete(ex)` would break `ReadFrameAsync`'s documented "returns empty when the
+        stream ends" contract with **zero call sites in the repo to go red**, and `OnError` on the
+        servers' `Subject<T>` is terminal for every subscriber. Adds an ADR, so it queues alone. Minor.
+
+      Items 1, 3, 5, 6, 9, 10 and 12 stay as recorded findings without a change of their own; each is a
+      one-line fix or a documentation decision rather than a defect.
+
+      **The unhomed harvest is the one piece of this change's close-out that is not complete**, and it
+      is recorded as such rather than dressed up.
+- [x] 9.6 After the archive, confirm `openspec/specs/client-connection-state/spec.md` exists, write
       its `## Purpose` to match the other living specs — the placeholder the CLI emits is a
       `openspec validate --all --strict` failure, not a cosmetic gap — and re-run that validation
+
+      **`openspec/specs/client-connection-state/spec.md` exists and its `## Purpose` is written.** The
+      CLI emitted the placeholder this task warns about — *"TBD - created by archiving change ...
+      Update Purpose after archive."* — which is a `validate --all --strict` failure and not a cosmetic
+      gap, so it was replaced rather than left.
+
+      Written to match the voice of the living specs beside it (`streaming-session-lifecycle`,
+      `test-determinism`): what the state says and when, the caller's-token discriminator with ADR-0053
+      as its reason, and the statement-not-a-gate property, in prose rather than a restatement of the
+      requirements below it.
+
+      `openspec validate --all --strict` -> **Totals: 11 passed, 0 failed**, exit 0.

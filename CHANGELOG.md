@@ -76,7 +76,7 @@ releasing, behind an idempotency gate.
 - No public API change: the service is `internal sealed` and `SetShutdownToken` is `internal`, so no
   `PublicAPI` surface moves and nothing downstream recompiles.
 
-### Fixed — BREAKING: a first `ConnectAsync` that never connected left `AriClient` reporting `Connecting` for good
+### Fixed — BREAKING: a first `ConnectAsync` that never connected left `AriClient` reporting `Connecting` for good (#291)
 
 `AriClient.ConnectAsync` wrote `Connecting`, dialled the events socket, and wrote `Connected` on the next
 statement. A throw from that dial skips the next statement, so `Connecting` was the last state the instance ever
@@ -111,7 +111,7 @@ never from the exception (`Sdk/ADR-0056`).
 - No counter, gauge, activity or event changes, and no public API change — no new type, no new member, no
   changed signature, and `AriConnectionState` itself is untouched.
 
-### Changed — BREAKING: `AriOutboundListener` keeps accepting after an accept fails
+### Changed — BREAKING: `AriOutboundListener` keeps accepting after an accept fails (#291)
 
 `AcceptLoopAsync` wrapped its whole `while` in a `try` whose last clause was `catch (SocketException) { }`,
 outside the loop. One transient accept failure while the listener was meant to be running — `EMFILE`, `ENOBUFS`,
