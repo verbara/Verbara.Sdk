@@ -187,6 +187,15 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
             // A failure that persists fails every accept at once, and without a pause this loop would
             // spin and log without bound. The wait doubles with each consecutive failure up to the
             // cap, and a successful accept above starts it over.
+            //
+            // This await does a second job that is easy to miss, and removing the wait breaks it:
+            // StartAsync starts this loop by calling it, not through Task.Run, so the loop runs on the
+            // caller's thread until its first suspension point. In normal operation that is the accept
+            // itself, which yields at once. On the failure path this delay is the only one — without it
+            // a persistent failure spins INSIDE StartAsync instead of behind it, and StartAsync never
+            // returns. Measured: the mutation that deletes this wait pins a test host at 98% CPU rather
+            // than going red, which in CI reads as a job timeout instead of a failed test. If this wait
+            // is ever moved or removed, start the loop with Task.Run first.
             try
             {
                 await Task.Delay(backoff, _timeProvider, ct);
