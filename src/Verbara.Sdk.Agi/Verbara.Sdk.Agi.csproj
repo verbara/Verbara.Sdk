@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Verbara.Sdk.Agi.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Verbara.Sdk\Verbara.Sdk.csproj" />
     <ProjectReference Include="..\Verbara.Sdk.Ami\Verbara.Sdk.Ami.csproj" />
   </ItemGroup>

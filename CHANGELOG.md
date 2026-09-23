@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — the FastAGI accept loop survives a failure it can survive, instead of dying in silence
+
+`FastAgiServer.AcceptLoopAsync` put its `try` outside its `while` and caught exactly two types, both the
+stop path. `TcpListener.AcceptTcpClientAsync` wraps `Socket.AcceptAsync`, whose contract also carries
+`SocketException` — so an accept that failed while the server was still running faulted the loop task,
+which nothing awaits until `StopAsync`'s `SuppressThrowing` at shutdown. With no
+`UnobservedTaskException` handler anywhere and the runtime's default of discarding them, the server died
+with **no log line at all**.
+
+It was the quietest of the three, because it also misled. `AgiServerState.Faulted` is documented as
+"Listener faulted (address in use, fd exhaustion)", but the loop never wrote it — the only
+`SetState(Faulted)` is in `StartAsync` — so `AgiHealthCheck` went on reporting
+`Healthy("AGI server listening")` over a dead loop, on a socket still in LISTEN, while Asterisk
+connected and got nothing.
+
+The loop now classifies its endings the way ADR-0056 R6 requires. A stop still ends it. A failure the
+server can survive — EMFILE/ENFILE, ENOBUFS, a connection aborted in the backlog — is logged once at
+Error through a new `AcceptLoopFailed` event, and the server goes on accepting after a wait that doubles
+from 100 ms to a 5 s cap and returns to 100 ms on the next successful accept. The discriminator is the
+server's own `IsRunning`, never the loop's token: `StopAsync` writes `Stopping` as its first statement,
+before it aborts the pending accept, so the state cannot be late where the token can.
+
+- **The loop does not write `Faulted`, deliberately.** Under this change the listener is still bound and
+  still accepting, and `Faulted` would make `StartAsync` refuse to start over a loop that is still
+  working. So a *persistent* failure still reads `Healthy` through `AgiHealthCheck`: what an operator
+  gains here is the Error line, not a state transition. Turning a retrying server into `Degraded` is a
+  separate decision about what `AgiServerState` means.
+- The backoff also keeps `StartAsync` returning. This server starts its loop without `Task.Run`, so
+  without a yielding await on the failure path a persistent failure would spin inside `StartAsync`
+  rather than behind it — measured, as the mutation that removes the wait wedges a test host at 98%
+  CPU rather than going red.
+- No API change: the backoff constants, the `TimeProvider` seam and the accept seam are all `internal`.
+- The same defect remains in `Ari/Audio/AudioSocketServer` and `Ari/Audio/WebSocketAudioServer`. Both
+  set their running flag *after* awaiting the accept loop rather than before aborting it, so this
+  filter cannot be transplanted to them until that ordering is corrected. Tracked, not fixed here.
+
 ### Fixed — `AudioSocketServer` left a connection open when it was accepted in the moment the server stopped (#281)
 
 `AcceptLoopAsync` handed each accepted connection to its handler through `Task.Run(…, ct)`, gated on the server's

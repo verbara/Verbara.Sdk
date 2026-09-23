@@ -29,6 +29,9 @@ internal static partial class FastAgiServerLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[AGI] Connection error")]
     public static partial void ConnectionError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[AGI] Accept failed — the server stays bound and accepts again after a backoff")]
+    public static partial void AcceptLoopFailed(ILogger logger, Exception exception);
 }
 
 /// <summary>
@@ -37,8 +40,15 @@ internal static partial class FastAgiServerLog
 /// </summary>
 public sealed class FastAgiServer : IAgiServer
 {
+    /// <summary>The wait after the first of a run of failed accepts.</summary>
+    internal static readonly TimeSpan InitialAcceptBackoff = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>The longest wait between failed accepts, however long the run.</summary>
+    internal static readonly TimeSpan MaxAcceptBackoff = TimeSpan.FromSeconds(5);
+
     private readonly IMappingStrategy _mappingStrategy;
     private readonly ILogger<FastAgiServer> _logger;
+    private readonly TimeProvider _timeProvider;
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
@@ -54,11 +64,31 @@ public sealed class FastAgiServer : IAgiServer
     /// <summary>Maximum time allowed for a single AGI connection/script execution. Default: 5 minutes.</summary>
     public TimeSpan ConnectionTimeout { get; set; } = TimeSpan.FromMinutes(5);
 
+    /// <summary>
+    /// Replaces the server's accept when set. Settable by tests (via InternalsVisibleTo), so a test
+    /// can make accepts fail on demand instead of exhausting file descriptors to get a failure.
+    /// </summary>
+    internal Func<CancellationToken, ValueTask<TcpClient>>? AcceptOverride { get; set; }
+
     public FastAgiServer(int port, IMappingStrategy mappingStrategy, ILogger<FastAgiServer> logger)
+        : this(port, mappingStrategy, logger, TimeProvider.System)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance whose accept backoff waits on <paramref name="timeProvider"/>, so a
+    /// test can drive that wait with a fake clock instead of sitting out a real one.
+    /// </summary>
+    internal FastAgiServer(
+        int port,
+        IMappingStrategy mappingStrategy,
+        ILogger<FastAgiServer> logger,
+        TimeProvider timeProvider)
     {
         Port = port;
         _mappingStrategy = mappingStrategy;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     public async ValueTask StartAsync(CancellationToken cancellationToken = default)
@@ -89,11 +119,13 @@ public sealed class FastAgiServer : IAgiServer
 
     private async Task AcceptLoopAsync(CancellationToken ct)
     {
-        try
+        var backoff = InitialAcceptBackoff;
+        while (!ct.IsCancellationRequested)
         {
-            while (!ct.IsCancellationRequested)
+            try
             {
-                var client = await _listener!.AcceptTcpClientAsync(ct);
+                var client = await AcceptAsync(ct);
+                backoff = InitialAcceptBackoff;
                 client.NoDelay = true;
 
                 var endpoint = client.Client.RemoteEndPoint?.ToString();
@@ -101,17 +133,65 @@ public sealed class FastAgiServer : IAgiServer
 
                 // Handle each connection concurrently
                 _ = HandleConnectionAsync(client, ct);
+                continue;
             }
-        }
-        catch (OperationCanceledException)
-        {
-            // Normal shutdown
-        }
-        catch (ObjectDisposedException)
-        {
-            // Listener stopped
+            catch (OperationCanceledException)
+            {
+                // Normal shutdown. `ct` is _cts.Token, cancelled by StopAsync (and so by
+                // DisposeAsync), and the pending accept ended with it. Nothing is meant to be
+                // accepted after that, so the loop ends rather than backing off.
+                break;
+            }
+            catch (ObjectDisposedException)
+            {
+                // Listener stopped — the Windows shape of that same stop: Stop() disposes the
+                // underlying socket under a pending accept and the accept surfaces the disposal.
+                // NOT reached on Linux, where Stop() on a pending accept raises
+                // SocketException(OperationAborted) and the filtered catch below takes it instead;
+                // this block is live on Windows, not dead code.
+                break;
+            }
+            catch (SocketException) when (!IsRunning)
+            {
+                // The Linux shape of the stop: StopAsync writes Stopping as its FIRST statement,
+                // before it calls _listener.Stop(), so an accept aborted by that Stop() always
+                // arrives with IsRunning (State == Listening, read through Volatile.Read) already
+                // false. IsRunning is the discriminator and not `ct`, because StopAsync cancels _cts
+                // only after Stop() returns — a filter on ct.IsCancellationRequested would race that
+                // ordering and report the stop as a failure.
+                break;
+            }
+            catch (SocketException ex)
+            {
+                // An accept that failed while the server is still meant to be running: EMFILE/ENFILE
+                // under a Native AOT process that never raised its descriptor limit, ENOBUFS, or a
+                // connection aborted in the backlog. Ending the loop here would leave IsRunning
+                // reporting true over a socket still in LISTEN, and AgiHealthCheck goes on reporting
+                // Healthy off that state — Asterisk would keep completing handshakes nobody ever
+                // reads. So it is reported at Error and the loop keeps accepting.
+                FastAgiServerLog.AcceptLoopFailed(_logger, ex);
+            }
+
+            // A failure that persists fails every accept at once, and without a pause this loop would
+            // spin and log without bound. The wait doubles with each consecutive failure up to the
+            // cap, and a successful accept above starts it over.
+            try
+            {
+                await Task.Delay(backoff, _timeProvider, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // Same stop path as above, caught while waiting out a backoff rather than while
+                // accepting: _cts was cancelled by StopAsync. The loop ends.
+                break;
+            }
+
+            backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, MaxAcceptBackoff.Ticks));
         }
     }
+
+    private ValueTask<TcpClient> AcceptAsync(CancellationToken ct) =>
+        AcceptOverride?.Invoke(ct) ?? _listener!.AcceptTcpClientAsync(ct);
 
     private async Task HandleConnectionAsync(TcpClient client, CancellationToken ct)
     {
