@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed — the FastAGI accept loop survives a failure it can survive, instead of dying in silence
+### Changed — the FastAGI accept loop survives a failure it can survive, instead of dying in silence (#298)
 
 `FastAgiServer.AcceptLoopAsync` put its `try` outside its `while` and caught exactly two types, both the
 stop path. `TcpListener.AcceptTcpClientAsync` wraps `Socket.AcceptAsync`, whose contract also carries

@@ -74,7 +74,7 @@
 
 ## Phase B — the fix, test first
 
-- [ ] B1 **Write the regression tests first, against the unfixed loop, and paste their verbatim
+- [x] B1 **Write the regression tests first, against the unfixed loop, and paste their verbatim
       failures here.** In `Tests/Verbara.Sdk.Agi.Tests/Server/FastAgiServerTests.cs`, following the
       shape of `Tests/Verbara.Sdk.Ari.Tests/Outbound/AriOutboundListenerTests.cs`:
       - `AcceptLoopAsync_ShouldReportItAndKeepAccepting_WhenAnAcceptFailsWhileRunning` — the accept
@@ -161,6 +161,46 @@
       **Passed: 3610, Failed: 1** across 34 assemblies, the one failure being the intended red test
       above (baseline was Passed: 3609, Failed: 0, so both new tests are accounted for).
       `tools/audit-test-asserts.sh` -> **Violations: 0**. `git diff --stat -- '*PublicAPI*'` -> empty.
+
+      **Delivered across B1 and B2, and left unticked until close-out on purpose.** B1 wrote two of the
+      three cases and **refused to write the third under its own scope** rather than weaken it:
+      `AcceptLoopAsync_ShouldBackOffFurther` asserts on the *wait the loop asks for*, and the only way
+      to observe a wait without spending it is `Task.Delay(backoff, _timeProvider, ct)` against an
+      injected `TimeProvider` — a seam listed under B2. The two weakenings available were both refused
+      and the refusal is the right call: asserting on elapsed wall time is forbidden by this repo's own
+      fence rule, and asserting only "it kept accepting" would have duplicated the first test while
+      pretending to cover the backoff. B2 added the seam and the test. All four now exist:
+      `AcceptLoopAsync_ShouldReportItAndKeepAccepting`, `AcceptLoopAsync_ShouldBackOffFurther`,
+      `AcceptLoopAsync_ShouldResetTheBackoff`, `StopAsync_ShouldEndTheLoopWithoutReportingAFailure`.
+
+      **Red against the unfixed loop**, verbatim — one accept, one throw, no retry, not one log line:
+
+      ```text
+      Verbara.Sdk.Agi.Tests.Server.FastAgiServerTests.AcceptLoopAsync_ShouldReportItAndKeepAccepting_WhenAnAcceptFailsWhileRunning [FAIL]
+        Expected keptAccepting to be True because an accept that failed while the server is still
+        running must not end the loop — after 1 attempt(s) all the server had logged was
+        [ServerStarted], but found False.
+          at <repo>/Tests/Verbara.Sdk.Agi.Tests/Server/FastAgiServerTests.cs(208,0)
+      Test Run Failed.  Total tests: 10  Passed: 9  Failed: 1
+      ```
+
+      **`StopAsync_ShouldEndTheLoopWithoutReportingAFailure` was GREEN before the fix, and that is
+      correct rather than a broken test** — it pins behaviour that was already right. Its
+      `NotContain(AcceptLoopFailed)` clause was vacuous at that point only because no such event
+      existed yet; its `ServerStopped` and `IsRunning == false` clauses pinned real behaviour from the
+      start, and B5's mutation 2 later proved the whole case bites once the filtered arm exists.
+
+      **A probe worth keeping, measured rather than reasoned.** On this Linux host,
+      `TcpListener.Stop()` under a pending `AcceptTcpClientAsync(ct)`, in `StopAsync`'s order — `Stop()`
+      before `CancelAsync()` — raises `SocketException(OperationAborted)`. Two consequences: **every
+      clean stop was already faulting the accept loop task today**, hidden only by `StopAsync`'s
+      `SuppressThrowing`; and after B2 that stop lands squarely on the filtered
+      `catch (SocketException) when (!IsRunning)` arm, so the arm is the normal stop path on Linux
+      rather than a rare one.
+
+      Only the `internal` accept seam was added to production code in this task — the property and the
+      one-line indirection copied from `AriOutboundListener` — and `AcceptLoopAsync` itself was left
+      untouched for B2.
 - [x] B2 Apply A′ to `AcceptLoopAsync`: `try` inside the `while`; `catch (OperationCanceledException)`
       and `catch (ObjectDisposedException)` keep their comments and `break`; a filtered
       `catch (SocketException) when (!IsRunning)` breaks; an unfiltered `catch (SocketException ex)`
