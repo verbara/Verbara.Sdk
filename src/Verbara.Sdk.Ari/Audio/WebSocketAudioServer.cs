@@ -25,6 +25,9 @@ internal static partial class WebSocketAudioServerLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "[WebSocketAudio] Invalid upgrade request")]
     public static partial void InvalidUpgrade(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[WebSocketAudio] Accept failed — the server stays bound and accepts again after a backoff")]
+    public static partial void AcceptLoopFailed(ILogger logger, Exception exception);
 }
 
 /// <summary>
@@ -35,8 +38,15 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
 {
     private const string WebSocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
+    /// <summary>The wait after the first of a run of failed accepts.</summary>
+    internal static readonly TimeSpan InitialAcceptBackoff = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>The longest wait between failed accepts, however long the run.</summary>
+    internal static readonly TimeSpan MaxAcceptBackoff = TimeSpan.FromSeconds(5);
+
     private readonly AudioServerOptions _options;
     private readonly ILogger<WebSocketAudioServer> _logger;
+    private readonly TimeProvider _timeProvider;
     private readonly ConcurrentDictionary<string, WebSocketAudioSession> _streams = new();
     private readonly Subject<IAudioStream> _streamSubject = new();
     // Connection handlers that have not finished. Each handler removes and disposes its own session
@@ -45,6 +55,7 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
+    private int _running;
 
     /// <summary>Observable that emits each new audio stream when a connection is established.</summary>
     public IObservable<IAudioStream> OnStreamConnected => _streamSubject;
@@ -59,20 +70,49 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     /// <summary>Number of currently active audio streams.</summary>
     public int ActiveStreamCount => _streams.Count;
 
-    public bool IsRunning { get; private set; }
+    /// <summary>
+    /// Whether the server is bound and accepting. Reads <c>false</c> from the moment a stop
+    /// <em>begins</em>, not from the moment its teardown finishes, and is published through a
+    /// barrier so the accept loop's thread cannot read a stale value.
+    /// </summary>
+    public bool IsRunning => Volatile.Read(ref _running) == 1;
 
     public WebSocketAudioServer(AudioServerOptions options, ILogger<WebSocketAudioServer> logger)
+        : this(options, logger, TimeProvider.System)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance whose accept backoff waits on <paramref name="timeProvider"/>, so a
+    /// test can drive that wait with a fake clock instead of sitting out a real one.
+    /// </summary>
+    internal WebSocketAudioServer(
+        AudioServerOptions options,
+        ILogger<WebSocketAudioServer> logger,
+        TimeProvider timeProvider)
     {
         _options = options;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
+
+    /// <summary>
+    /// Replaces the listener's accept when set. Settable by tests (via InternalsVisibleTo), so a test
+    /// can make accepts fail on demand instead of exhausting file descriptors to get a failure.
+    /// </summary>
+    internal Func<CancellationToken, ValueTask<TcpClient>>? AcceptOverride { get; set; }
 
     public ValueTask StartAsync(CancellationToken cancellationToken = default)
     {
+        // First, and before anything is built: a second start that got as far as replacing _cts
+        // would leave the first accept loop running against a source nothing can cancel, and the
+        // listener, the source and the loop task it overwrote all leaked.
+        if (Interlocked.Exchange(ref _running, 1) == 1)
+            return ValueTask.CompletedTask;
+
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _listener = new TcpListener(IPAddress.Parse(_options.ListenAddress), _options.WebSocketPort);
         _listener.Start();
-        IsRunning = true;
 
         WebSocketAudioServerLog.ServerStarted(_logger, _options.WebSocketPort);
 
@@ -82,11 +122,13 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
 
     private async Task AcceptLoopAsync(CancellationToken ct)
     {
-        try
+        var backoff = InitialAcceptBackoff;
+        while (!ct.IsCancellationRequested)
         {
-            while (!ct.IsCancellationRequested)
+            try
             {
-                var client = await _listener!.AcceptTcpClientAsync(ct);
+                var client = await AcceptAsync(ct);
+                backoff = InitialAcceptBackoff;
                 client.NoDelay = true;
 
                 if (_streams.Count >= _options.MaxConcurrentStreams)
@@ -95,29 +137,73 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                     continue;
                 }
 
+                // Started inline on the loop's own continuation and not through `Task.Run`, which is
+                // how this server has always handed a connection over and is left unchanged: `ct`
+                // travels with it as an argument, so there is no scheduler hand-off for CA2016 to
+                // forward a token to. Tracking it is what lets `StopAsync` wait for the handler.
                 TrackConnection(HandleConnectionAsync(client, ct));
+                continue;
             }
-        }
-        catch (OperationCanceledException)
-        {
-            // The stop path. `ct` is `_cts.Token`, cancelled by `StopAsync` and so by `DisposeAsync`,
-            // and the pending accept ended with it. Nothing is meant to be accepted after that, so the
-            // loop being over is the whole of what this catch absorbs.
-            /* Best effort — the server is stopping */
-        }
-        catch (ObjectDisposedException)
-        {
-            // The Windows shape of that same stop: `Stop()` disposes the underlying socket under a
-            // pending accept and the accept surfaces the disposal. NOT reached on Linux, and measured
-            // rather than assumed — a probe reproducing `StopAsync`'s `Stop()`-then-`CancelAsync()`
-            // ordering on a real loopback listener raised the `OperationCanceledException` above on 3
-            // of 10 runs and `SocketException(OperationAborted)` on the other 7, and this type not
-            // once. So the block is live on Windows, not dead code. The `SocketException` arm reaches
-            // no catch in this method: the loop task faults, and the `SuppressThrowing` await in
-            // `StopAsync` absorbs it, which ends the loop by the same door.
-            /* Best effort — the server is stopping */
+            catch (OperationCanceledException)
+            {
+                // The stop path. `ct` is `_cts.Token`, cancelled by `StopAsync` and so by
+                // `DisposeAsync`, and the pending accept ended with it. Nothing is meant to be
+                // accepted after that, so the loop ends rather than backing off.
+                break;
+            }
+            catch (ObjectDisposedException)
+            {
+                // The Windows shape of that same stop: `Stop()` disposes the underlying socket under
+                // a pending accept and the accept surfaces the disposal. NOT reached on Linux, where
+                // `Stop()` on a pending accept raises `SocketException(OperationAborted)` and the
+                // filtered catch below takes it instead — this block is live on Windows, not dead
+                // code.
+                break;
+            }
+            catch (SocketException) when (!IsRunning)
+            {
+                // The Linux shape of that same stop, and the arm `StopAsync` had to be reordered
+                // before it could exist: `StopAsync` now clears `_running` BEFORE it calls `Stop()`,
+                // so an accept aborted by that `Stop()` always arrives with `IsRunning` already
+                // false. Measured on a real loopback listener, this is the shape 7 stops in 10 take,
+                // against 3 in 10 for the `OperationCanceledException` above — so without this arm a
+                // routine shutdown would be reported as an accept failure most of the time.
+                // `IsRunning` is the discriminator and not `ct`, because `StopAsync` cancels `_cts`
+                // only after `Stop()` returns — a filter on `ct.IsCancellationRequested` would race
+                // that ordering.
+                break;
+            }
+            catch (SocketException ex)
+            {
+                // An accept that failed while the server is still meant to be running: EMFILE/ENFILE,
+                // a connection aborted in the backlog, ENOBUFS. Ending the loop here would leave
+                // `IsRunning` reporting true over a socket still in LISTEN — the kernel would keep
+                // completing handshakes nobody reads, so Asterisk's ExternalMedia channels would hang
+                // instead of being refused, and `StartAsync` could not restart the loop because
+                // `_running` is already 1. So it is logged and the loop keeps accepting.
+                WebSocketAudioServerLog.AcceptLoopFailed(_logger, ex);
+            }
+
+            // A failure that persists fails every accept at once, and without a pause this loop would
+            // spin and log without bound. The wait doubles with each consecutive failure up to the
+            // cap, and a successful accept above starts it over.
+            try
+            {
+                await Task.Delay(backoff, _timeProvider, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // Same stop path as above, caught while waiting out a backoff rather than while
+                // accepting: `_cts` was cancelled by `StopAsync`. The loop ends.
+                break;
+            }
+
+            backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, MaxAcceptBackoff.Ticks));
         }
     }
+
+    private ValueTask<TcpClient> AcceptAsync(CancellationToken ct) =>
+        AcceptOverride?.Invoke(ct) ?? _listener!.AcceptTcpClientAsync(ct);
 
     /// <summary>
     /// Keeps a connection handler in <see cref="_connections"/> until it completes. The handler is
@@ -273,6 +359,15 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     /// </summary>
     public async ValueTask StopAsync(CancellationToken cancellationToken = default)
     {
+        // The running flag goes down FIRST, before anything that can abort a pending accept. The
+        // accept loop tells a stop from a failure by reading it, so an abort that reached the loop
+        // while the flag was still up would have the loop reporting the server's own shutdown as a
+        // failure. Clearing it here also makes a second stop — or a DisposeAsync racing this one —
+        // a no-op rather than a second teardown, and it no longer depends on the two SuppressThrowing
+        // waits below to be reached at all.
+        if (Interlocked.Exchange(ref _running, 0) == 0)
+            return;
+
         _listener?.Stop();
 
         if (_cts is not null)
@@ -297,7 +392,6 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
             await session.DisposeAsync();
         _streams.Clear();
 
-        IsRunning = false;
         WebSocketAudioServerLog.ServerStopped(_logger);
     }
 
