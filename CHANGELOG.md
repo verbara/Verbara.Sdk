@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed — both ARI audio servers survive an accept failure, and `IsRunning` now means a stop has begun
+### Changed — both ARI audio servers survive an accept failure, and `IsRunning` now means a stop has begun (#300)
 
 `AudioSocketServer.AcceptLoopAsync` and `WebSocketAudioServer.AcceptLoopAsync` were the last two accept
 loops in this repository with no failure path. Both put their `try` outside their `while` and caught
