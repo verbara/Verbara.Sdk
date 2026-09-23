@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — both ARI audio servers survive an accept failure, and `IsRunning` now means a stop has begun
+
+`AudioSocketServer.AcceptLoopAsync` and `WebSocketAudioServer.AcceptLoopAsync` were the last two accept
+loops in this repository with no failure path. Both put their `try` outside their `while` and caught
+only the stop, so an accept that failed while the server was still running — descriptor exhaustion, a
+kernel out of buffers, a connection aborted in the backlog — faulted the loop task. Nothing awaits that
+task until `StopAsync`'s `SuppressThrowing` at shutdown, no `UnobservedTaskException` handler exists
+anywhere here, and the runtime discards it. The server stopped accepting with **no log line at all**,
+its socket still bound and `IsRunning` still reporting `true`.
+
+They now do what ADR-0056 R6 requires and what `AriOutboundListener` (#291) and `FastAgiServer` (#298)
+already do: a stop ends the loop, and a failure the server can survive is logged once at Error through
+a new `AcceptLoopFailed` event, after which the loop goes on accepting — waiting 100 ms and doubling to
+a 5 s cap between consecutive failures, back to 100 ms after the next successful accept.
+
+**`IsRunning` changes meaning on two shipped public types, and that is the larger half of this change.**
+The classification above reads the server's own running state to tell a stop from a failure, and that
+only works if the state is lowered *before* the stop aborts the pending accept. Both servers did the
+opposite: `IsRunning = false` was the penultimate statement of `StopAsync`, after `Stop()`, after
+`CancelAsync()` and after awaiting the accept loop. It now reads `false` from the moment a stop
+**begins** rather than from the moment it completes.
+
+- The flag is an `Interlocked`-guarded field published through `Volatile.Read`. It was a plain
+  auto-property written by the stopping thread and read by the loop's thread with no barrier.
+- That guard also makes a second `StartAsync` a no-op. It used to bind a second `TcpListener` and
+  overwrite the cancellation source, the listener and the loop task, leaking all three and leaving the
+  first loop running against a source nothing could cancel.
+- It removes a latent hazard as well: a throw anywhere in the old teardown would have skipped the clear
+  and left the server reporting itself running for good. The clear is now unconditional and first.
+- `DisposeAsync` improves rather than stays neutral — a disposal landing while a stop is in flight used
+  to read `true` and enter a second concurrent `StopAsync`; it now reads `false` and skips.
+- Inside this SDK the only readers are each server's own `DisposeAsync`. `IAudioServer` does not expose
+  `IsRunning`, so `CompositeAudioServer` and the hosted service never read it and a consumer needs the
+  concrete type. A consumer polling it to learn when a stop finished was already racing — `StopAsync`
+  returns an awaitable — but the window moves.
+
+Neither loop writes a terminal state for a failure it survives: the listener is still bound and still
+accepting. Neither server has a health check, and a persistent accept failure is therefore visible only
+in the log — recorded rather than left to be discovered.
+
+No API change: the backoff constants, the `TimeProvider` seam and the accept seam are all `internal`.
+
 ### Changed — the FastAGI accept loop survives a failure it can survive, instead of dying in silence (#298)
 
 `FastAgiServer.AcceptLoopAsync` put its `try` outside its `while` and caught exactly two types, both the
