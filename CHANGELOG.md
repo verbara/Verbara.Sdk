@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed — BREAKING: AudioSocket spoke a protocol Asterisk does not, so neither server ever completed a handshake
+### Changed — BREAKING: AudioSocket spoke a protocol Asterisk does not, so neither server ever completed a handshake (#302)
 
 Both AudioSocket implementations read a **four**-byte frame header. Asterisk sends **three**: one byte
 of type and two of big-endian length. Both also believed `0x01` meant an audio frame and `0x00` meant
