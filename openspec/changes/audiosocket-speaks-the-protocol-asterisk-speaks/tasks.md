@@ -553,4 +553,64 @@
 - [x] C7 `openspec validate --all --strict` green, and CI green on the PR.
 
       `openspec validate --all --strict` -> **Totals: 13 passed, 0 failed**, exit 0. CI on the PR is
-      recorded at close-out.
+      recorded at close-out.- [x] C8 The merge queue ran the functional suite for real and rejected the change. Diagnose, fix, and
+      record what the failure exposed.
+
+      **The PR was green and the queue build was not.** `Functional Tests (Testcontainers)` reported
+      `pass` in **16 s** on the PR and failed after **17.4 minutes** in the queue: on a pull request the
+      job short-circuits, and only a `merge_group` build starts Asterisk. The PR-level green said
+      nothing, and I read it as coverage.
+
+      ```
+      Test Run Failed.
+      Total tests: 156
+           Passed: 151
+           Failed: 5
+      ```
+
+      All five were `ConfBridge.ConfBridgeAdvancedTests` — Mute, Unmute, Lock, StartRecord,
+      StopRecord — on both Asterisk 22 and 23, none of them touching AudioSocket:
+
+      ```
+      Expected collection not to be empty because muting a channel in ConfBridge must fire
+      ConfbridgeMuteEvent.
+        at ConfBridgeAdvancedTests.Mute_ShouldFireMuteEvent() in ConfBridgeAdvancedTests.cs:line 68
+      ```
+
+      **Cause: an extension number collision, and the collision is the least of it.**
+      `ConfBridgeAdvancedTests` originates `Local/700@test-functional` from **ten** call sites, and
+      `[test-functional]` has never defined a 700. The originate fails, no `ConfbridgeJoinEvent`
+      arrives, and every one of those tests takes its `if (confJoin is null) return;` branch and is
+      reported as **passed without asserting anything**. Appending `exten => 700` for AudioSocket made
+      the originate succeed, so five of those tests ran their bodies for the first time — and failed.
+      This change did not break them; it stopped hiding them.
+
+      **Fix: renumber to 710/711**, in the dialplan and in the two test constants together. That keeps
+      the pre-existing hole exactly as it was rather than letting this change carry someone else's red.
+      The reason is written into `extensions.conf` beside the extensions, so the numbers do not drift
+      back.
+
+      **Filed, not fixed here:** `[test-functional]` is dialed at **160, 300, 700, 999 and 9998** by
+      tests and defines none of them. Whatever those tests assert, they assert it after an originate
+      that cannot have succeeded. Fixing them means reading ten call sites and deciding what each one
+      meant to test, which is its own change — and the `if (… is null) return;` shape is the thing to
+      hunt, not the extension numbers.
+
+      **Verified locally against real Asterisk**, both classes in one run:
+
+      ```
+      Total tests: 10
+           Passed: 10
+      ```
+
+      And the two new tests were **mutation-checked rather than trusted**, because a fixture that
+      passes while measuring nothing is the exact failure this change exists to correct. Flipping the
+      last character of the expected ARI UUID:
+
+      ```
+      Failed  AriAudioSocketServer_ShouldStartASessionCarryingTheDialplanUuid_WhenAsteriskDialsIt
+      Expected session!.ChannelId to be the same string … but they differ at index 35
+      ```
+
+      The 515 ms runtime is real, not a skip: a warm container answers an originate and completes the
+      AudioSocket handshake over loopback in about half a second.

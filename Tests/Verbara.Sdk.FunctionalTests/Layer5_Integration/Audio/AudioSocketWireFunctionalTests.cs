@@ -26,7 +26,7 @@ using VoiceAiAudioSocketServer = Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServ
 /// </para>
 /// <para>
 /// <b>The dialplan is half the test.</b> <c>docker/functional/asterisk-config/extensions.conf</c>
-/// extensions 700 and 701 name the UUIDs asserted below and the ports bound below. That file had no
+/// extensions 710 and 711 name the UUIDs asserted below and the ports bound below. That file had no
 /// <c>AudioSocket()</c> extension at all before this change, which is the gap that let the wrong
 /// format live.
 /// </para>
@@ -39,16 +39,16 @@ using VoiceAiAudioSocketServer = Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServ
 [Trait("Category", "Functional")]
 public sealed class AudioSocketWireFunctionalTests : FunctionalTestBase
 {
-    /// <summary>The UUID extension 700 names. The same literal appears in the dialplan.</summary>
+    /// <summary>The UUID extension 710 names. The same literal appears in the dialplan.</summary>
     private const string AriDialplanUuid = "4f1d9c60-7a2b-4e55-9f3d-2c6a8b0e1d47";
 
-    /// <summary>The UUID extension 701 names. The same literal appears in the dialplan.</summary>
+    /// <summary>The UUID extension 711 names. The same literal appears in the dialplan.</summary>
     private const string VoiceAiDialplanUuid = "6b3e2a18-5c94-4d07-8ae1-93f5c7204b6e";
 
-    /// <summary>The port extension 700 dials. Fixed, because a dialplan file cannot learn an ephemeral one.</summary>
+    /// <summary>The port extension 710 dials. Fixed, because a dialplan file cannot learn an ephemeral one.</summary>
     private const int AriPort = 19092;
 
-    /// <summary>The port extension 701 dials.</summary>
+    /// <summary>The port extension 711 dials.</summary>
     private const int VoiceAiPort = 19093;
 
     /// <summary>
@@ -84,7 +84,7 @@ public sealed class AudioSocketWireFunctionalTests : FunctionalTestBase
         using var subscription = server.OnStreamConnected.Subscribe(stream => identified.TrySetResult(stream));
         await server.StartAsync();
 
-        await OriginateAsync("700", "ari-audiosocket-wire-01");
+        await OriginateAsync("710", "ari-audiosocket-wire-01");
 
         var session = await WithinAsync(identified.Task, HandshakeTimeout);
 
@@ -94,7 +94,7 @@ public sealed class AudioSocketWireFunctionalTests : FunctionalTestBase
             + "for six months");
         session!.ChannelId.Should().Be(
             AriDialplanUuid,
-            "Asterisk identifies the call with the UUID extension 700 names, sixteen bytes in RFC "
+            "Asterisk identifies the call with the UUID extension 710 names, sixteen bytes in RFC "
             + "4122 order behind a three-byte header — a wrong header, a wrong type byte or a "
             + "little-endian Guid read each produce a different string here");
     }
@@ -125,7 +125,7 @@ public sealed class AudioSocketWireFunctionalTests : FunctionalTestBase
 
         await server.StartAsync(CancellationToken.None);
 
-        await OriginateAsync("701", "voiceai-audiosocket-wire-01");
+        await OriginateAsync("711", "voiceai-audiosocket-wire-01");
 
         var channelId = await WithinAsync(identified.Task, HandshakeTimeout);
 
