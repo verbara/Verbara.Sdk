@@ -354,7 +354,7 @@ failure is pasted here verbatim.** A task is not checked off until the thing it 
       here is worth something.
 ## Phase C — integration (batched)
 
-- [ ] C1 Functional test beside `AudioSocketWireFunctionalTests`. Three things it must get right:
+- [x] C1 Functional test beside `AudioSocketWireFunctionalTests`. Three things it must get right:
       - **Subscribe a Stasis application first.** `externalMedia` validates that `app` is non-empty
         and never checks it is registered, so the create returns 200 against a bare listener — but the
         channel then runs Stasis with no subscriber, Asterisk hangs it up, and the entry is removed
@@ -365,16 +365,95 @@ failure is pasted here verbatim.** A task is not checked off until the thing it 
       - A fixed port that is **not** 19092 or 19093 — those belong to extensions 710 and 711.
       Assert with a reason on every path; never `return` early. Assert
       `activity.AudioStream!.ChannelId == activity.Channel!.Id`.
-- [ ] C2 **Negatively control the functional test by reverting the fix, not by breaking the
+
+      **Done 2026-09-24.**
+      `Tests/Verbara.Sdk.FunctionalTests/Layer5_Integration/Audio/ExternalMediaChannelIdFunctionalTests.cs`,
+      one test, port **19094**, the activity constructed with `App`, `ExternalHost`, `Encapsulation`
+      and `ConnectionTimeout` and nothing else. Six assertions, every one with a `because`, no
+      `return` anywhere in the body.
+
+      ```text
+        Passed ExternalMediaActivity_ShouldResolveItsStreamByTheReturnedChannelId_
+               WhenAsteriskConnectsOverAudioSocket [259 ms]
+      Test Run Successful.  Total tests: 1  Passed: 1
+      ```
+
+      **Run on Asterisk 23 as well as 22**, rather than letting the merge queue meet it first.
+      `ASTERISK_VERSION=23 CODEC_OPUS_VERSION=23.0_1.3.0` → 23.4.1, passed in 261 ms; 22.9.0 in 259 ms.
+
+      **The functional project had no reference to `Verbara.Sdk.Activities`.** The class this whole
+      change is about was unreachable from the only suite that can put a real Asterisk on the other
+      end. One line added to the csproj — a project-graph change, so `LayeringGuard` was in scope and
+      is green.
+
+      **A sixteen-second green and a sixteen-second no-op look alike, and the duration is not what
+      tells them apart.** The whole run is 15–17 s while the test itself is 54–261 ms, because
+      `chan_audiosocket` connects *during* the create — there is nothing to wait for on the success
+      path. The seconds are container startup, and the log names them
+      (`Execute "asterisk -rx core show uptime" at Docker container …`, `… ready`). C3's skipped job
+      has the same wall clock and no such lines. **The container log is the discriminator.**
+
+      **The first assertion had to report the server's own table, or the control proves less than it
+      looks.** Written the obvious way, reversion 3 fails with `TimeoutException: Asterisk did not
+      connect to audio server within 00:00:45` — a sentence that is *false* about what happened, since
+      Asterisk connected and streamed, and indistinguishable from Asterisk never connecting. The
+      reason clause now carries `activity.Channel?.Id` and `server.ActiveStreams.Select(s => s.ChannelId)`,
+      so the red prints the two identifiers side by side.
+
+      The wire's own account is asserted **separately** from the activity's: `OnStreamConnected` gives
+      the UUID parsed out of Asterisk's frame, a value the test did not choose. `GetStream(Channel.Id)`
+      hitting implies it only transitively, and a transitive claim through a mock is the proposal's
+      whole complaint about the unit test.
+- [x] C2 **Negatively control the functional test by reverting the fix, not by breaking the
       assertion.** Breaking the expected value proves the assertion is wired; it does not prove the
       test can see the defect. Three reversions, each failure pasted: drop `data`; drop the `tcp`
       transport; pass `channelId` and `data` different values. ADR-0060's own control was a revert.
-- [ ] C3 Apply the **`ci:functional`** label to the PR. `docker/Dockerfile.asterisk` work and the
+
+      **Done 2026-09-24.** Three reversions of `ExternalMediaActivity.ExecuteAsync`, each restored
+      from a pristine copy and `touch`ed before the rebuild, each rebuild `0 Warning(s) 0 Error(s)`.
+      All three ran against the **final** test file. `ExternalMediaActivity.cs` is byte-identical to
+      HEAD afterwards.
+
+      **Reversion 1 — stop sending `data`.** Fails at the create, before a channel exists:
+
+      ```text
+       Expected failure to be <null> … instead StartAsync ended with
+       Verbara.Sdk.Ari.AriException: ARI request failed with 400: {"message": "data can not be empty"}
+       with the returned channel id no channel and these streams registered on the server: [none]
+      ```
+
+      **Reversion 2 — stop sending the `tcp` transport.** Also at the create:
+
+      ```text
+       … AriException: ARI request failed with 400:
+       {"message": "transport must be 'tcp' for audiosocket encapsulation"}
+      ```
+
+      **Reversion 3 — `channelId` and `data` different, both well-formed canonical UUIDs**, per A1's
+      correction #4: a malformed `data` is HTTP 500 at the create and would prove nothing. The create
+      returns **200**, Asterisk connects, and the failure lands where the defect actually is — at the
+      lookup, with the two identifiers printed apart.
+
+      **Two things the reversions exposed that no task anticipated:**
+
+      - **A4's "the loop is never left through its own condition" is a race, not a determinism.** Two
+        runs of identical source threw from *different* lines — `:196` once and `:200` once. The unit
+        lane's HITS=0 on the second throw is a short-timeout artefact, not a dead branch. That matters
+        if C5's floor ever pushes someone to declare it unreachable.
+      - **An unused `private const` is not a build oracle.** Reversion 2 left
+        `private const string AudioSocketTransport = "tcp"` with zero references and the build reported
+        `0 Warning(s)` under `TreatWarningsAsErrors` with `WarningLevel 9999`. Nothing mechanical would
+        catch a half-finished revert of that line.
+- [x] C3 Apply the **`ci:functional`** label to the PR. `docker/Dockerfile.asterisk` work and the
       functional suite are skipped on `pull_request` unless that label is present (ADR-0051,
       `.github/workflows/ci.yml`), and the matrix is `[23]` on a PR against `[22, 23]` in the queue.
       Without the label the job reports `pass` in about sixteen seconds having started no Asterisk —
       which is exactly how a broken dialplan reached the merge queue in #302. Record the PR-time
       result, not only the queue's.
+
+      **Done 2026-09-24.** The label exists and says what it does: `ci:functional — Run the
+      functional/Testcontainers matrix on this PR (ADR-0051 opt-in)`. Applied to the PR before any
+      code landed. It existed while #302's sixteen-second `pass` was read as coverage.
 - [ ] C4 `CHANGELOG.md [Unreleased]`: a `### Fixed — BREAKING` entry. Give it its **own insertion
       anchor** distinct from any other in-flight entry — a shared anchor ejected #300 from the merge
       queue with fourteen checks green. Leave `(#N)` for close-out.
@@ -386,27 +465,60 @@ failure is pasted here verbatim.** A task is not checked off until the thing it 
 - [ ] C6 `openspec validate --all --strict` green, full unit lane green, Governance green, `dotnet
       pack` clean, and CI green on the PR **including the `merge_group` build** — the only place the
       functional suite runs both Asterisk versions.
-- [ ] C7 Open a change for the follow-ups below and write its link back into this file. They are
+- [x] C7 Open a change for the follow-ups below and write its link back into this file. They are
       carried as prose, not as unchecked boxes: `openspec/config.yaml` requires every deferred finding
       to be harvested into an open change or an ADR addendum before archiving, and three `- [ ]` boxes
       inside this change would defer that harvest to close-out — the exact failure ADR-0060 committed
       and this change exists to stop repeating.
 
+
+      **Done 2026-09-24.** The change is
+      **`openspec/changes/a-published-surface-is-one-something-measures`**, carrying F1, F2 and F3.
+      `openspec validate --all --strict` → 15 passed, 0 failed.
+
+      **It corrected three things this file had wrong.**
+
+      - **F3 is ten undefined extensions, not five.** The suite reaches `[test-functional]` by *two*
+        forms, and both this file and the dialplan comment counted only `Local/N@test-functional`.
+        Pairing `Exten` with `Context` adds 161, 162, 163, 750 and 9999. Re-verified independently:
+        dialed = 100 150 155 160 161 162 163 300 500 600 700 750 900 950 999 9998 9999; defined = 100
+        150 155 500 600 710 711 900 950; **undefined = 160 161 162 163 300 700 750 999 9998 9999**.
+      - **F1's line numbers had aged inside this very phase.** The key is computed at
+        `WebSocketAudioServer.cs:341` and registered at `:266`; B3's doc edits moved both. Corrected
+        below, with the caveat that a citation by line number does not survive an edit above it.
+      - **The unasserting early return has four spellings, not one**, and covers all eight `[Fact]`s
+        in `ConfBridgeAdvancedTests` rather than the five that failed: `confJoin is null`,
+        `!joinEvents.Any(pred)`, `joinEvents.IsEmpty`, and `await Task.WhenAny(t, Task.Delay(…)) != t`.
+        Sweeping one phrasing finds three of eight. The scan reaches 71 candidate sites across 11
+        files — and it is a scan, not a verdict: `BridgeLifecycleTests:315` is a false positive.
+
+      **And it found why F2 survived, which nobody had asked.** `AudioStreamMetrics`' test file is the
+      closed loop in miniature: of eleven `[Fact]`s, six assert only `.Should().NotBeNull()` on a
+      `static readonly` field initialised at its declaration — true in every possible state of the
+      program — and four supply their own measurement through a `MeterListener` and assert they
+      observed it. All eleven are green with every production call site absent.
+
+      **`extensions.conf` was carrying the ADR-0060 failure it was written to prevent**: lines 104-111
+      documented the hole, stated the wrong count, and ended "the hole is filed separately" with no
+      link — inside the commit that existed to stop that. Corrected in this change: the count is right
+      and the comment names the change above.
 ## Follow-ups this change does NOT fix
 
 ADR-0060 wrote "tracked separately" with no link, and the close-out archived it anyway. C7 opens the
 change that carries these; the lines below are the evidence it starts from.
 
 - **F1 — `WebSocketAudioServer` keys on a URL path segment.** The key is computed at
-  `WebSocketAudioServer.cs:337` (`path.TrimStart('/').Split('/').LastOrDefault()?.Split('?').FirstOrDefault()`) and registered at
-  `:262`. The SDK's own example puts a literal `/audio` there
+  `WebSocketAudioServer.cs:341` (`path.TrimStart('/').Split('/').LastOrDefault()?.Split('?').FirstOrDefault()`) and registered at
+  `:266`. The SDK's own example puts a literal `/audio` there
   (`Examples/WebSocketMediaExample/Program.cs:10`), so every concurrent call would register under the
   key `"audio"`. `CompositeAudioServer` hands the same string to both servers, which do not agree on
   what it means. **No probe has measured what `externalMedia` with `transport=websocket` puts in the
   request path**, which is why this stays out of the present change rather than being designed from a
   reading of the code.
 - **F2 — `AudioStreamMetrics`** declares ten instruments with zero production call sites.
-- **F3 — five dialplan extensions are dialed and never defined.** `[test-functional]` is dialed at
-  160, 300, 700, 999 and 9998 and defines none of them. `ConfBridgeAdvancedTests` alone dials the
+- **F3 — ten dialplan extensions are dialed and never defined.** `[test-functional]` is dialed at
+  160, 161, 162, 163, 300, 700, 750, 999, 9998 and 9999 and defines none of them. `ConfBridgeAdvancedTests` alone dials the
   undefined 700 from ten call sites and passes by taking its `if (confJoin is null) return;` branch
   without asserting anything. The shape to hunt is that early return, not the extension numbers.
+
+These are carried by **`openspec/changes/a-published-surface-is-one-something-measures`** (C7).

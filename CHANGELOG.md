@@ -4,6 +4,57 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: `ExternalMediaActivity` could not reach an AudioSocket stream by any configuration (#N)
+
+`ExternalMediaActivity` accepts an `AudioSocketServer` in its constructor and then polls
+`GetStream(Channel.Id)` for the stream. It could never hit. Measured against a real Asterisk 22.9.0
+and 23.4.1, which behave identically:
+
+- With the activity's **defaults**, `POST /channels/externalMedia` returns 200 and a **UnicastRTP**
+  channel. Nothing connects to the AudioSocket server, and the poll waits out its 30-second timeout.
+- Setting `Encapsulation = "audiosocket"` returns `HTTP 400 transport must be 'tcp' for audiosocket
+  encapsulation`, because the activity sends `transport` only when a caller sets it.
+- Supplying the transport too returns `HTTP 400 data can not be empty`.
+
+And underneath those, the identifiers never matched. Asterisk's `data` parameter becomes the UUID in
+the identification frame — the value the stream table is keyed by — while `channelId` becomes the ARI
+`Channel.Id`. A probe with two distinct, byte-order-asymmetric UUIDs settles which travels:
+
+```text
+channelId = 0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9
+data      = f9e8d7c6-b5a4-3928-1706-f5e4d3c2b1a0
+
+channel.id : 0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9
+HEX        : 01 00 10 f9 e8 d7 c6 b5 a4 39 28 17 06 f5 e4 d3 c2 b1 a0
+UUID on the wire == channelId ? False    == data ? True
+```
+
+- **`CreateExternalMediaAsync` gains a `channelId` parameter** on `IAriChannelsResource` and
+  `AriChannelsResource`. Asterisk documents it as the unique id to assign the channel on creation, and
+  spells it camelCase among snake_case siblings — a misspelling is ignored silently, so the URL test
+  asserts the literal.
+- **The activity derives its request from the server it was handed.** AudioSocket encapsulation
+  implies `transport = "tcp"`, and one freshly minted UUID goes to both `channelId` and `data`, so
+  `Channel.Id` **is** the key. The mint is canonical lowercase, and that is load-bearing: the table is
+  an ordinal dictionary keyed by `Guid.ToString()`, and an uppercase identifier creates a channel
+  whose stream cannot be found.
+- **An `AudioSocketServer` supplied against a non-AudioSocket encapsulation is now refused** at the
+  start, instead of creating an RTP channel and reporting a connection failure thirty seconds later.
+- **The contract text now says what the key is.** `IAudioServer.GetStream` said "Get an active stream
+  by channel ID" — on the interface and, verbatim, on both shipped implementations. It now names the
+  key and its form for each, including that `WebSocketAudioServer` keys on the last segment of the
+  request URL instead. That second mismatch is real and is tracked separately, with a probe as its
+  first task rather than a design.
+
+**What a consumer must do.** Recompile, and name the cancellation token if you passed it positionally.
+The parameter was **appended** rather than placed first among the optionals, deliberately: every slot
+from `encapsulation` to `data` is `string?`, so inserting ahead of them would have rebound each
+argument one place over and gone on compiling — wrong values on the wire with no diagnostic anywhere.
+Appending produces `CS1503`, which is loud. Anyone implementing `IAriChannelsResource` gains a member.
+
+**Migration guide:** [`docs/guides/externalmedia-channel-id-migration.md`](docs/guides/externalmedia-channel-id-migration.md)
+— required by ADR-0028 for a minor that carries a breaking change.
+
 ### Changed — BREAKING: AudioSocket spoke a protocol Asterisk does not, so neither server ever completed a handshake (#302)
 
 Both AudioSocket implementations read a **four**-byte frame header. Asterisk sends **three**: one byte
