@@ -45,6 +45,9 @@ not a measured one, and anyone who implemented this SDK's dialect in their own c
 with it. `PublicAPI.Shipped.txt` is untouched in both packages; the changes are recorded in
 `PublicAPI.Unshipped.txt` as removals plus replacements.
 
+**Migration guide:** [`docs/guides/audiosocket-wire-format-migration.md`](docs/guides/audiosocket-wire-format-migration.md)
+— required by ADR-0028 for a minor that carries a breaking change.
+
 ADR-0017 is superseded: it described an 18-byte header, frame types in neither enum, and per-connection
 codec negotiation the code never implemented.
 

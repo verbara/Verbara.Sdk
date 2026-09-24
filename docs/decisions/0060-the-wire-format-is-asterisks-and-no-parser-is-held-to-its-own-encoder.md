@@ -208,6 +208,29 @@ every push (ADR-0051, ADR-0043).
   This is their prerequisite, not their fix, and saying so here keeps a green functional test from
   being read as a claim it does not make.
 
+## How the break is carried
+
+The corrected values are a binary break against the published 2.5.3 baseline, and `PackageValidation`
+reports it as six diagnostics per package: four `CP0011` for the changed enum values, and `CP0002` for
+`Silence` and for `AudioSocketSession.WriteSilenceAsync`. They are **declared** in a committed
+`CompatibilitySuppressions.xml` in each package, each entry read before it was kept, with the reason
+written at the top of the file.
+
+Declared rather than generated on the build machine, and the distinction is the whole point. ADR-0055
+records that `ApiCompatGenerateSuppressionFile` reading as true during `pack` turns every difference
+into a suppression that never reaches the repository — validation runs, reports green, and compares
+nothing. Measured there against a package whose 1.1.0 removed a public method 1.0.0 had: every spelling
+of that switch packed green without a `CP0002`. A suppression file is a record of an intended break or
+it is a way of not looking.
+
+ADR-0028 requires a minor that carries a breaking change to ship a migration guide, which is
+`docs/guides/audiosocket-wire-format-migration.md`. Its substance is one line — recompile — because
+enum values are inlined at compile time and a build pinned to 2.5.3 holds the old numbers in its own IL
+whatever package it resolves. The guide exists for the one case that needs more: a consumer who
+implemented this SDK's previous format in their own client rather than using its types. That population
+is believed empty, since the previous format cannot complete a handshake, and the guide says that it is
+believed rather than measured.
+
 ## Alternatives considered
 
 **Edit ADR-0017 to describe the real format.** Rejected, and this is the alternative the catalog's
