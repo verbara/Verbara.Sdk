@@ -4,8 +4,10 @@ Practical how-to guides for working with Verbara Sdk.
 
 | Guide | Description |
 |-------|-------------|
+| [ari-connection-state-and-accept-loop-migration.md](ari-connection-state-and-accept-loop-migration.md) | Moving to the ARI connect attempt that leaves a terminal state and the outbound listener that survives an accept failure -- what `AriClient.State` reports now, which workarounds can be deleted, and the Error line a persistent accept failure produces. |
 | [asterisk-version-compatibility.md](asterisk-version-compatibility.md) | AMI event coverage matrix across Asterisk 18-23, listing typed classes and fallback behavior per version. |
 | [asterisk-version-matrix.md](asterisk-version-matrix.md) | Supported Asterisk versions (22 LTS primary, 23 Standard secondary), Docker test infrastructure, and known-divergent behavior. |
+| [audiosocket-wire-format-migration.md](audiosocket-wire-format-migration.md) | Moving to the corrected AudioSocket frame header -- the three-byte shape Asterisk actually sends, the enum values that changed, and why a rebuild is what picks them up. |
 | [externalmedia-channel-id-migration.md](externalmedia-channel-id-migration.md) | Moving to the `CreateExternalMediaAsync` signature that takes a `channelId` -- why the break was bought, which callers have to be edited rather than rebuilt, and how to make an AudioSocket stream findable by the channel id the create returned. |
 | [high-load-tuning.md](high-load-tuning.md) | Configuration guidance for high-load scenarios (1K-100K+ agents), including EventPump sizing and buffer capacity recommendations. |
 | [log-analysis-prompt.md](log-analysis-prompt.md) | Ready-to-use LLM prompt for analyzing Verbara.Sdk structured log files with extract, classify, and diagnose phases. |
