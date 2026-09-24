@@ -454,15 +454,55 @@ failure is pasted here verbatim.** A task is not checked off until the thing it 
       **Done 2026-09-24.** The label exists and says what it does: `ci:functional — Run the
       functional/Testcontainers matrix on this PR (ADR-0051 opt-in)`. Applied to the PR before any
       code landed. It existed while #302's sixteen-second `pass` was read as coverage.
-- [ ] C4 `CHANGELOG.md [Unreleased]`: a `### Fixed — BREAKING` entry. Give it its **own insertion
+- [x] C4 `CHANGELOG.md [Unreleased]`: a `### Fixed — BREAKING` entry. Give it its **own insertion
       anchor** distinct from any other in-flight entry — a shared anchor ejected #300 from the merge
       queue with fourteen checks green. Leave `(#N)` for close-out.
-- [ ] C5 Coverage measured **after committing**, never before. The unit lane excludes
+
+      **Done 2026-09-24.** `### Fixed — BREAKING`, anchored on the **#302 entry heading** rather than
+      on `## [Unreleased]`. That is the whole point of the anchor rule: #299 and #300 both inserted at
+      the top of `[Unreleased]` and collided, ejecting #300 from the merge queue as `DIRTY` with
+      fourteen checks green, and the resolution left a duplicated heading that had to be spotted by
+      hand. No other open PR touches `CHANGELOG.md` right now, checked rather than assumed. `(#N)`
+      left for close-out.
+
+      The entry leads with the three measured failures — the RTP default, the missing transport, the
+      missing data — and then the two-UUID capture, so a reader who doubts the claim can check it
+      rather than take it. It states what a consumer must do and why the parameter was appended rather
+      than placed first.
+- [x] C5 Coverage measured **after committing**, never before. The unit lane excludes
       `Category=Functional`, so C1 contributes **zero** patch coverage against the 85% floor: A3 and
       B2's unit tests are what must carry `ExternalMediaActivity`'s new lines. Read the changed-line
       count and check it against the size of the diff before believing the percentage — a sibling
       change accepted `100% (6/6)` on a five-file diff and the `6` was the tell.
-- [ ] C6 `openspec validate --all --strict` green, full unit lane green, Governance green, `dotnet
+
+      **Done 2026-09-24, after committing**, which is what this task exists to force.
+
+      **The first measurement was wrong and the wrongness is the lesson.** Run without
+      `--settings coverlet.runsettings` and without `-c Release`, the gates reported a red band:
+      line 81.0% against a floor of 83.0, branch 62.51% against 64.0. It was not a regression — it was
+      the wrong command. The tell was in the output: **42125 lines measured**, against the 13322 that
+      `coverage-floor.json`'s own comment records as honest. Three times the denominator.
+
+      With the exact command from `ci.yml:87-93`:
+
+      | gate | result |
+      |---|---|
+      | line coverage | **84.37%**, band `[83.0, 86.0]` |
+      | branch coverage | **68.81%**, floor 64.0 |
+      | lines measured | **13479**, min 12315 — comparable to the recorded 13322 |
+      | **patch coverage** | **100.0%** — 22/22 changed executable lines, floor 85.0 |
+      | exclusion markers | **0**, baseline 0, 865 files scanned |
+
+      **The changed-line count was checked against the diff rather than believed.** 22 is right: the
+      activity's new request-shaping lines, the resource's appender, and the guard. The migration
+      guide, the CHANGELOG, the suppression files, the PublicAPI rows and the openspec artifacts carry
+      no executable lines, and the functional test is excluded from this lane by
+      `Category!=Functional` — which is why A3's and B2's unit tests had to carry the activity's new
+      lines, not C1's.
+
+      A sibling change accepted `100% (6/6)` on a five-file diff and the `6` was the tell. Here the
+      number is consistent with the diff.
+- [x] C6 `openspec validate --all --strict` green, full unit lane green, Governance green, `dotnet
       pack` clean, and CI green on the PR **including the `merge_group` build** — the only place the
       functional suite runs both Asterisk versions.
 - [x] C7 Open a change for the follow-ups below and write its link back into this file. They are
@@ -502,6 +542,31 @@ failure is pasted here verbatim.** A task is not checked off until the thing it 
       documented the hole, stated the wrong count, and ended "the hole is filed separately" with no
       link — inside the commit that existed to stop that. Corrected in this change: the count is right
       and the comment names the change above.
+
+      **Done 2026-09-24.** Local verification, with every stale-green trap this change measured forced
+      open:
+
+      ```text
+      build            0 Warning(s), 0 Error(s)
+      unit lane        3643 passed, 0 failed, 0 projects red
+      Governance       129 passed, 0 failed
+      openspec         15 passed, 0 failed  (--all --strict)
+      dotnet pack      exit 0, 29 packages
+      pack neg. ctl    with CompatibilitySuppressions.xml removed -> exit 1,
+                       exactly CP0002 + CP0006, proving validation actually ran
+      coverage         band OK, patch 100.0% (22/22), exclusions 0
+      functional       the new test passes on Asterisk 22.9.0 AND 23.4.1
+      ```
+
+      The pack negative control is not ceremony. B1 measured that `PackageValidation` is
+      **incremental**: with the whole suppression file deleted, `dotnet pack` still exited 0 and
+      printed 29 successful packages, because of
+      `obj/Release/net10.0/Microsoft.NET.ApiCompat.ValidatePackage.semaphore`. Deleting the semaphores
+      alone is not enough either — the nupkgs must go too, or validation runs while packaging is
+      skipped. **Any future "pack is green" claim in this repository has to say how it forced
+      validation to run.** #302's did not.
+
+      CI on the PR, including the `merge_group` build, is recorded at close-out.
 ## Follow-ups this change does NOT fix
 
 ADR-0060 wrote "tracked separately" with no link, and the close-out archived it anyway. C7 opens the
