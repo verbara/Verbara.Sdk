@@ -6,6 +6,7 @@ Practical how-to guides for working with Verbara Sdk.
 |-------|-------------|
 | [asterisk-version-compatibility.md](asterisk-version-compatibility.md) | AMI event coverage matrix across Asterisk 18-23, listing typed classes and fallback behavior per version. |
 | [asterisk-version-matrix.md](asterisk-version-matrix.md) | Supported Asterisk versions (22 LTS primary, 23 Standard secondary), Docker test infrastructure, and known-divergent behavior. |
+| [externalmedia-channel-id-migration.md](externalmedia-channel-id-migration.md) | Moving to the `CreateExternalMediaAsync` signature that takes a `channelId` -- why the break was bought, which callers have to be edited rather than rebuilt, and how to make an AudioSocket stream findable by the channel id the create returned. |
 | [high-load-tuning.md](high-load-tuning.md) | Configuration guidance for high-load scenarios (1K-100K+ agents), including EventPump sizing and buffer capacity recommendations. |
 | [log-analysis-prompt.md](log-analysis-prompt.md) | Ready-to-use LLM prompt for analyzing Verbara.Sdk structured log files with extract, classify, and diagnose phases. |
 | [log-analysis-reference.md](log-analysis-reference.md) | Tag catalog for SDK structured logs -- lists every `[TAG]`, its domain, source classes, and emitted events. |

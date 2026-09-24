@@ -183,7 +183,7 @@ failure is pasted here verbatim.** A task is not checked off until the thing it 
       worktree `AriChannelsResource` is the only implementer, so nothing here breaks on CS0535.
 ## Phase B — critical components (one focused subagent each)
 
-- [ ] B1 Add the `channelId` parameter to `CreateExternalMediaAsync` on **both**
+- [x] B1 Add the `channelId` parameter to `CreateExternalMediaAsync` on **both**
       `IAriChannelsResource` and `AriChannelsResource`, positioned **before** `cancellationToken`
       (CT-last is the SDK's convention and CA1068 is on under `TreatWarningsAsErrors`). Then:
       - the two `ActivityTests` substitutes move to **named arguments**;
@@ -198,7 +198,81 @@ failure is pasted here verbatim.** A task is not checked off until the thing it 
       - a migration note (ADR-0028 requires one for a minor carrying a break).
       Confirm with the exact command CI runs — `dotnet pack` — not with a clean build. A green build
       says nothing about `PackageValidation`; that mistake cost #302 a CI failure.
-- [ ] B2 `ExternalMediaActivity` derives its request from the server it was handed:
+
+      **Done 2026-09-24.** Parameter in, break declared in both packages, `dotnet pack -c Release`
+      green with validation **proven** to have run. The A3 test still failed here — correctly; it
+      needs B2.
+
+      **Position: appended after `data`, against the in-tree precedent, and the reason is the point.**
+      A2 found `IAriClient.cs:141` puts `channelId` first among `CreateWithoutDialAsync`'s optionals.
+      Inserting ahead of `encapsulation` would have been a **silent** break: every slot from
+      `encapsulation` to `data` is `string?`, so an existing positional call would rebind each
+      argument one place over and go on compiling — wrong values on the wire, no diagnostic anywhere.
+      Appending breaks only callers that passed the token positionally, and that break is `CS1503`.
+      A loud break beats consistency with one sibling. The reason is written into the `<remarks>` so
+      the next reader does not "fix" the inconsistency.
+
+      ```csharp
+      ValueTask<AriChannel> CreateExternalMediaAsync(string app, string externalHost, string format,
+          string? encapsulation = null, string? transport = null, string? connectionType = null,
+          string? direction = null, string? data = null, string? channelId = null,
+          CancellationToken cancellationToken = default);
+      ```
+
+      **The camelCase spelling is corroborated inside the tree, which nobody had noticed.**
+      `CreateWithoutDialAsync` already appends `&channelId=` at `AriChannelsResource.cs:222`. This
+      repository has been spelling it that way on another endpoint since before the probe measured it.
+
+      **`AriResourceTests` now sends what it asserts.** A4's point was that the test asserted
+      `encapsulation=`/`transport=` while `data=`, `connection_type=` and `direction=` had never
+      executed across 477 tests. It now supplies all six optionals and asserts each literal.
+      Negative control — the appender misspelled as `channel_id=`:
+
+      ```text
+      Failed Channels_CreateExternalMediaAsync_ShouldPostWithParams
+      Expected handler.LastRequestUri "…&data=f9e8d7c6-…&channel_id=0a1b2c3d-…" to contain
+      "channelId=0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9" because Asterisk spells this parameter
+      channelId, and silently ignores any other spelling.
+      ```
+
+      That failure doubles as proof the other three appenders now execute — they are all in the URL it
+      printed.
+
+      **RS0017 forced the `*REMOVED*` rows; nothing forced the new ones.** A2's warning held exactly:
+
+      ```text
+      src/Verbara.Sdk/PublicAPI.Shipped.txt(499,1): error RS0017: Symbol
+      'Verbara.Sdk.IAriChannelsResource.CreateExternalMediaAsync(…)' is part of the declared API,
+      but is either not public or could not be found
+      ```
+
+      The new rows are present because ADR-0023 says so, not because the compiler asked.
+
+      **Suppressions generated to a scratch path, read entry by entry, then hand-written.** Before any
+      suppression file, `pack` reported exactly the three predicted breaks and nothing else: `CP0002`
+      on `AriChannelsResource`, `CP0002` on `IAriChannelsResource`, `CP0006` for the added interface
+      member. `-p:ApiCompatSuppressionOutputFile=<scratch>` kept the build machine out of the
+      repository (ADR-0055). `src/Verbara.Sdk.Ari`'s five existing `AudioFrameType` entries were
+      reproduced byte-identically — nothing dropped, nothing invented.
+
+      **A new member of the stale-green family, and it is a big one.** `PackageValidation` is
+      **incremental**: with the whole of `src/Verbara.Sdk/CompatibilitySuppressions.xml` deleted,
+      `dotnet pack` still exited 0 and printed 29 successful packages. The gate is
+      `obj/Release/net10.0/Microsoft.NET.ApiCompat.ValidatePackage.semaphore`. Deleting the semaphores
+      is not enough either — the nupkgs must go too, or packaging is skipped while validation reports
+      on nothing. Local-only; CI packs a fresh checkout. Any future "pack is green" claim in this
+      repository must state how it forced validation to run.
+
+      **And `dotnet pack` prints nothing to a redirected stdout on success** — no summary line at all.
+      A zero-line log with exit 0 is indistinguishable from a run that did nothing.
+
+      **A4's arithmetic was wrong.** Measured against the committed tree: **2** unique CS1503 and
+      **18** unique NS1004, not 3 and ~27. A4 counted a draft of A3's substitute; the committed one
+      already named `cancellationToken:`. The shape of A4's warning stands, the numbers do not.
+
+      **Two substitutes beyond A4's list** — `ContactCenterActivityTests.cs:163` and `:196` — neither
+      configuring this method, so neither needed a change. Seven substitutes exist, not five.
+- [x] B2 `ExternalMediaActivity` derives its request from the server it was handed:
       `encapsulation = Encapsulation ?? (_audioSocketServer is not null ? "audiosocket" : null)`; when
       the encapsulation is AudioSocket (compare ordinal-ignore-case — Asterisk uses `strcasecmp`) then
       `transport = Transport ?? "tcp"` and one `Guid.NewGuid().ToString()` goes to **both** `channelId`
@@ -209,7 +283,41 @@ failure is pasted here verbatim.** A task is not checked off until the thing it 
       encapsulation: today that combination creates an RTP channel and waits out a 30-second timeout,
       which is the shape the delta spec forbids. A unit test pins whichever behaviour is chosen, plus
       one negative control using a non-canonical identifier spelling.
-- [ ] B3 Fix the contract text. `IAudioServer.GetStream` says "Get an active stream by channel ID" and
+
+      **Done 2026-09-24.** The activity now derives its request from the server it was handed, the A3
+      regression test passes, and the contradiction case is refused instead of timing out.
+
+      The mint is `Guid.NewGuid().ToString()` — canonical lowercase, because `ParseUuid` keys the
+      table with `new Guid(bytes, bigEndian: true).ToString()` into an **ordinal** comparer and A1
+      measured what any other spelling does: HTTP 200, `Channel.Id` in the spelling sent, and a lookup
+      that misses. Both reasons are written in the code, not left to this file.
+
+      **The contradiction case is refused.** An `AudioSocketServer` supplied while the encapsulation is
+      not AudioSocket used to create an RTP channel and wait out thirty seconds — the shape
+      Requirement 2 of the delta spec forbids.
+
+      **The negative control for it was blunt and nearly shipped that way.** With an unconfigured
+      substitute, deleting the guard made the activity die on a `NullReferenceException` from a null
+      `Channel` — a red for the wrong reason, saying nothing about the timeout it was supposed to
+      prove. Configuring the create to **succeed** is what makes the mutation reproduce the real
+      defect:
+
+      ```text
+      [30 s]  TimeoutException: Asterisk did not connect to audio server within 00:00:30
+      ```
+
+      The arrange looks redundant — the call must never happen — so there is a comment saying why it
+      is there.
+
+      **Two tooling findings.** `dotnet pack -tl:off -v m` prints **no** summary on success either, so
+      grepping for "Build succeeded" on a green pack returns nothing: a different flavour of B1's
+      note, and `-tl:off -v m` fixes `build` but not `pack`. And deleting only the ApiCompat
+      semaphores is not enough — measured EXIT=0 with **zero** `Successfully created package` lines,
+      validation running while packaging was skipped entirely. The nupkgs have to go too.
+
+      `<see cref="StartAsync"/>` on a member inherited from `AriActivityBase` does not resolve, and
+      CS1574 is an error here — the full `AriActivityBase.StartAsync(CancellationToken)` is required.
+- [x] B3 Fix the contract text. `IAudioServer.GetStream` says "Get an active stream by channel ID" and
       `IAudioStream.ChannelId` says "Unique ID of the external media channel in Asterisk" — both
       assert an identity the code does not hold. Say for each implementation what the key is and in
       what form: for `AudioSocketServer`, the UUID Asterisk sent in its identification frame in
@@ -217,6 +325,33 @@ failure is pasted here verbatim.** A task is not checked off until the thing it 
       as `channelId` and `data`. Say in `ExternalMediaActivity`'s remarks that the WebSocket branch is
       **not** routed — `WebSocketAudioServer` keys on the last segment of the request URL (F1).
 
+
+      **Done 2026-09-24.** Three findings, and one deliberate widening.
+
+      **The same wrong sentence was on both implementations, not only on the interface.**
+      `/// <summary>Get an active stream by channel ID.</summary>` sat verbatim on
+      `AudioSocketServer.cs:52` and `WebSocketAudioServer.cs:63` — public members of public shipped
+      classes, which is what a caller holding a concrete server reads. Both fixed, named here rather
+      than done silently: Requirement 4 covers *any* published contract for looking a stream up by
+      key, and leaving them would have left the interface doc contradicting its own implementations.
+
+      **The brief's phrasing was over-stated and was not reproduced.** It said the AudioSocket key is
+      "the value the creator supplied as `channelId` and `data`". Probe RUN C shows `data` **alone**
+      is the key — the wire UUID equalled `data` while `Channel.Id` came back as the Asterisk uniqueid
+      `1790244226.1`. `channelId` contributes nothing to the key; it only makes `Channel.Id` equal to
+      it. The landed text says that instead.
+
+      **A fourth wrong piece of prose found and deliberately left.**
+      `WebSocketAudioServer.cs:311-313` documents `internal static ReadUpgradeRequestAsync` as
+      extracting "channel ID from URL path … Expected URL: /ws/{channelId}" — precisely the false
+      identity this task removes, and it even names the placeholder `{channelId}`. It is on an
+      internal member, so not a published contract. It belongs to F1's change, where the WebSocket key
+      finally gets measured.
+
+      **One expectation this phase had accumulated is wrong, and that matters.**
+      `GenerateDocumentationFile` is true and CS1574 is **not** in `NoWarn`, so the doc edits do have a
+      compiler oracle — unlike RS0016, which A2 measured as globally suppressed. A green doc build
+      here is worth something.
 ## Phase C — integration (batched)
 
 - [ ] C1 Functional test beside `AudioSocketWireFunctionalTests`. Three things it must get right:
@@ -263,7 +398,7 @@ ADR-0060 wrote "tracked separately" with no link, and the close-out archived it 
 change that carries these; the lines below are the evidence it starts from.
 
 - **F1 — `WebSocketAudioServer` keys on a URL path segment.** The key is computed at
-  `WebSocketAudioServer.cs:337` (`path.TrimStart('/').Split('/').LastOrDefault()`) and registered at
+  `WebSocketAudioServer.cs:337` (`path.TrimStart('/').Split('/').LastOrDefault()?.Split('?').FirstOrDefault()`) and registered at
   `:262`. The SDK's own example puts a literal `/audio` there
   (`Examples/WebSocketMediaExample/Program.cs:10`), so every concurrent call would register under the
   key `"audio"`. `CompositeAudioServer` hands the same string to both servers, which do not agree on

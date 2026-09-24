@@ -97,9 +97,34 @@ public interface IAriChannelsResource
     ValueTask AnswerAsync(string channelId, CancellationToken cancellationToken = default);
 
     /// <summary>Create an external media channel. POST /channels/externalMedia</summary>
+    /// <remarks>
+    /// <para>
+    /// <c>channelId</c> is the unique id Asterisk assigns the channel it creates; it comes back as
+    /// <see cref="AriChannel.Id"/>. Asterisk spells this query parameter in <b>camelCase</b> while
+    /// every sibling here is snake_case, and it ignores a parameter it does not recognise instead of
+    /// rejecting it — so a misspelling is a silent no-op, not an error status. Asterisk echoes the
+    /// value back verbatim and does not require it to be a UUID.
+    /// </para>
+    /// <para>
+    /// It is a different thing from <c>data</c>. Under AudioSocket encapsulation <c>data</c> is the
+    /// identification UUID Asterisk sends on the audio connection — the value an AudioSocket server
+    /// keys its stream table by, and it must parse as a UUID — while <c>channelId</c> only names the
+    /// ARI channel. Passing one identifier as both is what makes a stream findable by the channel id
+    /// this call returned.
+    /// </para>
+    /// <para>
+    /// Placed after <c>data</c> rather than first among the optionals, which is where
+    /// <see cref="CreateWithoutDialAsync"/> puts its own <c>channelId</c>. The inconsistency is
+    /// deliberate: inserting ahead of <c>encapsulation</c> would rebind every existing positional
+    /// argument to a different <c>string?</c> parameter and still compile, so callers would break
+    /// silently at runtime. Appending before the cancellation token breaks only callers that passed
+    /// that token positionally, and that break is a compile error.
+    /// </para>
+    /// </remarks>
     ValueTask<AriChannel> CreateExternalMediaAsync(string app, string externalHost, string format,
         string? encapsulation = null, string? transport = null, string? connectionType = null,
-        string? direction = null, string? data = null, CancellationToken cancellationToken = default);
+        string? direction = null, string? data = null, string? channelId = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Get a channel variable. GET /channels/{channelId}/variable</summary>
     ValueTask<AriVariable> GetVariableAsync(string channelId, string variable, CancellationToken cancellationToken = default);
@@ -664,7 +689,31 @@ public sealed class AriRtpStats
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "IAudioStream is the correct domain name for this abstraction")]
 public interface IAudioStream : IAsyncDisposable
 {
-    /// <summary>Unique ID of the external media channel in Asterisk.</summary>
+    /// <summary>
+    /// The key this stream is registered under in its server's table. It is <b>not</b>, in general,
+    /// an ARI channel id: the two implementations derive it from different things, and a value that
+    /// is a valid key for one of them is meaningless to the other.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>AudioSocket.</b> The UUID Asterisk sent in the AudioSocket identification frame, rendered
+    /// from the sixteen wire bytes as <c>new Guid(bytes, bigEndian: true).ToString()</c> — so always
+    /// in <b>canonical lowercase hyphenated</b> form, e.g.
+    /// <c>cd98c592-9ce2-4093-afae-420d53629a4f</c>. Over ARI that is the value the creator passed as
+    /// <c>data</c> to <see cref="IAriChannelsResource.CreateExternalMediaAsync"/>. It equals
+    /// <see cref="AriChannel.Id"/> only when the creator passed that same value as <c>channelId</c>
+    /// as well — which is what <c>ExternalMediaActivity</c> does. Passing <c>data</c> alone leaves
+    /// <see cref="AriChannel.Id"/> an Asterisk-minted uniqueid such as <c>1790244226.1</c>, which
+    /// appears in no stream table.
+    /// </para>
+    /// <para>
+    /// <b>WebSocket.</b> Not an Asterisk identifier at all: the last segment of the HTTP upgrade
+    /// request's path with any query string removed —
+    /// <c>path.TrimStart('/').Split('/').LastOrDefault()?.Split('?').FirstOrDefault()</c>. It is
+    /// whatever the caller put at the end of the URL it dialled, so every connection that dials the
+    /// same URL yields the same key.
+    /// </para>
+    /// </remarks>
     string ChannelId { get; }
 
     /// <summary>Audio format (e.g., "slin16", "ulaw", "alaw").</summary>
@@ -701,7 +750,27 @@ public interface IAudioServer
     /// <summary>Observable that emits each new audio stream when a connection is established.</summary>
     IObservable<IAudioStream> OnStreamConnected { get; }
 
-    /// <summary>Get an active stream by channel ID.</summary>
+    /// <summary>
+    /// Get an active stream by the key its server registered it under. That key is <b>not</b> an
+    /// ARI channel id in general, and it is not interchangeable between implementations — a
+    /// <c>CompositeAudioServer</c> hands this one string to servers that do not agree on what it
+    /// means.
+    /// </summary>
+    /// <param name="channelId">
+    /// The registration key. It is the stream's <see cref="IAudioStream.ChannelId"/> and is
+    /// described in full there; the parameter keeps its old name for source compatibility, not
+    /// because the value is a channel id. In short — for <c>AudioSocketServer</c>: the UUID from
+    /// Asterisk's AudioSocket identification frame, in canonical lowercase hyphenated form and
+    /// compared <b>ordinally</b>, so any other spelling of the same UUID misses. For
+    /// <c>WebSocketAudioServer</c>: the last path segment of the HTTP upgrade request URL, query
+    /// string stripped. An ARI <see cref="AriChannel.Id"/> is a key for the first only when the
+    /// channel was created with that same value in both <c>channelId</c> and <c>data</c>, as
+    /// <c>ExternalMediaActivity</c> does; it is not a key for the second.
+    /// </param>
+    /// <returns>
+    /// The stream registered under that key, or <see langword="null"/> if there is none. A key in
+    /// the wrong form is indistinguishable from an absent stream, which is why the form matters.
+    /// </returns>
     IAudioStream? GetStream(string channelId);
 
     /// <summary>All currently active audio streams.</summary>

@@ -327,10 +327,17 @@ public class ActivityTests
         var channelsResource = Substitute.For<IAriChannelsResource>();
         ariClient.Channels.Returns(channelsResource);
 #pragma warning disable CA2012
+        // NAMED, including channelId. A positional list ending in Arg.Any<CancellationToken>() would
+        // bind the token to the string? channelId slot (CS1503), and leaving channelId out of a named
+        // list is worse: the compiler supplies its default null, NSubstitute equality-matches that
+        // null, and the setup silently stops matching the moment the activity sends a real id — the
+        // test would then die on a null Channel rather than on an argument mismatch.
         channelsResource.CreateExternalMediaAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            app: Arg.Any<string>(), externalHost: Arg.Any<string>(), format: Arg.Any<string>(),
+            encapsulation: Arg.Any<string?>(), transport: Arg.Any<string?>(),
+            connectionType: Arg.Any<string?>(), direction: Arg.Any<string?>(),
+            data: Arg.Any<string?>(), channelId: Arg.Any<string?>(),
+            cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new ValueTask<AriChannel>(new AriChannel { Id = "ch-1" }));
 #pragma warning restore CA2012
 
@@ -391,10 +398,15 @@ public class ActivityTests
         ariClient.Channels.Returns(channelsResource);
 
 #pragma warning disable CA2012
+        // NAMED, including channelId — see the note on the substitute above: omitting channelId from
+        // a named list leaves it equality-matched against null, which stops matching as soon as the
+        // activity supplies one.
         channelsResource.CreateExternalMediaAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            app: Arg.Any<string>(), externalHost: Arg.Any<string>(), format: Arg.Any<string>(),
+            encapsulation: Arg.Any<string?>(), transport: Arg.Any<string?>(),
+            connectionType: Arg.Any<string?>(), direction: Arg.Any<string?>(),
+            data: Arg.Any<string?>(), channelId: Arg.Any<string?>(),
+            cancellationToken: Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 // Return a channel, then simulate the audio server never connecting
@@ -453,11 +465,13 @@ public class ActivityTests
             encapsulation: Arg.Any<string?>(), transport: Arg.Any<string?>(),
             connectionType: Arg.Any<string?>(), direction: Arg.Any<string?>(),
             data: Arg.Any<string?>(),
-            // NAMED, and the token especially. The fix inserts channelId between data and the token,
-            // so a ninth POSITIONAL Arg.Any<CancellationToken>() would bind to a string? parameter
-            // and this file would stop compiling — CS1503, the same trap the two substitutes above
-            // carry. Naming the token survives the insertion; naming channelId is impossible here,
-            // because it does not exist on the signature under test.
+            // NAMED, and the token especially. B1 inserted channelId between data and the token, so a
+            // ninth POSITIONAL Arg.Any<CancellationToken>() would bind to a string? parameter and this
+            // file would stop compiling — CS1503, the trap the two substitutes above carried. Naming
+            // the token survived that insertion. channelId is named here too now that it exists: left
+            // out of a named list the compiler supplies null, NSubstitute equality-matches it, and the
+            // setup would stop matching the moment B2 makes the activity send a real uuid.
+            channelId: Arg.Any<string?>(),
             cancellationToken: Arg.Any<CancellationToken>())
             // ForAnyArgs, not Returns: the fix adds a channelId parameter to this method, and an
             // argument-by-argument match would leave it compared against its default null — the
@@ -465,12 +479,13 @@ public class ActivityTests
             // would fail on a null channel rather than on its own assertions.
             .ReturnsForAnyArgs(callInfo =>
             {
-                // Positional, because this test may not NAME channelId: that parameter does not
-                // exist on the signature under test, and naming it is CS1739 — a compile error, not
-                // a failing assertion. The captured positions are stable across the fix, which
-                // appends channelId after data and before the CancellationToken:
+                // Positional capture, and the indices below survived B1 because it APPENDED
+                // channelId after data rather than inserting it among the optionals:
                 //   0 app, 1 externalHost, 2 format, 3 encapsulation, 4 transport,
-                //   5 connectionType, 6 direction, 7 data, (8 channelId), last CancellationToken.
+                //   5 connectionType, 6 direction, 7 data, 8 channelId, 9 CancellationToken.
+                // That is a property of where the parameter landed, not a guarantee: any future
+                // insertion before index 7 renumbers these silently, because every slot from 3 to 8
+                // is string? and ArgAt<string?> would happily read the wrong one.
                 sentEncapsulation = callInfo.ArgAt<string?>(3);
                 sentTransport = callInfo.ArgAt<string?>(4);
                 sentData = callInfo.ArgAt<string?>(7);
@@ -512,6 +527,221 @@ public class ActivityTests
         sentTransport.Should().Be("tcp",
             "audiosocket encapsulation on any other transport is HTTP 400 \"transport must be 'tcp' "
             + "for audiosocket encapsulation\" (probe-capture.txt RUN G)");
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldSendOneCanonicalLowercaseIdentifierAsBothChannelIdAndData_WhenEncapsulationIsAudioSocket()
+    {
+        // The identity this change buys: Channel.Id and the AudioSocket identification UUID are one
+        // value, in the one spelling AudioSocketServer's table can be hit with. Both halves are
+        // measured, not reasoned:
+        //   probe-capture.txt RUN A — channelId and data given DIFFERENT values: HTTP 200,
+        //     Channel.Id is the channelId, the wire carries the data, and no lookup crosses them.
+        //   probe-capture.txt RUN C — data only: Channel.Id is an Asterisk uniqueid ("1790244226.1")
+        //     that appears in no stream table.
+        //   probe-capture.txt RUN U — an UPPERCASE identifier: HTTP 200, Channel.Id echoed back in
+        //     the spelling sent, while the wire bytes render through AudioSocketSession.ParseUuid as
+        //     canonical lowercase into an ORDINAL dictionary. Created channel, unfindable stream,
+        //     no error on any hop.
+        // RUN U's negative control is run against the real server rather than this substitute, in
+        // AudioSocketServerTests.GetStream_ShouldMiss_WhenIdentifierIsNotCanonicalLowercase.
+        var ariClient = Substitute.For<IAriClient>();
+        var channelsResource = Substitute.For<IAriChannelsResource>();
+        ariClient.Channels.Returns(channelsResource);
+
+        string? sentEncapsulation = null;
+        string? sentData = null;
+        string? sentChannelId = null;
+
+#pragma warning disable CA2012
+        channelsResource.CreateExternalMediaAsync(
+            app: Arg.Any<string>(), externalHost: Arg.Any<string>(), format: Arg.Any<string>(),
+            encapsulation: Arg.Any<string?>(), transport: Arg.Any<string?>(),
+            connectionType: Arg.Any<string?>(), direction: Arg.Any<string?>(),
+            data: Arg.Any<string?>(), channelId: Arg.Any<string?>(),
+            cancellationToken: Arg.Any<CancellationToken>())
+            .ReturnsForAnyArgs(callInfo =>
+            {
+                //   0 app, 1 externalHost, 2 format, 3 encapsulation, 4 transport,
+                //   5 connectionType, 6 direction, 7 data, 8 channelId, 9 CancellationToken.
+                // Every slot from 3 to 8 is string?, so an insertion before index 7 renumbers these
+                // silently — see the note on the test above.
+                sentEncapsulation = callInfo.ArgAt<string?>(3);
+                sentData = callInfo.ArgAt<string?>(7);
+                sentChannelId = callInfo.ArgAt<string?>(8);
+                return new ValueTask<AriChannel>(new AriChannel { Id = sentChannelId ?? "no-channel-id-was-sent" });
+            });
+#pragma warning restore CA2012
+
+        await using var audioSocketServer = new AudioSocketServer(
+            new AudioServerOptions { AudioSocketPort = 0, ListenAddress = "127.0.0.1" },
+            NullLogger<AudioSocketServer>.Instance);
+
+        // Encapsulation left NULL on purpose: this is the derivation, not a value the test supplied.
+        var activity = new ExternalMediaActivity(ariClient, audioSocketServer)
+        {
+            App = "test",
+            ExternalHost = "127.0.0.1:19099",
+            ConnectionTimeout = TimeSpan.FromMilliseconds(50)
+        };
+
+        var start = () => activity.StartAsync().AsTask();
+        await start.Should().ThrowAsync<TimeoutException>(
+            "nothing connects to the audio server here, so the run ends in the timeout — that is how "
+            + "it ends, not what is asserted below");
+
+        // Positive control, load-bearing for the same reason as in the test above: a capture that
+        // never ran reads null, and null would satisfy nothing here but would make every failure
+        // below look like the defect. This is the one value the derivation must produce.
+        sentEncapsulation.Should().Be("audiosocket",
+            "an AudioSocketServer with Encapsulation left null must derive audiosocket — otherwise "
+            + "Asterisk reads the absent parameter as rtp/udp, answers 200 with a UnicastRTP channel "
+            + "and nothing ever connects (probe-capture.txt RUN H/RUN H+)");
+
+        sentData.Should().NotBeNull("Asterisk rejects an audiosocket create with no data — "
+            + "HTTP 400 \"data can not be empty\" (RUN D)");
+        sentChannelId.Should().NotBeNull("without channelId Asterisk mints the ARI id itself and it "
+            + "appears in no stream table (RUN C)");
+        sentChannelId.Should().Be(sentData,
+            "one identifier in both parameters is what makes Channel.Id the key the stream table "
+            + "holds; different values create a channel whose stream cannot be found (RUN A)");
+
+        Guid.TryParse(sentData, out var minted).Should().BeTrue(
+            "Asterisk requires data to parse as a UUID — a malformed one is HTTP 500 with the "
+            + "listener up, the same status a dead port gives (probe-capture.txt correction #4)");
+        sentData.Should().Be(minted.ToString(),
+            "AudioSocketSession.ParseUuid ends in new Guid(bytes, bigEndian: true).ToString(), which "
+            + "is canonical lowercase hyphenated, and AudioSocketServer looks that key up in a "
+            + "ConcurrentDictionary<string, ...> with the default ORDINAL comparer. This equality — "
+            + "not Guid.TryParseExact(\"D\"), which accepts an uppercase spelling too — is what pins "
+            + "the form");
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldSendTheCallersTransportUnchanged_WhenTransportIsSetExplicitly()
+    {
+        // The derivation is `transport ??= "tcp"`, not `transport = "tcp"`, and nothing else would
+        // catch the difference: every other test here leaves Transport null, so an unconditional
+        // assignment passes them all while quietly overwriting what a caller asked for. Asterisk
+        // answers a wrong transport with HTTP 400 "transport must be 'tcp' for audiosocket
+        // encapsulation" (probe-capture.txt RUN G) — its own message, at the create call, which is
+        // a better diagnosis than a silent rewrite into something that works.
+        var ariClient = Substitute.For<IAriClient>();
+        var channelsResource = Substitute.For<IAriChannelsResource>();
+        ariClient.Channels.Returns(channelsResource);
+
+        string? sentTransport = null;
+
+#pragma warning disable CA2012
+        channelsResource.CreateExternalMediaAsync(
+            app: Arg.Any<string>(), externalHost: Arg.Any<string>(), format: Arg.Any<string>(),
+            encapsulation: Arg.Any<string?>(), transport: Arg.Any<string?>(),
+            connectionType: Arg.Any<string?>(), direction: Arg.Any<string?>(),
+            data: Arg.Any<string?>(), channelId: Arg.Any<string?>(),
+            cancellationToken: Arg.Any<CancellationToken>())
+            .ReturnsForAnyArgs(callInfo =>
+            {
+                sentTransport = callInfo.ArgAt<string?>(4);
+                return new ValueTask<AriChannel>(new AriChannel { Id = "ext-ch-explicit-transport" });
+            });
+#pragma warning restore CA2012
+
+        await using var audioSocketServer = new AudioSocketServer(
+            new AudioServerOptions { AudioSocketPort = 0, ListenAddress = "127.0.0.1" },
+            NullLogger<AudioSocketServer>.Instance);
+
+        var activity = new ExternalMediaActivity(ariClient, audioSocketServer)
+        {
+            App = "test",
+            ExternalHost = "127.0.0.1:19099",
+            Encapsulation = "audiosocket",
+            Transport = "udp",
+            ConnectionTimeout = TimeSpan.FromMilliseconds(50)
+        };
+
+        var start = () => activity.StartAsync().AsTask();
+        await start.Should().ThrowAsync<TimeoutException>(
+            "nothing connects here either — the create call on the way there is what is asserted");
+
+        sentTransport.Should().Be("udp",
+            "a caller who set Transport explicitly gets exactly that on the wire; the \"tcp\" default "
+            + "fills an absent value and does not override a supplied one");
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldThrowNamingTheContradiction_WhenAudioSocketServerIsSuppliedForAnotherEncapsulation()
+    {
+        // Delta spec, Requirement 2: "An audio server that cannot be reached by the requested
+        // encapsulation is refused" — it SHALL fail with an error naming the contradiction and SHALL
+        // NOT wait out its connection timeout and report a connection failure.
+        //
+        // Chosen behaviour: throw InvalidOperationException BEFORE the create call. The rejected
+        // alternatives, recorded so the choice is visible: silently overriding the caller's
+        // Encapsulation (the caller asked for something and would get something else, with no
+        // diagnostic), or ignoring the server (which is today's behaviour — a 30-second wait ending
+        // in "Asterisk did not connect to audio server", a symptom reported one layer away from the
+        // cause). Refusing before the create also keeps a doomed channel from existing at all.
+        var ariClient = Substitute.For<IAriClient>();
+        var channelsResource = Substitute.For<IAriChannelsResource>();
+        ariClient.Channels.Returns(channelsResource);
+
+        // The create is configured to SUCCEED even though it must never be reached. Without this the
+        // negative control is blunt: delete the guard and the activity dies on a NullReferenceException
+        // from an unconfigured substitute, which would fail this test for the wrong reason and say
+        // nothing about the timeout. With it, deleting the guard reproduces today's behaviour exactly —
+        // Asterisk creates a UnicastRTP channel (probe-capture.txt RUN H), nothing connects, and the
+        // activity waits out the whole ConnectionTimeout before throwing TimeoutException. Every
+        // assertion below then fails on the real defect.
+#pragma warning disable CA2012
+        channelsResource.CreateExternalMediaAsync(
+            app: Arg.Any<string>(), externalHost: Arg.Any<string>(), format: Arg.Any<string>(),
+            encapsulation: Arg.Any<string?>(), transport: Arg.Any<string?>(),
+            connectionType: Arg.Any<string?>(), direction: Arg.Any<string?>(),
+            data: Arg.Any<string?>(), channelId: Arg.Any<string?>(),
+            cancellationToken: Arg.Any<CancellationToken>())
+            .ReturnsForAnyArgs(new ValueTask<AriChannel>(new AriChannel { Id = "ext-ch-rtp" }));
+#pragma warning restore CA2012
+
+        await using var audioSocketServer = new AudioSocketServer(
+            new AudioServerOptions { AudioSocketPort = 0, ListenAddress = "127.0.0.1" },
+            NullLogger<AudioSocketServer>.Instance);
+
+        var activity = new ExternalMediaActivity(ariClient, audioSocketServer)
+        {
+            App = "test",
+            ExternalHost = "127.0.0.1:19099",
+            Encapsulation = "rtp",
+            ConnectionTimeout = TimeSpan.FromSeconds(30)
+        };
+
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var start = () => activity.StartAsync().AsTask();
+        var thrown = await start.Should().ThrowAsync<InvalidOperationException>(
+            "an AudioSocketServer cannot be reached over rtp encapsulation, and the SDK refuses the "
+            + "combination instead of creating a channel that can never carry that server's stream");
+        var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+
+        thrown.Which.Message.Should().Contain("AudioSocketServer",
+            "the message has to name what was supplied");
+        thrown.Which.Message.Should().Contain("rtp",
+            "and the encapsulation it contradicts, so the reader is not left to guess which half to change");
+        thrown.Which.Message.Should().Contain("audiosocket",
+            "and the value that would resolve it");
+
+        activity.Channel.Should().BeNull(
+            "the spec requires the failure BEFORE a channel is created, not after");
+        channelsResource.ReceivedCalls().Should().BeEmpty(
+            "nothing at all should have been asked of ARI — no externalMedia create, and so no "
+            + "channel to hang up");
+
+        // The timeout clause of the requirement, measured rather than inferred from the exception
+        // type. 30 s configured against a 5 s bound: a wide margin, because the claim is "did not
+        // wait it out", not "was fast".
+        elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5),
+            "the contradiction is refused up front; today's behaviour waits out the whole "
+            + "ConnectionTimeout and then reports a connection failure");
+        activity.Status.Should().Be(ActivityStatus.Failed,
+            "a refused configuration is a failed activity, not a cancelled one");
     }
 
     [Fact]

@@ -49,7 +49,13 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
     /// <summary>Observable that emits each new audio stream when a connection is established.</summary>
     public IObservable<IAudioStream> OnStreamConnected => _streamSubject;
 
-    /// <summary>Get an active stream by channel ID.</summary>
+    /// <summary>
+    /// Get an active stream by the UUID Asterisk sent in its AudioSocket identification frame, in
+    /// canonical lowercase hyphenated form. The table is an ordinal dictionary, so any other
+    /// spelling of the same UUID returns <see langword="null"/>. Over ARI that UUID is the value
+    /// the creator passed as <c>data</c>, and it is the created channel's id only if the creator
+    /// passed it as <c>channelId</c> too. See <see cref="IAudioServer.GetStream(string)"/>.
+    /// </summary>
     public IAudioStream? GetStream(string channelId) =>
         _streams.TryGetValue(channelId, out var session) ? session : null;
 
