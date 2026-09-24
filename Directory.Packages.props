@@ -57,7 +57,7 @@
 
   <!-- ONNX Runtime (Verbara.Sdk.VoiceAi.TurnDetection) -->
   <ItemGroup>
-    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.28.0" />
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.30.0" />
   </ItemGroup>
 
   <!-- OpenTelemetry (Verbara.Sdk.OpenTelemetry batteries-included package) -->
