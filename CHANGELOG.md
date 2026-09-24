@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-09-24
+
+### Changed — `Microsoft.ML.OnnxRuntime` moved from 1.28.0 to 1.30.0 (#296)
+
+`Verbara.Sdk.VoiceAi.TurnDetection` references it without `PrivateAssets`, so a consumer resolves the
+new version transitively and the turn detector runs its inference on it. The bundled
+`smart-turn-v3.2-cpu` model and every published accuracy figure are unchanged — the runtime moved, not
+the model. Recorded because a runtime dependency a consumer resolves is not an internal detail; the
+only precedent for recording a bump (`Microsoft.SourceLink.GitHub` in 2.5.1) was an advisory, and this
+one is a deliberate choice to state the reach rather than the reason.
+
 ### Changed — BREAKING: `ExternalMediaActivity` could not reach an AudioSocket stream by any configuration (#305)
 
 `ExternalMediaActivity` accepts an `AudioSocketServer` in its constructor and then polls

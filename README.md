@@ -58,7 +58,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ## Status
 
-**v2.5.3** — 29 NuGet packages, 0 build warnings, 0 trim warnings, ~2,924 unit tests + 154 functional + 65 integration (Testcontainers).
+**v2.6.0** — 29 NuGet packages, 0 build warnings, 0 trim warnings, ~2,924 unit tests + 154 functional + 65 integration (Testcontainers).
 
 Release history — every version, with what changed and why — is in [`CHANGELOG.md`](CHANGELOG.md). It is not restated here: a second copy in the README is one nobody updates, and this block had drifted three releases behind before anyone noticed.
 

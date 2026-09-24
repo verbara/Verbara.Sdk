@@ -50,7 +50,7 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 | 61 | 0 build warnings | ENFORCING | `Directory.Build.props` `TreatWarningsAsErrors` + `Pack Warnings Gate` | OK |
 | 61 | 0 trim warnings | ENFORCING | AotCanary | PARTIAL — 22/29 |
 | 61 | ~2,924 unit + 154 functional + 65 integration | COHERENCE | — | WRONG — the suite runs **3,295** (measured 2026-08-29); note nothing in-tree *records* that number until §4.1 commits the record |
-| 61 | headline version **v2.5.3** | COHERENCE | `StatusBlockCoherenceTests` — against `Directory.Build.props` `<PackageVersion>` | **OK** |
+| 61 | headline version **v2.6.0** | COHERENCE | `StatusBlockCoherenceTests` — against `Directory.Build.props` `<PackageVersion>` | **OK** |
 | ~~65~~ | ONNX model 8.3 MB | — | — | **DELETED** — lived in the release bullets, cut by the 2026-09-20 ruling on `README.md` release history |
 | ~~67~~ | 94.26% English accuracy, in upstream's voice | — | — | **DELETED** — lived in the release bullets, cut by the 2026-09-20 ruling on `README.md` release history. The figure survives at `:465` (row below) with its citation and hash pin; this was the duplicate. |
 | ~~67~~ | ~12 ms CPU inference | — | `TurnDetectionBenchmark` | **DELETED** — measured at 26.18–37.30 ms; deferred, see *Deferrals*. Its line was also removed with the release bullets on 2026-09-20. |
