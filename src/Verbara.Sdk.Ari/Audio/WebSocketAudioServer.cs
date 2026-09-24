@@ -60,7 +60,11 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     /// <summary>Observable that emits each new audio stream when a connection is established.</summary>
     public IObservable<IAudioStream> OnStreamConnected => _streamSubject;
 
-    /// <summary>Get an active stream by channel ID.</summary>
+    /// <summary>
+    /// Get an active stream by the last path segment of the HTTP upgrade request URL it arrived on,
+    /// query string stripped — not by an ARI channel id, and not by the AudioSocket identification
+    /// UUID. See <see cref="IAudioServer.GetStream(string)"/>.
+    /// </summary>
     public IAudioStream? GetStream(string channelId) =>
         _streams.TryGetValue(channelId, out var session) ? session : null;
 

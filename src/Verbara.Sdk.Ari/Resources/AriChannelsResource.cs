@@ -80,7 +80,8 @@ public sealed class AriChannelsResource : IAriChannelsResource
 
     public async ValueTask<AriChannel> CreateExternalMediaAsync(string app, string externalHost, string format,
         string? encapsulation = null, string? transport = null, string? connectionType = null,
-        string? direction = null, string? data = null, CancellationToken cancellationToken = default)
+        string? direction = null, string? data = null, string? channelId = null,
+        CancellationToken cancellationToken = default)
     {
         var url = $"channels/externalMedia?app={Uri.EscapeDataString(app)}&external_host={Uri.EscapeDataString(externalHost)}&format={Uri.EscapeDataString(format)}";
         if (encapsulation is not null) url += $"&encapsulation={Uri.EscapeDataString(encapsulation)}";
@@ -88,6 +89,11 @@ public sealed class AriChannelsResource : IAriChannelsResource
         if (connectionType is not null) url += $"&connection_type={Uri.EscapeDataString(connectionType)}";
         if (direction is not null) url += $"&direction={Uri.EscapeDataString(direction)}";
         if (data is not null) url += $"&data={Uri.EscapeDataString(data)}";
+        // camelCase, alone among the snake_case siblings above — that is how Asterisk spells this one,
+        // and it is not a typo. Asterisk ignores a query parameter it does not recognise rather than
+        // rejecting it, so a misspelling here would drop the channel id with an HTTP 200 and no
+        // symptom until a lookup missed. Verbara.Sdk.Ari.Tests asserts the literal "channelId=".
+        if (channelId is not null) url += $"&channelId={Uri.EscapeDataString(channelId)}";
 
         var response = await _http.PostAsync(url, null, cancellationToken);
         await response.EnsureAriSuccessAsync();

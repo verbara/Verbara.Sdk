@@ -158,8 +158,14 @@ public class AriResourceTests
         using var http = CreateHttpClient(handler);
         var sut = new AriChannelsResource(http, DefaultOptions);
 
+        // Every optional is SUPPLIED, not just asserted on. Until this change the test passed
+        // encapsulation and transport only, and the connection_type, direction and data appenders had
+        // never executed across the whole Ari suite — an assertion about a parameter the test does not
+        // send holds whatever the appender does, including nothing.
         var result = await sut.CreateExternalMediaAsync("myapp", "127.0.0.1:8000", "slin16",
-            encapsulation: "rtp", transport: "udp");
+            encapsulation: "rtp", transport: "udp", connectionType: "client", direction: "both",
+            data: "f9e8d7c6-b5a4-3928-1706-f5e4d3c2b1a0",
+            channelId: "0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9");
 
         result.Id.Should().Be("ch-ext");
         handler.LastMethod.Should().Be(HttpMethod.Post);
@@ -168,6 +174,18 @@ public class AriResourceTests
         handler.LastRequestUri.Should().Contain("format=slin16");
         handler.LastRequestUri.Should().Contain("encapsulation=rtp");
         handler.LastRequestUri.Should().Contain("transport=udp");
+        handler.LastRequestUri.Should().Contain("connection_type=client");
+        handler.LastRequestUri.Should().Contain("direction=both");
+        handler.LastRequestUri.Should().Contain("data=f9e8d7c6-b5a4-3928-1706-f5e4d3c2b1a0");
+
+        // The literal spelling, deliberately. Asterisk spells this one parameter in camelCase among
+        // snake_case siblings and ignores an unrecognised query parameter silently — "channel_id="
+        // would leave the create returning HTTP 200 with an Asterisk-minted id and no error anywhere,
+        // so only a test on the exact bytes catches the misspelling.
+        handler.LastRequestUri.Should().Contain("channelId=0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9",
+            "Asterisk spells this parameter channelId, and silently ignores any other spelling");
+        handler.LastRequestUri.Should().NotContain("channel_id=",
+            "the snake_case spelling the siblings use is the misspelling this assertion exists to catch");
     }
 
     [Fact]

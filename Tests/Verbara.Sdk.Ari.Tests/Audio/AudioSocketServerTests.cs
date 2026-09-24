@@ -190,6 +190,42 @@ public class AudioSocketServerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task GetStream_ShouldMiss_WhenIdentifierIsNotCanonicalLowercase()
+    {
+        // The negative control behind ExternalMediaActivity minting its identifier with
+        // Guid.ToString(). The fixture is a measurement, not an argument: probe-capture.txt RUN U
+        // sent this exact UUID to a real Asterisk — 22.9.0 and 23.4.1, identically — as both
+        // channelId and data:
+        //     -> HTTP 200  id=EC30994A-B0E1-4EBE-99BD-19CA35669F7A
+        //     HEX: 01 00 10 ec 30 99 4a b0 e1 4e be 99 bd 19 ca 35 66 9f 7a
+        // Asterisk accepted the uppercase spelling and echoed Channel.Id back in it, while the
+        // identification frame carried sixteen raw bytes. This test puts those sixteen bytes into
+        // the real server and then asks it for the stream BOTH ways — the way a consumer holding
+        // Channel.Id would, and the way the table is actually keyed.
+        const string asSentToAsterisk = "EC30994A-B0E1-4EBE-99BD-19CA35669F7A";
+        var wireUuid = Guid.Parse(asSentToAsterisk);
+        var canonical = wireUuid.ToString();
+        canonical.Should().NotBe(asSentToAsterisk,
+            "the fixture has to differ in spelling from its canonical form, or this test controls nothing");
+
+        var port = GetFreePort();
+        var server = CreateServer(port);
+        await server.StartAsync();
+
+        using var client = await ConnectAndSendUuidAsync(port, wireUuid, server);
+
+        server.ActiveStreamCount.Should().Be(1, "the identification frame was accepted");
+        server.GetStream(canonical).Should().NotBeNull(
+            "ParseUuid renders the sixteen wire bytes with new Guid(bytes, bigEndian: true).ToString(), "
+            + "so the table is keyed by the canonical lowercase hyphenated form");
+        server.GetStream(asSentToAsterisk).Should().BeNull(
+            "the table is a ConcurrentDictionary<string, ...> with the default ORDINAL comparer. A "
+            + "channel created with a non-canonical channelId comes back with Channel.Id in that "
+            + "spelling, so GetStream(Channel.Id) misses — HTTP 200, a live stream, and no error on "
+            + "any hop. That silence is why the identifier is minted rather than accepted");
+    }
+
+    [Fact]
     public async Task HandleConnection_ShouldEmitOnStreamConnected_WhenUuidReceived()
     {
         var port = GetFreePort();

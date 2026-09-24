@@ -1,0 +1,159 @@
+ARI externalMedia / AudioSocket identification probe
+====================================================
+Asterisk 22.9.0 (image verbara/asterisk-local:22, --network host), real ARI over HTTP :8088,
+bare TCP listener on 127.0.0.1:19099 recording raw bytes. The listener is dependency-free on
+purpose: no code from this repository decodes anything below.
+
+Reproduce with probe-externalmedia.py beside this file. It prints the FULL query string of every
+request, which this capture did not do in its first version — and that omission is what let a wrong
+conclusion survive review. See CORRECTIONS at the end.
+
+Every run uses UUIDs that are asymmetric under byte reversal, so a capture says BOTH which parameter
+travels AND in which byte order. A byte-order-symmetric fixture would have passed either way; that
+mistake was made once already in this repository's history.
+
+--------------------------------------------------------------------------------
+PART 1 — what the SDK sends today
+--------------------------------------------------------------------------------
+
+RUN G — ExternalMediaActivity with Encapsulation = "audiosocket", Transport unset.
+        This is what the class actually puts on the wire for an AudioSocket caller.
+  QUERY: app=probe&external_host=127.0.0.1%3A19099&format=slin16&encapsulation=audiosocket
+  HTTP 400 -> "transport must be 'tcp' for audiosocket encapsulation"
+
+RUN H — ExternalMediaActivity with its DEFAULTS (Encapsulation unset => rtp/udp).
+  QUERY: app=probe&external_host=127.0.0.1%3A19099&format=slin16
+  HTTP 200  id=1790245644.0  name=UnicastRTP/127.0.0.1:19099-0x7f6ce8002100
+  No AudioSocket connection is ever made. An AudioSocketServer handed to this activity waits out
+  ConnectionTimeout and the activity throws TimeoutException — which is exactly what ADR-0060
+  predicted, for the class's default configuration.
+
+RUN D — audiosocket + transport=tcp, no data.
+  QUERY: app=probe&external_host=127.0.0.1%3A19099&format=slin&encapsulation=audiosocket&transport=tcp
+  HTTP 400 -> "data can not be empty"
+  Reached only once transport=tcp is supplied. The activity does not supply it today.
+
+--------------------------------------------------------------------------------
+PART 2 — which parameter reaches the wire
+--------------------------------------------------------------------------------
+
+RUN A — channelId and data DISTINCT, listener up.
+  channelId = 0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9
+  data      = f9e8d7c6-b5a4-3928-1706-f5e4d3c2b1a0
+  HTTP 200
+  channel.id   : 0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9      <- channelId
+  channel.name : AudioSocket/127.0.0.1:19099-f9e8d7c6-...  <- data
+  HEX: 01 00 10 f9 e8 d7 c6 b5 a4 39 28 17 06 f5 e4 d3 c2 b1 a0
+  UUID on the wire (big-endian, RFC 4122): f9e8d7c6-b5a4-3928-1706-f5e4d3c2b1a0
+      == channelId ? False        == data ? True
+
+RUN F — RUN A repeated with fresh ids. Same result: the wire carries data.
+
+RUN C — data only, no channelId, listener up.
+  HTTP 200  channel.id : 1790244226.1   <- Asterisk-minted uniqueid, unrelated to the wire
+  HEX: 01 00 10 f9 e8 d7 c6 b5 a4 39 28 17 06 f5 e4 d3 c2 b1 a0   == data ? True
+  Note what this run proves: the stream is findable TODAY by the value the caller passed as data,
+  with no API change at all. Choosing channelId over that is a deliberate cost, recorded in
+  proposal.md under "Rejected alternative".
+
+--------------------------------------------------------------------------------
+PART 3 — the pattern, and what a 500 actually means
+--------------------------------------------------------------------------------
+
+channelId == data, fresh uuid each run, crossed against format and against whether anything is
+listening on the target port:
+
+  format=slin16   listener UP    -> HTTP 200  id=cd98c592-9ce2-4093-afae-420d53629a4f
+                                   HEX: 01 00 10 cd 98 c5 92 9c e2 40 93 af ae 42 0d 53 62 9a 4f
+                                   UUID on the wire == channelId ? True
+  format=slin16   listener DOWN  -> HTTP 500  "An internal error prevented this request..."
+  format=slin     listener UP    -> HTTP 200  id=5433739b-2d3b-4e8a-97f2-3c57e0981278
+                                   UUID on the wire == channelId ? True
+  format=slin     listener DOWN  -> HTTP 500
+
+HTTP 500 means NOTHING IS LISTENING on external_host. It is not about the format and not about the
+channel id. chan_audiosocket connects during the create call, so a create against a dead port fails
+the request rather than producing a channel that never connects.
+
+--------------------------------------------------------------------------------
+PART 4 — the CI lane's own image, Asterisk 22 AND 23 (task A1, 2026-09-24)
+--------------------------------------------------------------------------------
+
+Images built exactly as .github/workflows/ci.yml:387 builds them:
+
+  docker build -f docker/Dockerfile.asterisk docker/ \
+    --build-arg ASTERISK_VERSION=<22|23> --build-arg CODEC_OPUS_VERSION=<22|23>.0_1.3.0 \
+    -t verbara-probe:<22|23>
+
+  verbara/asterisk-local:22  -> /ari/asterisk/info system.version = 22.9.0
+  verbara-probe:22           -> 22.9.0   (andrius/asterisk:22, build date 2026-05-04)
+  verbara-probe:23           -> 23.4.1   (andrius/asterisk:23, build date 2026-09-23)
+
+Asterisk 23 had never been probed. It behaves IDENTICALLY to 22 on every run in this file:
+same HTTP status, same error strings verbatim, same parameter on the wire, same byte order,
+same 500 on a dead target port. Three full passes (local 22, lane 22, lane 23 twice) agree.
+
+  RUN G   400  "transport must be 'tcp' for audiosocket encapsulation"   22 == 23
+  RUN H   200  UnicastRTP/...                                            22 == 23
+  RUN D   400  "data can not be empty"                                   22 == 23
+  RUN A   200  id == channelId, wire UUID == data                        22 == 23
+  RUN C   200  id == Asterisk uniqueid, wire UUID == data                22 == 23
+  PART 3  200 / 500 crossed over format x listener                       22 == 23
+
+Two runs beyond what the shipped probe does, both measured on 22 and on 23 with identical results:
+
+  RUN H+  RUN H with the TCP listener UP for 4 s. Nothing connects — the sentence in PART 1 was
+          an inference from the channel name until now, because the shipped probe runs H with the
+          listener down.
+            -> HTTP 200  name=UnicastRTP/127.0.0.1:19099-0x7f0720006350
+            HEX: (nothing connected)
+
+  RUN U   channelId == data == an UPPERCASE canonical UUID. Asterisk ACCEPTS it: HTTP 200, and
+          Channel.Id comes back in the spelling that was sent. The wire carries the same 16 bytes,
+          which AudioSocketSession.ParseUuid renders with Guid.ToString() — canonical LOWERCASE —
+          into an ordinal ConcurrentDictionary<string,...>. So a non-canonical spelling creates a
+          channel whose stream cannot be found, silently, exactly as the delta spec forbids:
+            QUERY: ...&channelId=EC30994A-B0E1-4EBE-99BD-19CA35669F7A&data=EC30994A-...-19CA35669F7A
+            -> HTTP 200  id=EC30994A-B0E1-4EBE-99BD-19CA35669F7A
+            HEX: 01 00 10 ec 30 99 4a b0 e1 4e be 99 bd 19 ca 35 66 9f 7a
+            wire = ec30994a-b0e1-4ebe-99bd-19ca35669f7a   == sent ? False   == sent.lower() ? True
+          This is the measurement behind B2's "canonical lowercase is not incidental".
+
+--------------------------------------------------------------------------------
+CORRECTIONS to the first version of this file
+--------------------------------------------------------------------------------
+
+1. RUN D was labelled "exactly what ExternalMediaActivity sends today". It was not: it carried
+   transport=tcp, which the activity sends only when a caller sets Transport. The activity's real
+   request is RUN G, and its error is a different one. The capture recorded parameters in prose and
+   not the query string, which is why the mislabel survived. Every run above now carries its QUERY.
+
+2. The first version explained an HTTP 500 as "reuse of a channelId already created earlier in the
+   same session". That is wrong. The crossed runs above isolate it: the 500 is a dead target port.
+   A wrong "not a finding" note is worse than no note, because it sends the next reader away from
+   the cause.
+
+3. Neither error code predicted during review was right. A reading of res/ari/resource_channels.c
+   predicted 501 "encapsulation and/or transport is not supported" for RUN G; 22.9.0 returns 400
+   with a specific message instead. Measured beats read, again.
+
+4. Correction #2 above is itself incomplete. "HTTP 500 means NOTHING IS LISTENING on external_host"
+   names one cause, not the cause. With the listener UP, a `data` value that is not a parseable
+   UUID returns the same 500 and nothing ever connects (measured on 22 and on 23):
+     channelId CANONICAL, data = {eba9adc2-...}        -> HTTP 500, nothing connected
+     channelId CANONICAL, data = not-a-uuid-at-all     -> HTTP 500, nothing connected
+     channelId = {eef6aae9-...}, data CANONICAL        -> HTTP 200, id={eef6aae9-...}, wire == data
+   So: `channelId` is a free-form ARI id and is echoed back verbatim — braces and all — while
+   `data` must parse as a UUID. A 500 from externalMedia means "chan_audiosocket could not set the
+   connection up", which covers a dead port AND a malformed `data`. Saying it means a dead port
+   sends the next reader away from the second cause, which is the same mistake correction #2 was
+   written to fix.
+
+--------------------------------------------------------------------------------
+NOT YET MEASURED
+--------------------------------------------------------------------------------
+- Asterisk 23 is now measured — see PART 4. What remains unmeasured on 23 is everything this probe
+  does not touch, not the runs above.
+- The WebSocket transport. Nothing here measures what externalMedia with transport=websocket puts
+  in the request path, which is why F1 stays out of this change rather than being designed from a
+  reading of the code.

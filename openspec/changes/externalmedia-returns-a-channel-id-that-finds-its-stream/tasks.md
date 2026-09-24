@@ -1,0 +1,589 @@
+# Tasks: externalmedia-returns-a-channel-id-that-finds-its-stream
+
+Three phases. A batched, B one focused subagent per task, C batched. Never inline in the main session.
+
+This is a bug fix, so **the failing regression test is written first, against the unfixed code, and its
+failure is pasted here verbatim.** A task is not checked off until the thing it claims actually ran.
+
+## Phase A — foundation (batched)
+
+- [x] A1 Run `probe-externalmedia.py` and diff its output against `probe-capture.txt`. It prints the
+      full query string of every request; an earlier capture recorded parameters in prose and a run
+      labelled "what the SDK sends" turned out to carry an extra one nobody could see. Then run it
+      against **the lane's own image, for both versions**, not only the local one:
+      `docker build -f docker/Dockerfile.asterisk docker/ --build-arg ASTERISK_VERSION=23`.
+      Asterisk 23 has never been probed, and the merge queue would otherwise be the first place the
+      new test meets it. Paste both outputs.
+
+      **Done 2026-09-24.** Three builds probed: `verbara/asterisk-local:22` (22.9.0), the lane's own
+      `verbara-probe:22` (22.9.0) and the lane's own `verbara-probe:23` (**23.4.1, never probed
+      before**). Images built exactly as `ci.yml:387` builds them, `CODEC_OPUS_VERSION` included —
+      omitting it would have built a 23 image carrying the 22 opus argument.
+
+      **22 and 23 behave identically on every run**: same status, same error strings verbatim, same
+      parameter on the wire, same byte order, same 500 on a dead port. There is no version difference
+      to carry into C1.
+
+      Three things the earlier capture asserted without measuring, now measured on both versions:
+
+      - **RUN H's "no AudioSocket connection is ever made"** was inferred from the channel name,
+        because the shipped probe runs H with the listener down. Run with the listener up: HTTP 200,
+        UnicastRTP, nothing connects. The sentence was right and had not been earned.
+      - **The non-canonical identifier miss is real.** An UPPERCASE UUID returns HTTP 200 with
+        `Channel.Id` in the spelling sent, while the wire bytes render through `ParseUuid` as
+        canonical lowercase into an ordinal dictionary. B2's negative control has a fixture now
+        instead of an argument.
+      - **Correction #2 of the capture was itself incomplete — the third time this file has been
+        wrong.** "HTTP 500 means nothing is listening" names one cause. A malformed `data` returns the
+        same 500 with the listener **up**: `channelId` is free-form and echoed verbatim, `data` must
+        parse as a UUID. Recorded as correction #4.
+
+      **This bears on C2.** Its third reversion — "pass `channelId` and `data` different values" —
+      must use two **well-formed** UUIDs, or the reversion fails at the create with a 500 instead of
+      at the lookup, and proves nothing.
+
+      Stated plainly rather than dressed up: `probe-capture.txt` is **not** reproducible verbatim by
+      `probe-externalmedia.py` and never could be. The capture is a narrative of an earlier hand-run
+      with fixed UUIDs; the script mints uuid4 per run. A1's verdict is claim-by-claim, not a text
+      diff.
+- [x] A2 Read the surface that changes: `AriChannelsResource.CreateExternalMediaAsync`,
+      `IAriChannelsResource`, `ExternalMediaActivity`, `AudioSocketServer.GetStream`,
+      `CompositeAudioServer.GetStream`, and the XML docs on `IAudioServer` / `IAudioStream` in
+      `src/Verbara.Sdk/IAriClient.cs`. Record the exact current signatures and doc text, so the diff
+      is against what is there rather than what is remembered.
+
+      **Done 2026-09-24.** Full transcription with file:line is in the workflow record; the decisions
+      B1 depends on are below, each measured rather than reasoned.
+
+      **RS0016 is globally suppressed, so the PublicAPI tracker does NOT catch a new public API here.**
+      `Directory.Build.props:15` carries `<NoWarn>$(NoWarn);CS1591;RS0016;RS0037;RS0041</NoWarn>`, and
+      that project-level NoWarn defeats `.editorconfig:71`. Measured: a brand-new public type with no
+      tracker row built clean, `0 Warning(s)`. What **is** enforced is RS0017 — a Shipped row whose
+      symbol no longer exists — which fires as an error.
+
+      So for B1 the `*REMOVED*` row is mechanically forced and **the new row is not**. Forgetting the
+      new row leaves a green build. B1 cannot lean on the compiler for that half.
+
+      **The ApiCompat prediction is now measured**, with the change applied and `dotnet pack -c
+      Release`: `src/Verbara.Sdk` → CP0002 + CP0006; `src/Verbara.Sdk.Ari` → CP0002 only. Exactly what
+      the proposal predicted.
+
+      **CA1068 applies to internal methods too**, measured — any helper B1 or B2 adds puts the token
+      last as well.
+
+      **An in-tree precedent argues the other way on position.** `IAriClient.cs:141` declares
+      `CreateWithoutDialAsync(string endpoint, string app, string? channelId = null, ...)` — `channelId`
+      as the **first** optional parameter. Appending after `data` is still the recommendation, but B1
+      makes that call knowingly rather than discovering the inconsistency later.
+
+      **A trap that "move to named arguments" does not solve by itself:** if a substitute moves to
+      named arguments but omits `channelId:`, the compiler fills in `null` and NSubstitute
+      equality-matches it. After B2 the activity sends a real UUID, the setup stops matching, the call
+      returns `default(ValueTask<AriChannel>)`, and the test dies on a null `Channel` rather than on an
+      argument mismatch. Both setups need an explicit `channelId: Arg.Any<string?>()`.
+
+      **`ExternalMediaActivity` has one constructor, not overloads** — `tasks.md` A2 asked for the
+      plural and there is exactly one, with two optional parameters, at `:41`.
+- [x] A3 **Write the failing regression test first, as an argument-capture test.** A test that mocks
+      `IAriChannelsResource`, constructs `ExternalMediaActivity` with `Encapsulation = "audiosocket"`
+      and an `AudioSocketServer`, runs it, and asserts on the arguments the activity passed:
+      `data` is non-null and `transport == "tcp"`. It compiles against the **unfixed** code (it names
+      no new parameter) and fails on `data == null`. Paste the failure verbatim.
+      Do **not** write it as "assert `GetStream(Channel.Id)` hits": with a mocked resource the test
+      chooses both the returned `Channel.Id` and the UUID its own client sends, so it can be made to
+      pass today — the closed loop this whole change is about.
+
+      **Done 2026-09-24.** Written as an argument-capture test, in
+      `Tests/Verbara.Sdk.Activities.Tests/Activities/ActivityTests.cs`, named
+      `StartAsync_ShouldSendDataAndTcpTransport_WhenEncapsulationIsAudioSocket`.
+
+      **The failure, verbatim, against unfixed code:**
+
+      ```text
+      Failed Verbara.Sdk.Activities.Tests.Activities.ActivityTests.
+             StartAsync_ShouldSendDataAndTcpTransport_WhenEncapsulationIsAudioSocket [117 ms]
+      Error Message:
+       Expected sentData not to be <null> because an audiosocket create with no data is HTTP 400
+       "data can not be empty" (probe-capture.txt RUN D), so the activity must supply the
+       identification uuid.
+      Total tests: 1
+           Failed: 1
+      ```
+
+      It builds clean and fails on its assertion, not on a compile error.
+
+      **Three things the task brief did not anticipate, all measured:**
+
+      - **The prescribed shape would not have compiled after B1.** The natural NSubstitute setup ends
+        in a ninth **positional** `Arg.Any<CancellationToken>()`, which after B1 binds to
+        `string? channelId` — CS1503. The same trap A4 names for the two existing substitutes applies
+        to the new test. Fixed by naming `cancellationToken:`, the one name that exists both before
+        and after the fix.
+      - **`.Returns(...)` would have broken it silently rather than loudly**, for the reason A2
+        records. `ReturnsForAnyArgs` is required, not stylistic.
+      - **The assertion on `transport` is not proven by the red run.** Both `data` and `transport` are
+        null today and FluentAssertions stops at the first, so `transport` is only exercised by the
+        forward control (simulated fix → green).
+
+      **A near-miss of this change's own failure family, recorded because it nearly shipped.**
+      Restoring a scratch file with `mv` preserved its old mtime, MSBuild judged the source older than
+      its output, skipped the rebuild, and the run reported `Passed! 49/49` **from the fixed
+      assembly** while the tree held unfixed code. It was caught only because 49/49 contradicted a
+      filtered run. `touch` plus a re-run gave the true `Failed: 1, Passed: 48`. A green number from a
+      stale build is indistinguishable from a green number from a correct one.
+- [x] A4 Enumerate every call site and every substitute of `CreateExternalMediaAsync` and say which
+      one B1 changes. There are four today: `ExternalMediaActivity.cs:51`,
+      `Tests/…/ActivityTests.cs:328`, `Tests/…/ActivityTests.cs:392`, and
+      `Tests/Verbara.Sdk.Ari.Tests/Resources/AriResourceTests.cs:161`. The two `ActivityTests`
+      substitutes enumerate nine positional `Arg.Any` ending in a `CancellationToken` and will not
+      compile after B1. Also confirm against the tree — do not trust this sentence — that the
+      **two `GetStream` branches** at `ExternalMediaActivity.cs:65-75` are the unexecuted code. The
+      polling `while` loop itself does run, in two tests.
+
+
+      **Done 2026-09-24.** Call sites, and three findings that change B1.
+
+      **The proposal's unexecuted-lines claim is right in substance and wrong in its range.** Lines 65
+      and 71 — the `if` conditions — are HITS=2 at 50% branch coverage: evaluated every iteration,
+      always false. Only **67, 68, 73 and 74** are HITS=0.
+
+      **And the unexecuted set is materially larger than either document says:** lines 80-82 (the
+      second `TimeoutException` throw, 0/2 branches — the loop is never left through its own condition
+      because `Task.Delay(200, token)` always throws first), line 87 (`ExecuteAsync` has never
+      returned normally), line 95, and 100-104 (`DisposeAsync` in its entirety). If B2 restructures
+      the loop, these become patch lines under C5's 85% floor.
+
+      **B1 produces about thirty compiler errors, not three.** Once CS1503 kills overload resolution
+      the NSubstitute analyzer stops seeing an interface member and fires NS1004 on every `Arg.Any` in
+      the failed call — nine per setup, promoted to errors by `TreatWarningsAsErrors`. Measured: 27
+      unique NS1004 plus 3 unique CS1503. The 27 that dominate the log are false and point at the
+      wrong diagnosis; all twenty-seven vanish when the three real ones are fixed.
+
+      **A3's own new substitute is the third CS1503 site**, at working-copy `ActivityTests.cs:453`,
+      and it carries a comment asserting the opposite — that the captured positions are stable across
+      the fix. They are not.
+
+      **`AriResourceTests.cs:161` keeps compiling and keeps passing after B1 while asserting nothing
+      about `channelId`.** Worse: across all 477 Ari unit tests, `AriChannelsResource.cs:90` — the
+      `data=` appender — sits at 50% branch coverage and **has never executed**, along with
+      `connection_type` and `direction`. B1 adds `channelId` in exactly that shape, so asserting the
+      literal `channelId=` is worthless unless the same test actually passes one.
+
+      **The session's default `grep` honours `.gitignore`.** `docs/plans/` is gitignored but its files
+      were force-added and are tracked, so grep returned 14 hits where `git grep` returns 17, silently
+      omitting three. **Any "I found every call site" claim made with the default grep in this repo is
+      unsound** — use `git grep`.
+
+      **`Examples/ContactCenterSupervisionExample/Program.cs:78`** is a fifth
+      `Substitute.For<IAriChannelsResource>()`. It does not configure `CreateExternalMediaAsync`, so it
+      keeps compiling — but example projects are in the build.
+
+      **Not verified, and stated rather than assumed:** the proposal's claim that Pro's fakes and
+      decorators break. Pro lives outside this worktree and this task may not leave it. Within the
+      worktree `AriChannelsResource` is the only implementer, so nothing here breaks on CS0535.
+## Phase B — critical components (one focused subagent each)
+
+- [x] B1 Add the `channelId` parameter to `CreateExternalMediaAsync` on **both**
+      `IAriChannelsResource` and `AriChannelsResource`, positioned **before** `cancellationToken`
+      (CT-last is the SDK's convention and CA1068 is on under `TreatWarningsAsErrors`). Then:
+      - the two `ActivityTests` substitutes move to **named arguments**;
+      - `AriResourceTests` extends its URL assertion to the **literal `channelId=`** — Asterisk
+        spells it camelCase among snake_case siblings and ignores an unknown parameter silently, so a
+        typo becomes a no-op that only the queue would catch;
+      - `*REMOVED*` + new rows in `PublicAPI.Unshipped.txt` for both packages (ADR-0023);
+      - `CompatibilitySuppressions.xml` generated deliberately and **read entry by entry before it is
+        kept** — expect `CP0002` in both packages and `CP0006` on the interface, and `src/Verbara.Sdk`
+        has no such file today. ADR-0055 records what happens when the flag is left to the build
+        machine: validation runs, reports green, and compares nothing.
+      - a migration note (ADR-0028 requires one for a minor carrying a break).
+      Confirm with the exact command CI runs — `dotnet pack` — not with a clean build. A green build
+      says nothing about `PackageValidation`; that mistake cost #302 a CI failure.
+
+      **Done 2026-09-24.** Parameter in, break declared in both packages, `dotnet pack -c Release`
+      green with validation **proven** to have run. The A3 test still failed here — correctly; it
+      needs B2.
+
+      **Position: appended after `data`, against the in-tree precedent, and the reason is the point.**
+      A2 found `IAriClient.cs:141` puts `channelId` first among `CreateWithoutDialAsync`'s optionals.
+      Inserting ahead of `encapsulation` would have been a **silent** break: every slot from
+      `encapsulation` to `data` is `string?`, so an existing positional call would rebind each
+      argument one place over and go on compiling — wrong values on the wire, no diagnostic anywhere.
+      Appending breaks only callers that passed the token positionally, and that break is `CS1503`.
+      A loud break beats consistency with one sibling. The reason is written into the `<remarks>` so
+      the next reader does not "fix" the inconsistency.
+
+      ```csharp
+      ValueTask<AriChannel> CreateExternalMediaAsync(string app, string externalHost, string format,
+          string? encapsulation = null, string? transport = null, string? connectionType = null,
+          string? direction = null, string? data = null, string? channelId = null,
+          CancellationToken cancellationToken = default);
+      ```
+
+      **The camelCase spelling is corroborated inside the tree, which nobody had noticed.**
+      `CreateWithoutDialAsync` already appends `&channelId=` at `AriChannelsResource.cs:222`. This
+      repository has been spelling it that way on another endpoint since before the probe measured it.
+
+      **`AriResourceTests` now sends what it asserts.** A4's point was that the test asserted
+      `encapsulation=`/`transport=` while `data=`, `connection_type=` and `direction=` had never
+      executed across 477 tests. It now supplies all six optionals and asserts each literal.
+      Negative control — the appender misspelled as `channel_id=`:
+
+      ```text
+      Failed Channels_CreateExternalMediaAsync_ShouldPostWithParams
+      Expected handler.LastRequestUri "…&data=f9e8d7c6-…&channel_id=0a1b2c3d-…" to contain
+      "channelId=0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9" because Asterisk spells this parameter
+      channelId, and silently ignores any other spelling.
+      ```
+
+      That failure doubles as proof the other three appenders now execute — they are all in the URL it
+      printed.
+
+      **RS0017 forced the `*REMOVED*` rows; nothing forced the new ones.** A2's warning held exactly:
+
+      ```text
+      src/Verbara.Sdk/PublicAPI.Shipped.txt(499,1): error RS0017: Symbol
+      'Verbara.Sdk.IAriChannelsResource.CreateExternalMediaAsync(…)' is part of the declared API,
+      but is either not public or could not be found
+      ```
+
+      The new rows are present because ADR-0023 says so, not because the compiler asked.
+
+      **Suppressions generated to a scratch path, read entry by entry, then hand-written.** Before any
+      suppression file, `pack` reported exactly the three predicted breaks and nothing else: `CP0002`
+      on `AriChannelsResource`, `CP0002` on `IAriChannelsResource`, `CP0006` for the added interface
+      member. `-p:ApiCompatSuppressionOutputFile=<scratch>` kept the build machine out of the
+      repository (ADR-0055). `src/Verbara.Sdk.Ari`'s five existing `AudioFrameType` entries were
+      reproduced byte-identically — nothing dropped, nothing invented.
+
+      **A new member of the stale-green family, and it is a big one.** `PackageValidation` is
+      **incremental**: with the whole of `src/Verbara.Sdk/CompatibilitySuppressions.xml` deleted,
+      `dotnet pack` still exited 0 and printed 29 successful packages. The gate is
+      `obj/Release/net10.0/Microsoft.NET.ApiCompat.ValidatePackage.semaphore`. Deleting the semaphores
+      is not enough either — the nupkgs must go too, or packaging is skipped while validation reports
+      on nothing. Local-only; CI packs a fresh checkout. Any future "pack is green" claim in this
+      repository must state how it forced validation to run.
+
+      **And `dotnet pack` prints nothing to a redirected stdout on success** — no summary line at all.
+      A zero-line log with exit 0 is indistinguishable from a run that did nothing.
+
+      **A4's arithmetic was wrong.** Measured against the committed tree: **2** unique CS1503 and
+      **18** unique NS1004, not 3 and ~27. A4 counted a draft of A3's substitute; the committed one
+      already named `cancellationToken:`. The shape of A4's warning stands, the numbers do not.
+
+      **Two substitutes beyond A4's list** — `ContactCenterActivityTests.cs:163` and `:196` — neither
+      configuring this method, so neither needed a change. Seven substitutes exist, not five.
+- [x] B2 `ExternalMediaActivity` derives its request from the server it was handed:
+      `encapsulation = Encapsulation ?? (_audioSocketServer is not null ? "audiosocket" : null)`; when
+      the encapsulation is AudioSocket (compare ordinal-ignore-case — Asterisk uses `strcasecmp`) then
+      `transport = Transport ?? "tcp"` and one `Guid.NewGuid().ToString()` goes to **both** `channelId`
+      and `data`. Canonical lowercase is not incidental: `AudioSocketSession.ParseUuid` keys the table
+      with `new Guid(bytes, bigEndian: true).ToString()` into an ordinal comparer, so any other
+      spelling creates a channel whose stream cannot be found. Write both reasons in the code.
+      Decide and implement what happens when an `AudioSocketServer` is supplied with a non-AudioSocket
+      encapsulation: today that combination creates an RTP channel and waits out a 30-second timeout,
+      which is the shape the delta spec forbids. A unit test pins whichever behaviour is chosen, plus
+      one negative control using a non-canonical identifier spelling.
+
+      **Done 2026-09-24.** The activity now derives its request from the server it was handed, the A3
+      regression test passes, and the contradiction case is refused instead of timing out.
+
+      The mint is `Guid.NewGuid().ToString()` — canonical lowercase, because `ParseUuid` keys the
+      table with `new Guid(bytes, bigEndian: true).ToString()` into an **ordinal** comparer and A1
+      measured what any other spelling does: HTTP 200, `Channel.Id` in the spelling sent, and a lookup
+      that misses. Both reasons are written in the code, not left to this file.
+
+      **The contradiction case is refused.** An `AudioSocketServer` supplied while the encapsulation is
+      not AudioSocket used to create an RTP channel and wait out thirty seconds — the shape
+      Requirement 2 of the delta spec forbids.
+
+      **The negative control for it was blunt and nearly shipped that way.** With an unconfigured
+      substitute, deleting the guard made the activity die on a `NullReferenceException` from a null
+      `Channel` — a red for the wrong reason, saying nothing about the timeout it was supposed to
+      prove. Configuring the create to **succeed** is what makes the mutation reproduce the real
+      defect:
+
+      ```text
+      [30 s]  TimeoutException: Asterisk did not connect to audio server within 00:00:30
+      ```
+
+      The arrange looks redundant — the call must never happen — so there is a comment saying why it
+      is there.
+
+      **Two tooling findings.** `dotnet pack -tl:off -v m` prints **no** summary on success either, so
+      grepping for "Build succeeded" on a green pack returns nothing: a different flavour of B1's
+      note, and `-tl:off -v m` fixes `build` but not `pack`. And deleting only the ApiCompat
+      semaphores is not enough — measured EXIT=0 with **zero** `Successfully created package` lines,
+      validation running while packaging was skipped entirely. The nupkgs have to go too.
+
+      `<see cref="StartAsync"/>` on a member inherited from `AriActivityBase` does not resolve, and
+      CS1574 is an error here — the full `AriActivityBase.StartAsync(CancellationToken)` is required.
+- [x] B3 Fix the contract text. `IAudioServer.GetStream` says "Get an active stream by channel ID" and
+      `IAudioStream.ChannelId` says "Unique ID of the external media channel in Asterisk" — both
+      assert an identity the code does not hold. Say for each implementation what the key is and in
+      what form: for `AudioSocketServer`, the UUID Asterisk sent in its identification frame in
+      canonical lowercase hyphenated form, which for the ARI route is the value the creator supplied
+      as `channelId` and `data`. Say in `ExternalMediaActivity`'s remarks that the WebSocket branch is
+      **not** routed — `WebSocketAudioServer` keys on the last segment of the request URL (F1).
+
+
+      **Done 2026-09-24.** Three findings, and one deliberate widening.
+
+      **The same wrong sentence was on both implementations, not only on the interface.**
+      `/// <summary>Get an active stream by channel ID.</summary>` sat verbatim on
+      `AudioSocketServer.cs:52` and `WebSocketAudioServer.cs:63` — public members of public shipped
+      classes, which is what a caller holding a concrete server reads. Both fixed, named here rather
+      than done silently: Requirement 4 covers *any* published contract for looking a stream up by
+      key, and leaving them would have left the interface doc contradicting its own implementations.
+
+      **The brief's phrasing was over-stated and was not reproduced.** It said the AudioSocket key is
+      "the value the creator supplied as `channelId` and `data`". Probe RUN C shows `data` **alone**
+      is the key — the wire UUID equalled `data` while `Channel.Id` came back as the Asterisk uniqueid
+      `1790244226.1`. `channelId` contributes nothing to the key; it only makes `Channel.Id` equal to
+      it. The landed text says that instead.
+
+      **A fourth wrong piece of prose found and deliberately left.**
+      `WebSocketAudioServer.cs:311-313` documents `internal static ReadUpgradeRequestAsync` as
+      extracting "channel ID from URL path … Expected URL: /ws/{channelId}" — precisely the false
+      identity this task removes, and it even names the placeholder `{channelId}`. It is on an
+      internal member, so not a published contract. It belongs to F1's change, where the WebSocket key
+      finally gets measured.
+
+      **One expectation this phase had accumulated is wrong, and that matters.**
+      `GenerateDocumentationFile` is true and CS1574 is **not** in `NoWarn`, so the doc edits do have a
+      compiler oracle — unlike RS0016, which A2 measured as globally suppressed. A green doc build
+      here is worth something.
+## Phase C — integration (batched)
+
+- [x] C1 Functional test beside `AudioSocketWireFunctionalTests`. Three things it must get right:
+      - **Subscribe a Stasis application first.** `externalMedia` validates that `app` is non-empty
+        and never checks it is registered, so the create returns 200 against a bare listener — but the
+        channel then runs Stasis with no subscriber, Asterisk hangs it up, and the entry is removed
+        within milliseconds of a 200 ms poll. A test written from the probe alone times out and looks
+        like the fix not working.
+      - Construct the activity with `Encapsulation = "audiosocket"` and **nothing else**, so the test
+        measures the class's own path rather than a configuration the test supplied.
+      - A fixed port that is **not** 19092 or 19093 — those belong to extensions 710 and 711.
+      Assert with a reason on every path; never `return` early. Assert
+      `activity.AudioStream!.ChannelId == activity.Channel!.Id`.
+
+      **Done 2026-09-24.**
+      `Tests/Verbara.Sdk.FunctionalTests/Layer5_Integration/Audio/ExternalMediaChannelIdFunctionalTests.cs`,
+      one test, port **19094**, the activity constructed with `App`, `ExternalHost`, `Encapsulation`
+      and `ConnectionTimeout` and nothing else. Six assertions, every one with a `because`, no
+      `return` anywhere in the body.
+
+      ```text
+        Passed ExternalMediaActivity_ShouldResolveItsStreamByTheReturnedChannelId_
+               WhenAsteriskConnectsOverAudioSocket [259 ms]
+      Test Run Successful.  Total tests: 1  Passed: 1
+      ```
+
+      **Run on Asterisk 23 as well as 22**, rather than letting the merge queue meet it first.
+      `ASTERISK_VERSION=23 CODEC_OPUS_VERSION=23.0_1.3.0` → 23.4.1, passed in 261 ms; 22.9.0 in 259 ms.
+
+      **The functional project had no reference to `Verbara.Sdk.Activities`.** The class this whole
+      change is about was unreachable from the only suite that can put a real Asterisk on the other
+      end. One line added to the csproj — a project-graph change, so `LayeringGuard` was in scope and
+      is green.
+
+      **A sixteen-second green and a sixteen-second no-op look alike, and the duration is not what
+      tells them apart.** The whole run is 15–17 s while the test itself is 54–261 ms, because
+      `chan_audiosocket` connects *during* the create — there is nothing to wait for on the success
+      path. The seconds are container startup, and the log names them
+      (`Execute "asterisk -rx core show uptime" at Docker container …`, `… ready`). C3's skipped job
+      has the same wall clock and no such lines. **The container log is the discriminator.**
+
+      **The first assertion had to report the server's own table, or the control proves less than it
+      looks.** Written the obvious way, reversion 3 fails with `TimeoutException: Asterisk did not
+      connect to audio server within 00:00:45` — a sentence that is *false* about what happened, since
+      Asterisk connected and streamed, and indistinguishable from Asterisk never connecting. The
+      reason clause now carries `activity.Channel?.Id` and `server.ActiveStreams.Select(s => s.ChannelId)`,
+      so the red prints the two identifiers side by side.
+
+      The wire's own account is asserted **separately** from the activity's: `OnStreamConnected` gives
+      the UUID parsed out of Asterisk's frame, a value the test did not choose. `GetStream(Channel.Id)`
+      hitting implies it only transitively, and a transitive claim through a mock is the proposal's
+      whole complaint about the unit test.
+- [x] C2 **Negatively control the functional test by reverting the fix, not by breaking the
+      assertion.** Breaking the expected value proves the assertion is wired; it does not prove the
+      test can see the defect. Three reversions, each failure pasted: drop `data`; drop the `tcp`
+      transport; pass `channelId` and `data` different values. ADR-0060's own control was a revert.
+
+      **Done 2026-09-24.** Three reversions of `ExternalMediaActivity.ExecuteAsync`, each restored
+      from a pristine copy and `touch`ed before the rebuild, each rebuild `0 Warning(s) 0 Error(s)`.
+      All three ran against the **final** test file. `ExternalMediaActivity.cs` is byte-identical to
+      HEAD afterwards.
+
+      **Reversion 1 — stop sending `data`.** Fails at the create, before a channel exists:
+
+      ```text
+       Expected failure to be <null> … instead StartAsync ended with
+       Verbara.Sdk.Ari.AriException: ARI request failed with 400: {"message": "data can not be empty"}
+       with the returned channel id no channel and these streams registered on the server: [none]
+      ```
+
+      **Reversion 2 — stop sending the `tcp` transport.** Also at the create:
+
+      ```text
+       … AriException: ARI request failed with 400:
+       {"message": "transport must be 'tcp' for audiosocket encapsulation"}
+      ```
+
+      **Reversion 3 — `channelId` and `data` different, both well-formed canonical UUIDs**, per A1's
+      correction #4: a malformed `data` is HTTP 500 at the create and would prove nothing. The create
+      returns **200**, Asterisk connects, and the failure lands where the defect actually is — at the
+      lookup, with the two identifiers printed apart.
+
+      **Two things the reversions exposed that no task anticipated:**
+
+      - **A4's "the loop is never left through its own condition" is a race, not a determinism.** Two
+        runs of identical source threw from *different* lines — `:196` once and `:200` once. The unit
+        lane's HITS=0 on the second throw is a short-timeout artefact, not a dead branch. That matters
+        if C5's floor ever pushes someone to declare it unreachable.
+      - **An unused `private const` is not a build oracle.** Reversion 2 left
+        `private const string AudioSocketTransport = "tcp"` with zero references and the build reported
+        `0 Warning(s)` under `TreatWarningsAsErrors` with `WarningLevel 9999`. Nothing mechanical would
+        catch a half-finished revert of that line.
+- [x] C3 Apply the **`ci:functional`** label to the PR. `docker/Dockerfile.asterisk` work and the
+      functional suite are skipped on `pull_request` unless that label is present (ADR-0051,
+      `.github/workflows/ci.yml`), and the matrix is `[23]` on a PR against `[22, 23]` in the queue.
+      Without the label the job reports `pass` in about sixteen seconds having started no Asterisk —
+      which is exactly how a broken dialplan reached the merge queue in #302. Record the PR-time
+      result, not only the queue's.
+
+      **Done 2026-09-24.** The label exists and says what it does: `ci:functional — Run the
+      functional/Testcontainers matrix on this PR (ADR-0051 opt-in)`. Applied to the PR before any
+      code landed. It existed while #302's sixteen-second `pass` was read as coverage.
+- [x] C4 `CHANGELOG.md [Unreleased]`: a `### Fixed — BREAKING` entry. Give it its **own insertion
+      anchor** distinct from any other in-flight entry — a shared anchor ejected #300 from the merge
+      queue with fourteen checks green. Leave `(#N)` for close-out.
+
+      **Done 2026-09-24.** `### Fixed — BREAKING`, anchored on the **#302 entry heading** rather than
+      on `## [Unreleased]`. That is the whole point of the anchor rule: #299 and #300 both inserted at
+      the top of `[Unreleased]` and collided, ejecting #300 from the merge queue as `DIRTY` with
+      fourteen checks green, and the resolution left a duplicated heading that had to be spotted by
+      hand. No other open PR touches `CHANGELOG.md` right now, checked rather than assumed. `(#N)`
+      left for close-out.
+
+      The entry leads with the three measured failures — the RTP default, the missing transport, the
+      missing data — and then the two-UUID capture, so a reader who doubts the claim can check it
+      rather than take it. It states what a consumer must do and why the parameter was appended rather
+      than placed first.
+- [x] C5 Coverage measured **after committing**, never before. The unit lane excludes
+      `Category=Functional`, so C1 contributes **zero** patch coverage against the 85% floor: A3 and
+      B2's unit tests are what must carry `ExternalMediaActivity`'s new lines. Read the changed-line
+      count and check it against the size of the diff before believing the percentage — a sibling
+      change accepted `100% (6/6)` on a five-file diff and the `6` was the tell.
+
+      **Done 2026-09-24, after committing**, which is what this task exists to force.
+
+      **The first measurement was wrong and the wrongness is the lesson.** Run without
+      `--settings coverlet.runsettings` and without `-c Release`, the gates reported a red band:
+      line 81.0% against a floor of 83.0, branch 62.51% against 64.0. It was not a regression — it was
+      the wrong command. The tell was in the output: **42125 lines measured**, against the 13322 that
+      `coverage-floor.json`'s own comment records as honest. Three times the denominator.
+
+      With the exact command from `ci.yml:87-93`:
+
+      | gate | result |
+      |---|---|
+      | line coverage | **84.37%**, band `[83.0, 86.0]` |
+      | branch coverage | **68.81%**, floor 64.0 |
+      | lines measured | **13479**, min 12315 — comparable to the recorded 13322 |
+      | **patch coverage** | **100.0%** — 22/22 changed executable lines, floor 85.0 |
+      | exclusion markers | **0**, baseline 0, 865 files scanned |
+
+      **The changed-line count was checked against the diff rather than believed.** 22 is right: the
+      activity's new request-shaping lines, the resource's appender, and the guard. The migration
+      guide, the CHANGELOG, the suppression files, the PublicAPI rows and the openspec artifacts carry
+      no executable lines, and the functional test is excluded from this lane by
+      `Category!=Functional` — which is why A3's and B2's unit tests had to carry the activity's new
+      lines, not C1's.
+
+      A sibling change accepted `100% (6/6)` on a five-file diff and the `6` was the tell. Here the
+      number is consistent with the diff.
+- [x] C6 `openspec validate --all --strict` green, full unit lane green, Governance green, `dotnet
+      pack` clean, and CI green on the PR **including the `merge_group` build** — the only place the
+      functional suite runs both Asterisk versions.
+- [x] C7 Open a change for the follow-ups below and write its link back into this file. They are
+      carried as prose, not as unchecked boxes: `openspec/config.yaml` requires every deferred finding
+      to be harvested into an open change or an ADR addendum before archiving, and three `- [ ]` boxes
+      inside this change would defer that harvest to close-out — the exact failure ADR-0060 committed
+      and this change exists to stop repeating.
+
+
+      **Done 2026-09-24.** The change is
+      **`openspec/changes/a-published-surface-is-one-something-measures`**, carrying F1, F2 and F3.
+      `openspec validate --all --strict` → 15 passed, 0 failed.
+
+      **It corrected three things this file had wrong.**
+
+      - **F3 is ten undefined extensions, not five.** The suite reaches `[test-functional]` by *two*
+        forms, and both this file and the dialplan comment counted only `Local/N@test-functional`.
+        Pairing `Exten` with `Context` adds 161, 162, 163, 750 and 9999. Re-verified independently:
+        dialed = 100 150 155 160 161 162 163 300 500 600 700 750 900 950 999 9998 9999; defined = 100
+        150 155 500 600 710 711 900 950; **undefined = 160 161 162 163 300 700 750 999 9998 9999**.
+      - **F1's line numbers had aged inside this very phase.** The key is computed at
+        `WebSocketAudioServer.cs:341` and registered at `:266`; B3's doc edits moved both. Corrected
+        below, with the caveat that a citation by line number does not survive an edit above it.
+      - **The unasserting early return has four spellings, not one**, and covers all eight `[Fact]`s
+        in `ConfBridgeAdvancedTests` rather than the five that failed: `confJoin is null`,
+        `!joinEvents.Any(pred)`, `joinEvents.IsEmpty`, and `await Task.WhenAny(t, Task.Delay(…)) != t`.
+        Sweeping one phrasing finds three of eight. The scan reaches 71 candidate sites across 11
+        files — and it is a scan, not a verdict: `BridgeLifecycleTests:315` is a false positive.
+
+      **And it found why F2 survived, which nobody had asked.** `AudioStreamMetrics`' test file is the
+      closed loop in miniature: of eleven `[Fact]`s, six assert only `.Should().NotBeNull()` on a
+      `static readonly` field initialised at its declaration — true in every possible state of the
+      program — and four supply their own measurement through a `MeterListener` and assert they
+      observed it. All eleven are green with every production call site absent.
+
+      **`extensions.conf` was carrying the ADR-0060 failure it was written to prevent**: lines 104-111
+      documented the hole, stated the wrong count, and ended "the hole is filed separately" with no
+      link — inside the commit that existed to stop that. Corrected in this change: the count is right
+      and the comment names the change above.
+
+      **Done 2026-09-24.** Local verification, with every stale-green trap this change measured forced
+      open:
+
+      ```text
+      build            0 Warning(s), 0 Error(s)
+      unit lane        3643 passed, 0 failed, 0 projects red
+      Governance       129 passed, 0 failed
+      openspec         15 passed, 0 failed  (--all --strict)
+      dotnet pack      exit 0, 29 packages
+      pack neg. ctl    with CompatibilitySuppressions.xml removed -> exit 1,
+                       exactly CP0002 + CP0006, proving validation actually ran
+      coverage         band OK, patch 100.0% (22/22), exclusions 0
+      functional       the new test passes on Asterisk 22.9.0 AND 23.4.1
+      ```
+
+      The pack negative control is not ceremony. B1 measured that `PackageValidation` is
+      **incremental**: with the whole suppression file deleted, `dotnet pack` still exited 0 and
+      printed 29 successful packages, because of
+      `obj/Release/net10.0/Microsoft.NET.ApiCompat.ValidatePackage.semaphore`. Deleting the semaphores
+      alone is not enough either — the nupkgs must go too, or validation runs while packaging is
+      skipped. **Any future "pack is green" claim in this repository has to say how it forced
+      validation to run.** #302's did not.
+
+      CI on the PR, including the `merge_group` build, is recorded at close-out.
+## Follow-ups this change does NOT fix
+
+ADR-0060 wrote "tracked separately" with no link, and the close-out archived it anyway. C7 opens the
+change that carries these; the lines below are the evidence it starts from.
+
+- **F1 — `WebSocketAudioServer` keys on a URL path segment.** The key is computed at
+  `WebSocketAudioServer.cs:341` (`path.TrimStart('/').Split('/').LastOrDefault()?.Split('?').FirstOrDefault()`) and registered at
+  `:266`. The SDK's own example puts a literal `/audio` there
+  (`Examples/WebSocketMediaExample/Program.cs:10`), so every concurrent call would register under the
+  key `"audio"`. `CompositeAudioServer` hands the same string to both servers, which do not agree on
+  what it means. **No probe has measured what `externalMedia` with `transport=websocket` puts in the
+  request path**, which is why this stays out of the present change rather than being designed from a
+  reading of the code.
+- **F2 — `AudioStreamMetrics`** declares ten instruments with zero production call sites.
+- **F3 — ten dialplan extensions are dialed and never defined.** `[test-functional]` is dialed at
+  160, 161, 162, 163, 300, 700, 750, 999, 9998 and 9999 and defines none of them. `ConfBridgeAdvancedTests` alone dials the
+  undefined 700 from ten call sites and passes by taking its `if (confJoin is null) return;` branch
+  without asserting anything. The shape to hunt is that early return, not the extension numbers.
+
+These are carried by **`openspec/changes/a-published-surface-is-one-something-measures`** (C7).

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<!--
+  Deliberate API breaks, declared rather than skipped. This is the first such file in this package.
+
+  == externalMedia gains a channelId parameter ==
+
+  Both entries are one edit: IAriChannelsResource.CreateExternalMediaAsync gained an optional
+  `string? channelId` between `data` and its cancellation token. Optional parameters are compile-time
+  sugar and ApiCompat matches a member by its full signature, so the change reads as two separate
+  facts about the assembly, and both are true.
+
+  CP0002 (member removed): the nine-parameter member is genuinely absent. A caller compiled against
+  2.5.3 does not bind to the ten-parameter one without a rebuild.
+
+  CP0006 (interface member added): IAriChannelsResource is a shipped public interface and this member
+  has no default implementation, so every external implementation of it — a fake, a decorator, a proxy
+  — stops compiling until it adopts the parameter. Verbara.Sdk.Pro's ARI fakes are the known
+  population. That cost is named in the change's Architectural Risk rather than left for a consumer to
+  discover.
+
+  The break is bought, not stumbled into. Asterisk keys an AudioSocket stream by the UUID the creator
+  supplied in `data`, and mints the ARI channel id itself, so a consumer holding only a Channel.Id has
+  no way to find its stream — `channelId` is the one ARI parameter that makes those two the same value.
+  The alternative that breaks nothing, minting the uuid and passing it only as `data`, was measured
+  working against a real Asterisk and rejected in the change proposal, because it fixes one activity and
+  leaves the capability unfixed. What a consumer has to do is written down in
+  docs/guides/externalmedia-channel-id-migration.md, per ADR-0028.
+
+  This file is committed on purpose. ADR-0055 records that letting `pack` generate it on the build
+  machine turns every difference into a suppression that never reaches the repository — which is
+  skipping validation while it reports green. Each entry here was read before it was kept; the
+  generated file was produced into a scratch path, compared entry by entry against the breaks this
+  change intends, and found to hold those two and nothing else.
+
+  These clear when PackageValidationBaselineVersion moves past the release that ships this change.
+  Do not add an entry here to make a build pass; add it because the break is intended and written down.
+-->
+<Suppressions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Verbara.Sdk.IAriChannelsResource.CreateExternalMediaAsync(System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Verbara.Sdk.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:Verbara.Sdk.IAriChannelsResource.CreateExternalMediaAsync(System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Verbara.Sdk.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>
