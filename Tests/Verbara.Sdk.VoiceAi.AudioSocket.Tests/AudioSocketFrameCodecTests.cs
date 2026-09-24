@@ -4,19 +4,25 @@ using FluentAssertions;
 
 namespace Verbara.Sdk.VoiceAi.AudioSocket.Tests;
 
+/// <summary>
+/// The codec's own unit tests. Half of them build their input with the codec they then check, and
+/// the other half build it by hand in this file, so neither half can say what bytes Asterisk sends.
+/// That is <see cref="AudioSocketCapturedWireTests"/>'s job, and until it existed this file agreed
+/// happily with a four-byte header no Asterisk has ever put on a socket.
+/// </summary>
 public sealed class AudioSocketFrameCodecTests
 {
     [Fact]
     public void TryReadFrame_ShouldParseUuidFrame()
     {
-        // UUID frame: type=0x00, length=16 (0x000010), then 16-byte UUID
+        // UUID frame: type=0x01, length=16 (0x0010), then 16-byte UUID
         byte[] uuidBytes = new byte[16];
         Random.Shared.NextBytes(uuidBytes);
 
-        byte[] data = new byte[4 + 16];
-        data[0] = 0x00; // Uuid
-        data[1] = 0x00; data[2] = 0x00; data[3] = 0x10; // length = 16
-        uuidBytes.CopyTo(data, 4);
+        byte[] data = new byte[3 + 16];
+        data[0] = 0x01; // Uuid
+        data[1] = 0x00; data[2] = 0x10; // length = 16
+        uuidBytes.CopyTo(data, 3);
 
         var buffer = new ReadOnlySequence<byte>(data);
         var result = AudioSocketFrameCodec.TryReadFrame(ref buffer, out var frame);
@@ -31,10 +37,10 @@ public sealed class AudioSocketFrameCodecTests
     public void TryReadFrame_ShouldParseAudioFrame()
     {
         byte[] audio = new byte[320]; // 160 PCM16 samples = 320 bytes
-        byte[] data = new byte[4 + 320];
-        data[0] = 0x01; // Audio
-        data[1] = 0x00; data[2] = 0x01; data[3] = 0x40; // length = 320 = 0x000140
-        audio.CopyTo(data, 4);
+        byte[] data = new byte[3 + 320];
+        data[0] = 0x10; // Audio
+        data[1] = 0x01; data[2] = 0x40; // length = 320 = 0x0140
+        audio.CopyTo(data, 3);
 
         var buffer = new ReadOnlySequence<byte>(data);
         var result = AudioSocketFrameCodec.TryReadFrame(ref buffer, out var frame);
@@ -45,22 +51,24 @@ public sealed class AudioSocketFrameCodecTests
     }
 
     [Fact]
-    public void TryReadFrame_ShouldParseSilenceFrame_With2BytePayload()
+    public void TryReadFrame_ShouldParseDtmfFrame_WithOneAsciiDigitOfPayload()
     {
-        byte[] data = [0x02, 0x00, 0x00, 0x02, 0x01, 0xF4]; // type=Silence, length=2, duration=500ms
+        // The codec has no behaviour for DTMF. Identifying it and consuming exactly its declared
+        // length is the whole requirement: anything else leaves the next frame at the wrong offset.
+        byte[] data = [0x03, 0x00, 0x01, (byte)'5']; // type=Dtmf, length=1, payload='5'
         var buffer = new ReadOnlySequence<byte>(data);
         var result = AudioSocketFrameCodec.TryReadFrame(ref buffer, out var frame);
 
         result.Should().BeTrue();
-        frame.Type.Should().Be(AudioSocketFrameType.Silence);
-        var duration = AudioSocketFrameCodec.ParseSilenceDuration(frame.Payload.Span);
-        duration.Should().Be(500);
+        frame.Type.Should().Be(AudioSocketFrameType.Dtmf);
+        frame.Payload.Span[0].Should().Be((byte)'5');
+        buffer.IsEmpty.Should().BeTrue();
     }
 
     [Fact]
     public void TryReadFrame_ShouldParseHangupFrame()
     {
-        byte[] data = [0xFF, 0x00, 0x00, 0x00]; // type=Hangup, length=0
+        byte[] data = [0x00, 0x00, 0x00]; // type=Hangup, length=0
         var buffer = new ReadOnlySequence<byte>(data);
         var result = AudioSocketFrameCodec.TryReadFrame(ref buffer, out var frame);
 
@@ -73,12 +81,11 @@ public sealed class AudioSocketFrameCodecTests
     public void TryReadFrame_ShouldParseErrorFrame()
     {
         byte[] errorMsg = "channel error"u8.ToArray();
-        byte[] data = new byte[4 + errorMsg.Length];
-        data[0] = 0x04; // Error
+        byte[] data = new byte[3 + errorMsg.Length];
+        data[0] = 0xFF; // Error
         data[1] = 0x00;
-        data[2] = 0x00;
-        data[3] = (byte)errorMsg.Length;
-        errorMsg.CopyTo(data, 4);
+        data[2] = (byte)errorMsg.Length;
+        errorMsg.CopyTo(data, 3);
 
         var buffer = new ReadOnlySequence<byte>(data);
         var result = AudioSocketFrameCodec.TryReadFrame(ref buffer, out var frame);
@@ -91,7 +98,7 @@ public sealed class AudioSocketFrameCodecTests
     [Fact]
     public void TryReadFrame_ShouldReturnFalse_WhenDataIsIncomplete()
     {
-        byte[] data = [0x01, 0x00, 0x01, 0x40]; // header says 320 bytes payload, but no payload
+        byte[] data = [0x10, 0x01, 0x40]; // header says 320 bytes payload, but no payload
         var buffer = new ReadOnlySequence<byte>(data);
         var result = AudioSocketFrameCodec.TryReadFrame(ref buffer, out _);
 
@@ -101,7 +108,7 @@ public sealed class AudioSocketFrameCodecTests
     [Fact]
     public void TryReadFrame_ShouldReturnFalse_WhenLessThanHeader()
     {
-        byte[] data = [0x01, 0x00]; // only 2 bytes, need 4 for header
+        byte[] data = [0x10, 0x00]; // only 2 bytes, need 3 for header
         var buffer = new ReadOnlySequence<byte>(data);
         var result = AudioSocketFrameCodec.TryReadFrame(ref buffer, out _);
 
@@ -125,11 +132,10 @@ public sealed class AudioSocketFrameCodecTests
         AudioSocketFrameCodec.WriteFrame(writer, AudioSocketFrameType.Audio, payload);
 
         var written = writer.WrittenSpan;
-        written[0].Should().Be(0x01); // Audio type
+        written[0].Should().Be(0x10); // Audio type
         written[1].Should().Be(0x00); // length high
-        written[2].Should().Be(0x00); // length mid
-        written[3].Should().Be(0x03); // length low = 3
-        written[4..7].ToArray().Should().BeEquivalentTo(payload);
+        written[2].Should().Be(0x03); // length low = 3
+        written[3..6].ToArray().Should().BeEquivalentTo(payload);
     }
 
     [Fact]
@@ -138,12 +144,26 @@ public sealed class AudioSocketFrameCodecTests
         var writer = new ArrayBufferWriter<byte>();
         AudioSocketFrameCodec.WriteFrame(writer, AudioSocketFrameType.Hangup, ReadOnlySpan<byte>.Empty);
 
-        writer.WrittenCount.Should().Be(4);
+        writer.WrittenCount.Should().Be(3);
         var written = writer.WrittenSpan;
-        written[0].Should().Be(0xFF); // Hangup type
+        written[0].Should().Be(0x00); // Hangup type
         written[1].Should().Be(0x00);
-        written[2].Should().Be(0x00);
-        written[3].Should().Be(0x00); // length = 0
+        written[2].Should().Be(0x00); // length = 0
+    }
+
+    [Fact]
+    public void WriteFrame_ShouldThrow_WhenThePayloadIsLongerThanTheLengthFieldCanDeclare()
+    {
+        // The two-byte length caps a frame at 65,535 bytes. Writing a longer payload behind a
+        // truncated length would put every frame after it at the wrong offset, which is the same
+        // class of failure this whole change exists to correct.
+        var writer = new ArrayBufferWriter<byte>();
+        byte[] payload = new byte[AudioSocketFrameCodec.MaxPayloadLength + 1];
+
+        var act = () => AudioSocketFrameCodec.WriteFrame(writer, AudioSocketFrameType.Audio, payload);
+
+        act.Should().Throw<ArgumentOutOfRangeException>().WithParameterName("payload");
+        writer.WrittenCount.Should().Be(0, "a rejected frame leaves nothing half-written");
     }
 
     [Fact]
@@ -204,23 +224,5 @@ public sealed class AudioSocketFrameCodecTests
 
         act.Should().Throw<ArgumentException>()
             .WithParameterName("payload");
-    }
-
-    [Fact]
-    public void ParseSilenceDuration_ShouldDecodeBigEndianUInt16()
-    {
-        byte[] payload = [0x03, 0xE8]; // 1000 in big-endian
-        var duration = AudioSocketFrameCodec.ParseSilenceDuration(payload);
-
-        duration.Should().Be(1000);
-    }
-
-    [Fact]
-    public void ParseSilenceDuration_ShouldReturnZero_WhenPayloadTooShort()
-    {
-        byte[] payload = [0x01]; // only 1 byte
-        var duration = AudioSocketFrameCodec.ParseSilenceDuration(payload);
-
-        duration.Should().Be(0);
     }
 }

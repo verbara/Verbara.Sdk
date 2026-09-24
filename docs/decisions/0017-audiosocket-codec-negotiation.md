@@ -1,6 +1,6 @@
 # ADR-0017: AudioSocket codec negotiation (slin16 / ulaw / alaw / gsm, per-connection)
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0060](0060-the-wire-format-is-asterisks-and-no-parser-is-held-to-its-own-encoder.md)
 - **Date:** 2026-03-19 (retrospective — decision made during VoiceAi AudioSocket introduction)
 - **Deciders:** Harol A. Reina H.
 - **Related:** ADR-0013 (`ISessionHandler` abstraction), ADR-0014 (raw HTTP/WebSocket providers)

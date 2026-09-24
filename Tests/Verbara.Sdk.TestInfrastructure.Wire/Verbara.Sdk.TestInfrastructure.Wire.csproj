@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <!--
+    Bytes captured off a real wire, shared by every test suite that parses that wire, and NOTHING
+    else. Deliberately carries zero PackageReference.
+
+    Why this is not a folder inside Verbara.Sdk.TestInfrastructure: that project carries
+    Testcontainers, so referencing it from a unit-test suite would hand that suite the whole Docker
+    client graph to read nineteen bytes. Verbara.Sdk.TestInfrastructure.Http already exists for
+    exactly this reason and its csproj records what the alternative cost — WireMock's transitive
+    graph landing in suites that did not need it dropped measured line coverage from 80.42% to
+    61.96% while every test still passed (ADR-0041 D7). The same confinement rule, applied one
+    project earlier.
+
+    Why this is not a per-suite copy of the bytes: a captured fixture exists to stop a parser being
+    held to its own encoder. Two copies of the capture can drift apart exactly like two parsers did,
+    which is the failure this project is here to make impossible.
+  -->
+
+</Project>

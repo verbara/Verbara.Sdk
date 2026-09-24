@@ -52,19 +52,20 @@ public class AudioSocketServerTests : IAsyncDisposable
         return port;
     }
 
+    /// <summary>One byte of type, two of big-endian length, then the payload.</summary>
     private static byte[] BuildFrame(AudioFrameType type, byte[] payload)
     {
-        var frame = new byte[4 + payload.Length];
+        var frame = new byte[3 + payload.Length];
         frame[0] = (byte)type;
-        frame[1] = (byte)(payload.Length >> 16);
-        frame[2] = (byte)(payload.Length >> 8);
-        frame[3] = (byte)(payload.Length);
-        payload.CopyTo(frame.AsSpan(4));
+        frame[1] = (byte)(payload.Length >> 8);
+        frame[2] = (byte)(payload.Length);
+        payload.CopyTo(frame.AsSpan(3));
         return frame;
     }
 
+    /// <summary>The UUID travels in RFC 4122 order, most significant byte first, as Asterisk sends it.</summary>
     private static byte[] BuildUuidFrame(Guid uuid) =>
-        BuildFrame(AudioFrameType.Uuid, uuid.ToByteArray());
+        BuildFrame(AudioFrameType.Uuid, uuid.ToByteArray(bigEndian: true));
 
     private static byte[] BuildHangupFrame() =>
         BuildFrame(AudioFrameType.Hangup, []);

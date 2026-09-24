@@ -1,0 +1,82 @@
+Phase A3 — capture of the remaining frame kinds
+===============================================
+
+Rig
+---
+  image      verbara/asterisk-local:22   (Asterisk 22.9.0; app_audiosocket.so, res_audiosocket.so,
+                                          chan_audiosocket.so all Running)
+  network    --network host, so 127.0.0.1:9092 inside the container is the host's loopback
+  mount      <repo-scratchpad>/probe/extensions.conf -> /etc/asterisk/extensions.conf:ro
+  listener   a bare python3 socket on 127.0.0.1:9092 that accepted, recorded every byte, and
+             parsed with the header the first probe measured: 1 byte type + 2 bytes big-endian length
+  originate  asterisk -rx "channel originate Local/700@audiosocket-probe <caller>"
+
+Dialplan (the ;2 half hands the call over; the ;1 half is the far leg)
+  exten => 700,1,NoOp(AudioSocket probe)
+   same => n,Answer()
+   same => n,AudioSocket(01234567-89ab-cdef-0123-456789abcdef,127.0.0.1:9092)
+   same => n,Hangup()
+
+The dialplan UUID is deliberately not byte-order symmetric. The first probe's
+11111111-2222-3333-4444-555555555555 reads the same in either byte order in every field, so it
+cannot distinguish RFC 4122 order from the little-endian layout Guid uses by default.
+
+
+Run "audio" — far leg: application Playback demo-congrats, ended with `channel request hangup all`
+---------------------------------------------------------------------------------------------------
+  TOTAL BYTES: 97888
+  PARSED FRAMES: 304, trailing bytes: 0
+  peer closed the connection
+
+  frame #0    type=0x01 len=16    payload[:16]=01 23 45 67 89 ab cd ef 01 23 45 67 89 ab cd ef
+  frame #1    type=0x10 len=320   payload[:16]=00 00 ff ff 00 00 00 00 00 00 00 00 00 00 00 00
+  frame #2    type=0x10 len=320   payload[:16]=00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  frame #3    type=0x10 len=320   payload[:16]=00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+  TYPE 0x01  count=1     first=#0    len=16
+  TYPE 0x10  count=303   first=#1    len=320
+
+  Header of the first audio frame, verbatim: 10 01 40   (type 0x10, length 0x0140 = 320)
+  An earlier run of the same shape held 14 s and produced 701 audio frames, 0 trailing bytes.
+
+
+Run "dtmf" — far leg: extension 701 = Answer, Wait(2), SendDTMF(1234,250,250), Wait(2), Hangup()
+--------------------------------------------------------------------------------------------------
+  TOTAL BYTES: 35
+  PARSED FRAMES: 5, trailing bytes: 0
+  peer closed the connection
+
+  frame #0    type=0x01 len=16    payload[:16]=01 23 45 67 89 ab cd ef 01 23 45 67 89 ab cd ef
+  frame #1    type=0x03 len=1     payload[:16]=31
+  frame #2    type=0x03 len=1     payload[:16]=32
+  frame #3    type=0x03 len=1     payload[:16]=33
+  frame #4    type=0x03 len=1     payload[:16]=34
+
+  Whole first DTMF frame, verbatim: 03 00 01 31   (type 0x03, length 1, payload = ASCII '1')
+  Payloads 31 32 33 34 match SendDTMF(1234) digit for digit.
+
+
+Hangup — NOT CAPTURED, and this is the finding
+----------------------------------------------
+Two runs ended the call two different ways:
+  - `channel request hangup all` from the CLI, and
+  - the far leg reaching Hangup() in the dialplan on its own.
+Both ended the same way: the listener printed "peer closed the connection" with ZERO trailing bytes
+after the last complete frame. Asterisk 22.9.0's app_audiosocket closes the TCP connection; it does
+not send a 0x00 hangup frame in the Asterisk -> server direction.
+
+No hangup entry was written into the fixture. A hand-written one would be a guess dressed as a
+capture, which is the closed loop this change exists to break. 0x00 stays the hangup type in the
+OUTBOUND direction (the SDK sends it to ask Asterisk to hang up) on the strength of the type table,
+not of a measurement, and it is recorded that way.
+
+
+What this adds to the measurement the change rests on
+-----------------------------------------------------
+  Uuid   = 0x01   confirmed a second time, and now with a UUID that pins RFC 4122 byte order
+  Audio  = 0x10   MEASURED, not inferred from AudioSlin12 = 0x11
+  Dtmf   = 0x03   MEASURED; neither enum has a member for it today
+  Hangup = 0x00   still unmeasured inbound; Asterisk closes the socket instead
+  header = 1 byte type + 2 bytes big-endian length, on 1,411 frames across the runs, 0 trailing bytes
+
+Container cleanup: `docker rm -f as-probe`, confirmed gone.

@@ -1,1 +1,12 @@
 #nullable enable
+*REMOVED*Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Audio = 1 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+*REMOVED*Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Error = 4 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+*REMOVED*Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Hangup = 255 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+*REMOVED*Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Silence = 2 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+*REMOVED*Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Uuid = 0 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+*REMOVED*Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession.WriteSilenceAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Audio = 16 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Dtmf = 3 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Error = 255 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Hangup = 0 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Uuid = 1 -> Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType

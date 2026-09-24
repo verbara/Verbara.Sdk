@@ -36,24 +36,6 @@ public sealed class AudioSocketSessionTests : IAsyncDisposable
         return (session, client);
     }
 
-    // ── WriteSilenceAsync ────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task WriteSilenceAsync_ShouldSendSilenceFrame()
-    {
-        var (session, client) = await CreateSessionAsync();
-
-        // WriteSilenceAsync sends a Silence frame with 2-byte payload [0, 0]
-        await session.WriteSilenceAsync();
-
-        // The client should be able to read back the silence frame as raw data.
-        // Since AudioSocketClient.ReadAudioAsync only yields Audio frames,
-        // we verify the session didn't throw and is still connected.
-        session.IsConnected.Should().BeTrue();
-
-        await client.DisposeAsync();
-    }
-
     // ── HangupAsync ──────────────────────────────────────────────────────────
 
     [Fact]
@@ -252,22 +234,6 @@ public sealed class AudioSocketSessionTests : IAsyncDisposable
         await session.DisposeAsync();
 
         session.IsConnected.Should().BeFalse();
-
-        await client.DisposeAsync();
-    }
-
-    // ── WriteSilenceAsync throws when disposed ───────────────────────────────
-
-    [Fact]
-    public async Task WriteSilenceAsync_ShouldThrow_WhenDisposed()
-    {
-        var (session, client) = await CreateSessionAsync();
-
-        await session.DisposeAsync();
-
-        var act = async () => await session.WriteSilenceAsync();
-
-        await act.Should().ThrowAsync<ObjectDisposedException>();
 
         await client.DisposeAsync();
     }

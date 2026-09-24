@@ -1,4 +1,14 @@
 #nullable enable
+*REMOVED*Verbara.Sdk.Ari.Audio.AudioFrameType.Audio = 1 -> Verbara.Sdk.Ari.Audio.AudioFrameType
+*REMOVED*Verbara.Sdk.Ari.Audio.AudioFrameType.Error = 16 -> Verbara.Sdk.Ari.Audio.AudioFrameType
+*REMOVED*Verbara.Sdk.Ari.Audio.AudioFrameType.Hangup = 255 -> Verbara.Sdk.Ari.Audio.AudioFrameType
+*REMOVED*Verbara.Sdk.Ari.Audio.AudioFrameType.Silence = 2 -> Verbara.Sdk.Ari.Audio.AudioFrameType
+*REMOVED*Verbara.Sdk.Ari.Audio.AudioFrameType.Uuid = 0 -> Verbara.Sdk.Ari.Audio.AudioFrameType
+Verbara.Sdk.Ari.Audio.AudioFrameType.Audio = 16 -> Verbara.Sdk.Ari.Audio.AudioFrameType
+Verbara.Sdk.Ari.Audio.AudioFrameType.Dtmf = 3 -> Verbara.Sdk.Ari.Audio.AudioFrameType
+Verbara.Sdk.Ari.Audio.AudioFrameType.Error = 255 -> Verbara.Sdk.Ari.Audio.AudioFrameType
+Verbara.Sdk.Ari.Audio.AudioFrameType.Hangup = 0 -> Verbara.Sdk.Ari.Audio.AudioFrameType
+Verbara.Sdk.Ari.Audio.AudioFrameType.Uuid = 1 -> Verbara.Sdk.Ari.Audio.AudioFrameType
 Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage
 Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer
 Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf
