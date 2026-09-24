@@ -1,0 +1,51 @@
+ARI externalMedia / AudioSocket identification probe
+====================================================
+Asterisk 22.9.0 (image verbara/asterisk-local:22, --network host), real ARI over HTTP :8088,
+bare TCP listener on 127.0.0.1:19099 recording raw bytes. The listener is dependency-free on
+purpose: no code from this repository decodes anything below.
+
+Two DISTINCT uuids per run, each asymmetric under byte reversal, so a capture says BOTH which
+parameter travels AND in which byte order. A byte-order-symmetric fixture would have passed
+either way; that mistake was made once already in this repository's history.
+
+RUN A - channelId and data DISTINCT
+    channelId = 0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9
+    data      = f9e8d7c6-b5a4-3928-1706-f5e4d3c2b1a0
+
+    HTTP 200
+    channel.id   : 0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9      <- channelId
+    channel.name : AudioSocket/127.0.0.1:19099-f9e8d7c6-...  <- data
+
+    HEX: 01 00 10 f9 e8 d7 c6 b5 a4 39 28 17 06 f5 e4 d3 c2 b1 a0
+    UUID on the wire (big-endian, RFC 4122): f9e8d7c6-b5a4-3928-1706-f5e4d3c2b1a0
+        == channelId ? False
+        == data      ? True
+
+RUN C - data only, no channelId
+    HTTP 200
+    channel.id : 1790244226.1        <- Asterisk-minted uniqueid, unrelated to the wire
+    HEX: 01 00 10 f9 e8 d7 c6 b5 a4 39 28 17 06 f5 e4 d3 c2 b1 a0
+        == data ? True
+
+RUN D - exactly what ExternalMediaActivity sends today (no channelId, no data)
+    HTTP 400 -> {"message": "data can not be empty"}
+
+RUN B - channelId only, no data
+    HTTP 400 -> {"message": "data can not be empty"}
+
+RUN E1/E2 - channelId == data, fresh uuid each time
+    E1: HTTP 200  id=c165018a-d35b-4783-a057-4d43c1f7ba59
+        HEX: 01 00 10 c1 65 01 8a d3 5b 47 83 a0 57 4d 43 c1 f7 ba 59
+        UUID on the wire == channelId ? True   == data ? True
+    E2: HTTP 200  id=c6868f03-d4eb-48fe-8bc3-a0b8b99f140e
+        HEX: 01 00 10 c6 86 8f 03 d4 eb 48 fe 8b c3 a0 b8 b9 9f 14 0e
+        UUID on the wire == channelId ? True   == data ? True
+
+RUN F - channelId and data distinct, both fresh (RUN A repeated against fresh ids)
+    HTTP 200  id=f1fbf105-bec3-4523-a789-93a631902cbf
+              name=AudioSocket/127.0.0.1:19099-0f744ac5-adae-4c3b-ac91-d75a63fde417
+    UUID on the wire: 0f744ac5-adae-4c3b-ac91-d75a63fde417   == data ? True
+
+NOT A FINDING, recorded so it is not rediscovered as one: an intermediate run of E returned
+HTTP 500. The cause was reuse of a channelId already created earlier in the same session, not a
+defect in the pattern. Every E run above uses a fresh uuid and returns 200.
