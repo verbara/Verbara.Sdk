@@ -115,11 +115,6 @@ internal sealed class AudioSocketSession : IAudioStream
                             _audioInChannel.Writer.TryWrite(payload.ToArray());
                             break;
 
-                        case AudioFrameType.Silence:
-                            // Silence frame — enqueue empty to signal silence
-                            _audioInChannel.Writer.TryWrite(ReadOnlyMemory<byte>.Empty);
-                            break;
-
                         case AudioFrameType.Hangup:
                             _state.OnNext(AudioStreamState.Disconnected);
                             _audioInChannel.Writer.TryComplete();
@@ -181,7 +176,11 @@ internal sealed class AudioSocketSession : IAudioStream
         {
             Span<byte> bytes = stackalloc byte[16];
             payload.Slice(0, 16).CopyTo(bytes);
-            return new Guid(bytes).ToString();
+            // RFC 4122 order, most significant byte first — which is how Asterisk puts the
+            // dialplan's UUID on the wire, and what the capture shows. Guid's own layout is
+            // little-endian for the first three fields, so without bigEndian: true the first
+            // eleven characters of every channel id come out reversed.
+            return new Guid(bytes, bigEndian: true).ToString();
         }
 
         // Fallback: treat as UTF-8 string

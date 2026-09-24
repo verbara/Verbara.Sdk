@@ -7,10 +7,10 @@ public sealed class AudioSocketFrameTypeTests
     // ── Byte values ──────────────────────────────────────────────────────────
 
     [Theory]
-    [InlineData(AudioSocketFrameType.Uuid, 0x00)]
-    [InlineData(AudioSocketFrameType.Audio, 0x01)]
-    [InlineData(AudioSocketFrameType.Silence, 0x02)]
-    [InlineData(AudioSocketFrameType.Error, 0x04)]
+    [InlineData(AudioSocketFrameType.Hangup, 0x00)]
+    [InlineData(AudioSocketFrameType.Uuid, 0x01)]
+    [InlineData(AudioSocketFrameType.Dtmf, 0x03)]
+    [InlineData(AudioSocketFrameType.Audio, 0x10)]
     [InlineData(AudioSocketFrameType.AudioSlin12, 0x11)]
     [InlineData(AudioSocketFrameType.AudioSlin16, 0x12)]
     [InlineData(AudioSocketFrameType.AudioSlin24, 0x13)]
@@ -19,7 +19,7 @@ public sealed class AudioSocketFrameTypeTests
     [InlineData(AudioSocketFrameType.AudioSlin48, 0x16)]
     [InlineData(AudioSocketFrameType.AudioSlin96, 0x17)]
     [InlineData(AudioSocketFrameType.AudioSlin192, 0x18)]
-    [InlineData(AudioSocketFrameType.Hangup, 0xFF)]
+    [InlineData(AudioSocketFrameType.Error, 0xFF)]
     public void FrameType_ShouldHaveCorrectByteValue(AudioSocketFrameType type, byte expectedValue)
     {
         ((byte)type).Should().Be(expectedValue);
@@ -44,7 +44,7 @@ public sealed class AudioSocketFrameTypeTests
 
     [Theory]
     [InlineData(AudioSocketFrameType.Uuid)]
-    [InlineData(AudioSocketFrameType.Silence)]
+    [InlineData(AudioSocketFrameType.Dtmf)]
     [InlineData(AudioSocketFrameType.Error)]
     [InlineData(AudioSocketFrameType.Hangup)]
     public void GetSampleRate_ShouldReturn8000_ForNonAudioTypes(AudioSocketFrameType type)
@@ -71,7 +71,7 @@ public sealed class AudioSocketFrameTypeTests
 
     [Theory]
     [InlineData(AudioSocketFrameType.Uuid)]
-    [InlineData(AudioSocketFrameType.Silence)]
+    [InlineData(AudioSocketFrameType.Dtmf)]
     [InlineData(AudioSocketFrameType.Error)]
     [InlineData(AudioSocketFrameType.Hangup)]
     public void IsAudio_ShouldReturnFalse_ForNonAudioFrameTypes(AudioSocketFrameType type)

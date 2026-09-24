@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<!--
+  Deliberate API breaks, declared rather than skipped.
+
+  Every entry here is a consequence of one fact: both AudioSocket implementations read a frame header
+  Asterisk does not send. Measured against a real Asterisk 22.9.0 with the real res_audiosocket.so —
+  the first bytes on the wire are `01 00 10` plus sixteen of UUID, so the header is one type byte and
+  two of big-endian length, and `0x01` is the identification frame rather than audio. The values these
+  suppressions cover described a protocol no Asterisk speaks, which is why no consumer can have
+  depended on them for anything that worked.
+
+  CP0011 (value changed): Uuid, Audio, Error and Hangup take the values res_audiosocket.h defines.
+  CP0002 (member removed): Silence, and its writer, describe a frame kind Asterisk has no code for.
+
+  This file is committed on purpose. ADR-0055 records that letting `pack` generate it on the build
+  machine turns every difference into a suppression that never reaches the repository — which is
+  skipping validation while it reports green. Each entry here was read before it was kept.
+
+  These clear when PackageValidationBaselineVersion moves past the release that ships this change.
+  Do not add an entry here to make a build pass; add it because the break is intended and written down.
+-->
+<Suppressions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>F:Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Silence</Target>
+    <Left>lib/net10.0/Verbara.Sdk.VoiceAi.AudioSocket.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.VoiceAi.AudioSocket.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketSession.WriteSilenceAsync(System.Threading.CancellationToken)</Target>
+    <Left>lib/net10.0/Verbara.Sdk.VoiceAi.AudioSocket.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.VoiceAi.AudioSocket.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0011</DiagnosticId>
+    <Target>F:Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Audio</Target>
+    <Left>lib/net10.0/Verbara.Sdk.VoiceAi.AudioSocket.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.VoiceAi.AudioSocket.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0011</DiagnosticId>
+    <Target>F:Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Error</Target>
+    <Left>lib/net10.0/Verbara.Sdk.VoiceAi.AudioSocket.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.VoiceAi.AudioSocket.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0011</DiagnosticId>
+    <Target>F:Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Hangup</Target>
+    <Left>lib/net10.0/Verbara.Sdk.VoiceAi.AudioSocket.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.VoiceAi.AudioSocket.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0011</DiagnosticId>
+    <Target>F:Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType.Uuid</Target>
+    <Left>lib/net10.0/Verbara.Sdk.VoiceAi.AudioSocket.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.VoiceAi.AudioSocket.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>

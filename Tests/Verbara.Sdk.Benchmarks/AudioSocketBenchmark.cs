@@ -21,23 +21,23 @@ public class AudioSocketBenchmark
         _singleAudioFrame = BuildFrame(AudioFrameType.Audio, payload);
 
         // 100 audio frames back-to-back
-        var writer = new ArrayBufferWriter<byte>(100 * (4 + 640));
+        var writer = new ArrayBufferWriter<byte>(100 * (AudioSocketProtocol.HeaderSize + 640));
         for (int i = 0; i < 100; i++)
             AudioSocketProtocol.WriteFrame(writer, AudioFrameType.Audio, payload);
         _batch100Frames = writer.WrittenSpan.ToArray();
 
-        // Incomplete frame: header says 640 bytes but only 100 present
-        _incompleteFrame = new byte[4 + 100];
+        // Incomplete frame: header says 640 bytes but only 100 present. Three bytes of header —
+        // one of type, two of big-endian length — which is what Asterisk sends.
+        _incompleteFrame = new byte[AudioSocketProtocol.HeaderSize + 100];
         _incompleteFrame[0] = (byte)AudioFrameType.Audio;
-        _incompleteFrame[1] = 0; // 640 >> 16
-        _incompleteFrame[2] = 2; // 640 >> 8
-        _incompleteFrame[3] = 128; // 640 & 0xFF
+        _incompleteFrame[1] = 2; // 640 >> 8
+        _incompleteFrame[2] = 128; // 640 & 0xFF
         // Only 100 bytes of payload follow — parser should return false + rewind
     }
 
     private static byte[] BuildFrame(AudioFrameType type, ReadOnlySpan<byte> payload)
     {
-        var writer = new ArrayBufferWriter<byte>(4 + payload.Length);
+        var writer = new ArrayBufferWriter<byte>(AudioSocketProtocol.HeaderSize + payload.Length);
         AudioSocketProtocol.WriteFrame(writer, type, payload);
         return writer.WrittenSpan.ToArray();
     }

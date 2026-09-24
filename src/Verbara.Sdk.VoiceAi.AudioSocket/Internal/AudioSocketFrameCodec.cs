@@ -4,9 +4,19 @@ using System.Buffers.Binary;
 namespace Verbara.Sdk.VoiceAi.AudioSocket.Internal;
 
 /// <summary>Encodes and decodes AudioSocket protocol frames.</summary>
+/// <remarks>
+/// The header is Asterisk's, from <c>res_audiosocket.h</c>: one byte of kind, then a two-byte
+/// big-endian payload length. It is also measured — the first nineteen bytes of a real call are
+/// <c>01 00 10</c> followed by sixteen of UUID — and
+/// <c>Verbara.Sdk.TestInfrastructure.Wire.AudioSocketWireCapture</c> holds that capture so this
+/// codec is never checked against nothing but itself.
+/// </remarks>
 internal static class AudioSocketFrameCodec
 {
-    private const int HeaderSize = 4; // 1 type + 3 length
+    private const int HeaderSize = 3; // 1 type + 2 big-endian length
+
+    /// <summary>The largest payload a two-byte length can declare.</summary>
+    internal const int MaxPayloadLength = ushort.MaxValue;
 
     /// <summary>
     /// Attempts to read one complete frame from the buffer.
@@ -20,14 +30,14 @@ internal static class AudioSocketFrameCodec
         if (buffer.Length < HeaderSize)
             return false;
 
-        // Read header (4 bytes)
+        // Read header (3 bytes)
         Span<byte> header = stackalloc byte[HeaderSize];
         buffer.Slice(0, HeaderSize).CopyTo(header);
 
         var type = (AudioSocketFrameType)header[0];
 
-        // 3-byte big-endian length
-        int payloadLength = (header[1] << 16) | (header[2] << 8) | header[3];
+        // 2-byte big-endian length
+        int payloadLength = BinaryPrimitives.ReadUInt16BigEndian(header[1..]);
 
         if (buffer.Length < HeaderSize + payloadLength)
             return false;
@@ -44,16 +54,21 @@ internal static class AudioSocketFrameCodec
     /// <summary>
     /// Writes a complete AudioSocket frame to the buffer writer.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The payload is longer than <see cref="MaxPayloadLength"/>, which the two-byte length cannot
+    /// express. Truncating it silently would put a frame on the wire whose declared length is not
+    /// its own, and every frame after it would then be read at the wrong offset.
+    /// </exception>
     internal static void WriteFrame(IBufferWriter<byte> writer, AudioSocketFrameType type, ReadOnlySpan<byte> payload)
     {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(payload.Length, MaxPayloadLength, nameof(payload));
+
         int totalSize = HeaderSize + payload.Length;
         Span<byte> buffer = writer.GetSpan(totalSize);
 
         buffer[0] = (byte)type;
-        // 3-byte big-endian length
-        buffer[1] = (byte)(payload.Length >> 16);
-        buffer[2] = (byte)(payload.Length >> 8);
-        buffer[3] = (byte)(payload.Length);
+        // 2-byte big-endian length
+        BinaryPrimitives.WriteUInt16BigEndian(buffer[1..3], (ushort)payload.Length);
 
         payload.CopyTo(buffer[HeaderSize..]);
         writer.Advance(totalSize);
@@ -69,16 +84,5 @@ internal static class AudioSocketFrameCodec
             throw new ArgumentException("UUID payload must be exactly 16 bytes.", nameof(payload));
 
         return new Guid(payload, bigEndian: true);
-    }
-
-    /// <summary>
-    /// Parses a Silence frame payload (2-byte big-endian duration in ms).
-    /// </summary>
-    internal static ushort ParseSilenceDuration(ReadOnlySpan<byte> payload)
-    {
-        if (payload.Length < 2)
-            return 0;
-
-        return BinaryPrimitives.ReadUInt16BigEndian(payload);
     }
 }

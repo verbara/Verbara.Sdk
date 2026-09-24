@@ -122,17 +122,6 @@ public sealed class AudioSocketSession : IAsyncDisposable
         AudioSocketMetrics.BytesSent.Add(pcmData.Length);
     }
 
-    /// <summary>Send a silence indication frame.</summary>
-    public async ValueTask WriteSilenceAsync(CancellationToken ct = default)
-    {
-        ObjectDisposedException.ThrowIf(_disposed == 1, this);
-        Span<byte> payload = stackalloc byte[2];
-        payload[0] = 0;
-        payload[1] = 0;
-        AudioSocketFrameCodec.WriteFrame(_writer, AudioSocketFrameType.Silence, payload);
-        await _writer.FlushAsync(ct).ConfigureAwait(false);
-    }
-
     /// <summary>Signal hangup to Asterisk.</summary>
     public async ValueTask HangupAsync(CancellationToken ct = default)
     {
@@ -176,9 +165,12 @@ public sealed class AudioSocketSession : IAsyncDisposable
                         case AudioSocketFrameType.Error:
                             return; // the finally tears the transport down and fires the hangup
 
-                        case AudioSocketFrameType.Silence:
                         case AudioSocketFrameType.Uuid:
+                        case AudioSocketFrameType.Dtmf:
                         default:
+                            // Recognised and skipped by its own declared length, which
+                            // TryReadFrame has already done. Nothing here resynchronises the
+                            // stream on a frame this session has no behaviour for.
                             break;
                     }
                 }

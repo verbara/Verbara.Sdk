@@ -4,6 +4,53 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: AudioSocket spoke a protocol Asterisk does not, so neither server ever completed a handshake
+
+Both AudioSocket implementations read a **four**-byte frame header. Asterisk sends **three**: one byte
+of type and two of big-endian length. Both also believed `0x01` meant an audio frame and `0x00` meant
+the identification frame. Asterisk sends the opposite.
+
+So the very first packet — `01 00 10` followed by sixteen bytes of UUID — was read as an audio frame
+whose length came out of the UUID's own bytes. The identification never arrived, the session never
+started, and Asterisk closed the connection two seconds later with `Reached timeout after 2000 ms of no
+activity`. That was true of `Verbara.Sdk.Ari.Audio.AudioSocketServer` and of
+`Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer` alike, since 2.0.0.
+
+This is measured, not inferred. A probe against a real Asterisk 22.9.0 with the real
+`res_audiosocket.so`, originating a real call, captured 1,411 frames across several runs: the
+identification frame above, audio as `10 01 40` plus 320 bytes, and DTMF as `03 00 01 31`. The header
+was one type byte and two big-endian length bytes in every one of them, with zero trailing bytes.
+
+- **Frame types now carry the values Asterisk sends**: `Hangup = 0x00`, `Uuid = 0x01`, `Dtmf = 0x03`
+  (new — captured, and previously unhandled by both), `Audio = 0x10`, `Error = 0xFF`. `Silence = 0x02`
+  is **removed** from both enums and with it `AudioSocketSession.WriteSilenceAsync`: `res_audiosocket.h`
+  defines no such frame. `AudioSlin12` through `AudioSlin192` were already right and do not move.
+- **The ARI enum had a second, independent defect**: it mapped `0x10` to `Error`, which is the real
+  audio type, and its read pump returns on `Error`. It would have torn the session down on the first
+  audio frame even with a correct header.
+- **The ARI UUID parse now reads big-endian**, which the capture confirms and which this repo's own
+  design note already required. The VoiceAi side already did.
+- **The format is now pinned by the captured bytes**, in one fixture shared by both packages'
+  tests. Until now every test in both packages built its input with the code under test, which is a
+  loop that passes whatever the wire really carries — 25 encoding sites across the two packages fed 39
+  tests that asserted the wrong bytes and stayed green for six months.
+- **The functional dialplan gains an `AudioSocket()` extension**, which it never had. That absence is
+  what let this live: the lane covered FastAGI, Stasis, queues and echo, so nothing ever reached either
+  AudioSocket server.
+
+**What a consumer must do.** Recompile. Both enums are public and enum values are inlined at compile
+time, so a pinned build keeps the old numbers. No consumer can have depended on them for anything that
+worked, because the old values describe a protocol no Asterisk speaks — but that is a reasoned claim,
+not a measured one, and anyone who implemented this SDK's dialect in their own client will need to move
+with it. `PublicAPI.Shipped.txt` is untouched in both packages; the changes are recorded in
+`PublicAPI.Unshipped.txt` as removals plus replacements.
+
+**Migration guide:** [`docs/guides/audiosocket-wire-format-migration.md`](docs/guides/audiosocket-wire-format-migration.md)
+— required by ADR-0028 for a minor that carries a breaking change.
+
+ADR-0017 is superseded: it described an 18-byte header, frame types in neither enum, and per-connection
+codec negotiation the code never implemented.
+
 ### Changed — both ARI audio servers survive an accept failure, and `IsRunning` now means a stop has begun (#300)
 
 `AudioSocketServer.AcceptLoopAsync` and `WebSocketAudioServer.AcceptLoopAsync` were the last two accept

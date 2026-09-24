@@ -6,23 +6,29 @@ namespace Verbara.Sdk.Ari.Tests.Audio;
 
 public class AudioSocketSessionTests
 {
-    /// <summary>Build a complete AudioSocket frame in memory.</summary>
+    /// <summary>
+    /// Build a complete AudioSocket frame in memory: one byte of type, two of big-endian length.
+    /// Hand-built rather than written with the codec, but still this file's own idea of the format —
+    /// what pins it to the wire is <see cref="AudioSocketCapturedWireTests"/>.
+    /// </summary>
     private static byte[] BuildFrame(AudioFrameType type, byte[] payload)
     {
-        var frame = new byte[4 + payload.Length];
+        var frame = new byte[3 + payload.Length];
         frame[0] = (byte)type;
-        frame[1] = (byte)(payload.Length >> 16);
-        frame[2] = (byte)(payload.Length >> 8);
-        frame[3] = (byte)(payload.Length);
-        payload.CopyTo(frame.AsSpan(4));
+        frame[1] = (byte)(payload.Length >> 8);
+        frame[2] = (byte)(payload.Length);
+        payload.CopyTo(frame.AsSpan(3));
         return frame;
     }
+
+    /// <summary>The sixteen bytes Asterisk sends for a UUID: RFC 4122 order, most significant first.</summary>
+    private static byte[] UuidPayload(Guid uuid) => uuid.ToByteArray(bigEndian: true);
 
     [Fact]
     public async Task Session_ShouldParseUuidAndReadAudio()
     {
         var uuid = Guid.NewGuid();
-        var uuidFrame = BuildFrame(AudioFrameType.Uuid, uuid.ToByteArray());
+        var uuidFrame = BuildFrame(AudioFrameType.Uuid, UuidPayload(uuid));
         var audioData = new byte[320];
         Random.Shared.NextBytes(audioData);
         var audioFrame = BuildFrame(AudioFrameType.Audio, audioData);
@@ -76,7 +82,7 @@ public class AudioSocketSessionTests
     [Fact]
     public async Task Session_ShouldReportDisconnectedOnHangup()
     {
-        var uuidFrame = BuildFrame(AudioFrameType.Uuid, Guid.NewGuid().ToByteArray());
+        var uuidFrame = BuildFrame(AudioFrameType.Uuid, UuidPayload(Guid.NewGuid()));
         var hangupFrame = BuildFrame(AudioFrameType.Hangup, []);
 
         var allData = new byte[uuidFrame.Length + hangupFrame.Length];
@@ -105,7 +111,7 @@ public class AudioSocketSessionTests
     [Fact]
     public async Task Session_ShouldHandleErrorFrame()
     {
-        var uuidFrame = BuildFrame(AudioFrameType.Uuid, Guid.NewGuid().ToByteArray());
+        var uuidFrame = BuildFrame(AudioFrameType.Uuid, UuidPayload(Guid.NewGuid()));
         var errorFrame = BuildFrame(AudioFrameType.Error, "test error"u8.ToArray());
 
         var allData = new byte[uuidFrame.Length + errorFrame.Length];
@@ -132,7 +138,7 @@ public class AudioSocketSessionTests
     [Fact]
     public async Task Session_DisposeAsync_ShouldCompleteCleanly()
     {
-        var uuidFrame = BuildFrame(AudioFrameType.Uuid, Guid.NewGuid().ToByteArray());
+        var uuidFrame = BuildFrame(AudioFrameType.Uuid, UuidPayload(Guid.NewGuid()));
         await using var memStream = new MemoryStream(uuidFrame);
         var session = new AudioSocketSession(memStream, "slin16");
         var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
