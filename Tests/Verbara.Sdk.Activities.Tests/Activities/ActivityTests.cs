@@ -1,7 +1,9 @@
 using Verbara.Sdk;
 using Verbara.Sdk.Activities.Activities;
 using Verbara.Sdk.Activities.Models;
+using Verbara.Sdk.Ari.Audio;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace Verbara.Sdk.Activities.Tests.Activities;
@@ -422,6 +424,94 @@ public class ActivityTests
 
         // Verify HangupAsync was called on the channel
         await channelsResource.Received(1).HangupAsync("ext-ch-1", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldSendDataAndTcpTransport_WhenEncapsulationIsAudioSocket()
+    {
+        // ARGUMENT-CAPTURE, deliberately. The tempting test — "GetStream(Channel.Id) returns a
+        // stream" — cannot fail here: with a substituted resource the test picks BOTH the Channel.Id
+        // handed back AND the uuid its own fake client would send, so it can be made green against
+        // the unfixed activity. That closed loop is the defect this change exists to correct.
+        // What a real Asterisk rejects is the REQUEST, before any stream exists:
+        //   RUN G (probe-capture.txt) — encapsulation=audiosocket, no transport
+        //       -> HTTP 400 "transport must be 'tcp' for audiosocket encapsulation"
+        //   RUN D (probe-capture.txt) — encapsulation=audiosocket&transport=tcp, no data
+        //       -> HTTP 400 "data can not be empty"
+        // So the assertion is on the arguments that leave the activity.
+        var ariClient = Substitute.For<IAriClient>();
+        var channelsResource = Substitute.For<IAriChannelsResource>();
+        ariClient.Channels.Returns(channelsResource);
+
+        string? sentEncapsulation = null;
+        string? sentTransport = null;
+        string? sentData = null;
+
+#pragma warning disable CA2012
+        channelsResource.CreateExternalMediaAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            encapsulation: Arg.Any<string?>(), transport: Arg.Any<string?>(),
+            connectionType: Arg.Any<string?>(), direction: Arg.Any<string?>(),
+            data: Arg.Any<string?>(),
+            // NAMED, and the token especially. The fix inserts channelId between data and the token,
+            // so a ninth POSITIONAL Arg.Any<CancellationToken>() would bind to a string? parameter
+            // and this file would stop compiling — CS1503, the same trap the two substitutes above
+            // carry. Naming the token survives the insertion; naming channelId is impossible here,
+            // because it does not exist on the signature under test.
+            cancellationToken: Arg.Any<CancellationToken>())
+            // ForAnyArgs, not Returns: the fix adds a channelId parameter to this method, and an
+            // argument-by-argument match would leave it compared against its default null — the
+            // setup would stop matching the moment the activity starts sending one, and the test
+            // would fail on a null channel rather than on its own assertions.
+            .ReturnsForAnyArgs(callInfo =>
+            {
+                // Positional, because this test may not NAME channelId: that parameter does not
+                // exist on the signature under test, and naming it is CS1739 — a compile error, not
+                // a failing assertion. The captured positions are stable across the fix, which
+                // appends channelId after data and before the CancellationToken:
+                //   0 app, 1 externalHost, 2 format, 3 encapsulation, 4 transport,
+                //   5 connectionType, 6 direction, 7 data, (8 channelId), last CancellationToken.
+                sentEncapsulation = callInfo.ArgAt<string?>(3);
+                sentTransport = callInfo.ArgAt<string?>(4);
+                sentData = callInfo.ArgAt<string?>(7);
+                return new ValueTask<AriChannel>(new AriChannel { Id = "ext-ch-audiosocket" });
+            });
+#pragma warning restore CA2012
+
+        // Never started: the activity only reads GetStream off it, and an unbound server needs no
+        // port. Nothing will ever connect, so the run ends in the timeout below — that is how the
+        // run ends, not what this test measures.
+        await using var audioSocketServer = new AudioSocketServer(
+            new AudioServerOptions { AudioSocketPort = 0, ListenAddress = "127.0.0.1" },
+            NullLogger<AudioSocketServer>.Instance);
+
+        var activity = new ExternalMediaActivity(ariClient, audioSocketServer)
+        {
+            App = "test",
+            ExternalHost = "127.0.0.1:19099",
+            Encapsulation = "audiosocket",
+            ConnectionTimeout = TimeSpan.FromMilliseconds(50)
+        };
+
+        var start = () => activity.StartAsync().AsTask();
+        await start.Should().ThrowAsync<TimeoutException>(
+            "nothing connects to the audio server in this test, so the activity times out after "
+            + "ConnectionTimeout — the create call it made on the way there is what is asserted below");
+
+        // Positive control, and it is load-bearing. Everything below asserts that a captured value is
+        // null, and a capture that never ran reads null too — so without one captured value that MUST
+        // be non-null today, a broken offset or an unmatched substitute would go red in exactly the
+        // shape of the defect and measure nothing. This repository has shipped that twice.
+        sentEncapsulation.Should().Be("audiosocket",
+            "the capture must be reading the real argument array: this is the one value the unfixed "
+            + "activity already sends, so if it does not arrive the nulls below prove nothing");
+
+        sentData.Should().NotBeNull(
+            "an audiosocket create with no data is HTTP 400 \"data can not be empty\" "
+            + "(probe-capture.txt RUN D), so the activity must supply the identification uuid");
+        sentTransport.Should().Be("tcp",
+            "audiosocket encapsulation on any other transport is HTTP 400 \"transport must be 'tcp' "
+            + "for audiosocket encapsulation\" (probe-capture.txt RUN G)");
     }
 
     [Fact]

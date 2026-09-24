@@ -76,6 +76,50 @@ channel id. chan_audiosocket connects during the create call, so a create agains
 the request rather than producing a channel that never connects.
 
 --------------------------------------------------------------------------------
+PART 4 — the CI lane's own image, Asterisk 22 AND 23 (task A1, 2026-09-24)
+--------------------------------------------------------------------------------
+
+Images built exactly as .github/workflows/ci.yml:387 builds them:
+
+  docker build -f docker/Dockerfile.asterisk docker/ \
+    --build-arg ASTERISK_VERSION=<22|23> --build-arg CODEC_OPUS_VERSION=<22|23>.0_1.3.0 \
+    -t verbara-probe:<22|23>
+
+  verbara/asterisk-local:22  -> /ari/asterisk/info system.version = 22.9.0
+  verbara-probe:22           -> 22.9.0   (andrius/asterisk:22, build date 2026-05-04)
+  verbara-probe:23           -> 23.4.1   (andrius/asterisk:23, build date 2026-09-23)
+
+Asterisk 23 had never been probed. It behaves IDENTICALLY to 22 on every run in this file:
+same HTTP status, same error strings verbatim, same parameter on the wire, same byte order,
+same 500 on a dead target port. Three full passes (local 22, lane 22, lane 23 twice) agree.
+
+  RUN G   400  "transport must be 'tcp' for audiosocket encapsulation"   22 == 23
+  RUN H   200  UnicastRTP/...                                            22 == 23
+  RUN D   400  "data can not be empty"                                   22 == 23
+  RUN A   200  id == channelId, wire UUID == data                        22 == 23
+  RUN C   200  id == Asterisk uniqueid, wire UUID == data                22 == 23
+  PART 3  200 / 500 crossed over format x listener                       22 == 23
+
+Two runs beyond what the shipped probe does, both measured on 22 and on 23 with identical results:
+
+  RUN H+  RUN H with the TCP listener UP for 4 s. Nothing connects — the sentence in PART 1 was
+          an inference from the channel name until now, because the shipped probe runs H with the
+          listener down.
+            -> HTTP 200  name=UnicastRTP/127.0.0.1:19099-0x7f0720006350
+            HEX: (nothing connected)
+
+  RUN U   channelId == data == an UPPERCASE canonical UUID. Asterisk ACCEPTS it: HTTP 200, and
+          Channel.Id comes back in the spelling that was sent. The wire carries the same 16 bytes,
+          which AudioSocketSession.ParseUuid renders with Guid.ToString() — canonical LOWERCASE —
+          into an ordinal ConcurrentDictionary<string,...>. So a non-canonical spelling creates a
+          channel whose stream cannot be found, silently, exactly as the delta spec forbids:
+            QUERY: ...&channelId=EC30994A-B0E1-4EBE-99BD-19CA35669F7A&data=EC30994A-...-19CA35669F7A
+            -> HTTP 200  id=EC30994A-B0E1-4EBE-99BD-19CA35669F7A
+            HEX: 01 00 10 ec 30 99 4a b0 e1 4e be 99 bd 19 ca 35 66 9f 7a
+            wire = ec30994a-b0e1-4ebe-99bd-19ca35669f7a   == sent ? False   == sent.lower() ? True
+          This is the measurement behind B2's "canonical lowercase is not incidental".
+
+--------------------------------------------------------------------------------
 CORRECTIONS to the first version of this file
 --------------------------------------------------------------------------------
 
@@ -93,11 +137,23 @@ CORRECTIONS to the first version of this file
    predicted 501 "encapsulation and/or transport is not supported" for RUN G; 22.9.0 returns 400
    with a specific message instead. Measured beats read, again.
 
+4. Correction #2 above is itself incomplete. "HTTP 500 means NOTHING IS LISTENING on external_host"
+   names one cause, not the cause. With the listener UP, a `data` value that is not a parseable
+   UUID returns the same 500 and nothing ever connects (measured on 22 and on 23):
+     channelId CANONICAL, data = {eba9adc2-...}        -> HTTP 500, nothing connected
+     channelId CANONICAL, data = not-a-uuid-at-all     -> HTTP 500, nothing connected
+     channelId = {eef6aae9-...}, data CANONICAL        -> HTTP 200, id={eef6aae9-...}, wire == data
+   So: `channelId` is a free-form ARI id and is echoed back verbatim — braces and all — while
+   `data` must parse as a UUID. A 500 from externalMedia means "chan_audiosocket could not set the
+   connection up", which covers a dead port AND a malformed `data`. Saying it means a dead port
+   sends the next reader away from the second cause, which is the same mistake correction #2 was
+   written to fix.
+
 --------------------------------------------------------------------------------
 NOT YET MEASURED
 --------------------------------------------------------------------------------
-- Asterisk 23. This probe ran only against 22.9.0 on verbara/asterisk-local:22. The CI lane builds
-  its own image from docker/Dockerfile.asterisk for 22 and 23; task A1 runs the probe against both.
+- Asterisk 23 is now measured — see PART 4. What remains unmeasured on 23 is everything this probe
+  does not touch, not the runs above.
 - The WebSocket transport. Nothing here measures what externalMedia with transport=websocket puts
   in the request path, which is why F1 stays out of this change rather than being designed from a
   reading of the code.
