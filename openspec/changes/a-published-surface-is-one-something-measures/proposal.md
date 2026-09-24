@@ -246,7 +246,9 @@ findings with no unknowns land first, so the unknown cannot hold them.
 - **CI:** F3's work is invisible on a `pull_request` without the `ci:functional` label (ADR-0051), and
   only `merge_group` runs both Asterisk versions. A sixteen-second green functional job means no
   Asterisk started. F1's probe depends on the same images.
-- **Depends on** `externalmedia-returns-a-channel-id-that-finds-its-stream`: its delta creates the
-  `external-media-stream-routing` capability and explicitly excludes the WebSocket transport "until its
-  key has been measured". F1's delta adds to that capability and removes the exclusion, so this change
-  archives after its parent.
+- **Builds on** `externalmedia-returns-a-channel-id-that-finds-its-stream`, which **landed as #305**
+  and is archived at `openspec/changes/archive/2026-09-24-externalmedia-returns-a-channel-id-that-finds-its-stream`.
+  Its delta created the `external-media-stream-routing` capability, now live at
+  `openspec/specs/external-media-stream-routing/spec.md`, and that capability explicitly excludes the
+  WebSocket transport "until its key has been measured". F1's delta adds to it and removes the
+  exclusion. The dependency is therefore satisfied: this change is unblocked.

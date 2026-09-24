@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed — BREAKING: `ExternalMediaActivity` could not reach an AudioSocket stream by any configuration (#N)
+### Changed — BREAKING: `ExternalMediaActivity` could not reach an AudioSocket stream by any configuration (#305)
 
 `ExternalMediaActivity` accepts an `AudioSocketServer` in its constructor and then polls
 `GetStream(Channel.Id)` for the stream. It could never hit. Measured against a real Asterisk 22.9.0
