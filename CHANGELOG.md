@@ -287,6 +287,9 @@ never from the exception (`Sdk/ADR-0056`).
 - No counter, gauge, activity or event changes, and no public API change — no new type, no new member, no
   changed signature, and `AriConnectionState` itself is untouched.
 
+**Migration guide:** [`docs/guides/ari-connection-state-and-accept-loop-migration.md`](docs/guides/ari-connection-state-and-accept-loop-migration.md)
+— required by ADR-0028 for a minor that carries a breaking change.
+
 ### Changed — BREAKING: `AriOutboundListener` keeps accepting after an accept fails (#291)
 
 `AcceptLoopAsync` wrapped its whole `while` in a `try` whose last clause was `catch (SocketException) { }`,
@@ -314,6 +317,9 @@ cap with each consecutive failure and starts over after a successful accept — 
   rather than dismissed.
 - No public API change here either: the backoff bounds, the accept seam and the `TimeProvider` constructor the
   wait runs on are all `internal`.
+
+**Migration guide:** [`docs/guides/ari-connection-state-and-accept-loop-migration.md`](docs/guides/ari-connection-state-and-accept-loop-migration.md)
+— required by ADR-0028 for a minor that carries a breaking change.
 
 ## [2.5.3] - 2026-09-13
 
