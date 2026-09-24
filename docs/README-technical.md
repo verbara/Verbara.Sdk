@@ -540,8 +540,8 @@ services.AddOpenAiRealtimeBridge(o => { o.ApiKey = "..."; o.Model = "gpt-4o-real
 | Type | Namespace | Purpose |
 |------|-----------|---------|
 | `IAmiConnection` | `Verbara.Sdk.Ami` | Send actions, receive events/responses |
-| `AmiAction` | `Verbara.Sdk.Ami.Actions` | Base class for all 111 AMI actions |
-| `AmiEvent` | `Verbara.Sdk.Ami.Events` | Base class for all 215 AMI events |
+| `ManagerAction` | `Verbara.Sdk` | Base class for all 148 AMI actions |
+| `ManagerEvent` | `Verbara.Sdk` | Base class for all 269 AMI events |
 | `VerbaraServer` | `Verbara.Sdk.Live` | Top-level live model: channels, queues, agents |
 | `ChannelManager` | `Verbara.Sdk.Live` | Real-time channel tracking with secondary indices |
 | `QueueManager` | `Verbara.Sdk.Live` | Real-time queue tracking with member reverse index |

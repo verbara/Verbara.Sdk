@@ -42,7 +42,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ## Features
 
-- **AMI Client** — Connect to the Asterisk Manager Interface over TCP with MD5 challenge-response authentication, 148 actions, 278 events, and 18 typed responses. Auto-reconnect with configurable exponential backoff. Configurable heartbeat/keepalive with auto-disconnect on timeout.
+- **AMI Client** — Connect to the Asterisk Manager Interface over TCP with MD5 challenge-response authentication, 148 actions, 269 events, and 17 typed responses. Auto-reconnect with configurable exponential backoff. Configurable heartbeat/keepalive with auto-disconnect on timeout.
 - **FastAGI Server** — Async TCP server for the Asterisk Gateway Interface with 54 AGI commands, pluggable script mapping strategies, and zero-copy I/O via `System.IO.Pipelines`. Per-connection timeout, status 511 hangup detection, and `AgiMetrics` instrumentation.
 - **ARI Client** — REST + WebSocket client for the Asterisk REST Interface. Manage channels, bridges, playbacks, recordings, endpoints, applications, and sounds. Domain exceptions (`AriNotFoundException`, `AriConflictException`) for HTTP error mapping. WebSocket reconnect with exponential backoff.
 - **Live API** — Real-time in-memory tracking of channels, queues, agents, and conference rooms from AMI events. Secondary indices for O(1) lookups by name. Observable gauges and event counters via `System.Diagnostics.Metrics`.
@@ -62,7 +62,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 Release history — every version, with what changed and why — is in [`CHANGELOG.md`](CHANGELOG.md). It is not restated here: a second copy in the README is one nobody updates, and this block had drifted three releases behind before anyone noticed.
 
-API coverage (cumulative): 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%), 27/27 ARI models (100%), 278 AMI events covering Asterisk 18-23. Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` JSON control protocol both supported. Compatible with **Asterisk 18, 20, 22 LTS, and 23 Standard** — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for lifecycle and break-change risk areas.
+API coverage (cumulative): 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%), 27/27 ARI models (100%), 269 AMI events covering Asterisk 18-23. Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` JSON control protocol both supported. Compatible with **Asterisk 18, 20, 22 LTS, and 23 Standard** — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for lifecycle and break-change risk areas.
 
 Architecture decisions: **58 ADRs** in [`docs/decisions/`](docs/decisions/) covering AOT-first design, source-generator-over-reflection policy, three-tier test strategy, push-bus design, cadence commitment, resilience/cluster primitive split between MIT and Pro, the rebrand to Verbara, and the cross-repo ADR reference convention.
 

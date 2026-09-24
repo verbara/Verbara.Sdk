@@ -43,7 +43,7 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 |---|---|---|---|---|
 | 13 | Native AOT-ready badge | ENFORCING | `tools/AotCanary/` + `tools/verify-aot.sh` + `aot-validate.yml` | PARTIAL — canary references 22 of 29 packages |
 | 23 | asterisk-java "790+ classes" | ATTRIBUTED | — | GAP — no citation, first-party voice |
-| 45 | 148 actions, 278 events, 18 typed responses | ENFORCING | — | GAP — `src/Verbara.Sdk.Ami/README.md:7` publishes 111/261/17, and **all three quantities need a counting definition first** (see *Unresolved* 5) |
+| 45 | 148 actions, 269 events, 17 typed responses | ENFORCING | — | GAP — corrected 2026-09-24 under the counting definition settled that day; all four published copies now agree. A guard still needs the `classify-docs-only.sh` carve-out moved first (see *Unresolved* 1) |
 | 46 | 54 AGI commands | ENFORCING | — | GAP |
 | 54 | four source generators, 0 trim warnings | ENFORCING | AotCanary (trim half) | PARTIAL — generator count unguarded |
 | 61 | 29 NuGet packages | ENFORCING | — | GAP |
@@ -54,7 +54,7 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 | ~~65~~ | ONNX model 8.3 MB | — | — | **DELETED** — lived in the release bullets, cut by the 2026-09-20 ruling on `README.md` release history |
 | ~~67~~ | 94.26% English accuracy, in upstream's voice | — | — | **DELETED** — lived in the release bullets, cut by the 2026-09-20 ruling on `README.md` release history. The figure survives at `:465` (row below) with its citation and hash pin; this was the duplicate. |
 | ~~67~~ | ~12 ms CPU inference | — | `TurnDetectionBenchmark` | **DELETED** — measured at 26.18–37.30 ms; deferred, see *Deferrals*. Its line was also removed with the release bullets on 2026-09-20. |
-| 65 | 148/152 AMI (97%), 94/98 ARI (96%), 46/46, 27/27, 278 events | ENFORCING | — | GAP |
+| 65 | 148/152 AMI (97%), 94/98 ARI (96%), 46/46, 27/27, 269 events | ENFORCING | — | GAP — the event figure was corrected 2026-09-24 (was 278) |
 | 67 | **58 ADRs** | ENFORCING | `StatusBlockCoherenceTests` — counts `docs/decisions/*.md`, excluding the catalog `README.md` | **OK** |
 | 91 | measurement provenance (Ryzen 9 9900X, .NET 10.0.5, BDN v0.14.0, 2026-04-18) | COHERENCE | `PerformanceTableCoherenceTests` — the header provenance test | PARTIAL — matched against the whole file rather than this line, and blind to the AMI row's .NET 10.0.6 MediumRunJob exception (`performance-record.json:12`); the two session-store rows measured apart from it state their own at :110 |
 | 95 | AMI parse+dispatch 1.62M events/sec (617.6 ns) | ENFORCING + COHERENCE | `perf-regression.yml` `*AmiProtocolReader*` | GAP — observational only (`\|\| true`, no baseline) |
@@ -93,8 +93,8 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 | 438-479 | project tree: 17 package dirs, 13 examples | ENFORCING | — | WRONG — 29 packages, 25 examples |
 | 494 | `Ami.Port = 5038 // default` | ENFORCING | — | GAP — correct |
 | 503 | `EventPumpCapacity = 10_000 // default` | ENFORCING | — | **WRONG — `AsyncEventPump.DefaultCapacity` is 20_000** |
-| 543 | "all 111 AMI actions" | ENFORCING | — | WRONG — 148 |
-| 544 | "all 215 AMI events" | ENFORCING | — | WRONG — 278 |
+| 543 | "all 148 AMI actions" | ENFORCING | — | GAP — corrected 2026-09-24 (was 111). The same row also named a type that does not exist, `AmiAction` in `Verbara.Sdk.Ami.Actions`; the base is `ManagerAction` in `Verbara.Sdk` |
+| 544 | "all 269 AMI events" | ENFORCING | — | GAP — corrected 2026-09-24 (was 215). Same type defect: `AmiEvent` in `Verbara.Sdk.Ami.Events` does not exist; the base is `ManagerEvent` in `Verbara.Sdk` |
 
 ## `docs/README-commercial.md`
 
@@ -129,7 +129,7 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 | `Verbara.Sdk/README.md:13` | 60 const strings, 14 nested classes | ENFORCING | `MarketingClaimsTests.cs:59-74` | OK |
 | `Verbara.Sdk/README.md:14` | 9 ActivitySources, 15 Meters | ENFORCING | `MarketingClaimsTests.cs:45-57` | OK |
 | `Verbara.Sdk/README.md:53` | 0 trim warnings **across the package family** | ENFORCING | AotCanary | PARTIAL — 22/29; the **seven** uncanaried are `OpenTelemetry`, `Push.AspNetCore`, `Push.Nats`, `Sessions.Redis`, `Sessions.Postgres`, `VoiceAi.TurnDetection` and `Ami.SourceGenerators` (packable, so it counts) |
-| `Verbara.Sdk.Ami/README.md:7` | 111 actions, 261 events, 17 response types | ENFORCING | — | WRONG — 148/278/18, and contradicts `README.md:45` |
+| `Verbara.Sdk.Ami/README.md:7` | 148 actions, 269 events, 17 response types | ENFORCING | — | GAP — corrected 2026-09-24 (was 111/261/17); now agrees with `README.md:45`. This file is the package's `PackageReadmeFile`, published verbatim on nuget.org |
 | `Verbara.Sdk.Ari/README.md:7-8` | 8 ARI resources, 46 event types | ENFORCING | — | GAP |
 | `Verbara.Sdk.Agi/README.md:8` | 54 AGI commands | ENFORCING | — | GAP |
 | `Verbara.Sdk.Live/README.md:9` | 100K+ agents | — | — | GAP — see *Unresolved* below |
@@ -280,17 +280,49 @@ These carry no class yet. Each needs a decision before it can ship under D1.
    *(Note, 2026-09-20: whichever way this goes, a guard on `src/*/README.md` does not currently run —
    `scripts/ci/classify-docs-only.sh:25` treats `*/README.md` as docs-only, so the PR that breaks
    such a figure skips `Unit Tests`. The carve-out has to move in the same change.)*
-2. **AMI surface counts need a counting definition before any of them can be guarded.** Responses:
-   18 files in `Responses/`, 17 `public sealed class` — one file is a helper type. Events: 278
-   files, of which **269** are `public sealed class` and **9** are shared base types (the 8 under
-   `Events/Base/` plus `Events/ResponseEvent.cs`, base of 60 events). Actions: 148 concrete classes
-   across 149 files. Every published figure here is defensible under some definition and
-   indefensible under another, and a gate cannot be written until the definition is chosen. This
-   blocks the §1.2 rows for `README.md:45`, `:72` and `src/Verbara.Sdk.Ami/README.md:7`.
-   *(Corrected 2026-09-20: this entry previously read "270 concrete plus 8 abstract bases under
-   `Events/Base/`". Neither half held — `grep -rn 'abstract class' Events` returns nothing, and the
-   ninth base sits outside `Events/Base/`. `EventRegistryGenerator` already implements one
-   executable definition: `[VerbaraMapping]` and not `IsAbstract`, which yields 269.)*
+
+## Rulings settled 2026-09-24
+
+**The AMI surface counts are counted by type, not by file**, and the definition is the one the
+shipping source generator already implements: a class-level `[VerbaraMapping]` on a non-abstract
+type (`EventRegistryGenerator.cs:51,60`). Measured against the tree that day: **148 actions, 269
+events, 17 typed responses**.
+
+No published figure was coherent before this ruling. `README.md:45` read 148 / 278 / 18 — one type
+count and two file counts in the same sentence — which is why no guard could be written against it.
+
+The two rejected definitions, and what each would have to call an AMI action or event:
+
+- *By file* (149 / 278 / 18) counts `Actions/IEventGeneratingAction.cs`, an interface, as an action,
+  and `Responses/ConfigCategory.cs`, a helper `record`, as a typed response.
+- *By `[VerbaraMapping]` occurrence* (149 / 270 / 17) counts two **property-level** mappings as
+  types: `Async` in `OriginateAction.cs:19` and `100rel` in `EndpointDetail.cs:74`. Both map an AMI
+  field name that is not a valid C# identifier, which is the whole reason the attribute is there.
+
+The nine event base types — `Events/ResponseEvent.cs` plus the eight under `Events/Base/` — carry no
+`[VerbaraMapping]` at all, so no definition reaches them. None is `abstract`, so a filter written on
+`IsAbstract` alone would not exclude them either.
+
+| Where | Before | Now |
+|---|---|---|
+| `README.md:45` | 148 / 278 / 18 | 148 / 269 / 17 |
+| `README.md:65` | 278 events | 269 events |
+| `docs/README-technical.md:543-544` | 111 actions, 215 events | 148 actions, 269 events |
+| `src/Verbara.Sdk.Ami/README.md:7` | 111 / 261 / 17 | 148 / 269 / 17 |
+
+Corrected in the same pass: `docs/README-technical.md:543-544` named `AmiAction` and `AmiEvent`, in
+`Verbara.Sdk.Ami.Actions` and `.Events`. Neither type exists. The bases are `ManagerAction` and
+`ManagerEvent`, both in `Verbara.Sdk` (`src/Verbara.Sdk/IAmiConnection.cs:70,79`).
+
+**The guard is deliberately not in this change.** A guard on `src/*/README.md` cannot run today:
+`scripts/ci/classify-docs-only.sh:25` treats every `*/README.md` as docs-only, so the PR that breaks
+the figure skips `Unit Tests` — the job the guard would live on. That carve-out moves with
+*Unresolved* 1, and the guard goes in with it. Until then these rows stay `GAP`: the figures are
+right and nothing stops them drifting again.
+
+Left alone deliberately: `docs/decisions/0001` and `0015` state 278 event types, and dated files
+under `docs/research/` state 278 and 111. Both folders are **Out** of scope above, as period-correct
+records left verbatim; an Accepted ADR is superseded, never edited.
 
 ## Rulings settled 2026-09-20
 

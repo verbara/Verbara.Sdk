@@ -4,7 +4,7 @@ Asterisk Manager Interface (AMI) client for .NET 10 with Native AOT support.
 
 ## Features
 
-- Full AMI protocol implementation (111 actions, 261 events, 17 response types)
+- Full AMI protocol implementation (148 actions, 269 events, 17 response types)
 - Zero-copy TCP parsing via `System.IO.Pipelines`
 - Async event pump with configurable backpressure (`EventPumpCapacity`)
 - MD5 challenge-response authentication
