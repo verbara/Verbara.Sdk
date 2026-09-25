@@ -119,6 +119,28 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       still ends its call. The test must be deterministic — no wall-clock waits, or the sync-fence
       guard will ask you for a `fence-allow` category you should not need.
 
+- [ ] 2.8 A call opened from a reloaded channel carries the state Asterisk reported. Task 2.6 made
+      the CHANNEL correct; the SESSION is still wrong. `CallSessionManager.OnChannelAdded` never
+      reads `channel.State`, and only `OnChannelStateChanged` transitions a session — which does not
+      fire for a channel that was just admitted. So a reload that admits an answered call opens it in
+      `Created`. That is the exact condition `proposal.md` names as the reason a clock-based sweep
+      would mark healthy calls dead, so leaving it is leaving this change's own central argument
+      half-answered. Owner ruling of 2026-09-25.
+      **It cannot be done with `TryTransition`.** `CallSessionStateTransitions` allows `Created` to
+      reach only `Dialing`, `Queued` and `Failed` — not `Connected`, not `Ringing` — so a transition
+      returns false and silently does nothing. The state must be chosen when the session is
+      constructed.
+      **Do not invent a history to go with it.** `CallSession.UpdateTimestamp` sets `ConnectedAt` and
+      `RingingAt` as a side effect of transitioning, which construction bypasses. A call whose answer
+      the SDK never observed has no known answer time, and the spec forbids asserting one — the same
+      rule D3 applies to a hangup cause. If you derive anything from the `Seconds` header, state
+      precisely what `Seconds` measures (channel age, not time since answer) and why that is
+      honest; if you leave the time unknown, say what a consumer computing a duration sees instead.
+      Verify with the spec's four scenarios, and with a non-regression test that a channel arriving
+      live through the ordinary `NewChannel` path — not a reload — still opens its session exactly as
+      it does today. `OnChannelAdded` serves both paths; a regression there breaks every call, not
+      just reloaded ones.
+
 ## 3. Phase C — integration (batched)
 
 - [ ] 3.1 Turn every scenario in `specs/live-state-reload/spec.md` into a test, including the two that
@@ -140,7 +162,7 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       the bottom of `[Unreleased]`, immediately above the newest released heading, is the anchor least
       likely to be contested.
 
-- [ ] 3.3 Measure both Asterisk-side premises against a real Asterisk, do not assume either. Follow
+- [x] 3.3 Measure both Asterisk-side premises against a real Asterisk, do not assume either. Follow
       the pattern in `Tests/Verbara.Sdk.FunctionalTests/Layer5_Integration/NetworkPartition/ConnectionCutTests.cs`
       (Toxiproxy `ami-proxy`, `AutoReconnect=true`), on the supported versions:
       **(a)** whether `Status` populates `Linkedid` (design D4's residual — if a version does not, verify
@@ -161,7 +183,7 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       `.github/workflows/ci.yml` and run the remaining fast, deterministic, non-service steps it
       lists rather than recalling job names.
 
-- [ ] 3.6 Do **not** bump `Directory.Build.props`. The version is cut at release time (ADR-0055), so
+- [x] 3.6 Do **not** bump `Directory.Build.props`. The version is cut at release time (ADR-0055), so
       this change ships its CHANGELOG entry and the release that carries it decides the tier — which,
       per 3.2's ruling, may be a patch. Verify `Directory.Build.props` is absent from this change's
       diff.

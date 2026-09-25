@@ -181,6 +181,44 @@ outcome this capability can produce, and it is worse than the defect the capabil
 - **WHEN** a completed snapshot does not contain it
 - **THEN** it is removed and its call ends, exactly as it would without the window
 
+### Requirement: A call the reload reports as live SHALL NOT be described as newly created
+
+A call opened from a reloaded channel SHALL be described in the state Asterisk reported that channel
+to be in. A channel the reload admits as answered SHALL NOT produce a call reported as newly created,
+because a consumer reading that reports a live conversation as one that has not started, and because
+a call sitting in the initial state past a dialing timeout is exactly what this SDK's own
+reconciliation treats as an orphan to be failed.
+
+Carrying the channel's state is not the same as inventing its history: a call whose answer was never
+observed has no known answer time, and the reload SHALL NOT assert one.
+
+#### Scenario: The reload reports an answered call
+
+- **GIVEN** a reload that returns a channel Asterisk reports as answered, which the SDK does not hold
+- **WHEN** the call is opened for it
+- **THEN** that call is reported as connected
+- **AND** it is not reported as newly created
+
+#### Scenario: The reload reports a ringing call
+
+- **GIVEN** a reload that returns a channel Asterisk reports as ringing
+- **WHEN** the call is opened for it
+- **THEN** that call is reported as ringing
+
+#### Scenario: A state the reload cannot determine
+
+- **GIVEN** a reload that returns a channel whose state Asterisk does not report
+- **WHEN** the call is opened for it
+- **THEN** that call is reported as newly created, exactly as it is today
+- **AND** the call is still opened
+
+#### Scenario: An unobserved answer time is not invented
+
+- **GIVEN** a call opened from a reloaded channel Asterisk reports as answered
+- **WHEN** a consumer reads when it was answered
+- **THEN** it can tell that the answer time is unknown
+- **AND** it is not given a time the SDK never observed
+
 ## Architectural Risk
 
 **Level:** MEDIUM.
