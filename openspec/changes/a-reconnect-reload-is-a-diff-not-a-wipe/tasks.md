@@ -13,7 +13,7 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
 
 ## 1. Phase A — foundation (batched)
 
-- [ ] 1.1 Commit the two failing regression tests exactly as measured, at
+- [x] 1.1 Commit the two failing regression tests exactly as measured, at
       `Tests/Verbara.Sdk.Sessions.FunctionalTests/ReconnectReloadTests.cs` (already written and run
       on 2026-09-24, against the unfixed code). Verify by running
       `dotnet test Tests/Verbara.Sdk.Sessions.FunctionalTests/ --filter "FullyQualifiedName~ReconnectReloadTests"`
@@ -31,7 +31,7 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       participants=2 | linked=caller-001 state=Created participants=1], but found
       ```
 
-- [ ] 1.2 Record the fact the tests exposed about the existing suite: the shared `SessionTestFixture`
+- [x] 1.2 Record the fact the tests exposed about the existing suite: the shared `SessionTestFixture`
       never calls `VerbaraServer.StartAsync`, which is where `Reconnected` is subscribed, so
       `ReconciliationTests.Reconnection_ShouldCleanSessions_WhenServerReconnects` exercises no
       reconnect at all. Verify by asserting in that test's file, or in this change's notes, that the
@@ -49,7 +49,7 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       — `ThePublishedAdrCount_ShouldMatchTheDecisionsOnDisk` and
       `TheDecisionCatalog_ShouldListEveryAdrOnDisk` both fail if any of the three is missed.
 
-- [ ] 1.5 Add a test that the **initial** load is unchanged by anything this change will do: a first
+- [x] 1.5 Add a test that the **initial** load is unchanged by anything this change will do: a first
       `StartAsync` against an empty table produces exactly the channels the snapshot contains, and
       the same `ChannelAdded` events as today. Verify it passes **before** Phase B, so a Phase B
       regression in startup is attributable.
