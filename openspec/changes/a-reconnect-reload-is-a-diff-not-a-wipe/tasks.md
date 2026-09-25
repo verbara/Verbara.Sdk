@@ -90,12 +90,19 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       has a test and that deleting the guard it describes turns that test red — a scenario whose
       mutation survives is not bound.
 
-- [ ] 3.2 Write the `CHANGELOG.md` entry under `[Unreleased]`, labelled `### Changed — BREAKING`
-      (ADR-0061: a `Changed — BREAKING` forces a minor). State both observable changes — a lost call
-      now ends, and a surviving call no longer multiplies — and the marker a consumer reads to tell a
-      reload-produced ending apart. **Pick an insertion anchor distinct from any other in-flight PR's
-      and state it in the PR body**; the bottom of `[Unreleased]`, immediately above the newest
-      released heading, is the anchor least likely to be contested.
+- [ ] 3.2 Write the `CHANGELOG.md` entry under `[Unreleased]`, labelled **`### Fixed — BREAKING`**.
+      The owner ruled the label on 2026-09-24, under ADR-0061 D3: the SDK never promised to hold a
+      stranded session for the life of the process, nor to turn one call into several — `LinkedId`
+      correlation is its declared design — so this restores documented behaviour rather than
+      withdrawing a kept promise. Under ADR-0061 D1 a `Fixed — BREAKING` does **not** force a minor,
+      so this change may ship in a patch, and ADR-0028's migration-guide obligation — which attaches
+      to a minor carrying a breaking change — does not attach to it. That is why `design.md`'s
+      Migration Plan says there is nothing for a consumer to migrate.
+      State both observable changes — a lost call now ends, and a surviving call no longer multiplies
+      — and the marker a consumer reads to tell a reload-produced ending apart.
+      **Pick an insertion anchor distinct from any other in-flight PR's and state it in the PR body**;
+      the bottom of `[Unreleased]`, immediately above the newest released heading, is the anchor least
+      likely to be contested.
 
 - [ ] 3.3 Measure both Asterisk-side premises against a real Asterisk, do not assume either. Follow
       the pattern in `Tests/Verbara.Sdk.FunctionalTests/Layer5_Integration/NetworkPartition/ConnectionCutTests.cs`
@@ -119,8 +126,9 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       lists rather than recalling job names.
 
 - [ ] 3.6 Do **not** bump `Directory.Build.props`. The version is cut at release time (ADR-0055), so
-      this change ships its CHANGELOG entry and the release that carries it takes the minor ADR-0061
-      requires. Verify `Directory.Build.props` is absent from this change's diff.
+      this change ships its CHANGELOG entry and the release that carries it decides the tier — which,
+      per 3.2's ruling, may be a patch. Verify `Directory.Build.props` is absent from this change's
+      diff.
 
 ## 4. Measured elsewhere, or not yet owned
 
