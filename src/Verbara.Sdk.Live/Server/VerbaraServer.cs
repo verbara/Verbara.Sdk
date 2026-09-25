@@ -126,8 +126,14 @@ public sealed class VerbaraServer : IVerbaraServer
         {
             VerbaraServerLog.Reconnected(_logger);
 
-            // Clear stale state from all managers
-            Channels.Clear();
+            // The channel table is deliberately NOT cleared here. Clearing it raises no
+            // ChannelRemoved, so every consumer holding call state — CallSessionManager first —
+            // was never told the channels went away, and a call that ended during the outage
+            // stayed "in progress" for the life of the process. RequestInitialStateAsync now
+            // buffers Asterisk's snapshot to completion and reconciles the table against it
+            // instead (ADR-0062, design D1/D2), which announces the difference on the event
+            // consumers already subscribe to. The four managers below hold no session identity,
+            // so they keep their clear-and-reload — an explicit non-goal, not an oversight.
             Queues.Clear();
             Agents.Clear();
             MeetMe.Clear();
@@ -149,26 +155,22 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>
     /// Request initial state snapshots from Asterisk.
     /// Sends StatusAction, QueueStatusAction, AgentsAction to populate managers.
+    /// <para>
+    /// The channel leg is read into a buffer first and reconciled only once that read completed —
+    /// see <see cref="ReadChannelSnapshotAsync"/>. On a first load the table is empty and the
+    /// reconciliation degenerates to "everything is added", which is exactly what this method did
+    /// before; on a post-reconnect reload the difference is what drives the events.
+    /// </para>
     /// </summary>
     public async ValueTask RequestInitialStateAsync(CancellationToken cancellationToken = default)
     {
         using var activity = LiveActivitySource.StartStateLoad(_connection.AsteriskVersion ?? "unknown");
 
-        // Populate channels from StatusAction
-        await foreach (var evt in _connection.SendEventGeneratingActionAsync(new StatusAction(), cancellationToken))
-        {
-            if (evt is StatusEvent se)
-            {
-                var state = Enum.TryParse<ChannelState>(se.State, out var cs) ? cs : ChannelState.Unknown;
-                Channels.OnNewChannel(
-                    se.UniqueId ?? "",
-                    se.Channel ?? "",
-                    state,
-                    se.CallerId,
-                    context: se.RawFields?.GetValueOrDefault("Context"),
-                    exten: se.Extension);
-            }
-        }
+        // Populate channels from StatusAction. Buffer first, then reconcile: a snapshot that
+        // throws, is cancelled or never completes must leave every held channel alone, and it can
+        // only do that if nothing was mutated while it was being read (ADR-0062, design D1).
+        var channelSnapshot = await ReadChannelSnapshotAsync(cancellationToken);
+        Channels.ReconcileWithSnapshot(channelSnapshot);
 
         // Populate queues from QueueStatusAction
         await foreach (var evt in _connection.SendEventGeneratingActionAsync(new QueueStatusAction(), cancellationToken))
@@ -197,6 +199,51 @@ public sealed class VerbaraServer : IVerbaraServer
 
         VerbaraServerLog.InitialStateLoaded(_logger, Channels.ChannelCount, Queues.QueueCount, Agents.AgentCount);
         LiveActivitySource.SetStateLoadResult(activity, Channels.ChannelCount, Queues.QueueCount, Agents.AgentCount);
+    }
+
+    /// <summary>
+    /// Read every channel Asterisk reports on a <c>Status</c> snapshot into a buffer, and return it
+    /// only once the enumeration ran to completion.
+    /// <para>
+    /// Nothing is mutated while the snapshot is being read. That is the whole point: absence from an
+    /// unfinished snapshot is not evidence that a channel is gone, and
+    /// <see cref="ChannelManager.ReconcileWithSnapshot"/> removes exactly what the snapshot omits.
+    /// A snapshot that throws or is cancelled therefore leaves the channel table — and every call
+    /// session derived from it — untouched, because the buffer is discarded with the exception and
+    /// the reconciliation never runs. <c>OnReconnected</c> is <c>async void</c> and swallows every
+    /// exception into a log line, so a failure path that mutates nothing is the only one that stays
+    /// safe underneath it (ADR-0062, design D1).
+    /// </para>
+    /// </summary>
+    private async ValueTask<List<ChannelSnapshotEntry>> ReadChannelSnapshotAsync(
+        CancellationToken cancellationToken)
+    {
+        var snapshot = new List<ChannelSnapshotEntry>();
+
+        await foreach (var evt in _connection.SendEventGeneratingActionAsync(
+            new StatusAction(), cancellationToken))
+        {
+            if (evt is not StatusEvent se)
+                continue;
+
+            var state = Enum.TryParse<ChannelState>(se.State, out var cs) ? cs : ChannelState.Unknown;
+            snapshot.Add(new ChannelSnapshotEntry(
+                se.UniqueId ?? "",
+                se.Channel ?? "",
+                state,
+                CallerIdNum: se.CallerId,
+                // Context reaches the manager only through RawFields — StatusEvent has no typed
+                // property for it — and CallSessionManager infers a call's direction from it.
+                Context: se.RawFields?.GetValueOrDefault("Context"),
+                Extension: se.Extension));
+        }
+
+        // An enumeration that honoured the token by stopping quietly rather than by throwing would
+        // hand back a truncated snapshot that reads as complete, and reconciling that would remove
+        // every channel the snapshot had not reached yet. Cancellation is not completion.
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return snapshot;
     }
 
     private async ValueTask PopulateAgentsAsync(CancellationToken cancellationToken)

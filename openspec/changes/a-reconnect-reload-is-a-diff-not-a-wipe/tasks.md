@@ -38,12 +38,12 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       subscription happens in `StartAsync` and the fixture does not call it — do **not** rewrite that
       test here; it belongs to whatever change fixes it.
 
-- [ ] 1.3 Write `docs/decisions/0062-a-reload-is-a-reconciliation-and-an-unobserved-ending-is-unknown.md`
+- [x] 1.3 Write `docs/decisions/0062-a-reload-is-a-reconciliation-and-an-unobserved-ending-is-unknown.md`
       (Status: Proposed → Accepted at merge), carrying D1–D4 from `design.md` and the owner's ruling
       of 2026-09-24 on how a reload-produced ending is attributed. Verify `openspec validate --all --strict`
       passes and the file exists.
 
-- [ ] 1.4 Land the ADR-count coupling in the same commit as 1.3: bump `README.md`'s `**N ADRs**`
+- [x] 1.4 Land the ADR-count coupling in the same commit as 1.3: bump `README.md`'s `**N ADRs**`
       figure, update its row in `docs/claim-registry.md`, and add the catalog row in
       `docs/decisions/README.md`. Verify `dotnet test Tests/Verbara.Sdk.OpenTelemetry.Tests/` passes
       — `ThePublishedAdrCount_ShouldMatchTheDecisionsOnDisk` and
@@ -56,12 +56,12 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
 
 ## 2. Phase B — critical components (one focused subagent each)
 
-- [ ] 2.1 Give `ChannelManager` a reconcile entry point that takes a complete snapshot and raises
+- [x] 2.1 Give `ChannelManager` a reconcile entry point that takes a complete snapshot and raises
       `ChannelAdded` for what is new and `ChannelRemoved` for what the snapshot does not contain
       (design D2). `Clear()` stays public and untouched. Verify with unit tests over the manager
       alone: added-only, removed-only, mixed, and identical-snapshot (which must raise nothing).
 
-- [ ] 2.2 Make `VerbaraServer` buffer the channel snapshot to completion before reconciling, and make
+- [x] 2.2 Make `VerbaraServer` buffer the channel snapshot to completion before reconciling, and make
       `OnReconnected` hand it to 2.1's entry point instead of calling `Channels.Clear()` (design D1).
       A snapshot whose enumeration throws or never completes MUST leave every held channel alone.
       Verify with a test whose status enumeration throws midway: zero removals, zero endings, the
