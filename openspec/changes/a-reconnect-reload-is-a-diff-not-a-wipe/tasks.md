@@ -67,23 +67,27 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       Verify with a test whose status enumeration throws midway: zero removals, zero endings, the
       held call still active with its participants intact.
 
-- [ ] 2.3 Pass `StatusEvent.LinkedId` through `RequestInitialStateAsync` to `OnNewChannel`, and make a
-      channel already held reconcile rather than re-enter as new (design D4). Verify against the
-      second regression test from 1.1: it must go green, reporting **1** active session under the
-      identity it had before the reconnect, not 3.
+- [x] 2.3 Pass `StatusEvent.LinkedId` through `RequestInitialStateAsync` to `OnNewChannel`, and make a
+      channel already held reconcile rather than re-enter as new (design D4). **That task's original verification was not a check and has been
+      corrected here:** it said "verify the second regression test from 1.1 goes green", but that
+      test was already green at task 2.2 — task 2.1's reconcile stops re-admitting a held
+      `UniqueId`, so the correlation path never runs in it, and 2.3 could have been ticked with no
+      code change at all. The real verification is a reload returning **two never-before-seen legs
+      sharing one `Linkedid`** — a call that started during the outage — which must open ONE session,
+      plus the spec's "a reload without correlation does not invent calls" scenario.
 
-- [ ] 2.4 Carry "no cause observed" from a reload-driven removal into `CallSessionManager`, so the
+- [x] 2.4 Carry "no cause observed" from a reload-driven removal into `CallSessionManager`, so the
       ending is marked as coming from a reload and the departing participants are left without a
       hangup cause — distinct from `HangupCause.NotDefined` (design D3, owner ruling). The resulting
       session state must follow from what the session already was, not from a cause that does not
       exist. Verify with tests that a reload-ended call carries the marker and no cause, and that a
       call ended by an observed hangup still carries Asterisk's cause and no marker.
 
-- [ ] 2.5 Make the first regression test from 1.1 go green through the normal completion path:
+- [x] 2.5 Make the first regression test from 1.1 go green through the normal completion path:
       exactly one `CallEndedEvent`, the call gone from the active set. Verify that the event is the
       same one a hangup produces — a consumer subscribed only to call endings must observe it.
 
-- [ ] 2.6 Make the reload read the headers Asterisk actually sends. `RequestInitialStateAsync`
+- [x] 2.6 Make the reload read the headers Asterisk actually sends. `RequestInitialStateAsync`
       currently reads `se.State` and `se.CallerId`, and **no supported Asterisk version sends a
       `State:` or `CallerID:` header on a `Status` frame** — measured on 18.26.4, 20.20.1, 22.9.0 and
       23.4.1 by task 3.3, whose kept test re-measures it. Every reloaded channel therefore lands as
@@ -97,7 +101,7 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       admitted in that state and not `Unknown`, that its calling number survives, and that a channel
       reported with no state header at all still defaults to `Unknown` and is still admitted.
 
-- [ ] 2.7 Close the window this change opened: a reload MUST NOT end a call that arrived after its
+- [x] 2.7 Close the window this change opened: a reload MUST NOT end a call that arrived after its
       snapshot began. `OnReconnected` re-subscribes the event observer **before** it awaits the
       reload (`src/Verbara.Sdk.Live/Server/VerbaraServer.cs`), so a channel that arrives live during
       the read lands in the table, is absent from the older snapshot, and task 2.1's reconcile
@@ -188,6 +192,19 @@ the last one was lost:
   addition, not a break) and deciding what to do about the two dead ones — removing them **is** a
   break (CP0002), so they can only be documented or obsoleted. **It has no open change of its own.**
   It needs one.
+
+- **The public-API guard this repo believes it has does not run.** `RS0016` (undeclared public API)
+  is in `Directory.Build.props:15`'s `<NoWarn>`, and the comment on the next line — "severity
+  controlled in .editorconfig for user-authored code" — is wrong: `NoWarn` wins over
+  `.editorconfig:71`. **Measured** during this change with a negative control: a `public int` method
+  reading instance data, added to the shipped `CallSessionManager`, builds Release `--no-incremental`
+  with **0 warnings and 0 errors**. There is no backstop either — nothing under `Tests/`, `tools/`,
+  `scripts/` or `.github/` reads `PublicAPI.Unshipped.txt` — and package validation cannot catch it,
+  because an addition is not a `CP0002` break. So a new public member can land in any shipped package
+  silently. This change is unaffected (its own "no public API moved" claim rests on a `git diff` of
+  the `PublicAPI.*.txt` files, which is mechanical and was run), but **task 3.4's check is a human
+  diff read, not the analyzer gate the repo's own comment advertises.** Not caused here.
+  **It has no open change of its own.** It needs one.
 
 - **The product-level blast radius of a stranded call** (conversation left active, voice capacity
   held, agent left busy). Belongs to the Platform repo, not this one.

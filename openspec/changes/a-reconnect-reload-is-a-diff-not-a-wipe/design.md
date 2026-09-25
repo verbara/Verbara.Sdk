@@ -140,9 +140,15 @@ section 4. Fixing it here would add four public members (an addition, not a brea
 this change's own claim that no public API moves, for a benefit the reload does not need: `RawFields`
 already carries the values, verified on the wire.
 
-*Why the enum needs no work:* `ChannelState` maps 1:1 onto Asterisk's numeric header
-(`Down = 0` … `Up = 6` … `PreRing = 9`), and the measured frame carries both `ChannelState: 6` and
-`ChannelStateDesc: Up`, so `Enum.TryParse` resolves either spelling. The bug was never the parse; it
+*Which header, and why the numeric one:* `ChannelState` is **defined as** Asterisk's numeric values
+(`Down = 0` … `Unknown = 10`, contiguous), so reading the numeric `ChannelState` header round-trips by
+construction for every state. The text `ChannelStateDesc` carries no such guarantee — its values are
+Asterisk's prose, not this enum's member names, and `Rsrvd` does not parse as `Reserved`. The reload
+therefore reads the numeric header, range-checks it, and falls back to `Unknown` for an absent,
+non-numeric or out-of-range value. Task 3.3 observed only `Up` (state 6, `ChannelStateDesc: Up`) on
+the wire; that Asterisk's text spellings diverge for some states is read from its `ast_state2str`
+and is **not measured in this repo**, which is why the decision rests on the numeric header's
+definitional round trip rather than on a list of divergent spellings. The bug was never the parse; it
 was the field handed to it.
 
 *Failure direction:* a channel for which Asterisk sends no state header at all still defaults to
