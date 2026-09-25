@@ -196,9 +196,46 @@ public sealed partial class CallSessionManager : ICallSessionManager
         _ = PersistAsync(session);
     }
 
+    /// <summary>
+    /// The metadata key under which the SDK records how a session ended when it did <em>not</em>
+    /// observe the ending. Already carries <c>"orphaned"</c> from
+    /// <see cref="SessionReconciler.TryMarkOrphaned"/>; <see cref="EndingProvenanceReload"/> joins
+    /// it rather than opening a second vocabulary for the same question.
+    /// </summary>
+    private const string EndingProvenanceKey = "cause";
+
+    /// <summary>
+    /// The value <see cref="EndingProvenanceKey"/> carries when a completed state reload proved the
+    /// call's channels gone. A consumer reads it as positive evidence that no hangup was observed —
+    /// never by noticing that <c>HangupCause</c> is null (<c>ADR-0062</c>, design D3).
+    /// </summary>
+    private const string EndingProvenanceReload = "reload";
+
+    /// <summary>
+    /// Ends the session a departing channel belongs to.
+    /// <para>
+    /// A removal arrives by one of two routes, and they carry different knowledge.
+    /// <c>ChannelManager.OnHangup</c> observed Asterisk's <c>Hangup</c> and put its cause on the
+    /// channel. <c>ChannelManager.ReconcileWithSnapshot</c> observed only that a completed reload
+    /// no longer lists the channel: no hangup was seen, no cause exists, and
+    /// <see cref="AsteriskChannel.HangupCause"/> still holds its non-nullable default
+    /// <c>NotDefined</c> — cause zero. Reading that default here would invent a cause, and
+    /// <c>NotDefined</c> is not neutral downstream: a classifier that treats anything other than
+    /// <c>NormalClearing</c> as abnormal reads every reconnect-lost call as an abnormal hangup and
+    /// acts on it. So a reload-produced ending carries no cause at all and is marked instead
+    /// (<c>ADR-0062</c>, design D3).
+    /// </para>
+    /// </summary>
     private void OnChannelRemoved(AsteriskChannel channel)
     {
         if (!_byChannelId.TryGetValue(channel.UniqueId, out var session)) return;
+
+        var byReload = channel.RemovedByReload;
+
+        // The one read of channel.HangupCause in this method. Null when nothing was observed —
+        // distinct from HangupCause.NotDefined, which is what "observed, and Asterisk said zero"
+        // would look like.
+        var observedCause = byReload ? (HangupCause?)null : channel.HangupCause;
 
         lock (session.SyncRoot)
         {
@@ -206,28 +243,55 @@ public sealed partial class CallSessionManager : ICallSessionManager
             if (participant is not null)
             {
                 participant.LeftAt = DateTimeOffset.UtcNow;
-                participant.HangupCause = channel.HangupCause;
+                participant.HangupCause = observedCause;
             }
 
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
-                CallSessionEventType.ParticipantLeft, channel.Name, null, channel.HangupCause.ToString()));
+                CallSessionEventType.ParticipantLeft, channel.Name, null,
+                byReload ? EndingProvenanceReload : observedCause.ToString()));
 
             // Check if all participants have left
             if (session.Participants.All(p => p.LeftAt.HasValue))
             {
-                session.HangupCause = channel.HangupCause;
-                var targetState = channel.HangupCause == HangupCause.NormalClearing
-                    ? CallSessionState.Completed
-                    : CallSessionState.Failed;
+                session.HangupCause = observedCause;
 
-                // Try the natural progression if needed
-                if (session.State == CallSessionState.Created)
+                if (byReload)
                 {
-                    session.TryTransition(CallSessionState.Failed);
+                    // Marked on the session, which is what a consumer can reach from the SessionId
+                    // on CallEndedEvent. The event record itself gains no field: CallEndedEvent is
+                    // a positional record, so adding one would move the public API this change
+                    // claims it does not touch.
+                    session.SetMetadata(EndingProvenanceKey, EndingProvenanceReload);
+
+                    // No cause exists, so the outcome follows from what the session already was: a
+                    // call that was up really took place and is over; one that never connected
+                    // never became a call. Transferring is deliberately absent — it has no valid
+                    // transition to Completed — and falls to the Failed arm below.
+                    var reloadTarget = session.State is CallSessionState.Connected
+                        or CallSessionState.OnHold or CallSessionState.Conference
+                        ? CallSessionState.Completed
+                        : CallSessionState.Failed;
+
+                    if (!session.TryTransition(reloadTarget))
+                        session.TryTransition(CallSessionState.Failed);
+
+                    LogEndedByReload(session.SessionId, session.LinkedId, session.State);
                 }
-                else if (!session.TryTransition(targetState))
+                else
                 {
-                    session.TryTransition(CallSessionState.Failed);
+                    var targetState = channel.HangupCause == HangupCause.NormalClearing
+                        ? CallSessionState.Completed
+                        : CallSessionState.Failed;
+
+                    // Try the natural progression if needed
+                    if (session.State == CallSessionState.Created)
+                    {
+                        session.TryTransition(CallSessionState.Failed);
+                    }
+                    else if (!session.TryTransition(targetState))
+                    {
+                        session.TryTransition(CallSessionState.Failed);
+                    }
                 }
 
                 OnSessionCompleted(session);
@@ -240,6 +304,11 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
         _byChannelId.TryRemove(channel.UniqueId, out _);
     }
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Session {SessionId} (linked {LinkedId}) ended as {State} because a state reload "
+            + "proved its channels gone; no hangup was observed, so no cause is recorded")]
+    private partial void LogEndedByReload(string sessionId, string linkedId, CallSessionState state);
 
     private void OnChannelStateChanged(AsteriskChannel channel)
     {

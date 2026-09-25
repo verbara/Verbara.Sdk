@@ -142,11 +142,22 @@ public sealed class VerbaraServerReloadTests : IAsyncDisposable
             $"the reconnect reload never finished. Server log:{Environment.NewLine}{_log}");
     }
 
+    /// <summary>
+    /// One <c>Status</c> entry shaped the way Asterisk really answers: the state arrives as the
+    /// numeric <c>ChannelState</c> header alongside its text <c>ChannelStateDesc</c>, both in
+    /// <c>RawFields</c>. <c>StatusEvent.State</c> is deliberately left unset — no supported version
+    /// sends a <c>State:</c> header, so a fixture that filled it would be testing a wire this SDK
+    /// never sees (ADR-0062, design D5).
+    /// </summary>
     private static StatusEvent Leg(string uniqueId, string channel) => new()
     {
         UniqueId = uniqueId,
         Channel = channel,
-        State = nameof(ChannelState.Up),
+        RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["ChannelState"] = "6",       // AST_STATE_UP, exactly as the frame carries it
+            ["ChannelStateDesc"] = "Up",
+        },
     };
 
     private string Describe() =>
@@ -278,11 +289,13 @@ public sealed class VerbaraServerReloadTests : IAsyncDisposable
             {
                 UniqueId = "1700000000.7",
                 Channel = "PJSIP/trunk-0007",
-                State = nameof(ChannelState.Ring),
-                CallerId = "5551234",
                 Extension = "800",
                 RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
+                    ["ChannelState"] = "4",           // AST_STATE_RING
+                    ["ChannelStateDesc"] = "Ring",
+                    ["CallerIDNum"] = "5551234",
+                    ["CallerIDName"] = "Ada Lovelace",
                     ["Context"] = "from-trunk",
                 },
             }
@@ -295,6 +308,7 @@ public sealed class VerbaraServerReloadTests : IAsyncDisposable
         admitted!.Name.Should().Be("PJSIP/trunk-0007");
         admitted.State.Should().Be(ChannelState.Ring);
         admitted.CallerIdNum.Should().Be("5551234");
+        admitted.CallerIdName.Should().Be("Ada Lovelace");
         admitted.Context.Should().Be("from-trunk",
             "Context reaches the table only through RawFields, and CallSessionManager infers a "
             + "call's direction from it — a buffer narrower than OnNewChannel's parameters would "
@@ -302,6 +316,193 @@ public sealed class VerbaraServerReloadTests : IAsyncDisposable
         admitted.Extension.Should().Be("800");
         _sut.Channels.GetByName("PJSIP/trunk-0007").Should().BeSameAs(admitted,
             "the name index is the second half of the table");
+    }
+
+    // --- the headers Asterisk actually sends (design D5) -----------------------------------------
+    //
+    // Measured 2026-09-24 on 18.26.4, 20.20.1, 22.9.0 and 23.4.1: no Status frame on any supported
+    // version carries a State: or a CallerID: header, and the header set is byte-for-byte identical
+    // across the four. What every version does carry is ChannelState (numeric) with
+    // ChannelStateDesc (text), and CallerIDNum with CallerIDName. Reading StatusEvent.State and
+    // StatusEvent.CallerId therefore landed every reloaded channel as Unknown with no caller id, on
+    // every version, today.
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldAdmitTheChannelInTheStateAsteriskReported_WhenTheSnapshotSaysItIsAnswered()
+    {
+        _statusReply =
+        [
+            new StatusEvent
+            {
+                UniqueId = "1700000000.7",
+                Channel = "PJSIP/trunk-0007",
+                RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["ChannelState"] = "6",           // AST_STATE_UP
+                    ["ChannelStateDesc"] = "Up",
+                },
+            }
+        ];
+
+        await _sut.RequestInitialStateAsync();
+
+        var admitted = _sut.Channels.GetByUniqueId("1700000000.7");
+        admitted.Should().NotBeNull($"Measured: {Describe()}");
+        admitted!.State.Should().Be(ChannelState.Up,
+            "Asterisk reported this channel as answered; a reload that reads the header it really "
+            + "sends must hold it in that state");
+        admitted.State.Should().NotBe(ChannelState.Unknown,
+            "Unknown is what reading the State: header produced for every channel on every "
+            + "version, which is the defect this binds");
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldCarryTheCallingNumber_WhenTheSnapshotReportsOne()
+    {
+        _statusReply =
+        [
+            new StatusEvent
+            {
+                UniqueId = "1700000000.7",
+                Channel = "PJSIP/trunk-0007",
+                RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["ChannelState"] = "6",
+                    ["ChannelStateDesc"] = "Up",
+                    ["CallerIDNum"] = "5551234",
+                    ["CallerIDName"] = "Ada Lovelace",
+                },
+            }
+        ];
+
+        await _sut.RequestInitialStateAsync();
+
+        var admitted = _sut.Channels.GetByUniqueId("1700000000.7");
+        admitted.Should().NotBeNull($"Measured: {Describe()}");
+        admitted!.CallerIdNum.Should().Be("5551234",
+            "the caller identity survives the reload; CallerIDNum is the header that carries it");
+        admitted.CallerIdName.Should().Be("Ada Lovelace",
+            "CallerIDName travels the same route and is the other half of the identity");
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldAdmitTheChannelAsUnknown_WhenTheSnapshotCarriesNoStateHeaderAtAll()
+    {
+        _statusReply =
+        [
+            new StatusEvent
+            {
+                UniqueId = "1700000000.7",
+                Channel = "PJSIP/trunk-0007",
+                RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["Context"] = "from-trunk",
+                },
+            }
+        ];
+
+        await _sut.RequestInitialStateAsync();
+
+        var admitted = _sut.Channels.GetByUniqueId("1700000000.7");
+        admitted.Should().NotBeNull(
+            "a channel whose state Asterisk did not report is still a channel Asterisk has; the "
+            + $"reload admits it rather than rejecting it. Measured: {Describe()}");
+        admitted!.State.Should().Be(ChannelState.Unknown,
+            "defaulting is correct when the value is genuinely absent — what was wrong was "
+            + "defaulting a value that could never arrive");
+        _added.Should().ContainSingle().Which.UniqueId.Should().Be("1700000000.7");
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldIgnoreTheHeadersNoVersionSends_WhenStatusEventCarriesThemAnyway()
+    {
+        // The negative control for design D5: State and CallerId are set here to values that
+        // contradict the wire, so a reload that still read them would report Up / 9999999. Nothing
+        // on any measured version populates them, and nothing in the reload may consume them.
+        _statusReply =
+        [
+            new StatusEvent
+            {
+                UniqueId = "1700000000.7",
+                Channel = "PJSIP/trunk-0007",
+                State = nameof(ChannelState.Up),
+                CallerId = "9999999",
+                RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["ChannelState"] = "4",           // AST_STATE_RING
+                    ["ChannelStateDesc"] = "Ring",
+                    ["CallerIDNum"] = "5551234",
+                },
+            }
+        ];
+
+        await _sut.RequestInitialStateAsync();
+
+        var admitted = _sut.Channels.GetByUniqueId("1700000000.7");
+        admitted.Should().NotBeNull($"Measured: {Describe()}");
+        admitted!.State.Should().Be(ChannelState.Ring,
+            "the wire header wins; StatusEvent.State is a property no Asterisk version fills and "
+            + "the reload must not read it");
+        admitted.CallerIdNum.Should().Be("5551234",
+            "likewise StatusEvent.CallerId — the calling number arrives as CallerIDNum");
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldAdmitTheNumberedState_WhenAsterisksTextSpellingWouldNotParse()
+    {
+        // Why the numeric header and not the text one. ChannelState is DEFINED as Asterisk's
+        // numeric values (Down = 0 .. Unknown = 10, contiguous), so the numeric header round-trips
+        // by construction. The text header carries no such guarantee: its spellings are Asterisk's
+        // prose, not this enum's member names, and "Rsrvd" — the spelling for AST_STATE_RESERVED —
+        // does not parse, which the assertion below measures. Only "Up" (state 6) was observed on
+        // the wire by task 3.3; that three spellings diverge is read from Asterisk's ast_state2str,
+        // NOT measured here, and the numeric choice does not depend on it being exactly three.
+        Enum.TryParse<ChannelState>("Rsrvd", out _).Should().BeFalse(
+            "this spelling is not a member of ChannelState, so a reload parsing ChannelStateDesc "
+            + "would report Unknown for whatever state Asterisk spells this way");
+
+        _statusReply =
+        [
+            new StatusEvent
+            {
+                UniqueId = "1700000000.7",
+                Channel = "PJSIP/trunk-0007",
+                RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["ChannelState"] = "1",           // AST_STATE_RESERVED
+                    ["ChannelStateDesc"] = "Rsrvd",
+                },
+            }
+        ];
+
+        await _sut.RequestInitialStateAsync();
+
+        _sut.Channels.GetByUniqueId("1700000000.7")!.State.Should().Be(ChannelState.Reserved,
+            $"the numeric header is exact where the text one is not. Measured: {Describe()}");
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldAdmitTheChannelAsUnknown_WhenTheStateHeaderIsNotANumberThisSdkKnows()
+    {
+        _statusReply =
+        [
+            new StatusEvent
+            {
+                UniqueId = "1700000000.7",
+                Channel = "PJSIP/trunk-0007",
+                RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["ChannelState"] = "42",          // a state this SDK has no member for
+                    ["ChannelStateDesc"] = "Teleported",
+                },
+            }
+        ];
+
+        await _sut.RequestInitialStateAsync();
+
+        _sut.Channels.GetByUniqueId("1700000000.7")!.State.Should().Be(ChannelState.Unknown,
+            "a value outside the enum is genuinely unknown to this SDK and must say so, not be "
+            + $"cast into a ChannelState that names nothing. Measured: {Describe()}");
     }
 
     public async ValueTask DisposeAsync() => await _sut.DisposeAsync();

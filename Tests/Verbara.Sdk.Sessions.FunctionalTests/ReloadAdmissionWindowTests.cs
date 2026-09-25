@@ -13,29 +13,37 @@ using Verbara.Sdk.Sessions.Manager;
 namespace Verbara.Sdk.Sessions.FunctionalTests;
 
 /// <summary>
-/// Binds the failure direction of the post-reconnect reload, at the level where it matters: a
-/// reload that could not be shown to have completed MUST end nothing — no session closed, no
-/// <c>CallEndedEvent</c>, every participant still in the call (ADR-0062, design D1).
+/// Binds the window this change opened: a reload MUST NOT end a call that arrived after its
+/// snapshot was taken (ADR-0062, design D6).
 ///
-/// <para>Why this is a requirement and not carefulness: <c>ChannelManager.ReconcileWithSnapshot</c>
-/// removes exactly the channels the snapshot omits, and a snapshot that died halfway through omits
-/// every channel it never reached. Streaming into the table while reading it, or reconciling a
-/// truncated buffer, would therefore end calls that are still live — worse than the ghost sessions
-/// this change removes. <c>VerbaraServer</c> reads the snapshot into a buffer and reconciles only
-/// after the read completed, so a failure discards the buffer having mutated nothing.</para>
+/// <para><c>VerbaraServer.OnReconnected</c> re-subscribes the event observer <b>before</b> it awaits
+/// the reload, so live events resume while the snapshot is still being read. A call that starts in
+/// that window is admitted to the channel table, is legitimately absent from the older snapshot, and
+/// a reconciliation that read that absence as evidence would end a call that is up. On a large
+/// estate the window is a full <c>Status</c> round trip.</para>
 ///
-/// <para>Two harness traps, inherited from <see cref="ReconnectReloadTests"/>: the status reply must
-/// be armed before the reconnect is raised, and a server that was only constructed has subscribed to
-/// nothing — <c>StartAsync</c> is where <c>Reconnected</c> is attached. A third is specific to a
-/// failing reload: <c>OnReconnected</c> is <c>async void</c> and swallows every exception into a log
-/// line, so that line is the only completion signal a failed reload produces.</para>
+/// <para>This is a regression <b>this change introduces</b>, not a pre-existing one: before it,
+/// <c>Channels.Clear()</c> removed every channel in silence and raised nothing, so no call ever
+/// ended from a reload and none could end wrongly. The pair of tests below is therefore two-sided on
+/// purpose — the call that arrived mid-read survives, and the ordinary stale call is still ended.
+/// The second is what stops the window being closed by weakening the removal path instead.</para>
+///
+/// <para>Deterministic by construction, with no wall-clock wait anywhere in the premise: the
+/// mid-read arrival is raised from inside the fake's <c>Status</c> reply, which by definition runs
+/// after <c>VerbaraServer</c> captured its admission mark and before the snapshot is reconciled.
+/// The only clock is the guard that bounds the wait for <c>async void OnReconnected</c>.</para>
 /// </summary>
-public sealed class ReloadFailureTests : IAsyncDisposable
+public sealed class ReloadAdmissionWindowTests : IAsyncDisposable
 {
     private const string ServerId = "test-srv";
     private const string CallerUid = "caller-001";
     private const string AgentUid = "agent-001";
     private const string LinkedId = "linked-001";
+
+    /// <summary>The call that starts while the reload is reading its snapshot.</summary>
+    private const string LateUid = "late-001";
+    private const string LateName = "PJSIP/trunk-late";
+    private const string LateLinkedId = "linked-late";
 
     private readonly IAmiConnection _connection = Substitute.For<IAmiConnection>();
     private readonly VerbaraServer _server;
@@ -46,12 +54,16 @@ public sealed class ReloadFailureTests : IAsyncDisposable
     private readonly List<AsteriskChannel> _removed = [];
     private readonly IDisposable _sessionSubscription;
 
-    private readonly CancellationTokenSource _abandonedReload = new();
-
     private IReadOnlyList<StatusEvent> _statusReply = [];
-    private bool _snapshotDiesAfterFirstEntry;
 
-    public ReloadFailureTests()
+    /// <summary>
+    /// Fired once, from inside the <c>Status</c> reply, to stand in for the AMI observer delivering
+    /// a <c>NewChannel</c> while the reload is in flight. Armed per reload so the initial
+    /// <c>StartAsync</c> load does not trip it.
+    /// </summary>
+    private Action? _whileTheSnapshotIsRead;
+
+    public ReloadAdmissionWindowTests()
     {
         _connection.AsteriskVersion.Returns("21.0.0");
         _connection
@@ -70,8 +82,10 @@ public sealed class ReloadFailureTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// Answers the three actions the load sends. The channel leg can be made to die partway — one
-    /// entry delivered, then the socket gone — which is the whole subject of this file.
+    /// Answers the three actions the load sends. The <c>Status</c> leg first lets the test push a
+    /// live arrival into the table: this body only runs once the enumeration has started, which is
+    /// strictly after <c>VerbaraServer</c> read the admission mark the snapshot will be judged
+    /// against, so the ordering the requirement is about needs no clock to arrange.
     /// </summary>
     private async IAsyncEnumerable<ManagerEvent> Reply(ManagerAction action)
     {
@@ -86,14 +100,11 @@ public sealed class ReloadFailureTests : IAsyncDisposable
         if (action is not StatusAction)
             yield break;
 
-        var delivered = 0;
-        foreach (var status in _statusReply)
-        {
-            yield return status;
+        var arrival = Interlocked.Exchange(ref _whileTheSnapshotIsRead, null);
+        arrival?.Invoke();
 
-            if (++delivered == 1 && _snapshotDiesAfterFirstEntry)
-                throw new IOException("the AMI socket died halfway through the Status snapshot");
-        }
+        foreach (var status in _statusReply)
+            yield return status;
     }
 
     private async Task GivenAStartedServer() => await _server.StartAsync();
@@ -112,6 +123,11 @@ public sealed class ReloadFailureTests : IAsyncDisposable
         _server.Bridges.OnChannelEntered("bridge-001", AgentUid);
     }
 
+    /// <summary>The live <c>NewChannel</c> that lands while the snapshot is being read.</summary>
+    private void ACallArrivesLive() =>
+        _server.Channels.OnNewChannel(LateUid, LateName, ChannelState.Ring,
+            callerIdNum: "5559999", context: "from-trunk", linkedId: LateLinkedId);
+
     /// <summary>
     /// Raises <c>Reconnected</c> and waits for the reload to end — at its last action when it
     /// completed, at the catch-all's log line when it failed.
@@ -119,6 +135,7 @@ public sealed class ReloadFailureTests : IAsyncDisposable
     private async Task WhenTheConnectionReconnects(params StatusEvent[] channelsAsteriskStillHas)
     {
         _statusReply = channelsAsteriskStillHas;
+        _whileTheSnapshotIsRead = ACallArrivesLive;
         _serverLog.RearmReloadSignals();
         _connection.Reconnected += Raise.Event<Action>();
 
@@ -137,10 +154,10 @@ public sealed class ReloadFailureTests : IAsyncDisposable
     private string Describe() =>
         $"{_sessions.ActiveSessions.Count()} active session(s) [" +
         string.Join(" | ", _sessions.ActiveSessions.Select(
-            s => $"linked={s.LinkedId} state={s.State} participants={s.Participants.Count}"
-                 + $" left={s.Participants.Count(p => p.LeftAt.HasValue)}")) +
-        $"]; {_server.Channels.ChannelCount} channel(s) held" +
-        $"; ChannelRemoved raised for [{string.Join(", ", _removed.Select(c => c.UniqueId))}]" +
+            s => $"linked={s.LinkedId} state={s.State} participants={s.Participants.Count}")) +
+        $"]; {_server.Channels.ChannelCount} channel(s) held [" +
+        string.Join(", ", _server.Channels.ActiveChannels.Select(c => c.UniqueId)) +
+        $"]; ChannelRemoved raised for [{string.Join(", ", _removed.Select(c => c.UniqueId))}]" +
         $"; domain events [{string.Join(", ", _sessionEvents.Select(e => e.GetType().Name))}]";
 
     /// <summary>
@@ -160,114 +177,69 @@ public sealed class ReloadFailureTests : IAsyncDisposable
         },
     };
 
+    // --- scenario: a call starts while the reload is still reading -------------------------------
+
     [Fact]
-    public async Task Reconnect_ShouldEndNothing_WhenTheReloadSnapshotFailsPartway()
+    public async Task Reconnect_ShouldNotEndTheCallThatArrivedWhileTheSnapshotWasRead_WhenTheCompletedSnapshotOmitsIt()
     {
         await GivenAStartedServer();
         GivenAnAnsweredCall();
-        _sessions.ActiveSessions.Should().HaveCount(1, "the call is up before the outage");
-        var sessionIdBefore = _sessions.ActiveSessions.Single().SessionId;
 
-        // Asterisk starts answering the reload — one leg arrives — and then the socket dies. The
-        // snapshot never reached the second leg, and that silence is not evidence of a hangup.
-        _snapshotDiesAfterFirstEntry = true;
+        // The snapshot completes and reports only the call Asterisk had when it was asked. The
+        // call that started during the read is missing from it because it could not be in it.
         await WhenTheConnectionReconnects(
             Leg(CallerUid, "PJSIP/trunk-001"),
             Leg(AgentUid, "PJSIP/100-001"));
 
+        _server.Channels.GetByUniqueId(LateUid).Should().NotBeNull(
+            "the snapshot was requested before this channel existed, so its absence says nothing "
+            + $"about it; removing it would end a call that is up. Measured: {Describe()}");
+        _removed.Select(c => c.UniqueId).Should().NotContain(LateUid,
+            $"nothing proved this channel gone. Measured: {Describe()}");
         _sessionEvents.OfType<CallEndedEvent>().Should().BeEmpty(
-            "a reload that cannot be trusted ends nothing; ending a live call in error is worse "
-            + $"than the defect this change removes. Measured: {Describe()}");
-        _removed.Should().BeEmpty(
-            "the reload is buffered and reconciled only once the read completed, so a failed read "
-            + $"announces no removal at all. Measured: {Describe()}");
-
-        var session = _sessions.ActiveSessions.Should().ContainSingle(
-            $"the call was live before the reload and is still live after it. Measured: {Describe()}")
-            .Subject;
-        session.SessionId.Should().Be(sessionIdBefore, "it is the same call, under the same identity");
-        session.State.Should().Be(CallSessionState.Connected,
-            $"a failed reload changes no session state either. Measured: {Describe()}");
-        session.Participants.Should().HaveCount(2,
-            $"both legs are still in the call. Measured: {Describe()}");
-        session.Participants.Should().OnlyContain(p => !p.LeftAt.HasValue,
-            "a participant marked as having left is how a consumer sees a leg drop out; the reload "
-            + $"observed no leg leaving. Measured: {Describe()}");
-        session.Participants.Should().OnlyContain(p => p.HangupCause == null,
-            $"no hangup was observed for either leg. Measured: {Describe()}");
+            "no call ended: one was still in the snapshot and the other is newer than it. "
+            + $"Measured: {Describe()}");
+        _sessions.ActiveSessions.Select(s => s.LinkedId).Should().Contain(LateLinkedId,
+            $"the call that arrived mid-read is still in progress. Measured: {Describe()}");
     }
 
-    [Fact]
-    public async Task Reconnect_ShouldKeepEveryHeldChannel_WhenTheReloadSnapshotFailsPartway()
-    {
-        await GivenAStartedServer();
-        GivenAnAnsweredCall();
-
-        _snapshotDiesAfterFirstEntry = true;
-        await WhenTheConnectionReconnects(
-            Leg(CallerUid, "PJSIP/trunk-001"),
-            Leg(AgentUid, "PJSIP/100-001"));
-
-        _server.Channels.ActiveChannels.Select(c => c.UniqueId).Should().BeEquivalentTo(
-            [CallerUid, AgentUid],
-            "the buffer is discarded with the exception, so the table is exactly as it was — "
-            + $"including the leg the snapshot never reached. Measured: {Describe()}");
-        _server.Channels.GetByUniqueId(CallerUid)!.LinkedId.Should().Be(LinkedId,
-            "the held instances survive untouched, correlation included");
-    }
+    // --- scenario: the ordinary stale channel is still ended --------------------------------------
 
     [Fact]
-    public async Task Reconnect_ShouldEndNothing_WhenAsteriskNeverAnswersTheStateRequest()
+    public async Task Reconnect_ShouldStillEndTheCallHeldBeforeTheReload_WhenTheCompletedSnapshotOmitsIt()
     {
         await GivenAStartedServer();
         GivenAnAnsweredCall();
         var sessionIdBefore = _sessions.ActiveSessions.Single().SessionId;
 
-        // Asterisk accepts the Status action and then says nothing at all. The reload never
-        // completes, so it never reconciles, so it ends nothing — the hang is the safe outcome.
-        _statusReply = [];
-        _serverLog.RearmReloadSignals();
-        _connection
-            .SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
-            .Returns(_ => NeverAnswers());
-        _connection.Reconnected += Raise.Event<Action>();
+        // Asterisk answers the reload with nothing: the held call ended while the socket was down.
+        // A call still arrives mid-read, so both sides of the mark are exercised at once — the fix
+        // cannot have been implemented by making the reload stop removing things.
+        await WhenTheConnectionReconnects();
 
-        // The premise is a non-event — the reload still waiting — and only a clock bounds that.
-        // fence-allow: GUARD-TIMEOUT — the assertion below is that this bound is what won the race
-        var timeout = Task.Delay(TimeSpan.FromSeconds(1));
-        var ended = await Task.WhenAny(
-            _serverLog.ReloadFinished.Task, _serverLog.ReloadFailed.Task, timeout);
+        _server.Channels.GetByUniqueId(CallerUid).Should().BeNull(
+            "the completed snapshot could have reported this channel and did not. Measured: "
+            + Describe());
+        _removed.Select(c => c.UniqueId).Should().Contain([CallerUid, AgentUid],
+            $"both legs of the held call are gone. Measured: {Describe()}");
+        _sessionEvents.OfType<CallEndedEvent>().Should().ContainSingle(
+            "the reload is the only notification the consumer will ever get that the held call "
+            + $"ended, and the window must not have swallowed it. Measured: {Describe()}");
+        _sessions.ActiveSessions.Should().NotContain(s => s.SessionId == sessionIdBefore,
+            $"the held call is over. Measured: {Describe()}");
 
-        ReferenceEquals(ended, timeout).Should().BeTrue(
-            "an unanswered state request is the premise of this test: the reload must still be "
-            + $"waiting, neither finished nor failed. Server log:{Environment.NewLine}{_serverLog}");
-        _sessionEvents.OfType<CallEndedEvent>().Should().BeEmpty(
-            $"absence of an answer is not evidence that the call is gone. Measured: {Describe()}");
-        _sessions.ActiveSessions.Should().ContainSingle($"Measured: {Describe()}")
-            .Which.SessionId.Should().Be(sessionIdBefore);
-        _server.Channels.ChannelCount.Should().Be(2, $"Measured: {Describe()}");
-    }
-
-    /// <summary>
-    /// A reply that is accepted and then never produces anything and never ends — Asterisk taking
-    /// the action and saying nothing. Released only when the test is torn down, so the abandoned
-    /// reload does not outlive it.
-    /// </summary>
-    private async IAsyncEnumerable<ManagerEvent> NeverAnswers()
-    {
-        // This IS the fake: Asterisk accepting the action and then never answering at all.
-        // fence-allow: SIMULATED-WORK — stands in for silence; released only by teardown's cancel
-        await Task.Delay(Timeout.InfiniteTimeSpan, _abandonedReload.Token);
-        yield break;
+        _server.Channels.GetByUniqueId(LateUid).Should().NotBeNull(
+            "and the call that arrived during the same read is untouched — the mark separates the "
+            + $"two, nothing else does. Measured: {Describe()}");
+        _sessions.ActiveSessions.Select(s => s.LinkedId).Should().Contain(LateLinkedId,
+            $"Measured: {Describe()}");
     }
 
     public async ValueTask DisposeAsync()
     {
-        await _abandonedReload.CancelAsync();
         _sessionSubscription.Dispose();
         await _sessions.DisposeAsync();
         await _server.DisposeAsync();
-        _abandonedReload.Dispose();
     }
 
     /// <summary>

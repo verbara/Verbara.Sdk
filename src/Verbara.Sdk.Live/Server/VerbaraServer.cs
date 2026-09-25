@@ -1,4 +1,5 @@
 using System.Diagnostics.Metrics;
+using System.Globalization;
 using Verbara.Sdk;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Ami.Actions;
@@ -169,8 +170,8 @@ public sealed class VerbaraServer : IVerbaraServer
         // Populate channels from StatusAction. Buffer first, then reconcile: a snapshot that
         // throws, is cancelled or never completes must leave every held channel alone, and it can
         // only do that if nothing was mutated while it was being read (ADR-0062, design D1).
-        var channelSnapshot = await ReadChannelSnapshotAsync(cancellationToken);
-        Channels.ReconcileWithSnapshot(channelSnapshot);
+        var (admittedThrough, channelSnapshot) = await ReadChannelSnapshotAsync(cancellationToken);
+        Channels.ReconcileWithSnapshot(channelSnapshot, admittedThrough);
 
         // Populate queues from QueueStatusAction
         await foreach (var evt in _connection.SendEventGeneratingActionAsync(new QueueStatusAction(), cancellationToken))
@@ -214,10 +215,23 @@ public sealed class VerbaraServer : IVerbaraServer
     /// exception into a log line, so a failure path that mutates nothing is the only one that stays
     /// safe underneath it (ADR-0062, design D1).
     /// </para>
+    /// <para>
+    /// The returned admission mark is read <c>before</c> the <c>Status</c> action is sent, and says
+    /// how much of the channel table this snapshot could possibly describe. <c>OnReconnected</c>
+    /// re-subscribes the event observer before it awaits this read, so a call that starts during the
+    /// read is admitted live and is legitimately absent from the older snapshot; on a large estate
+    /// that window is a full <c>Status</c> round trip. The mark is what keeps the reconciliation
+    /// from reading that absence as a hangup and ending a call that is up (ADR-0062, design D6).
+    /// </para>
     /// </summary>
-    private async ValueTask<List<ChannelSnapshotEntry>> ReadChannelSnapshotAsync(
-        CancellationToken cancellationToken)
+    private async ValueTask<(long AdmittedThrough, List<ChannelSnapshotEntry> Entries)>
+        ReadChannelSnapshotAsync(CancellationToken cancellationToken)
     {
+        // Before the request, never after: a mark read once the answer is in hand would place every
+        // channel that arrived meanwhile at or below it, and hand the reconciliation the power to
+        // end those calls.
+        var admittedThrough = Channels.CaptureAdmissionMark();
+
         var snapshot = new List<ChannelSnapshotEntry>();
 
         await foreach (var evt in _connection.SendEventGeneratingActionAsync(
@@ -226,16 +240,33 @@ public sealed class VerbaraServer : IVerbaraServer
             if (evt is not StatusEvent se)
                 continue;
 
-            var state = Enum.TryParse<ChannelState>(se.State, out var cs) ? cs : ChannelState.Unknown;
+            // Every field below that Asterisk really sends is read from RawFields. StatusEvent's
+            // own State and CallerId properties are read by nothing here on purpose: no supported
+            // version populates them, so the parse that used to consume them could only ever
+            // produce ChannelState.Unknown and a null caller id (ADR-0062, design D5).
+            var rawFields = se.RawFields;
             snapshot.Add(new ChannelSnapshotEntry(
                 se.UniqueId ?? "",
                 se.Channel ?? "",
-                state,
-                CallerIdNum: se.CallerId,
+                ReadChannelState(rawFields),
+                // CallerIDNum / CallerIDName are the header names every channel-bearing event uses;
+                // Status carries them too, and StatusEvent.CallerId — which is what this read
+                // before — is not among the headers any measured version sends.
+                CallerIdNum: rawFields?.GetValueOrDefault("CallerIDNum"),
+                CallerIdName: rawFields?.GetValueOrDefault("CallerIDName"),
                 // Context reaches the manager only through RawFields — StatusEvent has no typed
                 // property for it — and CallSessionManager infers a call's direction from it.
-                Context: se.RawFields?.GetValueOrDefault("Context"),
-                Extension: se.Extension));
+                Context: rawFields?.GetValueOrDefault("Context"),
+                Extension: se.Extension,
+                // The correlation Asterisk already put on the wire. Dropping it is what turned one
+                // call into several: a channel admitted with no LinkedId falls back to its own
+                // UniqueId in CallSessionManager, so the two legs of a call that started during the
+                // outage — neither of which the SDK ever saw — open two sessions instead of one.
+                // Measured present, non-empty and identical across every leg of one call on 18.26.4,
+                // 20.20.1, 22.9.0 and 23.4.1, so no mapping is needed: pass it (ADR-0062, design D4).
+                // An absent or empty header still degrades to linkedId = uniqueId downstream, which
+                // is exactly today's behaviour for an uncorrelated channel.
+                LinkedId: se.LinkedId));
         }
 
         // An enumeration that honoured the token by stopping quietly rather than by throwing would
@@ -243,7 +274,39 @@ public sealed class VerbaraServer : IVerbaraServer
         // every channel the snapshot had not reached yet. Cancellation is not completion.
         cancellationToken.ThrowIfCancellationRequested();
 
-        return snapshot;
+        return (admittedThrough, snapshot);
+    }
+
+    /// <summary>
+    /// Read a <c>Status</c> frame's channel state from the header Asterisk actually sends.
+    /// <para>
+    /// The <b>numeric</b> <c>ChannelState</c> is the one read, not the text <c>ChannelStateDesc</c>,
+    /// even though both are on the wire on every measured version. <see cref="ChannelState"/>'s
+    /// members map 1:1 onto Asterisk's numeric values, so the numeric header round-trips for all
+    /// eleven states; the text spellings do not — Asterisk writes <c>Rsrvd</c>,
+    /// <c>Dialing Offhook</c> and <c>Pre-ring</c> where this enum names
+    /// <c>Reserved</c>, <c>DialingOffHook</c> and <c>PreRing</c>, and each of those three would
+    /// silently land as <c>Unknown</c>. Reading the numeric header is therefore lossless where
+    /// reading the text one would re-introduce a quieter version of the defect D5 removes.
+    /// </para>
+    /// <para>
+    /// A channel whose frame carries no state header at all still defaults to
+    /// <see cref="ChannelState.Unknown"/> and is still admitted: defaulting is correct when the
+    /// value is genuinely absent. What was wrong was defaulting a value that could never arrive.
+    /// </para>
+    /// </summary>
+    private static ChannelState ReadChannelState(IReadOnlyDictionary<string, string>? rawFields)
+    {
+        if (rawFields is null || !rawFields.TryGetValue("ChannelState", out var numeric))
+            return ChannelState.Unknown;
+
+        // The enum's values are contiguous from Down = 0 to Unknown = 10, so a value inside those
+        // bounds is a named member. Anything else — a state a future Asterisk adds, or a header
+        // that is not a number — is genuinely unknown to this SDK and says so.
+        return int.TryParse(numeric, CultureInfo.InvariantCulture, out var value)
+            && value is >= (int)ChannelState.Down and <= (int)ChannelState.Unknown
+                ? (ChannelState)value
+                : ChannelState.Unknown;
     }
 
     private async ValueTask PopulateAgentsAsync(CancellationToken cancellationToken)

@@ -1,3 +1,4 @@
+using System.Globalization;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -116,25 +117,41 @@ public sealed class InitialLoadTests : IAsyncDisposable
         $"; ChannelRemoved raised for [{string.Join(", ", _removed.Select(c => c.UniqueId))}]";
 
     /// <summary>
-    /// A channel as <c>Status</c> reports it. <c>Context</c> only ever reaches the manager through
-    /// <c>RawFields</c> — <see cref="StatusEvent"/> has no typed property for it — so a reload that
-    /// stopped reading the raw field would lose the direction the session manager infers from it.
+    /// A channel as <c>Status</c> really reports it. The state, the calling number and
+    /// <c>Context</c> all reach the manager through <c>RawFields</c>: <see cref="StatusEvent"/> has
+    /// no typed property for <c>Context</c> at all, and its <c>State</c> and <c>CallerId</c>
+    /// properties are filled by no supported Asterisk version — measured on 18.26.4, 20.20.1, 22.9.0
+    /// and 23.4.1 (ADR-0062, design D5). A load that read those two instead would report every
+    /// channel as <see cref="ChannelState.Unknown"/> with no caller id, and a load that stopped
+    /// reading the raw fields would lose the direction the session manager infers from
+    /// <c>Context</c>.
     /// </summary>
     private static StatusEvent Leg(
         string uniqueId, string channel, string linkedId,
         ChannelState state = ChannelState.Up,
-        string? callerId = null, string? context = null, string? extension = null) => new()
+        string? callerId = null, string? context = null, string? extension = null)
+    {
+        var rawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            // Numeric, exactly as the frame carries it: Up is 6, Ring is 4.
+            ["ChannelState"] = ((int)state).ToString(CultureInfo.InvariantCulture),
+            ["ChannelStateDesc"] = state.ToString(),
+        };
+
+        if (callerId is not null)
+            rawFields["CallerIDNum"] = callerId;
+        if (context is not null)
+            rawFields["Context"] = context;
+
+        return new StatusEvent
         {
             UniqueId = uniqueId,
             Channel = channel,
-            State = state.ToString(),
             LinkedId = linkedId,
-            CallerId = callerId,
             Extension = extension,
-            RawFields = context is null
-                ? null
-                : new Dictionary<string, string>(StringComparer.Ordinal) { ["Context"] = context },
+            RawFields = rawFields,
         };
+    }
 
     [Fact]
     public async Task StartAsync_ShouldHoldExactlyTheChannelsTheSnapshotContains_WhenTheTableIsEmpty()
@@ -154,10 +171,12 @@ public sealed class InitialLoadTests : IAsyncDisposable
         caller.Should().NotBeNull();
         caller!.Name.Should().Be("PJSIP/trunk-100");
         caller.State.Should().Be(ChannelState.Up,
-            "Status reports the state as a name and the load parses it; an unparsed state would "
-            + "silently become Unknown");
+            "Status reports the state as the numeric ChannelState header and the load reads it "
+            + "from RawFields; reading StatusEvent.State — which no supported version fills — made "
+            + "every loaded channel Unknown");
         caller.CallerIdNum.Should().Be("5551234",
-            "the status event's CallerId is what the load passes as callerIdNum");
+            "the CallerIDNum header is what the load passes as callerIdNum; StatusEvent.CallerId "
+            + "is never populated on the wire");
         caller.Context.Should().Be("from-trunk",
             "Context arrives only in RawFields, and the session manager infers call direction from it");
         caller.Extension.Should().Be("800");
