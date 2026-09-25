@@ -135,6 +135,51 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
     // --- Event Handlers ---
 
+    /// <summary>
+    /// The metadata key under which the SDK records that it did <em>not</em> observe a session
+    /// start. It is the opening counterpart of <see cref="EndingProvenanceKey"/>: <c>origin</c> says
+    /// how the SDK came to know about the call, <c>cause</c> how it came to know it ended.
+    /// </summary>
+    private const string OriginKey = "origin";
+
+    /// <summary>
+    /// The value <see cref="OriginKey"/> carries when the session was opened from a channel a
+    /// <c>Status</c> snapshot reported — a first load or a post-reconnect reload. A consumer reads
+    /// it as positive evidence that the call was already in progress when the SDK learned of it, so
+    /// <see cref="CallSession.CreatedAt"/> is when the session record was opened rather than when
+    /// the call began, and any state on it was reported rather than watched (<c>ADR-0062</c>,
+    /// design D5).
+    /// </summary>
+    private const string OriginReload = "reload";
+
+    /// <summary>
+    /// The state a session opens in when the channel it is opened from came out of a <c>Status</c>
+    /// snapshot, or <c>null</c> when the snapshot's state says nothing worth carrying and the
+    /// session opens in <see cref="CallSessionState.Created"/> exactly as it always has.
+    /// <para>
+    /// The mapping is the one <see cref="OnChannelStateChanged"/> already performs for a live
+    /// channel — <c>Ring</c>/<c>Ringing</c> to <see cref="CallSessionState.Ringing"/>, <c>Up</c> to
+    /// <see cref="CallSessionState.Connected"/> — deliberately, so a reloaded call is described in
+    /// the same vocabulary as a call the SDK watched. The difference is only <em>when</em> it is
+    /// applied: a transition cannot reach either state from <c>Created</c>, so for a reloaded
+    /// channel it has to be applied at construction.
+    /// </para>
+    /// <para>
+    /// Every other state — including <see cref="ChannelState.Unknown"/>, which is what a frame
+    /// carrying no state header at all becomes — maps to <c>null</c>. <c>Down</c> and <c>Reserved</c>
+    /// describe a channel that is not carrying a call yet, and <c>Dialing</c>, <c>OffHook</c>,
+    /// <c>Busy</c>, <c>DialingOffHook</c> and <c>PreRing</c> have no session state this SDK has ever
+    /// derived from a channel state; inventing one here would be this method asserting more than the
+    /// snapshot said.
+    /// </para>
+    /// </summary>
+    private static CallSessionState? ReportedSessionState(ChannelState channelState) => channelState switch
+    {
+        ChannelState.Ringing or ChannelState.Ring => CallSessionState.Ringing,
+        ChannelState.Up => CallSessionState.Connected,
+        _ => null,
+    };
+
     private void OnChannelAdded(AsteriskChannel channel, string serverId)
     {
         var linkedId = channel.LinkedId;
@@ -171,6 +216,26 @@ public sealed partial class CallSessionManager : ICallSessionManager
         session.Context = channel.Context;
         session.Extension = channel.Extension;
 
+        // A channel that came out of a Status snapshot — a first load or a post-reconnect reload —
+        // is a call the SDK never saw start. The state on it is Asterisk's own account of the call
+        // and the only one that will ever arrive: no NewState announcing it is coming, because it
+        // already happened. Opening such a call in Created would report a live conversation as one
+        // that has not started, and Created past a dialing timeout is exactly what
+        // SessionReconciler's orphan branch fails (ADR-0062, design D5).
+        var reportedState = channel.AdmittedFromSnapshot ? ReportedSessionState(channel.State) : null;
+        if (channel.AdmittedFromSnapshot)
+        {
+            // Marked whatever state was reported, including the one the snapshot could not
+            // determine: what the marker says is that CreatedAt is when the SDK learned of this
+            // call and not when the call began, and that every timestamp before it is unobserved.
+            // Positive evidence, read the way the ending's "cause" marker is — never inferred from
+            // a null ConnectedAt.
+            session.SetMetadata(OriginKey, OriginReload);
+        }
+
+        if (reportedState is { } live)
+            session.OpenInReportedState(live);
+
         var callerRole = SessionCorrelator.InferRole(channel.Name, 0);
         session.AddParticipant(new SessionParticipant
         {
@@ -184,6 +249,18 @@ public sealed partial class CallSessionManager : ICallSessionManager
         });
         session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
             CallSessionEventType.Created, channel.Name, null, null));
+
+        // The audit trail says where the state came from, so a reader cannot mistake it for an
+        // answer or a ring this SDK watched happen. Its timestamp is when the snapshot was read,
+        // which is why the state is not also written into ConnectedAt / RingingAt.
+        if (reportedState is { } reported)
+        {
+            session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
+                reported is CallSessionState.Connected
+                    ? CallSessionEventType.Connected
+                    : CallSessionEventType.Ringing,
+                channel.Name, null, OriginReload));
+        }
 
         _sessions[session.SessionId] = session;
         _byLinkedId[linkedId] = session;

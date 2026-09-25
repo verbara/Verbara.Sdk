@@ -119,7 +119,7 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       still ends its call. The test must be deterministic — no wall-clock waits, or the sync-fence
       guard will ask you for a `fence-allow` category you should not need.
 
-- [ ] 2.8 A call opened from a reloaded channel carries the state Asterisk reported. Task 2.6 made
+- [x] 2.8 A call opened from a reloaded channel carries the state Asterisk reported. Task 2.6 made
       the CHANNEL correct; the SESSION is still wrong. `CallSessionManager.OnChannelAdded` never
       reads `channel.State`, and only `OnChannelStateChanged` transitions a session — which does not
       fire for a channel that was just admitted. So a reload that admits an answered call opens it in
@@ -140,15 +140,42 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       live through the ordinary `NewChannel` path — not a reload — still opens its session exactly as
       it does today. `OnChannelAdded` serves both paths; a regression there breaks every call, not
       just reloaded ones.
+      **Done 2026-09-25. The timestamp fork was ruled: the answer time is left unknown.** `Seconds`
+      is not read at all — it is channel age, and for an answered channel it differs from time since
+      answer by the ring time, so deriving `ConnectedAt` from it would assert an answer the SDK never
+      observed. `CallSession.OpenInReportedState` therefore sets the state without running
+      `UpdateTimestamp`: `ConnectedAt` and `RingingAt` stay null, so `WaitTime` and `TalkTime` read
+      null even after the call completes, and `Duration` runs from `CreatedAt` — the moment the SDK
+      learned of the call, not the moment the call began, so it is an undercount of real call age.
+      The tell is positive, not a null: the session carries metadata `origin=reload`, the opening
+      counterpart of D3's `cause=reload`. The provenance gate is
+      `AsteriskChannel.AdmittedFromSnapshot` (internal, mirroring `RemovedByReload`), set through a
+      private `ChannelManager.Admit` so `OnNewChannel`'s public signature does not move.
 
 ## 3. Phase C — integration (batched)
 
-- [ ] 3.1 Turn every scenario in `specs/live-state-reload/spec.md` into a test, including the two that
+- [x] 3.1 Turn every scenario in `specs/live-state-reload/spec.md` into a test, including the two that
       bind the failure direction (reload fails partway; reload never answered). Verify each scenario
       has a test and that deleting the guard it describes turns that test red — a scenario whose
       mutation survives is not bound.
+      **Done 2026-09-25. All 18 scenarios across the eight requirements have a test, and every one
+      was killed by a mutation of the PRODUCTION code it binds** — 21 mutations, each applied alone,
+      each restored and the restore verified by `sha256sum -c`. The one real gap task 2.5 named was
+      closed rather than narrowed: requirement 5's first scenario says "GIVEN **two** connected
+      calls", and `ReloadFailureTests` set up one, so the clause "neither call is ended" was never
+      exercised. It now holds two independent calls (`linked-001`, `linked-002`) whose legs are
+      delivered last-first, so the truncation falls **between** the calls. Measured difference, not
+      argued: under the mutation that reconciles a truncated buffer, the two-call fixture observes a
+      `CallEndedEvent` for `linked-002` while `linked-001` survives with `participants=2 left=1` —
+      a call ended outright, which a single held call cannot produce, because a session ends only
+      once every participant has left.
+      **One measurement method error, caught and corrected**: `dotnet test --no-build` on project B
+      after building project A runs B's stale binaries. Two mutation results (D6's admission-mark
+      inversion, and the truncated-buffer one) first read as "the test survived"; re-run after
+      `dotnet build Verbara.Sdk.slnx -c Release`, both died. Every mutation result recorded here was
+      taken after a full rebuild.
 
-- [ ] 3.2 Write the `CHANGELOG.md` entry under `[Unreleased]`, labelled **`### Fixed — BREAKING`**.
+- [x] 3.2 Write the `CHANGELOG.md` entry under `[Unreleased]`, labelled **`### Fixed — BREAKING`**.
       The owner ruled the label on 2026-09-24, under ADR-0061 D3: the SDK never promised to hold a
       stranded session for the life of the process, nor to turn one call into several — `LinkedId`
       correlation is its declared design — so this restores documented behaviour rather than
@@ -172,11 +199,11 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       narrows — so this measurement can change the spec, and it is the one task here that must run
       before Phase B is called done. Record both results in the ADR.
 
-- [ ] 3.4 Confirm the change adds and removes no public API: verify `PublicAPI.Unshipped.txt` is
+- [x] 3.4 Confirm the change adds and removes no public API: verify `PublicAPI.Unshipped.txt` is
       unchanged in every package this change touches, and that no `CompatibilitySuppressions.xml` is
       needed.
 
-- [ ] 3.5 **Verification.** On the integrated branch: `dotnet build Verbara.Sdk.slnx -c Release` with
+- [x] 3.5 **Verification.** On the integrated branch: `dotnet build Verbara.Sdk.slnx -c Release` with
       **0 warnings**; the full unit lane under the CI filter; `Tests/Verbara.Sdk.Governance.Tests`
       and `Tests/Verbara.Sdk.OpenTelemetry.Tests` (tree-scanning guards — green on touched projects
       is not green in CI); `openspec validate --all --strict`. Then read
@@ -227,6 +254,19 @@ the last one was lost:
   the `PublicAPI.*.txt` files, which is mechanical and was run), but **task 3.4's check is a human
   diff read, not the analyzer gate the repo's own comment advertises.** Not caused here.
   **It has no open change of its own.** It needs one.
+
+- **The session transition table has a hole the ordinary live path falls into.**
+  `CallSessionStateTransitions` lets `Created` reach only `Dialing`, `Queued` and `Failed` — neither
+  `Connected` **nor `Ringing`**. A live inbound call arrives in `ChannelState.Ring` and opens
+  `Created`; if a `NewState` carrying `Ringing` reaches `OnChannelStateChanged` before `DialBegin`,
+  its `TryTransition(Ringing)` returns false and **silently does nothing**. The only reason live
+  calls reach `Connected` at all is the `Created → Dialing` step `OnChannelDialBegin` supplies, so
+  the ordering of two Asterisk events decides whether a ring is ever recorded. Found while
+  implementing 2.8 and **measured**: removing that task's provenance gate — which would have applied
+  the same state mapping to the live path — turns 10 of 75 `Sessions.FunctionalTests` red, because
+  the session reaches `Ringing` and then permanently swallows the `Dialing` step every live call
+  depends on. Pre-existing, untouched here, and the reason 2.8's mapping is scoped to channels
+  admitted from a snapshot. **It has no open change of its own.** It needs one.
 
 - **The product-level blast radius of a stranded call** (conversation left active, voice capacity
   held, agent left busy). Belongs to the Platform repo, not this one.

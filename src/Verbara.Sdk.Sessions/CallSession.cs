@@ -100,6 +100,37 @@ public sealed class CallSession
             throw new InvalidSessionStateTransitionException(State, newState);
     }
 
+    /// <summary>
+    /// Open a brand-new session in the state Asterisk reported the channel it was opened from to be
+    /// in, instead of in <see cref="CallSessionState.Created"/>.
+    /// <para>
+    /// This is not a transition and deliberately does not go through <see cref="TryTransition"/>.
+    /// <see cref="CallSessionStateTransitions"/> lets <see cref="CallSessionState.Created"/> reach
+    /// only <c>Dialing</c>, <c>Queued</c> and <c>Failed</c>, so a transition to <c>Connected</c> or
+    /// <c>Ringing</c> returns <c>false</c> and silently does nothing — the state has to be chosen
+    /// when the session is constructed, which is the only moment this method is legal at
+    /// (<c>ADR-0062</c>, design D5).
+    /// </para>
+    /// <para>
+    /// It also deliberately does not run <see cref="UpdateTimestamp"/>, and that is the point rather
+    /// than an omission. <see cref="ConnectedAt"/> and <see cref="RingingAt"/> are records of
+    /// something the SDK <em>observed</em>; a reload reports only that the channel is up <em>now</em>
+    /// and never says when it answered. Stamping them here would invent a history, the same way
+    /// reading <c>HangupCause.NotDefined</c> off a reload-driven removal would invent a cause. They
+    /// stay <c>null</c>, so <see cref="WaitTime"/> and <see cref="TalkTime"/> stay <c>null</c> too
+    /// and a consumer reads "unknown" rather than a time that was never seen. <see cref="Duration"/>
+    /// still runs from <see cref="CreatedAt"/>, which for such a session is when the SDK learned of
+    /// the call and not when the call began; the session's <c>origin</c> metadata is what says so.
+    /// </para>
+    /// </summary>
+    internal void OpenInReportedState(CallSessionState state)
+    {
+        if (State != CallSessionState.Created)
+            return;
+
+        State = state;
+    }
+
     // Hold time tracking
     internal void StartHold() => _holdStartedAt = DateTimeOffset.UtcNow;
 

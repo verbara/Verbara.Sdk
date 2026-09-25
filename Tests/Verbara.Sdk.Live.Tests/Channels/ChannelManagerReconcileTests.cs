@@ -384,6 +384,31 @@ public class ChannelManagerReconcileTests
         manager.CaptureAdmissionMark().Should().Be(before + admissions);
     }
 
+    // --- provenance of an admission -------------------------------------------------------------
+
+    [Fact]
+    public void ReconcileWithSnapshot_ShouldMarkTheAdmissionAsComingFromASnapshot_WhenTheSnapshotHoldsAChannelNotTracked()
+    {
+        ReconcileAgainst([Entry("1700000000.1", "PJSIP/2000-0001", ChannelState.Up)]);
+
+        _sut.GetByUniqueId("1700000000.1")!.AdmittedFromSnapshot.Should().BeTrue(
+            "the SDK never saw this call start, so the state on it is Asterisk's account and the "
+            + "only one that will ever arrive — no NewState announcing it is coming");
+        _added.Should().ContainSingle().Which.AdmittedFromSnapshot.Should().BeTrue(
+            "and the subscriber must be able to read it on the announced channel, which is where a "
+            + "session is opened from");
+    }
+
+    [Fact]
+    public void OnNewChannel_ShouldNotMarkTheAdmissionAsComingFromASnapshot_WhenTheChannelArrivesLive()
+    {
+        _sut.OnNewChannel("1700000000.1", "PJSIP/2000-0001", ChannelState.Up);
+
+        _sut.GetByUniqueId("1700000000.1")!.AdmittedFromSnapshot.Should().BeFalse(
+            "a live NewChannel is a channel watched from its first instant; marking it would make "
+            + "every ordinary call look like a reloaded one");
+    }
+
     // --- Clear() is untouched -----------------------------------------------------------------
 
     [Fact]

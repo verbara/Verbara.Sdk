@@ -37,6 +37,19 @@ public sealed class ReloadFailureTests : IAsyncDisposable
     private const string AgentUid = "agent-001";
     private const string LinkedId = "linked-001";
 
+    // A second, independent call. The spec's premise for this requirement is plural — "GIVEN two
+    // connected calls … THEN neither call is ended AND both remain active" — and the plural is not
+    // decoration: a snapshot that died partway is truncated, and a reload that reconciled the
+    // truncated buffer would find the calls it never reached missing. With one held call the
+    // reconciliation would drop legs out of that one call and stop short of ending it, because a
+    // session ends only once every participant has left; with two, the call the snapshot never
+    // reached loses both its legs and ends outright, which is the failure this file exists to
+    // catch. The second call's legs are also the ones delivered LAST, so the truncation falls
+    // between the two calls rather than inside one.
+    private const string CallerUid2 = "caller-002";
+    private const string AgentUid2 = "agent-002";
+    private const string LinkedId2 = "linked-002";
+
     private readonly IAmiConnection _connection = Substitute.For<IAmiConnection>();
     private readonly VerbaraServer _server;
     private readonly CallSessionManager _sessions;
@@ -99,17 +112,31 @@ public sealed class ReloadFailureTests : IAsyncDisposable
     private async Task GivenAStartedServer() => await _server.StartAsync();
 
     /// <summary>A two-leg inbound call, answered and bridged: one session, state Connected.</summary>
-    private void GivenAnAnsweredCall()
+    private void GivenAnAnsweredCall() =>
+        GivenAnAnsweredCall(CallerUid, AgentUid, LinkedId, "PJSIP/trunk-001", "PJSIP/100-001",
+            "bridge-001", "5551234");
+
+    /// <summary>
+    /// The second of the two calls the spec's failure-direction premise requires. Same shape as
+    /// <see cref="GivenAnAnsweredCall()"/>, under its own correlation identifier, so the two
+    /// sessions are independent and either can be ended without the other.
+    /// </summary>
+    private void GivenASecondAnsweredCall() =>
+        GivenAnAnsweredCall(CallerUid2, AgentUid2, LinkedId2, "PJSIP/trunk-002", "PJSIP/200-002",
+            "bridge-002", "5559876");
+
+    private void GivenAnAnsweredCall(string callerUid, string agentUid, string linkedId,
+        string trunkChannel, string agentChannel, string bridgeId, string callerIdNum)
     {
-        _server.Channels.OnNewChannel(CallerUid, "PJSIP/trunk-001", ChannelState.Ring,
-            callerIdNum: "5551234", context: "from-trunk", linkedId: LinkedId);
-        _server.Channels.OnNewChannel(AgentUid, "PJSIP/100-001", ChannelState.Ring,
-            linkedId: LinkedId);
-        _server.Channels.OnDialBegin(CallerUid, AgentUid, "PJSIP/100-001", null);
-        _server.Channels.OnNewState(AgentUid, ChannelState.Up);
-        _server.Bridges.OnBridgeCreated("bridge-001", "mixing", "simple_bridge", null, null);
-        _server.Bridges.OnChannelEntered("bridge-001", CallerUid);
-        _server.Bridges.OnChannelEntered("bridge-001", AgentUid);
+        _server.Channels.OnNewChannel(callerUid, trunkChannel, ChannelState.Ring,
+            callerIdNum: callerIdNum, context: "from-trunk", linkedId: linkedId);
+        _server.Channels.OnNewChannel(agentUid, agentChannel, ChannelState.Ring,
+            linkedId: linkedId);
+        _server.Channels.OnDialBegin(callerUid, agentUid, agentChannel, null);
+        _server.Channels.OnNewState(agentUid, ChannelState.Up);
+        _server.Bridges.OnBridgeCreated(bridgeId, "mixing", "simple_bridge", null, null);
+        _server.Bridges.OnChannelEntered(bridgeId, callerUid);
+        _server.Bridges.OnChannelEntered(bridgeId, agentUid);
     }
 
     /// <summary>
@@ -148,11 +175,11 @@ public sealed class ReloadFailureTests : IAsyncDisposable
     /// <c>ChannelState</c> header in <c>RawFields</c>, never as <c>StatusEvent.State</c>, which no
     /// supported Asterisk version populates (ADR-0062, design D5).
     /// </summary>
-    private static StatusEvent Leg(string uniqueId, string channel) => new()
+    private static StatusEvent Leg(string uniqueId, string channel, string linkedId = LinkedId) => new()
     {
         UniqueId = uniqueId,
         Channel = channel,
-        LinkedId = LinkedId,
+        LinkedId = linkedId,
         RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["ChannelState"] = "6",       // AST_STATE_UP, exactly as the frame carries it
@@ -165,15 +192,21 @@ public sealed class ReloadFailureTests : IAsyncDisposable
     {
         await GivenAStartedServer();
         GivenAnAnsweredCall();
-        _sessions.ActiveSessions.Should().HaveCount(1, "the call is up before the outage");
-        var sessionIdBefore = _sessions.ActiveSessions.Single().SessionId;
+        GivenASecondAnsweredCall();
+        _sessions.ActiveSessions.Should().HaveCount(2, "two calls are up before the outage");
+        var idsBefore = _sessions.ActiveSessions
+            .ToDictionary(s => s.LinkedId, s => s.SessionId, StringComparer.Ordinal);
 
-        // Asterisk starts answering the reload — one leg arrives — and then the socket dies. The
-        // snapshot never reached the second leg, and that silence is not evidence of a hangup.
+        // Asterisk starts answering the reload — one leg of the FIRST call arrives — and then the
+        // socket dies. The snapshot never reached the other three legs, and that silence is not
+        // evidence of a hangup. The second call is the one a truncated buffer would end outright:
+        // neither of its legs was ever delivered.
         _snapshotDiesAfterFirstEntry = true;
         await WhenTheConnectionReconnects(
             Leg(CallerUid, "PJSIP/trunk-001"),
-            Leg(AgentUid, "PJSIP/100-001"));
+            Leg(AgentUid, "PJSIP/100-001"),
+            Leg(CallerUid2, "PJSIP/trunk-002", LinkedId2),
+            Leg(AgentUid2, "PJSIP/200-002", LinkedId2));
 
         _sessionEvents.OfType<CallEndedEvent>().Should().BeEmpty(
             "a reload that cannot be trusted ends nothing; ending a live call in error is worse "
@@ -182,19 +215,25 @@ public sealed class ReloadFailureTests : IAsyncDisposable
             "the reload is buffered and reconciled only once the read completed, so a failed read "
             + $"announces no removal at all. Measured: {Describe()}");
 
-        var session = _sessions.ActiveSessions.Should().ContainSingle(
-            $"the call was live before the reload and is still live after it. Measured: {Describe()}")
-            .Subject;
-        session.SessionId.Should().Be(sessionIdBefore, "it is the same call, under the same identity");
-        session.State.Should().Be(CallSessionState.Connected,
-            $"a failed reload changes no session state either. Measured: {Describe()}");
-        session.Participants.Should().HaveCount(2,
-            $"both legs are still in the call. Measured: {Describe()}");
-        session.Participants.Should().OnlyContain(p => !p.LeftAt.HasValue,
-            "a participant marked as having left is how a consumer sees a leg drop out; the reload "
-            + $"observed no leg leaving. Measured: {Describe()}");
-        session.Participants.Should().OnlyContain(p => p.HangupCause == null,
-            $"no hangup was observed for either leg. Measured: {Describe()}");
+        _sessions.ActiveSessions.Select(s => s.LinkedId).Should().BeEquivalentTo(
+            [LinkedId, LinkedId2],
+            "both calls were live before the reload and both are still live after it — including "
+            + $"the one the truncated snapshot never mentioned. Measured: {Describe()}");
+
+        foreach (var session in _sessions.ActiveSessions)
+        {
+            session.SessionId.Should().Be(idsBefore[session.LinkedId],
+                "it is the same call, under the same identity");
+            session.State.Should().Be(CallSessionState.Connected,
+                $"a failed reload changes no session state either. Measured: {Describe()}");
+            session.Participants.Should().HaveCount(2,
+                $"both legs are still in the call. Measured: {Describe()}");
+            session.Participants.Should().OnlyContain(p => !p.LeftAt.HasValue,
+                "a participant marked as having left is how a consumer sees a leg drop out; the "
+                + $"reload observed no leg leaving. Measured: {Describe()}");
+            session.Participants.Should().OnlyContain(p => p.HangupCause == null,
+                $"no hangup was observed for either leg. Measured: {Describe()}");
+        }
     }
 
     [Fact]
@@ -202,16 +241,19 @@ public sealed class ReloadFailureTests : IAsyncDisposable
     {
         await GivenAStartedServer();
         GivenAnAnsweredCall();
+        GivenASecondAnsweredCall();
 
         _snapshotDiesAfterFirstEntry = true;
         await WhenTheConnectionReconnects(
             Leg(CallerUid, "PJSIP/trunk-001"),
-            Leg(AgentUid, "PJSIP/100-001"));
+            Leg(AgentUid, "PJSIP/100-001"),
+            Leg(CallerUid2, "PJSIP/trunk-002", LinkedId2),
+            Leg(AgentUid2, "PJSIP/200-002", LinkedId2));
 
         _server.Channels.ActiveChannels.Select(c => c.UniqueId).Should().BeEquivalentTo(
-            [CallerUid, AgentUid],
+            [CallerUid, AgentUid, CallerUid2, AgentUid2],
             "the buffer is discarded with the exception, so the table is exactly as it was — "
-            + $"including the leg the snapshot never reached. Measured: {Describe()}");
+            + $"including the three legs the snapshot never reached. Measured: {Describe()}");
         _server.Channels.GetByUniqueId(CallerUid)!.LinkedId.Should().Be(LinkedId,
             "the held instances survive untouched, correlation included");
     }

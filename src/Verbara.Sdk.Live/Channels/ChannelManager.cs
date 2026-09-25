@@ -84,7 +84,26 @@ public sealed class ChannelManager
     public void OnNewChannel(string uniqueId, string channelName, ChannelState state,
         string? callerIdNum = null, string? callerIdName = null,
         string? context = null, string? exten = null, int priority = 1,
-        string? linkedId = null)
+        string? linkedId = null) =>
+        Admit(uniqueId, channelName, state, callerIdNum, callerIdName, context, exten, priority,
+            linkedId, fromSnapshot: false);
+
+    /// <summary>
+    /// The one place a channel enters the table. <see cref="OnNewChannel"/> is the live
+    /// <c>NewChannel</c> route into it and <see cref="ReconcileWithSnapshot"/> the reload's; the
+    /// only difference between them is <paramref name="fromSnapshot"/>, which becomes
+    /// <see cref="AsteriskChannel.AdmittedFromSnapshot"/>.
+    /// <para>
+    /// Private, and a separate method rather than an extra parameter on <see cref="OnNewChannel"/>,
+    /// because <see cref="OnNewChannel"/> is public API that two downstream repos consume: adding
+    /// even an optional parameter to it would change its signature and move
+    /// <c>PublicAPI.Shipped.txt</c>, which this change does not do (ADR-0062).
+    /// </para>
+    /// </summary>
+    private void Admit(string uniqueId, string channelName, ChannelState state,
+        string? callerIdNum, string? callerIdName,
+        string? context, string? exten, int priority,
+        string? linkedId, bool fromSnapshot)
     {
         // Stamped before the channel is published to either index, so a channel visible to a
         // concurrent reconciliation always carries the mark that ordered it. Channels arrive on the
@@ -102,7 +121,8 @@ public sealed class ChannelManager
             Extension = exten,
             Priority = priority,
             LinkedId = linkedId,
-            AdmissionMark = admissionMark
+            AdmissionMark = admissionMark,
+            AdmittedFromSnapshot = fromSnapshot
         };
 
         _channelsByUniqueId[uniqueId] = channel;
@@ -353,8 +373,12 @@ public sealed class ChannelManager
             if (_channelsByUniqueId.ContainsKey(entry.UniqueId))
                 continue;
 
-            OnNewChannel(entry.UniqueId, entry.Name, entry.State, entry.CallerIdNum,
-                entry.CallerIdName, entry.Context, entry.Extension, entry.Priority, entry.LinkedId);
+            // fromSnapshot: the SDK never saw this channel start. A subscriber that opens a record
+            // for it must be able to tell that from a live NewChannel, because the state the
+            // snapshot reports is the only history it will ever get (ADR-0062, design D5/D6).
+            Admit(entry.UniqueId, entry.Name, entry.State, entry.CallerIdNum,
+                entry.CallerIdName, entry.Context, entry.Extension, entry.Priority, entry.LinkedId,
+                fromSnapshot: true);
             added++;
         }
 
@@ -450,6 +474,27 @@ public sealed class AsteriskChannel : LiveObjectBase
     /// </para>
     /// </summary>
     internal long AdmissionMark { get; init; }
+
+    /// <summary>
+    /// True when this channel entered <see cref="ChannelManager"/>'s table out of a <c>Status</c>
+    /// snapshot — a first load or a post-reconnect reload, both of which travel
+    /// <c>VerbaraServer.RequestInitialStateAsync</c> and
+    /// <see cref="ChannelManager.ReconcileWithSnapshot"/> — rather than from a live
+    /// <c>NewChannel</c> event through <see cref="ChannelManager.OnNewChannel"/>.
+    /// <para>
+    /// It is the counterpart of <see cref="RemovedByReload"/> at the other end of the channel's
+    /// life, and it carries the same kind of knowledge: the SDK did <b>not</b> observe this call
+    /// start, so <see cref="State"/> is the only account of it that will ever arrive and no
+    /// <c>NewState</c> announcing it is coming. A subscriber opening a record for the channel reads
+    /// this as positive evidence that the history behind that state was never seen, instead of
+    /// inferring it from a missing event (<c>ADR-0062</c>, design D5).
+    /// </para>
+    /// <para>
+    /// Internal on purpose: this change adds no public API, and the consumer-visible marker belongs
+    /// to the session the admission opens.
+    /// </para>
+    /// </summary>
+    internal bool AdmittedFromSnapshot { get; init; }
 
     /// <summary>
     /// Marks this channel as removed by a state reload. One-way and idempotent: a removal is
