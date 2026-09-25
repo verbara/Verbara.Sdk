@@ -97,6 +97,24 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       admitted in that state and not `Unknown`, that its calling number survives, and that a channel
       reported with no state header at all still defaults to `Unknown` and is still admitted.
 
+- [ ] 2.7 Close the window this change opened: a reload MUST NOT end a call that arrived after its
+      snapshot began. `OnReconnected` re-subscribes the event observer **before** it awaits the
+      reload (`src/Verbara.Sdk.Live/Server/VerbaraServer.cs`), so a channel that arrives live during
+      the read lands in the table, is absent from the older snapshot, and task 2.1's reconcile
+      removes it — ending a live call. This is a regression **this change introduces**: before it,
+      `Channels.Clear()` removed silently and no call ever ended, so no call could end wrongly.
+      Owner ruling of 2026-09-25, design D6: use a **monotonic admission mark**, not a timestamp.
+      `ChannelManager` carries a counter incremented on every admission; the snapshot reader captures
+      its value before the first read; the reconcile skips any held channel admitted after that mark.
+      Do NOT use `AsteriskChannel.CreatedAt` — it is `DateTimeOffset.UtcNow` at construction, not
+      injectable, so a test would rest on real-clock ordering and two equal stamps would make it
+      intermittent. Do NOT move the re-subscribe after the reload: that loses every event in the
+      window outright, trading a wrongly-ended call for an invisible one.
+      Verify with the two scenarios the spec now states: a channel admitted mid-read survives a
+      snapshot that does not contain it, and a channel held before the reload is still removed and
+      still ends its call. The test must be deterministic — no wall-clock waits, or the sync-fence
+      guard will ask you for a `fence-allow` category you should not need.
+
 ## 3. Phase C — integration (batched)
 
 - [ ] 3.1 Turn every scenario in `specs/live-state-reload/spec.md` into a test, including the two that

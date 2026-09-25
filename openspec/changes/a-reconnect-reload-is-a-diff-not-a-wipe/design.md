@@ -149,6 +149,36 @@ was the field handed to it.
 `Unknown` and is still admitted. Defaulting is correct when the value is genuinely absent; what was
 wrong was defaulting a value that could never arrive.
 
+### D6 — A reload only judges channels its snapshot could have seen, by admission mark
+
+Ruled by the owner on 2026-09-25, after tasks 2.1 and 2.2 made the reload able to end calls.
+
+`OnReconnected` re-subscribes the event observer before it awaits the reload, so live events resume
+while the snapshot is still being read. A call that starts in that window is admitted to the table,
+is absent from the older snapshot, and the reconcile would remove it — ending a call that is up. On a
+large estate the window is a full `Status` round trip.
+
+*This is a regression the change introduces, not a pre-existing one.* Before it, `Channels.Clear()`
+removed every channel silently and raised nothing, so no call ever ended from a reload and none could
+end wrongly. D1 and D2 gave the reload the power to end calls; D6 bounds what it is allowed to judge.
+
+`ChannelManager` carries a counter incremented on every admission and stamps each channel with it.
+The snapshot reader captures the counter's value before its first read, and the reconcile skips any
+held channel whose stamp is above that mark: the snapshot is older than the channel and says nothing
+about it. Absence is evidence only about channels the snapshot could have contained.
+
+*Alternative rejected — filter on `AsteriskChannel.CreatedAt`.* The field already exists and costs
+nothing to read, but it is `DateTimeOffset.UtcNow` evaluated at construction and is not injectable, so
+a test binding this requirement would rest on real-clock ordering between two operations microseconds
+apart. Two equal stamps make it intermittent, and this repo already carries five hand-rolled
+`FakeTimeProvider` copies from seams built this way. A counter is deterministic and the test that
+binds it needs no clock at all.
+
+*Alternative rejected — re-subscribe after the reload.* It removes the window with no new state, but
+every event Asterisk sends during the reload is then lost outright rather than delayed: a call that
+starts in the window appears in neither the snapshot nor the event stream, so the SDK never learns of
+it. That trades a wrongly-ended call for a permanently invisible one, which is not an improvement.
+
 ## Risks / Trade-offs
 
 - **Ending a live call by mistake** → the worst outcome available, and worse than the defect. D1

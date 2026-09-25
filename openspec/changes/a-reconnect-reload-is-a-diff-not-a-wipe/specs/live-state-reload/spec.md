@@ -154,6 +154,33 @@ version does carry is `ChannelState` (numeric) with `ChannelStateDesc` (text), a
 - **THEN** it is reported as being in an unknown state
 - **AND** the reload admits it rather than rejecting it
 
+### Requirement: A reload SHALL NOT end a call that arrived after its snapshot was taken
+
+Absence from a snapshot SHALL only be treated as evidence about channels the snapshot could have
+contained. A channel the SDK learned about after the snapshot began to be read SHALL NOT be ended by
+that snapshot's reconciliation, because the snapshot is older than the channel and says nothing about
+it.
+
+This is a guarantee about a reload that **succeeded**, which is why it is stated separately from the
+requirement about a reload that cannot be trusted. Live events resume before the reload completes, so
+there is a window in which a new call is admitted while the snapshot is still being read; on a large
+estate that window is the duration of a full `Status` round trip. Ending such a call is the worst
+outcome this capability can produce, and it is worse than the defect the capability exists to remove.
+
+#### Scenario: A call starts while the reload is still reading
+
+- **GIVEN** a reload that has begun reading its snapshot
+- **WHEN** a new channel arrives live before that snapshot completes
+- **AND** the completed snapshot does not contain it
+- **THEN** that channel is not removed
+- **AND** no call is ended for it
+
+#### Scenario: The ordinary stale channel is still ended
+
+- **GIVEN** a channel the SDK held before the reload began
+- **WHEN** a completed snapshot does not contain it
+- **THEN** it is removed and its call ends, exactly as it would without the window
+
 ## Architectural Risk
 
 **Level:** MEDIUM.
