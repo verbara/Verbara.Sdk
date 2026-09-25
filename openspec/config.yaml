@@ -19,6 +19,11 @@ context: |
 
   Cross-repo standards live in the private verbara-meta repo as ADRs.
 
+  Where work runs (verbara-meta/ADR-0006): a change whose commits land only in this repo is
+  proposed, applied and archived here. A change that needs a commit in another repo is hosted from
+  the verbara-meta cockpit via `/xr:change`, not here — if a change turns out to need one, record
+  the finding in `tasks.md` and recommend `/xr:change` before capturing more.
+
 rules:
   proposal:
     - "Set a `tier` in frontmatter: GRANDE (cross-repo, >3 days, or a product decision), MEDIANO (one repo, 1-3 days), or PEQUEÑO (bug fix, <1 day). PEQUEÑO may keep the proposal light."
@@ -35,7 +40,7 @@ rules:
     - "Honor the AOT + MIT-public constraints: no reflection, no Dapper, no closed-source concepts."
     - "Record any durable architectural decision as an ADR in docs/decisions/, not only in this design."
   tasks:
-    - "When the change spans repos, spell out the cross-repo sequence: edit Sdk -> dotnet pack to local-nuget-feed -> clear NuGet cache -> dotnet restore Pro and Platform."
+    - "When a change here must be verified against its downstream consumers, spell out the local sequence: dotnet pack to local-nuget-feed -> clear NuGet cache -> dotnet restore Pro and Platform. Verification only — a change that needs a commit in Pro or Platform is hosted via `/xr:change` (verbara-meta/ADR-0006)."
     - "Verification tasks MUST include `dotnet test` green and CI green, with zero warnings (TreatWarningsAsErrors)."
     - "A release task MUST bump Directory.Build.props PackageVersion and add a CHANGELOG entry — publishing to nuget.org triggers only on a `v*` tag push (or manual workflow_dispatch) via .github/workflows/publish.yml, so merging to main without bumping/tagging is a silent no-op."
     - "Order execution in three phases — A foundation (batched), B critical components (one focused subagent each), C integration (batched) — with a fresh subagent per task, never inline in the main session."
@@ -45,7 +50,7 @@ operations:
   apply:
     guidance:
       - "Do not check off a verification task until it actually ran: `dotnet test` green and CI green, zero warnings."
-      - "Cross-repo edits: `dotnet pack -c Release -o <local-nuget-feed>` -> `rm -rf ~/.nuget/packages/verbara.sdk*/` -> `dotnet restore` in Pro AND Platform. Skipping the cache clear restores the stale package and the consumer builds against the old surface."
+      - "Verifying against a locally packed build: `dotnet pack -c Release -o <local-nuget-feed>` -> `rm -rf ~/.nuget/packages/verbara.sdk*/` -> `dotnet restore` in Pro AND Platform. Skipping the cache clear restores the stale package and the consumer builds against the old surface."
       - "A version bump is not a publish: nuget.org publishes only on a `v*` tag push (or manual workflow_dispatch). Merging a bumped `Directory.Build.props` to `main` is a silent no-op."
       - "Add the `CHANGELOG.md [Unreleased]` entry in this PR; leave its `(#N)` citation for close-out."
       - "Conventional Commits (`feat:`/`fix:`/`docs:`/`refactor:`/`test:`/`chore:`), and never a `Co-Authored-By` trailer."
