@@ -83,6 +83,20 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       exactly one `CallEndedEvent`, the call gone from the active set. Verify that the event is the
       same one a hangup produces — a consumer subscribed only to call endings must observe it.
 
+- [ ] 2.6 Make the reload read the headers Asterisk actually sends. `RequestInitialStateAsync`
+      currently reads `se.State` and `se.CallerId`, and **no supported Asterisk version sends a
+      `State:` or `CallerID:` header on a `Status` frame** — measured on 18.26.4, 20.20.1, 22.9.0 and
+      23.4.1 by task 3.3, whose kept test re-measures it. Every reloaded channel therefore lands as
+      `ChannelState.Unknown` with a null caller id today. Read `ChannelStateDesc` (or the numeric
+      `ChannelState`; the `ChannelState` enum maps 1:1 to Asterisk's numeric values, `Up = 6`) and
+      `CallerIDNum` through `se.RawFields`, the route `Context` already uses at
+      `src/Verbara.Sdk.Live/Server/VerbaraServer.cs:168` — design D5.
+      **Do NOT add properties to `StatusEvent`** to do this: that is a public API addition, it would
+      falsify task 3.4, and the reason `StatusEvent` lacks them is a separate defect with its own
+      entry in section 4. Verify with a test that a channel the snapshot reports as answered is
+      admitted in that state and not `Unknown`, that its calling number survives, and that a channel
+      reported with no state header at all still defaults to `Unknown` and is still admitted.
+
 ## 3. Phase C — integration (batched)
 
 - [ ] 3.1 Turn every scenario in `specs/live-state-reload/spec.md` into a test, including the two that
@@ -144,5 +158,18 @@ the last one was lost:
   count what stays resident; `MaxCompletedSessions` is declared and read by nothing, and eviction
   fires only when another session completes). Out of scope here — this change neither worsens nor
   repairs it — and **it has no open change of its own**. It needs one.
+- **`StatusEvent` declares two properties no Asterisk version populates, and lacks the four that
+  carry the values.** `StatusEvent.State` and `StatusEvent.CallerId` are in
+  `src/Verbara.Sdk.Ami/PublicAPI.Shipped.txt` and are always null on 18/20/22/23 — measured by task
+  3.3. What the wire carries is `ChannelState`/`ChannelStateDesc` and `CallerIDNum`/`CallerIDName`,
+  which is exactly the set `ChannelEventBase` declares for every other channel-bearing event;
+  `StatusEvent` extends `ResponseEvent` instead and so never got them. This affects **every consumer
+  that reads `StatusEvent` directly**, not only the reload, so it is an `Verbara.Sdk.Ami` parsing
+  defect rather than a reload defect, and task 2.6 deliberately routes around it through `RawFields`
+  instead of fixing it here. Fixing it properly means adding the four properties (a public API
+  addition, not a break) and deciding what to do about the two dead ones — removing them **is** a
+  break (CP0002), so they can only be documented or obsoleted. **It has no open change of its own.**
+  It needs one.
+
 - **The product-level blast radius of a stranded call** (conversation left active, voice capacity
   held, agent left busy). Belongs to the Platform repo, not this one.

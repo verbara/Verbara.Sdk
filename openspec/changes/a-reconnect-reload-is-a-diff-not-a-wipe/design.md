@@ -15,7 +15,15 @@ the current code:
   `Completed` versus `Failed` by reading `channel.HangupCause`, which defaults to `NotDefined`.
 - `RequestInitialStateAsync` is used for both the initial load and the post-reconnect reload. On the
   initial load there is nothing held, so a diff degenerates to "everything is added" — the same
-  behaviour it has today.
+  behaviour it has today **for the channel table**. It is NOT the same for the session table, and the
+  original wording of this bullet claimed it was. Because the initial load drops `StatusEvent.LinkedId`
+  through the same three lines the reload does, two bridged legs of one live call that Asterisk
+  reports with a shared `Linkedid` become **two** sessions on a first load today, and become one after
+  D4. So a process restart during live traffic multiplies sessions exactly as a reconnect does, and
+  D4 fixes both. Task 1.5's `InitialLoadTests` deliberately binds neither the loaded channels'
+  `LinkedId` nor any session identity derived from correlated legs, precisely so it does not bind the
+  defect; its single-leg session assertion survives D4 on purpose. The CHANGELOG entry and the ADR
+  owe this the same sentence: a restart, not only a reconnect.
 
 ## Goals / Non-Goals
 
@@ -98,10 +106,48 @@ held is reconciled rather than re-added.
 *Why:* the value is already on the wire and already parsed; not passing it is the whole reason one
 call becomes three. This is the smallest half of the change and the one with the clearest evidence.
 
-*Residual:* whether Asterisk always populates `Linkedid` on `Status` across the supported versions
-(18, 20, 22 LTS, 23) is not knowable from this repo. The requirement "a reload without correlation
-does not invent calls" covers the case where it is absent, so the fix degrades rather than breaks —
-but the functional lane must measure it against a real Asterisk rather than assume it.
+*Residual — CLOSED, favourably, by task 3.3 on 2026-09-24.* `Linkedid` is present, non-empty and
+identical across every leg of one call on **all four** supported versions (18.26.4, 20.20.1, 22.9.0,
+23.4.1), measured on a real bridge with `BridgeID` populated as well as on a simple two-leg pair, and
+the `Status` header set is byte-for-byte identical across the four. The wire header reaches
+`StatusEvent.LinkedId` through the SDK's own parser, verified by probe. So D4 is implementable exactly
+as written, with no mapping work first, and no version needs the fallback.
+
+Keep the requirement "a reload without correlation does not invent calls" anyway, but understand what
+it now is: a defensive path with **no measured triggering version** among 18/20/22/23, not a
+workaround for a known version difference. It costs nothing — an empty `Linkedid` degrades to today's
+`linkedId = uniqueId` — and it covers what the measurement did not reach: `Local` channels were the
+only technology exercised, because the functional dialplan has no PJSIP endpoint that answers without
+SIPp. One line of the ADR should say this, so a later reader does not reopen the question hunting for
+the version that drops the header.
+
+### D5 — The reload reads the headers Asterisk sends, through `RawFields`, without widening the public API
+
+`RequestInitialStateAsync` reads `se.State` and `se.CallerId`. Task 3.3 measured that **no supported
+Asterisk version sends a `State:` or a `CallerID:` header on a `Status` frame** — not 18.26.4, not
+20.20.1, not 22.9.0, not 23.4.1, and the header set is byte-for-byte identical across the four. Every
+reloaded channel therefore lands as `ChannelState.Unknown` with a null caller id, today, on every
+version. The reload reads `ChannelStateDesc` and `CallerIDNum` from `se.RawFields` instead — the same
+route `Context` already travels at `VerbaraServer.cs:168`.
+
+*Why through `RawFields` and not by giving `StatusEvent` the properties it is missing:* the missing
+properties are a real defect, but a different one. `ChannelEventBase` declares
+`ChannelState`/`ChannelStateDesc`/`CallerIdNum`/`CallerIdName` for every other channel-bearing event;
+`StatusEvent` extends `ResponseEvent` and never got them, which is why it has `State` and `CallerId`
+that nothing populates. That shape affects **every consumer reading `StatusEvent` directly**, not just
+the reload, so it belongs to `Verbara.Sdk.Ami` and to its own change — recorded in `tasks.md`
+section 4. Fixing it here would add four public members (an addition, not a break) and would falsify
+this change's own claim that no public API moves, for a benefit the reload does not need: `RawFields`
+already carries the values, verified on the wire.
+
+*Why the enum needs no work:* `ChannelState` maps 1:1 onto Asterisk's numeric header
+(`Down = 0` … `Up = 6` … `PreRing = 9`), and the measured frame carries both `ChannelState: 6` and
+`ChannelStateDesc: Up`, so `Enum.TryParse` resolves either spelling. The bug was never the parse; it
+was the field handed to it.
+
+*Failure direction:* a channel for which Asterisk sends no state header at all still defaults to
+`Unknown` and is still admitted. Defaulting is correct when the value is genuinely absent; what was
+wrong was defaulting a value that could never arrive.
 
 ## Risks / Trade-offs
 

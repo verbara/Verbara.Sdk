@@ -122,6 +122,38 @@ to remove.
 - **WHEN** the connection reconnects and Asterisk never answers the state request
 - **THEN** the call is not ended
 
+### Requirement: A reload SHALL read the headers Asterisk actually sends
+
+A reload SHALL derive each channel's state and caller identity from the headers Asterisk sends on a
+`Status` frame, and SHALL NOT derive them from headers no supported version sends. A field read from
+a header that is never present is not a missing value to be defaulted; it is a value that can never
+arrive, and defaulting it silently reports every reloaded channel as being in an unknown state.
+
+Measured 2026-09-24 on Asterisk 18.26.4, 20.20.1, 22.9.0 and 23.4.1 over the raw TCP AMI transport:
+no `Status` frame on any supported version carries a `State:` or a `CallerID:` header. What every
+version does carry is `ChannelState` (numeric) with `ChannelStateDesc` (text), and `CallerIDNum` with
+`CallerIDName`. The header set is byte-for-byte identical across the four versions.
+
+#### Scenario: A call that started during the outage
+
+- **GIVEN** a reload that returns a channel the SDK does not hold, which Asterisk reports as answered
+- **WHEN** that channel is admitted
+- **THEN** it carries the state Asterisk reported for it
+- **AND** it is not reported as being in an unknown state
+
+#### Scenario: The caller identity survives the reload
+
+- **GIVEN** a reload that returns a channel for which Asterisk reports a calling number
+- **WHEN** that channel is admitted
+- **THEN** it carries that calling number
+
+#### Scenario: A header Asterisk does omit still defaults safely
+
+- **GIVEN** a reload that returns a channel for which Asterisk reports no state header at all
+- **WHEN** that channel is admitted
+- **THEN** it is reported as being in an unknown state
+- **AND** the reload admits it rather than rejecting it
+
 ## Architectural Risk
 
 **Level:** MEDIUM.
