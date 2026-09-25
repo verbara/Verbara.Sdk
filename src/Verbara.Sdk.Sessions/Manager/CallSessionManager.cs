@@ -135,6 +135,51 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
     // --- Event Handlers ---
 
+    /// <summary>
+    /// The metadata key under which the SDK records that it did <em>not</em> observe a session
+    /// start. It is the opening counterpart of <see cref="EndingProvenanceKey"/>: <c>origin</c> says
+    /// how the SDK came to know about the call, <c>cause</c> how it came to know it ended.
+    /// </summary>
+    private const string OriginKey = "origin";
+
+    /// <summary>
+    /// The value <see cref="OriginKey"/> carries when the session was opened from a channel a
+    /// <c>Status</c> snapshot reported — a first load or a post-reconnect reload. A consumer reads
+    /// it as positive evidence that the call was already in progress when the SDK learned of it, so
+    /// <see cref="CallSession.CreatedAt"/> is when the session record was opened rather than when
+    /// the call began, and any state on it was reported rather than watched (<c>ADR-0062</c>,
+    /// design D5).
+    /// </summary>
+    private const string OriginReload = "reload";
+
+    /// <summary>
+    /// The state a session opens in when the channel it is opened from came out of a <c>Status</c>
+    /// snapshot, or <c>null</c> when the snapshot's state says nothing worth carrying and the
+    /// session opens in <see cref="CallSessionState.Created"/> exactly as it always has.
+    /// <para>
+    /// The mapping is the one <see cref="OnChannelStateChanged"/> already performs for a live
+    /// channel — <c>Ring</c>/<c>Ringing</c> to <see cref="CallSessionState.Ringing"/>, <c>Up</c> to
+    /// <see cref="CallSessionState.Connected"/> — deliberately, so a reloaded call is described in
+    /// the same vocabulary as a call the SDK watched. The difference is only <em>when</em> it is
+    /// applied: a transition cannot reach either state from <c>Created</c>, so for a reloaded
+    /// channel it has to be applied at construction.
+    /// </para>
+    /// <para>
+    /// Every other state — including <see cref="ChannelState.Unknown"/>, which is what a frame
+    /// carrying no state header at all becomes — maps to <c>null</c>. <c>Down</c> and <c>Reserved</c>
+    /// describe a channel that is not carrying a call yet, and <c>Dialing</c>, <c>OffHook</c>,
+    /// <c>Busy</c>, <c>DialingOffHook</c> and <c>PreRing</c> have no session state this SDK has ever
+    /// derived from a channel state; inventing one here would be this method asserting more than the
+    /// snapshot said.
+    /// </para>
+    /// </summary>
+    private static CallSessionState? ReportedSessionState(ChannelState channelState) => channelState switch
+    {
+        ChannelState.Ringing or ChannelState.Ring => CallSessionState.Ringing,
+        ChannelState.Up => CallSessionState.Connected,
+        _ => null,
+    };
+
     private void OnChannelAdded(AsteriskChannel channel, string serverId)
     {
         var linkedId = channel.LinkedId;
@@ -171,6 +216,26 @@ public sealed partial class CallSessionManager : ICallSessionManager
         session.Context = channel.Context;
         session.Extension = channel.Extension;
 
+        // A channel that came out of a Status snapshot — a first load or a post-reconnect reload —
+        // is a call the SDK never saw start. The state on it is Asterisk's own account of the call
+        // and the only one that will ever arrive: no NewState announcing it is coming, because it
+        // already happened. Opening such a call in Created would report a live conversation as one
+        // that has not started, and Created past a dialing timeout is exactly what
+        // SessionReconciler's orphan branch fails (ADR-0062, design D5).
+        var reportedState = channel.AdmittedFromSnapshot ? ReportedSessionState(channel.State) : null;
+        if (channel.AdmittedFromSnapshot)
+        {
+            // Marked whatever state was reported, including the one the snapshot could not
+            // determine: what the marker says is that CreatedAt is when the SDK learned of this
+            // call and not when the call began, and that every timestamp before it is unobserved.
+            // Positive evidence, read the way the ending's "cause" marker is — never inferred from
+            // a null ConnectedAt.
+            session.SetMetadata(OriginKey, OriginReload);
+        }
+
+        if (reportedState is { } live)
+            session.OpenInReportedState(live);
+
         var callerRole = SessionCorrelator.InferRole(channel.Name, 0);
         session.AddParticipant(new SessionParticipant
         {
@@ -185,6 +250,18 @@ public sealed partial class CallSessionManager : ICallSessionManager
         session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
             CallSessionEventType.Created, channel.Name, null, null));
 
+        // The audit trail says where the state came from, so a reader cannot mistake it for an
+        // answer or a ring this SDK watched happen. Its timestamp is when the snapshot was read,
+        // which is why the state is not also written into ConnectedAt / RingingAt.
+        if (reportedState is { } reported)
+        {
+            session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
+                reported is CallSessionState.Connected
+                    ? CallSessionEventType.Connected
+                    : CallSessionEventType.Ringing,
+                channel.Name, null, OriginReload));
+        }
+
         _sessions[session.SessionId] = session;
         _byLinkedId[linkedId] = session;
         _byChannelId[channel.UniqueId] = session;
@@ -196,9 +273,46 @@ public sealed partial class CallSessionManager : ICallSessionManager
         _ = PersistAsync(session);
     }
 
+    /// <summary>
+    /// The metadata key under which the SDK records how a session ended when it did <em>not</em>
+    /// observe the ending. Already carries <c>"orphaned"</c> from
+    /// <see cref="SessionReconciler.TryMarkOrphaned"/>; <see cref="EndingProvenanceReload"/> joins
+    /// it rather than opening a second vocabulary for the same question.
+    /// </summary>
+    private const string EndingProvenanceKey = "cause";
+
+    /// <summary>
+    /// The value <see cref="EndingProvenanceKey"/> carries when a completed state reload proved the
+    /// call's channels gone. A consumer reads it as positive evidence that no hangup was observed —
+    /// never by noticing that <c>HangupCause</c> is null (<c>ADR-0062</c>, design D3).
+    /// </summary>
+    private const string EndingProvenanceReload = "reload";
+
+    /// <summary>
+    /// Ends the session a departing channel belongs to.
+    /// <para>
+    /// A removal arrives by one of two routes, and they carry different knowledge.
+    /// <c>ChannelManager.OnHangup</c> observed Asterisk's <c>Hangup</c> and put its cause on the
+    /// channel. <c>ChannelManager.ReconcileWithSnapshot</c> observed only that a completed reload
+    /// no longer lists the channel: no hangup was seen, no cause exists, and
+    /// <see cref="AsteriskChannel.HangupCause"/> still holds its non-nullable default
+    /// <c>NotDefined</c> — cause zero. Reading that default here would invent a cause, and
+    /// <c>NotDefined</c> is not neutral downstream: a classifier that treats anything other than
+    /// <c>NormalClearing</c> as abnormal reads every reconnect-lost call as an abnormal hangup and
+    /// acts on it. So a reload-produced ending carries no cause at all and is marked instead
+    /// (<c>ADR-0062</c>, design D3).
+    /// </para>
+    /// </summary>
     private void OnChannelRemoved(AsteriskChannel channel)
     {
         if (!_byChannelId.TryGetValue(channel.UniqueId, out var session)) return;
+
+        var byReload = channel.RemovedByReload;
+
+        // The one read of channel.HangupCause in this method. Null when nothing was observed —
+        // distinct from HangupCause.NotDefined, which is what "observed, and Asterisk said zero"
+        // would look like.
+        var observedCause = byReload ? (HangupCause?)null : channel.HangupCause;
 
         lock (session.SyncRoot)
         {
@@ -206,28 +320,55 @@ public sealed partial class CallSessionManager : ICallSessionManager
             if (participant is not null)
             {
                 participant.LeftAt = DateTimeOffset.UtcNow;
-                participant.HangupCause = channel.HangupCause;
+                participant.HangupCause = observedCause;
             }
 
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
-                CallSessionEventType.ParticipantLeft, channel.Name, null, channel.HangupCause.ToString()));
+                CallSessionEventType.ParticipantLeft, channel.Name, null,
+                byReload ? EndingProvenanceReload : observedCause.ToString()));
 
             // Check if all participants have left
             if (session.Participants.All(p => p.LeftAt.HasValue))
             {
-                session.HangupCause = channel.HangupCause;
-                var targetState = channel.HangupCause == HangupCause.NormalClearing
-                    ? CallSessionState.Completed
-                    : CallSessionState.Failed;
+                session.HangupCause = observedCause;
 
-                // Try the natural progression if needed
-                if (session.State == CallSessionState.Created)
+                if (byReload)
                 {
-                    session.TryTransition(CallSessionState.Failed);
+                    // Marked on the session, which is what a consumer can reach from the SessionId
+                    // on CallEndedEvent. The event record itself gains no field: CallEndedEvent is
+                    // a positional record, so adding one would move the public API this change
+                    // claims it does not touch.
+                    session.SetMetadata(EndingProvenanceKey, EndingProvenanceReload);
+
+                    // No cause exists, so the outcome follows from what the session already was: a
+                    // call that was up really took place and is over; one that never connected
+                    // never became a call. Transferring is deliberately absent — it has no valid
+                    // transition to Completed — and falls to the Failed arm below.
+                    var reloadTarget = session.State is CallSessionState.Connected
+                        or CallSessionState.OnHold or CallSessionState.Conference
+                        ? CallSessionState.Completed
+                        : CallSessionState.Failed;
+
+                    if (!session.TryTransition(reloadTarget))
+                        session.TryTransition(CallSessionState.Failed);
+
+                    LogEndedByReload(session.SessionId, session.LinkedId, session.State);
                 }
-                else if (!session.TryTransition(targetState))
+                else
                 {
-                    session.TryTransition(CallSessionState.Failed);
+                    var targetState = channel.HangupCause == HangupCause.NormalClearing
+                        ? CallSessionState.Completed
+                        : CallSessionState.Failed;
+
+                    // Try the natural progression if needed
+                    if (session.State == CallSessionState.Created)
+                    {
+                        session.TryTransition(CallSessionState.Failed);
+                    }
+                    else if (!session.TryTransition(targetState))
+                    {
+                        session.TryTransition(CallSessionState.Failed);
+                    }
                 }
 
                 OnSessionCompleted(session);
@@ -240,6 +381,11 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
         _byChannelId.TryRemove(channel.UniqueId, out _);
     }
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Session {SessionId} (linked {LinkedId}) ended as {State} because a state reload "
+            + "proved its channels gone; no hangup was observed, so no cause is recorded")]
+    private partial void LogEndedByReload(string sessionId, string linkedId, CallSessionState state);
 
     private void OnChannelStateChanged(AsteriskChannel channel)
     {

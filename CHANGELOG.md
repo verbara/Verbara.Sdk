@@ -4,6 +4,55 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING
+
+- **An AMI reconnect no longer discards the call state it is holding.** The reload now reconciles
+  Asterisk's snapshot against what the SDK holds instead of clearing the channel table and re-adding
+  the survivors, and the difference is announced on the events consumers already subscribe to
+  (`ADR-0062`). Four behaviours change for anyone holding call state across a reconnect, all of them
+  measured before the fix rather than inferred:
+
+  - **A call that ended during the outage now ends.** It previously stayed reported as in progress
+    for the life of the process and produced no `CallEndedEvent` at all — the reload was its last
+    possible notification, and Asterisk replays nothing after a reconnect (measured on 18.26.4,
+    20.20.1, 22.9.0 and 23.4.1). The ending now travels the same path a hangup takes, so a consumer
+    subscribed only to call endings receives it with no code change.
+  - **A call that survived the outage is no longer split into several.** The reload now carries the
+    `Linkedid` Asterisk reports, and a channel already held is reconciled rather than re-admitted, so
+    one call before a reconnect stays one call after it. A consumer counting calls across a reconnect
+    will see a different, lower, correct number.
+  - **A reloaded channel now carries the state and caller number Asterisk reported.** The reload was
+    reading `State` and `CallerID` headers that no supported Asterisk version sends, so every
+    reloaded channel arrived in an unknown state with no caller id. Consequently, a call the reload
+    reports as answered now opens as connected rather than as newly created — which also matters
+    because a call left in the initial state past a dialing timeout is what this SDK's own
+    reconciliation treats as an orphan.
+  - **A restart is affected, not only a reconnect.** The first load shares this code path, so a
+    process restarted against live traffic was multiplying calls and mis-stating their state in
+    exactly the same way.
+
+- **Two markers a consumer can read**, both in a session's `Metadata`, neither requiring any API
+  change: `cause=reload` says an ending came from a reload rather than from an observed hangup, and
+  `origin=reload` says a call was opened from a snapshot rather than seen to start. Where the SDK did
+  not observe something it does not guess: a reload-produced ending carries **no** hangup cause
+  (`null`, not `NotDefined`, which downstream classifiers read as an abnormal ending), and a call
+  opened from a snapshot carries **no** answer time, so `TalkTime` and `WaitTime` are null and
+  `Duration` counts from when the SDK learned of the call. `cause=reload` is the sibling of the
+  `cause=orphaned` the reconciler already writes, so an existing consumer branch degrades into
+  "the SDK could not observe this" rather than into "abnormal hangup".
+
+- **The failure direction is a contract, not carefulness.** A reload that fails, is cancelled or is
+  never answered ends nothing and leaves every held call untouched with its participants intact; and
+  a call that arrives while the reload is still reading is never ended by that reload, because the
+  snapshot is older than the call and says nothing about it. Both are requirements with tests, and
+  every scenario in the capability was verified to fail under a mutation of the code it binds.
+
+- `RequestInitialStateAsync` is public on `IVerbaraServer`, and its signature is unchanged, but a
+  consumer calling it directly against a populated table now gets reconciliation where it previously
+  only re-added. `LiveMetrics.ChannelsDestroyed` now also ticks for reload-driven removals, where the
+  old clear-and-reload ticked nothing — a dashboard reading it will show a step at a reconnect that
+  ends calls.
+
 ## [2.6.0] - 2026-09-24
 
 ### Changed — `Microsoft.ML.OnnxRuntime` moved from 1.28.0 to 1.30.0 (#296)

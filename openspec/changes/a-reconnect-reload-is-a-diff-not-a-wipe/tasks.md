@@ -13,7 +13,7 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
 
 ## 1. Phase A — foundation (batched)
 
-- [ ] 1.1 Commit the two failing regression tests exactly as measured, at
+- [x] 1.1 Commit the two failing regression tests exactly as measured, at
       `Tests/Verbara.Sdk.Sessions.FunctionalTests/ReconnectReloadTests.cs` (already written and run
       on 2026-09-24, against the unfixed code). Verify by running
       `dotnet test Tests/Verbara.Sdk.Sessions.FunctionalTests/ --filter "FullyQualifiedName~ReconnectReloadTests"`
@@ -31,66 +31,151 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       participants=2 | linked=caller-001 state=Created participants=1], but found
       ```
 
-- [ ] 1.2 Record the fact the tests exposed about the existing suite: the shared `SessionTestFixture`
+- [x] 1.2 Record the fact the tests exposed about the existing suite: the shared `SessionTestFixture`
       never calls `VerbaraServer.StartAsync`, which is where `Reconnected` is subscribed, so
       `ReconciliationTests.Reconnection_ShouldCleanSessions_WhenServerReconnects` exercises no
       reconnect at all. Verify by asserting in that test's file, or in this change's notes, that the
       subscription happens in `StartAsync` and the fixture does not call it — do **not** rewrite that
       test here; it belongs to whatever change fixes it.
 
-- [ ] 1.3 Write `docs/decisions/0062-a-reload-is-a-reconciliation-and-an-unobserved-ending-is-unknown.md`
+- [x] 1.3 Write `docs/decisions/0062-a-reload-is-a-reconciliation-and-an-unobserved-ending-is-unknown.md`
       (Status: Proposed → Accepted at merge), carrying D1–D4 from `design.md` and the owner's ruling
       of 2026-09-24 on how a reload-produced ending is attributed. Verify `openspec validate --all --strict`
       passes and the file exists.
 
-- [ ] 1.4 Land the ADR-count coupling in the same commit as 1.3: bump `README.md`'s `**N ADRs**`
+- [x] 1.4 Land the ADR-count coupling in the same commit as 1.3: bump `README.md`'s `**N ADRs**`
       figure, update its row in `docs/claim-registry.md`, and add the catalog row in
       `docs/decisions/README.md`. Verify `dotnet test Tests/Verbara.Sdk.OpenTelemetry.Tests/` passes
       — `ThePublishedAdrCount_ShouldMatchTheDecisionsOnDisk` and
       `TheDecisionCatalog_ShouldListEveryAdrOnDisk` both fail if any of the three is missed.
 
-- [ ] 1.5 Add a test that the **initial** load is unchanged by anything this change will do: a first
+- [x] 1.5 Add a test that the **initial** load is unchanged by anything this change will do: a first
       `StartAsync` against an empty table produces exactly the channels the snapshot contains, and
       the same `ChannelAdded` events as today. Verify it passes **before** Phase B, so a Phase B
       regression in startup is attributable.
 
 ## 2. Phase B — critical components (one focused subagent each)
 
-- [ ] 2.1 Give `ChannelManager` a reconcile entry point that takes a complete snapshot and raises
+- [x] 2.1 Give `ChannelManager` a reconcile entry point that takes a complete snapshot and raises
       `ChannelAdded` for what is new and `ChannelRemoved` for what the snapshot does not contain
       (design D2). `Clear()` stays public and untouched. Verify with unit tests over the manager
       alone: added-only, removed-only, mixed, and identical-snapshot (which must raise nothing).
 
-- [ ] 2.2 Make `VerbaraServer` buffer the channel snapshot to completion before reconciling, and make
+- [x] 2.2 Make `VerbaraServer` buffer the channel snapshot to completion before reconciling, and make
       `OnReconnected` hand it to 2.1's entry point instead of calling `Channels.Clear()` (design D1).
       A snapshot whose enumeration throws or never completes MUST leave every held channel alone.
       Verify with a test whose status enumeration throws midway: zero removals, zero endings, the
       held call still active with its participants intact.
 
-- [ ] 2.3 Pass `StatusEvent.LinkedId` through `RequestInitialStateAsync` to `OnNewChannel`, and make a
-      channel already held reconcile rather than re-enter as new (design D4). Verify against the
-      second regression test from 1.1: it must go green, reporting **1** active session under the
-      identity it had before the reconnect, not 3.
+- [x] 2.3 Pass `StatusEvent.LinkedId` through `RequestInitialStateAsync` to `OnNewChannel`, and make a
+      channel already held reconcile rather than re-enter as new (design D4). **That task's original verification was not a check and has been
+      corrected here:** it said "verify the second regression test from 1.1 goes green", but that
+      test was already green at task 2.2 — task 2.1's reconcile stops re-admitting a held
+      `UniqueId`, so the correlation path never runs in it, and 2.3 could have been ticked with no
+      code change at all. The real verification is a reload returning **two never-before-seen legs
+      sharing one `Linkedid`** — a call that started during the outage — which must open ONE session,
+      plus the spec's "a reload without correlation does not invent calls" scenario.
 
-- [ ] 2.4 Carry "no cause observed" from a reload-driven removal into `CallSessionManager`, so the
+- [x] 2.4 Carry "no cause observed" from a reload-driven removal into `CallSessionManager`, so the
       ending is marked as coming from a reload and the departing participants are left without a
       hangup cause — distinct from `HangupCause.NotDefined` (design D3, owner ruling). The resulting
       session state must follow from what the session already was, not from a cause that does not
       exist. Verify with tests that a reload-ended call carries the marker and no cause, and that a
       call ended by an observed hangup still carries Asterisk's cause and no marker.
 
-- [ ] 2.5 Make the first regression test from 1.1 go green through the normal completion path:
+- [x] 2.5 Make the first regression test from 1.1 go green through the normal completion path:
       exactly one `CallEndedEvent`, the call gone from the active set. Verify that the event is the
       same one a hangup produces — a consumer subscribed only to call endings must observe it.
 
+- [x] 2.6 Make the reload read the headers Asterisk actually sends. `RequestInitialStateAsync`
+      currently reads `se.State` and `se.CallerId`, and **no supported Asterisk version sends a
+      `State:` or `CallerID:` header on a `Status` frame** — measured on 18.26.4, 20.20.1, 22.9.0 and
+      23.4.1 by task 3.3, whose kept test re-measures it. Every reloaded channel therefore lands as
+      `ChannelState.Unknown` with a null caller id today. Read `ChannelStateDesc` (or the numeric
+      `ChannelState`; the `ChannelState` enum maps 1:1 to Asterisk's numeric values, `Up = 6`) and
+      `CallerIDNum` through `se.RawFields`, the route `Context` already uses at
+      `src/Verbara.Sdk.Live/Server/VerbaraServer.cs:168` — design D5.
+      **Do NOT add properties to `StatusEvent`** to do this: that is a public API addition, it would
+      falsify task 3.4, and the reason `StatusEvent` lacks them is a separate defect with its own
+      entry in section 4. Verify with a test that a channel the snapshot reports as answered is
+      admitted in that state and not `Unknown`, that its calling number survives, and that a channel
+      reported with no state header at all still defaults to `Unknown` and is still admitted.
+
+- [x] 2.7 Close the window this change opened: a reload MUST NOT end a call that arrived after its
+      snapshot began. `OnReconnected` re-subscribes the event observer **before** it awaits the
+      reload (`src/Verbara.Sdk.Live/Server/VerbaraServer.cs`), so a channel that arrives live during
+      the read lands in the table, is absent from the older snapshot, and task 2.1's reconcile
+      removes it — ending a live call. This is a regression **this change introduces**: before it,
+      `Channels.Clear()` removed silently and no call ever ended, so no call could end wrongly.
+      Owner ruling of 2026-09-25, design D6: use a **monotonic admission mark**, not a timestamp.
+      `ChannelManager` carries a counter incremented on every admission; the snapshot reader captures
+      its value before the first read; the reconcile skips any held channel admitted after that mark.
+      Do NOT use `AsteriskChannel.CreatedAt` — it is `DateTimeOffset.UtcNow` at construction, not
+      injectable, so a test would rest on real-clock ordering and two equal stamps would make it
+      intermittent. Do NOT move the re-subscribe after the reload: that loses every event in the
+      window outright, trading a wrongly-ended call for an invisible one.
+      Verify with the two scenarios the spec now states: a channel admitted mid-read survives a
+      snapshot that does not contain it, and a channel held before the reload is still removed and
+      still ends its call. The test must be deterministic — no wall-clock waits, or the sync-fence
+      guard will ask you for a `fence-allow` category you should not need.
+
+- [x] 2.8 A call opened from a reloaded channel carries the state Asterisk reported. Task 2.6 made
+      the CHANNEL correct; the SESSION is still wrong. `CallSessionManager.OnChannelAdded` never
+      reads `channel.State`, and only `OnChannelStateChanged` transitions a session — which does not
+      fire for a channel that was just admitted. So a reload that admits an answered call opens it in
+      `Created`. That is the exact condition `proposal.md` names as the reason a clock-based sweep
+      would mark healthy calls dead, so leaving it is leaving this change's own central argument
+      half-answered. Owner ruling of 2026-09-25.
+      **It cannot be done with `TryTransition`.** `CallSessionStateTransitions` allows `Created` to
+      reach only `Dialing`, `Queued` and `Failed` — not `Connected`, not `Ringing` — so a transition
+      returns false and silently does nothing. The state must be chosen when the session is
+      constructed.
+      **Do not invent a history to go with it.** `CallSession.UpdateTimestamp` sets `ConnectedAt` and
+      `RingingAt` as a side effect of transitioning, which construction bypasses. A call whose answer
+      the SDK never observed has no known answer time, and the spec forbids asserting one — the same
+      rule D3 applies to a hangup cause. If you derive anything from the `Seconds` header, state
+      precisely what `Seconds` measures (channel age, not time since answer) and why that is
+      honest; if you leave the time unknown, say what a consumer computing a duration sees instead.
+      Verify with the spec's four scenarios, and with a non-regression test that a channel arriving
+      live through the ordinary `NewChannel` path — not a reload — still opens its session exactly as
+      it does today. `OnChannelAdded` serves both paths; a regression there breaks every call, not
+      just reloaded ones.
+      **Done 2026-09-25. The timestamp fork was ruled: the answer time is left unknown.** `Seconds`
+      is not read at all — it is channel age, and for an answered channel it differs from time since
+      answer by the ring time, so deriving `ConnectedAt` from it would assert an answer the SDK never
+      observed. `CallSession.OpenInReportedState` therefore sets the state without running
+      `UpdateTimestamp`: `ConnectedAt` and `RingingAt` stay null, so `WaitTime` and `TalkTime` read
+      null even after the call completes, and `Duration` runs from `CreatedAt` — the moment the SDK
+      learned of the call, not the moment the call began, so it is an undercount of real call age.
+      The tell is positive, not a null: the session carries metadata `origin=reload`, the opening
+      counterpart of D3's `cause=reload`. The provenance gate is
+      `AsteriskChannel.AdmittedFromSnapshot` (internal, mirroring `RemovedByReload`), set through a
+      private `ChannelManager.Admit` so `OnNewChannel`'s public signature does not move.
+
 ## 3. Phase C — integration (batched)
 
-- [ ] 3.1 Turn every scenario in `specs/live-state-reload/spec.md` into a test, including the two that
+- [x] 3.1 Turn every scenario in `specs/live-state-reload/spec.md` into a test, including the two that
       bind the failure direction (reload fails partway; reload never answered). Verify each scenario
       has a test and that deleting the guard it describes turns that test red — a scenario whose
       mutation survives is not bound.
+      **Done 2026-09-25. All 18 scenarios across the eight requirements have a test, and every one
+      was killed by a mutation of the PRODUCTION code it binds** — 21 mutations, each applied alone,
+      each restored and the restore verified by `sha256sum -c`. The one real gap task 2.5 named was
+      closed rather than narrowed: requirement 5's first scenario says "GIVEN **two** connected
+      calls", and `ReloadFailureTests` set up one, so the clause "neither call is ended" was never
+      exercised. It now holds two independent calls (`linked-001`, `linked-002`) whose legs are
+      delivered last-first, so the truncation falls **between** the calls. Measured difference, not
+      argued: under the mutation that reconciles a truncated buffer, the two-call fixture observes a
+      `CallEndedEvent` for `linked-002` while `linked-001` survives with `participants=2 left=1` —
+      a call ended outright, which a single held call cannot produce, because a session ends only
+      once every participant has left.
+      **One measurement method error, caught and corrected**: `dotnet test --no-build` on project B
+      after building project A runs B's stale binaries. Two mutation results (D6's admission-mark
+      inversion, and the truncated-buffer one) first read as "the test survived"; re-run after
+      `dotnet build Verbara.Sdk.slnx -c Release`, both died. Every mutation result recorded here was
+      taken after a full rebuild.
 
-- [ ] 3.2 Write the `CHANGELOG.md` entry under `[Unreleased]`, labelled **`### Fixed — BREAKING`**.
+- [x] 3.2 Write the `CHANGELOG.md` entry under `[Unreleased]`, labelled **`### Fixed — BREAKING`**.
       The owner ruled the label on 2026-09-24, under ADR-0061 D3: the SDK never promised to hold a
       stranded session for the life of the process, nor to turn one call into several — `LinkedId`
       correlation is its declared design — so this restores documented behaviour rather than
@@ -104,7 +189,7 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       the bottom of `[Unreleased]`, immediately above the newest released heading, is the anchor least
       likely to be contested.
 
-- [ ] 3.3 Measure both Asterisk-side premises against a real Asterisk, do not assume either. Follow
+- [x] 3.3 Measure both Asterisk-side premises against a real Asterisk, do not assume either. Follow
       the pattern in `Tests/Verbara.Sdk.FunctionalTests/Layer5_Integration/NetworkPartition/ConnectionCutTests.cs`
       (Toxiproxy `ami-proxy`, `AutoReconnect=true`), on the supported versions:
       **(a)** whether `Status` populates `Linkedid` (design D4's residual — if a version does not, verify
@@ -114,18 +199,18 @@ must not both edit `Tests/Verbara.Sdk.FunctionalTests/Verbara.Sdk.FunctionalTest
       narrows — so this measurement can change the spec, and it is the one task here that must run
       before Phase B is called done. Record both results in the ADR.
 
-- [ ] 3.4 Confirm the change adds and removes no public API: verify `PublicAPI.Unshipped.txt` is
+- [x] 3.4 Confirm the change adds and removes no public API: verify `PublicAPI.Unshipped.txt` is
       unchanged in every package this change touches, and that no `CompatibilitySuppressions.xml` is
       needed.
 
-- [ ] 3.5 **Verification.** On the integrated branch: `dotnet build Verbara.Sdk.slnx -c Release` with
+- [x] 3.5 **Verification.** On the integrated branch: `dotnet build Verbara.Sdk.slnx -c Release` with
       **0 warnings**; the full unit lane under the CI filter; `Tests/Verbara.Sdk.Governance.Tests`
       and `Tests/Verbara.Sdk.OpenTelemetry.Tests` (tree-scanning guards — green on touched projects
       is not green in CI); `openspec validate --all --strict`. Then read
       `.github/workflows/ci.yml` and run the remaining fast, deterministic, non-service steps it
       lists rather than recalling job names.
 
-- [ ] 3.6 Do **not** bump `Directory.Build.props`. The version is cut at release time (ADR-0055), so
+- [x] 3.6 Do **not** bump `Directory.Build.props`. The version is cut at release time (ADR-0055), so
       this change ships its CHANGELOG entry and the release that carries it decides the tier — which,
       per 3.2's ruling, may be a patch. Verify `Directory.Build.props` is absent from this change's
       diff.
@@ -144,5 +229,44 @@ the last one was lost:
   count what stays resident; `MaxCompletedSessions` is declared and read by nothing, and eviction
   fires only when another session completes). Out of scope here — this change neither worsens nor
   repairs it — and **it has no open change of its own**. It needs one.
+- **`StatusEvent` declares two properties no Asterisk version populates, and lacks the four that
+  carry the values.** `StatusEvent.State` and `StatusEvent.CallerId` are in
+  `src/Verbara.Sdk.Ami/PublicAPI.Shipped.txt` and are always null on 18/20/22/23 — measured by task
+  3.3. What the wire carries is `ChannelState`/`ChannelStateDesc` and `CallerIDNum`/`CallerIDName`,
+  which is exactly the set `ChannelEventBase` declares for every other channel-bearing event;
+  `StatusEvent` extends `ResponseEvent` instead and so never got them. This affects **every consumer
+  that reads `StatusEvent` directly**, not only the reload, so it is an `Verbara.Sdk.Ami` parsing
+  defect rather than a reload defect, and task 2.6 deliberately routes around it through `RawFields`
+  instead of fixing it here. Fixing it properly means adding the four properties (a public API
+  addition, not a break) and deciding what to do about the two dead ones — removing them **is** a
+  break (CP0002), so they can only be documented or obsoleted. **It has no open change of its own.**
+  It needs one.
+
+- **The public-API guard this repo believes it has does not run.** `RS0016` (undeclared public API)
+  is in `Directory.Build.props:15`'s `<NoWarn>`, and the comment on the next line — "severity
+  controlled in .editorconfig for user-authored code" — is wrong: `NoWarn` wins over
+  `.editorconfig:71`. **Measured** during this change with a negative control: a `public int` method
+  reading instance data, added to the shipped `CallSessionManager`, builds Release `--no-incremental`
+  with **0 warnings and 0 errors**. There is no backstop either — nothing under `Tests/`, `tools/`,
+  `scripts/` or `.github/` reads `PublicAPI.Unshipped.txt` — and package validation cannot catch it,
+  because an addition is not a `CP0002` break. So a new public member can land in any shipped package
+  silently. This change is unaffected (its own "no public API moved" claim rests on a `git diff` of
+  the `PublicAPI.*.txt` files, which is mechanical and was run), but **task 3.4's check is a human
+  diff read, not the analyzer gate the repo's own comment advertises.** Not caused here.
+  **It has no open change of its own.** It needs one.
+
+- **The session transition table has a hole the ordinary live path falls into.**
+  `CallSessionStateTransitions` lets `Created` reach only `Dialing`, `Queued` and `Failed` — neither
+  `Connected` **nor `Ringing`**. A live inbound call arrives in `ChannelState.Ring` and opens
+  `Created`; if a `NewState` carrying `Ringing` reaches `OnChannelStateChanged` before `DialBegin`,
+  its `TryTransition(Ringing)` returns false and **silently does nothing**. The only reason live
+  calls reach `Connected` at all is the `Created → Dialing` step `OnChannelDialBegin` supplies, so
+  the ordering of two Asterisk events decides whether a ring is ever recorded. Found while
+  implementing 2.8 and **measured**: removing that task's provenance gate — which would have applied
+  the same state mapping to the live path — turns 10 of 75 `Sessions.FunctionalTests` red, because
+  the session reaches `Ringing` and then permanently swallows the `Dialing` step every live call
+  depends on. Pre-existing, untouched here, and the reason 2.8's mapping is scoped to channels
+  admitted from a snapshot. **It has no open change of its own.** It needs one.
+
 - **The product-level blast radius of a stranded call** (conversation left active, voice capacity
   held, agent left busy). Belongs to the Platform repo, not this one.

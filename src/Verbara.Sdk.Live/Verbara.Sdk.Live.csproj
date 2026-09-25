@@ -6,6 +6,12 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Verbara.Sdk.Live.Tests" />
+    <!-- CallSessionManager subscribes to ChannelManager.ChannelRemoved and must be able to read
+         AsteriskChannel.RemovedByReload, the marker that says "this removal came from a reload and
+         no hangup cause was observed" (ADR-0062, design D3). The alternative was a new public
+         member on a type two downstream repos consume, which would have written a line into
+         PublicAPI.Unshipped.txt; this change adds no public API. -->
+    <InternalsVisibleTo Include="Verbara.Sdk.Sessions" />
   </ItemGroup>
 
   <ItemGroup>
