@@ -1,6 +1,6 @@
 # ADR-0062: A reload is a reconciliation, and an unobserved ending is unknown
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-25
 - **Deciders:** Harol A. Reina H.
 - **Related:** ADR-0048 (wire conformance is established by a live probe with a negative control,
