@@ -136,6 +136,7 @@ public sealed class ReloadPremiseTests : FunctionalTestBase
             while (connection.State == AmiConnectionState.Connected && !downCts.IsCancellationRequested)
             {
                 await BestEffort.SendAsync(connection, new PingAction(), downCts.Token);
+                // fence-allow: LOOP-DRIVER — paces the Ping loop that detects the cut; downCts bounds it
                 try { await Task.Delay(TimeSpan.FromMilliseconds(250), downCts.Token); }
                 catch (OperationCanceledException) { break; }
             }
@@ -144,6 +145,7 @@ public sealed class ReloadPremiseTests : FunctionalTestBase
                 "the call must end while the connection under test is genuinely down");
 
             await control.SendActionAsync(new CommandAction { Command = HangupEverything });
+            // fence-allow: SETTLE — lets Asterisk finish tearing the channels down before the connection is restored
             await Task.Delay(TimeSpan.FromSeconds(3));
 
             await ToxiproxyControl.RemoveToxicAsync(ProxyName, "reload-premise-cut");
@@ -154,6 +156,7 @@ public sealed class ReloadPremiseTests : FunctionalTestBase
             connection.State.Should().Be(AmiConnectionState.Connected);
 
             // Everything Asterisk has to say after the reconnect gets this long to arrive.
+            // fence-allow: SETTLE — the observation window whose emptiness IS the measured negative; a shorter one would prove nothing
             await Task.Delay(TimeSpan.FromSeconds(10));
 
             afterReconnect.Hangups.Should().NotIntersectWith(doomed,
@@ -183,6 +186,7 @@ public sealed class ReloadPremiseTests : FunctionalTestBase
             while (!afterReconnect.Hangups.Intersect(live, StringComparer.Ordinal).Any()
                    && !controlCts.IsCancellationRequested)
             {
+                // fence-allow: LOOP-DRIVER — paces the wait for a replayed Hangup that never comes; controlCts bounds it
                 try { await Task.Delay(TimeSpan.FromMilliseconds(250), controlCts.Token); }
                 catch (OperationCanceledException) { break; }
             }
@@ -233,6 +237,7 @@ public sealed class ReloadPremiseTests : FunctionalTestBase
             if (legs.Count >= atLeast)
                 return legs;
 
+            // fence-allow: LOOP-DRIVER — paces polling until Asterisk reports the legs; cts bounds it
             try { await Task.Delay(TimeSpan.FromMilliseconds(500), cts.Token); }
             catch (OperationCanceledException) { break; }
         }
