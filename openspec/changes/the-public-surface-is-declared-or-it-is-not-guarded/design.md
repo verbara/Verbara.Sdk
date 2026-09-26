@@ -18,7 +18,9 @@ there today:
   `Microsoft.CodeAnalysis.PublicApiAnalyzers.CodeFixes.dll`, its own documentation states plainly
   that *"all public types and members should be declared in PublicAPI.txt"*, and it exposes **no**
   configuration option to exclude compiler-emitted members — searched across its `documentation/` and
-  its four shipped `.editorconfig` presets.
+  its four shipped `.editorconfig` presets, and read from the DLL itself on 2026-09-26: the only
+  options it addresses to itself are `dotnet_public_api_analyzer.skip_namespaces` and
+  `.require_api_files`, both undocumented, and neither excludes a compiler-emitted member.
 
 ## Goals / Non-Goals
 
@@ -208,26 +210,117 @@ packed. `Build Release` runs with `-p:ProvideCommandLineArgs=true -p:RecordCscAr
 is the SDK's own switch that makes the `Csc` task output its arguments as `@(CscCommandLineArgs)`
 without changing the compile; the second arms a target in a new `Directory.Build.targets` that
 writes them, after `CoreCompile`, to `$(IntermediateOutputPath)public-api.csc-args.txt` — one file
-per project, in that project's own `obj/`, whichever node compiled it. Both are global, so no
-project can unset them. `scripts/ci/check-public-api-guard-coverage.sh` reads each file and fails
-the pull request unless: `/warnaserror+` is present; `/skipanalyzers+`, `/warn:0` and any
-`/ruleset:` are absent; `RS0016` is in neither `/nowarn:` nor `/warnaserror-:`; an `/analyzer:`
-line ends in `Microsoft.CodeAnalysis.PublicApiAnalyzers.dll`; an `/additionalfile:` names each of
-`PublicAPI.Shipped.txt` and `PublicAPI.Unshipped.txt`. The same file names every analyzer-config
-file and every source file the compiler read, and that — not "under `src/`" — is the scope of the
-scan for what arguments cannot show: no analyzer-config file inside the repository other than the
-root `.editorconfig` mentions `RS0016`, `dotnet_analyzer_diagnostic` or
-`dotnet_public_api_analyzer`; the root file keeps `dotnet_diagnostic.RS0016.severity` at `warning`
-or `error`; no source file on the compile list carries `#pragma warning disable` naming `RS0016` or
-with no id at all, or `SuppressMessage` for `RS0016`. Measured 2026-09-26 on SDK 10.0.401 with
-analyzer 5.6.0 against an undeclared public member: `WarningLevel=0` shows as `/warn:0`; `NoWarn`
+per project, in that project's own `obj/`, whichever node compiled it — and, in the same
+condition, sets that compile's `ErrorLog` so csc keeps its diagnostic log beside the record
+(below). Both are global, so no project can unset them.
+`scripts/ci/check-public-api-guard-coverage.sh` reads each file and fails the pull request unless:
+`/warnaserror+` is present; `/skipanalyzers+`, `/warn:0` and any `/ruleset:` are absent; `RS0016`
+is in neither `/nowarn:` nor `/warnaserror-:`; an `/analyzer:` line ends in
+`Microsoft.CodeAnalysis.PublicApiAnalyzers.dll`; every `/additionalfile:` named
+`PublicAPI.Shipped.txt` or `PublicAPI.Unshipped.txt` is the project's own, and each is present.
+
+The same file names every analyzer-config file the compiler read, and that list — every path on
+it, wherever it lives — is the scope of the scan for the one thing neither the arguments nor the
+compiler's log can show, because the analyzer then raises nothing or the compiler drops what it
+raised before any logger sees it: an option addressed to the analyzer, or a severity that hides
+the diagnostic. There is no exempt file and no exempt directory. The root `.editorconfig` was
+measured 2026-09-26 (SDK 10.0.401, analyzer 5.6.0) to silence `RS0016` on an undeclared public
+type while its line 71 stayed intact and every argument stayed clean:
+`dotnet_public_api_analyzer.skip_namespaces` in the `[*.cs]` section for a namespace with no
+record lines (one with record lines fails with `RS0017` instead); a later section setting the
+severity to `suggestion`; a later line in the same section setting it to `none` or `silent`;
+the key upper-cased; and the same key in a `.globalconfig` beside the project, which the SDK
+adds unasked and the record lists. The SDK's own `analysislevel_*.globalconfig` presets — all
+770 that ship with 10.0.401 — pass the rule below, so excluding the SDK directory and the NuGet
+cache bought nothing and cost a trust-by-path; they are scanned like the rest. The rule, applied
+to every non-comment, non-section `key = value` line with the key lowercased and the value cut
+at an inline `#` or `;`: no key may begin with `dotnet_public_api_analyzer` — the prefix, not
+the names: 5.6.0's DLL carries exactly two keys under it, `skip_namespaces` and
+`require_api_files` (its UTF-16 strings, read from the DLL the record names), and a prefix ban
+covers whatever a later version adds; no key may begin with `dotnet_analyzer_diagnostic`; the
+key `dotnet_diagnostic.rs0016.severity` must have the value `warning` or `error`, every
+occurrence; and `rs0016` may appear on no other key line — which fails
+`dotnet_code_quality.RS0016.excluded_symbol_names` too, measured inert for `RS0016` and failed on
+purpose, because a stray mention is a one-line fix and a silent one is this change's whole
+subject. The root file must contain at least one such severity line; it is what keeps the bulk
+settings inert. That one line is all the former exemption was protecting: the file's other 65
+keys never mention the analyzer, and the rule passes today's root file, the compiler's generated
+`*.GeneratedMSBuildEditorConfig.editorconfig` and every SDK preset at 0.06 s for 29 runs. Not
+banned, measured inert: `generated_code = true` and the shared `dotnet_code_quality.*` keys
+that do not carry the identifier. A `.globalconfig` cannot lower the severity past an
+`.editorconfig` line even at `global_level = 1000`, but it can set `skip_namespaces` when no
+`.editorconfig` sets it; it is on the record and the same rule catches it. A `.editorconfig`
+above the checkout is inert while the root file says `root = true` and is on the record — and
+scanned — when it does not.
+
+The arguments also name the declared record the analyzer was given, and that is checked too,
+measured 2026-09-26: a second `PublicAPI.Shipped.txt`/`PublicAPI.Unshipped.txt` pair from another
+directory, added as `AdditionalFiles` and listing the undeclared symbols, builds green — no
+`RS0016` on the console, none in the log — while the package's own record stays untouched; the
+analyzer reads every additional file of those two exact names (a lower-cased pair is ignored
+and the build fails) and unions them. The record shows it as
+`/additionalfile:../extra/PublicAPI.Shipped.txt`, so every such line must resolve, relative to
+the project directory and with symbolic links followed, to the project's own file of that name.
+And after the build the two record files of every package must match the checkout — `git diff
+--quiet` and no untracked record file — because a build step that writes the symbols into the
+record on the runner leaves the analyzer nothing to report, and this is the one place it shows.
+
+A suppression at the point the diagnostic is raised is **not** found by reading source text. The
+compile list does not include what a source generator emitted — measured 2026-09-26 on
+`src/Verbara.Sdk.Ami`, 467 source paths, the 3 generated ones all MSBuild's own
+(`GlobalUsings.g.cs`, `AssemblyAttributes.cs`) and none from the generator its `/analyzer:` line
+names, because a generator runs inside the compiler — and a generator that emits
+`#pragma warning disable RS0016` above an undeclared public class builds green with the class in
+the packed DLL. Nor does text show a `SuppressMessage` whose id is a `const` from another file
+(`[SuppressMessage("ApiDesign", Ids.Api)]` with `Ids.Api = "RS" + "0016"`: green, zero files
+flagged) or a `DiagnosticSuppressor` — an analyzer class that suppresses `RS0016`
+programmatically: green, the class in the DLL, no text anywhere. All of them are in one place:
+the compiler's SARIF log. `Directory.Build.targets` sets `ErrorLog` to
+`$(IntermediateOutputPath)public-api.sarif,version=2` whenever `RecordCscArgs` is `true` — there
+and not on the `ci.yml` command line, because a `-p:` value with a comma must be `%2C`-escaped
+or MSBuild reads `version=2` as a second property and csc writes SARIF 1.0 (reproduced), and
+the record shows the property's fate either way: `/errorlog:"obj/Release/net10.0/public-api.sarif,version=2"`,
+whose directory is the record's own `/out:` directory, so the guard reads the file the record
+names and no other. In that log every `RS0016` the analyzer raised is a `results[]` entry
+whether or not the console showed it: a suppressed one carries
+`"suppressions":[{"kind":"inSource","properties":{"suppressionType":"Pragma Directive"}}]`, or
+`"SuppressMessageAttribute"`, or `"DiagnosticSuppressor { Suppression Id: …, Suppression
+Justification: … }"`, with file and line — a generated file's as a `file://` uri under the
+project's `obj/Release/<tfm>/<generator assembly>/<generator type>/<hint name>`, a path that
+does not exist on disk — and its message names the symbol; a demoted one is there with no
+suppression, at `"level":"warning"` under `TreatWarningsAsErrors=false` or
+`/warnaserror-:RS0016`, at `"level":"note"` under an analyzer-config `suggestion`. The guard's
+rule is therefore that a compile that produced a record has **no** `RS0016` result at all and
+that `tool.driver.rules[]` lists `RS0016` — the analyzer ran in this compile.
+`invocations[0].executionSuccessful` is not read: it is `true` on a failed compile too
+(measured); the record's existence is the proof of success, because a failed `CoreCompile`
+writes none. Measured 2026-09-26 on SDK 10.0.401 with analyzer 5.6.0, twice independently: a
+hand-written pragma, a generated pragma, a bare `#pragma warning disable`, the const-id
+attribute and the suppressor each log three suppressed `RS0016` results on a green build, and
+`/nowarn:RS0016` logs none — that one is the arguments' to catch. What a generator emits is also
+recoverable as text (`-p:EmitCompilerGeneratedFiles=true` puts `/generatedfilesout:` on the
+record and csc writes each generated file under
+`obj/Release/<tfm>/generated/<generator assembly>/<generator type>/`, byte-identical to what it
+compiled after a 3-byte UTF-8 BOM), but the guard does not read it: csc rewrites those files on
+a failed compile too, a file a generator stops emitting stays until something deletes it, a
+`RemoveDir` before `CoreCompile` empties the folder on an up-to-date build while the DLL is
+kept, and the tree's generated code already carries one bare `#pragma warning disable`
+(`System.Text.RegularExpressions.Generator`, in `Verbara.Sdk.Sessions.Postgres`) that a text
+rule would fail on and the log, correctly, does not. The log is 0.4–1.2 MB a project (22.6 MB
+across 29, almost all the rule catalogue of every analyzer), lives under `obj/`, is a
+`FileWrites` item, cost the 29-project `--no-incremental` build +0.4 s and +2.1 s in two paired
+runs (7.9 s and 11.1 s without), and `jq` reads one in 3 ms.
+
+Measured 2026-09-26 on SDK 10.0.401 with analyzer 5.6.0 against an undeclared public member:
+`WarningLevel=0` shows as `/warn:0`; `NoWarn`
 appended in the project body and inside a `BeforeTargets="CoreCompile"` target both put `RS0016`
 in `/nowarn:`; an `<Analyzer Remove>` in such a target leaves no `/analyzer:` line for the package;
 `RunAnalyzersDuringBuild=false` shows `/skipanalyzers+`; `TreatWarningsAsErrors=false` leaves no
-`/warnaserror+`; a ruleset shows `/ruleset:`; and `skip_namespaces`, the one silencer that changes
-no argument, is a line in a file the arguments name. Recording costs nothing measurable (0.54 s
-against 0.56 s for a three-project rebuild), the file is about 21 KB a project, and the guard is
-29 file reads. It blocks the pull request that adds an opt-out.
+`/warnaserror+`; a ruleset shows `/ruleset:`; and `skip_namespaces`, a silencer that changes no
+argument at all, is a line in a file the arguments name. Recording the arguments costs nothing
+measurable (0.54 s against 0.56 s for a three-project rebuild) and about 21 KB a project; the log
+adds under 2.1 s and 22.6 MB across the 29; the guard is 29 record reads, 29 `jq` reads at 3 ms and
+29 analyzer-config scans at 2 ms. It blocks the pull request that adds an opt-out.
 
 What such a record holds was read on this tree before the recording target exists, by asking MSBuild
 for `CscCommandLineArgs` with the compiler skipped — an inspection, not the guard's route, which is
@@ -249,21 +342,28 @@ sibling `check-package-validation-coverage.sh` is the right shape for its own qu
 its header what it cannot see, "anything decided after evaluation"; for this guard that blind spot
 is the threat itself.
 
-*Why not the compiler's SARIF log:* `-p:ErrorLog=<file>%2Cversion=2` makes csc list the rules of
-every analyzer it ran with each rule's effective configuration, and that does show a dropped
-analyzer (no `RS` rule), `/skipanalyzers+` (no rule at all) and an `.editorconfig` severity of
-`none` (`{"enabled":false}`). Measured 2026-09-26, it does not show `/warn:0` or
-`/nowarn:RS0016` — from a global property, the project body or a target the record still reads
-`{"level":"error"}` while the build is green and the member is in the binary. A record blind to
-two of the knobs cannot be the judge.
+*What the compiler's SARIF log judges, and what it does not:* it is the judge of suppression and
+demotion, because it is the only observation that sees the diagnostic after the analyzer raised
+it and before the console failed to show it. It is not the judge of the compiler's options:
+measured 2026-09-26, under `/nowarn:RS0016` the log holds no `RS0016` result at all, and
+`/warn:0`, `/skipanalyzers+`, a missing `/analyzer:` line, a `/ruleset:` and a foreign
+`/additionalfile:` are the arguments' to read, one line each. Neither sees `skip_namespaces` or
+an analyzer-config `none` or `silent`: the analyzer raises nothing, or the compiler drops what
+it raised before any logger sees it — that stays with the analyzer-config scan. Three
+observations, one question each: the arguments judge the options and the record the analyzer
+was given, the log judges what became of what the analyzer raised, the analyzer-config files
+judge what the analyzer was told; source text is not read. What none of the three can judge is
+whether the files they read are the files the compiler read — a build step that changes and
+restores one is invisible to any reading after the fact, and the spec states that limit as a
+requirement rather than this design hiding it in a paragraph.
 
 *Why not a negative control on every package:* it observes the outcome, the strongest observation
 for anything an argument or a file decides — but it is a second compile a target can tell apart
 from the real one, it adds 20–28 s sequential (about 7 s with four workers) plus a design-time
 read per project, it fails 29 builds by design and must stay incremental or a failed rebuild
-leaves the next package's `--no-dependencies` verdict as `CS0006`, and it is blind to the one
-silencer measured to change no argument: `skip_namespaces` skips the package's own namespace while
-the probe's foreign namespace still fires. D5 keeps that observation where it pays — one package,
+leaves the next package's `--no-dependencies` verdict as `CS0006`, and it is blind to a silencer
+measured to change no argument: `skip_namespaces` skips the package's own namespace while the
+probe's foreign namespace still fires. D5 keeps that observation where it pays — one package,
 every pull request — as the check that the toolchain still turns these arguments into a failure.
 
 *Alternative rejected:* a Governance test that greps project files — rejected for the ADR-0055
@@ -282,16 +382,25 @@ no record, and no record is "not proven".
   was measured on.
 - **A package opts out after this change** → D6's guard fails the pull request that adds the opt-out,
   naming the project and the argument or the file; what no argument shows is found in the files the
-  same record names.
+  same record names. What the guard cannot see, by construction: a step of the repository's own
+  build that changes a file the compiler read and restores it before the guard runs. The ADR says
+  the guard trusts the checkout not to rewrite its own configuration mid-build, and that such a step
+  is a diff to a build file.
 - **A member is declared that should never have been public** → D4 makes the assessment a requirement
   and the finding explicit, while deliberately leaving the removal to a change that can carry a
   breaking tier. The risk is accepted, not eliminated: declaring an accidental export does entrench
-  it further until that change happens.
+  it further until that change happens. The guard judges only whether a member was declared, never
+  whether it should have been: a pull request that adds a public member and its `Unshipped` line in
+  the same diff passes, by design, and the reviewer reading the record line is the only check on it.
 - **`Unshipped` becomes misleading** → D3's consequence, stated in the ADR so the next reader is not
   the one who discovers it.
 - **A future language version emits new synthesised members** → the build fails on the next upgrade
   until they are declared. That is the guard working, but it is a cost on every major C# bump, and the
   ADR should say so rather than let it arrive as a surprise.
+- **A toolchain that stops logging suppressed diagnostics** → not a blind spot: 2.5's real-MSBuild
+  pragma and suppressor cases read "not proven" the day it arrives, the same way D5 catches an
+  analyzer that stops firing. The timing and size figures in D6 are one machine's, two paired runs
+  each.
 
 ## Migration Plan
 

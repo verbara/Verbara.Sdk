@@ -4,8 +4,8 @@
 
 What this repository guarantees about the public surface of its published packages: that every public
 member is declared, that an undeclared one stops the build instead of landing unnoticed, that the
-guard's liveness can be demonstrated rather than assumed, and that every hand-written member recorded
-as public was assessed, with the finding on record.
+guard's liveness can be demonstrated rather than assumed and its blind spot stated where it reports,
+and that every hand-written member recorded as public was assessed, with the finding on record.
 
 ## ADDED Requirements
 
@@ -59,18 +59,31 @@ carried exactly that arrangement.
 
 - **GIVEN** every project whose package the pull request's build produced
 - **WHEN** one of them re-suppresses the diagnostic, lowers it below a build failure, stops the
-  analyzer running, does not reference the analyzer, or tells the analyzer to skip part of its
-  surface — by any setting, wherever it is set, including a step that runs after the project is
-  evaluated and before it is compiled
+  analyzer running, does not reference the analyzer, tells the analyzer to skip part of its
+  surface, hands the analyzer a declared record other than the package's own two files, or has
+  the diagnostic suppressed where it is raised — by a directive or an attribute in a source file,
+  hand-written or emitted by a source generator, or by an analyzer that suppresses it
+  programmatically — by any setting, wherever it is set, including a step that runs after the
+  project is evaluated and before it is compiled
 - **THEN** a check that runs on every pull request the build runs for fails, naming the project
   and what it found
 - **AND** that check reads the arguments the compiler was handed by the compilation that produced
   the package — not the project's evaluation, not a second compile, and not the text of the
-  project file — so that everything decided before the compiler ran is inside what it sees
-- **AND** what those arguments cannot show — a suppression inside a source file, or a key in an
-  analyzer-config file — is found by reading the source and analyzer-config files those same
-  arguments name, wherever they live
-- **AND** a package with no such record is reported as not proven, never as a pass
+  project file — so that everything decided before the compiler ran is inside what it sees,
+  including which files it was given as the declared record
+- **AND** a suppression or demotion of the diagnostic at the point it was raised is found in the
+  compiler's own diagnostic log of that same compilation, which records every instance the
+  analyzer raised, suppressed ones included, with what suppressed it — not by reading source
+  text, which does not include what a generator emitted and cannot see a suppressor at all
+- **AND** a key in an analyzer-config file, which neither the arguments nor the log can show
+  because the analyzer then raises nothing, is found by reading every analyzer-config file those
+  arguments name — wherever it lives, the repository's root configuration file included, with no
+  exempt file and no exempt directory — under one rule: no option addressed to the public-API
+  analyzer, no bulk severity setting, and the diagnostic's identifier present only as its
+  severity key set to a level that fails the build, every occurrence, in every section, however
+  the key is cased
+- **AND** a package with no such record, or no such log, is reported as not proven, never as a
+  pass
 
 #### Scenario: The configuration describes itself truthfully
 
@@ -156,6 +169,51 @@ that carries its own release tier.
 - **WHEN** the record is completed
 - **THEN** it is declared without being assessed as a design decision
 
+### Requirement: The per-package check SHALL judge only what the compile left behind, and SHALL say so
+
+The per-package check SHALL judge each compile from what that compile left behind — the arguments
+the compiler was handed, the compiler's own diagnostic log, and the analyzer-config and
+declared-record files those arguments name — read as they exist when the check runs, and its
+output SHALL state that this is what it read. The two declared-record files of every package it
+judges SHALL match the checkout after the build. What the check cannot see, and SHALL NOT claim
+to: a step of this repository's own build that changes one of those files after the compiler
+read it, or changes what the compiler read and restores it before the check runs; and an option
+the analyzer reads under a name the rule does not know.
+
+A guard that reads files after the fact is trusting the build not to have rewritten them, and
+there is no observation a build step cannot forge — the build system runs any target after any
+other. The boundary is stated instead: such a step is a change to a project file, to
+`Directory.Build.targets` or to a package reference, and that is what review reads. Stating the
+boundary is the difference between a limit and a blind spot.
+
+#### Scenario: A record file the build left changed is caught
+
+- **GIVEN** a build step that appends the undeclared symbols to a package's declared record before
+  the compiler reads it and leaves the file changed
+- **WHEN** the check runs after the build
+- **THEN** it fails, naming the file, because a declared record that differs from the checkout is
+  not the record the pull request shows
+
+#### Scenario: A rewrite the build restores is named as unseen, not denied
+
+- **GIVEN** a build step that changes a file the compiler read — a declared record, an
+  analyzer-config file, the argument record or the log — and restores it before the check runs
+- **WHEN** the pull request's build and the check run
+- **THEN** the build succeeds and the check reports the package as proven
+- **AND** the check's output states that it judged those files as they existed when it ran, and
+  that a build step which changed and restored them is outside what it can see
+- **AND** the step itself is a change to a project file, `Directory.Build.targets` or a package
+  reference — never to a source file or a record file alone — which is what review reads
+
+#### Scenario: An option under a name the rule does not know is outside it
+
+- **GIVEN** a later analyzer version that reads a silencing option under a prefix other than
+  `dotnet_public_api_analyzer`
+- **WHEN** a package sets it in an analyzer-config file
+- **THEN** the check passes, because the rule bans by prefix and the prefix is not yet named
+- **AND** the version bump that brings it arrives as a pull request whose harness cases still
+  measure the known silencers, so the rule is extended there, not discovered later
+
 ## Architectural Risk
 
 **Level:** LOW.
@@ -165,9 +223,9 @@ packages that have undeclared members — measured 2026-09-25, the 783 symbols f
 projects, the largest being `Verbara.Sdk.Ari` (218), `Verbara.Sdk.Sessions` (187) and
 `Verbara.Sdk.VoiceAi` (128) — plus `Verbara.Sdk.Ami.SourceGenerators`, which the analyzer never
 reached. The build configuration gains a `Directory.Build.targets` that records each compile's own
-arguments, and two global properties on the Release build; two steps are added to an existing
-required CI job and **two** to the always-run script-test job — no new job and no new check-run
-name. No source file under `src/` changes behaviour, no package contents change, and
+arguments and keeps its diagnostic log, and two global properties on the Release build; two steps
+are added to an existing required CI job and **two** to the always-run script-test job — no new job
+and no new check-run name. No source file under `src/` changes behaviour, no package contents change, and
 no consumer is affected — the records are analyzer metadata and are not shipped. `PackageValidation`
 compares a pack against the previously published package rather than against these records, so the
 current baseline and the empty suppression set stay valid throughout.
@@ -178,7 +236,8 @@ package — so the work is bounded by a number that was counted, not estimated. 
 is the opposite of the usual one: not that the change breaks something, but that it lands and the
 guard still does not fire, on one package or on all of them. That is why the guard's liveness is a
 requirement with a negative control that runs on every pull request, and why its breadth is a
-requirement with a per-package check that reads the arguments of the compile that produced each
-package, rather than steps in a task list. The second risk is that completing the record quietly
+requirement with a per-package check that reads the arguments, the diagnostic log and the
+analyzer-config files of the compile that produced each package — and says what it cannot see —
+rather than steps in a task list. The second risk is that completing the record quietly
 blesses members that were never meant to be public, which the assessment requirement addresses by
 making the finding explicit while deliberately leaving removal to another change.

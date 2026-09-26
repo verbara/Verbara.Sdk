@@ -84,9 +84,10 @@ not folded in.
 - **The guard is proven on every package, not on one.** `Verbara.Sdk.Ami.SourceGenerators` never
   received the analyzer at all — `Directory.Build.props:69` excludes it by name — so "29 packages"
   is 28 today. It gets the analyzer (12 entries, measured), and a per-package check on every pull
-  request, reading the arguments of the compile that produced each package, fails the one that lets
-  any project opt out again; the negative control proves depth on one path, the check proves breadth
-  on all of them.
+  request, reading the arguments, the diagnostic log and the analyzer-config files of the compile
+  that produced each package, fails the one that lets any project opt out again, and says what it
+  cannot see; the negative control proves depth on one path, the check proves breadth on all of
+  them.
 
 - **Not in scope, deliberately:** removing any existing public member; changing `PackageValidation`,
   `PackageValidationBaselineVersion` or any `CompatibilitySuppressions.xml`; and `RS0037`/`RS0041`,
@@ -123,7 +124,7 @@ the analyzers the build runs.
   same pull request.
 - `Directory.Build.props` (again) — the analyzer item group stops excluding `SourceGenerators`;
   that package's `PublicAPI.Unshipped.txt` gains 12 lines.
-- New: `Directory.Build.targets` (the recording target),
+- New: `Directory.Build.targets` (the recording target and the `ErrorLog` property it arms),
   `scripts/ci/check-public-api-guard-coverage.sh`, `scripts/ci/check-public-api-guard-fires.sh`,
   their harnesses under `scripts/tests/`, `tools/declare-public-api.sh`, and one Governance test.
   `.github/workflows/ci.yml`'s `Build Release` step gains two global properties and `Pack Warnings
