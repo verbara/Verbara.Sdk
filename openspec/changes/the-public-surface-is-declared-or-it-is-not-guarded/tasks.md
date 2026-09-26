@@ -57,14 +57,22 @@ record file, not the code — so the two do not collide, but the pull request mu
       the measurement and the delta is a finding. Nothing to restore.
 
 - [ ] 1.3 Split that inventory into the groups designs D4 and D6 treat differently, and commit the
-      split: **671** synthesised (compiler `record` members — `PrintMembers`, `Equals(T?)`,
-      `EqualityContract`, `GetHashCode`, `ToString`, `Deconstruct`, `<Clone>$`, `operator ==`/`!=` —
-      and `System.Text.Json` source-generated context members), **112** hand-written, and the **12**
-      source-generator entry points, public because Roslyn loads them and declared without assessment
-      like the 671. Verify the three counts sum to 1.2's total and that the 112 list contains
+      split: **675** synthesised — the 671 compiler `record` members (`PrintMembers`, `Equals(T?)`,
+      `EqualityContract`, `GetHashCode`, `ToString`, `Deconstruct`, `<Clone>$`, `operator ==`/`!=`)
+      and `System.Text.Json` source-generated context members, plus the **4** implicit parameterless
+      constructors the compiler emits for the generator types (`…Generator.…Generator() -> void`) —
+      and **120** hand-written: the 112 plus the **8** author-written entries of
+      `Verbara.Sdk.Ami.SourceGenerators`, the four `…Generator` types and their four
+      `Initialize(IncrementalGeneratorInitializationContext)` methods. Those 8 go to 2.1's assessment
+      like the rest: spec requirement 4's "compiler-emitted" scenario covers what a compiler or a
+      generator emits, and a generator's own source is written by an author. Do not record them as
+      "public because Roslyn loads them" — measured 2026-09-26 on SDK 10.0.401, an `internal sealed
+      class …Generator` marked `[Generator]` is discovered, instantiated and emits identically, so
+      `public` there is a kept convention, which is exactly what the record is for. Verify
+      675 + 120 = 795 = 1.2's total (783 + 12), and that the 120 list contains
       `Verbara.Sdk.Ari.Client.AriClientFactory`, `VerbaraTelemetry.ActivitySourceNames`,
-      `NatsBridge.StopAsync` and `AmiConnectionOptionsValidator.Validate`, which the measurement
-      named. A classifier that puts a hand-written member in the synthesised bucket silently removes
+      `NatsBridge.StopAsync`, `AmiConnectionOptionsValidator.Validate` and the four `…Generator`
+      types. A classifier that puts a hand-written member in the synthesised bucket silently removes
       it from D4's review, so the boundary cases belong in the commit message.
 
 - [ ] 1.4 Write `docs/decisions/0063-*.md` (Status: Proposed → Accepted at merge) carrying D1–D6 from
@@ -72,10 +80,11 @@ record file, not the code — so the two do not collide, but the pull request mu
       measured on, D3's consequence that `Unshipped` will hold entries that are not new API, the note
       that a future C# version emitting new synthesised members will fail the build until they are
       declared, and the note that `Directory.Build.props`'s two `PublicAPI.*.txt` `AdditionalFiles`
-      lines duplicate what the analyzer's own `buildTransitive` targets add — kept on purpose, because
-      they are what 2.5's guard can read without a restore. Leave the D4 assessment section as a
-      placeholder for task 2.1 to fill. Verify `openspec validate --all --strict` passes and the file
-      exists.
+      lines duplicate what the analyzer's own `buildTransitive` targets add — kept on purpose — the
+      compiler receives each file twice either way (2.5's record shows both `/additionalfile:`
+      lines), so removing them changes nothing and is not this change's question. Leave the D4
+      assessment section as a placeholder for task 2.1 to fill. Verify
+      `openspec validate --all --strict` passes and the file exists.
 
 - [ ] 1.5 Land the ADR-count coupling in the same commit as 1.4: bump `README.md`'s `**N ADRs**`
       figure, update its row in `docs/claim-registry.md`, and add the catalog row in
@@ -85,16 +94,27 @@ record file, not the code — so the two do not collide, but the pull request mu
 
 ## 2. Phase B — critical components (one focused subagent each)
 
-- [ ] 2.1 Carry out design D4's assessment of the **112** hand-written members from 1.3's split,
+- [ ] 2.1 Carry out design D4's assessment of the **120** hand-written members from 1.3's split,
       **before any of them is recorded** (spec requirement 4): for each, intended public API or not,
-      written into ADR-0063's placeholder. Verify every one of the 112 is accounted for, and that any
+      written into ADR-0063's placeholder. Verify every one of the 120 is accounted for, and that any
       judged unintended is named explicitly with its package. **Remove nothing** — a removal is a
       `CP0002` break and belongs to its own change with its own release tier; this task's output is a
       list, and the ADR is where it lives. The guard is not needed for this: `RS0016` stays in
       `NoWarn` until 2.4, so the build is green for the duration. D4 says "a pass by a human eye" and
-      `rules.tasks` says a fresh subagent: the subagent drafts, and the approver reads the 112
+      `rules.tasks` says a fresh subagent: the subagent drafts, and the approver reads the 120
       findings and signs them in the ADR before 2.4 lands — the record must not land ahead of that
       signature.
+
+      The 8 generator entries take one recorded finding, and this is the finding the measurement
+      supports: intended — each type is the Roslyn host's entry point (`[Generator]` +
+      `IIncrementalGenerator`), its only public members are the contract's `Initialize` and the
+      implicit constructor, and the package ships no `lib/` (`IncludeBuildOutput=false`; the DLL packs
+      under `analyzers/dotnet/cs` only), so no consumer can bind to these symbols through the package.
+      Note there that a later `public → internal` on these types is **not** a `CP0002` break —
+      package validation has no `lib/` to compare for this package — so the record file is the only
+      thing that would notice; that is a different removal path from the other 112, not the same one.
+      Any public member outside that set, on a generator type or elsewhere in that package, gets an
+      ordinary finding of its own.
 
 - [ ] 2.2 Commit the route design D2 records as `tools/declare-public-api.sh`, and re-verify it on
       `Verbara.Sdk.Cluster.Primitives` alone before 2.3 touches 28 more packages: take that project's
@@ -144,31 +164,71 @@ record file, not the code — so the two do not collide, but the pull request mu
       command line.
 
 - [ ] 2.5 Assert the guard across every shipped package (design D6, spec requirement 2's second
-      scenario). Add `scripts/ci/check-public-api-guard-coverage.sh` in the shape of
-      `check-package-validation-coverage.sh`: for every project under `src/` that evaluates as
-      `IsPackable=true`, run `dotnet msbuild <csproj> -p:Configuration=Release -getProperty:NoWarn
-      -getProperty:WarningsNotAsErrors -getProperty:TreatWarningsAsErrors
-      -getProperty:CodeAnalysisTreatWarningsAsErrors -getProperty:RunAnalyzers
-      -getItem:AdditionalFiles -getItem:PackageReference` and fail, naming the project and the
-      setting, if `RS0016` appears in `NoWarn` or `WarningsNotAsErrors`, `TreatWarningsAsErrors` is
-      not `true`, `CodeAnalysisTreatWarningsAsErrors` reads `false` (the analyzer's own props then
-      move every `RS` id into `WarningsNotAsErrors`), `RunAnalyzers` reads `false`,
-      `Microsoft.CodeAnalysis.PublicApiAnalyzers` is not a `PackageReference`, or
-      `PublicAPI.Shipped.txt` and `PublicAPI.Unshipped.txt` are not both among the `AdditionalFiles`
-      items — matched on file name, because after a restore the analyzer's targets add each file a
-      second time under a relative path. Evaluated, never grepped. Run it in `Pack Warnings Gate`
-      immediately after the package-validation guard — no new job and no new check-run name
-      (ADR-0042 D3) — with a bash harness `scripts/tests/test_public_api_guard_coverage.sh` that
-      runs in `Coverage Script Tests` against a stand-in `dotnet`, and whose real-MSBuild cases run in
-      `Pack Warnings Gate` the way `PKV_MSBUILD_CASES=1` does; it pins each opt-out above as failing
-      against a fixture and a clean fixture as passing. Add the tree-scan half to
-      `Tests/Verbara.Sdk.Governance.Tests`: `.editorconfig`'s `dotnet_diagnostic.RS0016.severity` is
-      `warning` or `error`, no `.editorconfig` or `.globalconfig` under `src/` mentions `RS0016`, and
-      no file under `src/` carries `#pragma warning disable` or `SuppressMessage` for it. Verify: the
-      guard exits 0 on the integrated branch — which it can only do because 1.2 attached the analyzer
-      to `SourceGenerators`; had it not, this is where an exemption would have had to be written —
-      exits 1 on a fixture that appends `RS0016` to `NoWarn` and on one whose `PublicAPI.*.txt` are
-      both deleted, the harness is green, and the Governance tests pass.
+      scenario) from the arguments of the compile that produced each package — not from
+      evaluation, not from a second compile, and not from the compiler's SARIF log (D6 measures why
+      each is blind). Three pieces.
+      **(1) The record.** Add `Directory.Build.targets` at the repository root (there is none
+      today) with one target, armed only by a global property:
+      `<Target Name="RecordPublicApiCompilerArgs" AfterTargets="CoreCompile" Condition="'$(RecordCscArgs)' == 'true'">`
+      holding
+      `<WriteLinesToFile File="$(IntermediateOutputPath)public-api.csc-args.txt" Lines="@(CscCommandLineArgs)" Overwrite="true" Condition="'@(CscCommandLineArgs)' != ''" />`
+      and an `ItemGroup` with `<FileWrites Include="$(IntermediateOutputPath)public-api.csc-args.txt" />`.
+      In `.github/workflows/ci.yml`, `Pack Warnings Gate`'s `Build Release` step becomes
+      `dotnet build Verbara.Sdk.slnx -c Release -p:ProvideCommandLineArgs=true -p:RecordCscArgs=true`.
+      Measured 2026-09-26 on SDK 10.0.401: one file per project in that project's own
+      `obj/Release/<tfm>/`, under `-m:1` and `-m:3` alike; about 21 KB and 210 lines a project; no
+      measurable build cost. A failed `CoreCompile` writes nothing, and an up-to-date one leaves
+      the previous file — the record of the compile that produced the DLL still in `obj/`. CI's
+      fresh checkout compiles every project; a local run builds `--no-incremental` with the two
+      properties first.
+      **(2) The guard.** Add `scripts/ci/check-public-api-guard-coverage.sh`: for every project
+      under `src/` that evaluates as `IsPackable=true` (evaluation is fine for choosing the
+      projects; it is not fine for judging them), read
+      `<project dir>/obj/Release/*/public-api.csc-args.txt` and fail, naming the project and the
+      line, unless all of these hold: the file exists (missing is "not proven", never a pass);
+      `/warnaserror+` is a line; no line is `/skipanalyzers+`; no line is `/warn:0`; no `/nowarn:`
+      and no `/warnaserror-:` line contains `RS0016` (case-insensitive); an `/analyzer:` line ends
+      in `Microsoft.CodeAnalysis.PublicApiAnalyzers.dll`; one `/additionalfile:` line ends in
+      `PublicAPI.Shipped.txt` and another in `PublicAPI.Unshipped.txt`; no line starts with
+      `/ruleset:` (measured: a ruleset with `RS0016` at `None` silences it even with the root
+      `.editorconfig` line at `warning`). Then scan the files that same record names, for what no
+      argument shows: every `/analyzerconfig:` path inside the repository other than the root
+      `.editorconfig` must not mention `RS0016`, `dotnet_analyzer_diagnostic` or
+      `dotnet_public_api_analyzer` (the last covers `skip_namespaces` — measured to silence a
+      namespace that has no record lines while every argument stays clean — and
+      `require_api_files`); the root `.editorconfig` must keep `dotnet_diagnostic.RS0016.severity`
+      at `warning` or `error`; and no source path on the list (the lines with no leading `/`,
+      relative to the project directory, generated files under `obj/` included) may contain
+      `#pragma warning disable` naming `RS0016` or with no id at all, or `SuppressMessage` for
+      `RS0016`. Paths under the SDK or the NuGet cache are the toolchain's and are not scanned. On
+      CI, also require one `./artifacts/<project name>.*.nupkg` per selected project and as many
+      `.nupkg` files as selected projects, so the set judged is the set packed. Run it in
+      `Pack Warnings Gate` immediately after the package-validation guard — no new job and no new
+      check-run name (ADR-0042 D3). Cost: 29 file reads and scans, under 2 s, plus about 7 s of
+      evaluation for the selection.
+      **(3) The harness and the invariant.** `scripts/tests/test_public_api_guard_coverage.sh`
+      runs in `Coverage Script Tests` against fixture record files and a stand-in `dotnet` for the
+      selection: clean → 0; each forbidden line above, a missing file, an analyzer-config fixture
+      with `skip_namespaces`, a source fixture with a bare `#pragma warning disable` → 1 naming the
+      cause. Its real-MSBuild cases run in `Pack Warnings Gate` the way `PKV_MSBUILD_CASES=1` does:
+      a scratch project built with the two properties, once clean (proven) and once each with
+      `WarningLevel=0`; `RunAnalyzersDuringBuild=false` with `RunAnalyzers` unset; `RS0016`
+      appended to `NoWarn` inside a `BeforeTargets="CoreCompile"` target; an `<Analyzer Remove>`
+      in such a target; `TreatWarningsAsErrors=false`; `CodeAnalysisRuleSet` at a ruleset with
+      `RS0016` at `None`; and `dotnet_public_api_analyzer.skip_namespaces` in its `.editorconfig` —
+      each measured 2026-09-26 to build green with an undeclared public member, and each must read
+      "not proven". Do **not** pin "both `PublicAPI.*.txt` deleted": with neither file 5.6.0
+      reports every public symbol, with exactly one it reports `RS0048`, and both fail the build
+      on their own (measured). In `Tests/Verbara.Sdk.Governance.Tests`, one test: the root
+      `.editorconfig` line `dotnet_diagnostic.RS0016.severity` is `warning` or `error`, with a
+      failure message that says why the line is load-bearing — a specific severity there is what
+      keeps `dotnet_analyzer_diagnostic.severity = none` and the `category-ApiDesign` demotion
+      inert (measured both ways). Verify: after
+      `dotnet build Verbara.Sdk.slnx -c Release --no-incremental -p:ProvideCommandLineArgs=true -p:RecordCscArgs=true`
+      on the integrated branch the guard exits 0 — which it can only do because 1.2 attached the
+      analyzer to `SourceGenerators`; had it not, that project's record would carry no `/analyzer:`
+      line for the package, and this is where an exemption would have had to be written — exits 1
+      on each fixture above, the harness is green, and the Governance test passes.
 
 ## 3. Phase C — integration (batched)
 
@@ -232,7 +292,9 @@ record file, not the code — so the two do not collide, but the pull request mu
       guards — green on touched projects is not green in CI); `openspec validate --all --strict`;
       `bash scripts/tests/test_public_api_guard_coverage.sh` and
       `bash scripts/tests/test_public_api_guard_fires.sh` (green);
-      `bash scripts/ci/check-public-api-guard-coverage.sh` (exit 0); and
+      `dotnet build Verbara.Sdk.slnx -c Release --no-incremental -p:ProvideCommandLineArgs=true -p:RecordCscArgs=true`
+      followed by `bash scripts/ci/check-public-api-guard-coverage.sh` (exit 0 — a record from a
+      build without the two properties is "not proven"); and
       `bash scripts/ci/check-public-api-guard-fires.sh` (exit 0 — and it must exit 0 only because
       the build failed with `RS0016` naming the probe). Then read `.github/workflows/ci.yml` and run
       the remaining fast, deterministic, non-service steps it lists rather than recalling job names.

@@ -79,8 +79,10 @@ parts.
    required, or the first project that fails stops its dependents and the inventory is partial.
 2. **The message is the record line.** In 5.6.0 the text after `Symbol '` is exactly what the file
    takes — modifiers, nullability annotations, return type, an implicit constructor as
-   `T.T() -> void`, a constant with its value. The SARIF property bag (`-p:ErrorLog=<file>,version=2`,
-   key `APIName`) carries the same string and can cross-check the parse; the console is sufficient.
+   `T.T() -> void`, a constant with its value. The SARIF property bag
+   (`-p:ErrorLog=<file>%2Cversion=2`, key `APIName` — the comma escaped, or MSBuild reads
+   `version=2` as a second property and csc writes SARIF 1.0) carries the same string and can
+   cross-check the parse; the console is sufficient.
 3. **What the parse must get right:** (a) MSBuild prints every diagnostic at least twice — dedupe
    per project; (b) the owning package is the `[…/X.csproj]` suffix, not the source path — the
    JSON-context members sit in generated files; (c) anchor on the fixed text
@@ -126,19 +128,26 @@ reading `Unshipped` will see entries that are not new API. The change must say s
 next reader will misread the file the way this proposal's first draft misread
 `Cluster.Primitives`'s.
 
-### D4 — The 671 synthesised members are declared without assessment; the 112 are read one by one
+### D4 — The 675 synthesised members are declared without assessment; the 120 hand-written are read one by one
 
-The compiler's record members and the JSON source generator's context members are declared
-mechanically. The 112 hand-written members get a pass by a human eye, and the finding — "intended" or
-"this should not have been public" — is recorded in the ADR.
+The compiler's record members, the JSON source generator's context members and the four implicit
+constructors the compiler emits for the generator types are declared mechanically. The 120
+hand-written members — 112 across the 28 packages that already had the analyzer, plus the 8
+author-written entries of `Verbara.Sdk.Ami.SourceGenerators` (four `…Generator` types and their
+four `Initialize` methods) — get a pass by a human eye, and the finding — "intended" or "this should
+not have been public" — is recorded in the ADR.
 
 *Why:* the two groups differ in what a declaration means. Declaring `PrintMembers` states a fact about
 C#; nobody chose it and nobody can unchoose it without abandoning `record`. Declaring
 `AriClientFactory` states that a public factory type is part of the contract, which somebody either
-decided or did not. Treating them alike is how the second kind stops being a decision.
+decided or did not. Treating them alike is how the second kind stops being a decision. The generator
+types are the second kind: measured 2026-09-26 on SDK 10.0.401, an `internal sealed class …Generator`
+marked `[Generator]` is discovered, instantiated and emits identically to the public one, so `public`
+there is the Roslyn-template convention an author kept, not a load requirement — and a kept convention
+is a decision the record can state in one paragraph.
 
-*Alternative rejected:* assess all 783. It costs the reviewer's attention on 671 items that have one
-possible answer, which is the reliable way to make the remaining 112 get skimmed.
+*Alternative rejected:* assess all 795. It costs the reviewer's attention on 675 items that have one
+possible answer, which is the reliable way to make the remaining 120 get skimmed.
 
 ### D5 — The negative control is committed, it runs on every pull request, and it restores the tree
 
@@ -165,39 +174,102 @@ committed procedure does.
 instance data**, or `CA1822` ("can be marked as static") fails the build first and the control proves
 nothing about `RS0016`. The first attempt at this negative control failed exactly that way.
 
-### D6 — Breadth is proven by evaluation on every pull request; the control proves depth
+### D6 — Breadth is proven from the arguments of the compile that produced each package; the control proves depth
 
 The negative control (D5) shows the guard firing on one package through the real toolchain. It
 cannot show that the other 28 are guarded: a project can append `RS0016` to its own `NoWarn` — six
 projects already append or replace `NoWarn` this way, `Verbara.Sdk.OpenTelemetry` with `NU5104`,
 `Verbara.Sdk.Benchmarks` with `CA1822`, and three test projects that write `<NoWarn>CA1707</NoWarn>`
 with no `$(NoWarn);` prefix and so discard everything the repository sets — set
-`TreatWarningsAsErrors` or
-`CodeAnalysisTreatWarningsAsErrors` to `false` (the analyzer's own `buildTransitive` props then move
-every `RS` id into `WarningsNotAsErrors`), lose both `PublicAPI.*.txt` (the `Exists` conditions in
-`Directory.Build.props` and in the analyzer's targets then hand it nothing to check, and `RS0048`
-fires only when exactly one is missing), or never receive the analyzer. The last is not
-hypothetical: `Directory.Build.props:69` excludes `Verbara.Sdk.Ami.SourceGenerators` by name, and
-that package is `IsPackable=true` with four public generator types and one-line record files that
-nothing reads. Each of these builds exactly as green as a declared package, so "29 packages" was 28
-before this change started.
+`TreatWarningsAsErrors` to `false`; set `CodeAnalysisTreatWarningsAsErrors` to `false` in a
+`Directory.Build.props` (the analyzer's own `buildTransitive` props then move every `RS` id into
+`WarningsNotAsErrors`; from a project body the same property does nothing, because those props
+read it first — measured); set `WarningLevel` to `0`; set `RunAnalyzers` — or
+`RunAnalyzersDuringBuild` with `RunAnalyzers` unset — to `false`; point `CodeAnalysisRuleSet` at a
+ruleset that sets `RS0016` to `None`, which silences it with the root `.editorconfig` line at
+`warning` (measured); remove the analyzer item or append to `NoWarn` inside a target that runs
+before `CoreCompile`; put `dotnet_public_api_analyzer.skip_namespaces` in an analyzer-config file
+for a namespace that has no record lines yet; or never receive the analyzer. Deleting the record
+files is not on that list: with both `PublicAPI.*.txt` gone 5.6.0 reports every public symbol as
+`RS0016`, and with exactly one gone it reports `RS0048` — both fail the build on their own
+(measured). The last item is not hypothetical: `Directory.Build.props:69` excludes
+`Verbara.Sdk.Ami.SourceGenerators` by name, and that package is `IsPackable=true` with four public
+generator types and one-line record files that nothing reads. Each of these builds exactly as green
+as a declared package, so "29 packages" was 28 before this change started.
 
 Two decisions. First, the source-generator package gets the analyzer: attached in isolation on
 2026-09-25 it reports exactly 12 `RS0016` symbols (4 types × type, implicit constructor,
-`Initialize`) and no other diagnostic, so the cost is 12 lines and the spec's first requirement
-carries no exception. `BannedApiAnalyzers` stays excluded for it — unmeasured, and not this change's
-question. Second, a guard asserts the configuration across every packable project on every pull
-request by MSBuild evaluation (`dotnet msbuild -getProperty/-getItem`, about 0.3 s a project, no
-restore, no build), in the shape `scripts/ci/check-package-validation-coverage.sh` already has for
-the same failure class (ADR-0055 addendum, 17 of 29 validated). It blocks the pull request that adds
-an opt-out, which a control run afterwards cannot.
+`Initialize`) and no other diagnostic, so the cost is 12 lines; the spec's first requirement
+carries no exception, and neither does its fourth — the 8 author-written entries are assessed in
+2.1 (D4). `BannedApiAnalyzers` stays excluded for it — unmeasured, and not this change's question.
+Second, a guard reads, for every packable project, the arguments the C# compiler was handed by the
+compilation the pull request's build ran — the one whose output `dotnet pack --no-build` then
+packed. `Build Release` runs with `-p:ProvideCommandLineArgs=true -p:RecordCscArgs=true`: the first
+is the SDK's own switch that makes the `Csc` task output its arguments as `@(CscCommandLineArgs)`
+without changing the compile; the second arms a target in a new `Directory.Build.targets` that
+writes them, after `CoreCompile`, to `$(IntermediateOutputPath)public-api.csc-args.txt` — one file
+per project, in that project's own `obj/`, whichever node compiled it. Both are global, so no
+project can unset them. `scripts/ci/check-public-api-guard-coverage.sh` reads each file and fails
+the pull request unless: `/warnaserror+` is present; `/skipanalyzers+`, `/warn:0` and any
+`/ruleset:` are absent; `RS0016` is in neither `/nowarn:` nor `/warnaserror-:`; an `/analyzer:`
+line ends in `Microsoft.CodeAnalysis.PublicApiAnalyzers.dll`; an `/additionalfile:` names each of
+`PublicAPI.Shipped.txt` and `PublicAPI.Unshipped.txt`. The same file names every analyzer-config
+file and every source file the compiler read, and that — not "under `src/`" — is the scope of the
+scan for what arguments cannot show: no analyzer-config file inside the repository other than the
+root `.editorconfig` mentions `RS0016`, `dotnet_analyzer_diagnostic` or
+`dotnet_public_api_analyzer`; the root file keeps `dotnet_diagnostic.RS0016.severity` at `warning`
+or `error`; no source file on the compile list carries `#pragma warning disable` naming `RS0016` or
+with no id at all, or `SuppressMessage` for `RS0016`. Measured 2026-09-26 on SDK 10.0.401 with
+analyzer 5.6.0 against an undeclared public member: `WarningLevel=0` shows as `/warn:0`; `NoWarn`
+appended in the project body and inside a `BeforeTargets="CoreCompile"` target both put `RS0016`
+in `/nowarn:`; an `<Analyzer Remove>` in such a target leaves no `/analyzer:` line for the package;
+`RunAnalyzersDuringBuild=false` shows `/skipanalyzers+`; `TreatWarningsAsErrors=false` leaves no
+`/warnaserror+`; a ruleset shows `/ruleset:`; and `skip_namespaces`, the one silencer that changes
+no argument, is a line in a file the arguments name. Recording costs nothing measurable (0.54 s
+against 0.56 s for a three-project rebuild), the file is about 21 KB a project, and the guard is
+29 file reads. It blocks the pull request that adds an opt-out.
 
-*Alternative rejected:* a Governance test that greps project files — rejected by the ADR-0055 guard
-for reasons that apply unchanged (a nested props file, a property set through another property, or a
-spelling variant is invisible to grep and visible to evaluation). What evaluation cannot see —
-`.editorconfig` severity, a nested `.editorconfig`/`.globalconfig` under `src/`, `#pragma warning
-disable RS0016`, `[SuppressMessage]` — is a tree scan, and that half does belong in
-`Tests/Verbara.Sdk.Governance.Tests`.
+What such a record holds was read on this tree before the recording target exists, by asking MSBuild
+for `CscCommandLineArgs` with the compiler skipped — an inspection, not the guard's route, which is
+the real compile's own output. On `src/Verbara.Sdk.Cluster.Primitives` it returns **250** arguments:
+`skipanalyzers: 0`, 26 `/analyzer:` DLLs, `/warnaserror+`, both `PublicAPI.*.txt` as
+`additionalfile` — and `/nowarn:CS1591,RS0016,RS0037,RS0041,1701,1702,8002`. This change's own
+defect is one of those 250 lines, which is the point: the arguments state what the compiler was told
+about `RS0016`, and today they state that it was told to ignore it.
+
+*Why not evaluation:* `dotnet msbuild -getProperty/-getItem` reads the project before any target
+runs. A target can set `RunAnalyzers`, append to `NoWarn` or remove the analyzer item after that
+and before `CoreCompile`; the SDK itself decides whether analyzers run inside a target
+(`_ComputeSkipAnalyzers` in `Microsoft.Managed.Core.targets`: `RunAnalyzers` wins,
+`RunAnalyzersDuringBuild` counts only when `RunAnalyzers` is empty); and a NuGet analyzer is not an
+`Analyzer` item at evaluation at all. The evaluation of such a project is byte-identical to a
+guarded one (measured), and a list of properties to read is open by construction — this change's
+first draft missed `RunAnalyzersDuringBuild`, `WarningLevel` and `CodeAnalysisRuleSet`. The
+sibling `check-package-validation-coverage.sh` is the right shape for its own question and says in
+its header what it cannot see, "anything decided after evaluation"; for this guard that blind spot
+is the threat itself.
+
+*Why not the compiler's SARIF log:* `-p:ErrorLog=<file>%2Cversion=2` makes csc list the rules of
+every analyzer it ran with each rule's effective configuration, and that does show a dropped
+analyzer (no `RS` rule), `/skipanalyzers+` (no rule at all) and an `.editorconfig` severity of
+`none` (`{"enabled":false}`). Measured 2026-09-26, it does not show `/warn:0` or
+`/nowarn:RS0016` — from a global property, the project body or a target the record still reads
+`{"level":"error"}` while the build is green and the member is in the binary. A record blind to
+two of the knobs cannot be the judge.
+
+*Why not a negative control on every package:* it observes the outcome, the strongest observation
+for anything an argument or a file decides — but it is a second compile a target can tell apart
+from the real one, it adds 20–28 s sequential (about 7 s with four workers) plus a design-time
+read per project, it fails 29 builds by design and must stay incremental or a failed rebuild
+leaves the next package's `--no-dependencies` verdict as `CS0006`, and it is blind to the one
+silencer measured to change no argument: `skip_namespaces` skips the package's own namespace while
+the probe's foreign namespace still fires. D5 keeps that observation where it pays — one package,
+every pull request — as the check that the toolchain still turns these arguments into a failure.
+
+*Alternative rejected:* a Governance test that greps project files — rejected for the ADR-0055
+reasons, which apply unchanged. What fails closed rather than open: a project that sets
+`ImportDirectoryBuildTargets=false` or declares `RecordCscArgs` as `TreatAsLocalProperty` produces
+no record, and no record is "not proven".
 
 ## Risks / Trade-offs
 
@@ -209,7 +281,8 @@ disable RS0016`, `[SuppressMessage]` — is a tree scan, and that half does belo
   compiler refuses the lines. That is the acceptable direction; the ADR names the version the format
   was measured on.
 - **A package opts out after this change** → D6's guard fails the pull request that adds the opt-out,
-  naming the project and the setting; a demotion evaluation cannot see is the Governance scan's.
+  naming the project and the argument or the file; what no argument shows is found in the files the
+  same record names.
 - **A member is declared that should never have been public** → D4 makes the assessment a requirement
   and the finding explicit, while deliberately leaving the removal to a change that can carry a
   breaking tier. The risk is accepted, not eliminated: declaring an accidental export does entrench

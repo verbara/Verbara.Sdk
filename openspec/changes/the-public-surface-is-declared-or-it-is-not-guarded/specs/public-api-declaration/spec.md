@@ -57,14 +57,20 @@ carried exactly that arrangement.
 
 #### Scenario: A package cannot opt itself out unnoticed
 
-- **GIVEN** every packable project under `src/`
-- **WHEN** one of them re-suppresses the diagnostic, lowers it below a build failure, does not
-  reference the analyzer, or carries no declared record for the analyzer to check
-- **THEN** a check that runs on every pull request the build runs for fails, naming the project and
-  the setting
-- **AND** for a setting the build evaluates, that check reads the evaluation rather than the text of
-  the project file; for one the build does not evaluate — an analyzer-config severity or an
-  in-source suppression — it scans the tree
+- **GIVEN** every project whose package the pull request's build produced
+- **WHEN** one of them re-suppresses the diagnostic, lowers it below a build failure, stops the
+  analyzer running, does not reference the analyzer, or tells the analyzer to skip part of its
+  surface — by any setting, wherever it is set, including a step that runs after the project is
+  evaluated and before it is compiled
+- **THEN** a check that runs on every pull request the build runs for fails, naming the project
+  and what it found
+- **AND** that check reads the arguments the compiler was handed by the compilation that produced
+  the package — not the project's evaluation, not a second compile, and not the text of the
+  project file — so that everything decided before the compiler ran is inside what it sees
+- **AND** what those arguments cannot show — a suppression inside a source file, or a key in an
+  analyzer-config file — is found by reading the source and analyzer-config files those same
+  arguments name, wherever they live
+- **AND** a package with no such record is reported as not proven, never as a pass
 
 #### Scenario: The configuration describes itself truthfully
 
@@ -158,9 +164,10 @@ that carries its own release tier.
 packages that have undeclared members — measured 2026-09-25, the 783 symbols fall in 16 of the 29
 projects, the largest being `Verbara.Sdk.Ari` (218), `Verbara.Sdk.Sessions` (187) and
 `Verbara.Sdk.VoiceAi` (128) — plus `Verbara.Sdk.Ami.SourceGenerators`, which the analyzer never
-reached; two steps
-added to an existing required CI job and one to the always-run script-test job — no new job and no
-new check-run name. No source file under `src/` changes behaviour, no package contents change, and
+reached. The build configuration gains a `Directory.Build.targets` that records each compile's own
+arguments, and two global properties on the Release build; two steps are added to an existing
+required CI job and **two** to the always-run script-test job — no new job and no new check-run
+name. No source file under `src/` changes behaviour, no package contents change, and
 no consumer is affected — the records are analyzer metadata and are not shipped. `PackageValidation`
 compares a pack against the previously published package rather than against these records, so the
 current baseline and the empty suppression set stay valid throughout.
@@ -171,7 +178,7 @@ package — so the work is bounded by a number that was counted, not estimated. 
 is the opposite of the usual one: not that the change breaks something, but that it lands and the
 guard still does not fire, on one package or on all of them. That is why the guard's liveness is a
 requirement with a negative control that runs on every pull request, and why its breadth is a
-requirement with an evaluated per-package check, rather than steps in a task list. The second risk is
-that completing the record quietly blesses members that were never meant to be public, which the
-assessment requirement addresses by making the finding explicit while deliberately leaving removal
-to another change.
+requirement with a per-package check that reads the arguments of the compile that produced each
+package, rather than steps in a task list. The second risk is that completing the record quietly
+blesses members that were never meant to be public, which the assessment requirement addresses by
+making the finding explicit while deliberately leaving removal to another change.
