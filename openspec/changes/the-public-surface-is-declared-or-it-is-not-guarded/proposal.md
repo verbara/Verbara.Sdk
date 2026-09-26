@@ -71,8 +71,9 @@ not folded in.
   package's `PublicAPI.*.txt`, so the files describe the surface rather than a subset of it. How the
   671 synthesised members are handled is the design question (see `design.md`); what the requirement
   states is that after this change the files are complete and the build proves it.
-- **The 112 hand-written members are reviewed, not just recorded.** Each is declared, and either
-  recorded as intended or reported as one that should not have been public. Declaring an accidental
+- **The 120 hand-written members are reviewed, not just recorded** — the 112 plus the 8
+  author-written entries of the source-generator package. Each is declared, and either recorded as
+  intended or reported as one that should not have been public. Declaring an accidental
   export as intended is how an accident becomes a contract, so the review is a requirement rather
   than a suggestion — but **removing anything is out of scope here**: a removal is a `CP0002` break
   and belongs to its own change with its own release tier.
@@ -83,8 +84,10 @@ not folded in.
 - **The guard is proven on every package, not on one.** `Verbara.Sdk.Ami.SourceGenerators` never
   received the analyzer at all — `Directory.Build.props:69` excludes it by name — so "29 packages"
   is 28 today. It gets the analyzer (12 entries, measured), and a per-package check on every pull
-  request fails the one that lets any project opt out again; the negative control proves depth on
-  one path, the check proves breadth on all of them.
+  request, reading the arguments, the diagnostic log and the analyzer-config files of the compile
+  that produced each package, fails the one that lets any project opt out again, and says what it
+  cannot see; the negative control proves depth on one path, the check proves breadth on all of
+  them.
 
 - **Not in scope, deliberately:** removing any existing public member; changing `PackageValidation`,
   `PackageValidationBaselineVersion` or any `CompatibilitySuppressions.xml`; and `RS0037`/`RS0041`,
@@ -121,10 +124,12 @@ the analyzers the build runs.
   same pull request.
 - `Directory.Build.props` (again) — the analyzer item group stops excluding `SourceGenerators`;
   that package's `PublicAPI.Unshipped.txt` gains 12 lines.
-- New: `scripts/ci/check-public-api-guard-coverage.sh`, `scripts/ci/check-public-api-guard-fires.sh`,
+- New: `Directory.Build.targets` (the recording target and the `ErrorLog` property it arms),
+  `scripts/ci/check-public-api-guard-coverage.sh`, `scripts/ci/check-public-api-guard-fires.sh`,
   their harnesses under `scripts/tests/`, `tools/declare-public-api.sh`, and one Governance test.
-  `.github/workflows/ci.yml` gains two steps in `Pack Warnings Gate` and two in `Coverage Script
-  Tests`; no new job and no new check-run name.
+  `.github/workflows/ci.yml`'s `Build Release` step gains two global properties and `Pack Warnings
+  Gate` gains two steps, and `Coverage Script Tests` gains two; no new job and no new check-run
+  name.
 - **No behaviour changes for a consumer, and no package contents change.** `PublicAPI.*.txt` files are
   analyzer metadata; they are not shipped. `PackageValidation` compares against the published
   package, so the 2.6.0 baseline and the zero suppressions currently in the tree stay valid.
