@@ -10,8 +10,8 @@ namespace Verbara.Sdk.TestInfrastructure.Wire;
 /// run from <c>verbara/asterisk-local:22</c> on the host network, a call originated into
 /// <c>AudioSocket(&lt;uuid&gt;,127.0.0.1:9092)</c>, and a bare listener on 9092 that recorded what
 /// arrived. Nothing here was produced by this repository's own encoders, and nothing here may be.
-/// The raw records of the runs are kept with the change that introduced this file, under
-/// <c>openspec/changes/audiosocket-speaks-the-protocol-asterisk-speaks/</c>.
+/// The raw records of the runs are kept with the change that introduced this file
+/// ("audiosocket-speaks-the-protocol-asterisk-speaks").
 /// </para>
 /// <para>
 /// <b>The header, as measured.</b> One byte of type, then two bytes of big-endian length, then the

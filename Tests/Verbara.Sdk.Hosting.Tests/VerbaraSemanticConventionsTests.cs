@@ -6,8 +6,8 @@ namespace Verbara.Sdk.Hosting.Tests;
 /// <summary>
 /// Pins the wire-level attribute names exposed by <see cref="VerbaraSemanticConventions"/>
 /// so a refactor cannot silently rename a label and break consumer dashboards.
-/// The values mirror the proposal in
-/// <c>docs/research/2026-04-19-otel-sip-semantic-conventions.md</c>.
+/// The values mirror the draft SIP / Asterisk OpenTelemetry semantic-conventions
+/// proposal (2026-04-19).
 /// </summary>
 public sealed class VerbaraSemanticConventionsTests
 {

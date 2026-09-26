@@ -5,7 +5,7 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics;
 /// <summary>
 /// OpenTelemetry-compatible ActivitySource for distributed tracing of OpenAI Realtime sessions.
 /// Produces spans for session lifecycle and function call dispatch. Tag names match the
-/// draft in <c>docs/research/2026-04-19-otel-sip-semantic-conventions.md</c> and the
+/// draft SIP / Asterisk OpenTelemetry semantic-conventions proposal (2026-04-19) and the
 /// consumer-facing <c>Verbara.Sdk.VerbaraSemanticConventions</c> catalog.
 /// <para>
 /// To enable tracing, register the source name with your OpenTelemetry tracer:

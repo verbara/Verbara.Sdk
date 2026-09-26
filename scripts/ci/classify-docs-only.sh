@@ -27,7 +27,7 @@ for f in "${files[@]}"; do
       echo "docs_only=false"; exit 0 ;;
   esac
   case "$f" in
-    docs/*|openspec/*|CHANGELOG.md) continue ;;   # docs + specs + changelog
+    docs/*|CHANGELOG.md) continue ;;              # docs + changelog
     */README.md) continue ;;                      # README at any depth. Nested src/*/README.md ARE
                                                   # packed: deleting one is NU5019 and emptying one
                                                   # is NU5040 — both skipped by this fast path and

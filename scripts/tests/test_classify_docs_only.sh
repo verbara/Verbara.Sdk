@@ -40,9 +40,8 @@ run_case() { # run_case <expected> <description>
 [ -x "$CLASSIFY" ] && ok || bad "classifier must be committed executable (mode 100755)"
 
 # --- true cases (allowlisted) ---
-new_repo; commit_many docs/decisions/0040-x.md;              run_case true  "docs/ nested"
-new_repo; commit_many docs/specs/architecture.md;            run_case true  "docs/specs"
-new_repo; commit_many openspec/changes/archive/x/proposal.md; run_case true "openspec/ nested"
+new_repo; commit_many docs/guides/asterisk-version-matrix.md; run_case true "docs/ nested"
+new_repo; commit_many docs/operations/x.md;                  run_case true  "docs/operations"
 new_repo; commit_many CHANGELOG.md;                          run_case true  "top-level CHANGELOG.md (PRs #113/#114)"
 new_repo; commit_many src/Verbara.Sdk.Ami/README.md;         run_case true  "nested README (packed, NOT DocSnippets-compiled)"
 new_repo; commit_many Examples/SessionExample/README.md;     run_case true  "Examples README (PR #93 shape)"
@@ -50,15 +49,15 @@ new_repo; commit_many SECURITY.md;                           run_case true  "top
 new_repo; commit_many docs/ci-docs-fast-path.md;             run_case true  "the ADR-0016 §6 canary payload itself"
 new_repo; commit_many docs/guides/README.md;                 run_case true  "docs/guides README is NOT a snippet source"
 new_repo; commit_many docs/guides/log-analysis-reference.md; run_case true  "non-snippet guide (carve-out is a FILE LIST, not docs/guides/*)"
-new_repo; commit_many openspec/specs/ci-gating/spec.md CHANGELOG.md src/Verbara.Sdk.Ami/README.md
-run_case true "MULTI-PATH archive shape in one commit"
+new_repo; commit_many docs/claim-registry.md CHANGELOG.md src/Verbara.Sdk.Ami/README.md
+run_case true "MULTI-PATH docs + changelog + packed README in one commit"
 new_repo; commit_many "docs/café.md";                        run_case true  "non-ASCII path (core.quotePath=false)"
 
 # --- Sdk DocSnippets carve-out (the gated Unit Tests job is their only guard) ---
 new_repo; commit_many README.md;                             run_case false "top-level README.md is DocSnippets-compiled"
 new_repo; commit_many docs/README-technical.md;              run_case false "docs/README-technical.md is DocSnippets-compiled"
 new_repo; commit_many docs/guides/troubleshooting.md;        run_case false "docs/guides/troubleshooting.md is DocSnippets-compiled"
-new_repo; commit_many docs/decisions/0040-x.md docs/guides/high-load-tuning.md
+new_repo; commit_many docs/guides/asterisk-version-matrix.md docs/guides/high-load-tuning.md
 run_case false "MULTI-PATH: carve-out wins inside an otherwise-allowlisted diff"
 
 # --- false cases (fail-closed) ---
@@ -69,9 +68,9 @@ new_repo; commit_many docker/Dockerfile.asterisk;            run_case false "top
 new_repo; commit_many src/Verbara.Sdk/NOTES.md;              run_case false "nested non-README .md (blanket **/*.md is BANNED)"
 new_repo; commit_many .github/workflows/ci.yml;              run_case false "workflow change (self-validation: the rollout PR is NOT docs-only)"
 new_repo; commit_many scripts/ci/classify-docs-only.sh;      run_case false "the classifier itself"
-new_repo; commit_many docs/decisions/0040-x.md src/Verbara.Sdk/Foo.cs
+new_repo; commit_many docs/guides/asterisk-version-matrix.md src/Verbara.Sdk/Foo.cs
 run_case false "MULTI-PATH docs + code (docs first)"
-new_repo; commit_many src/Verbara.Sdk/Foo.cs docs/decisions/0040-x.md
+new_repo; commit_many src/Verbara.Sdk/Foo.cs docs/guides/asterisk-version-matrix.md
 run_case false "MULTI-PATH code + docs (docs last — order must not matter)"
 
 # rename CODE -> DOCS: without --no-renames git prints ONLY the destination (docs/...) and this

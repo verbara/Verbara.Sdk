@@ -172,7 +172,7 @@ The serialization DTO `CallSessionSnapshot` is `internal` to `Verbara.Sdk.Sessio
 
 ## Benchmarks
 
-Two figures per networked backend, from the re-measurement in the addendum at the end of [`docs/research/benchmark-analysis.md`](../research/benchmark-analysis.md): measured 2026-09-12 on .NET 10.0.12, AMD Ryzen 9 9900X, with an xunit `Fact` + `Stopwatch` (`RedisLatencyBenchmark` / `PostgresLatencyBenchmark`) against loopback Docker with no TLS — Redis 7.4.8, PostgreSQL 18.4 — median of five runs. They are bound to `docs/research/performance-record.json`, as `README.md`'s Performance table is.
+Two figures per networked backend, re-measured 2026-09-12 on .NET 10.0.12, AMD Ryzen 9 9900X, with an xunit `Fact` + `Stopwatch` (`RedisLatencyBenchmark` / `PostgresLatencyBenchmark`) against loopback Docker with no TLS — Redis 7.4.8, PostgreSQL 18.4 — median of five runs. They are bound to `Tests/Verbara.Sdk.Benchmarks/performance-record.json`, as `README.md`'s Performance table is.
 
 | Backend | `SaveAsync` (single session) | `SaveBatchAsync` (500 sessions) |
 |---------|------------------------------|---------------------------------|

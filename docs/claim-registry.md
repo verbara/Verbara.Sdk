@@ -2,7 +2,7 @@
 
 The single answer to **"is this claim guarded?"** — one file, rather than a search across the test
 projects, the AOT canary and the workflows. Required by `claim-guards` and
-[ADR-0042](decisions/0042-public-claim-guard-classes.md).
+ADR-0042.
 
 **A pull request that adds or changes a quantitative figure in a living public document must add or
 update its row here in the same PR.** A figure with no row does not ship (ADR-0042 D1).
@@ -26,9 +26,8 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 `src/*/README.md`, `Examples/*/README.md`, all of `docs/guides/`, and the `<Description>` values in
 `src/*/*.csproj` (not Markdown, but published verbatim on nuget.org).
 
-**Out**, as period-correct records left verbatim: dated `CHANGELOG.md` entries,
-`openspec/changes/archive/`, `docs/decisions/`, `docs/specs/`, `docs/research/`,
-`docs/plans/{completed,archived}/`.
+**Out**, as period-correct records left verbatim: dated `CHANGELOG.md` entries. Architecture
+decision records, specs, plans and research notes are kept locally and are not tracked here.
 
 ## Status legend
 
@@ -55,7 +54,7 @@ is the worked example: its vendor wire captures are EVIDENCE, its counts of *our
 | ~~67~~ | 94.26% English accuracy, in upstream's voice | — | — | **DELETED** — lived in the release bullets, cut by the 2026-09-20 ruling on `README.md` release history. The figure survives at `:465` (row below) with its citation and hash pin; this was the duplicate. |
 | ~~67~~ | ~12 ms CPU inference | — | `TurnDetectionBenchmark` | **DELETED** — measured at 26.18–37.30 ms; deferred, see *Deferrals*. Its line was also removed with the release bullets on 2026-09-20. |
 | 65 | 148/152 AMI (97%), 94/98 ARI (96%), 46/46, 27/27, 269 events | ENFORCING | — | GAP — the event figure was corrected 2026-09-24 (was 278) |
-| 67 | **60 ADRs** | ENFORCING | `StatusBlockCoherenceTests` — counts `docs/decisions/*.md`, excluding the catalog `README.md` | **OK** |
+| ~~67~~ | ~~**60 ADRs**~~ | — | — | **DELETED** — the figure left `README.md` with the public decision catalog it counted (decision records are kept locally, no longer tracked); the two `StatusBlockCoherenceTests` cases that pinned it were removed with it. |
 | 91 | measurement provenance (Ryzen 9 9900X, .NET 10.0.5, BDN v0.14.0, 2026-04-18) | COHERENCE | `PerformanceTableCoherenceTests` — the header provenance test | PARTIAL — matched against the whole file rather than this line, and blind to the AMI row's .NET 10.0.6 MediumRunJob exception (`performance-record.json:12`); the two session-store rows measured apart from it state their own at :110 |
 | 95 | AMI parse+dispatch 1.62M events/sec (617.6 ns) | ENFORCING + COHERENCE | `perf-regression.yml` `*AmiProtocolReader*` | GAP — observational only (`\|\| true`, no baseline) |
 | 96 | ARI deserialize Channel 3.54M ops/sec (283 ns) | ENFORCING + COHERENCE | `*AriJson*` | GAP — observational only |
@@ -219,8 +218,8 @@ false and is gone.
   and one of its own inputs (the per-agent event rate) is itself an unguarded planning assumption,
   so a COHERENCE guard against it would assert arithmetic and look like evidence.
 - **Unblocking condition:** a harness that can generate agent load and report a sustained rate.
-  The open change `openspec/changes/longevity-soak-and-chaos/` is the natural vehicle if it adopts
-  a scale target; until it does, nothing in flight discharges this.
+  The open change `longevity-soak-and-chaos` is the natural vehicle if it adopts a scale target;
+  until it does, nothing in flight discharges this.
 
 
 **Turn-detection CPU inference latency.** The `~12 ms` figure was **removed from `README.md:67` and
@@ -321,9 +320,9 @@ the figure skips `Unit Tests` — the job the guard would live on. That carve-ou
 *Unresolved* 1, and the guard goes in with it. Until then these rows stay `GAP`: the figures are
 right and nothing stops them drifting again.
 
-Left alone deliberately: `docs/decisions/0001` and `0015` state 278 event types, and dated files
-under `docs/research/` state 278 and 111. Both folders are **Out** of scope above, as period-correct
-records left verbatim; an Accepted ADR is superseded, never edited.
+Left alone deliberately: ADR-0001 and ADR-0015 state 278 event types, and dated research notes
+state 278 and 111. Both are **Out** of scope above, as period-correct records left verbatim; an
+Accepted ADR is superseded, never edited.
 
 ## Rulings settled 2026-09-20
 

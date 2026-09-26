@@ -49,5 +49,5 @@ Enroll via `Verbara.Sdk.OpenTelemetry.WithAllSources()` — the meter name is al
 
 ## Roadmap
 
-- `PublishOnly = false` — subscribe to remote NATS subjects and republish inbound events onto the local Push bus (planned for a later v1.12.x release, tracked in `docs/research/2026-04-19-v1.12.0-product-opportunities.md`).
+- `PublishOnly = false` — subscribe to remote NATS subjects and republish inbound events onto the local Push bus (planned for a later v1.12.x release).
 - JetStream durable subscriptions + ordered consumer support.

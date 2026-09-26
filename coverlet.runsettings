@@ -5,7 +5,7 @@
   test assemblies, generated code (carries [GeneratedCode]), SQL migrations, AND
   the src assemblies whose ONLY tests are container-backed (Testcontainers) — those
   are excluded from the unit subset, so counting them at 0% would dilute the number
-  and mask real regressions. See docs/research/2026-06-14-sdk-coverage-baseline.md.
+  and mask real regressions (coverage baseline of 2026-06-14).
 -->
 <RunSettings>
   <DataCollectionRunSettings>
