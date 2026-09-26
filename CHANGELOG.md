@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed — BREAKING
+### Fixed — BREAKING: an AMI reconnect discarded every channel it was tracking, stranding the calls that ended during the outage and splitting the ones that survived (#315)
 
 - **An AMI reconnect no longer discards the call state it is holding.** The reload now reconciles
   Asterisk's snapshot against what the SDK holds instead of clearing the channel table and re-adding
