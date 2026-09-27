@@ -242,8 +242,17 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// this directly moves no process-wide instrument. Internal so a test can release a session it
     /// built through the internal constructor.
     /// </summary>
+    /// <remarks>
+    /// Each session releases its own entry and no other. The pair overload removes the entry only while
+    /// it still maps to this session, so a hangup processed after the entry stopped being this
+    /// session's (a stop cleared the table and a same-id connection registered since) leaves that
+    /// other session registered, where a removal by key alone would unregister it. The key is the
+    /// session's <see cref="AudioSocketSession.ChannelId"/>, which is get-only and set from the id the
+    /// session registered under. A same-id connection is still refused at connect time, so there is
+    /// nothing to hand over here.
+    /// </remarks>
     internal void ReleaseSession(AudioSocketSession session) =>
-        _sessions.TryRemove(session.ChannelId, out _);
+        _sessions.TryRemove(new KeyValuePair<Guid, AudioSocketSession>(session.ChannelId, session));
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
