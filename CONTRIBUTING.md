@@ -68,7 +68,7 @@ Scope is optional but recommended. Common scopes: `ami`, `agi`, `ari`, `live`, `
 - **File-scoped namespaces** (warning-level enforcement).
 - **TreatWarningsAsErrors** is on globally — build must be 0 warnings.
 - **Test naming:** `Method_ShouldExpected_WhenCondition`.
-- **Test stack:** xUnit 2.9.3, FluentAssertions 7.1.0, NSubstitute 5.3.0.
+- **Test stack:** xUnit, FluentAssertions and NSubstitute. Their versions are pinned in `Directory.Packages.props`; read them there, because a copy here goes stale.
 - **Central package management:** All NuGet versions in `Directory.Packages.props`.
 
 ### Build & Test
@@ -77,8 +77,8 @@ Scope is optional but recommended. Common scopes: `ami`, `agi`, `ari`, `live`, `
 # Build entire solution
 dotnet build Verbara.Sdk.slnx
 
-# Run all unit tests
-dotnet test Verbara.Sdk.slnx
+# Run the unit lane (the filter CI's Unit Tests job uses)
+dotnet test Verbara.Sdk.slnx --filter "Category!=Functional&Category!=Integration&Category!=Realtime&Category!=Spike"
 
 # Run a specific test project
 dotnet test Tests/Verbara.Sdk.Ami.Tests/
@@ -86,8 +86,8 @@ dotnet test Tests/Verbara.Sdk.Ami.Tests/
 # Run a single test by name
 dotnet test Tests/Verbara.Sdk.Ami.Tests/ --filter "FullyQualifiedName~AmiProtocolReaderTests"
 
-# Run functional tests (requires Docker)
-docker compose -f docker/docker-compose.test.yml up --build
+# Run functional + integration tests (requires Docker; Testcontainers starts the containers)
+dotnet test Verbara.Sdk.slnx --filter "Category=Functional|Category=Integration|Category=Realtime" -- RunConfiguration.MaxCpuCount=1
 ```
 
 ## Pull Request Process
@@ -110,7 +110,7 @@ docker compose -f docker/docker-compose.test.yml up --build
 
 ## Release Process (Maintainers)
 
-Releases are driven by tag pushes matching `v*` (e.g. `v1.12.0`, `v1.12.1`). The `.github/workflows/publish.yml` workflow builds in Release, packs every shipping project, and pushes all `.nupkg` files to nuget.org via `dotnet nuget push --skip-duplicate`. No manual `dotnet nuget push` is needed.
+Releases are driven by tag pushes matching `v*` (e.g. `v1.12.0`, `v1.12.1`). The `.github/workflows/publish.yml` workflow checks that the tagged commit was built green on `main`, builds in Release, packs every shipping project, builds the release notes from `CHANGELOG.md`, pushes all `.nupkg` files to nuget.org via `dotnet nuget push --skip-duplicate`, and creates the GitHub Release. No manual `dotnet nuget push` or `gh release create` is needed.
 
 ### One-time setup — `NUGET_API_KEY` secret
 
@@ -136,31 +136,62 @@ gh secret list --repo verbara/Verbara.Sdk
 
 ### Cutting a release
 
+A release is two pull requests and one tag push. `main` takes changes only through the merge queue, so neither the version bump nor the baseline move is committed to it directly.
+
 ```bash
-# 1. Ensure main is clean and CI is green on the latest commit.
-git checkout main && git pull && git fetch --tags
+# 1. Read the current state from the tree, not from memory.
+git switch main && git pull --ff-only && git fetch --tags
+grep -o '<PackageVersion>[^<]*' Directory.Build.props
+git tag --list 'v*' --sort=-v:refname | head -3
 
-# 2. Bump <PackageVersion> in Directory.Build.props + prepend a CHANGELOG.md section.
-#    Commit as: chore: bump version X.Y.(Z-1) → X.Y.Z
+# 2. Release PR, titled `chore(release): X.Y.Z`. It touches four files:
+#    - Directory.Build.props   <PackageVersion> → X.Y.Z
+#    - CHANGELOG.md            rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`
+#                              and open a new, empty `## [Unreleased]` above it
+#    - README.md               the Status block headline → **vX.Y.Z**
+#                              (StatusBlockCoherenceTests fails while it disagrees with <PackageVersion>)
+#    - docs/claim-registry.md  the headline-version row
+#    A section with a `### Changed — BREAKING` heading ships as a minor. A section whose
+#    breaking entries are all `### Fixed — BREAKING` may ship as a patch.
 
-# 3. Tag and push — this fires publish.yml.
-git tag -a vX.Y.Z -m "vX.Y.Z — <headline>"
+# 3. Optional readiness check, after the release PR is merged: run publish.yml on main by
+#    workflow_dispatch. It is a dry run — it packs, verifies the version and builds the notes
+#    from the CHANGELOG section, and publishes nothing. A dry run that FAILS leaves a failed
+#    check run on the release commit, and the tag's provenance check refuses that commit until
+#    the run is re-run green.
+gh workflow run publish.yml --ref main
+
+# 4. Tag the merged release commit and push the tag. This fires publish.yml.
+#    The `release-tags` ruleset restricts creating, updating and deleting v* tags
+#    to organisation admins.
+git tag -a vX.Y.Z -m "vX.Y.Z" <release-commit-sha>
 git push origin vX.Y.Z
-
-# 4. Watch the workflow until green:
 gh run watch --exit-status
 
-# 5. Publish the GitHub Release from the CHANGELOG excerpt:
-awk "/^## \\[X.Y.Z\\]/,/^## \\[/" CHANGELOG.md | sed "\$d" > /tmp/notes.md
-gh release create vX.Y.Z --title "vX.Y.Z — <headline>" --notes-file /tmp/notes.md
+# 5. publish.yml polls the feed for ONE package. Confirm all of them:
+for d in src/*/; do
+  p="$(basename "$d" | tr '[:upper:]' '[:lower:]')"
+  curl -fsS "https://api.nuget.org/v3-flatcontainer/$p/index.json" | grep -q '"X.Y.Z"' || echo "not on the feed yet: $p"
+done
+
+# 6. Baseline PR, titled `chore(release): move the package validation baseline to X.Y.Z`,
+#    opened only after the tag exists:
+#    - Directory.Build.props   <PackageValidationBaselineVersion> → X.Y.Z
+#    - delete every src/**/CompatibilitySuppressions.xml
 ```
 
-If `publish.yml` fails partway through, the remaining packages were skipped; `--skip-duplicate` makes the workflow idempotent. To retry, fix the root cause and re-push the tag:
+Between the two PRs the **Release Hygiene** workflow reports two expected failures: after the release PR merges, *Publish Liveness* says the version is "staged but never tagged" until the tag is pushed; after the tag is pushed, *ApiCompat Baseline* says the baseline is behind the newest tag until the baseline PR merges (`scripts/ci/check-publish-liveness.sh`, `scripts/ci/check-apicompat-baseline.sh`). Neither blocks a merge or a publish.
 
-```bash
-git push origin :refs/tags/vX.Y.Z   # delete remote tag
-git push origin vX.Y.Z              # re-push → re-fires publish.yml
-```
+If `publish.yml` refuses or fails, **do not delete and re-push the tag** — the `release-tags` ruleset blocks it for everyone except organisation admins, and no failure needs it:
+
+- **The provenance check refused the tag** (a completed check run on the tagged commit did not conclude success, skipped or neutral — `scripts/ci/check-release-provenance.sh`). Re-run the failed check, then re-run the publish run:
+
+  ```bash
+  gh run rerun <failed-run-id> --failed
+  gh run rerun <publish-run-id>
+  ```
+
+- **The push stopped partway through.** Fix the cause and re-run the publish run. `--skip-duplicate` skips the packages already on the feed, and the run then checks the feed and creates the GitHub Release if it does not exist yet.
 
 ## Reporting Issues
 
