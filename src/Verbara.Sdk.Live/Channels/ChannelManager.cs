@@ -348,11 +348,8 @@ public sealed class ChannelManager
         // ConcurrentDictionary.Values hands back a snapshot, so removing inside the loop is safe.
         var removed = 0;
         var newerThanSnapshot = 0;
-        foreach (var held in _channelsByUniqueId.Values)
+        foreach (var held in _channelsByUniqueId.Values.Where(channel => !present.Contains(channel.UniqueId)))
         {
-            if (present.Contains(held.UniqueId))
-                continue;
-
             // The snapshot was requested before this channel was admitted, so it could not have
             // reported it and its silence is not evidence. Removing it here would end a call that
             // is up — the worst outcome this reconciliation can produce, and worse than the ghost
@@ -367,12 +364,11 @@ public sealed class ChannelManager
                 removed++;
         }
 
+        // Where is lazy: each entry is tested only when the loop reaches it, after every earlier
+        // entry has been admitted, so an entry the snapshot repeats is admitted once.
         var added = 0;
-        foreach (var entry in snapshot)
+        foreach (var entry in snapshot.Where(reported => !_channelsByUniqueId.ContainsKey(reported.UniqueId)))
         {
-            if (_channelsByUniqueId.ContainsKey(entry.UniqueId))
-                continue;
-
             // fromSnapshot: the SDK never saw this channel start. A subscriber that opens a record
             // for it must be able to tell that from a live NewChannel, because the state the
             // snapshot reports is the only history it will ever get (ADR-0062, design D5/D6).

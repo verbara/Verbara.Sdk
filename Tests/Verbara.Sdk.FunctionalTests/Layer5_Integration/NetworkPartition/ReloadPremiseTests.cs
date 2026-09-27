@@ -1,6 +1,7 @@
 namespace Verbara.Sdk.FunctionalTests.Layer5_Integration.NetworkPartition;
 
 using System.Collections.Concurrent;
+using System.Reactive.Disposables;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Enums;
@@ -118,6 +119,10 @@ public sealed class ReloadPremiseTests : FunctionalTestBase
 
         try
         {
+            // Declared first, so it is disposed last as this block exits: after the token sources
+            // below and before the finally clause, which is where it used to be disposed by hand.
+            using var resubscriptionScope = Disposable.Create(() => resubscription?.Dispose());
+
             await OriginateBridgedCallAsync(control);
             var legs = await WaitForStatusLegsAsync(connection, atLeast: 2);
             var doomed = legs
@@ -198,7 +203,6 @@ public sealed class ReloadPremiseTests : FunctionalTestBase
         }
         finally
         {
-            resubscription?.Dispose();
             await ToxiproxyControl.TryRemoveToxicAsync(ProxyName, "reload-premise-cut");
             await BestEffort.SendAsync(control, new CommandAction { Command = HangupEverything });
         }

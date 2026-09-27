@@ -164,9 +164,11 @@ public sealed class ExternalMediaChannelIdFunctionalTests : FunctionalTestBase
                 activity.Channel?.Id ?? "no channel",
                 registered.Length == 0 ? "none" : string.Join(", ", registered));
 
-            activity.Channel.Should().NotBeNull(
-                "a successful create returns the channel Asterisk made, and every assertion below "
-                + "compares against its id");
+            // Assert.True, not Should().NotBeNull(): its [DoesNotReturnIf(false)] carries "not null
+            // past this line" to flow analysis — the compiler's and CodeQL's — which Should() cannot.
+            Assert.True(activity.Channel is not null,
+                "activity.Channel is null, but a successful create returns the channel Asterisk made, "
+                + "and every assertion below compares against its id");
 
             activity.AudioStream.Should().NotBeNull(
                 "the activity resolves its stream by calling GetStream(Channel.Id) on the server it "
