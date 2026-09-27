@@ -6,9 +6,10 @@ namespace Verbara.Sdk.Governance.Tests;
 /// In-process guard for ADR-0004 D1 (openspec change <c>a-decision-is-held-by-a-test-that-can-fail</c>,
 /// spec requirement "A package version is declared once, centrally"; design D4): no project file
 /// carries a <c>VersionOverride</c> that <c>decision-guards-baseline.json</c> does not list. One override
-/// was in the tree when the guard landed — <c>Verbara.Sdk.Data.Npgsql</c>'s, whose entry records how it
-/// got there — and the tree must match the list exactly: a new override fails, and so does an entry
-/// whose override was removed or whose floor moved without the entry moving with it. Carries two
+/// was in the tree when the guard landed — <c>Verbara.Sdk.Data.Npgsql</c>'s, whose 10.0.9 floor made a
+/// project referencing that package fail restore with NU1605; its removal deleted its entry, and the
+/// baseline lists none now — and the tree must match the list exactly: a new override fails, and so does
+/// an entry whose override was removed or whose floor moved without the entry moving with it. Carries two
 /// liveness floors — the project files walked and the package references read — and fixtures for
 /// every spelling the scanner claims to see and every shape it must pass.
 /// </summary>
@@ -16,8 +17,8 @@ public sealed class VersionOverrideGuardTests
 {
     // Conservative floors, well below the tree as this guard landed (93 .csproj files plus
     // Directory.Build.props and Directory.Packages.props; ~430 PackageReference items). The second
-    // floor keeps the guard honest once the one listed override is gone and the baseline is empty: a
-    // reader that stopped seeing package references would then pass having inspected nothing.
+    // floor keeps the guard honest now that the one listed override is gone and the baseline lists none:
+    // a reader that stopped seeing package references would pass having inspected nothing.
     private const int MinimumScannedProjectFiles = 60;
     private const int MinimumPackageReferences = 200;
 
@@ -368,12 +369,11 @@ public sealed class VersionOverrideGuardTests
             "ADR-0004 D1: a package version is declared once, in Directory.Packages.props. A " +
             "VersionOverride sets the floor a published package declares for that dependency, apart " +
             "from the central pin, and nothing moves it when the pin moves: the override in the tree when " +
-            "this guard landed had stayed at 10.0.9 while its pin went to 10.0.12.");
+            "this guard landed had stayed at 10.0.9 while its pin went to 10.0.12, and a project " +
+            "referencing that package failed restore with NU1605.");
         sb.AppendLine(
-            "Remove the override and take the central version. The baseline lists only the override that " +
-            "was in the tree when this guard landed, and it only shrinks. The version is part of the key, " +
-            "so moving that listed floor means rewriting its entry: a release decision, made where a " +
-            "reviewer sees it.");
+            "Remove the override and take the central version. The baseline listed only the override that " +
+            "was in the tree when this guard landed; that override is gone, and the list only shrinks.");
         sb.Append(match.Describe());
         return sb.ToString();
     }

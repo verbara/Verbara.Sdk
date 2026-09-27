@@ -86,6 +86,19 @@ All notable changes to this project will be documented in this file.
   tagged `buffer_full`. The `filter_rejected` tag the metric's documentation listed was never emitted
   and is no longer documented.
 
+### Fixed — `Verbara.Sdk.Data.Npgsql` did not restore in a project that references it directly (#329)
+
+- A `Microsoft.NET.Sdk` project that referenced `Verbara.Sdk.Data.Npgsql` 2.5.1 or 2.6.0 failed
+  restore with `NU1605` (a package downgrade, an error by default). The package pinned
+  `Microsoft.Extensions.DependencyInjection.Abstractions` to 10.0.9 while also requiring
+  `Microsoft.Extensions.Logging.Abstractions` at the central version, which itself requires the higher
+  `DependencyInjection.Abstractions` (10.0.11 in 2.5.1, 10.0.12 in 2.6.0); NuGet picks the direct
+  10.0.9 and reports the downgrade. The package now declares `DependencyInjection.Abstractions` at the
+  same central version as the rest of the SDK. Measured on packed builds: a clean console project fails
+  on the old package and restores, builds and runs on the new one. ASP.NET Core projects and the
+  packages that depend on `Data.Npgsql` (`Sessions.Postgres`, `Cluster.Postgres`, `Hosting`) were not
+  affected, because they already resolve the higher version.
+
 ## [2.6.0] - 2026-09-24
 
 ### Changed — `Microsoft.ML.OnnxRuntime` moved from 1.28.0 to 1.30.0 (#296)
