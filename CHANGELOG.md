@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: an AMI heartbeat timeout hung the connection instead of reconnecting
+
+- **A Ping left unanswered past `HeartbeatTimeout` now ends the connection the way a peer-side close
+  does.** With `AutoReconnect = true` — the default — the connection reconnects, which is what
+  `AmiConnectionOptions.AutoReconnect` documents ("automatic reconnection on disconnect"). Before this
+  fix the heartbeat called `DisconnectAsync`, whose cleanup waited for the heartbeat's own task: the
+  call never returned, the socket was never released and no reconnect happened, so a half-open
+  connection stayed dead for the life of the process. Measured against the published 2.6.0 package.
+- **What a consumer observes changes.** After a heartbeat timeout with `AutoReconnect = true` the state
+  goes to `Reconnecting` and the connection raises its reconnected event, where it previously stayed in
+  a non-connected state for good. With `AutoReconnect = false` the timeout ends the connection in
+  `Disconnected`, and a `DisposeAsync` that follows completes.
+- **A connection lost without `AutoReconnect` now releases its socket** — after a heartbeat timeout or a
+  peer-side close alike — and reports `Disconnected` only once the socket is released, passing through
+  `Disconnecting` on the way. 2.6.0 left that socket open. A connection lost this way can still be
+  connected again with `ConnectAsync`; one closed by `DisconnectAsync` or `DisposeAsync` cannot.
+
+### Fixed — the AMI reconnect loop leaked its last socket when it gave up
+
+- When the loop stops at `MaxReconnectAttempts`, the socket its last attempt created is now disposed,
+  and the connection ends as a loss without `AutoReconnect` does. The number of attempts is unchanged.
+
 ### Fixed — BREAKING: an AMI reconnect discarded every channel it was tracking, stranding the calls that ended during the outage and splitting the ones that survived (#315)
 
 - **An AMI reconnect no longer discards the call state it is holding.** The reload now reconciles
