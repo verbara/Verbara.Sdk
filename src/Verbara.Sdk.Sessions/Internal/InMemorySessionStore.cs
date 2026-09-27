@@ -30,4 +30,13 @@ internal sealed class InMemorySessionStore : SessionStoreBase
 
     public override ValueTask<CallSession?> GetByLinkedIdAsync(string linkedId, CancellationToken ct)
         => ValueTask.FromResult(_store.Values.FirstOrDefault(s => s.LinkedId == linkedId));
+
+    /// <summary>
+    /// Lets go of the session the manager released. This store keeps the manager's own object, so
+    /// holding it past the manager's release would keep the whole call reachable for the life of the
+    /// process. The entry is removed only while it is that same object: a different session saved
+    /// under the id since is not removed on the released one's account.
+    /// </summary>
+    internal override void OnReleasedByManager(CallSession session)
+        => _store.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
 }

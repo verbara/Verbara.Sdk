@@ -77,8 +77,24 @@ public sealed partial class CallSessionManager : ICallSessionManager
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to persist session {SessionId}")]
     private partial void LogPersistError(Exception ex, string sessionId);
 
+    /// <summary>
+    /// Saves <paramref name="session"/> to the store — only while this manager still holds it.
+    /// <para>
+    /// A session it has released is never handed to the store again. A leg can outlive the call it
+    /// joined (a late leg reusing the call's <c>linkedid</c>, or one a reload admitted), and its
+    /// changes still reach this method; a save then would put back into the default store a call the
+    /// SDK has let go of, and hand a durable store a call the SDK no longer tracks. The check runs
+    /// again once the save is done, because with several servers attached a walk on another thread
+    /// can release the session between the first check and the store's write: if it did, the default
+    /// store is told again, after the write, so the write cannot outlast the release
+    /// (<c>ADR-0063</c>, D5).
+    /// </para>
+    /// </summary>
     private async Task PersistAsync(CallSession session)
     {
+        if (!IsHeld(session))
+            return;
+
         try
         {
             await _store.SaveAsync(session, _shutdownToken);
@@ -94,6 +110,9 @@ public sealed partial class CallSessionManager : ICallSessionManager
         {
             LogPersistError(ex, session.SessionId);
         }
+
+        if (!IsHeld(session))
+            _store.OnReleasedByManager(session);
     }
 
     public IObservable<SessionDomainEvent> Events => _events;
@@ -560,16 +579,16 @@ public sealed partial class CallSessionManager : ICallSessionManager
     /// ended — reusing its <c>linkedid</c>, or admitted into it by the reload that ended it — leaves
     /// too. The ending is delivered only the first time, keyed on the session's own delivery marker,
     /// never on its state (<c>ADR-0063</c>, D2). A repeat saves the session, which now records the late
-    /// leg, and only while this manager still holds that same object: once it has been released, a
-    /// save would hand the store a call the SDK has let go of.
+    /// leg — and, like every save, only while this manager still holds that same object
+    /// (<see cref="PersistAsync"/>): once it has been released, a save would hand the store a call the
+    /// SDK has let go of.
     /// </para>
     /// </summary>
     private void OnSessionCompleted(CallSession session)
     {
         if (!session.TryMarkEndingDelivered())
         {
-            if (IsHeld(session))
-                _ = PersistAsync(session);
+            _ = PersistAsync(session);
             return;
         }
 
@@ -674,11 +693,17 @@ public sealed partial class CallSessionManager : ICallSessionManager
     /// is this very session object, so an entry naming a session no longer held — released by an
     /// earlier entry for the same call — changes nothing, and a newer session reusing the id or the
     /// <c>linkedid</c> is never removed on an older one's account.
+    /// <para>
+    /// The store is told last, once the session is out of <c>_sessions</c>, so no save that checks
+    /// afterwards can find it held. The default in-memory store keeps this same object and lets go of
+    /// it; a durable store keeps its own retention and does nothing (<c>ADR-0063</c>, D5).
+    /// </para>
     /// </summary>
     private void Release(CallSession session)
     {
         _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
         _byLinkedId.TryRemove(new KeyValuePair<string, CallSession>(session.LinkedId, session));
+        _store.OnReleasedByManager(session);
     }
 
     /// <summary>
