@@ -14,6 +14,20 @@
       "key": "Task.Run(() => AcceptLoopAsync(_cts.Token), cancellationToken)",
       "reason": "StartAsync hands the accept loop to Task.Run gated on the start token (ADR-0058 R1/R2): a start whose token is already cancelled returns with the listener bound and the accept loop never runs. The fix passes CancellationToken.None and deletes this entry.",
       "owner": "a-server-that-stops-stops-what-it-started"
+    },
+    {
+      "guard": "empty-catch-block",
+      "path": "src/Verbara.Sdk.Ari/Audio/AudioSocketSession.cs",
+      "key": "catch (IOException) { }",
+      "reason": "FillPipeAsync swallows an IOException from the socket read, so a network reset and a normal hangup produce the same Connected > Disconnected sequence with no log and no metric (ADR-0053 R3; CodeQL #867). The fix logs and counts the reset, keeping the ending a consumer sees, and deletes this entry. It shares its key with the ReadPumpAsync entry, so the matcher counts two occurrences and cannot tell which one went stale: delete the entry whose reason names the method you fixed.",
+      "owner": "a-transport-that-fails-is-not-a-hangup"
+    },
+    {
+      "guard": "empty-catch-block",
+      "path": "src/Verbara.Sdk.Ari/Audio/AudioSocketSession.cs",
+      "key": "catch (IOException) { }",
+      "reason": "ReadPumpAsync swallows an IOException from the input pipe. FillPipeAsync completes the pipe writer without an exception, so this catch is not reached today (CodeQL #869) and needs a fix of its own; the entry stays with this owner until another is assigned. It shares its key with the FillPipeAsync entry: delete the entry whose reason names the method you fixed.",
+      "owner": "a-transport-that-fails-is-not-a-hangup"
     }
   ]
 }
