@@ -31,6 +31,14 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     private readonly ConcurrentDictionary<Guid, AudioSocketSession> _sessions = new();
     private readonly Meter _instanceMeter;
 
+    /// <summary>
+    /// Set by the first <see cref="DisposeAsync"/>, which every later call then ignores. The SDK's own
+    /// registration (<c>TryAddSingleton</c> plus an <c>AddHostedService</c> factory that resolves the
+    /// same singleton) makes the container dispose this instance twice, and a second pass would cancel
+    /// the source the first one released.
+    /// </summary>
+    private int _disposed;
+
     /// <summary>Raised when a new AudioSocket session has been established and the UUID frame received.</summary>
     public event Func<AudioSocketSession, ValueTask>? OnSessionStarted;
 
@@ -257,6 +265,9 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
         await StopAsync(CancellationToken.None).ConfigureAwait(false);
         _cts?.Dispose();
         _instanceMeter.Dispose();
