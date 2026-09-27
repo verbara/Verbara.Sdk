@@ -8,9 +8,9 @@ This is a ledger, not a status badge. It is updated by running
 live endpoint and writing down what came back — including the rows that say *not characterised*,
 which are the useful ones.
 
-Governing decisions: [ADR-0048](../decisions/0048-wire-conformance-by-live-probe-with-negative-control.md)
+Governing decisions: ADR-0048
 (a live probe with a negative control is what a conformance claim rests on) and
-[ADR-0049](../decisions/0049-in-band-failure-must-reach-the-caller.md) (a failure the vendor states
+ADR-0049 (a failure the vendor states
 must reach the caller). Capture rules — redaction, storage, per-provider terms — live in
 [`provider-recording-protocol.md`](provider-recording-protocol.md); this file inherits them and
 stores nothing.
@@ -23,6 +23,7 @@ stores nothing.
 |---|---|
 | `live + both controls` | Probed against the real endpoint with a wrong-path control **and** an invalid-credential control on the same host, in the same run |
 | `live + route control` | Probed live; the wrong path was controlled, the credential was not. Says nothing about whether the probe can tell a good key from a bad one |
+| `live + credential control` | Probed live; the invalid credential was controlled, and the wrong-path arm could not fail because this host served an undocumented path as a normal session (ADR-0048 Addendum A2). Says nothing about whether a wrong route would be noticed; the Route column reads *not controllable* |
 | `live, uncontrolled` | Probed live with no deliberately-wrong arm. Real evidence of a weaker class — a run with nothing to fail against cannot prove it *could* have failed |
 | `documentation` | Read from the vendor's published contract. Every defect in this record was invisible to this class, and several were *created* by trusting it |
 | `not characterised` | Nobody looked. Distinct from "looked and found nothing" |
@@ -95,6 +96,8 @@ kept, because swapping it would be an unmeasured change riding along with a meas
    empty stream and no exception. ***Fixed*** — under ADR-0050, the D1 remedy this pointed at (see
    *The silent-failure class, closed* below). It was left open here because it is a behaviour change and
    did not belong to a route fix.
+
+**LMNT, both transports — the vendor has shut down.** Recorded 2026-09-20 in `src/Verbara.Sdk.VoiceAi.Tts/README.md` ("Our speech generation journey has come to an end", docs.lmnt.com, accessed 2026-09-20). The two LMNT rows are dated evidence about the service as it was on 2026-08-19, not a current status. The record holds no LMNT probe after that date.
 
 **Speechmatics TTS** — the voice is selected by **path segment**, not by a body field: `/generate`
 returns `404` (identically to a route that does not exist, because that is what it is),
@@ -533,7 +536,7 @@ measured symptom, which made the class look like a frame-filter problem. It was 
 | Door | What it looked like | How many of the 8 WebSocket clients had it open |
 |---|---|---|
 | The frame allow-list | an error frame falls into the same discard branch as lifecycle noise | 8 |
-| The **close code** | `ws.CloseStatus` read, then thrown away — `1002`, `1008`, `4001` all indistinguishable from a finished session | 8 |
+| The **close code** | the close frame received and `CloseStatus` never read — `1002`, `1008`, `4001` all indistinguishable from a finished session | 8 |
 | `catch (WebSocketException) { break; }` | a socket dying mid-stream ends the stream as normal completion | 8 |
 
 A surface whose allow-list was clean was still silent through the other two, so "which surfaces are

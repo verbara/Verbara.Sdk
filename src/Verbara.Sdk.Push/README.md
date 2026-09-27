@@ -89,7 +89,7 @@ await bus.PublishAsync(new ConversationAssigned
 ### `BackpressureStrategy`
 
 - **`DropOldest`** *(default)* — evict the oldest buffered event to make room for the new one. Favors freshness; appropriate for live UI streams where stale events are worthless.
-- **`DropNewest`** — refuse to enqueue the new event, preserving the buffered backlog. Favors FIFO ordering.
+- **`DropNewest`** — evict the most recently *buffered* event to admit the new one (the BCL `DropNewest` mode). The oldest buffered events survive; the event being published is always enqueued.
 - **`Block`** — await buffer space. Use only when publishers can tolerate backpressure (batch pipelines, not hot request paths).
 
 Dropped events increment `asterisk.push.events.dropped` with a `reason="buffer_full"` tag.
@@ -113,7 +113,7 @@ This package is **Native AOT compatible**. The shipping build verifies zero trim
 
 ## Relation with Verbara.Sdk.Pro.Push
 
-This package provides **in-memory primitives** suitable for single-node hosts. For NATS-backed multi-node fan-out in the MIT surface, see **`Verbara.Sdk.Push.Nats`** (available since v1.12). For cluster-wide subscription routing over durable backplanes (Redis / Postgres LISTEN/NOTIFY), advanced authorization, and enterprise observability, see **`Verbara.Sdk.Pro.Push`** — both build on top of this package's abstractions, so the contract is forward-compatible.
+This package provides **in-memory primitives** suitable for single-node hosts. For NATS-backed multi-node fan-out in the MIT surface, see **`Verbara.Sdk.Push.Nats`** (available since v1.12). For cluster-wide fan-out over Redis pub/sub or Postgres LISTEN/NOTIFY backplanes (neither stores events for replay), advanced authorization, and enterprise observability, see **`Verbara.Sdk.Pro.Push`** — both build on top of this package's abstractions, so the contract is forward-compatible.
 
 ## Links
 

@@ -38,7 +38,7 @@ Sent SET_MEDIA_DIRECTION  direction=both
 
 ## What It Shows
 
-- `WebSocketAudioServer` — RFC 6455 server built on `TcpListener` + `WebSocket.CreateFromStream()` (see ADR-0017).
+- `WebSocketAudioServer` — RFC 6455 server built on `TcpListener` + `WebSocket.CreateFromStream()`.
 - `IChanWebSocketSession` — sub-interface that exposes JSON control messages as an `IObservable<ChanWebSocketControlMessage>`.
 - Pattern-matching over the polymorphic message types (source-generated, AOT-clean).
 - `SendMarkAsync`, `SendSetMediaDirectionAsync`, `SendXonAsync`, `SendXoffAsync` — outbound control messages.

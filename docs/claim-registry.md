@@ -55,22 +55,22 @@ decision records, specs, plans and research notes are kept locally and are not t
 | ~~67~~ | ~12 ms CPU inference | — | `TurnDetectionBenchmark` | **DELETED** — measured at 26.18–37.30 ms; deferred, see *Deferrals*. Its line was also removed with the release bullets on 2026-09-20. |
 | 65 | 148/152 AMI (97%), 94/98 ARI (96%), 46/46, 27/27, 269 events | ENFORCING | — | GAP — the event figure was corrected 2026-09-24 (was 278) |
 | ~~67~~ | ~~**60 ADRs**~~ | — | — | **DELETED** — the figure left `README.md` with the public decision catalog it counted (decision records are kept locally, no longer tracked); the two `StatusBlockCoherenceTests` cases that pinned it were removed with it. |
-| 91 | measurement provenance (Ryzen 9 9900X, .NET 10.0.5, BDN v0.14.0, 2026-04-18) | COHERENCE | `PerformanceTableCoherenceTests` — the header provenance test | PARTIAL — matched against the whole file rather than this line, and blind to the AMI row's .NET 10.0.6 MediumRunJob exception (`performance-record.json:12`); the two session-store rows measured apart from it state their own at :110 |
-| 95 | AMI parse+dispatch 1.62M events/sec (617.6 ns) | ENFORCING + COHERENCE | `perf-regression.yml` `*AmiProtocolReader*` | GAP — observational only (`\|\| true`, no baseline) |
-| 96 | ARI deserialize Channel 3.54M ops/sec (283 ns) | ENFORCING + COHERENCE | `*AriJson*` | GAP — observational only |
-| 97 | ARI event parse 595K events/sec (1.68 µs), "2.7× faster than v1.0" | ENFORCING + COHERENCE | `*AriParseEvent*` | GAP — observational; the cross-version ratio has no guard at all |
-| 98 | 163.9M lookups/sec (6.1 ns) | ENFORCING + COHERENCE | `*ChannelManager*` | GAP — observational |
-| 99 | ~0.21 ns/observer, zero-alloc | ENFORCING + COHERENCE | `*ObserverDispatch*` | GAP — observational |
-| 100 | Redis SaveAsync ~33.3K/sec (p50 30 µs), batch 91,021/sec | COHERENCE | `PerformanceTableCoherenceTests` — the value test | OK — re-measured 2026-09-12; the April figures it replaced (~12.6K/sec, p50 79 µs, batch 65,738/sec) understate today's measurement of the same store code ~2.6× and ~1.4×. Its provenance is row 110 |
-| 101 | Postgres SaveAsync ~500/sec (p50 1.97 ms), batch 13,489/sec | COHERENCE | `PerformanceTableCoherenceTests` — the value test | OK — re-measured 2026-09-12 on the `NpgsqlExecutor` store, so no longer a measurement of Dapper; batch was 9,491/sec and its rise is not attributed to the rewrite. Its provenance is row 110 |
-| 103 | session-store provenance: re-measured 2026-09-12, .NET 10.0.12, xunit Fact + Stopwatch against local Docker, PostgreSQL 18.4 / Redis 7.4.8, median of five runs; Postgres single-save latency is the WAL flush | COHERENCE | `PerformanceTableCoherenceTests` — the per-row provenance test | PARTIAL — date and runtime asserted against the Performance section; server versions, run count and the WAL-flush attribution stated, not asserted; and the check is opt-in, so deleting `provenance` from the record unbinds this line unnoticed |
-| 126 | 9 ActivitySources | ENFORCING | `MarketingClaimsTests.cs:45-50` | OK |
-| 127 | 15 Meters | ENFORCING | `MarketingClaimsTests.cs:52-57` | OK |
-| 128 | 11 IHealthChecks — 6 core + 5 VoiceAi | ENFORCING | `MarketingClaimsTests.cs:76-97` | PARTIAL — total pinned, the 6/5 split is not |
-| 129 | 60 const strings, 14 nested classes, "14+ unit tests" | ENFORCING | `MarketingClaimsTests.cs:59-74` | PARTIAL — the "14+ tests" sub-claim is unpinned |
-| 157 | "First contact in 10 lines" | COHERENCE | — | WRONG — the snippet at :166-182 is 14 lines |
-| 463 | Cartesia Sonic-3, no figure | — | — | **DELETED** — the figure moved to `src/Verbara.Sdk.VoiceAi.Tts/README.md`, cited; `40-90 ms` was never Cartesia's number (they publish sub-90 ms) |
-| 465 | smart-turn-v3.2-cpu, 94.26% in upstream's voice | ATTRIBUTED | citation + hash pin | **OK** — this line previously carried the figure with no citation at all |
+| 89 | measurement provenance (Ryzen 9 9900X, .NET 10.0.5, BDN v0.14.0, 2026-04-18) | COHERENCE | `PerformanceTableCoherenceTests` — the header provenance test | PARTIAL — matched against the whole file rather than this line, and blind to the AMI row's .NET 10.0.6 MediumRunJob exception (`performance-record.json:12`); the two session-store rows measured apart from it state their own at :110 |
+| 93 | AMI parse+dispatch 1.62M events/sec (617.6 ns) | ENFORCING + COHERENCE | `PerformanceTableCoherenceTests` against `performance-record.json`; `perf-regression.yml` `*AmiProtocolReader*` against `baseline.json` | PARTIAL — COHERENCE bound; the regression gate has a baseline since #232 but observes only (`PERF_GATE_ENFORCE: 'false'`) |
+| 94 | ARI deserialize Channel 3.54M ops/sec (283 ns) | ENFORCING + COHERENCE | `PerformanceTableCoherenceTests`; `*AriJson*` | PARTIAL — as row 93 |
+| 95 | ARI event parse 595K events/sec (1.68 µs), "2.7× faster than v1.0" | ENFORCING + COHERENCE | `PerformanceTableCoherenceTests` (binds the ratio too, `versus_v1_0`); `*AriParseEvent*` | PARTIAL — as row 93 |
+| 96 | 163.9M lookups/sec (6.1 ns) | ENFORCING + COHERENCE | `PerformanceTableCoherenceTests`; `*ChannelManager*` | PARTIAL — as row 93 |
+| 97 | ~0.21 ns/observer, zero-alloc | ENFORCING + COHERENCE | `PerformanceTableCoherenceTests`; `*ObserverDispatch*` | PARTIAL — as row 93; zero-alloc is not asserted |
+| 98 | Redis SaveAsync ~33.3K/sec (p50 30 µs), batch 91,021/sec | COHERENCE | `PerformanceTableCoherenceTests` — the value test | OK — re-measured 2026-09-12; the April figures it replaced (~12.6K/sec, p50 79 µs, batch 65,738/sec) understate today's measurement of the same store code ~2.6× and ~1.4×. Its provenance is row 110 |
+| 99 | Postgres SaveAsync ~500/sec (p50 1.97 ms), batch 13,489/sec | COHERENCE | `PerformanceTableCoherenceTests` — the value test | OK — re-measured 2026-09-12 on the `NpgsqlExecutor` store, so no longer a measurement of Dapper; batch was 9,491/sec and its rise is not attributed to the rewrite. Its provenance is row 110 |
+| 101 | session-store provenance: re-measured 2026-09-12, .NET 10.0.12, xunit Fact + Stopwatch against local Docker, PostgreSQL 18.4 / Redis 7.4.8, median of five runs; Postgres single-save latency is the WAL flush | COHERENCE | `PerformanceTableCoherenceTests` — the per-row provenance test | PARTIAL — date and runtime asserted against the Performance section; server versions, run count and the WAL-flush attribution stated, not asserted; and the check is opt-in, so deleting `provenance` from the record unbinds this line unnoticed |
+| 124 | 9 ActivitySources | ENFORCING | `MarketingClaimsTests.cs:45-50` | OK |
+| 125 | 15 Meters | ENFORCING | `MarketingClaimsTests.cs:52-57` | OK |
+| 126 | 11 IHealthChecks — 6 core + 5 VoiceAi | ENFORCING | `MarketingClaimsTests.cs:76-97` | PARTIAL — total pinned, the 6/5 split is not |
+| 127 | 60 const strings, 14 nested classes, "14+ unit tests" | ENFORCING | `MarketingClaimsTests.cs:59-74` | PARTIAL — the "14+ tests" sub-claim is unpinned |
+| 155 | "First contact in 10 lines" | COHERENCE | — | WRONG — the snippet at :158-172 is 15 lines (13 non-blank); the old anchor :166-182 was already off before #322 |
+| 461 | Cartesia Sonic-3, no figure | — | — | **DELETED** — the figure moved to `src/Verbara.Sdk.VoiceAi.Tts/README.md`, cited; `40-90 ms` was never Cartesia's number (they publish sub-90 ms) |
+| 463 | smart-turn-v3.2-cpu, 94.26% in upstream's voice | ATTRIBUTED | citation + hash pin | **OK** — this line previously carried the figure with no citation at all |
 
 ## `docs/README-technical.md`
 
@@ -182,6 +182,8 @@ Missed by the first sweep — tracked, public, and read as current by every cont
 | `high-load-tuning.md:138-140` | pauseWriter 1 MB / resumeWriter 512 KB / segment 4 KB "hardcoded" | ENFORCING | GAP |
 | `high-load-tuning.md:197` | EventPumpCapacity 20,000 | ENFORCING | OK — matches source; `README-technical.md:503` is the wrong one |
 | `ari-connection-state-and-accept-loop-migration.md` | accept backoff 100 ms doubling to a 5 s cap; at most 12 Error lines a minute at the cap | ENFORCING | GAP — the bounds are `internal` constants in `AriOutboundListener`; the per-minute figure is 60/5 s, arithmetic over them. Both are restated from the `[Unreleased]` #291 entry, not newly derived |
+| `audiosocket-wire-format-migration.md:10-18` | a three-byte header; Asterisk closed the connection "two seconds later"; "1,411 frames" captured against Asterisk 22.9.0; identification `01 00 10` plus sixteen bytes of UUID, audio `10 01 40` plus 320 bytes | — | GAP — no class declared; added by #302 (`24855e10`, 2026-09-24), which edited this registry in the same PR (the ADR-count row) without adding one |
+| `externalmedia-channel-id-migration.md:154-155` | `ConnectionTimeout` "30 seconds by default" | — | GAP — a documented default, unclassed until *Unresolved* 1 is ruled; added by #305 (`9f2cbde7`, 2026-09-24) without a row |
 | `session-store-backends.md:5,56,70,76` | three backends, three overloads, three indexes, pageSize 500 | ENFORCING | GAP |
 | `session-store-backends.md:9-11,22,27,35` at `e250182e` | read latency <0.1 ms / <1 ms / 5-10 ms; the "sub-millisecond" InMemory and Redis bullets; "5-10 ms read latency is acceptable" | COHERENCE | **DELETED** — nothing measures InMemory, the record binds no read figure, and the only read the committed measurements time, `GetAsync` over loopback, put Postgres at p50 48 µs, not 5-10 ms; Postgres `GetAsync` measures under a millisecond too, so "sub-millisecond reads" did not tell Redis apart. This row cited `:26` until then; the bullets are `:22` and `:27`. The words that replaced these figures are the next two rows |
 | `session-store-backends.md:9-11,22,35` | what a store call costs, in words: InMemory in-process, with no I/O and no serialization; Redis one `GET` for `GetAsync` and two for `GetByLinkedIdAsync`; Postgres one `SELECT` per read, one WAL flush per single save under the default `synchronous_commit=on`, and one shared by a `SaveBatchAsync` | ENFORCING | GAP — this repository's own code: true against `InMemorySessionStore.cs`, `RedisSessionStore.cs` and `PostgresSessionStore.cs` as of 2026-09-12 (`GetByLinkedIdAsync` sends one `GET` when the linked index misses), and nothing counts the commands |
@@ -320,9 +322,11 @@ the figure skips `Unit Tests` — the job the guard would live on. That carve-ou
 *Unresolved* 1, and the guard goes in with it. Until then these rows stay `GAP`: the figures are
 right and nothing stops them drifting again.
 
-Left alone deliberately: ADR-0001 and ADR-0015 state 278 event types, and dated research notes
-state 278 and 111. Both are **Out** of scope above, as period-correct records left verbatim; an
-Accepted ADR is superseded, never edited.
+Left alone deliberately: ADR-0001 and ADR-0015 state 278 event types, ADR-0003 states 278 events,
+and dated research notes state 278 and 111. Both are **Out** of scope above. The ADR figure was a
+file count on the day it was written (`229145b8` and `4c2d0644` each hold 278 event files and 269
+mapped types). Each of the three ADRs records the type count in its 2026-09-26 addendum, because an
+Accepted ADR's body is never edited.
 
 ## Rulings settled 2026-09-20
 
@@ -330,7 +334,7 @@ Four of the six were decided and discharged in one change; each is recorded wher
 the rows above and in the tables carry the result.
 
 - **Vendor latency and pricing under D8's pin** → split. Latency stays as the vendor's own figure,
-  cited with an access date, licensed by the new **D8a** ([ADR-0042 amendment](decisions/0042-public-claim-guard-classes.md)).
+  cited with an access date, licensed by the new **D8a** (the ADR-0042 amendment).
   Prices, cross-vendor ratios, market rankings in our own voice, and our own undated measurements of
   a third-party service were deleted. The sweep that settled this found **five of six** TTS latency
   figures did not match the vendor's published number, and that LMNT has shut down.
@@ -368,7 +372,7 @@ not 270 + 8). No other row was re-verified.
 (six bullets and a blank), so every row in the `README.md` section pointing below the cut moved by
 −7. All eighteen were re-pointed in that same change and each was checked against the line it now
 names; two rows that lived *inside* the cut (`~~65~~` the ONNX size, `~~67~~` the duplicated 94.26%)
-are struck through, and the 94.26% figure survives at `:465` with its citation and hash pin. A
+are struck through, and the 94.26% figure survives at `:463` with its citation and hash pin. A
 registry keyed by line number does not survive an edit above the line it points at, and nothing
 enforces that — the check is manual and belongs in any PR that adds or removes README lines.
 

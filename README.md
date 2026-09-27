@@ -418,7 +418,7 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 
 | Package | Description |
 |---------|-------------|
-| **Verbara.Sdk.Data.Npgsql** | Reflection-free Postgres data-access facade — `NpgsqlExecutor` (Dapper-parity surface: `ExecuteAsync`, `QueryAsync<T>`, `QuerySingleAsync`, etc.) + name-based `NpgsqlDataReader` getters, hand-written `static Map(NpgsqlDataReader)` row mapping. AOT-clean replacement for Dapper (ADR-0022 Phase D). |
+| **Verbara.Sdk.Data.Npgsql** | Reflection-free Postgres data-access facade — `NpgsqlExecutor` (Dapper-parity surface: `ExecuteAsync`, `QueryAsync<T>`, `QuerySingleAsync`, etc.) + name-based `NpgsqlDataReader` getters, hand-written `static Map(NpgsqlDataReader)` row mapping. AOT-clean replacement for Dapper (Platform/ADR-0022 Phase D). |
 
 ### Session Store Backends
 
@@ -438,7 +438,7 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 
 | Package | Description |
 |---------|-------------|
-| **Verbara.Sdk.Resilience** | Composable circuit breaker + retry + timeout primitives (`BackoffSchedule`, `RetryBudget`) shared by AMI/ARI/Webhook reconnect loops. |
+| **Verbara.Sdk.Resilience** | Composable circuit breaker + retry + timeout primitives (`ResiliencePolicy`, `CircuitBreakerState`, `BackoffSchedule`); `BackoffSchedule` is shared by the AMI/ARI reconnect loops and webhook delivery. |
 
 ### Observability & Integrations
 
@@ -540,4 +540,4 @@ This is the open-source base SDK of the **Verbara** open-core contact-center sta
 
 **Why MIT here:** the SDK is the community attractor of the Verbara stack — maximum permissive license to encourage adoption, evaluation, and contributions. Pro features (skill routing, predictive dialer, real-time analytics, cluster, multi-tenant) are commercial via a separate package family. See ADR-0027 (stewardship pledge) and ADR-0036 (rebrand to Verbara).
 
-**Trademark note:** "Asterisk" is a registered trademark of **Sangoma Technologies / Digium** and refers to the Asterisk PBX product. This SDK *targets* Asterisk PBX as a runtime dependency; the SDK itself is rebranding to **Verbara** to avoid trademark conflict. References to "Asterisk" in API names, documentation, and code comments refer to the PBX product (Sangoma trademark) and remain accurate.
+**Trademark note:** "Asterisk" is a registered trademark of **Sangoma Technologies / Digium** and refers to the Asterisk PBX product. This SDK *targets* Asterisk PBX as a runtime dependency; the SDK itself was renamed to **Verbara** in v2.0.0 (2026-05-06) to avoid trademark conflict. References to "Asterisk" in API names, documentation, and code comments refer to the PBX product (Sangoma trademark) and remain accurate.
