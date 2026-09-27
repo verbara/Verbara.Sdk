@@ -20,7 +20,14 @@ public sealed partial class CallSessionManager : ICallSessionManager
     private readonly ConcurrentDictionary<string, CallSession> _byLinkedId = new();
     private readonly ConcurrentDictionary<string, CallSession> _byChannelId = new();
     private readonly ConcurrentDictionary<string, string> _bridgeToSession = new();
-    private readonly ConcurrentQueue<string> _completedOrder = new();
+    private readonly ConcurrentQueue<ReleaseEntry> _completedOrder = new();
+
+    /// <summary>
+    /// Serializes the release walk. The walk judges an entry after taking it off the queue, which is
+    /// only sound while no other walk can take an entry between its look at the head and its dequeue;
+    /// two sessions ending at once — on two attached servers, say — each run a walk.
+    /// </summary>
+    private readonly Lock _releaseLock = new();
     private readonly ConcurrentDictionary<string, ServerSubscriptions> _serverSubs = new();
     private readonly Subject<SessionDomainEvent> _events = new();
     private readonly SessionCorrelator _correlator;
@@ -538,7 +545,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
     private void OnSessionCompleted(CallSession session)
     {
-        _completedOrder.Enqueue(session.SessionId);
+        QueueForRelease(session);
 
         // Record tracing span
         using var activity = SessionActivitySource.StartSessionCompleted(
@@ -577,19 +584,80 @@ public sealed partial class CallSessionManager : ICallSessionManager
     /// to see the queue; nothing in the manager reads it.
     /// </summary>
     internal int ReleaseQueueEntriesFor(string sessionId) =>
-        _completedOrder.Count(id => string.Equals(id, sessionId, StringComparison.Ordinal));
+        _completedOrder.Count(entry => string.Equals(entry.Session.SessionId, sessionId, StringComparison.Ordinal));
 
-    private void EvictStaleCompleted()
+    /// <summary>
+    /// Queues <paramref name="session"/>, whose ending has just been delivered, for release once
+    /// <see cref="SessionOptions.CompletedRetention"/> has passed since its completion time — the time
+    /// it carries <em>now</em>, recorded with the entry.
+    /// <para>
+    /// Internal rather than private so a test can put at the head an entry no route of the manager
+    /// produces, and show that the walk gets past it: the walk's progress must not depend on how an
+    /// entry went bad.
+    /// </para>
+    /// </summary>
+    internal void QueueForRelease(CallSession session) =>
+        _completedOrder.Enqueue(new ReleaseEntry(session, session.CompletedAt));
+
+    /// <summary>
+    /// Releases every queued call past <see cref="SessionOptions.CompletedRetention"/>, oldest first.
+    /// <para>
+    /// An entry leaves the queue first and is judged afterwards. The one thing read before it leaves
+    /// is its own record: a completion time that proves the call ended inside retention keeps it, and
+    /// the walk stops there. Every other entry is taken off — one naming a session no longer held, one
+    /// with no completion time, one past retention — so no entry can hold the head, and with it every
+    /// call queued after it, for the life of the process. That was the wedge: the walk used to take an
+    /// entry off only once it could evaluate it, and stopped at the first it could not (<c>ADR-0063</c>,
+    /// D1).
+    /// </para>
+    /// </summary>
+    internal void EvictStaleCompleted()
     {
-        var cutoff = _timeProvider.GetUtcNow() - _options.CompletedRetention;
-        while (_completedOrder.TryPeek(out var oldId) &&
-               _sessions.TryGetValue(oldId, out var old) &&
-               old.CompletedAt < cutoff)
+        lock (_releaseLock)
         {
-            _completedOrder.TryDequeue(out _);
-            _sessions.TryRemove(oldId, out _);
-            _byLinkedId.TryRemove(old.LinkedId, out _);
+            var cutoff = _timeProvider.GetUtcNow() - _options.CompletedRetention;
+
+            // Under the lock only this walk dequeues, so the entry taken off is the head just read.
+            while (_completedOrder.TryPeek(out var head) && !head.EndedWithin(cutoff)
+                   && _completedOrder.TryDequeue(out var entry))
+            {
+                // No completion time: the entry says nothing about how old the call is, so it is
+                // dropped and the call kept. Holding is the direction this bound fails in; releasing
+                // on no evidence is not.
+                if (entry.CompletedAt is null)
+                    continue;
+
+                Release(entry.Session);
+            }
         }
+    }
+
+    /// <summary>
+    /// Lets go of an ended session past retention. Each index gives up its entry only while that entry
+    /// is this very session object, so an entry naming a session no longer held — released by an
+    /// earlier entry for the same call — changes nothing, and a newer session reusing the id or the
+    /// <c>linkedid</c> is never removed on an older one's account.
+    /// </summary>
+    private void Release(CallSession session)
+    {
+        _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
+        _byLinkedId.TryRemove(new KeyValuePair<string, CallSession>(session.LinkedId, session));
+    }
+
+    /// <summary>
+    /// One delivered ending waiting for release: the session it ended, and the completion time that
+    /// session carried when the ending was delivered. The walk judges the entry by that recorded time,
+    /// never by reading the session again, so nothing done to a session after its ending — a consumer
+    /// clearing or moving its public <see cref="CallSession.CompletedAt"/> — can make an entry hold the
+    /// queue.
+    /// </summary>
+    private readonly record struct ReleaseEntry(CallSession Session, DateTimeOffset? CompletedAt)
+    {
+        /// <summary>
+        /// Whether this entry's own record proves its call ended at or after <paramref name="cutoff"/>,
+        /// that is, inside retention. An entry with no completion time proves nothing and answers no.
+        /// </summary>
+        public bool EndedWithin(DateTimeOffset cutoff) => CompletedAt >= cutoff;
     }
 
     public bool RegisterReconstructedSession(CallSession session)
