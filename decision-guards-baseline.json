@@ -41,14 +41,14 @@
       "path": "src/Verbara.Sdk.Hosting/SessionReconciliationService.cs",
       "key": "_cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)",
       "reason": "StartAsync links the start token into _cts, the source the sweep loop runs under (ADR-0059 R2: not stored, and not linked either). StopAsync cancels _cts itself, so the loop does end on a stop; the link adds only the coupling R2 rejects, an aborted start ending the sweep. Whether R2 reaches a service that links the start token for its own loop, rather than handing a lifetime token to another component, is open ruling L1 of the 2026-09-26 ADR audit, and this entry waits on it: if R2 applies, the fix owns a plain source and deletes this entry.",
-      "owner": "ruling L1 (docs/plans/active/2026-09-26-adr-audit-rulings.md)"
+      "owner": "owner ruling L1 (the scope of ADR-0059 R2), not yet ruled"
     },
     {
       "guard": "package-version-override",
       "path": "src/Verbara.Sdk.Data.Npgsql/Verbara.Sdk.Data.Npgsql.csproj",
       "key": "PackageReference Include=\"Microsoft.Extensions.DependencyInjection.Abstractions\" VersionOverride=\"10.0.9\"",
       "reason": "No decision put it here: Dependabot wrote the whole line in 9e2e5e57 (#49, 2026-06-16) while bumping the microsoft-extensions group, when the central pin was 10.0.9 as well, and git log --follow -S VersionOverride on this csproj finds no other commit. The package's code does not use the assembly; it arrives through Npgsql > Microsoft.Extensions.Logging.Abstractions. The central pin has since moved to 10.0.12 and the override has not, so the published nuspec declares a 10.0.9 floor (ADR-0004 D1, 2026-09-26 addendum). The floor is kept as it stands: moving a published dependency floor is a release decision of its own, and the version is part of the key, so the floor cannot move without this entry being rewritten or deleted. Measured 2026-09-27 against the published packages: since 2.5.1 the nuspec also lists Microsoft.Extensions.Logging.Abstractions at the central pin, which requires DependencyInjection.Abstractions at that pin or later, so a Microsoft.NET.Sdk project whose only reference is Verbara.Sdk.Data.Npgsql 2.5.1 or 2.6.0 fails restore with NU1605 (a downgrade from 10.0.12 to 10.0.9); 2.4.0, and a Microsoft.NET.Sdk.Web project, restore clean.",
-      "owner": "not yet assigned: the Data.Npgsql dependency-floor decision (ADR-0004 D1)"
+      "owner": "the Data.Npgsql restore fix, which removes this override"
     }
   ]
 }
