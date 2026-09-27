@@ -555,17 +555,24 @@ public sealed class VerbaraServer : IVerbaraServer
                     server.Bridges.OnBridgeDestroyed(bde.BridgeUniqueid!);
                     break;
 
-                // Dial events
+                // Dial events. For an AMI Originate, Asterisk's DialBegin and DialEnd name only the
+                // dialed side (DestChannel/DestUniqueid) and carry no Uniqueid: there is no calling
+                // channel to attribute the dial to, so the event is skipped. It is the ordinary shape
+                // of every originate, not an anomaly, so it is neither logged nor counted.
                 case DialBeginEvent dbe:
+                    if (dbe.UniqueId is null)
+                        break;
                     server.Channels.OnDialBegin(
-                        dbe.UniqueId!,
+                        dbe.UniqueId,
                         dbe.DestUniqueid!,
                         dbe.DestChannel!,
                         dbe.DialString);
                     break;
 
                 case DialEndEvent dee:
-                    server.Channels.OnDialEnd(dee.UniqueId!, dee.DialStatus);
+                    if (dee.UniqueId is null)
+                        break;
+                    server.Channels.OnDialEnd(dee.UniqueId, dee.DialStatus);
                     break;
 
                 // Hold events
