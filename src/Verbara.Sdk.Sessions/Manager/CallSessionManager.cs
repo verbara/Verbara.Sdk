@@ -571,6 +571,14 @@ public sealed partial class CallSessionManager : ICallSessionManager
         EvictStaleCompleted();
     }
 
+    /// <summary>
+    /// How many entries the release queue holds for <paramref name="sessionId"/>: the number of times
+    /// the session's ending was queued and not yet walked past. Read by tests, which have no other way
+    /// to see the queue; nothing in the manager reads it.
+    /// </summary>
+    internal int ReleaseQueueEntriesFor(string sessionId) =>
+        _completedOrder.Count(id => string.Equals(id, sessionId, StringComparison.Ordinal));
+
     private void EvictStaleCompleted()
     {
         var cutoff = _timeProvider.GetUtcNow() - _options.CompletedRetention;

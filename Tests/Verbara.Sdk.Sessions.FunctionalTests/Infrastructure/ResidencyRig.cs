@@ -217,6 +217,9 @@ internal sealed class ResidencyRig : IAsyncDisposable
         }
     }
 
+    /// <summary>How many times this session is queued for release.</summary>
+    public int QueueEntriesFor(string sessionId) => Manager.ReleaseQueueEntriesFor(sessionId);
+
     /// <summary>Ended calls the manager still holds whose completion lies before the cutoff.</summary>
     public int EndedHeldPastRetention()
     {
