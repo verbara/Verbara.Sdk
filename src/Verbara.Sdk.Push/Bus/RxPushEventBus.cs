@@ -25,6 +25,10 @@ public sealed partial class RxPushEventBus : IPushEventBus, IDisposable
     private readonly BackpressureStrategy _strategy;
     private int _disposed;
 
+    // Tags of asterisk.push.events.dropped: the reasons PushMetrics.EventsDropped documents.
+    private static readonly KeyValuePair<string, object?> BufferFullReason = new("reason", "buffer_full");
+    private static readonly KeyValuePair<string, object?> WriterClosedReason = new("reason", "writer_closed");
+
     public RxPushEventBus(
         IOptions<PushEventBusOptions> options,
         ILogger<RxPushEventBus> logger,
@@ -51,7 +55,9 @@ public sealed partial class RxPushEventBus : IPushEventBus, IDisposable
             SingleReader = true,
             SingleWriter = false,
         };
-        _channel = Channel.CreateBounded<PushEvent>(channelOptions);
+        // The channel evicts under DropOldest/DropNewest inside TryWrite, which still returns true;
+        // itemDropped is the only place that sees an eviction, so the count is taken there.
+        _channel = Channel.CreateBounded<PushEvent>(channelOptions, OnItemDropped);
         _dispatchLoop = Task.Run(DispatchLoopAsync);
     }
 
@@ -83,11 +89,12 @@ public sealed partial class RxPushEventBus : IPushEventBus, IDisposable
             return;
         }
 
-        // DropOldest / DropNewest are honored by the Channel itself; TryWrite returns false
-        // only when the writer is closed (disposed) — surface as drop with logging.
+        // DropOldest / DropNewest are honored by the Channel itself, which reports each eviction
+        // to OnItemDropped. TryWrite returns false only when the writer is closed: a publish that
+        // passed the disposed check above and lost the race with Dispose.
         if (!_channel.Writer.TryWrite(pushEvent))
         {
-            _metrics.EventsDropped.Add(1, new KeyValuePair<string, object?>("reason", "buffer_full"));
+            _metrics.EventsDropped.Add(1, WriterClosedReason);
             LogDropped(_logger, pushEvent.EventType, _strategy.ToString());
         }
         else
@@ -95,6 +102,10 @@ public sealed partial class RxPushEventBus : IPushEventBus, IDisposable
             PushActivitySource.SetPublished(activity);
         }
     }
+
+    // Invoked by the channel, on the publishing thread, once for every event a full buffer
+    // evicts under DropOldest or DropNewest.
+    private void OnItemDropped(PushEvent dropped) => _metrics.EventsDropped.Add(1, BufferFullReason);
 
     public IObservable<PushEvent> AsObservable() => new Observable(this);
 
@@ -164,7 +175,7 @@ public sealed partial class RxPushEventBus : IPushEventBus, IDisposable
         _stopCts.Dispose();
     }
 
-    [LoggerMessage(LogLevel.Warning, "Push event '{EventType}' dropped due to full buffer (strategy={Strategy})")]
+    [LoggerMessage(LogLevel.Warning, "Push event '{EventType}' dropped because the bus was disposed while it was being published (strategy={Strategy})")]
     private static partial void LogDropped(ILogger logger, string eventType, string strategy);
 
     [LoggerMessage(LogLevel.Error, "Observer threw while handling push event '{EventType}'")]

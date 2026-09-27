@@ -92,7 +92,7 @@ await bus.PublishAsync(new ConversationAssigned
 - **`DropNewest`** — evict the most recently *buffered* event to admit the new one (the BCL `DropNewest` mode). The oldest buffered events survive; the event being published is always enqueued.
 - **`Block`** — await buffer space. Use only when publishers can tolerate backpressure (batch pipelines, not hot request paths).
 
-Dropped events increment `asterisk.push.events.dropped` with a `reason="buffer_full"` tag.
+Every event a full buffer evicts under `DropOldest` or `DropNewest` increments `asterisk.push.events.dropped` once, tagged `reason="buffer_full"`; `Block` never evicts. A publish that races the bus's disposal is counted with `reason="writer_closed"`.
 
 ## Observability
 
@@ -102,7 +102,7 @@ The package exposes a `System.Diagnostics.Metrics.Meter` named **`Verbara.Sdk.Pu
 |------------|------|-------------|
 | `asterisk.push.events.published` | Counter&lt;long&gt; | Events accepted by `PublishAsync`. |
 | `asterisk.push.events.delivered` | Counter&lt;long&gt; | Events dispatched to at least one observer. |
-| `asterisk.push.events.dropped`   | Counter&lt;long&gt; | Events discarded (tag: `reason=buffer_full\|filter_rejected`). |
+| `asterisk.push.events.dropped`   | Counter&lt;long&gt; | Events discarded (tag: `reason=buffer_full\|writer_closed`). |
 | `asterisk.push.subscribers.active` | ObservableGauge&lt;int&gt; | Current active subscriptions (bound via `PushMetrics.BindActiveSubscribersGauge`). |
 
 Wire into OpenTelemetry with `meterProvider.AddMeter("Verbara.Sdk.Push")`.

@@ -22,7 +22,11 @@ public sealed class PushMetrics : IDisposable
     /// <summary>Events successfully delivered to at least one subscriber.</summary>
     public Counter<long> EventsDelivered { get; }
 
-    /// <summary>Events dropped (tag <c>reason=buffer_full|filter_rejected</c>).</summary>
+    /// <summary>
+    /// Events the bus dropped, tagged <c>reason</c>: <c>buffer_full</c> once for every event a full
+    /// buffer evicts under <c>DropOldest</c> or <c>DropNewest</c>, and <c>writer_closed</c> for a
+    /// publish that raced the bus's disposal.
+    /// </summary>
     public Counter<long> EventsDropped { get; }
 
     public PushMetrics()
@@ -39,7 +43,7 @@ public sealed class PushMetrics : IDisposable
 
         EventsDropped = _meter.CreateCounter<long>(
             "asterisk.push.events.dropped", "events",
-            "Push events dropped due to backpressure or filter rejection");
+            "Push events dropped by a full buffer or a closed bus");
     }
 
     /// <summary>
