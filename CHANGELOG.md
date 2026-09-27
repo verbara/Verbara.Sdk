@@ -86,6 +86,17 @@ All notable changes to this project will be documented in this file.
   tagged `buffer_full`. The `filter_rejected` tag the metric's documentation listed was never emitted
   and is no longer documented.
 
+### Fixed — an originate's dial events threw inside the AMI dispatcher (#N)
+
+- For an AMI `Originate`, Asterisk's `DialBegin` and `DialEnd` carry only the dialed side
+  (`DestChannel`/`DestUniqueid`) and no calling channel. The server's event observer passed the absent
+  `Uniqueid` to `ChannelManager.OnDialBegin`/`OnDialEnd`, whose parameter is declared non-null, and the
+  resulting `ArgumentNullException` was swallowed by the AMI dispatcher — 9 per replay of a 12-call
+  capture on Asterisk 20.20.1, 22.9.0 and 23.4.1, up to two per originate. Such an event is now skipped.
+  No call, channel or event a consumer observes changes: the captures replay to identical calls with
+  and without the fix. A process that exports .NET runtime metrics stops counting those exceptions in
+  `dotnet.exceptions`.
+
 ### Fixed — `Verbara.Sdk.Data.Npgsql` did not restore in a project that references it directly (#329)
 
 - A `Microsoft.NET.Sdk` project that referenced `Verbara.Sdk.Data.Npgsql` 2.5.1 or 2.6.0 failed
