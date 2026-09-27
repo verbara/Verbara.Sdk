@@ -2,34 +2,54 @@ using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Enums;
 using FluentAssertions;
 using FluentAssertions.Execution;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Verbara.Sdk.Ami.Tests.Connection;
 
 /// <summary>
-/// What the reconnect loop leaves behind when it gives up at
-/// <see cref="AmiConnectionOptions.MaxReconnectAttempts"/>: every socket the connection created released
-/// exactly once, the last one included, and <see cref="AmiConnectionState.Disconnected"/> reported only
-/// after that release.
+/// What ends the reconnect loop, and what it leaves behind. When it gives up at
+/// <see cref="AmiConnectionOptions.MaxReconnectAttempts"/>, every socket the connection created is released
+/// exactly once, the last one included, and <see cref="AmiConnectionState.Disconnected"/> is reported only
+/// after that release. When the caller ends the connection with <c>DisconnectAsync</c> or
+/// <c>DisposeAsync</c>, in the backoff delay or while a connect attempt is in flight, the loop stops: the
+/// connection dials no more, logs in no more, never raises <c>Reconnected</c>, and stays
+/// <see cref="AmiConnectionState.Disconnected"/>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// How many connects the loop makes before it gives up is deliberately not asserted. The limit is checked
-/// after the delay and before the connect, so today <c>MaxReconnectAttempts = N</c> makes N − 1 connects
-/// (3 makes two, 1 makes none). Whether N should mean N attempts is ruling C3 of the 2026-09-26 decision
-/// audit (ADR-0008 addendum), still open, and this test must hold under either answer: it reads the
-/// sockets the factory actually created instead of predicting how many there are.
+/// How many connects the loop makes is deliberately not asserted. The limit is checked after the delay and
+/// before the connect, so today <c>MaxReconnectAttempts = N</c> makes N − 1 connects (3 makes two, 1 makes
+/// none). Whether N should mean N attempts is ruling C3 of the 2026-09-26 decision audit (ADR-0008 addendum),
+/// still open, and these tests must hold under either answer: they read the sockets the factory actually
+/// created instead of predicting how many there are.
 /// </para>
 /// <para>
-/// Each peer is an in-memory <see cref="PipedSocket"/>. The first accepts its connect and logs in; every
-/// later one refuses, as an Asterisk that is down does. Every wait is bounded by <see cref="Bound"/> and
-/// ends on the signal it asserts; none of them sleeps.
+/// Each peer is an in-memory <see cref="PipedSocket"/>, a fresh one per connect. The first accepts its
+/// connect and logs in. A later one refuses its connect, as an Asterisk that is down does, or logs in, as one
+/// that came back does. Every wait is bounded by <see cref="Bound"/> and ends on the signal it asserts; none of
+/// them sleeps. The one exception is <see cref="DialWindow"/>, an observation window for an absence (the loop
+/// dials no more), paired with its positive control: a loop that nothing ended dials inside the same window.
 /// </para>
 /// </remarks>
 public sealed class AmiReconnectLoopTests
 {
     /// <summary>A hang bound. Every wait ends on its signal long before it; only a defect reaches it.</summary>
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// The backoff of the tests whose caller ends the connection. The loop writes its <c>[AMI] Reconnecting</c>
+    /// line right before this delay, so an ending issued on that line lands inside it.
+    /// </summary>
+    private static readonly TimeSpan Backoff = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>
+    /// How long a test watches for a dial once the caller's ending has returned: five backoff delays. It is
+    /// the observation, not a hang bound, and
+    /// <see cref="ReconnectLoop_ShouldDialWithinTheObservationWindow_WhenNothingEndsTheConnection"/> is its
+    /// positive control.
+    /// </summary>
+    private static readonly TimeSpan DialWindow = Backoff * 5;
 
     [Theory]
     // Gives up before any connect of its own: what is left is the socket the peer closed.
@@ -85,12 +105,337 @@ public sealed class AmiReconnectLoopTests
             "a DisposeAsync that finds the connection already Disconnected disposes no socket a second time");
     }
 
+    [Theory]
+    [InlineData(nameof(AmiConnection.DisposeAsync))]
+    [InlineData(nameof(AmiConnection.DisconnectAsync))]
+    public async Task Ending_ShouldStopTheReconnectLoop_WhenCalledDuringTheBackoff(string ending)
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        // Only the first socket accepts its connect: every reconnect is refused, as by an Asterisk that is down.
+        var factory = new PipedSocketFactory { ConnectsAccepted = 1 };
+        var logger = new SignalingLogger<AmiConnection>();
+        var connection = CreateReconnecting(factory, logger);
+        var first = await ConnectAsync(connection, factory, peerCts);
+        (await LoseAsync(first, logger.Logged)).Should().BeTrue("the peer's close starts the reconnect loop");
+
+        var returned = await CompletesWithinBoundAsync(EndAsync(connection, ending));
+        var stateAtReturn = connection.State;
+        var socketsAtReturn = factory.Created.Count;
+        var dialled = await factory.NextWithinAsync(DialWindow);
+
+        var sockets = factory.Created;
+        using (new AssertionScope())
+        {
+            returned.Should().BeTrue($"{ending} returns");
+            stateAtReturn.Should().Be(AmiConnectionState.Disconnected, $"{ending} has ended the connection when it returns");
+            dialled.Should().BeNull(
+                $"{ending} stops the reconnect loop, so it dials no more in {DialWindow.TotalMilliseconds} ms, five of its backoff delays");
+            sockets.Should().HaveCount(socketsAtReturn, $"the connection creates no socket after {ending} returns");
+            Unreleased(sockets).Should().BeEmpty(
+                $"every socket the connection created is released exactly once when {ending} ends it during a reconnect");
+            connection.State.Should().Be(AmiConnectionState.Disconnected, "nothing the loop does afterwards overrides the caller's ending");
+        }
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ShouldNotLogInAgain_WhenAsteriskComesBackAfterTheDispose()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory();
+        var logger = new SignalingLogger<AmiConnection>();
+        var connection = CreateReconnecting(factory, logger);
+        var reconnects = new Counter();
+        connection.Reconnected += reconnects.Increment;
+        var first = await ConnectAsync(connection, factory, peerCts);
+        // Asterisk is back: the peer of every socket created from here on completes the login.
+        var logins = new Counter();
+        var peers = LogInEveryNewSocketAsync(factory, logins, peerCts.Token);
+        (await LoseAsync(first, logger.Logged)).Should().BeTrue("the peer's close starts the reconnect loop");
+
+        var returned = await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask());
+        var socketsAtReturn = factory.Created.Count;
+        var dialled = await factory.NextWithinAsync(DialWindow);
+
+        using (new AssertionScope())
+        {
+            returned.Should().BeTrue("DisposeAsync returns");
+            dialled.Should().BeNull(
+                $"DisposeAsync stops the reconnect loop, so it dials no more in {DialWindow.TotalMilliseconds} ms, although Asterisk is back");
+            factory.Created.Should().HaveCount(socketsAtReturn, "the connection creates no socket after DisposeAsync returns");
+            logins.Count.Should().Be(0, "a disposed connection sends no login");
+            reconnects.Count.Should().Be(0, "a disposed connection never raises Reconnected");
+            connection.State.Should().Be(AmiConnectionState.Disconnected, "a disposed connection stays Disconnected");
+        }
+
+        await peerCts.CancelAsync();
+        (await CompletesWithinBoundAsync(peers)).Should().BeTrue("the peers stop with the test");
+    }
+
+    /// <summary>
+    /// The ending lands between the loop's backoff delay and its connect. It is issued from inside the lost
+    /// socket's first disposal, which the loop makes itself as it releases what the lost connection held
+    /// before it dials again, so the order is fixed by construction: the delay is over, the caller's ending is
+    /// recorded, and only then could the loop dial. It must not: no socket is created once the ending has been
+    /// issued, not only once it has returned.
+    /// </summary>
+    [Fact]
+    public async Task DisposeAsync_ShouldCreateNoSocket_WhenItLandsBetweenTheBackoffAndTheConnect()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        // Only the first socket accepts its connect: every reconnect is refused, as by an Asterisk that is down.
+        var factory = new PipedSocketFactory { ConnectsAccepted = 1 };
+        var logger = new SignalingLogger<AmiConnection>();
+        var connection = CreateReconnecting(factory, logger);
+        var first = await ConnectAsync(connection, factory, peerCts);
+        var issued = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+        first.DuringFirstDispose = () => issued.TrySetResult(connection.DisposeAsync().AsTask());
+
+        first.CloseFromPeer();
+        var dispose = await ResultWithinBoundAsync(issued.Task);
+        dispose.Should().NotBeNull("the loop releases the lost socket once its backoff is over, and that release issues DisposeAsync");
+        var returned = await CompletesWithinBoundAsync(dispose!);
+        var socketsAtReturn = factory.Created.Count;
+        var dialled = await factory.NextWithinAsync(DialWindow);
+
+        var sockets = factory.Created;
+        using (new AssertionScope())
+        {
+            returned.Should().BeTrue("DisposeAsync returns");
+            socketsAtReturn.Should().Be(1,
+                "the loop dials no socket once the caller's ending has been issued between its backoff and its connect");
+            dialled.Should().BeNull($"DisposeAsync stops the reconnect loop, so it dials no more in {DialWindow.TotalMilliseconds} ms");
+            Unreleased(sockets).Should().BeEmpty("the lost socket is released exactly once");
+            connection.State.Should().Be(AmiConnectionState.Disconnected, "a disposed connection stays Disconnected");
+        }
+    }
+
+    /// <summary>
+    /// The ending lands while the loop's connect attempt waits for the banner its peer withholds. The
+    /// attempt's socket reports the state at the moment the ending releases it, which is where a failed
+    /// attempt that wrote <see cref="AmiConnectionState.Reconnecting"/> over the caller's ending would show.
+    /// </summary>
+    [Fact]
+    public async Task DisposeAsync_ShouldStopTheReconnectLoop_WhenAConnectAttemptIsInFlight()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory();
+        var logger = new SignalingLogger<AmiConnection>();
+        var connection = CreateReconnecting(factory, logger);
+        var reconnects = new Counter();
+        connection.Reconnected += reconnects.Increment;
+        var first = await ConnectAsync(connection, factory, peerCts);
+
+        first.CloseFromPeer();
+        // The loop's attempt. Its peer withholds the banner, so the attempt stays in flight until something
+        // ends it.
+        var attempt = await factory.NextAsync(peerCts.Token).AsTask().WaitAsync(Bound);
+        AmiConnectionState? stateAtRelease = null;
+        attempt.DuringFirstDispose = () => stateAtRelease = connection.State;
+
+        var returned = await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask());
+        var socketsAtReturn = factory.Created.Count;
+        // Asterisk is back from here on: the peer of every new socket completes the login.
+        var logins = new Counter();
+        var peers = LogInEveryNewSocketAsync(factory, logins, peerCts.Token);
+        var dialled = await factory.NextWithinAsync(DialWindow);
+
+        using (new AssertionScope())
+        {
+            returned.Should().BeTrue("DisposeAsync returns while the loop's connect attempt is in flight");
+            attempt.DisposeCount.Should().Be(1, "the in-flight attempt's socket is released exactly once");
+            stateAtRelease.Should().Be(AmiConnectionState.Disconnecting,
+                "the caller's ending owns the state while it releases the attempt's socket: the attempt it cut short must not write Reconnecting over it");
+            dialled.Should().BeNull(
+                $"DisposeAsync stops the reconnect loop, so it dials no more in {DialWindow.TotalMilliseconds} ms, although Asterisk is back");
+            factory.Created.Should().HaveCount(socketsAtReturn, "the connection creates no socket after DisposeAsync returns");
+            logins.Count.Should().Be(0, "a disposed connection sends no login");
+            reconnects.Count.Should().Be(0, "a disposed connection never raises Reconnected");
+            connection.State.Should().Be(AmiConnectionState.Disconnected, "a disposed connection stays Disconnected");
+        }
+
+        await peerCts.CancelAsync();
+        (await CompletesWithinBoundAsync(peers)).Should().BeTrue("the peers stop with the test");
+    }
+
+    /// <summary>
+    /// The ending lands after the loop's attempt has logged in and before the loop reports the reconnect. It
+    /// is issued from inside the attempt's own <c>[AMI] Connected</c> line, which the attempt writes on the
+    /// loop's task as its last step, so the order is fixed by construction: the login succeeded, the caller's
+    /// ending was recorded, and only then could the loop raise <c>Reconnected</c>.
+    /// </summary>
+    [Fact]
+    public async Task DisposeAsync_ShouldNotRaiseReconnected_WhenItLandsAfterTheAttemptLoggedIn()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory();
+        // The first "[AMI] Connected" line is the test's own connect; the second is the loop's attempt.
+        var logger = new ActingLogger("[AMI] Connected", occurrence: 2);
+        var connection = CreateReconnecting(factory, logger);
+        var reconnects = new Counter();
+        connection.Reconnected += reconnects.Increment;
+        var issued = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+        logger.Act = () => issued.TrySetResult(connection.DisposeAsync().AsTask());
+        var first = await ConnectAsync(connection, factory, peerCts);
+        // Asterisk is back: the peer of every socket created from here on completes the login.
+        var logins = new Counter();
+        var peers = LogInEveryNewSocketAsync(factory, logins, peerCts.Token);
+        (await LoseAsync(first, logger.Logged)).Should().BeTrue("the peer's close starts the reconnect loop");
+
+        var dispose = await ResultWithinBoundAsync(issued.Task);
+        dispose.Should().NotBeNull("the loop's attempt logs in, and its [AMI] Connected line issues DisposeAsync");
+        var returned = await CompletesWithinBoundAsync(dispose!);
+        var socketsAtReturn = factory.Created.Count;
+        var dialled = await factory.NextWithinAsync(DialWindow);
+
+        var sockets = factory.Created;
+        using (new AssertionScope())
+        {
+            returned.Should().BeTrue("DisposeAsync returns");
+            reconnects.Count.Should().Be(0,
+                "the caller's ending was recorded before the loop reported the reconnect, so the loop never raises Reconnected");
+            dialled.Should().BeNull($"DisposeAsync stops the reconnect loop, so it dials no more in {DialWindow.TotalMilliseconds} ms");
+            sockets.Should().HaveCount(socketsAtReturn, "the connection creates no socket after DisposeAsync returns");
+            Unreleased(sockets).Should().BeEmpty(
+                "every socket the connection created is released exactly once, the one the attempt logged in on included");
+            connection.State.Should().Be(AmiConnectionState.Disconnected, "a disposed connection stays Disconnected");
+        }
+
+        await peerCts.CancelAsync();
+        (await CompletesWithinBoundAsync(peers)).Should().BeTrue("the peers stop with the test");
+    }
+
+    /// <summary>
+    /// The positive control of <see cref="DialWindow"/>, green before and after the loop learned to stop: the
+    /// same connection, with nothing ending it, dials inside the window. A socket absent from the window in
+    /// the tests above therefore means the loop stopped, not that the window was too short to see a dial.
+    /// </summary>
+    [Fact]
+    public async Task ReconnectLoop_ShouldDialWithinTheObservationWindow_WhenNothingEndsTheConnection()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory { ConnectsAccepted = 1 };
+        var logger = new SignalingLogger<AmiConnection>();
+        var connection = CreateReconnecting(factory, logger);
+        var first = await ConnectAsync(connection, factory, peerCts);
+        (await LoseAsync(first, logger.Logged)).Should().BeTrue("the peer's close starts the reconnect loop");
+
+        var dialled = await factory.NextWithinAsync(DialWindow);
+
+        dialled.Should().NotBeNull(
+            $"with nothing ending the connection, the loop dials within {DialWindow.TotalMilliseconds} ms of starting its backoff");
+        (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// A pin, green before and after the loop learned to stop: a connection its caller ended during a
+    /// reconnect refuses a connect, as one its caller ended while connected does. It holds the guard at
+    /// <c>ConnectAsync</c>'s entry, which the loop no longer passes through.
+    /// </summary>
+    [Fact]
+    public async Task ConnectAsync_ShouldThrowObjectDisposed_WhenTheCallerEndedTheConnectionDuringAReconnect()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory { ConnectsAccepted = 1 };
+        var logger = new SignalingLogger<AmiConnection>();
+        var connection = CreateReconnecting(factory, logger);
+        var first = await ConnectAsync(connection, factory, peerCts);
+        (await LoseAsync(first, logger.Logged)).Should().BeTrue("the peer's close starts the reconnect loop");
+        (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue("DisposeAsync returns");
+        var socketsBeforeConnect = factory.Created.Count;
+
+        var connect = async () => await connection.ConnectAsync().AsTask().WaitAsync(Bound);
+
+        await connect.Should().ThrowAsync<ObjectDisposedException>(
+            "a connection its caller ended during a reconnect stays ended, as one ended while connected does");
+        factory.Created.Should().HaveCount(socketsBeforeConnect, "the refused connect creates no socket");
+    }
+
     /// <summary>Each socket not disposed exactly once, described by its place in creation order.</summary>
     private static List<string> Unreleased(IReadOnlyList<PipedSocket> sockets) =>
         [.. sockets
             .Select((socket, index) => (socket.DisposeCount, Place: index + 1))
             .Where(s => s.DisposeCount != 1)
             .Select(s => $"socket {s.Place} of {sockets.Count}: disposed {s.DisposeCount} time(s)")];
+
+    /// <summary>
+    /// A connection that reconnects forever (<c>MaxReconnectAttempts = 0</c>, the default) after
+    /// <see cref="Backoff"/>, and that only the peer's close or the test ends.
+    /// </summary>
+    private static AmiConnection CreateReconnecting(PipedSocketFactory factory, ILogger<AmiConnection> logger) =>
+        new(Options.Create(new AmiConnectionOptions
+        {
+            Hostname = "localhost",
+            Username = "admin",
+            Password = "secret",
+            EnableHeartbeat = false,
+            AutoReconnect = true,
+            MaxReconnectAttempts = 0,
+            ReconnectInitialDelay = Backoff,
+            ReconnectMaxDelay = Backoff,
+        }), factory, logger);
+
+    /// <summary>
+    /// Connects, with the next socket's peer completing the login; returns that socket. The peer's reads end
+    /// with <paramref name="peerCts"/>.
+    /// </summary>
+    private static async Task<PipedSocket> ConnectAsync(AmiConnection connection, PipedSocketFactory factory,
+        CancellationTokenSource peerCts)
+    {
+        var loggedIn = Task.Run(async () =>
+        {
+            var peer = await factory.NextAsync(peerCts.Token);
+            await peer.CompleteLoginAsync(peerCts.Token);
+            return peer;
+        }, peerCts.Token);
+        await connection.ConnectAsync().AsTask().WaitAsync(Bound);
+        return await loggedIn.WaitAsync(Bound);
+    }
+
+    /// <summary>
+    /// The peer closes the socket; completes once the reconnect loop has written its <c>[AMI] Reconnecting</c>
+    /// line, right before its backoff delay.
+    /// </summary>
+    private static Task<bool> LoseAsync(PipedSocket peer, Func<string, Task> logged)
+    {
+        var reconnecting = logged("[AMI] Reconnecting");
+        peer.CloseFromPeer();
+        return CompletesWithinBoundAsync(reconnecting);
+    }
+
+    private static Task EndAsync(AmiConnection connection, string ending) => ending switch
+    {
+        nameof(AmiConnection.DisposeAsync) => connection.DisposeAsync().AsTask(),
+        nameof(AmiConnection.DisconnectAsync) => connection.DisconnectAsync().AsTask(),
+        _ => throw new ArgumentOutOfRangeException(nameof(ending), ending, "Not a caller's ending."),
+    };
+
+    /// <summary>
+    /// Plays an Asterisk that is up for every socket the connection creates from now on: its peer completes
+    /// the login, which <paramref name="logins"/> counts. Ends when <paramref name="ct"/> is cancelled.
+    /// </summary>
+    private static async Task LogInEveryNewSocketAsync(PipedSocketFactory factory, Counter logins, CancellationToken ct)
+    {
+        try
+        {
+            while (true)
+            {
+                var peer = await factory.NextAsync(ct);
+                try
+                {
+                    await peer.CompleteLoginAsync(ct);
+                    logins.Increment();
+                }
+                catch (InvalidOperationException)
+                {
+                    // The connection closed this socket before the login finished: no login was sent.
+                }
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // The test is over.
+        }
+    }
 
     private static async Task<bool> CompletesWithinBoundAsync(Task task)
     {
@@ -102,6 +447,57 @@ public sealed class AmiReconnectLoopTests
         catch (TimeoutException)
         {
             return false;
+        }
+    }
+
+    private static async Task<T?> ResultWithinBoundAsync<T>(Task<T> task) where T : class
+    {
+        try
+        {
+            return await task.WaitAsync(Bound);
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
+    }
+
+    private sealed class Counter
+    {
+        private int _count;
+
+        public int Count => Volatile.Read(ref _count);
+
+        public void Increment() => Interlocked.Increment(ref _count);
+    }
+
+    /// <summary>
+    /// A <see cref="SignalingLogger{T}"/> that also runs <see cref="Act"/> inside the
+    /// <c>occurrence</c>-th line containing <c>fragment</c>: on the thread that writes the line, before the
+    /// write returns. It places a call at a fixed point of the connection's own work by construction.
+    /// </summary>
+    private sealed class ActingLogger(string fragment, int occurrence) : ILogger<AmiConnection>
+    {
+        private readonly SignalingLogger<AmiConnection> _signals = new();
+        private int _seen;
+
+        public Action? Act { get; set; }
+
+        public Task Logged(string lineFragment) => _signals.Logged(lineFragment);
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => _signals.IsEnabled(logLevel);
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            _signals.Log(logLevel, eventId, state, exception, formatter);
+            if (formatter(state, exception).Contains(fragment, StringComparison.Ordinal)
+                && Interlocked.Increment(ref _seen) == occurrence)
+            {
+                Act?.Invoke();
+            }
         }
     }
 }
