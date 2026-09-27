@@ -27,16 +27,34 @@ public sealed partial class CallSessionManager : ICallSessionManager
     private readonly SessionOptions _options;
     private readonly SessionStoreBase _store;
     private readonly ILogger<CallSessionManager> _logger;
+    private readonly TimeProvider _timeProvider;
     private CancellationToken _shutdownToken;
 
     public CallSessionManager(
         IOptions<SessionOptions> options,
         ILogger<CallSessionManager> logger,
         SessionStoreBase store)
+        : this(options, logger, store, TimeProvider.System)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a manager whose release cutoff — the instant an ended session must have
+    /// completed before to be past <see cref="SessionOptions.CompletedRetention"/> — is read from
+    /// <paramref name="timeProvider"/>, so a test can move past the retention period with a fake
+    /// clock instead of sitting it out. Nothing else reads it: the session's own timestamps still
+    /// come from the wall clock.
+    /// </summary>
+    internal CallSessionManager(
+        IOptions<SessionOptions> options,
+        ILogger<CallSessionManager> logger,
+        SessionStoreBase store,
+        TimeProvider timeProvider)
     {
         _options = options.Value;
         _logger = logger;
         _store = store;
+        _timeProvider = timeProvider;
         _correlator = new SessionCorrelator(_options);
     }
 
@@ -555,7 +573,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
     private void EvictStaleCompleted()
     {
-        var cutoff = DateTimeOffset.UtcNow - _options.CompletedRetention;
+        var cutoff = _timeProvider.GetUtcNow() - _options.CompletedRetention;
         while (_completedOrder.TryPeek(out var oldId) &&
                _sessions.TryGetValue(oldId, out var old) &&
                old.CompletedAt < cutoff)
