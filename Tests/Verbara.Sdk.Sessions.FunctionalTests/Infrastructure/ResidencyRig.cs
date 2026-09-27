@@ -15,14 +15,28 @@ namespace Verbara.Sdk.Sessions.FunctionalTests.Infrastructure;
 /// A clock that moves only when the test moves it. It stands in for the manager's release cutoff
 /// and nothing else: a session's own timestamps (<see cref="CallSession.CompletedAt"/> included)
 /// still come from the wall clock.
+///
+/// <para>It also reports two things about how it is used. <see cref="TimersCreated"/> counts the
+/// timers asked of it, which it never fires: release rides arrivals and endings, so the manager
+/// schedules nothing (<c>ADR-0063</c>, D4). And <see cref="HoldNextRead"/> parks the next reader
+/// inside its read — the release walk reads the clock under its own lock, so a walk parked there
+/// is a walk in progress, and another reader arriving meanwhile is a second walk running at the
+/// same time.</para>
 /// </summary>
 internal sealed class ManualClock(DateTimeOffset start) : TimeProvider
 {
     private readonly Lock _gate = new();
     private DateTimeOffset _now = start;
+    private ReadHold? _hold;
+    private int _timersCreated;
+
+    /// <summary>How many timers have been asked of this clock.</summary>
+    public int TimersCreated => Volatile.Read(ref _timersCreated);
 
     public override DateTimeOffset GetUtcNow()
     {
+        Volatile.Read(ref _hold)?.OnRead();
+
         lock (_gate)
         {
             return _now;
@@ -36,13 +50,83 @@ internal sealed class ManualClock(DateTimeOffset start) : TimeProvider
             _now += by;
         }
     }
+
+    /// <summary>Parks the next reader of this clock until the returned hold is released.</summary>
+    public ReadHold HoldNextRead()
+    {
+        var hold = new ReadHold();
+        Volatile.Write(ref _hold, hold);
+        return hold;
+    }
+
+    /// <summary>Counts the timer and returns one that never fires.</summary>
+    public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+    {
+        Interlocked.Increment(ref _timersCreated);
+        return new InertTimer();
+    }
+
+    private sealed class InertTimer : ITimer
+    {
+        public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+
+        public void Dispose()
+        {
+            // Nothing was scheduled, so there is nothing to cancel.
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+}
+
+/// <summary>
+/// One read of a <see cref="ManualClock"/> held in place: the first reader after
+/// <see cref="ManualClock.HoldNextRead"/> signals <see cref="Reached"/> and stays inside its read
+/// until <see cref="Release"/>; every other read made while it is parked is counted in
+/// <see cref="ReadsWhileHeld"/>. Both waits end on the signal they are for; their bound only turns a
+/// test that never sends it into a report instead of a hang.
+/// </summary>
+internal sealed class ReadHold
+{
+    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(10);
+
+    private readonly TaskCompletionSource _reached = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _taken;
+    private int _parked;
+    private int _readsWhileHeld;
+
+    /// <summary>Reads of the clock made by anyone else while the first reader was parked.</summary>
+    public int ReadsWhileHeld => Volatile.Read(ref _readsWhileHeld);
+
+    /// <summary>Waits until the first reader is parked; false if none arrived within the bound.</summary>
+    public bool WaitUntilReached() => _reached.Task.Wait(Bound);
+
+    /// <summary>Lets the parked reader finish its read.</summary>
+    public void Release() => _released.TrySetResult();
+
+    internal void OnRead()
+    {
+        if (Interlocked.CompareExchange(ref _taken, 1, 0) == 0)
+        {
+            Volatile.Write(ref _parked, 1);
+            _reached.TrySetResult();
+            _released.Task.Wait(Bound);
+            Volatile.Write(ref _parked, 0);
+            return;
+        }
+
+        if (Volatile.Read(ref _parked) == 1)
+            Interlocked.Increment(ref _readsWhileHeld);
+    }
 }
 
 /// <summary>
 /// The real Live + Sessions pipeline for the tests of what the SDK holds for a call after it ends:
-/// a <see cref="VerbaraServer"/> over a substituted connection, a <see cref="CallSessionManager"/>
-/// on the default <see cref="InMemorySessionStore"/>, and a <see cref="ManualClock"/> for the
-/// manager's release cutoff. Everything is driven through the channel and bridge managers' own
+/// a <see cref="VerbaraServer"/> over a substituted connection (and, through
+/// <see cref="AttachServer"/>, more of them), a <see cref="CallSessionManager"/> on the default
+/// <see cref="InMemorySessionStore"/>, and a <see cref="ManualClock"/> for the manager's release
+/// cutoff. Everything is driven through the channel and bridge managers' own
 /// event entry points and the reconnect reload — the paths Asterisk's events take — and read back
 /// through the manager's and the store's members, never through private fields.
 ///
@@ -71,6 +155,7 @@ internal sealed class ResidencyRig : IAsyncDisposable
     private static readonly TimeSpan ReloadBound = TimeSpan.FromSeconds(10);
 
     private readonly IAmiConnection _connection = Substitute.For<IAmiConnection>();
+    private readonly List<VerbaraServer> _otherServers = [];
     private readonly ReloadSignals _reload = new();
     private readonly List<CallEndedEvent> _endings = [];
     private readonly IDisposable _endingSubscription;
@@ -118,35 +203,53 @@ internal sealed class ResidencyRig : IAsyncDisposable
     public Task StartAsync() => Server.StartAsync();
 
     /// <summary>
-    /// Two legs sharing <c>L-{tag}</c>, dialled and answered, no bridge: one session, state
-    /// Connected. Returns that session.
+    /// Attaches one more server to the same manager, over a connection of its own — as the
+    /// multi-server registration attaches one manager to every server. Its calls are driven through
+    /// its own channel manager: pass it as <c>on</c> to the helpers below.
     /// </summary>
-    public CallSession OpenAnsweredCall(string tag)
+    public VerbaraServer AttachServer(string serverId)
     {
+        var connection = Substitute.For<IAmiConnection>();
+        connection.AsteriskVersion.Returns("21.0.0");
+
+        var server = new VerbaraServer(connection, NullLogger<VerbaraServer>.Instance);
+        Manager.AttachToServer(server, serverId);
+        _otherServers.Add(server);
+        return server;
+    }
+
+    /// <summary>
+    /// Two legs sharing <c>L-{tag}</c>, dialled and answered, no bridge: one session, state
+    /// Connected, on <paramref name="on"/> (the first server by default). Returns that session.
+    /// </summary>
+    public CallSession OpenAnsweredCall(string tag, VerbaraServer? on = null)
+    {
+        var channels = (on ?? Server).Channels;
         var linkedId = LinkedIdOf(tag);
-        Server.Channels.OnNewChannel($"c-{tag}", $"PJSIP/trunk-c-{tag}", ChannelState.Ring,
+        channels.OnNewChannel($"c-{tag}", $"PJSIP/trunk-c-{tag}", ChannelState.Ring,
             callerIdNum: "5551234", context: "from-trunk", linkedId: linkedId);
-        Server.Channels.OnNewChannel($"a-{tag}", $"PJSIP/100-a-{tag}", ChannelState.Ring,
+        channels.OnNewChannel($"a-{tag}", $"PJSIP/100-a-{tag}", ChannelState.Ring,
             linkedId: linkedId);
-        Server.Channels.OnDialBegin($"c-{tag}", $"a-{tag}", $"PJSIP/100-a-{tag}", null);
-        Server.Channels.OnNewState($"a-{tag}", ChannelState.Up);
+        channels.OnDialBegin($"c-{tag}", $"a-{tag}", $"PJSIP/100-a-{tag}", null);
+        channels.OnNewState($"a-{tag}", ChannelState.Up);
 
         return Manager.GetByLinkedId(linkedId)
             ?? throw new InvalidOperationException($"no session for '{linkedId}'. Measured: {Describe()}");
     }
 
     /// <summary>Both legs of <paramref name="tag"/>'s call hang up, with NormalClearing.</summary>
-    public void HangUp(string tag)
+    public void HangUp(string tag, VerbaraServer? on = null)
     {
-        Server.Channels.OnHangup($"a-{tag}", HangupCause.NormalClearing);
-        Server.Channels.OnHangup($"c-{tag}", HangupCause.NormalClearing);
+        var channels = (on ?? Server).Channels;
+        channels.OnHangup($"a-{tag}", HangupCause.NormalClearing);
+        channels.OnHangup($"c-{tag}", HangupCause.NormalClearing);
     }
 
     /// <summary>One ordinary answered call, from its first leg to both hangups.</summary>
-    public CallSession Call(string tag)
+    public CallSession Call(string tag, VerbaraServer? on = null)
     {
-        var session = OpenAnsweredCall(tag);
-        HangUp(tag);
+        var session = OpenAnsweredCall(tag, on);
+        HangUp(tag, on);
         return session;
     }
 
@@ -161,14 +264,15 @@ internal sealed class ResidencyRig : IAsyncDisposable
 
     /// <summary>
     /// A new leg arrives carrying <c>L-{tag}</c> — the correlation of <paramref name="tag"/>'s call,
-    /// whatever state that call is in.
+    /// whatever state that call is in, or of no call at all — on <paramref name="on"/> (the first
+    /// server by default).
     /// </summary>
-    public void LegJoins(string uniqueId, string tag) =>
-        Server.Channels.OnNewChannel(uniqueId, $"PJSIP/300-{uniqueId}", ChannelState.Ring,
+    public void LegJoins(string uniqueId, string tag, VerbaraServer? on = null) =>
+        (on ?? Server).Channels.OnNewChannel(uniqueId, $"PJSIP/300-{uniqueId}", ChannelState.Ring,
             linkedId: LinkedIdOf(tag));
 
-    public void LegLeaves(string uniqueId) =>
-        Server.Channels.OnHangup(uniqueId, HangupCause.NormalClearing);
+    public void LegLeaves(string uniqueId, VerbaraServer? on = null) =>
+        (on ?? Server).Channels.OnHangup(uniqueId, HangupCause.NormalClearing);
 
     /// <summary>Moves the release cutoff past <see cref="SessionOptions.CompletedRetention"/>.</summary>
     public void MovePastRetention() => Clock.Advance(Options.CompletedRetention + PastRetentionMargin);
@@ -248,6 +352,8 @@ internal sealed class ResidencyRig : IAsyncDisposable
         _endingSubscription.Dispose();
         await Manager.DisposeAsync();
         await Server.DisposeAsync();
+        foreach (var server in _otherServers)
+            await server.DisposeAsync();
     }
 
     private void Record(CallEndedEvent ending)

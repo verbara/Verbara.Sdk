@@ -53,7 +53,7 @@ public sealed class ReleaseWedgeTests
         }.Should().BeEquivalentTo(
             new { VictimHeld = false, EndedHeldPastRetention = 0 },
             "with nothing but ordinary calls, every call that ended before the cutoff is released by "
-            + $"the next ending. Measured: {rig.Describe()}");
+            + $"the next arrival or ending. Measured: {rig.Describe()}");
     }
 
     [Fact]

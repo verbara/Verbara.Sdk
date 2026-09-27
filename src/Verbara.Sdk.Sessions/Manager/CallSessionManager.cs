@@ -25,7 +25,8 @@ public sealed partial class CallSessionManager : ICallSessionManager
     /// <summary>
     /// Serializes the release walk. The walk judges an entry after taking it off the queue, which is
     /// only sound while no other walk can take an entry between its look at the head and its dequeue;
-    /// two sessions ending at once — on two attached servers, say — each run a walk.
+    /// every arrival and every ending runs a walk, and with several servers attached they run on
+    /// different threads at once.
     /// </summary>
     private readonly Lock _releaseLock = new();
     private readonly ConcurrentDictionary<string, ServerSubscriptions> _serverSubs = new();
@@ -207,6 +208,13 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
     private void OnChannelAdded(AsteriskChannel channel, string serverId)
     {
+        // Release rides arrivals as well as endings, so a process that keeps accepting calls but has
+        // stopped completing them still lets go of what it holds past retention. It runs before the
+        // leg is correlated: a leg carrying the linkedid of an ended call past retention then finds
+        // that call released and opens its own, instead of joining a call this same evaluation lets
+        // go of. No timer is involved, so an idle process releases nothing (ADR-0063, D4).
+        EvictStaleCompleted();
+
         var linkedId = channel.LinkedId;
         if (string.IsNullOrEmpty(linkedId)) linkedId = channel.UniqueId;
 
@@ -628,6 +636,8 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
     /// <summary>
     /// Releases every queued call past <see cref="SessionOptions.CompletedRetention"/>, oldest first.
+    /// Runs on every arrival, before the arriving leg is correlated, and on every ending, after its
+    /// <see cref="CallEndedEvent"/>; nothing schedules it, and one walk runs at a time.
     /// <para>
     /// An entry leaves the queue first and is judged afterwards. The one thing read before it leaves
     /// is its own record: a completion time that proves the call ended inside retention keeps it, and
