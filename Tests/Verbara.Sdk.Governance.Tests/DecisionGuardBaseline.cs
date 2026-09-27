@@ -109,6 +109,7 @@ internal sealed class DecisionGuardBaseline
     /// </summary>
     public static readonly IReadOnlySet<string> RegisteredGuards = new HashSet<string>(StringComparer.Ordinal)
     {
+        TaskRunHandoffScanner.GuardName,
     };
 
     private static readonly string[] EntryFields = ["guard", "path", "key", "reason", "owner"];
