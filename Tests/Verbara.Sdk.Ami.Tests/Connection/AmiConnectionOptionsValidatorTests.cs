@@ -102,4 +102,26 @@ public class AmiConnectionOptionsValidatorTests
 
         result.Failed.Should().BeTrue();
     }
+
+    /// <summary>
+    /// The recorded defaults: a heartbeat every 30 s with a 10 s timeout, enabled (ADR-0021), and a
+    /// reconnect that starts at 1 s, doubles, stops growing at 30 s and never gives up (ADR-0008).
+    /// </summary>
+    [Fact]
+    public void Constructor_ShouldUseTheRecordedHeartbeatAndReconnectDefaults_WhenNothingIsSet()
+    {
+        var options = new AmiConnectionOptions();
+
+        options.Should().BeEquivalentTo(new
+        {
+            EnableHeartbeat = true,
+            HeartbeatInterval = TimeSpan.FromSeconds(30),
+            HeartbeatTimeout = TimeSpan.FromSeconds(10),
+            AutoReconnect = true,
+            ReconnectInitialDelay = TimeSpan.FromSeconds(1),
+            ReconnectMultiplier = 2.0,
+            ReconnectMaxDelay = TimeSpan.FromSeconds(30),
+            MaxReconnectAttempts = 0,
+        });
+    }
 }

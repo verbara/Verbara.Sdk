@@ -83,10 +83,18 @@ public sealed class AmiConnection : IAmiConnection
     private readonly ConcurrentDictionary<string, string> _actionNames = new();
     private readonly ConcurrentDictionary<string, ResponseEventCollector> _pendingEventActions = new();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
+
+    // Serializes CleanupAsync. DisconnectAsync, DisposeAsync, the reconnect loop and the release of a
+    // connection lost without AutoReconnect can each reach it, and every socket is disposed exactly once.
+    private readonly SemaphoreSlim _cleanupLock = new(1, 1);
     private volatile IObserver<ManagerEvent>[] _observers = [];
     private readonly Lock _observerLock = new();
 
     private volatile AmiConnectionState _state = AmiConnectionState.Initial;
+
+    // Set by DisconnectAsync and DisposeAsync. A connection that ended on its own (the peer closed, or a
+    // heartbeat timeout with AutoReconnect off) is released too, but its caller may still connect it again.
+    private volatile bool _closedByCaller;
     private bool _gaugesRegistered;
 
     public AmiConnectionState State => _state;
@@ -107,7 +115,7 @@ public sealed class AmiConnection : IAmiConnection
     /// <inheritdoc />
     public async ValueTask ConnectAsync(CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_state == AmiConnectionState.Disconnected && _cts is null, this);
+        ObjectDisposedException.ThrowIf(_state == AmiConnectionState.Disconnected && _closedByCaller, this);
 
         _state = AmiConnectionState.Connecting;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -166,7 +174,9 @@ public sealed class AmiConnection : IAmiConnection
         // Start heartbeat loop if enabled
         if (_options.EnableHeartbeat && _options.HeartbeatInterval > TimeSpan.Zero)
         {
-            _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(_cts.Token), CancellationToken.None);
+            var socket = _socket;
+            var token = _cts.Token;
+            _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(socket, token), CancellationToken.None);
         }
 
         AmiConnectionLog.Connected(_logger, _options.Hostname, _options.Port, AsteriskVersion);
@@ -435,7 +445,19 @@ public sealed class AmiConnection : IAmiConnection
         return new Unsubscriber(this, observer);
     }
 
-    private async Task HeartbeatLoopAsync(CancellationToken ct)
+    /// <summary>
+    /// Sends a Ping every <see cref="AmiConnectionOptions.HeartbeatInterval"/>. When one goes unanswered,
+    /// the heartbeat tears down <paramref name="socket"/> and leaves its loop; nothing else.
+    /// </summary>
+    /// <remarks>
+    /// With the transport closed the reader loop ends exactly as it does when the peer closes the socket,
+    /// and its <c>finally</c> alone chooses the ending: a reconnect when AutoReconnect is on, Disconnected
+    /// otherwise (ADR-0021, owner ruling 2026-09-26). The heartbeat must not call
+    /// <see cref="DisconnectAsync"/>: that sets Disconnecting, which sends the reader's <c>finally</c> to
+    /// Disconnected and suppresses the reconnect, and its cleanup awaits this very task, so it never
+    /// returned and never released the socket.
+    /// </remarks>
+    private async Task HeartbeatLoopAsync(ISocketConnection socket, CancellationToken ct)
     {
         using var timer = new PeriodicTimer(_options.HeartbeatInterval);
         try
@@ -450,10 +472,11 @@ public sealed class AmiConnection : IAmiConnection
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
-                    // Heartbeat timed out — connection is dead
+                    // Heartbeat timed out — the connection is dead. End the transport so the reader
+                    // loop ends; the socket itself is disposed by whichever cleanup follows.
                     AmiConnectionLog.HeartbeatTimeout(_logger);
-                    await DisconnectAsync(CancellationToken.None);
-                    break;
+                    await socket.CloseAsync(CancellationToken.None);
+                    return;
                 }
             }
         }
@@ -531,16 +554,43 @@ public sealed class AmiConnection : IAmiConnection
         }
         finally
         {
-            // Connection lost
-            if (_state == AmiConnectionState.Connected && _options.AutoReconnect)
+            // The one place that chooses how a connection ends. Still Connected means nobody asked for
+            // the ending: the peer closed, a read failed, or the heartbeat tore the transport down.
+            // Whatever runs next awaits this task in CleanupAsync, so it runs on a task of its own.
+            if (_state == AmiConnectionState.Connected)
             {
-                _state = AmiConnectionState.Reconnecting;
-                _ = Task.Run(() => ReconnectLoopAsync(), CancellationToken.None);
+                if (_options.AutoReconnect)
+                {
+                    _state = AmiConnectionState.Reconnecting;
+                    _ = Task.Run(() => ReconnectLoopAsync(), CancellationToken.None);
+                }
+                else
+                {
+                    _state = AmiConnectionState.Disconnecting;
+                    _ = Task.Run(() => EndLostConnectionAsync(), CancellationToken.None);
+                }
             }
             else
             {
                 _state = AmiConnectionState.Disconnected;
             }
+        }
+    }
+
+    /// <summary>
+    /// Ends a connection lost while AutoReconnect is off: releases what it holds, then reports
+    /// Disconnected, so a caller who sees Disconnected finds the socket already released.
+    /// </summary>
+    private async Task EndLostConnectionAsync()
+    {
+        try
+        {
+            await CleanupAsync();
+        }
+        finally
+        {
+            _state = AmiConnectionState.Disconnected;
+            AmiConnectionLog.Disconnected(_logger);
         }
     }
 
@@ -636,6 +686,7 @@ public sealed class AmiConnection : IAmiConnection
 
     public async ValueTask DisconnectAsync(CancellationToken cancellationToken = default)
     {
+        _closedByCaller = true;
         _state = AmiConnectionState.Disconnecting;
 
         // Try to send Logoff
@@ -656,61 +707,80 @@ public sealed class AmiConnection : IAmiConnection
         AmiConnectionLog.Disconnected(_logger);
     }
 
+    /// <summary>
+    /// Stops the heartbeat and reader loops and releases the event pump, the socket and the token
+    /// source. Serialized and idempotent: a second caller waits for the first and finds nothing left.
+    /// </summary>
+    /// <remarks>
+    /// It awaits the heartbeat task and the reader loop, so it must never run on either of them: both
+    /// hand an ending to a task of their own instead of calling this.
+    /// </remarks>
     private async ValueTask CleanupAsync()
     {
-        if (_cts is not null)
+        await _cleanupLock.WaitAsync();
+        try
         {
-            await _cts.CancelAsync();
-        }
+            if (_cts is not null)
+            {
+                await _cts.CancelAsync();
+            }
 
-        if (_heartbeatTask is not null)
+            if (_heartbeatTask is not null)
+            {
+                await _heartbeatTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                _heartbeatTask = null;
+            }
+
+            if (_readerLoop is not null)
+            {
+                await _readerLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                _readerLoop = null;
+            }
+
+            if (_eventPump is not null)
+            {
+                await _eventPump.DisposeAsync();
+                _eventPump = null;
+            }
+
+            if (_socket is not null)
+            {
+                await _socket.DisposeAsync();
+                _socket = null;
+            }
+
+            _reader = null;
+            _writer = null;
+
+            _cts?.Dispose();
+            _cts = null;
+
+            // Fail all pending actions
+            foreach (var pending in _pendingActions)
+            {
+                pending.Value.TrySetCanceled();
+            }
+
+            _pendingActions.Clear();
+
+            foreach (var collector in _pendingEventActions.Values)
+            {
+                collector.Complete();
+            }
+
+            _pendingEventActions.Clear();
+        }
+        finally
         {
-            await _heartbeatTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-            _heartbeatTask = null;
+            _cleanupLock.Release();
         }
-
-        if (_readerLoop is not null)
-        {
-            await _readerLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-            _readerLoop = null;
-        }
-
-        if (_eventPump is not null)
-        {
-            await _eventPump.DisposeAsync();
-            _eventPump = null;
-        }
-
-        if (_socket is not null)
-        {
-            await _socket.DisposeAsync();
-            _socket = null;
-        }
-
-        _reader = null;
-        _writer = null;
-
-        _cts?.Dispose();
-        _cts = null;
-
-        // Fail all pending actions
-        foreach (var pending in _pendingActions)
-        {
-            pending.Value.TrySetCanceled();
-        }
-
-        _pendingActions.Clear();
-
-        foreach (var collector in _pendingEventActions.Values)
-        {
-            collector.Complete();
-        }
-
-        _pendingEventActions.Clear();
     }
 
     public async ValueTask DisposeAsync()
     {
+        // A connection that ended on its own reports Disconnected only once it has been released, so
+        // there is nothing left to release here; it is still marked disposed.
+        _closedByCaller = true;
         if (_state != AmiConnectionState.Disconnected)
         {
             await DisconnectAsync();

@@ -4,7 +4,6 @@
     "Tests/Verbara.Sdk.Activities.Tests/Activities/ActivityTests.cs": 7,
     "Tests/Verbara.Sdk.Agi.Tests/Server/FastAgiServerTests.cs": 2,
     "Tests/Verbara.Sdk.Ami.Tests/Connection/AmiConnectionTests.cs": 1,
-    "Tests/Verbara.Sdk.Ami.Tests/Connection/AmiHeartbeatTests.cs": 3,
     "Tests/Verbara.Sdk.Ami.Tests/Internal/AmiProtocolReaderTests.cs": 1,
     "Tests/Verbara.Sdk.Ami.Tests/Internal/AsyncEventPumpTests.cs": 1,
     "Tests/Verbara.Sdk.Ari.Tests/Audio/AudioSocketServerTests.cs": 4,
