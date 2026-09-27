@@ -97,6 +97,13 @@ public sealed class AmiConnection : IAmiConnection
     private volatile bool _closedByCaller;
     private bool _gaugesRegistered;
 
+    // The one ending of this connection: in flight, or finished. The caller's DisconnectAsync and DisposeAsync
+    // and the connection's own ending when it is lost for good all join it instead of reading State, so none
+    // returns before the release has finished. A caller's ConnectAsync forgets a finished lost-connection
+    // ending, which leaves that connection reconnectable; a caller's ending is never forgotten.
+    private readonly Lock _endingLock = new();
+    private TaskCompletionSource? _ending;
+
     public AmiConnectionState State => _state;
     public string? AsteriskVersion { get; private set; }
 
@@ -116,6 +123,7 @@ public sealed class AmiConnection : IAmiConnection
     public async ValueTask ConnectAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_state == AmiConnectionState.Disconnected && _closedByCaller, this);
+        ForgetLostConnectionEnding();
 
         _state = AmiConnectionState.Connecting;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -180,6 +188,21 @@ public sealed class AmiConnection : IAmiConnection
         }
 
         AmiConnectionLog.Connected(_logger, _options.Hostname, _options.Port, AsteriskVersion);
+    }
+
+    /// <summary>
+    /// A connection lost for good was released, not disposed, so its caller may connect it again. Its
+    /// finished ending is forgotten before the connect acquires anything, so that the next ending releases
+    /// what this connect acquires — the socket a failed connect leaves open included — instead of joining
+    /// the ending that is already over.
+    /// </summary>
+    private void ForgetLostConnectionEnding()
+    {
+        lock (_endingLock)
+        {
+            if (!_closedByCaller && _ending is { Task.IsCompleted: true })
+                _ending = null;
+        }
     }
 
     private async ValueTask LoginAsync(CancellationToken ct)
@@ -453,9 +476,9 @@ public sealed class AmiConnection : IAmiConnection
     /// With the transport closed the reader loop ends exactly as it does when the peer closes the socket,
     /// and its <c>finally</c> alone chooses the ending: a reconnect when AutoReconnect is on, Disconnected
     /// otherwise (ADR-0021, owner ruling 2026-09-26). The heartbeat must not call
-    /// <see cref="DisconnectAsync"/>: that sets Disconnecting, which sends the reader's <c>finally</c> to
-    /// Disconnected and suppresses the reconnect, and its cleanup awaits this very task, so it never
-    /// returned and never released the socket.
+    /// <see cref="DisconnectAsync"/>: that sets Disconnecting, which keeps the reader's <c>finally</c> from
+    /// starting the reconnect, and its cleanup awaits this very task, so it never returned and never
+    /// released the socket.
     /// </remarks>
     private async Task HeartbeatLoopAsync(ISocketConnection socket, CancellationToken ct)
     {
@@ -557,6 +580,9 @@ public sealed class AmiConnection : IAmiConnection
             // The one place that chooses how a connection ends. Still Connected means nobody asked for
             // the ending: the peer closed, a read failed, or the heartbeat tore the transport down.
             // Whatever runs next awaits this task in CleanupAsync, so it runs on a task of its own.
+            // Any other state means an ending is already under way, and that ending writes Disconnected
+            // itself, once its release has finished: writing it here, as soon as the ending cancelled
+            // this loop, reported a connection whose socket was still open as Disconnected.
             if (_state == AmiConnectionState.Connected)
             {
                 if (_options.AutoReconnect)
@@ -570,31 +596,15 @@ public sealed class AmiConnection : IAmiConnection
                     _ = Task.Run(() => EndLostConnectionAsync(), CancellationToken.None);
                 }
             }
-            else
-            {
-                _state = AmiConnectionState.Disconnected;
-            }
         }
     }
 
     /// <summary>
-    /// Ends a connection lost for good — AutoReconnect is off, or the reconnect loop gave up: releases what
-    /// it holds, then reports Disconnected, so a caller who sees Disconnected finds the socket already
-    /// released. It runs on a task of its own, never on the reader loop or the heartbeat, which
-    /// <see cref="CleanupAsync"/> awaits.
+    /// Ends a connection lost for good — AutoReconnect is off, or the reconnect loop gave up — through the
+    /// same ending a caller's <see cref="DisconnectAsync"/> runs, without the Logoff. It runs on a task of
+    /// its own, never on the reader loop or the heartbeat, which <see cref="CleanupAsync"/> awaits.
     /// </summary>
-    private async Task EndLostConnectionAsync()
-    {
-        try
-        {
-            await CleanupAsync();
-        }
-        finally
-        {
-            _state = AmiConnectionState.Disconnected;
-            AmiConnectionLog.Disconnected(_logger);
-        }
-    }
+    private Task EndLostConnectionAsync() => EndAsync(byCaller: false, CancellationToken.None);
 
     private async Task ReconnectLoopAsync()
     {
@@ -620,7 +630,7 @@ public sealed class AmiConnection : IAmiConnection
                 // behind is released: the last one a failed connect created, or the lost one when no
                 // connect was made. Checked after the delay and before the connect, the limit makes
                 // N - 1 connects for N; whether it should make N is an open ruling, not this release.
-                _state = AmiConnectionState.Disconnecting;
+                // The ending writes Disconnecting itself, and only when no other ending is under way.
                 await EndLostConnectionAsync();
                 return;
             }
@@ -693,25 +703,69 @@ public sealed class AmiConnection : IAmiConnection
 
     public async ValueTask DisconnectAsync(CancellationToken cancellationToken = default)
     {
-        _closedByCaller = true;
-        _state = AmiConnectionState.Disconnecting;
+        await EndAsync(byCaller: true, cancellationToken);
+    }
 
-        // Try to send Logoff
-        if (_writer is not null && _socket?.IsConnected == true)
+    /// <summary>
+    /// The connection's one ending. The first call runs it: Disconnecting, a best-effort Logoff when the
+    /// caller asked for the ending, the release, and only then Disconnected. Every later call, the caller's
+    /// or the connection's own, joins that ending and returns when it has finished, whether it is still
+    /// releasing or finished long ago.
+    /// </summary>
+    /// <param name="byCaller">
+    /// <see langword="true"/> for <see cref="DisconnectAsync"/> and <see cref="DisposeAsync"/>, which also
+    /// mark the connection as ended by its caller, so it cannot be connected again.
+    /// </param>
+    /// <param name="logoffToken">Cancels only the Logoff write, never the release.</param>
+    private async Task EndAsync(bool byCaller, CancellationToken logoffToken)
+    {
+        TaskCompletionSource? mine = null;
+        Task ending;
+        lock (_endingLock)
         {
-            try
+            if (byCaller)
+                _closedByCaller = true;
+
+            if (_ending is null)
             {
-                await WriteActionLockedAsync("Logoff", NextActionId(), [], cancellationToken);
+                mine = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                _ending = mine;
             }
-            catch
-            {
-                // Best effort
-            }
+
+            ending = _ending.Task;
         }
 
-        await CleanupAsync();
-        _state = AmiConnectionState.Disconnected;
-        AmiConnectionLog.Disconnected(_logger);
+        if (mine is null)
+        {
+            await ending;
+            return;
+        }
+
+        try
+        {
+            _state = AmiConnectionState.Disconnecting;
+
+            // Try to send Logoff
+            if (byCaller && _writer is not null && _socket?.IsConnected == true)
+            {
+                try
+                {
+                    await WriteActionLockedAsync("Logoff", NextActionId(), [], logoffToken);
+                }
+                catch
+                {
+                    // Best effort
+                }
+            }
+
+            await CleanupAsync();
+        }
+        finally
+        {
+            _state = AmiConnectionState.Disconnected;
+            AmiConnectionLog.Disconnected(_logger);
+            mine.TrySetResult();
+        }
     }
 
     /// <summary>
@@ -785,13 +839,9 @@ public sealed class AmiConnection : IAmiConnection
 
     public async ValueTask DisposeAsync()
     {
-        // A connection that ended on its own reports Disconnected only once it has been released, so
-        // there is nothing left to release here; it is still marked disposed.
-        _closedByCaller = true;
-        if (_state != AmiConnectionState.Disconnected)
-        {
-            await DisconnectAsync();
-        }
+        // Joins the ending in flight, or the one already finished, instead of reading State: an ending
+        // under way still has to finish its release, and this call returns only after it has.
+        await EndAsync(byCaller: true, CancellationToken.None);
     }
 
     private string NextActionId()
