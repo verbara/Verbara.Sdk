@@ -54,5 +54,9 @@ Counters on `Verbara.Sdk.Push.Webhooks` meter:
 - `asterisk.push.webhooks.deliveries.failed`
 - `asterisk.push.webhooks.deliveries.retried`
 - `asterisk.push.webhooks.deliveries.dead_letter`
+- `asterisk.push.webhooks.circuit.opened`
+- `asterisk.push.webhooks.circuit.skipped`
+
+`deliveries.dead_letter` counts deliveries that failed all `MaxRetries + 1` attempts and were dropped. It is an operational signal, not a queue: nothing is stored and nothing can be replayed. A delivery skipped because its URL's circuit is open is dropped without an attempt and counted in `circuit.skipped`, not `dead_letter`. Retries still in flight when the host stops are lost without being counted, and every counter starts again from zero in the new process.
 
 Enroll via `Verbara.Sdk.OpenTelemetry` — `WithAllSources()` includes this meter automatically; it is already registered in `VerbaraTelemetry.MeterNames`.

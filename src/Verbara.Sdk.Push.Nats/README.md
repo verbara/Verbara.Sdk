@@ -44,10 +44,15 @@ Counters on the `Verbara.Sdk.Push.Nats` meter:
 
 - `asterisk.push.nats.events.published`
 - `asterisk.push.nats.events.failed`
+- `asterisk.push.nats.events.received`
+- `asterisk.push.nats.events.skipped`
+- `asterisk.push.nats.events.decode_failed`
 
 Enroll via `Verbara.Sdk.OpenTelemetry.WithAllSources()` — the meter name is already registered in `VerbaraTelemetry.MeterNames`.
 
-## Roadmap
+## Subscribe side
 
-- `PublishOnly = false` — subscribe to remote NATS subjects and republish inbound events onto the local Push bus (planned for a later v1.12.x release).
-- JetStream durable subscriptions + ordered consumer support.
+- Enabled by setting `Subscribe = new NatsSubscribeOptions { ... }`: the bridge consumes from NATS if and only if `Subscribe` is non-null. `PublishOnly` is kept only for compatibility with v1.12 configurations.
+- `SkipSelfOriginated` then requires `NodeId`, and startup validation refuses the configuration without it (loop prevention).
+- Remote events arrive on the local bus as `RemotePushEvent`.
+- JetStream and durable replay are out of scope for this MIT package.

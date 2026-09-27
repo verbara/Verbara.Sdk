@@ -6,7 +6,7 @@
 Verbara.Sdk tests fourteen speech-provider surfaces against in-process fakes. There are two
 substrates, and **which one a suite uses is not a choice**: it follows from whether the provider
 speaks HTTP request/response or a bidirectional WebSocket session.
-[ADR-0041](../decisions/0041-wiremock-as-http-provider-test-substrate.md) D2/D3 fixes the split so
+ADR-0041 D2/D3 fixes the split so
 that "use WireMock everywhere" cannot be adopted by drift, and so that a WebSocket suite's use of a
 hand-rolled server reads as a decision rather than as an unfinished migration.
 
@@ -69,7 +69,7 @@ precedent is `SpeechmaticsSpeechSynthesizer` (`_fakeBaseUri`) and `LmntSpeechSyn
 the strict matcher asserts the path the provider really builds rather than one the test handed it.
 A seam that accepted a full URL would delete the assertion it exists to enable.
 
-Use the IPv4 loopback literal (`127.0.0.1`), never `localhost` — [ADR-0044](../decisions/0044-ipv4-loopback-literal-for-test-servers.md).
+Use the IPv4 loopback literal (`127.0.0.1`), never `localhost` — ADR-0044.
 
 Providers that read a configurable endpoint from their own options (`WhisperOptions.Endpoint`,
 `AzureWhisperOptions.Endpoint`) need no seam at all. Check for one before adding it.
@@ -125,12 +125,12 @@ of the six defects below was findable by any depth of work inside the suite:
 Class D is the one to keep in mind when reading a green result: the handshake **succeeded**. A test
 that asserts the connection opened has asserted nothing about the credential. Where a vendor
 validates a credential — before or after `101` — is measured, never inferred from where the client
-puts it ([ADR-0049](../decisions/0049-in-band-failure-must-reach-the-caller.md)).
+puts it (ADR-0049).
 
 So a suite of this kind answers "does the client still do what we decided it should?" — a real and
 useful question, and the reason these suites exist. It does not answer "is what we decided correct?"
 Only the vendor settles that, through a live probe carrying a negative control
-([ADR-0048](../decisions/0048-wire-conformance-by-live-probe-with-negative-control.md); the procedure
+(ADR-0048; the procedure
 is §11 of [provider-recording-protocol.md](provider-recording-protocol.md)).
 
 **Do not infer conformance from this guide, or from a green run.** What has actually been checked,

@@ -32,6 +32,8 @@ Authorization: Bearer <jwt-with-tenantId-claim>
 Accept: text/event-stream
 ```
 
+If the request names no `topic`, or every named pattern is denied by `ISubscriptionAuthorizer` or fails to parse, the stream asks the authorizer about `**` and, if that is allowed, delivers every event the delivery filter lets through. An authorizer that scopes subscribers must therefore also decide `**`.
+
 Events are emitted in SSE format:
 
 ```

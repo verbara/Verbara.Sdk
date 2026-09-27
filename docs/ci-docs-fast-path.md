@@ -1,4 +1,4 @@
-# CI: docs/data-only fast-path (ADR-0016)
+# CI: docs/data-only fast-path (verbara-meta/ADR-0016)
 
 Docs-only PRs — markdown, OpenSpec-archive `git mv` moves, `CHANGELOG.md` — skip the
 heavy required CI jobs. A `gate` job in `ci.yml` and `codeql.yml` classifies the diff
@@ -13,4 +13,4 @@ context keeps running its job so its suffixed check-run name still materializes.
 workflow — that strands the required contexts `Expected` forever and blocks the PR.
 
 Standard, rationale, and the exact guard/classifier: verbara-meta **ADR-0016** (extends
-ADR-0003).
+verbara-meta/ADR-0003).

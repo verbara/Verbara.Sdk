@@ -6,7 +6,7 @@
 Verbara.Sdk owns wire-protocol parity for fourteen speech-provider surfaces it does not control (the
 §1 table enumerates them: 6 HTTP + 8 WebSocket). Hand-authored
 test fixtures assert what their author believed the vendor sends; a **recording** asserts what the
-vendor actually sent. [ADR-0041](../decisions/0041-wiremock-as-http-provider-test-substrate.md)
+vendor actually sent. ADR-0041
 makes recordings the fixture of record (D4) and bounds what may be committed (D5, D6). This guide is
 the operational form of that decision.
 
@@ -819,9 +819,9 @@ faithful recording of the wrong exchange. Six shipped defects were found this wa
 had a red test: the suites replayed our own misreadings back to us.
 
 The **probe** is the separate procedure that closes that gap.
-[ADR-0048](../decisions/0048-wire-conformance-by-live-probe-with-negative-control.md) makes it the
+ADR-0048 makes it the
 only thing that promotes a route, credential or frame-type claim to *verified*, and
-[ADR-0049](../decisions/0049-in-band-failure-must-reach-the-caller.md) extends it to the receive
+ADR-0049 extends it to the receive
 loop. A probe is **operator-run and off the PR path** — it spends a real credential against a real
 endpoint, so it never becomes a CI gate.
 
