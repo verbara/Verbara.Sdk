@@ -68,7 +68,7 @@ Scope is optional but recommended. Common scopes: `ami`, `agi`, `ari`, `live`, `
 - **File-scoped namespaces** (warning-level enforcement).
 - **TreatWarningsAsErrors** is on globally — build must be 0 warnings.
 - **Test naming:** `Method_ShouldExpected_WhenCondition`.
-- **Test stack:** xUnit 2.9.3, FluentAssertions 7.1.0, NSubstitute 5.3.0.
+- **Test stack:** xUnit, FluentAssertions and NSubstitute. Their versions are pinned in `Directory.Packages.props`; read them there, because a copy here goes stale.
 - **Central package management:** All NuGet versions in `Directory.Packages.props`.
 
 ### Build & Test
@@ -77,8 +77,8 @@ Scope is optional but recommended. Common scopes: `ami`, `agi`, `ari`, `live`, `
 # Build entire solution
 dotnet build Verbara.Sdk.slnx
 
-# Run all unit tests
-dotnet test Verbara.Sdk.slnx
+# Run the unit lane (the filter CI's Unit Tests job uses)
+dotnet test Verbara.Sdk.slnx --filter "Category!=Functional&Category!=Integration&Category!=Realtime&Category!=Spike"
 
 # Run a specific test project
 dotnet test Tests/Verbara.Sdk.Ami.Tests/
@@ -86,8 +86,8 @@ dotnet test Tests/Verbara.Sdk.Ami.Tests/
 # Run a single test by name
 dotnet test Tests/Verbara.Sdk.Ami.Tests/ --filter "FullyQualifiedName~AmiProtocolReaderTests"
 
-# Run functional tests (requires Docker)
-docker compose -f docker/docker-compose.test.yml up --build
+# Run functional + integration tests (requires Docker; Testcontainers starts the containers)
+dotnet test Verbara.Sdk.slnx --filter "Category=Functional|Category=Integration|Category=Realtime" -- RunConfiguration.MaxCpuCount=1
 ```
 
 ## Pull Request Process
