@@ -58,6 +58,82 @@ internal static class ProjectGraph
             .ToList();
     }
 
+    /// <summary>
+    /// For each package in <paramref name="sources"/> that can reach <paramref name="target"/> through
+    /// the graph's references, directly or through intermediate packages, returns the shortest such
+    /// chain as <c>"A -&gt; B -&gt; target"</c>. Sources are reported in ordinal order; a source absent
+    /// from the graph has no outgoing references and reaches nothing.
+    /// </summary>
+    public static IReadOnlyList<string> FindReferenceChains(
+        IReadOnlyDictionary<string, IReadOnlyList<string>> graph,
+        IEnumerable<string> sources,
+        string target)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(target);
+
+        var chains = new List<string>();
+        foreach (var source in sources.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        {
+            var chain = ShortestChain(graph, source, target);
+            if (chain is not null)
+                chains.Add(string.Join(" -> ", chain));
+        }
+
+        return chains;
+    }
+
+    /// <summary>
+    /// Breadth-first search from <paramref name="source"/>, visiting references in ordinal order so
+    /// the chain reported is the same on every machine. Each package is visited once, so a cycle ends
+    /// the walk instead of looping.
+    /// </summary>
+    private static List<string>? ShortestChain(
+        IReadOnlyDictionary<string, IReadOnlyList<string>> graph,
+        string source,
+        string target)
+    {
+        var cameFrom = new Dictionary<string, string>(StringComparer.Ordinal);
+        var visited = new HashSet<string>(StringComparer.Ordinal) { source };
+        var queue = new Queue<string>();
+        queue.Enqueue(source);
+
+        while (queue.Count > 0)
+        {
+            var package = queue.Dequeue();
+            if (!graph.TryGetValue(package, out var references))
+                continue;
+
+            foreach (var reference in references.Order(StringComparer.Ordinal))
+            {
+                if (!visited.Add(reference))
+                    continue;
+
+                cameFrom[reference] = package;
+                if (string.Equals(reference, target, StringComparison.Ordinal))
+                    return Unwind(cameFrom, source, target);
+
+                queue.Enqueue(reference);
+            }
+        }
+
+        return null;
+    }
+
+    private static List<string> Unwind(Dictionary<string, string> cameFrom, string source, string target)
+    {
+        var chain = new List<string> { target };
+        for (var package = target; !string.Equals(package, source, StringComparison.Ordinal);)
+        {
+            package = cameFrom[package];
+            chain.Add(package);
+        }
+
+        chain.Reverse();
+        return chain;
+    }
+
     private static bool IsAnalyzerReference(XElement element)
     {
         var outputItemType = element.Attribute("OutputItemType")?.Value;

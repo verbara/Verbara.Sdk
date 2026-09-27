@@ -32,6 +32,27 @@ public class VoiceAiDiTests
     }
 
     [Fact]
+    public async Task AddVoiceAiPipeline_ShouldResolveSessionHandlerAsThePipelineSingleton()
+    {
+        // ADR-0013: the consumer picks the session handler by DI registration alone, and this is the
+        // registration that picks the turn-based pipeline. The bridge's twin is pinned in RealtimeDiTests;
+        // this one was not (ADR-0013 addendum, 2026-09-26). The same instance, not merely the same type:
+        // the broker must reach the pipeline whose Events a consumer subscribed to.
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<SpeechRecognizer>(new FakeSpeechRecognizer());
+        services.AddSingleton<SpeechSynthesizer>(new FakeSpeechSynthesizer());
+        services.AddAudioSocketServer();
+        services.AddVoiceAiPipeline<FakeConversationHandlerScoped>();
+
+        await using var provider = services.BuildServiceProvider();
+
+        var handler = provider.GetRequiredService<ISessionHandler>();
+        handler.Should().BeOfType<VoiceAiPipeline>()
+            .Which.Should().BeSameAs(provider.GetRequiredService<VoiceAiPipeline>());
+    }
+
+    [Fact]
     public async Task AddVoiceAiPipeline_ShouldRegisterHandlerAsScoped()
     {
         var services = new ServiceCollection();

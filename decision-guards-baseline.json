@@ -1,0 +1,54 @@
+{
+  "_comment": "Known sites of the decision guards in Tests/Verbara.Sdk.Governance.Tests that fired on a defect already owned elsewhere when the guard landed. Each entry is {guard, path, key, reason, owner}: key is the whitespace-normalized text of the site (never a line number) and owner names the change that owns the fix. The match is EXACT: a site not listed fails its guard, and an entry whose site no longer fires fails it too, so the change that fixes a site deletes its entry in the same commit. Never add an entry to let a new violation in.",
+  "entries": [
+    {
+      "guard": "task-run-handoff-token",
+      "path": "src/Verbara.Sdk.Push.Nats/NatsBridge.cs",
+      "key": "Task.Run(() => ConsumeFromNatsAsync(filter, subOpts, stoppingToken), stoppingToken)",
+      "reason": "Each consume loop is handed to Task.Run gated on the bridge's stopping token (ADR-0058 R2). No observable effect: a skipped consume loop and one that ends at its first check both do nothing. The fix passes CancellationToken.None and deletes this entry.",
+      "owner": "a-server-that-stops-stops-what-it-started"
+    },
+    {
+      "guard": "task-run-handoff-token",
+      "path": "src/Verbara.Sdk.VoiceAi.AudioSocket/AudioSocketServer.cs",
+      "key": "Task.Run(() => AcceptLoopAsync(_cts.Token), cancellationToken)",
+      "reason": "StartAsync hands the accept loop to Task.Run gated on the start token (ADR-0058 R1/R2): a start whose token is already cancelled returns with the listener bound and the accept loop never runs. The fix passes CancellationToken.None and deletes this entry.",
+      "owner": "a-server-that-stops-stops-what-it-started"
+    },
+    {
+      "guard": "empty-catch-block",
+      "path": "src/Verbara.Sdk.Ari/Audio/AudioSocketSession.cs",
+      "key": "catch (IOException) { }",
+      "reason": "FillPipeAsync swallows an IOException from the socket read, so a network reset and a normal hangup produce the same Connected > Disconnected sequence with no log and no metric (ADR-0053 R3; CodeQL #867). The fix logs and counts the reset, keeping the ending a consumer sees, and deletes this entry. It shares its key with the ReadPumpAsync entry, so the matcher counts two occurrences and cannot tell which one went stale: delete the entry whose reason names the method you fixed.",
+      "owner": "a-transport-that-fails-is-not-a-hangup"
+    },
+    {
+      "guard": "empty-catch-block",
+      "path": "src/Verbara.Sdk.Ari/Audio/AudioSocketSession.cs",
+      "key": "catch (IOException) { }",
+      "reason": "ReadPumpAsync swallows an IOException from the input pipe. FillPipeAsync completes the pipe writer without an exception, so this catch is not reached today (CodeQL #869) and needs a fix of its own; the entry stays with this owner until another is assigned. It shares its key with the FillPipeAsync entry: delete the entry whose reason names the method you fixed.",
+      "owner": "a-transport-that-fails-is-not-a-hangup"
+    },
+    {
+      "guard": "hosted-service-start-token",
+      "path": "src/Verbara.Sdk.VoiceAi/Pipeline/VoiceAiSessionBroker.cs",
+      "key": "_stoppingToken = cancellationToken",
+      "reason": "StartAsync keeps the start token in _stoppingToken and hands it to every session it dispatches (ADR-0059 R2). After a completed start the host has released the source behind that token, so nothing ever cancels it, and StopAsync does nothing: a stop cannot end a running session handler. The fix gives the broker a source it owns, cancelled by StopAsync, and deletes this entry.",
+      "owner": "a-server-that-stops-stops-what-it-started"
+    },
+    {
+      "guard": "hosted-service-start-token",
+      "path": "src/Verbara.Sdk.Hosting/SessionReconciliationService.cs",
+      "key": "_cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)",
+      "reason": "StartAsync links the start token into _cts, the source the sweep loop runs under (ADR-0059 R2: not stored, and not linked either). StopAsync cancels _cts itself, so the loop does end on a stop; the link adds only the coupling R2 rejects, an aborted start ending the sweep. Whether R2 reaches a service that links the start token for its own loop, rather than handing a lifetime token to another component, is open ruling L1 of the 2026-09-26 ADR audit, and this entry waits on it: if R2 applies, the fix owns a plain source and deletes this entry.",
+      "owner": "owner ruling L1 (the scope of ADR-0059 R2), not yet ruled"
+    },
+    {
+      "guard": "package-version-override",
+      "path": "src/Verbara.Sdk.Data.Npgsql/Verbara.Sdk.Data.Npgsql.csproj",
+      "key": "PackageReference Include=\"Microsoft.Extensions.DependencyInjection.Abstractions\" VersionOverride=\"10.0.9\"",
+      "reason": "No decision put it here: Dependabot wrote the whole line in 9e2e5e57 (#49, 2026-06-16) while bumping the microsoft-extensions group, when the central pin was 10.0.9 as well, and git log --follow -S VersionOverride on this csproj finds no other commit. The package's code does not use the assembly; it arrives through Npgsql > Microsoft.Extensions.Logging.Abstractions. The central pin has since moved to 10.0.12 and the override has not, so the published nuspec declares a 10.0.9 floor (ADR-0004 D1, 2026-09-26 addendum). The floor is kept as it stands: moving a published dependency floor is a release decision of its own, and the version is part of the key, so the floor cannot move without this entry being rewritten or deleted. Measured 2026-09-27 against the published packages: since 2.5.1 the nuspec also lists Microsoft.Extensions.Logging.Abstractions at the central pin, which requires DependencyInjection.Abstractions at that pin or later, so a Microsoft.NET.Sdk project whose only reference is Verbara.Sdk.Data.Npgsql 2.5.1 or 2.6.0 fails restore with NU1605 (a downgrade from 10.0.12 to 10.0.9); 2.4.0, and a Microsoft.NET.Sdk.Web project, restore clean.",
+      "owner": "the Data.Npgsql restore fix, which removes this override"
+    }
+  ]
+}
