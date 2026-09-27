@@ -207,7 +207,7 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
             var session = new AudioSocketSession(channelId, client, reader, _options.DefaultFormat, _logger);
             session.OnHangup += () =>
             {
-                _sessions.TryRemove(channelId, out _);
+                ReleaseSession(session);
                 AudioSocketMetrics.ConnectionsClosed.Add(1);
                 AudioSocketMetrics.SessionDurationMs.Record(
                     Stopwatch.GetElapsedTime(sessionStart).TotalMilliseconds);
@@ -235,6 +235,15 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
             client.Dispose();
         }
     }
+
+    /// <summary>
+    /// Releases the registry entry of a session that has hung up: the release its hangup handler
+    /// performs, named in one place. The handler keeps recording the close metrics itself, so calling
+    /// this directly moves no process-wide instrument. Internal so a test can release a session it
+    /// built through the internal constructor.
+    /// </summary>
+    internal void ReleaseSession(AudioSocketSession session) =>
+        _sessions.TryRemove(session.ChannelId, out _);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
