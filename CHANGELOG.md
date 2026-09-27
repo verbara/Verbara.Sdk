@@ -86,7 +86,7 @@ All notable changes to this project will be documented in this file.
   tagged `buffer_full`. The `filter_rejected` tag the metric's documentation listed was never emitted
   and is no longer documented.
 
-### Fixed — `Verbara.Sdk.Data.Npgsql` did not restore in a project that references it directly
+### Fixed — `Verbara.Sdk.Data.Npgsql` did not restore in a project that references it directly (#329)
 
 - A `Microsoft.NET.Sdk` project that referenced `Verbara.Sdk.Data.Npgsql` 2.5.1 or 2.6.0 failed
   restore with `NU1605` (a package downgrade, an error by default). The package pinned
