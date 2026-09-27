@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed — BREAKING: an AMI heartbeat timeout hung the connection instead of reconnecting
+### Fixed — BREAKING: an AMI heartbeat timeout hung the connection instead of reconnecting (#327)
 
 - **A Ping left unanswered past `HeartbeatTimeout` now ends the connection the way a peer-side close
   does.** With `AutoReconnect = true` — the default — the connection reconnects, which is what
@@ -21,7 +21,7 @@ All notable changes to this project will be documented in this file.
   `Disconnecting` on the way. 2.6.0 left that socket open. A connection lost this way can still be
   connected again with `ConnectAsync`; one closed by `DisconnectAsync` or `DisposeAsync` cannot.
 
-### Fixed — the AMI reconnect loop leaked its last socket when it gave up
+### Fixed — the AMI reconnect loop leaked its last socket when it gave up (#327)
 
 - When the loop stops at `MaxReconnectAttempts`, the socket its last attempt created is now disposed,
   and the connection ends as a loss without `AutoReconnect` does. The number of attempts is unchanged.
