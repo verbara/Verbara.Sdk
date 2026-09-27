@@ -5,7 +5,7 @@ namespace Verbara.Sdk.VoiceAi.Diagnostics;
 /// <summary>
 /// OpenTelemetry-compatible ActivitySource for distributed tracing of Voice AI operations.
 /// Produces spans for pipeline sessions, STT transcriptions, and TTS syntheses.
-/// Tag names match the draft in <c>docs/research/2026-04-19-otel-sip-semantic-conventions.md</c>
+/// Tag names match the draft SIP / Asterisk OpenTelemetry semantic-conventions proposal (2026-04-19)
 /// and the consumer-facing <c>Verbara.Sdk.VerbaraSemanticConventions</c> catalog.
 /// <para>
 /// To enable tracing, register the source name with your OpenTelemetry tracer:

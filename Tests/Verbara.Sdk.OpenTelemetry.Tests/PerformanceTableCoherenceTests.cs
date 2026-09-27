@@ -6,7 +6,7 @@ namespace Verbara.Sdk.OpenTelemetry.Tests;
 
 /// <summary>
 /// Binds every absolute figure in <c>README.md</c>'s Performance table to
-/// <c>docs/research/performance-record.json</c> (ADR-0042 D7). The table asserts "this is what we
+/// <c>Tests/Verbara.Sdk.Benchmarks/performance-record.json</c> (ADR-0042 D7). The table asserts "this is what we
 /// measured, on this machine, on this date, and you can reproduce it"; this fails the build when
 /// the document and the record stop agreeing. It also requires the <c>## Benchmarks</c> section of
 /// <c>docs/guides/session-store-backends.md</c> to state each session-store row's figures, date and
@@ -70,7 +70,7 @@ public sealed class PerformanceTableCoherenceTests
         published.Should().NotBeEmpty("the Performance table must still be findable in README.md");
         published.Should().OnlyContain(op => accounted.Contains(op),
             "every published figure carries a record entry or a declared deferral (ADR-0042 D1) — " +
-            "add the row to docs/research/performance-record.json in the same pull request");
+            "add the row to Tests/Verbara.Sdk.Benchmarks/performance-record.json in the same pull request");
     }
 
     /// <summary>
@@ -234,7 +234,7 @@ public sealed class PerformanceTableCoherenceTests
     private static string ReadReadme() => File.ReadAllText(Path.Join(RepoRoot(), "README.md"));
 
     private static JsonDocument LoadRecord() => JsonDocument.Parse(
-        File.ReadAllText(Path.Join(RepoRoot(), "docs", "research", "performance-record.json")));
+        File.ReadAllText(Path.Join(RepoRoot(), "Tests", "Verbara.Sdk.Benchmarks", "performance-record.json")));
 
     private static string RepoRoot()
     {

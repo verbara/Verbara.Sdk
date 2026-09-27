@@ -137,9 +137,8 @@ public sealed class ReconciliationTests : IAsyncLifetime
     // SessionTestFixture never calls StartAsync. The assertion below is that the session SURVIVES
     // the simulated reconnect, which is the stranded session that change removes. Left exactly as
     // found on purpose — whichever change repairs this test owns it. The full record, including
-    // which reconnection tests could have caught the defect, is in
-    // openspec/changes/a-reconnect-reload-is-a-diff-not-a-wipe/
-    //   notes-what-the-existing-suite-never-exercised.md
+    // which reconnection tests could have caught the defect, is kept with the change
+    // "a-reconnect-reload-is-a-diff-not-a-wipe" (notes-what-the-existing-suite-never-exercised).
     [Fact]
     public void Reconnection_ShouldCleanSessions_WhenServerReconnects()
     {

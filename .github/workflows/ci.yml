@@ -36,13 +36,12 @@ jobs:
   #    STEP-level guard: a false job-level `if:` collapses the matrix into one unsuffixed
   #    check-run, the (23) context never reports, and the PR is stranded forever (#104/#105,
   #    ADR-0039 addendum — see that job's comment).
-  # Always-run (NO `needs: gate`): "OpenSpec Validate" (validates exactly the docs diff, §3.3)
-  # and "Coverage Script Tests", which hosts this classifier's unit tests and MUST run on the very
-  # PR that edits it (§3.4). The one required context NOT in this file, "Analyze (C#)", lives in
+  # Always-run (NO `needs: gate`): "Coverage Script Tests", which hosts this classifier's unit
+  # tests and MUST run on the very PR that edits it (§3.4). The one required context NOT in this file, "Analyze (C#)", lives in
   # codeql.yml, which is merge_group-wired — paths-ignore there is BANNED and `needs:` cannot cross
   # workflow files, so codeql.yml carries its own gate job.
   #
-  # Allowlist: docs/** openspec/** CHANGELOG.md, top-level *.md, **/README.md — MINUS the six
+  # Allowlist: docs/** CHANGELOG.md, top-level *.md, **/README.md — MINUS the six
   # Markdown files Verbara.Sdk.DocSnippets.Tests Roslyn-compiles inside the (gated) Unit Tests job.
   gate:
     name: Docs-only gate
@@ -118,7 +117,7 @@ jobs:
     # (test asms, generated code, migrations, container-only src assemblies —
     # Cluster.Postgres / Sessions.Postgres / Sessions.Redis) and manual-only
     # ratchet semantics (no CI write-back) are unchanged (verbara-meta/ADR-0003).
-    # Baseline + rationale: docs/research/2026-06-14-sdk-coverage-baseline.md.
+    # Baseline set 2026-06-14.
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -413,19 +412,3 @@ jobs:
         # image matches the matrix target.
         run: dotnet test Verbara.Sdk.slnx --filter "Category=Functional|Category=Integration|Category=Realtime" --logger "console;verbosity=detailed" -- RunConfiguration.MaxCpuCount=1
         timeout-minutes: 30
-
-  # OpenSpec docs gate (2026-07-04 ecosystem audit): changes/specs are agent-edited
-  # markdown with a strict parser — validate them like code. Pinned CLI version.
-  openspec:
-    name: OpenSpec Validate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - name: Validate specs and changes (strict)
-        run: npx -y @fission-ai/openspec@1.13.1 validate --all --strict --no-interactive
-
-      # Archived changes must carry no unticked task. ADR-0023 §7 deferred this gate per
-      # repo until that repo reached rc=0; this one is the last of the five, cleared in the
-      # same PR that adds the step.
-      - name: Validate archived changes (no unticked tasks)
-        run: npx -y @fission-ai/openspec@1.13.1 validate --archived --no-interactive

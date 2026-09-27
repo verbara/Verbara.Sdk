@@ -2,7 +2,7 @@
 
 > The modern .NET SDK for Asterisk PBX. AMI, AGI, ARI, Live API, Sessions, Voice AI — all in one package. Native AOT. Zero reflection. MIT licensed.
 >
-> **Rebrand history:** released as `Asterisk.Sdk.*` through v1.15.3, fully renamed to `Verbara.Sdk.*` in **v2.0.0** (2026-05-06) — see [ADR-0036](docs/decisions/0036-rebrand-to-verbara.md). The legacy `Asterisk.Sdk.*` packages on nuget.org are deprecated; each points to its `Verbara.Sdk.*` replacement.
+> **Rebrand history:** released as `Asterisk.Sdk.*` through v1.15.3, fully renamed to `Verbara.Sdk.*` in **v2.0.0** (2026-05-06) — see ADR-0036. The legacy `Asterisk.Sdk.*` packages on nuget.org are deprecated; each points to its `Verbara.Sdk.*` replacement.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/verbara/Verbara.Sdk/ci.yml?branch=main&label=CI)](https://github.com/verbara/Verbara.Sdk/actions/workflows/ci.yml)
 [![AOT](https://img.shields.io/github/actions/workflow/status/verbara/Verbara.Sdk/aot-validate.yml?branch=main&label=AOT)](https://github.com/verbara/Verbara.Sdk/actions/workflows/aot-validate.yml)
@@ -10,7 +10,7 @@
 [![Downloads](https://img.shields.io/nuget/dt/Verbara.Sdk?label=Downloads&color=blue)](https://www.nuget.org/packages/Verbara.Sdk)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Trim-safe](https://img.shields.io/badge/Native%20AOT-ready-brightgreen)](docs/research/benchmark-analysis.md)
+[![Trim-safe](https://img.shields.io/badge/Native%20AOT-ready-brightgreen)](Tests/Verbara.Sdk.Benchmarks/README.md)
 
 ---
 
@@ -64,8 +64,6 @@ Release history — every version, with what changed and why — is in [`CHANGEL
 
 API coverage (cumulative): 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%), 27/27 ARI models (100%), 269 AMI events covering Asterisk 18-23. Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` JSON control protocol both supported. Compatible with **Asterisk 18, 20, 22 LTS, and 23 Standard** — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for lifecycle and break-change risk areas.
 
-Architecture decisions: **60 ADRs** in [`docs/decisions/`](docs/decisions/) covering AOT-first design, source-generator-over-reflection policy, three-tier test strategy, push-bus design, cadence commitment, resilience/cluster primitive split between MIT and Pro, the rebrand to Verbara, and the cross-repo ADR reference convention.
-
 ---
 
 ## Documentation
@@ -79,7 +77,7 @@ Architecture decisions: **60 ADRs** in [`docs/decisions/`](docs/decisions/) cove
 | Troubleshooting (connection, auth, events, tracing) | [docs/guides/troubleshooting.md](docs/guides/troubleshooting.md) |
 | Asterisk 18/20/22/23 version compatibility | [docs/guides/asterisk-version-compatibility.md](docs/guides/asterisk-version-compatibility.md) |
 | Asterisk Realtime (ODBC) setup | [docs/guides/manual-asterisk-realtime-setup.md](docs/guides/manual-asterisk-realtime-setup.md) |
-| Benchmarks (AMD Ryzen 9 9900X, .NET 10) | [docs/research/benchmark-analysis.md](docs/research/benchmark-analysis.md) |
+| Benchmarks (AMD Ryzen 9 9900X, .NET 10) | [Tests/Verbara.Sdk.Benchmarks/README.md](Tests/Verbara.Sdk.Benchmarks/README.md) |
 | Release notes | [CHANGELOG.md](CHANGELOG.md) |
 | Contributing (dev setup, conventions, hooks) | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Security policy | [SECURITY.md](SECURITY.md) |
@@ -100,7 +98,7 @@ Benchmarked on AMD Ryzen 9 9900X (12C/24T), .NET 10.0.5, BenchmarkDotNet v0.14.0
 | Session store Redis `SaveAsync` | **~33.3K saves/sec** (p50 30 µs) / batch 91,021 sess/sec |
 | Session store Postgres `SaveAsync` | **~500 saves/sec** (p50 1.97 ms) / batch 13,489 sess/sec |
 
-Full methodology, machine-readable results, and cross-language comparison (asterisk-java, asterisk-ami-client, pyst2) in [docs/research/benchmark-analysis.md](docs/research/benchmark-analysis.md). Raw BenchmarkDotNet reports are under `BenchmarkDotNet.Artifacts/results/`. Reproduce: `dotnet run -c Release --project Tests/Verbara.Sdk.Benchmarks/`. **Session-store rows:** re-measured 2026-09-12 on .NET 10.0.12 (same machine model) with an xunit `Fact` + `Stopwatch` against local Docker (loopback, no TLS) — PostgreSQL 18.4, Redis 7.4.8 — not BenchmarkDotNet, median of five runs; method, runs and reproduce commands are in that document's addendum. Postgres single-save latency is the measuring machine's WAL flush (one fsync per commit), not SDK code.
+The machine-readable record behind every figure in this table is [Tests/Verbara.Sdk.Benchmarks/performance-record.json](Tests/Verbara.Sdk.Benchmarks/performance-record.json); the harness and measurement conditions are in [Tests/Verbara.Sdk.Benchmarks/README.md](Tests/Verbara.Sdk.Benchmarks/README.md). Raw BenchmarkDotNet reports are under `BenchmarkDotNet.Artifacts/results/`. Reproduce: `dotnet run -c Release --project Tests/Verbara.Sdk.Benchmarks/`. **Session-store rows:** re-measured 2026-09-12 on .NET 10.0.12 (same machine model) with an xunit `Fact` + `Stopwatch` against local Docker (loopback, no TLS) — PostgreSQL 18.4, Redis 7.4.8 — not BenchmarkDotNet, median of five runs; the run-by-run figures are in the record. Postgres single-save latency is the measuring machine's WAL flush (one fsync per commit), not SDK code.
 
 ---
 
@@ -540,6 +538,6 @@ This is the open-source base SDK of the **Verbara** open-core contact-center sta
 | **Verbara Platform** | Apache 2.0 | Backend application — full contact-center engine |
 | **Verbara Sdk Pro** | Commercial | Enterprise overlays (multi-tenant, analytics, cluster, licensing) |
 
-**Why MIT here:** the SDK is the community attractor of the Verbara stack — maximum permissive license to encourage adoption, evaluation, and contributions. Pro features (skill routing, predictive dialer, real-time analytics, cluster, multi-tenant) are commercial via a separate package family. See [ADR-0027 (stewardship pledge)](docs/decisions/0027-stewardship-pledge-mit-commercial.md) and [ADR-0036 (rebrand to Verbara)](docs/decisions/0036-rebrand-to-verbara.md).
+**Why MIT here:** the SDK is the community attractor of the Verbara stack — maximum permissive license to encourage adoption, evaluation, and contributions. Pro features (skill routing, predictive dialer, real-time analytics, cluster, multi-tenant) are commercial via a separate package family. See ADR-0027 (stewardship pledge) and ADR-0036 (rebrand to Verbara).
 
 **Trademark note:** "Asterisk" is a registered trademark of **Sangoma Technologies / Digium** and refers to the Asterisk PBX product. This SDK *targets* Asterisk PBX as a runtime dependency; the SDK itself is rebranding to **Verbara** to avoid trademark conflict. References to "Asterisk" in API names, documentation, and code comments refer to the PBX product (Sangoma trademark) and remain accurate.

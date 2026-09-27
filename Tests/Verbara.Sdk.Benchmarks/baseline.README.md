@@ -151,7 +151,7 @@ scheduled runs** have passed under observation. That single flag arms both
 
 ## Related
 
-- `docs/decisions/0042-public-claim-guard-classes.md` — D4 (relative gate, fail closed), D5 (durable
+- ADR-0042 — D4 (relative gate, fail closed), D5 (durable
   breach artifact), D6 (no CI write-back), D7 (published figures are COHERENCE).
 - `docs/claim-registry.md` — which public claim each guard answers for.
 - `scripts/tests/test_check_perf_baseline.py`, `scripts/tests/test_report_perf_breach.sh` — the

@@ -6,7 +6,7 @@
 repo: Verbara.Sdk
 role: root
 visibility: public          # MIT open-core (the free, decompilable-by-design tier)
-charter: docs/specs/architecture.md
+charter: docs/README-technical.md
 decision_ref: verbara-meta/ADR-0014
 gates:
   - id: G1
@@ -14,9 +14,8 @@ gates:
     status: present
     impl: >-
       .github/workflows/ci.yml job "Unit Tests" (unit-tests) — dotnet build Verbara.Sdk.slnx -c Release
-      then the unit test subset; "OpenSpec Validate" (openspec) type-checks specs/changes strict.
-      Docs-only PRs skip "Unit Tests" via the verbara-meta/ADR-0016 §1 gate job (a skipped required
-      check satisfies classic branch protection); "OpenSpec Validate" stays always-run.
+      then the unit test subset. Docs-only PRs skip "Unit Tests" via the verbara-meta/ADR-0016 §1
+      gate job (a skipped required check satisfies classic branch protection).
 
   - id: G2
     class: warnings-as-errors+banned-deps

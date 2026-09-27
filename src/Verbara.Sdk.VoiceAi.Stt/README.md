@@ -66,7 +66,7 @@ services.AddSpeechmaticsSpeechRecognizer(o => { ... });
 
 ## Native AOT
 
-All HTTP/WebSocket clients hand-rolled with `HttpClient` / `ClientWebSocket`. JSON serialization via source-generated `JsonSerializerContext` (`VoiceAiSttJsonContext`). 0 trim warnings. See [ADR-0014](https://github.com/verbara/Verbara.Sdk/blob/main/docs/decisions/0014-raw-http-websocket-voiceai-providers.md) for the no-vendor-SDK rationale.
+All HTTP/WebSocket clients hand-rolled with `HttpClient` / `ClientWebSocket`. JSON serialization via source-generated `JsonSerializerContext` (`VoiceAiSttJsonContext`). 0 trim warnings. No vendor SDKs by design (ADR-0014).
 
 ## License
 

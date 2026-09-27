@@ -46,7 +46,7 @@ dotnet run -c Release --project Tests/Verbara.Sdk.Benchmarks/ -- \
 
 Every run writes artifacts under `BenchmarkDotNet.Artifacts/results/`:
 
-- `*.md` — Markdown table (commit to `docs/research/` when you rerun the official suite)
+- `*.md` — Markdown table (the curated figures go to `performance-record.json` in this directory when you rerun the official suite)
 - `*.csv` — CSV for scripting / charting
 - `*.html` — interactive HTML report
 - `*.log` — verbose log (attach for regressions)
@@ -55,7 +55,7 @@ The column `Ratio` compares each case against the benchmark marked `[Benchmark(B
 
 ## Official baseline
 
-The canonical numbers published in [docs/research/benchmark-analysis.md](../../docs/research/benchmark-analysis.md) were captured on:
+The canonical numbers published in the README's Performance table, and recorded in [performance-record.json](performance-record.json), were captured on:
 
 | Dimension | Value |
 |-----------|-------|
@@ -68,11 +68,11 @@ The canonical numbers published in [docs/research/benchmark-analysis.md](../../d
 
 Re-runs on different hardware will scale roughly linearly for ALU-heavy paths and drift more for allocation-sensitive paths.
 
-## Updating the published analysis
+## Updating the published figures
 
 1. Run the full suite: `dotnet run -c Release --project Tests/Verbara.Sdk.Benchmarks/`
 2. Pick the `*.md` reports you want to cite from `BenchmarkDotNet.Artifacts/results/`.
-3. Edit `docs/research/benchmark-analysis.md` — preserve the narrative, paste fresh tables, note the date/commit SHA.
-4. Commit both the regenerated markdown report(s) and the updated analysis under `docs(bench):`.
+3. Update `performance-record.json` first, in its own reviewed commit — note the date, runtime and machine — then the README table it binds (`PerformanceTableCoherenceTests` fails the build while the two disagree).
+4. Commit under `docs(bench):`.
 
-The raw `BenchmarkDotNet.Artifacts/` directory is in `.gitignore` — only the curated markdown in `docs/research/` is versioned.
+The raw `BenchmarkDotNet.Artifacts/` directory is in `.gitignore` — only the curated record is versioned.

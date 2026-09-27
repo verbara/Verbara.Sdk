@@ -1,6 +1,6 @@
 # VoiceAiAssemblyAiExample
 
-AssemblyAI-powered STT with Azure TTS. Demonstrates the **mix-and-match provider design** that [ADR-0014](../../docs/decisions/0014-raw-http-websocket-voiceai-providers.md) enables: the pipeline wires STT and TTS independently, so nothing forces both to come from the same vendor.
+AssemblyAI-powered STT with Azure TTS. Demonstrates the **mix-and-match provider design** that ADR-0014 enables: the pipeline wires STT and TTS independently, so nothing forces both to come from the same vendor.
 
 AssemblyAI ships STT only. Pairing it with Azure TTS gives you AssemblyAI's Universal Streaming transcription quality and Azure's broad voice catalog on the synthesis side — a common combination in English-first enterprise call centers.
 

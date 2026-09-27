@@ -2195,12 +2195,12 @@ frame-format fix.
 ### Changed — Tests & tooling
 
 - **Speech-provider HTTP suites now run against a real loopback server, driven by recorded vendor
-  responses** ([ADR-0041](docs/decisions/0041-wiremock-as-http-provider-test-substrate.md), Accepted
+  responses** (ADR-0041, Accepted
   2026-08-09; Phase A in [#149](https://github.com/verbara/Verbara.Sdk/pull/149)). **No public API
   changes and no behaviour change on any production path** — this is test infrastructure. **All six
   HTTP surfaces have now migrated**: Azure TTS, OpenAI Whisper, Azure OpenAI Whisper, Google
   Speech-to-Text, and — once the route defects below were fixed under
-  [ADR-0048](docs/decisions/0048-wire-conformance-by-live-probe-with-negative-control.md) —
+  ADR-0048 —
   Speechmatics TTS and the LMNT HTTP fallback. The last two are worth reading about: they were blocked on defects in shipped
   code rather than on effort, which is why they landed last rather than being faked green.
   - **`WireMock.NET` replaces `MockHttpMessageHandler` on the HTTP side.** The old handler returned
@@ -2358,7 +2358,7 @@ frame-format fix.
 ### Fixed — Tests
 
 - **Fake-server seams dial the IPv4 loopback literal `127.0.0.1`, never `localhost`**
-  ([ADR-0044](docs/decisions/0044-ipv4-loopback-literal-for-test-servers.md), #146). **Test-only —
+  (ADR-0044, #146). **Test-only —
   the eight touched `src/` lines are the fake-server URL branch of the recognizers and synthesizers,
   reached only when a test sets the fake port; no production endpoint or public API changes.** Two
   tests flaked under parallel load (`DeepgramSpeechSynthesizerTests.SynthesizeAsync_ShouldSendRequestToCorrectPath`,
@@ -2610,7 +2610,7 @@ frame-format fix.
 
 ## [2.0.0] - 2026-05-06
 
-**Full rebrand from `Asterisk.Sdk.*` → `Verbara.Sdk.*` ([ADR-0036](docs/decisions/0036-rebrand-to-verbara.md)).** Breaking change: every namespace, assembly, and NuGet package renamed. The legacy `Asterisk.Sdk.*` packages on nuget.org are deprecated and each points to its `Verbara.Sdk.*` replacement.
+**Full rebrand from `Asterisk.Sdk.*` → `Verbara.Sdk.*` (ADR-0036).** Breaking change: every namespace, assembly, and NuGet package renamed. The legacy `Asterisk.Sdk.*` packages on nuget.org are deprecated and each points to its `Verbara.Sdk.*` replacement.
 
 ### Breaking — Rebrand
 
@@ -2791,7 +2791,7 @@ Five package READMEs were either 2-line stubs or inadequate-but-better. Each now
 
 ## [1.14.0] - 2026-04-20
 
-**Resilience primitives added to SDK (MIT).** No breaking changes. New `Verbara.Sdk.Resilience` package (25th on nuget.org) ships composable `CircuitBreakerState`, `ResiliencePolicy`, `ResiliencePolicyBuilder`, `CircuitBreakerOpenException`, `ResilienceMetrics`, `BackoffSchedule`, and `AddAsteriskResilience` DI extension. Migrated from `Verbara.Sdk.Pro.Resilience` v1.8.1-pro per [ADR-0029](docs/decisions/0029-resilience-primitives-mit.md) (stewardship pledge — generic primitives belong in MIT). Internal hot paths (AMI/ARI reconnect, Webhook delivery) now share a single backoff primitive instead of three duplicated open-coded loops.
+**Resilience primitives added to SDK (MIT).** No breaking changes. New `Verbara.Sdk.Resilience` package (25th on nuget.org) ships composable `CircuitBreakerState`, `ResiliencePolicy`, `ResiliencePolicyBuilder`, `CircuitBreakerOpenException`, `ResilienceMetrics`, `BackoffSchedule`, and `AddAsteriskResilience` DI extension. Migrated from `Verbara.Sdk.Pro.Resilience` v1.8.1-pro per ADR-0029 (stewardship pledge — generic primitives belong in MIT). Internal hot paths (AMI/ARI reconnect, Webhook delivery) now share a single backoff primitive instead of three duplicated open-coded loops.
 
 ### Added
 
@@ -2807,7 +2807,7 @@ Five package READMEs were either 2-line stubs or inadequate-but-better. Each now
 
 ### Migration
 
-Consumers of `Verbara.Sdk.Pro.Resilience` v1.8.x-pro migrate by renaming `using` + swapping `<PackageReference>`. See [ADR-0029 Migration guide](docs/decisions/0029-resilience-primitives-mit.md#migration-guide). Meter name changes from `Verbara.Sdk.Pro.Resilience` to `Verbara.Sdk.Resilience` (dashboards need one-time update; no dual-emit window).
+Consumers of `Verbara.Sdk.Pro.Resilience` v1.8.x-pro migrate by renaming `using` + swapping `<PackageReference>`. See ADR-0029 Migration guide. Meter name changes from `Verbara.Sdk.Pro.Resilience` to `Verbara.Sdk.Resilience` (dashboards need one-time update; no dual-emit window).
 
 ## [1.13.0] - 2026-04-20
 
@@ -2817,7 +2817,7 @@ Consumers of `Verbara.Sdk.Pro.Resilience` v1.8.x-pro migrate by renaming `using`
 
 - **`Verbara.Sdk.AsteriskSemanticConventions`** — new public static catalog (54 const strings across 11 nested classes) standardizing OpenTelemetry attribute names for SIP/Asterisk telephony. Consumers reference by name (`AsteriskSemanticConventions.Channel.Id`, `AsteriskSemanticConventions.VoiceAi.Provider`, etc.) so dashboard/query code remains stable across SDK versions. Pinned by 14 unit tests. Backed by the draft in `docs/research/2026-04-19-otel-sip-semantic-conventions.md`. ([c62f8ce](https://github.com/verbara/Verbara.Sdk/commit/c62f8ce), [066cb3c](https://github.com/verbara/Verbara.Sdk/commit/066cb3c))
 - **`AsteriskSemanticConventions.Events`** nested class — span event names for transient, event-shaped telemetry (use with `Activity.AddEvent`, not `SetTag`). Five entries: `asterisk.channel.hangup`, `asterisk.dtmf.received`, `asterisk.media.started`, `asterisk.media.buffering`, `asterisk.media.mark_processed`. `WebSocketAudioSession` now emits these events on `Activity.Current` when the matching chan_websocket control message arrives. No-op when no span is active. XON/XOFF flow-control signals intentionally NOT instrumented (too noisy for span events). ([df0fe93](https://github.com/verbara/Verbara.Sdk/commit/df0fe93), [2a7af1a](https://github.com/verbara/Verbara.Sdk/commit/2a7af1a))
-- **`Verbara.Sdk.Push.Nats` subscribe side (bidirectional bridge)** — closes T2 of the v1.13 roadmap. New `NatsBridgeOptions.NodeId` (optional, enables loop prevention) and nested `Subscribe` options (`SubjectFilters`, `QueueGroup`, `SkipSelfOriginated`) turn the bridge bidirectional. Incoming NATS messages materialize as `Verbara.Sdk.Push.Events.RemotePushEvent` (new public envelope) and are republished to the local `RxPushEventBus` so SSE / Webhook / dashboard subscribers on receiving nodes see the events without change to their filtering code. Loop prevention via optional `"source":"nodeId"` field in the JSON envelope + a .NET-type guard that never republishes a `RemotePushEvent`. New metrics: `EventsReceived`, `EventsSkipped`, `EventsDecodeFailed`. Extension point `INatsPayloadDeserializer` lets consumers round-trip to their concrete `PushEvent` subclasses if desired; default ships envelope-only. Queue-group semantics are opt-in; default pub/sub matches the local bus fan-out contract. JetStream / durable replay remain out of MIT (ADR-0011 boundary). Backed by [ADR-0025](docs/decisions/0025-push-nats-subscribe-and-loop-prevention.md). ([059e46d](https://github.com/verbara/Verbara.Sdk/commit/059e46d) through [c98229f](https://github.com/verbara/Verbara.Sdk/commit/c98229f))
+- **`Verbara.Sdk.Push.Nats` subscribe side (bidirectional bridge)** — closes T2 of the v1.13 roadmap. New `NatsBridgeOptions.NodeId` (optional, enables loop prevention) and nested `Subscribe` options (`SubjectFilters`, `QueueGroup`, `SkipSelfOriginated`) turn the bridge bidirectional. Incoming NATS messages materialize as `Verbara.Sdk.Push.Events.RemotePushEvent` (new public envelope) and are republished to the local `RxPushEventBus` so SSE / Webhook / dashboard subscribers on receiving nodes see the events without change to their filtering code. Loop prevention via optional `"source":"nodeId"` field in the JSON envelope + a .NET-type guard that never republishes a `RemotePushEvent`. New metrics: `EventsReceived`, `EventsSkipped`, `EventsDecodeFailed`. Extension point `INatsPayloadDeserializer` lets consumers round-trip to their concrete `PushEvent` subclasses if desired; default ships envelope-only. Queue-group semantics are opt-in; default pub/sub matches the local bus fan-out contract. JetStream / durable replay remain out of MIT (ADR-0011 boundary). Backed by ADR-0025. ([059e46d](https://github.com/verbara/Verbara.Sdk/commit/059e46d) through [c98229f](https://github.com/verbara/Verbara.Sdk/commit/c98229f))
 - **Six new example apps** under `Examples/` (16 → 22): `VoiceAiCartesiaExample`, `VoiceAiAssemblyAiExample`, `VoiceAiSpeechmaticsExample`, `WebSocketMediaExample` (chan_websocket control protocol), `AriOutboundExample`, `NatsBridgeExample`. All v1.12 features now have runnable showcases. ([991078e](https://github.com/verbara/Verbara.Sdk/commit/991078e), [60fcdbb](https://github.com/verbara/Verbara.Sdk/commit/60fcdbb))
 - **4 `Verbara.Sdk.Push.Nats` Testcontainers integration tests** against real `nats:2.10-alpine` covering subject prefix, payload bytes, multi-event delivery, and custom prefix behavior. `[Trait("Category", "Integration")]`. ([7a6f6fa](https://github.com/verbara/Verbara.Sdk/commit/7a6f6fa))
 - **Shared `WebSocketTestServer`** in `Tests/Verbara.Sdk.TestInfrastructure/WebSocket/` — TcpListener + manual HTTP/1.1 upgrade + `WebSocket.CreateFromStream(IsServer=true)`. Unblocks `ws.Abort()` test paths that previously hung on Linux under `HttpListener`. 2 new abort tests added (AssemblyAi STT, Speechmatics STT) closing the silent coverage gap. ([b02bf18](https://github.com/verbara/Verbara.Sdk/commit/b02bf18))
@@ -2899,7 +2899,7 @@ Two items originally scoped for v1.12.0 were found to be **already shipped pre-v
 - **ADR-0013** — `ISessionHandler` as the VoiceAi dispatch seam. Captures why turn-based (`VoiceAiPipeline`) and streaming (`OpenAiRealtimeBridge`) both implement a single-method interface and why consumers swap by DI registration alone.
 - **ADR-0014** — Raw HTTP / `ClientWebSocket` for VoiceAi providers. Captures why every STT + TTS provider is hand-rolled against the vendor's public API instead of depending on official vendor SDKs (AOT incompatibility).
 - **ADR-0015** — AMI string interning pool (FNV-1a, 2048 buckets). Captures why the 344-LOC pool in `AmiStringPool` is load-bearing at 100K+ events/s workloads and why alternatives (`ConcurrentDictionary`, `FrozenDictionary`, `string.Intern`) are inadequate for UTF-8-span lookup.
-- **Product alignment audit** — [docs/research/2026-04-19-product-alignment-audit.md](docs/research/2026-04-19-product-alignment-audit.md) reconciles the 12 accepted ADRs, 4 archived plans, and 6 archived specs against the v1.11.0 product state. Confirms `api-completeness-plan.md` is legitimately closed: 148/152 AMI (97%) + 94/98 ARI (96%) reflect an intentional scope decision, not abandoned work. Documents 12 further load-bearing decisions as ADR candidates for future releases.
+- **Product alignment audit** — `docs/research/2026-04-19-product-alignment-audit.md` reconciles the 12 accepted ADRs, 4 archived plans, and 6 archived specs against the v1.11.0 product state. Confirms `api-completeness-plan.md` is legitimately closed: 148/152 AMI (97%) + 94/98 ARI (96%) reflect an intentional scope decision, not abandoned work. Documents 12 further load-bearing decisions as ADR candidates for future releases.
 
 ### Notes
 

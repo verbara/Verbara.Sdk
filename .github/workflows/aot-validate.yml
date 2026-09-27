@@ -17,7 +17,6 @@ on:
     # IF `aot-check` IS EVER PROMOTED TO A REQUIRED CONTEXT HERE, DELETE THIS FILTER FIRST.
     paths-ignore:
       - 'docs/**'
-      - 'openspec/**'
       - '**/*.md'
       - 'CHANGELOG.md'
 

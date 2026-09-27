@@ -2,8 +2,8 @@ namespace Verbara.Sdk;
 
 /// <summary>
 /// Standardized OpenTelemetry attribute names for Asterisk / SIP telephony.
-/// Backed by the draft proposal in
-/// <c>docs/research/2026-04-19-otel-sip-semantic-conventions.md</c>. Use the
+/// Backed by the draft OpenTelemetry semantic-conventions proposal for SIP / Asterisk
+/// telephony (2026-04-19). Use the
 /// const strings here on every <see cref="System.Diagnostics.Activity.SetTag"/>
 /// or metric-label call so consumer dashboards remain stable across SDK versions.
 /// </summary>

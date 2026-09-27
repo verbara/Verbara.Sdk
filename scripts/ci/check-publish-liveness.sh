@@ -55,7 +55,7 @@
 #                              never packed. Without this, the baseline ratchet added alongside
 #                              this script would start the clock the moment it was satisfied.
 #
-# NOT here, and correctly ignored: Tests/, Examples/, docs/, openspec/, scripts/, .github/.
+# NOT here, and correctly ignored: Tests/, Examples/, docs/, scripts/, .github/.
 #
 # Keying state B on a NON-EMPTY `[Unreleased]` section was rejected — it counts recorded work rather
 # than shippable work, so it fires on docs-only merges. Its SIZE is used instead, which is a

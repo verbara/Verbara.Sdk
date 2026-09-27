@@ -46,19 +46,17 @@ Thumbs.db
 ## Publish
 publish/
 
-## Internal docs (local only — public repo, keep sensitive planning private)
-## Option K layout: docs/specs/, docs/decisions/, docs/research/ are PUBLIC
-## (tracked). docs/plans/ defaults to local until each plan is reviewed for
-## cross-repo/commercial leakage; explicitly tracked plans can live in
-## docs/plans/active|completed|archived/ after review — use `git add -f`.
-## Anything referencing private-repo paths, commercial roadmap, pricing or
-## partner info lives in the private verbara-meta repo (roadmap rows, research,
-## product decisions), never here. docs/superpowers/ stays ignored as a guard:
-## the superpowers skills default to writing designs and plans there, while this
-## workspace keeps specs in openspec/ and plans in docs/plans/.
+## Internal development records (local only — never tracked in this public repo)
+openspec/
+docs/decisions/
 docs/plans/
+docs/research/
+docs/specs/
 docs/superpowers/
 .superpowers/
+
+## Agent instructions (local only)
+AGENTS.md
 
 ## Claude Code
 CLAUDE.md

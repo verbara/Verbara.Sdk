@@ -50,7 +50,7 @@ builder.Services.AddVerbaraOpenTelemetry().WithAllSources();
 
 ## Native AOT
 
-Zero runtime reflection. All serialization paths use Roslyn source generators (`ActionSerializerGenerator`, `EventDeserializerGenerator`, `EventRegistryGenerator`, `ResponseDeserializerGenerator`). Trim-safe (`<IsTrimmable>true</IsTrimmable>`); 0 trim warnings across the package family. See [ADR-0001](https://github.com/verbara/Verbara.Sdk/blob/main/docs/decisions/0001-native-aot-first.md) and [ADR-0003](https://github.com/verbara/Verbara.Sdk/blob/main/docs/decisions/0003-source-generators-over-reflection.md) for design rationale.
+Zero runtime reflection. All serialization paths use Roslyn source generators (`ActionSerializerGenerator`, `EventDeserializerGenerator`, `EventRegistryGenerator`, `ResponseDeserializerGenerator`). Trim-safe (`<IsTrimmable>true</IsTrimmable>`); 0 trim warnings across the package family. Design rationale: ADR-0001 (Native AOT first) and ADR-0003 (source generators over reflection).
 
 ## License
 
