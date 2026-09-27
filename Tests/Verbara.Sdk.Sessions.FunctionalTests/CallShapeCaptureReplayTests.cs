@@ -1,4 +1,6 @@
 using FluentAssertions;
+using FluentAssertions.Execution;
+using Verbara.Sdk.Enums;
 using Verbara.Sdk.Sessions.FunctionalTests.Infrastructure;
 
 namespace Verbara.Sdk.Sessions.FunctionalTests;
@@ -32,4 +34,81 @@ public sealed class CallShapeCaptureReplayTests
             + "the dispatcher swallowed {0}: {1}",
             swallowed.Count, string.Join(" | ", swallowed));
     }
+
+    /// <summary>
+    /// Pins the flows that skipping a caller-less dial event must not move: the unanswered originate,
+    /// the dialer and inbound queue flows, and the two dialed calls, whose <c>Dialing</c> step comes
+    /// from a dial event that does name its calling channel. States, timestamps set or null, the
+    /// order of <c>Dialing</c> and <c>Connected</c>, and domain events — never an exact audit trail,
+    /// which a recorded ring would legitimately lengthen.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CallShapeCaptures))]
+    public async Task UnansweredQueuedAndDialedCalls_ShouldEndAsTheyDoToday_WhenACallShapeCaptureIsReplayed(string fixture)
+    {
+        var replay = await AmiCaptureReplay.ReplayAsync(fixture);
+        using var scope = new AssertionScope();
+        scope.AddReportable("replay", replay.Describe());
+
+        var s5 = replay.Call("S5");
+        s5.Session.State.Should().Be(CallSessionState.Failed, "S5 is an originate the far end never answers");
+        s5.Session.HangupCause.Should().Be(HangupCause.NoAnswer, "S5's originate gives up unanswered");
+
+        ShouldHaveBeenQueued(replay.Call("S6"), CallSessionState.Completed, withQueuedEvent: true);
+        ShouldHaveBeenQueued(replay.Call("S7"), CallSessionState.Failed, withQueuedEvent: true);
+        ShouldHaveBeenQueued(replay.Call("S10"), CallSessionState.Completed, withQueuedEvent: false);
+        ShouldHaveBeenQueued(replay.Call("S11"), CallSessionState.Failed, withQueuedEvent: false);
+
+        ShouldHaveBeenDialed(replay.Call("S9"));
+        ShouldHaveBeenDialed(replay.Call("S12"));
+    }
+
+    /// <summary>
+    /// A relative pin, deliberately not a state. S3 and S4 are originates answered with no dial
+    /// onward, and each carries a <c>DialBegin</c>/<c>DialEnd</c> that names no calling channel; S1 is
+    /// an IVR answered with no dial, and carries no dial event at all. They end alike: in the same
+    /// state, with the same cause and the same talk-time presence. That holds whether such a call ends
+    /// failed or completed, so it shows that skipping those dial events changes nothing about them
+    /// without binding how an answered, never-dialed call ends.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CallShapeCaptures))]
+    public async Task AnsweredOriginates_ShouldEndLikeTheIvrWithNoDialEvent_WhenTheirDialEventsNameNoCaller(string fixture)
+    {
+        var replay = await AmiCaptureReplay.ReplayAsync(fixture);
+        using var scope = new AssertionScope();
+        scope.AddReportable("replay", replay.Describe());
+
+        var ivr = EndingOf(replay.Call("S1"));
+
+        EndingOf(replay.Call("S3")).Should().Be(ivr, "S3, an originate answered with no dial, ends as S1 does");
+        EndingOf(replay.Call("S4")).Should().Be(ivr, "S4, an originate to a local IVR, ends as S1 does");
+    }
+
+    private static void ShouldHaveBeenQueued(ReplayedCall call, CallSessionState state, bool withQueuedEvent)
+    {
+        call.Session.State.Should().Be(state, "{0} ends as it does today", call.Scenario);
+        call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
+        if (withQueuedEvent)
+            call.DomainEvents.OfType<CallQueuedEvent>().Should().ContainSingle("{0} is queued once", call.Scenario);
+    }
+
+    private static void ShouldHaveBeenDialed(ReplayedCall call)
+    {
+        call.Session.State.Should().Be(CallSessionState.Completed, "{0} is dialed to an agent who answers", call.Scenario);
+        call.Session.DialingAt.Should().NotBeNull("{0}'s dial names its calling channel", call.Scenario);
+        call.Trail.Should().Contain(CallSessionEventType.Connected, "{0} connects", call.Scenario);
+        call.Trail.TakeWhile(t => t != CallSessionEventType.Connected).Should().Contain(
+            CallSessionEventType.Dialing, "{0} passes through Dialing before it connects", call.Scenario);
+    }
+
+    /// <summary>How a call ended, as far as the relative pin compares it.</summary>
+    private sealed record Ending(CallSessionState State, HangupCause? Cause, bool HasTalkTime, string CallEndedEvents);
+
+    private static Ending EndingOf(ReplayedCall call) => new(
+        call.Session.State,
+        call.Session.HangupCause,
+        call.Session.TalkTime.HasValue,
+        string.Join(",", call.DomainEvents.OfType<CallEndedEvent>()
+            .Select(e => $"CallEnded(cause={e.Cause?.ToString() ?? "null"},talk={(e.TalkTime.HasValue ? "set" : "null")})")));
 }
