@@ -112,6 +112,7 @@ internal sealed class DecisionGuardBaseline
         TaskRunHandoffScanner.GuardName,
         EmptyCatchScanner.GuardName,
         HostedStartTokenScanner.GuardName,
+        VersionOverrideScanner.GuardName,
     };
 
     private static readonly string[] EntryFields = ["guard", "path", "key", "reason", "owner"];
