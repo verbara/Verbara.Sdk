@@ -165,6 +165,16 @@ public sealed class SpeechProviderFailureExceptionTests
     }
 
     [Fact]
+    public void SpeechProviderException_ShouldDeriveDirectlyFromSystemException_WhenItsBaseTypeIsRead()
+    {
+        // ADR-0050 E3: the hierarchy roots at System.Exception, not at a PBX-layer exception. This
+        // package family does not reference the PBX layer, and a rejected TTS credential is not an
+        // Asterisk error. Directly, not merely assignable: every exception is assignable to Exception,
+        // so only the immediate base tells the decision from its rejected alternative.
+        typeof(SpeechProviderException).BaseType.Should().Be<Exception>();
+    }
+
+    [Fact]
     public void FromTransport_ShouldBeCatchableAsTheBaseType_WhenACallerDoesNotCareWhichChannelFailed()
     {
         // ADR-0050 E4: two types, and a caller that only wants "the provider failed" catches the base.
