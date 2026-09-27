@@ -238,7 +238,7 @@ public sealed class FakeServerCaptureGuardTests
         // Production collections and ordinary test helpers are out of scope: this rule is about a
         // background receive loop racing an assertion, which only fake servers have.
         const string source =
-            "class TranscriptAccumulator {\n" +
+            "class MessageAccumulator {\n" +
             "    public System.Collections.Generic.List<string> Received { get; } = new();\n" +
             "    void Capture(string m) { Received.Add(m); }\n" +
             "}";

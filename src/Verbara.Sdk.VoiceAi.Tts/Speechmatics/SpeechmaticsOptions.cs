@@ -24,7 +24,7 @@ public sealed class SpeechmaticsOptions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Behavioural change.</b> Before 2.4.1 this property defaulted to
+    /// <b>Behavioural change.</b> Before 2.5.0 this property defaulted to
     /// <c>https://preview.tts.speechmatics.com/generate</c> — the complete endpoint — and the voice
     /// was sent as a JSON body field. That request returns <c>404 Not Found</c>: the API has no
     /// <c>/generate</c> route. Callers who set this property must now supply the origin alone; a
@@ -42,7 +42,7 @@ public sealed class SpeechmaticsOptions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Behavioural change.</b> Before 2.4.1 this defaulted to <c>"eleanor"</c>, which is not a
+    /// <b>Behavioural change.</b> Before 2.5.0 this defaulted to <c>"eleanor"</c>, which is not a
     /// voice the service offers. The API does not reject an unknown segment — it answers
     /// <c>200 audio/wav</c> in <see cref="SpeechmaticsVoices.Jack"/>'s voice — so every caller on
     /// the old default was already being served Jack. Naming that default <c>jack</c> makes the

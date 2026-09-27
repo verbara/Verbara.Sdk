@@ -63,8 +63,8 @@ public sealed partial class RxPushEventBus : IPushEventBus, IDisposable
 
         // Capture the ambient W3C traceparent so it survives the async Channel hop between
         // PublishAsync and DispatchLoopAsync. Without this, Activity.Current flow is broken
-        // at the Channel boundary (Task.Run starts the dispatch loop with an empty
-        // ExecutionContext), preventing downstream transports — SSE, Pro.Push backplanes —
+        // at the Channel boundary (the dispatch loop runs under the ExecutionContext that the
+        // constructor's Task.Run captured, not the publisher's), preventing downstream transports — SSE, Pro.Push backplanes —
         // from linking receiver spans back to the publisher's trace. Only applied when the
         // event's metadata has no explicit TraceContext yet (publisher opt-in overrides).
         if (pushEvent.Metadata is { TraceContext: null } meta

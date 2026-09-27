@@ -20,12 +20,12 @@ using Microsoft.Extensions.Options;
 namespace Verbara.Sdk.Hosting;
 
 /// <summary>
-/// Extension methods for registering Asterisk SDK services in the DI container.
+/// Extension methods for registering Verbara Sdk services in the DI container.
 /// </summary>
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Add all Asterisk SDK services (AMI, AGI, ARI, Live) to the service collection.
+    /// Add all Verbara Sdk services (AMI, AGI, ARI, Live) to the service collection.
     /// Configures a single Asterisk server connection with options validation on startup.
     /// </summary>
     public static IServiceCollection AddVerbara(
@@ -133,7 +133,7 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Add all Asterisk SDK services binding options from <see cref="IConfiguration"/>.
+    /// Add all Verbara Sdk services binding options from <see cref="IConfiguration"/>.
     /// Expects an "Asterisk" section with "Ami", "Ari", etc. sub-sections.
     /// AOT-safe: manually reads configuration keys instead of using reflection-based Bind().
     /// </summary>
@@ -249,7 +249,7 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Register Asterisk SDK with multi-server support.
+    /// Register Verbara Sdk with multi-server support.
     /// Use <see cref="VerbaraServerPool"/> to add and manage multiple Asterisk server connections.
     /// </summary>
     public static IServiceCollection AddVerbaraMultiServer(
@@ -287,7 +287,7 @@ public static class ServiceCollectionExtensions
 }
 
 /// <summary>
-/// Top-level configuration for all Asterisk SDK services.
+/// Top-level configuration for all Verbara Sdk services.
 /// </summary>
 public sealed class VerbaraOptions
 {

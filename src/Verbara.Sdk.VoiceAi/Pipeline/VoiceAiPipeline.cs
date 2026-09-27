@@ -330,10 +330,11 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                     catch (ObjectDisposedException)
                     {
                         // ADR-0057: the write found the session already gone. For this sealed session
-                        // type that can only mean its own teardown has run — the guard at
-                        // AudioSocketSession.cs:118 reads a flag none but that private terminate sets
-                        // (:232), and the transport a flush would touch is what the same terminate
-                        // closes last (:236). Nobody in the process asked for that ending, so it
+                        // type that can only mean its own teardown has run — the guard at the top of
+                        // AudioSocketSession.WriteAudioAsync reads a flag none but that private
+                        // terminate sets (TerminateAsync's first statement), and the transport a flush
+                        // would touch is what the same terminate closes last (its _client.Dispose()).
+                        // Nobody in the process asked for that ending, so it
                         // cancels neither token and neither filter below can see it: it is ADR-0053 R3's
                         // ending seen from the write side, not a fault of the synthesizer.
                         //

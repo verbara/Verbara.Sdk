@@ -6,7 +6,7 @@ namespace Verbara.Sdk.Governance.Tests;
 /// <summary>
 /// In-process regression guard: parses every test source file with Roslyn and fails the build if a
 /// test file gains a NEW wall-clock synchronization barrier beyond the grandfathered baseline
-/// (ADR-0004 net-new-only ratchet). Pre-existing barriers recorded in
+/// (verbara-meta/ADR-0004 net-new-only ratchet). Pre-existing barriers recorded in
 /// <c>sync-fence-baseline.json</c> are tolerated; new ones must be removed or annotated with an
 /// inline <c>// fence-allow:</c> marker. Includes liveness self-tests (the scan must actually walk a
 /// large file set) and detector unit tests that pin both true positives and the prose/string

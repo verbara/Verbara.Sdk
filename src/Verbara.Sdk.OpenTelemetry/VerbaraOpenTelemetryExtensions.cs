@@ -10,7 +10,7 @@ namespace Verbara.Sdk.OpenTelemetry;
 public static class VerbaraOpenTelemetryExtensions
 {
     /// <summary>
-    /// Configure OpenTelemetry tracing and metrics with the Asterisk SDK's ActivitySources and
+    /// Configure OpenTelemetry tracing and metrics with the Verbara Sdk's ActivitySources and
     /// Meters pre-enrolled. Callers opt into exporters via the fluent builder:
     /// <code>
     /// services.AddVerbaraOpenTelemetry(b =&gt; b

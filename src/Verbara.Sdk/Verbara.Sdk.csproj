@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>Verbara.Sdk - Core abstractions, interfaces, attributes, enums and base types for Asterisk SDKs</Description>
+    <Description>Verbara.Sdk - Core abstractions, interfaces, attributes, enums and base types for the Verbara Sdk packages</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,4 +1,4 @@
-# gates.yaml — ADR-0014 §2 Gate Contract manifest for Verbara.Sdk.
+# gates.yaml — verbara-meta/ADR-0014 §2 Gate Contract manifest for Verbara.Sdk.
 # One entry per language-agnostic gate class (G1-G8). Cross-checkable by /xr:doctor.
 #   status: present | partial | na
 #   impl:          (present/partial) the CONCRETE CI job / script / guard that instantiates it — exists in this repo
@@ -23,7 +23,7 @@ gates:
     impl: >-
       Directory.Build.props: TreatWarningsAsErrors=true + WarningLevel=9999 (repo-wide);
       BanDapperPackageReferences MSBuild target fails the build on any Dapper/Dapper.AOT/
-      Verbara.Sdk.Dapper.Stubs reference (ADR-0022); Microsoft.CodeAnalysis.BannedApiAnalyzers +
+      Verbara.Sdk.Dapper.Stubs reference (Platform/ADR-0022); Microsoft.CodeAnalysis.BannedApiAnalyzers +
       BannedSymbols.txt ban reflection APIs and DateTime.Now; ci.yml "Pack Warnings Gate"
       (pack-check) re-asserts -p:TreatWarningsAsErrors=true at pack time.
 
@@ -35,10 +35,10 @@ gates:
       scripts/check-coverage-floor.py (two-sided band), scripts/check-patch-coverage.py (diff-cover
       patch floor, needs fetch-depth:0), scripts/check-exclusion-baseline.py (denominator guard vs
       coverage-exclusion-baseline.json); ci.yml "Coverage Script Tests" (coverage-scripts) unit-tests
-      the guards themselves (scripts/tests/). Manual ratchet, no CI write-back (ADR-0003/ADR-0038).
+      the guards themselves (scripts/tests/). Manual ratchet, no CI write-back (verbara-meta/ADR-0003, ADR-0038).
       "Coverage Ratchet" is gated by the verbara-meta/ADR-0016 §1 fast-path and does not run on
       docs-only diffs; "Coverage Script Tests" carries NO `needs: gate` edge and additionally hosts
-      scripts/tests/test_classify_docs_only.sh, the ADR-0016 §3.4 classifier suite (promoted to a
+      scripts/tests/test_classify_docs_only.sh, the verbara-meta/ADR-0016 §3.4 classifier suite (promoted to a
       required context 2026-07-27).
 
   - id: G4
@@ -56,14 +56,14 @@ gates:
     status: present
     impl: >-
       Three grep/Roslyn content guards no analyzer covers: SyncFenceRegressionGuardTests +
-      SyncFenceScanner (net-new-only wall-clock-barrier ratchet vs sync-fence-baseline.json, ADR-0004);
+      SyncFenceScanner (net-new-only wall-clock-barrier ratchet vs sync-fence-baseline.json, verbara-meta/ADR-0004);
       Tests/Verbara.Sdk.DocSnippets.Tests DocSnippetCompilationTests (every ```csharp doc block must
       still compile against the real API); ci.yml "Audit Test Asserts" (audit-test-asserts) via
       tools/audit-test-asserts.sh (no assertion-free [Fact]/[Theory]).
-      DocSnippetCompilationTests runs inside the ADR-0016-gated "Unit Tests" job, so the six Markdown
+      DocSnippetCompilationTests runs inside the verbara-meta/ADR-0016-gated "Unit Tests" job, so the six Markdown
       files it compiles are explicitly carved OUT of the fast-path allowlist
       (scripts/ci/classify-docs-only.sh, BEGIN docsnippets-carveout), pinned by a drift test;
-      "Audit Test Asserts" is ADR-0016-gated and does not run on docs-only diffs.
+      "Audit Test Asserts" is verbara-meta/ADR-0016-gated and does not run on docs-only diffs.
 
   - id: G6
     class: budgets
@@ -93,8 +93,8 @@ gates:
       Warnings Gate) fails a PR in which a package already on nuget.org at the baseline skips or silences
       that validation, and scripts/ci/check-apicompat-baseline.sh (release-hygiene.yml, push:[main] +
       weekly) keeps the baseline at the newest published release.
-      "AOT Trim Check" and "Pack Warnings Gate" are ADR-0016-gated (they report skipped on docs-only
-      diffs); aot-validate.yml's pull_request trigger additionally carries the ADR-0016 §2
+      "AOT Trim Check" and "Pack Warnings Gate" are verbara-meta/ADR-0016-gated (they report skipped on docs-only
+      diffs); aot-validate.yml's pull_request trigger additionally carries the verbara-meta/ADR-0016 §2
       paths-ignore, while its push:[main] baseline stays unfiltered.
 
   - id: G8

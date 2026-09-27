@@ -172,10 +172,11 @@ await bus.PublishAsync(sample);
 
 
 
-// v2.2.0+ Data.Npgsql + Cluster.Postgres force-load (ADR-0022 Phase D + Phase A.5).
+// v2.2.0+ Data.Npgsql + Cluster.Postgres force-load (Platform/ADR-0022 Phase D + Phase A.5).
 // We reference public types without invoking I/O — connection-string-less constructors
-// would block at runtime. Touching the types is enough to make the linker process the
-// assemblies during dotnet publish.
+// would block at runtime. A typeof keeps the type in the image but does not bring its
+// methods into ILC's analysis: only code this program calls is checked for trim and AOT
+// warnings here. The compile-time analyzers (IsAotCompatible) are what check the rest.
 _ = typeof(Verbara.Sdk.Data.Npgsql.NpgsqlExecutor);
 _ = typeof(Verbara.Sdk.Cluster.Postgres.DependencyInjection.ClusterPostgresServiceCollectionExtensions);
 _ = typeof(Verbara.Sdk.Cluster.Postgres.Migrations.MigrationRunner);

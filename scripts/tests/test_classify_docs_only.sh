@@ -46,7 +46,7 @@ new_repo; commit_many CHANGELOG.md;                          run_case true  "top
 new_repo; commit_many src/Verbara.Sdk.Ami/README.md;         run_case true  "nested README (packed, NOT DocSnippets-compiled)"
 new_repo; commit_many Examples/SessionExample/README.md;     run_case true  "Examples README (PR #93 shape)"
 new_repo; commit_many SECURITY.md;                           run_case true  "top-level *.md"
-new_repo; commit_many docs/ci-docs-fast-path.md;             run_case true  "the ADR-0016 §6 canary payload itself"
+new_repo; commit_many docs/ci-docs-fast-path.md;             run_case true  "the verbara-meta/ADR-0016 §6 canary payload itself"
 new_repo; commit_many docs/guides/README.md;                 run_case true  "docs/guides README is NOT a snippet source"
 new_repo; commit_many docs/guides/log-analysis-reference.md; run_case true  "non-snippet guide (carve-out is a FILE LIST, not docs/guides/*)"
 new_repo; commit_many docs/claim-registry.md CHANGELOG.md src/Verbara.Sdk.Ami/README.md

@@ -1,5 +1,5 @@
 {
-  "_comment": "Grandfathered wall-clock barriers per test file (ADR-0004 net-new-only ratchet). Never RAISE a count; lower it by hand when you annotate/remove a barrier. New unmarked barriers fail the build.",
+  "_comment": "Grandfathered wall-clock barriers per test file (verbara-meta/ADR-0004 net-new-only ratchet). Never RAISE a count; lower it by hand when you annotate/remove a barrier. New unmarked barriers fail the build.",
   "files": {
     "Tests/Verbara.Sdk.Activities.Tests/Activities/ActivityTests.cs": 7,
     "Tests/Verbara.Sdk.Agi.Tests/Server/FastAgiServerTests.cs": 2,
