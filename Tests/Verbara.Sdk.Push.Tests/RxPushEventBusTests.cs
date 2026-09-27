@@ -9,6 +9,7 @@ public class RxPushEventBusTests
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(5);
 
     private static readonly KeyValuePair<string, object?> BufferFull = new("reason", "buffer_full");
+    private static readonly KeyValuePair<string, object?> WriterClosed = new("reason", "writer_closed");
 
     private static RxPushEventBus CreateBus(
         int bufferCapacity = 256,
@@ -248,5 +249,51 @@ public class RxPushEventBusTests
 
         var act = async () => await bus.PublishAsync(TestEventFactory.Create("x"));
         await act.Should().ThrowAsync<ObjectDisposedException>();
+    }
+
+    [Fact]
+    public async Task PublishAsync_ShouldCountWriterClosed_WhenDisposeRunsBetweenTheDisposedCheckAndTheWrite()
+    {
+        using var metrics = new PushMetrics();
+        using var dropped = new DroppedCounterCapture(metrics);
+        var logger = new CapturingLogger();
+        using var bus = new RxPushEventBus(
+            Options.Create(new PushEventBusOptions()), logger, metrics);
+
+        // PublishAsync counts asterisk.push.events.published after its disposed check and before
+        // it writes to the channel, and a MeterListener callback runs synchronously inside Add.
+        // Disposing the bus from that callback puts Dispose exactly between the two: the ordering
+        // a publish racing Dispose produces, reached by construction rather than by timing.
+        using var disposeOnPublished = new MeterListener();
+        disposeOnPublished.InstrumentPublished = (instrument, listener) =>
+        {
+            if (ReferenceEquals(instrument, metrics.EventsPublished))
+                listener.EnableMeasurementEvents(instrument);
+        };
+        disposeOnPublished.SetMeasurementEventCallback<long>((_, _, _, _) => bus.Dispose());
+        disposeOnPublished.Start();
+
+        var act = async () => await bus.PublishAsync(TestEventFactory.Create("late"));
+
+        await act.Should().NotThrowAsync();
+        dropped.Measurements.Should().ContainSingle().Which.Tags.Should().Equal(new[] { WriterClosed });
+        logger.Messages.Should().ContainSingle()
+            .Which.Should().Contain("'test.event'").And.Contain("disposed").And.NotContain("full buffer");
+    }
+
+    private sealed class CapturingLogger : ILogger<RxPushEventBus>
+    {
+        private readonly ConcurrentQueue<string> _messages = new();
+
+        public IReadOnlyList<string> Messages => [.. _messages];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => _messages.Enqueue(formatter(state, exception));
     }
 }
