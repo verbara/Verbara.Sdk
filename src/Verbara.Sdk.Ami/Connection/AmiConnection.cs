@@ -578,8 +578,10 @@ public sealed class AmiConnection : IAmiConnection
     }
 
     /// <summary>
-    /// Ends a connection lost while AutoReconnect is off: releases what it holds, then reports
-    /// Disconnected, so a caller who sees Disconnected finds the socket already released.
+    /// Ends a connection lost for good — AutoReconnect is off, or the reconnect loop gave up: releases what
+    /// it holds, then reports Disconnected, so a caller who sees Disconnected finds the socket already
+    /// released. It runs on a task of its own, never on the reader loop or the heartbeat, which
+    /// <see cref="CleanupAsync"/> awaits.
     /// </summary>
     private async Task EndLostConnectionAsync()
     {
@@ -614,8 +616,13 @@ public sealed class AmiConnection : IAmiConnection
 
             if (_options.MaxReconnectAttempts > 0 && attempt >= _options.MaxReconnectAttempts)
             {
-                _state = AmiConnectionState.Disconnected;
-                break;
+                // Giving up ends the connection as a loss without AutoReconnect does, so the socket left
+                // behind is released: the last one a failed connect created, or the lost one when no
+                // connect was made. Checked after the delay and before the connect, the limit makes
+                // N - 1 connects for N; whether it should make N is an open ruling, not this release.
+                _state = AmiConnectionState.Disconnecting;
+                await EndLostConnectionAsync();
+                return;
             }
 
             try

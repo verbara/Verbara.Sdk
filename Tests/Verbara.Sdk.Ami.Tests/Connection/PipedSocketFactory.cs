@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Globalization;
 using System.IO.Pipelines;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
@@ -19,6 +20,12 @@ internal sealed class PipedSocketFactory : ISocketConnectionFactory
     private readonly Lock _gate = new();
     private readonly List<PipedSocket> _all = [];
 
+    /// <summary>
+    /// How many sockets accept their connect. Every socket created after them refuses it, as a peer that
+    /// is down does, so a test can make every reconnect fail. Unlimited by default.
+    /// </summary>
+    public int ConnectsAccepted { get; init; } = int.MaxValue;
+
     /// <summary>Every socket handed out so far, in creation order.</summary>
     public IReadOnlyList<PipedSocket> Created
     {
@@ -33,9 +40,10 @@ internal sealed class PipedSocketFactory : ISocketConnectionFactory
 
     public ISocketConnection Create()
     {
-        var socket = new PipedSocket();
+        PipedSocket socket;
         lock (_gate)
         {
+            socket = new PipedSocket(refusesConnect: _all.Count >= ConnectsAccepted);
             _all.Add(socket);
         }
 
@@ -61,7 +69,7 @@ internal sealed class PipedSocketFactory : ISocketConnectionFactory
 /// when a real transport is torn down. The peer's writes and that ending share one lock: a peer that
 /// answers while the socket closes loses the answer instead of racing the pipe.
 /// </remarks>
-internal sealed class PipedSocket : ISocketConnection
+internal sealed class PipedSocket(bool refusesConnect = false) : ISocketConnection
 {
     private readonly Pipe _toConnection = new();
     private readonly Pipe _toPeer = new();
@@ -89,7 +97,10 @@ internal sealed class PipedSocket : ISocketConnection
     public Action? DuringFirstDispose { get; set; }
 
     public ValueTask ConnectAsync(string hostname, int port, bool useSsl = false,
-        CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        CancellationToken cancellationToken = default) =>
+        refusesConnect
+            ? ValueTask.FromException(new SocketException((int)SocketError.ConnectionRefused))
+            : ValueTask.CompletedTask;
 
     public ValueTask CloseAsync(CancellationToken cancellationToken = default)
     {
@@ -121,6 +132,12 @@ internal sealed class PipedSocket : ISocketConnection
     }
 
     // ── The peer's side ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The peer closes the socket: the connection's reader sees the stream end, as it does when Asterisk
+    /// goes away. The connection still owns the socket and must dispose it.
+    /// </summary>
+    public void CloseFromPeer() => Close();
 
     /// <summary>
     /// Reads the next action the connection wrote. Returns <see langword="null"/> once the socket has
