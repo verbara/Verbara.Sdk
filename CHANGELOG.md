@@ -86,7 +86,7 @@ All notable changes to this project will be documented in this file.
   tagged `buffer_full`. The `filter_rejected` tag the metric's documentation listed was never emitted
   and is no longer documented.
 
-### Fixed — an originate's dial events threw inside the AMI dispatcher (#N)
+### Fixed — an originate's dial events threw inside the AMI dispatcher (#331)
 
 - For an AMI `Originate`, Asterisk's `DialBegin` and `DialEnd` carry only the dialed side
   (`DestChannel`/`DestUniqueid`) and no calling channel. The server's event observer passed the absent
