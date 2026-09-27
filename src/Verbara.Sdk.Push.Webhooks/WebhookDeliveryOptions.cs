@@ -6,7 +6,7 @@ namespace Verbara.Sdk.Push.Webhooks;
 /// </summary>
 public sealed class WebhookDeliveryOptions
 {
-    /// <summary>Maximum delivery attempts per event per subscription. Default 5.</summary>
+    /// <summary>Maximum retries after the first delivery attempt, per event per subscription (so at most MaxRetries + 1 attempts). Default 5.</summary>
     public int MaxRetries { get; set; } = 5;
 
     /// <summary>Initial retry delay. Doubles on each failure up to <see cref="MaxDelay"/>. Default 1 s.</summary>

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>Verbara.Sdk.Hosting - DI extensions and meta-package referencing all Asterisk SDK sub-packages</Description>
+    <Description>Verbara.Sdk.Hosting - DI extensions and meta-package referencing all Verbara Sdk sub-packages</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -3,7 +3,7 @@ using System.Text;
 namespace Verbara.Sdk.Governance.Tests;
 
 /// <summary>
-/// In-process architecture guard (ADR-0014 §2 G4): fails the build if an infrastructure-provider
+/// In-process architecture guard (verbara-meta/ADR-0014 §2 G4): fails the build if an infrastructure-provider
 /// package (base name ending in a <see cref="ProjectGraph.ProviderSuffixes"/> — e.g. <c>.Postgres</c>,
 /// <c>.Redis</c>, <c>.Nats</c>) is compile-time <c>ProjectReference</c>d by a NON-provider package.
 /// Providers are concrete backing stores / transports that plug in via DI at the app composition

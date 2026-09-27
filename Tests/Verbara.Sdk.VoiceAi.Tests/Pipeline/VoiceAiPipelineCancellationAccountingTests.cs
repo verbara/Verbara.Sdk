@@ -589,7 +589,7 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
     /// <para>
     /// Ordered by construction, never by a delay. <c>AudioSocketSession</c>'s teardown runs for every
     /// ending it has, sets its disposed flag as its first statement, and only then fires
-    /// <c>OnHangup</c> (<c>AudioSocketSession.cs:197-204</c>, <c>:232</c>). A subscription taken
+    /// <c>OnHangup</c> (<c>ReadLoopAsync</c>'s <c>finally</c> and <c>TerminateAsync</c>'s first statement). A subscription taken
     /// before the session starts therefore turns that event into the proof that the next write must
     /// throw, rather than a hint that it probably will.
     /// </para>

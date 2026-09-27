@@ -36,7 +36,7 @@ public sealed class VerbaraOpenTelemetryBuilder
     internal IReadOnlyList<Action<MeterProviderBuilder>> MetricsConfigurators => _metricsConfigurators;
 
     /// <summary>
-    /// Enroll every Asterisk SDK <see cref="VerbaraTelemetry.ActivitySourceNames"/> and
+    /// Enroll every Verbara Sdk <see cref="VerbaraTelemetry.ActivitySourceNames"/> and
     /// <see cref="VerbaraTelemetry.MeterNames"/> for export. Safe to call multiple times —
     /// duplicate names are deduplicated before enrollment.
     /// </summary>

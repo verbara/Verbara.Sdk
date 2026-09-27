@@ -53,7 +53,7 @@ public sealed class CallSession
     public string? AgentInterface { get; set; }
     public string? BridgeId { get; set; }
 
-    /// <summary>Tenant identifier. Set by ITenantResolver on call arrival.</summary>
+    /// <summary>Tenant identifier. The SDK does not assign it; the host sets it.</summary>
     public string? TenantId { get; set; }
     public HangupCause? HangupCause { get; set; }
 

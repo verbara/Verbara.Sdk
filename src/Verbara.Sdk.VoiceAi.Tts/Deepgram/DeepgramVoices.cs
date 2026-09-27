@@ -118,7 +118,7 @@ public static class DeepgramVoices
     /// Aura 1 — Helios (English, male). Legacy voice.
     /// </summary>
     /// <remarks>
-    /// Helios exists only in Aura 1. Until 2.4.1 this catalog exposed it as
+    /// Helios exists only in Aura 1. Until 2.5.0 this catalog exposed it as
     /// <c>"aura-2-helios-en"</c>, an id the API rejects with <c>400 "No such model/version
     /// combination found."</c> — there is no Aura 2 Helios. The constant now carries the id that
     /// synthesises.

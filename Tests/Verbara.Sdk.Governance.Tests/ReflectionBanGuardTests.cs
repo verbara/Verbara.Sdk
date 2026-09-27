@@ -3,7 +3,7 @@ using System.Text;
 namespace Verbara.Sdk.Governance.Tests;
 
 /// <summary>
-/// In-process architecture guard (ADR-0014 §2 G4 / ADR-0022): parses every product source file with
+/// In-process architecture guard (verbara-meta/ADR-0014 §2 G4 / Platform/ADR-0022): parses every product source file with
 /// Roslyn and fails the build if any file uses an AOT-breaking reflection API without a valid inline
 /// <c>// aot-allow:</c> marker. Unlike the sync-fence ratchet, this guard is ZERO-TOLERANCE — the
 /// Sdk <c>src/</c> tree carries no banned reflection today and must never gain any (an AOT-existential
@@ -232,7 +232,7 @@ public sealed class ReflectionBanGuardTests
     {
         var sb = new StringBuilder();
         sb.Append(violations.Count)
-            .AppendLine(" AOT-breaking reflection site(s) found in the src/ tree (ADR-0022 — the shippable image must be Native AOT):");
+            .AppendLine(" AOT-breaking reflection site(s) found in the src/ tree (Platform/ADR-0022 — the shippable image must be Native AOT):");
         foreach (var v in violations.OrderBy(v => v.Path, StringComparer.Ordinal).ThenBy(v => v.Line))
         {
             sb.Append("  ").Append(v.Path).Append(':').Append(v.Line)

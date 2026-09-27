@@ -14,7 +14,7 @@ internal sealed record ReflectionViolation(string Path, int Line, string Api, st
 
 /// <summary>
 /// Pure, I/O-free detector that parses C# with Roslyn and reports the reflection APIs that break
-/// Native AOT (ADR-0022): non-generic <c>Activator.CreateInstance</c>, static <c>Type.GetType</c>,
+/// Native AOT (Platform/ADR-0022): non-generic <c>Activator.CreateInstance</c>, static <c>Type.GetType</c>,
 /// <c>MakeGenericType</c>/<c>MakeGenericMethod</c>, <c>new DynamicMethod</c>, and
 /// <c>System.Reflection.Emit</c> imports — none of which the trimmer/AOT compiler can resolve
 /// statically. Detection is syntactic (real invocation/object-creation/using nodes), so comment,

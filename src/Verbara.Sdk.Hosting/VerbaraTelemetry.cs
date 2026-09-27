@@ -1,12 +1,12 @@
 namespace Verbara.Sdk.Hosting;
 
 /// <summary>
-/// Provides source and meter names for all Asterisk SDK telemetry signals.
+/// Provides source and meter names for all Verbara Sdk telemetry signals.
 /// Use with OpenTelemetry: <c>builder.AddSource(VerbaraTelemetry.ActivitySourceNames)</c>.
 /// </summary>
 public static class VerbaraTelemetry
 {
-    /// <summary>All ActivitySource names registered by Asterisk SDK packages.</summary>
+    /// <summary>All ActivitySource names registered by Verbara Sdk packages.</summary>
     public static readonly string[] ActivitySourceNames =
     [
         "Verbara.Sdk.Ami",
@@ -20,7 +20,7 @@ public static class VerbaraTelemetry
         "Verbara.Sdk.VoiceAi.OpenAiRealtime"
     ];
 
-    /// <summary>All Meter names registered by Asterisk SDK packages.</summary>
+    /// <summary>All Meter names registered by Verbara Sdk packages.</summary>
     public static readonly string[] MeterNames =
     [
         "Verbara.Sdk.Ami",

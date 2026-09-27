@@ -23,7 +23,7 @@ jobs:
   # Docs/data-only CI fast-path gate (verbara-meta/ADR-0016 §1). Classifies the PR / merge_group
   # diff against the event's OWN base and exposes outputs.docs_only.
   #
-  # Sdk is the ecosystem's FIRST classic-branch-protection + merge-queue repo: the 9 required
+  # Sdk is the ecosystem's FIRST classic-branch-protection + merge-queue repo: the 8 required
   # contexts come from `gh api .../branches/main/protection` (strict:false); ruleset 16696290
   # carries a merge_queue rule ONLY (ALLGREEN, SQUASH) and zero required checks.
   #
@@ -103,7 +103,7 @@ jobs:
     name: Coverage Ratchet
     runs-on: ubuntu-latest
     needs: [unit-tests, gate]
-    # ADR-0016 §3.2 guard PLUS an explicit re-statement of the pre-existing `needs: unit-tests`
+    # verbara-meta/ADR-0016 §3.2 guard PLUS an explicit re-statement of the pre-existing `needs: unit-tests`
     # SUCCESS edge, which `!cancelled()` would otherwise drop: this job downloads the artifact
     # unit-tests produces, so it must stay skipped when unit-tests FAILS (today's implicit
     # success()) as well as when the diff is docs-only (unit-tests skipped => no artifact).
@@ -185,7 +185,7 @@ jobs:
       # asserted by one of the cases). Promoted to a REQUIRED context (2026-07-27) so a
       # mis-widened allowlist is merge-BLOCKING, not advisory: this job is the only thing standing
       # between a broken classifier and six silently-skipped required checks.
-      - name: Run docs-only classifier unit tests (ADR-0016)
+      - name: Run docs-only classifier unit tests (verbara-meta/ADR-0016)
         run: bash scripts/tests/test_classify_docs_only.sh
 
       # Release-hygiene guard unit tests (ADR-0055). Same precedent as the classifier above: both
@@ -369,7 +369,7 @@ jobs:
         # enqueuer and no `github.event.pull_request.*` field is meaningful, so a leading term that
         # read one would be asking the wrong object. `ci:functional` is the opt-in escape hatch for
         # a branch that does touch this surface and wants the answer before the queue.
-        # AND'ed with the ADR-0016 docs-only guard. Deliberately NO `!cancelled()`
+        # AND'ed with the verbara-meta/ADR-0016 docs-only guard. Deliberately NO `!cancelled()`
         # here: at STEP level any status function REMOVES the implicit success() over the preceding
         # steps, so the expensive step would run after a failed checkout/setup-dotnet. Fail-closed
         # is already guaranteed — gate=failure or gate=skipped makes the second term true => RUN.
@@ -398,7 +398,7 @@ jobs:
         # enqueuer and no `github.event.pull_request.*` field is meaningful, so a leading term that
         # read one would be asking the wrong object. `ci:functional` is the opt-in escape hatch for
         # a branch that does touch this surface and wants the answer before the queue.
-        # AND'ed with the ADR-0016 docs-only guard. Deliberately NO `!cancelled()`
+        # AND'ed with the verbara-meta/ADR-0016 docs-only guard. Deliberately NO `!cancelled()`
         # here: at STEP level any status function REMOVES the implicit success() over the preceding
         # steps, so the expensive step would run after a failed checkout/setup-dotnet. Fail-closed
         # is already guaranteed — gate=failure or gate=skipped makes the second term true => RUN.

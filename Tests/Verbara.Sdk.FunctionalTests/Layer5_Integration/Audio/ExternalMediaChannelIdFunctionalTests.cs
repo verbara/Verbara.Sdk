@@ -215,7 +215,7 @@ public sealed class ExternalMediaChannelIdFunctionalTests : FunctionalTestBase
     /// Awaits <paramref name="task"/> and returns <see langword="null"/> if it does not complete
     /// within <paramref name="timeout"/>, so the failure is an assertion with a reason rather than a
     /// bare <see cref="TimeoutException"/>. No wall-clock barrier: the timeout is the task's own
-    /// deadline, not a sleep the test races (ADR-0004 / ADR-0045).
+    /// deadline, not a sleep the test races (verbara-meta/ADR-0004 / ADR-0045).
     /// </summary>
     private static async Task<T?> WithinAsync<T>(Task<T> task, TimeSpan timeout) where T : class
     {
