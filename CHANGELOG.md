@@ -53,6 +53,17 @@ All notable changes to this project will be documented in this file.
   old clear-and-reload ticked nothing — a dashboard reading it will show a step at a reconnect that
   ends calls.
 
+### Fixed — the push bus never counted an event dropped by a full buffer (#328)
+
+- `asterisk.push.events.dropped` now increments, tagged `reason=buffer_full`, once for every event a
+  full channel evicts under `DropOldest` or `DropNewest`. It previously moved only when a publish found
+  the bus already closed, because an eviction still reports the write as accepted — so one slow
+  subscriber could make every subscriber lose events with no count and no log line. Operators alerting
+  on this counter will now see counts where they saw none; nothing about which events are kept changes.
+- A publish that loses the race with disposal is now tagged `reason=writer_closed`, where it was
+  tagged `buffer_full`. The `filter_rejected` tag the metric's documentation listed was never emitted
+  and is no longer documented.
+
 ## [2.6.0] - 2026-09-24
 
 ### Changed — `Microsoft.ML.OnnxRuntime` moved from 1.28.0 to 1.30.0 (#296)

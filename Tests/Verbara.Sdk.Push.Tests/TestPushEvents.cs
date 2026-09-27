@@ -47,21 +47,43 @@ internal sealed class CapturingObserver<T> : IObserver<T>
 internal sealed class BlockingObserver : IObserver<PushEvent>
 {
     private readonly ManualResetEventSlim _release;
-    private int _started;
+    private readonly TaskCompletionSource _parked = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly List<(int Count, TaskCompletionSource Signal)> _waiters = [];
 
     public BlockingObserver(ManualResetEventSlim release) => _release = release;
 
     public List<PushEvent> Items { get; } = [];
-    public bool Started => Volatile.Read(ref _started) != 0;
+
+    /// <summary>
+    /// Completes when the dispatcher has taken the first event and is about to park inside
+    /// <see cref="OnNext"/>: from then on nothing leaves the channel until the test releases it.
+    /// </summary>
+    public Task Parked => _parked.Task;
+
+    /// <summary>Completes once <paramref name="count"/> events have been received.</summary>
+    public Task WhenReceived(int count)
+    {
+        lock (Items)
+        {
+            if (Items.Count >= count) return Task.CompletedTask;
+            var signal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _waiters.Add((count, signal));
+            return signal.Task;
+        }
+    }
 
     public void OnNext(PushEvent value)
     {
-        if (Interlocked.Exchange(ref _started, 1) == 0)
+        if (_parked.TrySetResult())
         {
             // First event: park the dispatcher loop until the test releases us.
             _release.Wait(TimeSpan.FromSeconds(5));
         }
-        lock (Items) Items.Add(value);
+        lock (Items)
+        {
+            Items.Add(value);
+            _waiters.RemoveAll(w => Items.Count >= w.Count && w.Signal.TrySetResult());
+        }
     }
 
     public void OnCompleted() { }
