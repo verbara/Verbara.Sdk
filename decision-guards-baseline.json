@@ -1,0 +1,4 @@
+{
+  "_comment": "Known sites of the decision guards in Tests/Verbara.Sdk.Governance.Tests that fired on a defect already owned elsewhere when the guard landed. Each entry is {guard, path, key, reason, owner}: key is the whitespace-normalized text of the site (never a line number) and owner names the change that owns the fix. The match is EXACT: a site not listed fails its guard, and an entry whose site no longer fires fails it too, so the change that fixes a site deletes its entry in the same commit. Never add an entry to let a new violation in.",
+  "entries": []
+}
