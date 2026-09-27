@@ -19,6 +19,7 @@ internal sealed class PipedSocketFactory : ISocketConnectionFactory
     private readonly Channel<PipedSocket> _created = Channel.CreateUnbounded<PipedSocket>();
     private readonly Lock _gate = new();
     private readonly List<PipedSocket> _all = [];
+    private TaskCompletionSource<PipedSocket> _nextCreated = NewCreatedSignal();
 
     /// <summary>
     /// How many sockets accept their connect. Every socket created after them refuses it, as a peer that
@@ -41,13 +42,17 @@ internal sealed class PipedSocketFactory : ISocketConnectionFactory
     public ISocketConnection Create()
     {
         PipedSocket socket;
+        TaskCompletionSource<PipedSocket> created;
         lock (_gate)
         {
             socket = new PipedSocket(refusesConnect: _all.Count >= ConnectsAccepted);
             _all.Add(socket);
+            created = _nextCreated;
+            _nextCreated = NewCreatedSignal();
         }
 
         _created.Writer.TryWrite(socket);
+        created.TrySetResult(socket);
         return socket;
     }
 
@@ -57,6 +62,45 @@ internal sealed class PipedSocketFactory : ISocketConnectionFactory
     /// <summary>The next socket the connection creates, in order; waits until it has been created.</summary>
     public ValueTask<PipedSocket> NextAsync(CancellationToken cancellationToken) =>
         _created.Reader.ReadAsync(cancellationToken);
+
+    /// <summary>
+    /// The first socket the connection creates after this call, if it creates one within
+    /// <paramref name="window"/>; else <see langword="null"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The window is what is being observed, not a hang bound: a socket created inside it is returned,
+    /// and <see langword="null"/> means none was. A test that asserts the connection stopped dialling
+    /// pairs the window with a positive control, the same setup with nothing ending the connection,
+    /// which does see a socket inside the same window.
+    /// </para>
+    /// <para>
+    /// It only watches. It takes nothing from the queue <see cref="NextAsync"/> reads, so a peer task
+    /// draining <see cref="NextAsync"/> at the same time still receives every socket. A socket created
+    /// before the call is not returned, however long it has waited in that queue.
+    /// </para>
+    /// </remarks>
+    public async Task<PipedSocket?> NextWithinAsync(TimeSpan window)
+    {
+        Task<PipedSocket> next;
+        lock (_gate)
+        {
+            next = _nextCreated.Task;
+        }
+
+        using var windowCts = new CancellationTokenSource(window);
+        try
+        {
+            return await next.WaitAsync(windowCts.Token);
+        }
+        catch (OperationCanceledException) when (windowCts.IsCancellationRequested)
+        {
+            return null;
+        }
+    }
+
+    private static TaskCompletionSource<PipedSocket> NewCreatedSignal() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
 
 /// <summary>
@@ -201,6 +245,20 @@ internal sealed class PipedSocket(bool refusesConnect = false) : ISocketConnecti
             sb.Append(CultureInfo.InvariantCulture, $"{kv.Key}: {kv.Value}\r\n");
         sb.Append("\r\n");
         return await WriteAsync(sb.ToString());
+    }
+
+    /// <summary>
+    /// Sends an unsolicited event, as Asterisk does, for example <c>WriteEventAsync("FullyBooted")</c>.
+    /// Returns <see langword="false"/> when the socket was already closed.
+    /// </summary>
+    public Task<bool> WriteEventAsync(string eventType, IEnumerable<KeyValuePair<string, string>>? fields = null)
+    {
+        var sb = new StringBuilder();
+        sb.Append(CultureInfo.InvariantCulture, $"Event: {eventType}\r\n");
+        foreach (var kv in fields ?? [])
+            sb.Append(CultureInfo.InvariantCulture, $"{kv.Key}: {kv.Value}\r\n");
+        sb.Append("\r\n");
+        return WriteAsync(sb.ToString());
     }
 
     /// <summary>Writes raw text to the connection. Returns <see langword="false"/> when the socket was already closed.</summary>
