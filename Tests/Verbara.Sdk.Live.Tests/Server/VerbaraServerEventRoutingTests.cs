@@ -2,6 +2,7 @@ using Verbara.Sdk;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Agents;
+using Verbara.Sdk.Live.Channels;
 using Verbara.Sdk.Live.Server;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -445,6 +446,108 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncDisposable
         var channel = _sut.Channels.GetByUniqueId("ch.1");
         channel.Should().NotBeNull();
         channel!.DialedChannel.Should().Be("PJSIP/3000-001");
+    }
+
+    // ==========================================================================
+    // DialBeginEvent / DialEndEvent that name no calling channel (an AMI Originate)
+    // ==========================================================================
+    //
+    // For an AMI Originate, Asterisk's DialBegin and DialEnd name only the dialed side: no Channel and
+    // no Uniqueid. The field values below are copied from the S3 frames of the Asterisk 22.9.0 capture
+    // (Tests/Verbara.Sdk.Sessions.FunctionalTests/Recordings/asterisk-ami/). The dialed leg is created
+    // first, so attributing the event to DestUniqueid instead of skipping it would be caught as well.
+    // A dial event that does name its calling channel still reaches ChannelManager:
+    // EventObserver_ShouldRouteDialBeginEvent_ToChannelManager above binds that.
+
+    private const string OriginatedLegUniqueId = "1790513796.2";
+    private const string OriginatedLegChannel = "PJSIP/tocaller-00000002";
+
+    private void CreateOriginatedLeg()
+    {
+        _observer!.OnNext(new NewChannelEvent
+        {
+            Privilege = "call,all",
+            Channel = OriginatedLegChannel,
+            ChannelState = "0",
+            ChannelStateDesc = "Down",
+            CallerIdNum = "<unknown>",
+            CallerIdName = "<unknown>",
+            Context = "from-external",
+            Exten = "s",
+            Priority = 1,
+            UniqueId = OriginatedLegUniqueId,
+            Linkedid = OriginatedLegUniqueId,
+        });
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldSkipDialBeginEvent_WhenItNamesNoCallingChannel()
+    {
+        await StartAndGetObserverAsync();
+        CreateOriginatedLeg();
+        var raised = new List<AsteriskChannel>();
+        _sut.Channels.ChannelDialBegin += raised.Add;
+
+        var originateDialBegin = new DialBeginEvent
+        {
+            Privilege = "call,all",
+            DestChannel = OriginatedLegChannel,
+            DestChannelState = "0",
+            DestChannelStateDesc = "Down",
+            DestCallerIdNum = "1003",
+            DestCallerIdName = "N5",
+            DestConnectedLineNum = "1003",
+            DestConnectedLineName = "N5",
+            DestLanguage = "en",
+            DestAccountCode = "",
+            DestContext = "from-external",
+            DestExten = "s",
+            DestPriority = 1,
+            DestUniqueid = OriginatedLegUniqueId,
+            DestLinkedid = OriginatedLegUniqueId,
+            DialString = "400@tocaller",
+        };
+
+        var deliver = () => _observer!.OnNext(originateDialBegin);
+
+        deliver.Should().NotThrow("an originate's DialBegin names no calling channel, so the observer skips it");
+        raised.Should().BeEmpty("a dial event with no calling channel is attributed to no channel");
+        _sut.Channels.GetByUniqueId(OriginatedLegUniqueId)!.DialedChannel.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldSkipDialEndEvent_WhenItNamesNoCallingChannel()
+    {
+        await StartAndGetObserverAsync();
+        CreateOriginatedLeg();
+        var raised = new List<AsteriskChannel>();
+        _sut.Channels.ChannelDialEnd += raised.Add;
+
+        var originateDialEnd = new DialEndEvent
+        {
+            Privilege = "call,all",
+            DestChannel = OriginatedLegChannel,
+            DestChannelState = "6",
+            DestChannelStateDesc = "Up",
+            DestCallerIdNum = "1003",
+            DestCallerIdName = "N5",
+            DestConnectedLineNum = "1003",
+            DestConnectedLineName = "N5",
+            DestLanguage = "en",
+            DestAccountCode = "",
+            DestContext = "from-external",
+            DestExten = "s",
+            DestPriority = 1,
+            DestUniqueid = OriginatedLegUniqueId,
+            DestLinkedid = OriginatedLegUniqueId,
+            DialStatus = "ANSWER",
+        };
+
+        var deliver = () => _observer!.OnNext(originateDialEnd);
+
+        deliver.Should().NotThrow("an originate's DialEnd names no calling channel, so the observer skips it");
+        raised.Should().BeEmpty("a dial event with no calling channel is attributed to no channel");
+        _sut.Channels.GetByUniqueId(OriginatedLegUniqueId)!.DialStatus.Should().BeNull();
     }
 
     // ==========================================================================

@@ -1,0 +1,8733 @@
+Asterisk Call Manager/11.0.0
+Event: FullyBooted
+Privilege: system,all
+Uptime: 14
+LastReload: 14
+Status: Fully Booted
+
+Response: Success
+ActionID: n5-2
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+UserEvent: N5Marker
+Scenario: S1-ivr-pbx-hangs-up
+ActionID: n5-2
+
+Event: Newchannel
+Privilege: call,all
+Channel: PJSIP/anonymous-00000000
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1001
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513783.0
+Linkedid: 1790513783.0
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000000
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1001
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513783.0
+Linkedid: 1790513783.0
+Variable: SIPDOMAIN
+Value: n5-pbx
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000000
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1001
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513783.0
+Linkedid: 1790513783.0
+Extension: 300
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Channel: PJSIP/anonymous-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1001
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513783.0
+Linkedid: 1790513783.0
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/anonymous
+State: INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1001
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 2
+Uniqueid: 1790513783.0
+Linkedid: 1790513783.0
+Extension: 300
+Application: Wait
+AppData: 2
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1001
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 3
+Uniqueid: 1790513783.0
+Linkedid: 1790513783.0
+Extension: 300
+Application: Hangup
+AppData: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1001
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 3
+Uniqueid: 1790513783.0
+Linkedid: 1790513783.0
+Variable: RTPAUDIOQOS
+Value: ssrc=1470480833;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1001
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 3
+Uniqueid: 1790513783.0
+Linkedid: 1790513783.0
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1001
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 3
+Uniqueid: 1790513783.0
+Linkedid: 1790513783.0
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1001
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 3
+Uniqueid: 1790513783.0
+Linkedid: 1790513783.0
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1001
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 3
+Uniqueid: 1790513783.0
+Linkedid: 1790513783.0
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: PJSIP/anonymous-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1001
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 3
+Uniqueid: 1790513783.0
+Linkedid: 1790513783.0
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Channel: PJSIP/anonymous-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1001
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 3
+Uniqueid: 1790513783.0
+Linkedid: 1790513783.0
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/anonymous
+State: UNAVAILABLE
+
+Response: Success
+ActionID: n5-3
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+UserEvent: N5Marker
+Scenario: S2-ivr-caller-hangs-up
+ActionID: n5-3
+
+Event: Newchannel
+Privilege: call,all
+Channel: PJSIP/anonymous-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1002
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 301
+Priority: 1
+Uniqueid: 1790513789.1
+Linkedid: 1790513789.1
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1002
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 301
+Priority: 1
+Uniqueid: 1790513789.1
+Linkedid: 1790513789.1
+Variable: SIPDOMAIN
+Value: n5-pbx
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1002
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 301
+Priority: 1
+Uniqueid: 1790513789.1
+Linkedid: 1790513789.1
+Extension: 301
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Channel: PJSIP/anonymous-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1002
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 301
+Priority: 1
+Uniqueid: 1790513789.1
+Linkedid: 1790513789.1
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/anonymous
+State: INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1002
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 301
+Priority: 2
+Uniqueid: 1790513789.1
+Linkedid: 1790513789.1
+Extension: 301
+Application: Wait
+AppData: 60
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1002
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 301
+Priority: 2
+Uniqueid: 1790513789.1
+Linkedid: 1790513789.1
+Variable: RTPAUDIOQOS
+Value: ssrc=2041339107;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1002
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 301
+Priority: 2
+Uniqueid: 1790513789.1
+Linkedid: 1790513789.1
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1002
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 301
+Priority: 2
+Uniqueid: 1790513789.1
+Linkedid: 1790513789.1
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1002
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 301
+Priority: 2
+Uniqueid: 1790513789.1
+Linkedid: 1790513789.1
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1002
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 301
+Priority: 2
+Uniqueid: 1790513789.1
+Linkedid: 1790513789.1
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: HangupRequest
+Privilege: call,all
+Channel: PJSIP/anonymous-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1002
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 301
+Priority: 2
+Uniqueid: 1790513789.1
+Linkedid: 1790513789.1
+Cause: 16
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: PJSIP/anonymous-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1002
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 301
+Priority: 2
+Uniqueid: 1790513789.1
+Linkedid: 1790513789.1
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Channel: PJSIP/anonymous-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1002
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 301
+Priority: 2
+Uniqueid: 1790513789.1
+Linkedid: 1790513789.1
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/anonymous
+State: UNAVAILABLE
+
+Response: Success
+ActionID: n5-4
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+UserEvent: N5Marker
+Scenario: S3-originate-answered-no-dial
+ActionID: n5-4
+
+Response: Success
+ActionID: n5-5
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+Extension: s
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 1003
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 1003
+CallerIDName: N5
+ConnectedLineNum: 1003
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+
+Event: DialBegin
+Privilege: call,all
+DestChannel: PJSIP/tocaller-00000002
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 1003
+DestCallerIDName: N5
+DestConnectedLineNum: 1003
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-external
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790513796.2
+DestLinkedid: 1790513796.2
+DialString: 400@tocaller
+
+Event: Newstate
+Privilege: call,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 1003
+CallerIDName: N5
+ConnectedLineNum: 1003
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+
+Event: DialState
+Privilege: call,all
+DestChannel: PJSIP/tocaller-00000002
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 1003
+DestCallerIDName: N5
+DestConnectedLineNum: 1003
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-external
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790513796.2
+DestLinkedid: 1790513796.2
+DialStatus: RINGING
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/tocaller
+State: RINGING
+
+Event: Newstate
+Privilege: call,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1003
+CallerIDName: N5
+ConnectedLineNum: 1003
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+
+Event: OriginateResponse
+Privilege: call,all
+ActionID: n5-5
+Response: Success
+Channel: PJSIP/tocaller-00000002
+Context: n5-orig
+Exten: 500
+Reason: 4
+Uniqueid: 1790513796.2
+CallerIDNum: 1003
+CallerIDName: N5
+
+Event: DialEnd
+Privilege: call,all
+DestChannel: PJSIP/tocaller-00000002
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 1003
+DestCallerIDName: N5
+DestConnectedLineNum: 1003
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-external
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790513796.2
+DestLinkedid: 1790513796.2
+DialStatus: ANSWER
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/tocaller
+State: INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1003
+CallerIDName: N5
+ConnectedLineNum: 1003
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 500
+Priority: 1
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+Extension: 500
+Application: Wait
+AppData: 2
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1003
+CallerIDName: N5
+ConnectedLineNum: 1003
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 500
+Priority: 2
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+Extension: 500
+Application: Hangup
+AppData: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1003
+CallerIDName: N5
+ConnectedLineNum: 1003
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 500
+Priority: 2
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+Variable: RTPAUDIOQOS
+Value: ssrc=496495410;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1003
+CallerIDName: N5
+ConnectedLineNum: 1003
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 500
+Priority: 2
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1003
+CallerIDName: N5
+ConnectedLineNum: 1003
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 500
+Priority: 2
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1003
+CallerIDName: N5
+ConnectedLineNum: 1003
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 500
+Priority: 2
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1003
+CallerIDName: N5
+ConnectedLineNum: 1003
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 500
+Priority: 2
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1003
+CallerIDName: N5
+ConnectedLineNum: 1003
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 500
+Priority: 2
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Channel: PJSIP/tocaller-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1003
+CallerIDName: N5
+ConnectedLineNum: 1003
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 500
+Priority: 2
+Uniqueid: 1790513796.2
+Linkedid: 1790513796.2
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/tocaller
+State: NOT_INUSE
+
+Response: Success
+ActionID: n5-6
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+UserEvent: N5Marker
+Scenario: S4-originate-local-answered
+ActionID: n5-6
+
+Response: Success
+ActionID: n5-7
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Channel: Local/300@from-external-00000000;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513803.3
+Linkedid: 1790513803.3
+
+Event: Newchannel
+Privilege: call,all
+Channel: Local/300@from-external-00000000;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513803.4
+Linkedid: 1790513803.3
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/300@from-external-00000000;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513803.3
+Linkedid: 1790513803.3
+Extension: 300
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Channel: Local/300@from-external-00000000;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 1004
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513803.3
+Linkedid: 1790513803.3
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Channel: Local/300@from-external-00000000;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 1004
+CallerIDName: N5
+ConnectedLineNum: 1004
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513803.3
+Linkedid: 1790513803.3
+
+Event: NewCallerid
+Privilege: call,all
+Channel: Local/300@from-external-00000000;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1004
+CallerIDName: N5
+ConnectedLineNum: 1004
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513803.4
+Linkedid: 1790513803.3
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Channel: Local/300@from-external-00000000;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1004
+CallerIDName: N5
+ConnectedLineNum: 1004
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513803.4
+Linkedid: 1790513803.3
+
+Event: LocalBridge
+Privilege: call,all
+LocalOneChannel: Local/300@from-external-00000000;1
+LocalOneChannelState: 0
+LocalOneChannelStateDesc: Down
+LocalOneCallerIDNum: 1004
+LocalOneCallerIDName: N5
+LocalOneConnectedLineNum: 1004
+LocalOneConnectedLineName: N5
+LocalOneLanguage: en
+LocalOneAccountCode: 
+LocalOneContext: from-external
+LocalOneExten: 300
+LocalOnePriority: 1
+LocalOneUniqueid: 1790513803.3
+LocalOneLinkedid: 1790513803.3
+LocalTwoChannel: Local/300@from-external-00000000;2
+LocalTwoChannelState: 4
+LocalTwoChannelStateDesc: Ring
+LocalTwoCallerIDNum: 1004
+LocalTwoCallerIDName: N5
+LocalTwoConnectedLineNum: 1004
+LocalTwoConnectedLineName: N5
+LocalTwoLanguage: en
+LocalTwoAccountCode: 
+LocalTwoContext: from-external
+LocalTwoExten: 300
+LocalTwoPriority: 1
+LocalTwoUniqueid: 1790513803.4
+LocalTwoLinkedid: 1790513803.3
+Context: from-external
+Exten: 300
+LocalOptimization: No
+
+Event: DialBegin
+Privilege: call,all
+DestChannel: Local/300@from-external-00000000;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 1004
+DestCallerIDName: N5
+DestConnectedLineNum: 1004
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-external
+DestExten: 300
+DestPriority: 1
+DestUniqueid: 1790513803.3
+DestLinkedid: 1790513803.3
+DialString: 300@from-external/n
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/300@from-external-00000000;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1004
+CallerIDName: N5
+ConnectedLineNum: 1004
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513803.4
+Linkedid: 1790513803.3
+Extension: 300
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Channel: Local/300@from-external-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1004
+CallerIDName: N5
+ConnectedLineNum: 1004
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513803.4
+Linkedid: 1790513803.3
+
+Event: Newstate
+Privilege: call,all
+Channel: Local/300@from-external-00000000;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1004
+CallerIDName: N5
+ConnectedLineNum: 1004
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513803.3
+Linkedid: 1790513803.3
+
+Event: DialEnd
+Privilege: call,all
+DestChannel: Local/300@from-external-00000000;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 1004
+DestCallerIDName: N5
+DestConnectedLineNum: 1004
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-external
+DestExten: 300
+DestPriority: 1
+DestUniqueid: 1790513803.3
+DestLinkedid: 1790513803.3
+DialStatus: ANSWER
+
+Event: OriginateResponse
+Privilege: call,all
+ActionID: n5-7
+Response: Success
+Channel: Local/300@from-external-00000000;1
+Application: Wait
+Data: 10
+Reason: 4
+Uniqueid: 1790513803.3
+CallerIDNum: 1004
+CallerIDName: N5
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/300@from-external
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/300@from-external
+State: INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/300@from-external-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1004
+CallerIDName: N5
+ConnectedLineNum: 1004
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 2
+Uniqueid: 1790513803.4
+Linkedid: 1790513803.3
+Extension: 300
+Application: Wait
+AppData: 2
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/300@from-external-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1004
+CallerIDName: N5
+ConnectedLineNum: 1004
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 3
+Uniqueid: 1790513803.4
+Linkedid: 1790513803.3
+Extension: 300
+Application: Hangup
+AppData: 
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: Local/300@from-external-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1004
+CallerIDName: N5
+ConnectedLineNum: 1004
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 3
+Uniqueid: 1790513803.4
+Linkedid: 1790513803.3
+Cause: 16
+
+Event: HangupRequest
+Privilege: call,all
+Channel: Local/300@from-external-00000000;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1004
+CallerIDName: N5
+ConnectedLineNum: 1004
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513803.3
+Linkedid: 1790513803.3
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Channel: Local/300@from-external-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1004
+CallerIDName: N5
+ConnectedLineNum: 1004
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 3
+Uniqueid: 1790513803.4
+Linkedid: 1790513803.3
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: Hangup
+Privilege: call,all
+Channel: Local/300@from-external-00000000;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1004
+CallerIDName: N5
+ConnectedLineNum: 1004
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 300
+Priority: 1
+Uniqueid: 1790513803.3
+Linkedid: 1790513803.3
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/300@from-external
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/300@from-external
+State: NOT_INUSE
+
+Response: Success
+ActionID: n5-8
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+UserEvent: N5Marker
+Scenario: S5-originate-never-answered
+ActionID: n5-8
+
+Response: Success
+ActionID: n5-9
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Channel: PJSIP/tocaller-00000003
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513809.5
+Linkedid: 1790513809.5
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000003
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513809.5
+Linkedid: 1790513809.5
+Extension: s
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Channel: PJSIP/tocaller-00000003
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 1005
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513809.5
+Linkedid: 1790513809.5
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Channel: PJSIP/tocaller-00000003
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 1005
+CallerIDName: N5
+ConnectedLineNum: 1005
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513809.5
+Linkedid: 1790513809.5
+
+Event: DialBegin
+Privilege: call,all
+DestChannel: PJSIP/tocaller-00000003
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 1005
+DestCallerIDName: N5
+DestConnectedLineNum: 1005
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-external
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790513809.5
+DestLinkedid: 1790513809.5
+DialString: 401@tocaller
+
+Event: Newstate
+Privilege: call,all
+Channel: PJSIP/tocaller-00000003
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 1005
+CallerIDName: N5
+ConnectedLineNum: 1005
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513809.5
+Linkedid: 1790513809.5
+
+Event: DialState
+Privilege: call,all
+DestChannel: PJSIP/tocaller-00000003
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 1005
+DestCallerIDName: N5
+DestConnectedLineNum: 1005
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-external
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790513809.5
+DestLinkedid: 1790513809.5
+DialStatus: RINGING
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/tocaller
+State: RINGING
+
+Event: OriginateResponse
+Privilege: call,all
+ActionID: n5-9
+Response: Failure
+Channel: PJSIP/401@tocaller
+Context: n5-orig
+Exten: 500
+Reason: 3
+Uniqueid: <unknown>
+CallerIDNum: 1005
+CallerIDName: N5
+
+Event: Hangup
+Privilege: call,all
+Channel: PJSIP/tocaller-00000003
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 1005
+CallerIDName: N5
+ConnectedLineNum: 1005
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513809.5
+Linkedid: 1790513809.5
+Cause: 19
+Cause-txt: User alerting, no answer
+TechCause: 480
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/tocaller
+State: NOT_INUSE
+
+Response: Success
+ActionID: n5-10
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+UserEvent: N5Marker
+Scenario: S6-dialer-queued-agent-answers
+ActionID: n5-10
+
+Response: Success
+ActionID: n5-11
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Extension: s
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+
+Event: DialBegin
+Privilege: call,all
+DestChannel: PJSIP/tocaller-00000004
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 1006
+DestCallerIDName: N5
+DestConnectedLineNum: 1006
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-external
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790513817.6
+DestLinkedid: 1790513817.6
+DialString: 400@tocaller
+
+Event: Newstate
+Privilege: call,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+
+Event: DialState
+Privilege: call,all
+DestChannel: PJSIP/tocaller-00000004
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 1006
+DestCallerIDName: N5
+DestConnectedLineNum: 1006
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-external
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790513817.6
+DestLinkedid: 1790513817.6
+DialStatus: RINGING
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/tocaller
+State: RINGING
+
+Event: Newstate
+Privilege: call,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+
+Event: DialEnd
+Privilege: call,all
+DestChannel: PJSIP/tocaller-00000004
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 1006
+DestCallerIDName: N5
+DestConnectedLineNum: 1006
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-external
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790513817.6
+DestLinkedid: 1790513817.6
+DialStatus: ANSWER
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Extension: 510
+Application: Queue
+AppData: n5q,,,,20
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: QUEUEWAIT
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: QUEUEWAIT_MS
+Value: 
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Queue:n5q
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Queue: n5q
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+
+Event: Newchannel
+Privilege: call,all
+Channel: Local/600@n5-agents-00000001;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513818.8
+Linkedid: 1790513817.6
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+Extension: 600
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+Variable: DIALEDPEERNUMBER
+Value: 600@n5-agents/n
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000001;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513818.8
+Linkedid: 1790513817.6
+Variable: DIALEDPEERNUMBER
+Value: 600@n5-agents/n
+
+Event: NewCallerid
+Privilege: call,all
+Channel: Local/600@n5-agents-00000001;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513818.8
+Linkedid: 1790513817.6
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Channel: Local/600@n5-agents-00000001;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513818.8
+Linkedid: 1790513817.6
+
+Event: LocalBridge
+Privilege: call,all
+LocalOneChannel: Local/600@n5-agents-00000001;1
+LocalOneChannelState: 0
+LocalOneChannelStateDesc: Down
+LocalOneCallerIDNum: 1006
+LocalOneCallerIDName: N5
+LocalOneConnectedLineNum: <unknown>
+LocalOneConnectedLineName: <unknown>
+LocalOneLanguage: en
+LocalOneAccountCode: 
+LocalOneContext: n5-agents
+LocalOneExten: 600
+LocalOnePriority: 1
+LocalOneUniqueid: 1790513818.7
+LocalOneLinkedid: 1790513817.6
+LocalTwoChannel: Local/600@n5-agents-00000001;2
+LocalTwoChannelState: 4
+LocalTwoChannelStateDesc: Ring
+LocalTwoCallerIDNum: 1006
+LocalTwoCallerIDName: N5
+LocalTwoConnectedLineNum: 1006
+LocalTwoConnectedLineName: N5
+LocalTwoLanguage: en
+LocalTwoAccountCode: 
+LocalTwoContext: n5-agents
+LocalTwoExten: 600
+LocalTwoPriority: 1
+LocalTwoUniqueid: 1790513818.8
+LocalTwoLinkedid: 1790513817.6
+Context: n5-agents
+Exten: 600
+LocalOptimization: No
+
+Event: AgentCalled
+Privilege: agent,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+DestChannel: Local/600@n5-agents-00000001;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 1006
+DestCallerIDName: N5
+DestConnectedLineNum: 1006
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: n5-agents
+DestExten: 510
+DestPriority: 1
+DestUniqueid: 1790513818.7
+DestLinkedid: 1790513817.6
+Queue: n5q
+Interface: Local/600@n5-agents/n
+MemberName: Local/600@n5-agents/n
+
+Event: DialBegin
+Privilege: call,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+DestChannel: Local/600@n5-agents-00000001;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 1006
+DestCallerIDName: N5
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: n5-agents
+DestExten: 600
+DestPriority: 1
+DestUniqueid: 1790513818.7
+DestLinkedid: 1790513817.6
+DialString: Local/600@n5-agents/n
+
+Event: OriginateResponse
+Privilege: call,all
+ActionID: n5-11
+Response: Success
+Channel: PJSIP/tocaller-00000004
+Context: n5-orig
+Exten: 510
+Reason: 4
+Uniqueid: 1790513817.6
+CallerIDNum: 1006
+CallerIDName: N5
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000001;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513818.8
+Linkedid: 1790513817.6
+Extension: 600
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Channel: Local/600@n5-agents-00000001;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513818.8
+Linkedid: 1790513817.6
+
+Event: Newstate
+Privilege: call,all
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 510
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 510
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+Extension: 510
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewConnectedLine
+Privilege: call,all
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 510
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+
+Event: DialEnd
+Privilege: call,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+DestChannel: Local/600@n5-agents-00000001;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 1006
+DestCallerIDName: N5
+DestConnectedLineNum: 1006
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: n5-agents
+DestExten: 510
+DestPriority: 1
+DestUniqueid: 1790513818.7
+DestLinkedid: 1790513817.6
+DialStatus: ANSWER
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Queue:n5q
+State: NOT_INUSE
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Queue: n5q
+Position: 1
+Count: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: QUEUEPOSITION
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: QUEUEWAIT
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: QUEUEWAIT_MS
+Value: 0
+
+Event: AgentConnect
+Privilege: agent,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+DestChannel: Local/600@n5-agents-00000001;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 1006
+DestCallerIDName: N5
+DestConnectedLineNum: 1006
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: n5-agents
+DestExten: 510
+DestPriority: 1
+DestUniqueid: 1790513818.7
+DestLinkedid: 1790513817.6
+Queue: n5q
+Interface: Local/600@n5-agents/n
+MemberName: Local/600@n5-agents/n
+HoldTime: 0
+RingTime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/tocaller
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Queue: n5q
+MemberName: Local/600@n5-agents/n
+Interface: Local/600@n5-agents/n
+StateInterface: Local/600@n5-agents/n
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790513769
+InCall: 1
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Queue:n5q_avail
+State: NOT_INUSE
+
+Event: BridgeCreate
+Privilege: call,all
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: BridgeEnter
+Privilege: call,all
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 510
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+
+Event: BridgeEnter
+Privilege: call,all
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 510
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+Variable: BRIDGEPEER
+Value: PJSIP/tocaller-00000004
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 510
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+Variable: BRIDGEPVTCALLID
+Value: 22222222-2222-2222-2222-222222222222
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: BRIDGEPEER
+Value: Local/600@n5-agents-00000001;1
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000001;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 2
+Uniqueid: 1790513818.8
+Linkedid: 1790513817.6
+Extension: 600
+Application: Wait
+AppData: 3
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000001;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 3
+Uniqueid: 1790513818.8
+Linkedid: 1790513817.6
+Extension: 600
+Application: Hangup
+AppData: 
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: Local/600@n5-agents-00000001;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 3
+Uniqueid: 1790513818.8
+Linkedid: 1790513817.6
+Cause: 16
+
+Event: HangupRequest
+Privilege: call,all
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 510
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Channel: Local/600@n5-agents-00000001;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 3
+Uniqueid: 1790513818.8
+Linkedid: 1790513817.6
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: AgentComplete
+Privilege: agent,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+DestChannel: Local/600@n5-agents-00000001;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 1006
+DestCallerIDName: N5
+DestConnectedLineNum: 1006
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: n5-agents
+DestExten: 510
+DestPriority: 1
+DestUniqueid: 1790513818.7
+DestLinkedid: 1790513817.6
+Queue: n5q
+Interface: Local/600@n5-agents/n
+MemberName: Local/600@n5-agents/n
+HoldTime: 0
+TalkTime: 4
+Reason: agent
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 510
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+Variable: BRIDGEPEER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 510
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+Variable: BRIDGEPVTCALLID
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: BRIDGEPEER
+Value: 
+
+Event: BridgeLeave
+Privilege: call,all
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 510
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+
+Event: Hangup
+Privilege: call,all
+Channel: Local/600@n5-agents-00000001;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 510
+Priority: 1
+Uniqueid: 1790513818.7
+Linkedid: 1790513817.6
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: BridgeLeave
+Privilege: call,all
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+
+Event: BridgeDestroy
+Privilege: call,all
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: ANSWEREDTIME
+Value: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: ANSWEREDTIME_MS
+Value: 3506
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: DIALEDTIME
+Value: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: DIALEDTIME_MS
+Value: 4513
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: RTPAUDIOQOS
+Value: ssrc=1273476474;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Cause: 16
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Queue: n5q
+MemberName: Local/600@n5-agents/n
+Interface: Local/600@n5-agents/n
+StateInterface: Local/600@n5-agents/n
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1790513822
+LastPause: 0
+LoginTime: 1790513769
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: Hangup
+Privilege: call,all
+Channel: PJSIP/tocaller-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1006
+CallerIDName: N5
+ConnectedLineNum: 1006
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 510
+Priority: 1
+Uniqueid: 1790513817.6
+Linkedid: 1790513817.6
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/tocaller
+State: NOT_INUSE
+
+Response: Success
+ActionID: n5-12
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+UserEvent: N5Marker
+Scenario: S7-dialer-queued-abandoned
+ActionID: n5-12
+
+Response: Success
+ActionID: n5-13
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Extension: s
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+
+Event: DialBegin
+Privilege: call,all
+DestChannel: PJSIP/tocaller-00000005
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 1007
+DestCallerIDName: N5
+DestConnectedLineNum: 1007
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-external
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790513827.9
+DestLinkedid: 1790513827.9
+DialString: 400@tocaller
+
+Event: Newstate
+Privilege: call,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/tocaller
+State: RINGING
+
+Event: DialState
+Privilege: call,all
+DestChannel: PJSIP/tocaller-00000005
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 1007
+DestCallerIDName: N5
+DestConnectedLineNum: 1007
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-external
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790513827.9
+DestLinkedid: 1790513827.9
+DialStatus: RINGING
+
+Event: OriginateResponse
+Privilege: call,all
+ActionID: n5-13
+Response: Success
+Channel: PJSIP/tocaller-00000005
+Context: n5-orig
+Exten: 520
+Reason: 4
+Uniqueid: 1790513827.9
+CallerIDNum: 1007
+CallerIDName: N5
+
+Event: Newstate
+Privilege: call,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: from-external
+Exten: s
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+
+Event: DialEnd
+Privilege: call,all
+DestChannel: PJSIP/tocaller-00000005
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 1007
+DestCallerIDName: N5
+DestConnectedLineNum: 1007
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-external
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790513827.9
+DestLinkedid: 1790513827.9
+DialStatus: ANSWER
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/tocaller
+State: INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Extension: 520
+Application: Queue
+AppData: n5qempty,,,,3
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: QUEUEWAIT
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: QUEUEWAIT_MS
+Value: 
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Queue:n5qempty
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Queue: n5qempty
+Position: 1
+Count: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: ABANDONED
+Value: TRUE
+
+Event: QueueCallerAbandon
+Privilege: agent,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Queue: n5qempty
+Position: 1
+OriginalPosition: 1
+HoldTime: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: QUEUEWAIT
+Value: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: QUEUEWAIT_MS
+Value: 3000
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: DIALEDTIME
+Value: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: DIALEDTIME_MS
+Value: 4010
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: ANSWEREDTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: ANSWEREDTIME_MS
+Value: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Queue:n5qempty
+State: NOT_INUSE
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Queue: n5qempty
+Position: 1
+Count: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: QUEUEPOSITION
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 1
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: QUEUESTATUS
+Value: TIMEOUT
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 2
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Extension: 520
+Application: Hangup
+AppData: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 2
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: RTPAUDIOQOS
+Value: ssrc=327438732;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 2
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 2
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 2
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 2
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 2
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Channel: PJSIP/tocaller-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1007
+CallerIDName: N5
+ConnectedLineNum: 1007
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-orig
+Exten: 520
+Priority: 2
+Uniqueid: 1790513827.9
+Linkedid: 1790513827.9
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/tocaller
+State: NOT_INUSE
+
+Response: Success
+ActionID: n5-14
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+UserEvent: N5Marker
+Scenario: S8-long-ivr
+ActionID: n5-14
+
+Event: Newchannel
+Privilege: call,all
+Channel: PJSIP/anonymous-00000006
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1008
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 302
+Priority: 1
+Uniqueid: 1790513836.10
+Linkedid: 1790513836.10
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000006
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1008
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 302
+Priority: 1
+Uniqueid: 1790513836.10
+Linkedid: 1790513836.10
+Variable: SIPDOMAIN
+Value: n5-pbx
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000006
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1008
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 302
+Priority: 1
+Uniqueid: 1790513836.10
+Linkedid: 1790513836.10
+Extension: 302
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Channel: PJSIP/anonymous-00000006
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1008
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 302
+Priority: 1
+Uniqueid: 1790513836.10
+Linkedid: 1790513836.10
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/anonymous
+State: INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000006
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1008
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 302
+Priority: 2
+Uniqueid: 1790513836.10
+Linkedid: 1790513836.10
+Extension: 302
+Application: Wait
+AppData: 10
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000006
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1008
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 302
+Priority: 3
+Uniqueid: 1790513836.10
+Linkedid: 1790513836.10
+Extension: 302
+Application: Hangup
+AppData: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000006
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1008
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 302
+Priority: 3
+Uniqueid: 1790513836.10
+Linkedid: 1790513836.10
+Variable: RTPAUDIOQOS
+Value: ssrc=970734187;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000006
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1008
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 302
+Priority: 3
+Uniqueid: 1790513836.10
+Linkedid: 1790513836.10
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000006
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1008
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 302
+Priority: 3
+Uniqueid: 1790513836.10
+Linkedid: 1790513836.10
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000006
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1008
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 302
+Priority: 3
+Uniqueid: 1790513836.10
+Linkedid: 1790513836.10
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000006
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1008
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 302
+Priority: 3
+Uniqueid: 1790513836.10
+Linkedid: 1790513836.10
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: PJSIP/anonymous-00000006
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1008
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 302
+Priority: 3
+Uniqueid: 1790513836.10
+Linkedid: 1790513836.10
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Channel: PJSIP/anonymous-00000006
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1008
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 302
+Priority: 3
+Uniqueid: 1790513836.10
+Linkedid: 1790513836.10
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/anonymous
+State: UNAVAILABLE
+
+Response: Success
+ActionID: n5-15
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+UserEvent: N5Marker
+Scenario: S9-control-inbound-dialed
+ActionID: n5-15
+
+Event: Newchannel
+Privilege: call,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: SIPDOMAIN
+Value: n5-pbx
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Extension: 303
+Application: Dial
+AppData: Local/600@n5-agents/n,20
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: DIALSTATUS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: DIALEDPEERNUMBER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: DIALEDPEERNAME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: RINGTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: RINGTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: PROGRESSTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: PROGRESSTIME_MS
+Value: 
+
+Event: Newchannel
+Privilege: call,all
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+
+Event: Newchannel
+Privilege: call,all
+Channel: Local/600@n5-agents-00000002;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513850.13
+Linkedid: 1790513850.11
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+Variable: DIALEDPEERNUMBER
+Value: 600@n5-agents/n
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 303
+CallerIDName: <unknown>
+ConnectedLineNum: 1009
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+Extension: 303
+Application: AppDial
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 303
+CallerIDName: <unknown>
+ConnectedLineNum: 1009
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 303
+CallerIDName: <unknown>
+ConnectedLineNum: 1009
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000002;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513850.13
+Linkedid: 1790513850.11
+Variable: DIALEDPEERNUMBER
+Value: 600@n5-agents/n
+
+Event: NewCallerid
+Privilege: call,all
+Channel: Local/600@n5-agents-00000002;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: 303
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513850.13
+Linkedid: 1790513850.11
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Channel: Local/600@n5-agents-00000002;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: 303
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513850.13
+Linkedid: 1790513850.11
+
+Event: LocalBridge
+Privilege: call,all
+LocalOneChannel: Local/600@n5-agents-00000002;1
+LocalOneChannelState: 0
+LocalOneChannelStateDesc: Down
+LocalOneCallerIDNum: 303
+LocalOneCallerIDName: <unknown>
+LocalOneConnectedLineNum: 1009
+LocalOneConnectedLineName: N5
+LocalOneLanguage: en
+LocalOneAccountCode: 
+LocalOneContext: n5-agents
+LocalOneExten: 303
+LocalOnePriority: 1
+LocalOneUniqueid: 1790513850.12
+LocalOneLinkedid: 1790513850.11
+LocalTwoChannel: Local/600@n5-agents-00000002;2
+LocalTwoChannelState: 4
+LocalTwoChannelStateDesc: Ring
+LocalTwoCallerIDNum: 1009
+LocalTwoCallerIDName: N5
+LocalTwoConnectedLineNum: 303
+LocalTwoConnectedLineName: <unknown>
+LocalTwoLanguage: en
+LocalTwoAccountCode: 
+LocalTwoContext: n5-agents
+LocalTwoExten: 600
+LocalTwoPriority: 1
+LocalTwoUniqueid: 1790513850.13
+LocalTwoLinkedid: 1790513850.11
+Context: n5-agents
+Exten: 600
+LocalOptimization: No
+
+Event: DialBegin
+Privilege: call,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+DestChannel: Local/600@n5-agents-00000002;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 303
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 1009
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: n5-agents
+DestExten: 303
+DestPriority: 1
+DestUniqueid: 1790513850.12
+DestLinkedid: 1790513850.11
+DialString: 600@n5-agents/n
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000002;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: 303
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513850.13
+Linkedid: 1790513850.11
+Extension: 600
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Channel: Local/600@n5-agents-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: 303
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513850.13
+Linkedid: 1790513850.11
+
+Event: Newstate
+Privilege: call,all
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 303
+CallerIDName: <unknown>
+ConnectedLineNum: 1009
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: DIALSTATUS
+Value: ANSWER
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: DIALEDPEERNAME
+Value: Local/600@n5-agents-00000002;1
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: DIALEDPEERNUMBER
+Value: 600@n5-agents/n
+
+Event: DialEnd
+Privilege: call,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+DestChannel: Local/600@n5-agents-00000002;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 303
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 1009
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: n5-agents
+DestExten: 
+DestPriority: 1
+DestUniqueid: 1790513850.12
+DestLinkedid: 1790513850.11
+DialStatus: ANSWER
+
+Event: Newstate
+Privilege: call,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Queue: n5q
+MemberName: Local/600@n5-agents/n
+Interface: Local/600@n5-agents/n
+StateInterface: Local/600@n5-agents/n
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1790513822
+LastPause: 0
+LoginTime: 1790513769
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/anonymous
+State: INUSE
+
+Event: BridgeCreate
+Privilege: call,all
+BridgeUniqueid: 33333333-3333-3333-3333-333333333333
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 303
+CallerIDName: <unknown>
+ConnectedLineNum: 1009
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+Extension: 
+Application: AppDial
+AppData: (Outgoing Line)
+
+Event: BridgeEnter
+Privilege: call,all
+BridgeUniqueid: 33333333-3333-3333-3333-333333333333
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 303
+CallerIDName: <unknown>
+ConnectedLineNum: 1009
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+
+Event: BridgeEnter
+Privilege: call,all
+BridgeUniqueid: 33333333-3333-3333-3333-333333333333
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 303
+CallerIDName: <unknown>
+ConnectedLineNum: 1009
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+Variable: BRIDGEPEER
+Value: PJSIP/anonymous-00000007
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 303
+CallerIDName: <unknown>
+ConnectedLineNum: 1009
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+Variable: BRIDGEPVTCALLID
+Value: 44444444-4444-4444-4444-444444444444
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: BRIDGEPEER
+Value: Local/600@n5-agents-00000002;1
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: 303
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 2
+Uniqueid: 1790513850.13
+Linkedid: 1790513850.11
+Extension: 600
+Application: Wait
+AppData: 3
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: 303
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 3
+Uniqueid: 1790513850.13
+Linkedid: 1790513850.11
+Extension: 600
+Application: Hangup
+AppData: 
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: Local/600@n5-agents-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: 303
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 3
+Uniqueid: 1790513850.13
+Linkedid: 1790513850.11
+Cause: 16
+
+Event: HangupRequest
+Privilege: call,all
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 303
+CallerIDName: <unknown>
+ConnectedLineNum: 1009
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Channel: Local/600@n5-agents-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: 303
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 3
+Uniqueid: 1790513850.13
+Linkedid: 1790513850.11
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 303
+CallerIDName: <unknown>
+ConnectedLineNum: 1009
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+Variable: BRIDGEPEER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 303
+CallerIDName: <unknown>
+ConnectedLineNum: 1009
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+Variable: BRIDGEPVTCALLID
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: BRIDGEPEER
+Value: 
+
+Event: BridgeLeave
+Privilege: call,all
+BridgeUniqueid: 33333333-3333-3333-3333-333333333333
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 303
+CallerIDName: <unknown>
+ConnectedLineNum: 1009
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+
+Event: BridgeLeave
+Privilege: call,all
+BridgeUniqueid: 33333333-3333-3333-3333-333333333333
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+
+Event: Hangup
+Privilege: call,all
+Channel: Local/600@n5-agents-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 303
+CallerIDName: <unknown>
+ConnectedLineNum: 1009
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513850.12
+Linkedid: 1790513850.11
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: BridgeDestroy
+Privilege: call,all
+BridgeUniqueid: 33333333-3333-3333-3333-333333333333
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: ANSWEREDTIME
+Value: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: ANSWEREDTIME_MS
+Value: 3503
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: DIALEDTIME
+Value: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: DIALEDTIME_MS
+Value: 3504
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: DIALSTATUS
+Value: ANSWER
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: RTPAUDIOQOS
+Value: ssrc=2053755419;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Cause: 16
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Queue: n5q
+MemberName: Local/600@n5-agents/n
+Interface: Local/600@n5-agents/n
+StateInterface: Local/600@n5-agents/n
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1790513822
+LastPause: 0
+LoginTime: 1790513769
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: Hangup
+Privilege: call,all
+Channel: PJSIP/anonymous-00000007
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1009
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 303
+Priority: 1
+Uniqueid: 1790513850.11
+Linkedid: 1790513850.11
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/anonymous
+State: UNAVAILABLE
+
+Response: Success
+ActionID: n5-16
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+UserEvent: N5Marker
+Scenario: S10-ivr-then-queue-agent-answers
+ActionID: n5-16
+
+Event: Newchannel
+Privilege: call,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 1
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 1
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: SIPDOMAIN
+Value: n5-pbx
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 1
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Extension: 304
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 1
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/anonymous
+State: INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 2
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Extension: 304
+Application: Wait
+AppData: 1
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Extension: 304
+Application: Queue
+AppData: n5q,,,,20
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: QUEUEWAIT
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: QUEUEWAIT_MS
+Value: 
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Queue:n5q
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Queue: n5q
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+
+Event: Newchannel
+Privilege: call,all
+Channel: Local/600@n5-agents-00000003;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513859.16
+Linkedid: 1790513858.14
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 304
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+Extension: 600
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 304
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 304
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+Variable: DIALEDPEERNUMBER
+Value: 600@n5-agents/n
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000003;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513859.16
+Linkedid: 1790513858.14
+Variable: DIALEDPEERNUMBER
+Value: 600@n5-agents/n
+
+Event: NewCallerid
+Privilege: call,all
+Channel: Local/600@n5-agents-00000003;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: 304
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513859.16
+Linkedid: 1790513858.14
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Channel: Local/600@n5-agents-00000003;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: 304
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513859.16
+Linkedid: 1790513858.14
+
+Event: LocalBridge
+Privilege: call,all
+LocalOneChannel: Local/600@n5-agents-00000003;1
+LocalOneChannelState: 0
+LocalOneChannelStateDesc: Down
+LocalOneCallerIDNum: 304
+LocalOneCallerIDName: <unknown>
+LocalOneConnectedLineNum: <unknown>
+LocalOneConnectedLineName: <unknown>
+LocalOneLanguage: en
+LocalOneAccountCode: 
+LocalOneContext: n5-agents
+LocalOneExten: 600
+LocalOnePriority: 1
+LocalOneUniqueid: 1790513859.15
+LocalOneLinkedid: 1790513858.14
+LocalTwoChannel: Local/600@n5-agents-00000003;2
+LocalTwoChannelState: 4
+LocalTwoChannelStateDesc: Ring
+LocalTwoCallerIDNum: 1010
+LocalTwoCallerIDName: N5
+LocalTwoConnectedLineNum: 304
+LocalTwoConnectedLineName: <unknown>
+LocalTwoLanguage: en
+LocalTwoAccountCode: 
+LocalTwoContext: n5-agents
+LocalTwoExten: 600
+LocalTwoPriority: 1
+LocalTwoUniqueid: 1790513859.16
+LocalTwoLinkedid: 1790513858.14
+Context: n5-agents
+Exten: 600
+LocalOptimization: No
+
+Event: AgentCalled
+Privilege: agent,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+DestChannel: Local/600@n5-agents-00000003;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 304
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 1010
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: n5-agents
+DestExten: 304
+DestPriority: 1
+DestUniqueid: 1790513859.15
+DestLinkedid: 1790513858.14
+Queue: n5q
+Interface: Local/600@n5-agents/n
+MemberName: Local/600@n5-agents/n
+
+Event: DialBegin
+Privilege: call,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+DestChannel: Local/600@n5-agents-00000003;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 304
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: n5-agents
+DestExten: 600
+DestPriority: 1
+DestUniqueid: 1790513859.15
+DestLinkedid: 1790513858.14
+DialString: Local/600@n5-agents/n
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000003;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: 304
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513859.16
+Linkedid: 1790513858.14
+Extension: 600
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Channel: Local/600@n5-agents-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: 304
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513859.16
+Linkedid: 1790513858.14
+
+Event: Newstate
+Privilege: call,all
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 304
+CallerIDName: <unknown>
+ConnectedLineNum: 1010
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 304
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 304
+CallerIDName: <unknown>
+ConnectedLineNum: 1010
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 304
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+Extension: 304
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewConnectedLine
+Privilege: call,all
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 304
+CallerIDName: <unknown>
+ConnectedLineNum: 1010
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 304
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Queue: n5q
+MemberName: Local/600@n5-agents/n
+Interface: Local/600@n5-agents/n
+StateInterface: Local/600@n5-agents/n
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1790513822
+LastPause: 0
+LoginTime: 1790513769
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DialEnd
+Privilege: call,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+DestChannel: Local/600@n5-agents-00000003;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 304
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 1010
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: n5-agents
+DestExten: 304
+DestPriority: 1
+DestUniqueid: 1790513859.15
+DestLinkedid: 1790513858.14
+DialStatus: ANSWER
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Queue:n5q
+State: NOT_INUSE
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Queue: n5q
+Position: 1
+Count: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: QUEUEPOSITION
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: QUEUEWAIT
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: QUEUEWAIT_MS
+Value: 0
+
+Event: AgentConnect
+Privilege: agent,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+DestChannel: Local/600@n5-agents-00000003;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 304
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 1010
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: n5-agents
+DestExten: 304
+DestPriority: 1
+DestUniqueid: 1790513859.15
+DestLinkedid: 1790513858.14
+Queue: n5q
+Interface: Local/600@n5-agents/n
+MemberName: Local/600@n5-agents/n
+HoldTime: 0
+RingTime: 0
+
+Event: BridgeCreate
+Privilege: call,all
+BridgeUniqueid: 55555555-5555-5555-5555-555555555555
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: BridgeEnter
+Privilege: call,all
+BridgeUniqueid: 55555555-5555-5555-5555-555555555555
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 304
+CallerIDName: <unknown>
+ConnectedLineNum: 1010
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 304
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+
+Event: BridgeEnter
+Privilege: call,all
+BridgeUniqueid: 55555555-5555-5555-5555-555555555555
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 304
+CallerIDName: <unknown>
+ConnectedLineNum: 1010
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 304
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+Variable: BRIDGEPEER
+Value: PJSIP/anonymous-00000008
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 304
+CallerIDName: <unknown>
+ConnectedLineNum: 1010
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 304
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+Variable: BRIDGEPVTCALLID
+Value: 66666666-6666-6666-6666-666666666666
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: BRIDGEPEER
+Value: Local/600@n5-agents-00000003;1
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: 304
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 2
+Uniqueid: 1790513859.16
+Linkedid: 1790513858.14
+Extension: 600
+Application: Wait
+AppData: 3
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: 304
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 3
+Uniqueid: 1790513859.16
+Linkedid: 1790513858.14
+Extension: 600
+Application: Hangup
+AppData: 
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: Local/600@n5-agents-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: 304
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 3
+Uniqueid: 1790513859.16
+Linkedid: 1790513858.14
+Cause: 16
+
+Event: HangupRequest
+Privilege: call,all
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 304
+CallerIDName: <unknown>
+ConnectedLineNum: 1010
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 304
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Channel: Local/600@n5-agents-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: 304
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 3
+Uniqueid: 1790513859.16
+Linkedid: 1790513858.14
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 304
+CallerIDName: <unknown>
+ConnectedLineNum: 1010
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 304
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+Variable: BRIDGEPEER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 304
+CallerIDName: <unknown>
+ConnectedLineNum: 1010
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 304
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+Variable: BRIDGEPVTCALLID
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: BRIDGEPEER
+Value: 
+
+Event: BridgeLeave
+Privilege: call,all
+BridgeUniqueid: 55555555-5555-5555-5555-555555555555
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 304
+CallerIDName: <unknown>
+ConnectedLineNum: 1010
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 304
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+
+Event: AgentComplete
+Privilege: agent,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+DestChannel: Local/600@n5-agents-00000003;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 304
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 1010
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: n5-agents
+DestExten: 304
+DestPriority: 1
+DestUniqueid: 1790513859.15
+DestLinkedid: 1790513858.14
+Queue: n5q
+Interface: Local/600@n5-agents/n
+MemberName: Local/600@n5-agents/n
+HoldTime: 0
+TalkTime: 4
+Reason: agent
+
+Event: BridgeLeave
+Privilege: call,all
+BridgeUniqueid: 55555555-5555-5555-5555-555555555555
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+
+Event: BridgeDestroy
+Privilege: call,all
+BridgeUniqueid: 55555555-5555-5555-5555-555555555555
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: ANSWEREDTIME
+Value: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: ANSWEREDTIME_MS
+Value: 3502
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: DIALEDTIME
+Value: 5
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: DIALEDTIME_MS
+Value: 5007
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: RTPAUDIOQOS
+Value: ssrc=1376756337;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Cause: 16
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Queue: n5q
+MemberName: Local/600@n5-agents/n
+Interface: Local/600@n5-agents/n
+StateInterface: Local/600@n5-agents/n
+Membership: static
+Penalty: 0
+CallsTaken: 2
+LastCall: 1790513863
+LastPause: 0
+LoginTime: 1790513769
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: Hangup
+Privilege: call,all
+Channel: Local/600@n5-agents-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 304
+CallerIDName: <unknown>
+ConnectedLineNum: 1010
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 304
+Priority: 1
+Uniqueid: 1790513859.15
+Linkedid: 1790513858.14
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: Hangup
+Privilege: call,all
+Channel: PJSIP/anonymous-00000008
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1010
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 304
+Priority: 3
+Uniqueid: 1790513858.14
+Linkedid: 1790513858.14
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/anonymous
+State: UNAVAILABLE
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: NOT_INUSE
+
+Response: Success
+ActionID: n5-17
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+UserEvent: N5Marker
+Scenario: S11-ivr-then-queue-abandoned
+ActionID: n5-17
+
+Event: Newchannel
+Privilege: call,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 1
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 1
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: SIPDOMAIN
+Value: n5-pbx
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 1
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Extension: 305
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 1
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/anonymous
+State: INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 2
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Extension: 305
+Application: Wait
+AppData: 1
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Extension: 305
+Application: Queue
+AppData: n5qempty,,,,3
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: QUEUEWAIT
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: QUEUEWAIT_MS
+Value: 
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Queue:n5qempty
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Queue: n5qempty
+Position: 1
+Count: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: ABANDONED
+Value: TRUE
+
+Event: QueueCallerAbandon
+Privilege: agent,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Queue: n5qempty
+Position: 1
+OriginalPosition: 1
+HoldTime: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: QUEUEWAIT
+Value: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: QUEUEWAIT_MS
+Value: 3000
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: DIALEDTIME
+Value: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: DIALEDTIME_MS
+Value: 4505
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: ANSWEREDTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: ANSWEREDTIME_MS
+Value: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Queue:n5qempty
+State: NOT_INUSE
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Queue: n5qempty
+Position: 1
+Count: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: QUEUEPOSITION
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 3
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: QUEUESTATUS
+Value: TIMEOUT
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 4
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Extension: 305
+Application: Hangup
+AppData: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 4
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: RTPAUDIOQOS
+Value: ssrc=769180399;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 4
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 4
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 4
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 4
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 4
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Channel: PJSIP/anonymous-00000009
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1011
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 305
+Priority: 4
+Uniqueid: 1790513867.17
+Linkedid: 1790513867.17
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/anonymous
+State: UNAVAILABLE
+
+Response: Success
+ActionID: n5-18
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+UserEvent: N5Marker
+Scenario: S12-ivr-then-dial-agent
+ActionID: n5-18
+
+Event: Newchannel
+Privilege: call,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 1
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 1
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: SIPDOMAIN
+Value: n5-pbx
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 1
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Extension: 306
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 1
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/anonymous
+State: INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 2
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Extension: 306
+Application: Wait
+AppData: 1
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Extension: 306
+Application: Dial
+AppData: Local/600@n5-agents/n,20
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: DIALSTATUS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: DIALEDPEERNUMBER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: DIALEDPEERNAME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: RINGTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: RINGTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: PROGRESSTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: PROGRESSTIME_MS
+Value: 
+
+Event: Newchannel
+Privilege: call,all
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+
+Event: Newchannel
+Privilege: call,all
+Channel: Local/600@n5-agents-00000004;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513876.20
+Linkedid: 1790513875.18
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+Variable: DIALEDPEERNUMBER
+Value: 600@n5-agents/n
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 306
+CallerIDName: <unknown>
+ConnectedLineNum: 1012
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 306
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+Extension: 306
+Application: AppDial
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 306
+CallerIDName: <unknown>
+ConnectedLineNum: 1012
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 306
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 306
+CallerIDName: <unknown>
+ConnectedLineNum: 1012
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 306
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000004;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513876.20
+Linkedid: 1790513875.18
+Variable: DIALEDPEERNUMBER
+Value: 600@n5-agents/n
+
+Event: NewCallerid
+Privilege: call,all
+Channel: Local/600@n5-agents-00000004;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: 306
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513876.20
+Linkedid: 1790513875.18
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Channel: Local/600@n5-agents-00000004;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: 306
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513876.20
+Linkedid: 1790513875.18
+
+Event: LocalBridge
+Privilege: call,all
+LocalOneChannel: Local/600@n5-agents-00000004;1
+LocalOneChannelState: 0
+LocalOneChannelStateDesc: Down
+LocalOneCallerIDNum: 306
+LocalOneCallerIDName: <unknown>
+LocalOneConnectedLineNum: 1012
+LocalOneConnectedLineName: N5
+LocalOneLanguage: en
+LocalOneAccountCode: 
+LocalOneContext: n5-agents
+LocalOneExten: 306
+LocalOnePriority: 1
+LocalOneUniqueid: 1790513876.19
+LocalOneLinkedid: 1790513875.18
+LocalTwoChannel: Local/600@n5-agents-00000004;2
+LocalTwoChannelState: 4
+LocalTwoChannelStateDesc: Ring
+LocalTwoCallerIDNum: 1012
+LocalTwoCallerIDName: N5
+LocalTwoConnectedLineNum: 306
+LocalTwoConnectedLineName: <unknown>
+LocalTwoLanguage: en
+LocalTwoAccountCode: 
+LocalTwoContext: n5-agents
+LocalTwoExten: 600
+LocalTwoPriority: 1
+LocalTwoUniqueid: 1790513876.20
+LocalTwoLinkedid: 1790513875.18
+Context: n5-agents
+Exten: 600
+LocalOptimization: No
+
+Event: DialBegin
+Privilege: call,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+DestChannel: Local/600@n5-agents-00000004;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 306
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 1012
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: n5-agents
+DestExten: 306
+DestPriority: 1
+DestUniqueid: 1790513876.19
+DestLinkedid: 1790513875.18
+DialString: 600@n5-agents/n
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000004;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: 306
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513876.20
+Linkedid: 1790513875.18
+Extension: 600
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Channel: Local/600@n5-agents-00000004;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: 306
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 1
+Uniqueid: 1790513876.20
+Linkedid: 1790513875.18
+
+Event: Newstate
+Privilege: call,all
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 306
+CallerIDName: <unknown>
+ConnectedLineNum: 1012
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 306
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: DIALSTATUS
+Value: ANSWER
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: DIALEDPEERNAME
+Value: Local/600@n5-agents-00000004;1
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: DIALEDPEERNUMBER
+Value: 600@n5-agents/n
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: INUSE
+
+Event: DialEnd
+Privilege: call,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+DestChannel: Local/600@n5-agents-00000004;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 306
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 1012
+DestConnectedLineName: N5
+DestLanguage: en
+DestAccountCode: 
+DestContext: n5-agents
+DestExten: 
+DestPriority: 1
+DestUniqueid: 1790513876.19
+DestLinkedid: 1790513875.18
+DialStatus: ANSWER
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Queue: n5q
+MemberName: Local/600@n5-agents/n
+Interface: Local/600@n5-agents/n
+StateInterface: Local/600@n5-agents/n
+Membership: static
+Penalty: 0
+CallsTaken: 2
+LastCall: 1790513863
+LastPause: 0
+LoginTime: 1790513769
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: BridgeCreate
+Privilege: call,all
+BridgeUniqueid: 77777777-7777-7777-7777-777777777777
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 306
+CallerIDName: <unknown>
+ConnectedLineNum: 1012
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+Extension: 
+Application: AppDial
+AppData: (Outgoing Line)
+
+Event: BridgeEnter
+Privilege: call,all
+BridgeUniqueid: 77777777-7777-7777-7777-777777777777
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 306
+CallerIDName: <unknown>
+ConnectedLineNum: 1012
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+
+Event: BridgeEnter
+Privilege: call,all
+BridgeUniqueid: 77777777-7777-7777-7777-777777777777
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 306
+CallerIDName: <unknown>
+ConnectedLineNum: 1012
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+Variable: BRIDGEPEER
+Value: PJSIP/anonymous-0000000a
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 306
+CallerIDName: <unknown>
+ConnectedLineNum: 1012
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+Variable: BRIDGEPVTCALLID
+Value: 88888888-8888-8888-8888-888888888888
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: BRIDGEPEER
+Value: Local/600@n5-agents-00000004;1
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000004;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: 306
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 2
+Uniqueid: 1790513876.20
+Linkedid: 1790513875.18
+Extension: 600
+Application: Wait
+AppData: 3
+
+Event: Newexten
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000004;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: 306
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 3
+Uniqueid: 1790513876.20
+Linkedid: 1790513875.18
+Extension: 600
+Application: Hangup
+AppData: 
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: Local/600@n5-agents-00000004;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: 306
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 3
+Uniqueid: 1790513876.20
+Linkedid: 1790513875.18
+Cause: 16
+
+Event: HangupRequest
+Privilege: call,all
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 306
+CallerIDName: <unknown>
+ConnectedLineNum: 1012
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Channel: Local/600@n5-agents-00000004;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: 306
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 600
+Priority: 3
+Uniqueid: 1790513876.20
+Linkedid: 1790513875.18
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 306
+CallerIDName: <unknown>
+ConnectedLineNum: 1012
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+Variable: BRIDGEPEER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 306
+CallerIDName: <unknown>
+ConnectedLineNum: 1012
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+Variable: BRIDGEPVTCALLID
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: BRIDGEPEER
+Value: 
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: NOT_INUSE
+
+Event: BridgeLeave
+Privilege: call,all
+BridgeUniqueid: 77777777-7777-7777-7777-777777777777
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 306
+CallerIDName: <unknown>
+ConnectedLineNum: 1012
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Queue: n5q
+MemberName: Local/600@n5-agents/n
+Interface: Local/600@n5-agents/n
+StateInterface: Local/600@n5-agents/n
+Membership: static
+Penalty: 0
+CallsTaken: 2
+LastCall: 1790513863
+LastPause: 0
+LoginTime: 1790513769
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: BridgeLeave
+Privilege: call,all
+BridgeUniqueid: 77777777-7777-7777-7777-777777777777
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+
+Event: Hangup
+Privilege: call,all
+Channel: Local/600@n5-agents-00000004;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 306
+CallerIDName: <unknown>
+ConnectedLineNum: 1012
+ConnectedLineName: N5
+Language: en
+AccountCode: 
+Context: n5-agents
+Exten: 
+Priority: 1
+Uniqueid: 1790513876.19
+Linkedid: 1790513875.18
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: BridgeDestroy
+Privilege: call,all
+BridgeUniqueid: 77777777-7777-7777-7777-777777777777
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: Local/600@n5-agents
+State: NOT_INUSE
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: ANSWEREDTIME
+Value: 5
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: ANSWEREDTIME_MS
+Value: 5005
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: DIALEDTIME
+Value: 5
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: DIALEDTIME_MS
+Value: 5005
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: DIALSTATUS
+Value: ANSWER
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: RTPAUDIOQOS
+Value: ssrc=115357151;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: SoftHangupRequest
+Privilege: call,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Channel: PJSIP/anonymous-0000000a
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 1012
+CallerIDName: N5
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-external
+Exten: 306
+Priority: 3
+Uniqueid: 1790513875.18
+Linkedid: 1790513875.18
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Device: PJSIP/anonymous
+State: UNAVAILABLE
+
+Response: Success
+ActionID: n5-19
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+UserEvent: N5Marker
+Scenario: N5Done
+ActionID: n5-19
+
+Response: Goodbye
+ActionID: n5-20
+Message: Thanks for all the fish.
+

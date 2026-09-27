@@ -8,6 +8,7 @@
     <InternalsVisibleTo Include="Verbara.Sdk.Ami.Tests" />
     <InternalsVisibleTo Include="Verbara.Sdk.Benchmarks" />
     <InternalsVisibleTo Include="Verbara.Sdk.FunctionalTests" />
+    <InternalsVisibleTo Include="Verbara.Sdk.Sessions.FunctionalTests" />
   </ItemGroup>
 
   <ItemGroup>

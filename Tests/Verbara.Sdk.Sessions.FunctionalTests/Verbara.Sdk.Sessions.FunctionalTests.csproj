@@ -12,4 +12,8 @@
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="coverlet.collector" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The AMI captures AmiCaptureReplay reads (Recordings/asterisk-ami/README.md). -->
+    <None Update="Recordings\**\*.raw" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
