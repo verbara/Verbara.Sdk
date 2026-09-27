@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed — an AudioSocket or WebSocket connection that ended could unregister another call's live stream (#N)
+### Fixed — an AudioSocket or WebSocket connection that ended could unregister another call's live stream (#330)
 
 - **Ari `AudioSocketServer`: a connection releases only the entry it registered.** A connection that
   ended removed its id from the registry by key alone, so a second connection presenting the same UUID,
