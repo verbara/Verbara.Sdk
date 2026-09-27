@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
+using System.Threading.Channels;
 using Verbara.Sdk.Ari.Audio;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -140,7 +141,7 @@ public class WebSocketAudioServerTests
         await firstClient.ConnectAsync(ChannelUri(port, "ch-shared"), CancellationToken.None);
         var first = await firstSignal.Task.WaitAsync(WaitLimit);
 
-        // Same channel id: this session loses TryAdd and is never registered.
+        // Same channel id: this session waits, unregistered, while the first session is live.
         using var secondClient = new ClientWebSocket();
         await secondClient.ConnectAsync(ChannelUri(port, "ch-shared"), CancellationToken.None);
         var secondDisposed = await secondDisposedSignal.Task.WaitAsync(WaitLimit);
@@ -571,6 +572,198 @@ public class WebSocketAudioServerTests
             entry => entry.EventName == "ServerStopped",
             "the stop ran to the end");
         server.IsRunning.Should().BeFalse();
+    }
+
+    // ------------------------------- a shared channel id passes to the connection that shared it
+
+    // chan_websocket upgrades every call through one websocket_client connection on the configured
+    // URI, so every concurrent call on it presents the same last path segment here: a shared key is
+    // the normal case on this server. Every test below connects in order and waits for each
+    // connection's own announcement before the next one connects, so which connection is which is
+    // fixed by construction. An ending is waited for on that connection's disposal, which its handler
+    // performs strictly after its release, so every assertion reads the table after the release and
+    // after any hand-over the release made.
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldHandTheChannelToTheConnectionThatSharedIt_WhenTheFirstCloses()
+    {
+        // Arrange — the first client holds ch-shared; a second connects to the same path after it
+        var port = GetFreePort();
+        await using var server = await StartServerAsync(port);
+        using var announcements = new Announcements(server);
+
+        using var first = await ConnectAndAwaitAnnouncementAsync(port, "ch-shared", announcements);
+        using var second = await ConnectAndAwaitAnnouncementAsync(port, "ch-shared", announcements);
+
+        // Act — the order a real call takes: the connection that arrived first ends first
+        await first.CloseAsync();
+
+        // Assert
+        server.GetStream("ch-shared").Should().BeSameAs(
+            second.Stream,
+            "the connection that presented ch-shared after the first is still open, so the first " +
+            "one's ending hands the id to it instead of leaving a live call that nothing can find");
+        server.ActiveStreamCount.Should().Be(1, "the connection that took the id over is counted");
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldKeepALiveSessionFindable_WhenSeveralConnectionsShareOnePath()
+    {
+        // Arrange — the chan_websocket shape: three calls through one websocket_client connection
+        // upgrade on the same URI, in the order first, second, third
+        var port = GetFreePort();
+        await using var server = await StartServerAsync(port);
+        using var announcements = new Announcements(server);
+
+        using var first = await ConnectAndAwaitAnnouncementAsync(port, "ch-client", announcements);
+        using var second = await ConnectAndAwaitAnnouncementAsync(port, "ch-client", announcements);
+        using var third = await ConnectAndAwaitAnnouncementAsync(port, "ch-client", announcements);
+
+        // Act and assert — the holder closes: the earliest connection still open takes the id over
+        await first.CloseAsync();
+        server.GetStream("ch-client").Should().BeSameAs(
+            second.Stream,
+            "the hand-over follows arrival order, so the second connection takes the id over");
+
+        // A waiting connection closes: it holds nothing, so the new holder keeps the id
+        await third.CloseAsync();
+        server.GetStream("ch-client").Should().BeSameAs(
+            second.Stream,
+            "a waiting connection that ends holds nothing, so the live holder keeps the id");
+
+        // The last one closes, with nobody left waiting
+        await second.CloseAsync();
+        server.GetStream("ch-client").Should().BeNull(
+            "the last connection that presented the id has ended, and an ended waiter is never " +
+            "handed the id");
+        server.ActiveStreamCount.Should().Be(0, "nothing is live");
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldSkipAWaitingConnectionThatHasClosed_WhenTheFirstClosesBeforeItsRelease()
+    {
+        // Arrange — the first client holds ch-skip; a second and then a third connect to the same
+        // path. The test above lets the second one's own release run before the first ends, and that
+        // release takes it out of the waiting list, so the hand-over never meets it. This one holds
+        // the second connection between its close and its release. A session notifies its state
+        // observers in subscription order, and the one below subscribes inside the second
+        // connection's announcement, before its handler subscribes the observer that ends its wait.
+        // Parking inside the second session's Disconnected notification therefore holds its release
+        // back, by construction, while the first one ends.
+        var port = GetFreePort();
+        await using var server = await StartServerAsync(port);
+        using var announcements = new Announcements(server);
+
+        var closedButNotReleased = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var resume = new ManualResetEventSlim();
+        var announced = 0;
+        using var parking = server.OnStreamConnected.Subscribe(stream =>
+        {
+            if (Interlocked.Increment(ref announced) != 2)
+                return;
+
+            stream.StateChanges.Subscribe(state =>
+            {
+                if (state is AudioStreamState.Disconnected or AudioStreamState.Error
+                    && closedButNotReleased.TrySetResult())
+                {
+                    resume.Wait(WaitLimit);
+                }
+            });
+        });
+
+        using var first = await ConnectAndAwaitAnnouncementAsync(port, "ch-skip", announcements);
+        using var second = await ConnectAndAwaitAnnouncementAsync(port, "ch-skip", announcements);
+        using var third = await ConnectAndAwaitAnnouncementAsync(port, "ch-skip", announcements);
+
+        IAudioStream? holderAfterFirstClosed;
+        try
+        {
+            // Act — the second client closes and is parked before its release; then the first closes
+            await second.SendCloseAsync();
+            await closedButNotReleased.Task.WaitAsync(WaitLimit);
+            await first.CloseAsync();
+            holderAfterFirstClosed = server.GetStream("ch-skip");
+        }
+        finally
+        {
+            resume.Set();
+        }
+
+        await second.Disposed.WaitAsync(WaitLimit);
+
+        // Assert
+        holderAfterFirstClosed.Should().BeSameAs(
+            third.Stream,
+            "the second connection had closed when the first ended, so the hand-over passes it by " +
+            "for the third rather than registering a connection that is already over");
+        server.GetStream("ch-skip").Should().BeSameAs(
+            third.Stream,
+            "the second connection's late release leaves the third holding the id");
+        server.ActiveStreamCount.Should().Be(1, "only the third connection is live");
+    }
+
+    /// <summary>
+    /// Connects to <paramref name="channelId"/>'s path and waits for the server to announce this
+    /// connection. The client's connect completes on the 101 response, which the server sends before
+    /// it builds and announces the session, so the announcement is the sentinel that the connection
+    /// has arrived. The caller connects one at a time, so the next announcement is this one.
+    /// </summary>
+    private static async Task<AnnouncedClient> ConnectAndAwaitAnnouncementAsync(
+        int port, string channelId, Announcements announcements)
+    {
+        var client = new ClientWebSocket();
+        await client.ConnectAsync(ChannelUri(port, channelId), CancellationToken.None);
+
+        var (announced, disposed) = await announcements.NextAsync();
+        announced.ChannelId.Should().Be(channelId, "the announcement is this connection's");
+        return new AnnouncedClient(client, announced, disposed);
+    }
+
+    /// <summary>
+    /// Every stream the server announces, in announcement order, each paired with its disposal
+    /// sentinel. The sentinel is subscribed inside the emission: the handler publishes synchronously
+    /// and disposes the session only after the emission returns, so it cannot have been missed.
+    /// </summary>
+    private sealed class Announcements : IDisposable
+    {
+        private readonly Channel<(IAudioStream Stream, Task Disposed)> _announced =
+            Channel.CreateUnbounded<(IAudioStream Stream, Task Disposed)>();
+
+        private readonly IDisposable _subscription;
+
+        public Announcements(WebSocketAudioServer server) =>
+            _subscription = server.OnStreamConnected.Subscribe(
+                stream => _announced.Writer.TryWrite((stream, WhenDisposed(stream))));
+
+        public async Task<(IAudioStream Stream, Task Disposed)> NextAsync() =>
+            await _announced.Reader.ReadAsync().AsTask().WaitAsync(WaitLimit);
+
+        public void Dispose() => _subscription.Dispose();
+    }
+
+    /// <summary>
+    /// A client the server has announced. <see cref="Disposed"/> completes when the connection's
+    /// handler disposes its session, which it does strictly after its own release.
+    /// </summary>
+    private sealed class AnnouncedClient(ClientWebSocket client, IAudioStream stream, Task disposed) : IDisposable
+    {
+        public IAudioStream Stream { get; } = stream;
+
+        public Task Disposed { get; } = disposed;
+
+        /// <summary>Sends the close frame, without waiting for anything the server does next.</summary>
+        public Task SendCloseAsync() =>
+            client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
+
+        /// <summary>Closes and waits until the handler has released and disposed the session.</summary>
+        public async Task CloseAsync()
+        {
+            await SendCloseAsync();
+            await Disposed.WaitAsync(WaitLimit);
+        }
+
+        public void Dispose() => client.Dispose();
     }
 
     private static int GetFreePort()
