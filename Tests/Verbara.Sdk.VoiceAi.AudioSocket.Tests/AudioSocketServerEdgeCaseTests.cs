@@ -1,9 +1,12 @@
+using System.Buffers;
 using System.Collections.Concurrent;
+using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Verbara.Sdk.VoiceAi.AudioSocket.Internal;
 
 namespace Verbara.Sdk.VoiceAi.AudioSocket.Tests;
 
@@ -248,6 +251,114 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ReleaseSession_ShouldKeepTheHolderRegistered_WhenTheReleasedSessionDoesNotHoldItsId()
+    {
+        // Arrange — the holder registers under X through the handler, the way the accept loop hands a
+        // connection over, and is announced only after its registration.
+        var x = Guid.NewGuid();
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        await using var server = NewServerOnStoppedClock();
+        using var holderPeer = await ConnectAndIdentifyAsync(listener, x);
+        var holder = await HandOverAndAwaitAnnouncementAsync(server, listener);
+
+        // A second session that presented X but holds no entry for it: the shape of a same-id
+        // connection that did not win the registration, or of a holder whose entry a stop cleared
+        // before its hangup ran. It is built through the internal constructor on a loopback pair of its
+        // own, so it never went near the registry.
+        using var otherPeer = new TcpClient();
+        await otherPeer.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port);
+        using var otherEnd = await listener.AcceptTcpClientAsync();
+        await using var other = new AudioSocketSession(
+            x,
+            otherEnd,
+            PipeReader.Create(otherEnd.GetStream()),
+            new AudioSocketOptions().DefaultFormat,
+            NullLogger.Instance);
+
+        // Act — the release that session's hangup performs
+        server.ReleaseSession(other);
+
+        // Assert
+        server.ActiveSessionCount.Should().Be(
+            1,
+            "a release removes only the entry its own session holds, and the released session never held X — removing by key alone would unregister the other call's live session");
+        holder.IsConnected.Should().BeTrue("nothing has ended the holder's connection");
+        await server.StopAsync(CancellationToken.None);
+        (await ReadFromServerAsync(holderPeer)).Should().Be(
+            0,
+            "the holder is still registered, so the stop finds it and closes its connection");
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldKeepTheHolderRegistered_WhenASameIdConnectionIsRefused()
+    {
+        // A characterization pin, green before the release changed. This server refuses a connection
+        // that presents a held id and disposes its session before the read loop starts, so that
+        // session's hangup never fires and it releases nothing: the invariant the key-only release
+        // relied on. The refusal itself is the policy, and it is unchanged.
+        var x = Guid.NewGuid();
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        await using var server = NewServerOnStoppedClock();
+        var announcements = 0;
+        server.OnSessionStarted += _ =>
+        {
+            Interlocked.Increment(ref announcements);
+            return ValueTask.CompletedTask;
+        };
+        using var holderPeer = await ConnectAndIdentifyAsync(listener, x);
+        var holder = await HandOverAndAwaitAnnouncementAsync(server, listener);
+
+        // Act — a second connection presents X through the same handler
+        using var refusedPeer = await ConnectAndIdentifyAsync(listener, x);
+        using var refusedEnd = await listener.AcceptTcpClientAsync();
+        var refusing = server.HandleConnectionAsync(refusedEnd, CancellationToken.None);
+
+        // Assert — the server closes the refused connection only after it lost the registration, so
+        // that read returning 0 orders every check below after the refusal
+        (await ReadFromServerAsync(refusedPeer)).Should().Be(
+            0,
+            "the server refuses a connection that presents an id a live session holds, and closes it");
+        await refusing.WaitAsync(SignalTimeout);
+        server.ActiveSessionCount.Should().Be(
+            1,
+            "the refused connection never held X, so the live holder keeps its entry");
+        Volatile.Read(ref announcements).Should().Be(1, "a refused connection is never announced");
+        holder.IsConnected.Should().BeTrue("the refusal leaves the holder's connection alone");
+        await server.StopAsync(CancellationToken.None);
+        (await ReadFromServerAsync(holderPeer)).Should().Be(
+            0,
+            "the holder is still registered, so the stop finds it and closes its connection");
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldReleaseTheHoldersEntry_WhenItsClientSendsAHangupFrame()
+    {
+        // Arrange
+        var x = Guid.NewGuid();
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        await using var server = NewServerOnStoppedClock();
+        using var holderPeer = await ConnectAndIdentifyAsync(listener, x);
+        var holder = await HandOverAndAwaitAnnouncementAsync(server, listener);
+        server.ActiveSessionCount.Should().Be(1, "the handler announces a session only after registering it");
+
+        // The handler subscribed its release to the session when it created it, before this handler,
+        // and an event runs its handlers in subscription order: once this one runs, the release has.
+        var hungUp = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        holder.OnHangup += () => hungUp.TrySetResult();
+
+        // Act
+        await SendFrameAsync(holderPeer, AudioSocketFrameType.Hangup, []);
+        await hungUp.Task.WaitAsync(SignalTimeout);
+
+        // Assert
+        server.ActiveSessionCount.Should().Be(0, "a session that hangs up releases the entry it holds");
+        (await ReadFromServerAsync(holderPeer)).Should().Be(0, "the session closes its connection on the hangup frame");
+    }
+
+    [Fact]
     public async Task Server_ShouldRejectConnection_WhenMaxSessionsReached()
     {
         await _server.StartAsync(CancellationToken.None);
@@ -306,6 +417,62 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncDisposable
     /// </summary>
     private static Task<int> ReadFromServerAsync(TcpClient client) =>
         client.GetStream().ReadAsync(new byte[1]).AsTask().WaitAsync(SignalTimeout);
+
+    /// <summary>
+    /// A server whose UUID timeout runs on a fake clock that never moves, so nothing a test does with
+    /// it can end on a clock. It is never started: a test hands it connections through the handler.
+    /// </summary>
+    private static AudioSocketServer NewServerOnStoppedClock() =>
+        new(
+            new AudioSocketOptions { Port = 0, ConnectionTimeout = TimeSpan.FromSeconds(30) },
+            NullLogger<AudioSocketServer>.Instance,
+            new FakeTimeProvider());
+
+    /// <summary>Connects a peer to <paramref name="listener"/> and sends the UUID frame naming <paramref name="channelId"/>.</summary>
+    private static async Task<TcpClient> ConnectAndIdentifyAsync(TcpListener listener, Guid channelId)
+    {
+        var peer = new TcpClient();
+        await peer.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port);
+        await SendFrameAsync(peer, AudioSocketFrameType.Uuid, channelId.ToByteArray(bigEndian: true));
+        return peer;
+    }
+
+    /// <summary>Writes one AudioSocket frame from a peer, in the codec's wire format.</summary>
+    private static async Task SendFrameAsync(TcpClient peer, AudioSocketFrameType type, byte[] payload)
+    {
+        var frame = new ArrayBufferWriter<byte>();
+        AudioSocketFrameCodec.WriteFrame(frame, type, payload);
+        await peer.GetStream().WriteAsync(frame.WrittenMemory);
+    }
+
+    /// <summary>
+    /// Accepts the next connection on <paramref name="listener"/> and hands it to the handler, as the
+    /// accept loop does, then returns the session the handler announces. The handler registers a
+    /// session before it announces it, so the announcement is the sentinel for the registration.
+    /// </summary>
+    private static async Task<AudioSocketSession> HandOverAndAwaitAnnouncementAsync(
+        AudioSocketServer server,
+        TcpListener listener)
+    {
+        var announced = new TaskCompletionSource<AudioSocketSession>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ValueTask OnStarted(AudioSocketSession session)
+        {
+            announced.TrySetResult(session);
+            return ValueTask.CompletedTask;
+        }
+
+        server.OnSessionStarted += OnStarted;
+        try
+        {
+            var accepted = await listener.AcceptTcpClientAsync();
+            await server.HandleConnectionAsync(accepted, CancellationToken.None).WaitAsync(SignalTimeout);
+            return await announced.Task.WaitAsync(SignalTimeout);
+        }
+        finally
+        {
+            server.OnSessionStarted -= OnStarted;
+        }
+    }
 
     /// <summary>
     /// Totals the audio the server sends until it closes the connection. The enumeration ends only on

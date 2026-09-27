@@ -63,7 +63,10 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     /// <summary>
     /// Get an active stream by the last path segment of the HTTP upgrade request URL it arrived on,
     /// query string stripped — not by an ARI channel id, and not by the AudioSocket identification
-    /// UUID. See <see cref="IAudioServer.GetStream(string)"/>.
+    /// UUID. When several live connections present one segment, this returns the earliest of them
+    /// still connected, and the others are announced on <see cref="OnStreamConnected"/> but are not
+    /// listed, counted or found until they take the segment over. See
+    /// <see cref="IAudioServer.GetStream(string)"/>.
     /// </summary>
     public IAudioStream? GetStream(string channelId) =>
         _streams.TryGetValue(channelId, out var session) ? session : null;
@@ -218,6 +221,78 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     private ValueTask<TcpClient> AcceptAsync(CancellationToken ct) =>
         AcceptOverride?.Invoke(ct) ?? _listener!.AcceptTcpClientAsync(ct);
 
+    // Several live connections can present one key: chan_websocket upgrades every call through one
+    // websocket_client connection on the same URI, so on this server a shared key is the normal case.
+    // The first to register holds it. Each later one is announced but waits here, unregistered, in
+    // arrival order, and takes the key over when the connections ahead of it have ended. The gate
+    // orders Register's retry against every Release. Lookups, counts and ActiveStreams read _streams
+    // and never take it.
+    private readonly Lock _registryGate = new();
+    private readonly Dictionary<string, List<WebSocketAudioSession>> _waiting = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Registers <paramref name="session"/> under <paramref name="id"/>, or, while another live
+    /// connection holds that id, appends it to the id's waiting list. The uncontended path takes no
+    /// lock.
+    /// </summary>
+    private void Register(string id, WebSocketAudioSession session)
+    {
+        if (_streams.TryAdd(id, session))
+            return;
+
+        lock (_registryGate)
+        {
+            // The holder may have been released between the first attempt and the lock.
+            if (_streams.TryAdd(id, session))
+                return;
+
+            if (!_waiting.TryGetValue(id, out var waiters))
+                _waiting[id] = waiters = [];
+            waiters.Add(session);
+        }
+    }
+
+    /// <summary>
+    /// Releases what <paramref name="session"/> holds under <paramref name="id"/>: its place in the
+    /// waiting list, or the entry itself. A held entry passes to the earliest waiting connection still
+    /// connected, or is removed when none is left. An entry that maps to another session is neither
+    /// removed nor handed over.
+    /// </summary>
+    private void Release(string id, WebSocketAudioSession session)
+    {
+        lock (_registryGate)
+        {
+            if (_waiting.TryGetValue(id, out var waiters))
+            {
+                waiters.Remove(session);
+
+                // A waiter that has already disconnected is never handed the id. Its own release,
+                // still to come, then finds nothing to do.
+                while (waiters.Count > 0 && !waiters[0].IsConnected)
+                    waiters.RemoveAt(0);
+            }
+
+            if (waiters is { Count: > 0 })
+            {
+                // One atomic replace, so a lookup never finds the id empty while a connection that
+                // presented it is open, and a newcomer's lock-free TryAdd cannot overtake the waiter.
+                // It succeeds only while the entry still maps to this session: it fails when this
+                // session was itself waiting, or when StopAsync has already cleared the table, so
+                // nothing is handed over after a stop.
+                if (_streams.TryUpdate(id, waiters[0], session))
+                    waiters.RemoveAt(0);
+            }
+            else
+            {
+                // By value: the pair overload removes the entry only while it maps to this session.
+                _streams.TryRemove(new KeyValuePair<string, WebSocketAudioSession>(id, session));
+            }
+
+            if (waiters is { Count: 0 })
+                _waiting.Remove(id);
+        }
+    }
+
     /// <summary>
     /// Keeps a connection handler in <see cref="_connections"/> until it completes. The handler is
     /// added before the removal is attached, and a continuation attached to a task that has already
@@ -263,7 +338,7 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 var endpoint = client.Client.RemoteEndPoint?.ToString();
                 WebSocketAudioServerLog.ConnectionAccepted(_logger, endpoint, channelId);
 
-                _streams.TryAdd(channelId, session);
+                Register(channelId, session);
                 _streamSubject.OnNext(session);
 
                 // Wait for session to disconnect
@@ -298,10 +373,13 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
             {
                 // Each connection cleans up its own session and no other. The pair overload removes
                 // the entry only while it still maps to this session, so a connection that lost the
-                // TryAdd race for a channel id leaves the session that won it registered.
+                // TryAdd race for a channel id leaves the session that won it registered. Release
+                // keeps that rule and adds the hand-over: a holder that ends passes the id to the
+                // earliest connection still open that presented it, and a connection that was
+                // waiting for the id only leaves the waiting list.
                 if (session is not null)
                 {
-                    _streams.TryRemove(new KeyValuePair<string, WebSocketAudioSession>(session.ChannelId, session));
+                    Release(session.ChannelId, session);
                     await session.DisposeAsync();
                 }
             }

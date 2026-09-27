@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — an AudioSocket or WebSocket connection that ended could unregister another call's live stream (#330)
+
+- **Ari `AudioSocketServer`: a connection releases only the entry it registered.** A connection that
+  ended removed its id from the registry by key alone, so a second connection presenting the same UUID,
+  or a connection that had sent a second identification frame (the session takes the id of every UUID
+  frame), could unregister another call's live stream. `GetStream` then missed that stream, and
+  `ActiveStreamCount` and the `MaxConcurrentStreams` admission left it out. Each connection now
+  releases, by value, only the entry it registered under the id it first identified with. Measured on
+  2.6.0 over loopback: 10 of 10 in each ordering.
+- **Both Ari servers hand a shared id on when its holder ends.** A connection that presents an id
+  another live connection holds is still announced on `OnStreamConnected` and is still not findable
+  while the holder is live. When the holder ends, the earliest waiting connection that is still open
+  now takes the id over in one atomic replace, so a lookup never finds the id empty while a connection
+  that presented it is open; a stop hands nothing over. Before, that connection stayed live and nothing
+  could find it: 10 of 10 on loopback, and on Asterisk 22.9.0 and 23.4.1 through `AudioSocket()`,
+  `Dial(AudioSocket/…)` and external media (5 of 5 each) and through chan_websocket (3 of 3).
+  chan_websocket upgrades every call through one `websocket_client` connection on the same URI, so on
+  `WebSocketAudioServer` this was the common case. `GetStream`'s XML doc now says which connection a
+  shared id returns.
+- **`Verbara.Sdk.VoiceAi.AudioSocket`: a late hangup no longer removes a session registered after a
+  stop.** A session that `StopAsync` disposed could fire its hangup late and remove a same-id session
+  that registered after the stop; that session then dropped out of `ActiveSessionCount`, the
+  `audiosocket.sessions.active` gauge and the `MaxConcurrentSessions` admission, and the next stop did
+  not dispose it — 47 to 88 of 200 in three probe runs on 2.6.0. The release now removes the entry only
+  while it still maps to that session. This server still refuses a same-id connection when it connects.
+- **Not changed:** until it takes the id over, a waiting connection is not listed, counted or admitted
+  against `MaxConcurrentStreams`, so with chan_websocket's shared key `ActiveStreamCount` counts one per
+  URI, not one per call. A server that was over-admitting after such an ending now refuses at its
+  configured limit. No public API changes.
+
 ### Fixed — BREAKING: an AMI heartbeat timeout hung the connection instead of reconnecting (#327)
 
 - **A Ping left unanswered past `HeartbeatTimeout` now ends the connection the way a peer-side close

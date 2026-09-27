@@ -54,7 +54,10 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
     /// canonical lowercase hyphenated form. The table is an ordinal dictionary, so any other
     /// spelling of the same UUID returns <see langword="null"/>. Over ARI that UUID is the value
     /// the creator passed as <c>data</c>, and it is the created channel's id only if the creator
-    /// passed it as <c>channelId</c> too. See <see cref="IAudioServer.GetStream(string)"/>.
+    /// passed it as <c>channelId</c> too. When several live connections present one UUID, this
+    /// returns the earliest of them still connected, and the others are announced on
+    /// <see cref="OnStreamConnected"/> but are not listed, counted or found until they take the UUID
+    /// over. See <see cref="IAudioServer.GetStream(string)"/>.
     /// </summary>
     public IAudioStream? GetStream(string channelId) =>
         _streams.TryGetValue(channelId, out var session) ? session : null;
@@ -210,12 +213,89 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
     private ValueTask<TcpClient> AcceptAsync(CancellationToken ct) =>
         AcceptOverride?.Invoke(ct) ?? _listener!.AcceptTcpClientAsync(ct);
 
+    // Asterisk does not keep the identification UUID unique, so several live connections can present
+    // one id. The first to register holds it. Each later one is announced but waits here, unregistered,
+    // in arrival order, and takes the id over when the connections ahead of it have ended. The gate
+    // orders Register's retry against every Release. Lookups, counts and ActiveStreams read _streams
+    // and never take it.
+    private readonly Lock _registryGate = new();
+    private readonly Dictionary<string, List<AudioSocketSession>> _waiting = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Registers <paramref name="session"/> under <paramref name="id"/>, or, while another live
+    /// connection holds that id, appends it to the id's waiting list. The uncontended path takes no
+    /// lock.
+    /// </summary>
+    private void Register(string id, AudioSocketSession session)
+    {
+        if (_streams.TryAdd(id, session))
+            return;
+
+        lock (_registryGate)
+        {
+            // The holder may have been released between the first attempt and the lock.
+            if (_streams.TryAdd(id, session))
+                return;
+
+            if (!_waiting.TryGetValue(id, out var waiters))
+                _waiting[id] = waiters = [];
+            waiters.Add(session);
+        }
+    }
+
+    /// <summary>
+    /// Releases what <paramref name="session"/> holds under <paramref name="id"/>, the id it was
+    /// registered with: its place in the waiting list, or the entry itself. A held entry passes to the
+    /// earliest waiting connection still connected, or is removed when none is left. An entry that
+    /// maps to another session is neither removed nor handed over.
+    /// </summary>
+    private void Release(string id, AudioSocketSession session)
+    {
+        lock (_registryGate)
+        {
+            if (_waiting.TryGetValue(id, out var waiters))
+            {
+                waiters.Remove(session);
+
+                // A waiter that has already disconnected is never handed the id. Its own release,
+                // still to come, then finds nothing to do.
+                while (waiters.Count > 0 && !waiters[0].IsConnected)
+                    waiters.RemoveAt(0);
+            }
+
+            if (waiters is { Count: > 0 })
+            {
+                // One atomic replace, so a lookup never finds the id empty while a connection that
+                // presented it is open, and a newcomer's lock-free TryAdd cannot overtake the waiter.
+                // It succeeds only while the entry still maps to this session: it fails when this
+                // session was itself waiting, or when StopAsync has already cleared the table, so
+                // nothing is handed over after a stop.
+                if (_streams.TryUpdate(id, waiters[0], session))
+                    waiters.RemoveAt(0);
+            }
+            else
+            {
+                // By value: the pair overload removes the entry only while it maps to this session.
+                _streams.TryRemove(new KeyValuePair<string, AudioSocketSession>(id, session));
+            }
+
+            if (waiters is { Count: 0 })
+                _waiting.Remove(id);
+        }
+    }
+
     private async Task HandleConnectionAsync(TcpClient client, CancellationToken ct)
     {
         using (client)
         {
             await using var session = new AudioSocketSession(client.GetStream(), _options.DefaultFormat);
             session.Start();
+
+            // The id this connection registered under, read once after the identification wait. The
+            // session reassigns its ChannelId on every identification frame, so the release must not
+            // read it again at the end: a second frame naming another call's id would release that
+            // call's entry and leave this one's registered.
+            string? registeredId = null;
 
             try
             {
@@ -229,13 +309,17 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
                     await Task.Delay(10, timeoutCts.Token);
                 }
 
-                if (string.IsNullOrEmpty(session.ChannelId))
+                var channelId = session.ChannelId;
+                if (string.IsNullOrEmpty(channelId))
                     return;
 
                 var endpoint = client.Client.RemoteEndPoint?.ToString();
-                AudioSocketServerLog.ConnectionAccepted(_logger, endpoint, session.ChannelId);
+                AudioSocketServerLog.ConnectionAccepted(_logger, endpoint, channelId);
 
-                _streams.TryAdd(session.ChannelId, session);
+                // Captured whether or not the registration wins, so a connection that waits for its
+                // id leaves that id's waiting list when it ends.
+                registeredId = channelId;
+                Register(channelId, session);
                 _streamSubject.OnNext(session);
 
                 // Wait for session to disconnect
@@ -275,7 +359,12 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
             }
             finally
             {
-                _streams.TryRemove(session.ChannelId, out _);
+                // Each connection releases what its own session holds and nothing else, under the id
+                // it registered with, so a same-id connection that ends leaves the live holder
+                // registered. A holder that ends hands the id to the earliest connection still open
+                // that presented it. A connection that never identified itself holds nothing.
+                if (registeredId is not null)
+                    Release(registeredId, session);
             }
         }
     }

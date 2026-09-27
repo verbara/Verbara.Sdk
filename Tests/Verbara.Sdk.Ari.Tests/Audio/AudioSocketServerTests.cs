@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading.Channels;
 using Verbara.Sdk.Ari.Audio;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -797,6 +798,310 @@ public class AudioSocketServerTests : IAsyncDisposable
         logger.Entries.Should().NotContain(
             entry => entry.EventName == "ConnectionError",
             "a peer hanging up is an ending, not a failure, so it is not reported as one");
+    }
+
+    // ------------------------------- a registry releases the session it holds, and hands a shared id on
+
+    // Asterisk does not keep the identification UUID unique: it kept four TCP connections open on one
+    // UUID, and AudioSocket(), Dial(AudioSocket/) and an externalMedia create that reuses `data` all
+    // produce a second one. Every test below connects in order and waits for each connection's own
+    // announcement before the next one connects, so which connection is which is fixed by
+    // construction. An ending is waited for on that connection's disposal, which its handler performs
+    // strictly after its release, so every assertion reads the table after the release and after any
+    // hand-over the release made.
+
+    [Fact]
+    public async Task HandleConnection_ShouldKeepTheLiveStreamRegistered_WhenASameIdConnectionEnds()
+    {
+        // Arrange — A holds X; B presents X while A is live, so B does not become its holder
+        var port = GetFreePort();
+        var server = CreateServer(port);
+        await server.StartAsync();
+        using var announcements = new Announcements(server);
+        var x = Guid.NewGuid();
+
+        using var holder = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+        using var duplicate = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+
+        // Act
+        await duplicate.HangUpAsync();
+
+        // Assert
+        server.GetStream(x.ToString()).Should().BeSameAs(
+            holder.Stream,
+            "an ending releases only the entry its own session holds, and the connection that ended " +
+            "never held X — removing by key alone would unregister the other call's live stream");
+        server.ActiveStreamCount.Should().Be(1, "the live holder is still counted");
+    }
+
+    [Fact]
+    public async Task HandleConnection_ShouldHandTheIdToTheConnectionThatSharedIt_WhenTheHolderEnds()
+    {
+        // Arrange — the order a real call takes: A holds X, B presents X after it, and A ends first
+        var port = GetFreePort();
+        var server = CreateServer(port);
+        await server.StartAsync();
+        using var announcements = new Announcements(server);
+        var x = Guid.NewGuid();
+
+        using var holder = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+        using var sharer = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+
+        // Act
+        await holder.HangUpAsync();
+
+        // Assert
+        server.GetStream(x.ToString()).Should().BeSameAs(
+            sharer.Stream,
+            "the connection that presented X after the holder is still open, so the holder's ending " +
+            "hands X to it instead of leaving a live call that nothing can find");
+        server.ActiveStreamCount.Should().Be(1, "the connection that took X over is counted");
+
+        await server.StopAsync().AsTask().WaitAsync(SignalTimeout);
+        (await sharer.ReadAsync()).Should().Be(
+            0,
+            "the stop closes the connection that took X over, like any registered stream");
+    }
+
+    [Fact]
+    public async Task HandleConnection_ShouldReleaseTheIdItRegisteredUnder_WhenTheConnectionIdentifiesItselfTwice()
+    {
+        // Arrange — C holds Y; A registers under X
+        var port = GetFreePort();
+        var server = CreateServer(port);
+        await server.StartAsync();
+        using var announcements = new Announcements(server);
+        var x = Guid.NewGuid();
+        var y = Guid.NewGuid();
+
+        using var otherCall = await ConnectAndAwaitAnnouncementAsync(port, y, announcements);
+        using var reidentifying = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+
+        // Act — a second identification frame naming Y, then a hangup. The session reassigns its
+        // ChannelId to Y on that frame, before the hangup that ends it.
+        await reidentifying.SendAsync(BuildUuidFrame(y));
+        await reidentifying.HangUpAsync();
+
+        // Assert
+        server.GetStream(y.ToString()).Should().BeSameAs(
+            otherCall.Stream,
+            "the ending connection registered under X, so it has no claim on the other call's Y");
+        server.GetStream(x.ToString()).Should().BeNull(
+            "the entry the connection registered under X is the one its ending releases, whatever " +
+            "its session reports as its id by then");
+        server.ActiveStreamCount.Should().Be(1, "only the other call is still live");
+    }
+
+    [Fact]
+    public async Task HandleConnection_ShouldHandTheIdOnInArrivalOrder_WhenAWaitingConnectionEndsFirst()
+    {
+        // Arrange — A holds X; B and then C present X
+        var port = GetFreePort();
+        var server = CreateServer(port);
+        await server.StartAsync();
+        using var announcements = new Announcements(server);
+        var x = Guid.NewGuid();
+
+        using var first = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+        using var second = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+        using var third = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+
+        // Act and assert — B ends while it waits
+        await second.HangUpAsync();
+        server.GetStream(x.ToString()).Should().BeSameAs(
+            first.Stream,
+            "a waiting connection that ends holds nothing, so the live holder keeps X");
+
+        // A ends: X passes to the earliest connection still open, which is C, never B's ended session
+        await first.HangUpAsync();
+        server.GetStream(x.ToString()).Should().BeSameAs(
+            third.Stream,
+            "the hand-over follows arrival order and skips a waiting connection that has ended");
+
+        // C ends with nobody left waiting
+        await third.HangUpAsync();
+        server.GetStream(x.ToString()).Should().BeNull("the last connection that presented X has ended");
+        server.ActiveStreamCount.Should().Be(0, "nothing is live");
+    }
+
+    [Fact]
+    public async Task HandleConnection_ShouldSkipAWaitingConnectionThatHasDisconnected_WhenTheHolderEndsBeforeItsRelease()
+    {
+        // Arrange — A holds X; B and then C present X. The test above lets B's own release run before
+        // A ends, and that release takes B out of the waiting list, so the hand-over never meets it.
+        // This one holds B between its disconnect and its release. A session notifies its state
+        // observers in subscription order, and the one below subscribes inside B's announcement, before
+        // B's handler subscribes the observer that ends its wait. Parking inside B's Disconnected
+        // notification therefore holds B's release back, by construction, while A ends.
+        var port = GetFreePort();
+        var server = CreateServer(port);
+        await server.StartAsync();
+        using var announcements = new Announcements(server);
+        var x = Guid.NewGuid();
+
+        var disconnectedButNotReleased = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var resume = new ManualResetEventSlim();
+        var announced = 0;
+        using var parking = server.OnStreamConnected.Subscribe(stream =>
+        {
+            if (Interlocked.Increment(ref announced) != 2)
+                return;
+
+            stream.StateChanges.Subscribe(state =>
+            {
+                if (state is AudioStreamState.Disconnected or AudioStreamState.Error
+                    && disconnectedButNotReleased.TrySetResult())
+                {
+                    resume.Wait(SignalTimeout);
+                }
+            });
+        });
+
+        using var first = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+        using var second = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+        using var third = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+
+        IAudioStream? holderAfterFirstEnded;
+        try
+        {
+            // Act — B hangs up and is parked before its release; then A ends
+            await second.SendAsync(BuildHangupFrame());
+            await disconnectedButNotReleased.Task.WaitAsync(SignalTimeout);
+            await first.HangUpAsync();
+            holderAfterFirstEnded = server.GetStream(x.ToString());
+        }
+        finally
+        {
+            resume.Set();
+        }
+
+        await second.Disposed.WaitAsync(SignalTimeout);
+
+        // Assert
+        holderAfterFirstEnded.Should().BeSameAs(
+            third.Stream,
+            "B had disconnected when A ended, so the hand-over passes it by for C rather than " +
+            "registering a connection that is already over");
+        server.GetStream(x.ToString()).Should().BeSameAs(third.Stream, "B's late release leaves C holding X");
+        server.ActiveStreamCount.Should().Be(1, "only C is live");
+    }
+
+    [Fact]
+    public async Task StopAsync_ShouldLeaveNothingRegistered_WhenSameIdConnectionsAreWaiting()
+    {
+        // A characterization pin, green before the hand-over existed: it holds that a hand-over never
+        // outlives a stop. The stop's Clear() empties the table, and after that no entry maps to an
+        // ending session any more, so no release can hand X to a connection that is still waiting.
+        var port = GetFreePort();
+        var server = CreateServer(port);
+        await server.StartAsync();
+        using var announcements = new Announcements(server);
+        var x = Guid.NewGuid();
+
+        using var holder = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+        using var firstWaiting = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+        using var secondWaiting = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+
+        // Act
+        await server.StopAsync().AsTask().WaitAsync(SignalTimeout);
+        await Task.WhenAll(holder.Disposed, firstWaiting.Disposed, secondWaiting.Disposed)
+            .WaitAsync(SignalTimeout);
+
+        // Assert
+        server.GetStream(x.ToString()).Should().BeNull(
+            "every ending was processed after the stop began, and none of them registered anything");
+        server.ActiveStreamCount.Should().Be(0, "a stopped server counts nothing");
+        (await holder.ReadAsync()).Should().Be(0, "the stop closes the holder's connection");
+        (await firstWaiting.ReadAsync()).Should().Be(0, "and each waiting connection's");
+        (await secondWaiting.ReadAsync()).Should().Be(0, "and each waiting connection's");
+    }
+
+    /// <summary>
+    /// Connects, sends a UUID frame, and waits for the server to announce this connection. Unlike
+    /// <see cref="ConnectAndSendUuidAsync"/>, which returns as soon as the UUID resolves, this works
+    /// for a UUID another connection already holds: the lookup resolves before the duplicate is even
+    /// read, but the announcement is this connection's own. The caller connects one at a time, so the
+    /// next announcement is this one.
+    /// </summary>
+    private static async Task<AnnouncedConnection> ConnectAndAwaitAnnouncementAsync(
+        int port, Guid uuid, Announcements announcements)
+    {
+        var client = await ConnectAsync(port);
+        var stream = client.GetStream();
+        await stream.WriteAsync(BuildUuidFrame(uuid));
+        await stream.FlushAsync();
+
+        var (announced, disposed) = await announcements.NextAsync();
+        announced.ChannelId.Should().Be(uuid.ToString(), "the announcement is this connection's");
+        return new AnnouncedConnection(client, announced, disposed);
+    }
+
+    /// <summary>
+    /// Every stream the server announces, in announcement order, each paired with its disposal
+    /// sentinel. The sentinel is subscribed inside the emission: the handler publishes synchronously
+    /// and disposes the session only after the emission returns, so it cannot have been missed.
+    /// </summary>
+    private sealed class Announcements : IDisposable
+    {
+        private readonly Channel<(IAudioStream Stream, Task Disposed)> _announced =
+            Channel.CreateUnbounded<(IAudioStream Stream, Task Disposed)>();
+
+        private readonly IDisposable _subscription;
+
+        public Announcements(AudioSocketServer server) =>
+            _subscription = server.OnStreamConnected.Subscribe(
+                stream => _announced.Writer.TryWrite((stream, WhenDisposed(stream))));
+
+        public async Task<(IAudioStream Stream, Task Disposed)> NextAsync() =>
+            await _announced.Reader.ReadAsync().AsTask().WaitAsync(SignalTimeout);
+
+        public void Dispose() => _subscription.Dispose();
+    }
+
+    /// <summary>
+    /// A loopback connection the server has announced. <see cref="Disposed"/> completes when the
+    /// connection's handler disposes its session, which it does strictly after its own release.
+    /// </summary>
+    private sealed class AnnouncedConnection(TcpClient client, IAudioStream stream, Task disposed) : IDisposable
+    {
+        public IAudioStream Stream { get; } = stream;
+
+        public Task Disposed { get; } = disposed;
+
+        public async Task SendAsync(byte[] frame)
+        {
+            var network = client.GetStream();
+            await network.WriteAsync(frame);
+            await network.FlushAsync();
+        }
+
+        /// <summary>Sends a hangup frame and waits until the handler has released and disposed the session.</summary>
+        public async Task HangUpAsync()
+        {
+            await SendAsync(BuildHangupFrame());
+            await Disposed.WaitAsync(SignalTimeout);
+        }
+
+        /// <summary>One read from the far end; 0 is the server having closed the connection.</summary>
+        public async Task<int> ReadAsync()
+        {
+            var buffer = new byte[1];
+            return await client.GetStream().ReadAsync(buffer).AsTask().WaitAsync(SignalTimeout);
+        }
+
+        public void Dispose() => client.Dispose();
+    }
+
+    /// <summary>
+    /// Completes when the session behind <paramref name="stream"/> is disposed: its state subject
+    /// completes only from DisposeAsync. Call it from inside the OnStreamConnected emission, before
+    /// the connection's handler can have disposed the session.
+    /// </summary>
+    private static Task WhenDisposed(IAudioStream stream)
+    {
+        var disposed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        stream.StateChanges.Subscribe(static _ => { }, () => disposed.TrySetResult());
+        return disposed.Task;
     }
 
     // ---------------------------------------------------------------------------------- helpers
