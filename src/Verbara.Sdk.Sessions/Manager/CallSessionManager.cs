@@ -543,8 +543,28 @@ public sealed partial class CallSessionManager : ICallSessionManager
         _ = PersistAsync(session);
     }
 
+    /// <summary>
+    /// Delivers the ending of a call whose participants have all left: its release-queue entry, its
+    /// tracing span, its completion measurements and its <see cref="CallEndedEvent"/>. Runs under the
+    /// session's lock, from <see cref="OnChannelRemoved"/>.
+    /// <para>
+    /// Every participant can be found to have left more than once: a leg that joined the call after it
+    /// ended — reusing its <c>linkedid</c>, or admitted into it by the reload that ended it — leaves
+    /// too. The ending is delivered only the first time, keyed on the session's own delivery marker,
+    /// never on its state (<c>ADR-0063</c>, D2). A repeat saves the session, which now records the late
+    /// leg, and only while this manager still holds that same object: once it has been released, a
+    /// save would hand the store a call the SDK has let go of.
+    /// </para>
+    /// </summary>
     private void OnSessionCompleted(CallSession session)
     {
+        if (!session.TryMarkEndingDelivered())
+        {
+            if (IsHeld(session))
+                _ = PersistAsync(session);
+            return;
+        }
+
         QueueForRelease(session);
 
         // Record tracing span
@@ -577,6 +597,13 @@ public sealed partial class CallSessionManager : ICallSessionManager
         _ = PersistAsync(session);
         EvictStaleCompleted();
     }
+
+    /// <summary>
+    /// Whether this manager still holds <paramref name="session"/> itself — not merely a session with
+    /// the same id.
+    /// </summary>
+    private bool IsHeld(CallSession session) =>
+        _sessions.TryGetValue(session.SessionId, out var held) && ReferenceEquals(held, session);
 
     /// <summary>
     /// How many entries the release queue holds for <paramref name="sessionId"/>: the number of times
