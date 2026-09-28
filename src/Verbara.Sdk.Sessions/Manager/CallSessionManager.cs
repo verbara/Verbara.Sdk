@@ -52,8 +52,12 @@ public sealed partial class CallSessionManager : ICallSessionManager
     /// Initializes a manager whose release cutoff — the instant an ended session must have
     /// completed before to be past <see cref="SessionOptions.CompletedRetention"/> — is read from
     /// <paramref name="timeProvider"/>, so a test can move past the retention period with a fake
-    /// clock instead of sitting it out. Nothing else reads it: the session's own timestamps still
-    /// come from the wall clock.
+    /// clock instead of sitting it out. The same clock gives the two instants of a queue visit: the
+    /// join, which stamps <see cref="CallQueuedEvent"/>, and the connect, which stamps
+    /// <see cref="CallConnectedEvent"/>; the queue wait-time histogram records the difference, so a
+    /// test fixes a visit's length exactly. Nothing else reads it: the session's own timestamps
+    /// (<see cref="CallSession.CreatedAt"/>, <see cref="CallSession.ConnectedAt"/>) and its audit
+    /// trail still come from the wall clock.
     /// </summary>
     internal CallSessionManager(
         IOptions<SessionOptions> options,
@@ -199,6 +203,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
         Action<BridgeTransferInfo> onTransfer = OnTransfer;
         Action<string, AsteriskQueueEntry> onCallerJoined = OnQueueCallerJoined;
         Action<string, string?, string?> onAgentConnected = OnAgentConnected;
+        Action<string?, string?, string?> onQueueCallerConnected = OnQueueCallerConnected;
 
         server.Channels.ChannelAdded += onAdded;
         server.Channels.ChannelRemoved += onRemoved;
@@ -212,11 +217,12 @@ public sealed partial class CallSessionManager : ICallSessionManager
         server.Bridges.TransferOccurred += onTransfer;
         server.Queues.CallerJoined += onCallerJoined;
         server.Agents.AgentConnected += onAgentConnected;
+        server.Agents.QueueCallerConnected += onQueueCallerConnected;
 
         _serverSubs[serverId] = new ServerSubscriptions(server,
             onAdded, onRemoved, onStateChanged, onDialBegin, onDialEnd,
             onHeld, onUnheld, onBridgeEntered, onBridgeDestroyed, onTransfer, onCallerJoined,
-            onAgentConnected);
+            onAgentConnected, onQueueCallerConnected);
     }
 
     public void DetachFromServer(string serverId)
@@ -567,12 +573,12 @@ public sealed partial class CallSessionManager : ICallSessionManager
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Connected, null, null, $"bridge:{bridge.BridgeUniqueid}"));
 
-                var waitTime = session.WaitTime ?? TimeSpan.Zero;
-                _events.OnNext(new CallConnectedEvent(session.SessionId, session.ServerId,
-                    DateTimeOffset.UtcNow, session.AgentId, session.QueueName, waitTime));
-
-                if (waitTime > TimeSpan.Zero)
-                    SessionMetrics.WaitTimeMs.Record(waitTime.TotalMilliseconds);
+                // A bridge announces only a call that never joined a queue, every time it connects it,
+                // as it always has. A queued call is announced when app_queue reports the connection
+                // (OnQueueCallerConnected): a member leg can enter a bridge that app_queue never
+                // connects, as a pooled agent that never acknowledges does.
+                if (session.QueueName is null)
+                    PublishConnected(session, session.AgentId);
 
                 _ = PersistAsync(session);
             }
@@ -604,17 +610,68 @@ public sealed partial class CallSessionManager : ICallSessionManager
             s.Participants.Any(p => p.Channel == entry.Channel));
         if (session is null) return;
 
+        DateTimeOffset joinedAt;
         lock (session.SyncRoot)
         {
+            // Each join opens a new visit: it has not been announced yet, and its wait starts now. The
+            // one instant stamps both the visit's start and CallQueuedEvent, so the queue's metrics and
+            // the histogram measure the visit from the same moment.
+            joinedAt = _timeProvider.GetUtcNow();
             session.QueueName = queueName;
+            session.QueueVisitAnnounced = false;
+            session.QueueVisitStartedAt = joinedAt;
             session.TryTransition(CallSessionState.Queued);
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.QueueJoined, entry.Channel, null, queueName));
         }
 
         _events.OnNext(new CallQueuedEvent(session.SessionId, session.ServerId,
-            DateTimeOffset.UtcNow, queueName, entry.Position));
+            joinedAt, queueName, entry.Position));
         _ = PersistAsync(session);
+    }
+
+    /// <summary>
+    /// Publishes <see cref="CallConnectedEvent"/> for <paramref name="session"/> and, for a call that
+    /// joined a queue, records the visit's wait in the queue wait-time histogram
+    /// (<c>sessions.wait_time</c>). Every publication of the event goes through here. Called under the
+    /// session's lock.
+    /// <list type="bullet">
+    /// <item>A call that joined a queue (<see cref="CallSession.QueueName"/> set) is announced once per
+    /// visit: the first connect after a join publishes, and every later one until the next join does
+    /// nothing. Its sample is the visit's wait, from the join to this connect, both read from the
+    /// manager's clock; a session whose join the manager never saw (restored from a snapshot) falls back
+    /// to the call's wait since it was created, as the queue's metrics do. A wait of zero is a sample;
+    /// only a negative one, from a clock stepping back, is dropped.</item>
+    /// <item>A call that never joined a queue is published every time, as it always has been, and records
+    /// no sample on any path: it has no queue wait.</item>
+    /// </list>
+    /// The event's own <see cref="CallConnectedEvent.WaitTime"/> is the call's wait since it was
+    /// created, whichever the case.
+    /// </summary>
+    private void PublishConnected(CallSession session, string? agentId)
+    {
+        var queued = session.QueueName is not null;
+        if (queued)
+        {
+            if (session.QueueVisitAnnounced)
+                return;
+
+            session.QueueVisitAnnounced = true;
+        }
+
+        var connectedAt = _timeProvider.GetUtcNow();
+        var waitSinceCreated = session.WaitTime ?? TimeSpan.Zero;
+        _events.OnNext(new CallConnectedEvent(session.SessionId, session.ServerId,
+            connectedAt, agentId, session.QueueName, waitSinceCreated));
+
+        if (!queued)
+            return;
+
+        var visitWait = session.QueueVisitStartedAt is { } visitStartedAt
+            ? connectedAt - visitStartedAt
+            : waitSinceCreated;
+        if (visitWait >= TimeSpan.Zero)
+            SessionMetrics.WaitTimeMs.Record(visitWait.TotalMilliseconds);
     }
 
     /// <summary>
@@ -822,11 +879,45 @@ public sealed partial class CallSessionManager : ICallSessionManager
             {
                 session.ConnectedAt ??= DateTimeOffset.UtcNow;
             }
+
+            // A queued call is announced once per visit, and a known agent's connect arrives before
+            // app_queue's own report of it (OnQueueCallerConnected), so this is the announcement that
+            // carries the agent. A call the manager never saw join a queue is published as it always was.
+            PublishConnected(session, agentId);
         }
 
-        _events.OnNext(new CallConnectedEvent(
-            session.SessionId, session.ServerId, DateTimeOffset.UtcNow,
-            agentId, session.QueueName, session.WaitTime ?? TimeSpan.Zero));
+        _ = PersistAsync(session);
+    }
+
+    /// <summary>
+    /// app_queue connected a queue caller to a member (<c>AgentConnect</c>), whether or not the member is
+    /// an agent the SDK knows by name: the queue visit is answered. The caller is looked up by its own
+    /// channel, <paramref name="callerUniqueId"/>, which a <c>Linkedid</c> rewrite does not move.
+    /// <para>
+    /// Only a call the manager saw join a queue is acted on. For one it did not see join
+    /// (<see cref="CallSession.QueueName"/> unset), the queue's metrics never counted an offer, so
+    /// counting an answer would make answered exceed offered; such a call is announced, as it always was,
+    /// by a known agent's connect or by a bridge.
+    /// </para>
+    /// </summary>
+    private void OnQueueCallerConnected(string? callerUniqueId, string? memberName, string? memberInterface)
+    {
+        if (callerUniqueId is null || !_byChannelId.TryGetValue(callerUniqueId, out var session))
+            return;
+
+        lock (session.SyncRoot)
+        {
+            if (session.QueueName is null)
+                return;
+
+            session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
+                CallSessionEventType.AgentConnected, memberInterface, null, memberName));
+
+            if (session.TryTransition(CallSessionState.Connected))
+                session.ConnectedAt ??= DateTimeOffset.UtcNow;
+
+            PublishConnected(session, session.AgentId);
+        }
 
         _ = PersistAsync(session);
     }
@@ -892,7 +983,8 @@ public sealed partial class CallSessionManager : ICallSessionManager
         Action<AsteriskBridge> onBridgeDestroyed,
         Action<BridgeTransferInfo> onTransfer,
         Action<string, AsteriskQueueEntry> onCallerJoined,
-        Action<string, string?, string?> onAgentConnected)
+        Action<string, string?, string?> onAgentConnected,
+        Action<string?, string?, string?> onQueueCallerConnected)
     {
         public void Detach()
         {
@@ -908,6 +1000,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
             server.Bridges.TransferOccurred -= onTransfer;
             server.Queues.CallerJoined -= onCallerJoined;
             server.Agents.AgentConnected -= onAgentConnected;
+            server.Agents.QueueCallerConnected -= onQueueCallerConnected;
         }
     }
 }

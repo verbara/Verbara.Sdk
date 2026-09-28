@@ -12,8 +12,10 @@ using Verbara.Sdk.Sessions.Manager;
 namespace Verbara.Sdk.Sessions.FunctionalTests.Infrastructure;
 
 /// <summary>
-/// A clock that moves only when the test moves it. It stands in for the manager's release cutoff
-/// and nothing else: a session's own timestamps (<see cref="CallSession.CompletedAt"/> included)
+/// A clock that moves only when the test moves it. It stands in for the manager's clock seam: the
+/// release cutoff, and the two instants of a queue visit (the join and app_queue's connect, which
+/// stamp <see cref="CallQueuedEvent"/> and <see cref="CallConnectedEvent"/> and fix the
+/// queue-wait sample). A session's own timestamps (<see cref="CallSession.CompletedAt"/> included)
 /// still come from the wall clock.
 ///
 /// <para>It also reports two things about how it is used. <see cref="TimersCreated"/> counts the

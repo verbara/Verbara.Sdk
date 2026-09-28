@@ -112,6 +112,23 @@ public sealed class CallSession
         return true;
     }
 
+    /// <summary>
+    /// Whether the current queue visit has been announced: its <c>CallConnectedEvent</c> published. The
+    /// manager consults it only for a session whose <see cref="QueueName"/> is set, sets it when it
+    /// announces the visit, and clears it at each queue join, so a queued call is announced once per
+    /// visit whichever of app_queue's connect or a known agent's connect reaches it first. Written only
+    /// under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal bool QueueVisitAnnounced { get; set; }
+
+    /// <summary>
+    /// When the current queue visit opened: the instant the manager saw the call join its queue, read
+    /// from the manager's clock and reset at each join. The queue wait-time histogram records the visit's
+    /// wait from it. <c>null</c> when the manager never saw the join, as for a session restored from a
+    /// snapshot. Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal DateTimeOffset? QueueVisitStartedAt { get; set; }
+
     // State transitions (internal — only CallSessionManager drives transitions)
     internal bool TryTransition(CallSessionState newState)
     {
