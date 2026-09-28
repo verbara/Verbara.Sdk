@@ -265,7 +265,7 @@ All notable changes to this project will be documented in this file.
   tagged `buffer_full`. The `filter_rejected` tag the metric's documentation listed was never emitted
   and is no longer documented.
 
-### Fixed — BREAKING: a speech vendor that went silent after the end of input held the call (#339)
+### Fixed — BREAKING: a speech vendor that went silent after the end of input held the call (#346)
 
 - **The eight WebSocket speech clients fail when the vendor goes silent after the end of input.** The
   Deepgram, AssemblyAI, Cartesia and Speechmatics recognizers and the Cartesia, Deepgram, ElevenLabs and
