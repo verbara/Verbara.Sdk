@@ -38,7 +38,13 @@ public sealed class AmiConnectionOptions
     /// <summary>Default timeout waiting for event-generating action completion. Default: 5 seconds.</summary>
     public TimeSpan DefaultEventTimeout { get; set; } = TimeSpan.FromSeconds(5);
 
-    /// <summary>Enable automatic reconnection on disconnect. Default: true.</summary>
+    /// <summary>Enable automatic reconnection when the connection is lost. Default: true.</summary>
+    /// <remarks>
+    /// Only a loss the caller did not ask for starts a reconnect. A caller's
+    /// <see cref="IAmiConnection.DisconnectAsync"/> or <c>DisposeAsync</c> ends the connection, and reconnection
+    /// with it, including a reconnect in progress: its backoff delay or connect attempt is cut short, and nothing
+    /// is dialled afterwards.
+    /// </remarks>
     public bool AutoReconnect { get; set; } = true;
 
     /// <summary>Maximum reconnection attempts. 0 = unlimited. Default: 0.</summary>

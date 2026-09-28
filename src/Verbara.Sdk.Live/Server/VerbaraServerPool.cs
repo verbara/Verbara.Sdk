@@ -36,6 +36,13 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     /// <summary>
     /// Add a new Asterisk server to the pool, connect, and start tracking its state.
     /// </summary>
+    /// <remarks>
+    /// The pool creates the AMI connection and owns it together with the server:
+    /// <see cref="RemoveServerAsync"/> and <see cref="DisposeAsync"/> dispose both. If
+    /// <paramref name="serverId"/> is already in the pool, the server and the connection created for it are
+    /// disposed before the exception is thrown, and the server already held is left untouched.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">A server with <paramref name="serverId"/> is already in the pool.</exception>
     public async ValueTask<VerbaraServer> AddServerAsync(
         string serverId,
         AmiConnectionOptions options,
@@ -71,6 +78,14 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     /// Adds an already-connected VerbaraServer to the pool (for cluster failover).
     /// Subscribes to agent events for routing and indexes existing agents.
     /// </summary>
+    /// <remarks>
+    /// The pool takes ownership of the server and of the AMI connection behind it
+    /// (<see cref="VerbaraServer.Connection"/>): <see cref="RemoveServerAsync"/> and <see cref="DisposeAsync"/>
+    /// dispose both. Once the server has left the pool, its connection is disposed, so do not keep using it, and
+    /// do not hand the same connection in behind a second server. If <paramref name="serverId"/> is already in
+    /// the pool, the server is rejected, and both it and its connection stay the caller's, undisposed.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">A server with <paramref name="serverId"/> is already in the pool.</exception>
     public void AddExistingServer(string serverId, VerbaraServer server)
     {
         if (!_servers.TryAdd(serverId, server))
@@ -90,6 +105,13 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     /// <summary>
     /// Remove and disconnect a server from the pool.
     /// </summary>
+    /// <remarks>
+    /// Disposes the server, then the AMI connection behind it, whether the pool created that connection
+    /// (<see cref="AddServerAsync"/>) or it was handed in (<see cref="AddExistingServer"/>). The connection ends
+    /// for good: a reconnect in progress stops, and it does not log in again when Asterisk comes back. Awaited
+    /// from inside that connection's own event dispatch, such as an <c>OnEvent</c> handler, the removal completes
+    /// without waiting for that dispatch.
+    /// </remarks>
     public async ValueTask RemoveServerAsync(string serverId)
     {
         if (_servers.TryRemove(serverId, out var server))
@@ -126,6 +148,10 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     public VerbaraServer? GetServer(string serverId) =>
         _servers.GetValueOrDefault(serverId);
 
+    /// <summary>
+    /// Disposes every server in the pool and the AMI connection behind each, whether the pool created that
+    /// connection or it was handed in with <see cref="AddExistingServer"/>, then empties the pool.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         foreach (var server in _servers.Values)

@@ -823,6 +823,7 @@ public sealed class AmiConnection : IAmiConnection
         return OnEvent?.Invoke(evt) ?? ValueTask.CompletedTask;
     }
 
+    /// <inheritdoc />
     public async ValueTask DisconnectAsync(CancellationToken cancellationToken = default)
     {
         await EndAsync(byCaller: true, cancellationToken);
@@ -1023,6 +1024,29 @@ public sealed class AmiConnection : IAmiConnection
             await pumpReleased;
     }
 
+    /// <summary>
+    /// Ends the connection for good and releases it, as <see cref="DisconnectAsync"/> does: a reconnect in
+    /// progress stops wherever it is, nothing is dialled or logged in afterwards, and a later
+    /// <see cref="ConnectAsync"/> throws <see cref="ObjectDisposedException"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// If an ending is already under way, whether a <see cref="DisconnectAsync"/>, another
+    /// <see cref="DisposeAsync"/>, or the connection's own ending after a loss it does not reconnect from, this
+    /// call waits for that ending and returns only once its release has finished. A call made after the
+    /// connection has ended returns at once. <see cref="State"/> reads
+    /// <see cref="AmiConnectionState.Disconnected"/> only once the socket, the heartbeat, the reader loop and the
+    /// event pump have been released.
+    /// </para>
+    /// <para>
+    /// The one exception is a call made from inside the connection's own event dispatch: an
+    /// <see cref="OnEvent"/> handler that awaits it, an observer's <c>OnNext</c> that waits on it, or anything
+    /// they call or start from there, such as a server pool that removes this connection's server. That
+    /// dispatch is waiting for the call, so the call does not wait for it. It releases everything else,
+    /// reports <see cref="AmiConnectionState.Disconnected"/> and returns. The event pump dispatches no later
+    /// event, and stops once the calling dispatch returns.
+    /// </para>
+    /// </remarks>
     public async ValueTask DisposeAsync()
     {
         // Joins the ending in flight, or the one already finished, instead of reading State: an ending
