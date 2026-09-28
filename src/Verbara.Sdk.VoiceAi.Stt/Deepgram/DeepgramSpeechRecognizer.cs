@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.VoiceAi.Internal;
 using Verbara.Sdk.VoiceAi.Stt.Internal;
 using Microsoft.Extensions.Options;
 
@@ -72,8 +73,14 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
 
         var channel = System.Threading.Channels.Channel.CreateUnbounded<SpeechRecognitionResult>();
 
+        // Once the terminator is out, the vendor owes the final results and the close; this bounds
+        // how long it may stay silent before the session is reported as failed. Without it a vendor
+        // that never answered held the caller, and the pipeline above it, past the hangup (ADR-0050
+        // E2c). It runs on this client's clock, so a test moves it rather than waits it out.
+        using var silence = new EndOfInputSilenceBound(EndOfInputSilenceBound.Default, TimeProvider, ct);
+
         // Fire-and-forget: send audio frames to the server.
-        var sendTask = SendLoopAsync(ws, audioFrames, ct);
+        var sendTask = SendLoopAsync(ws, audioFrames, silence, ct);
 
         // Receive loop writes results to channel, then completes the writer — with the failure when
         // the session failed.
@@ -82,7 +89,7 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
         {
             try
             {
-                sawVendorFrame = await ReceiveLoopAsync(ws, channel.Writer, ProviderName, ct)
+                sawVendorFrame = await ReceiveLoopAsync(ws, channel.Writer, ProviderName, silence, ct)
                     .ConfigureAwait(false);
                 channel.Writer.TryComplete();
             }
@@ -116,6 +123,7 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
     private static async Task SendLoopAsync(
         ClientWebSocket ws,
         IAsyncEnumerable<ReadOnlyMemory<byte>> frames,
+        EndOfInputSilenceBound silence,
         CancellationToken ct)
     {
         try
@@ -135,8 +143,11 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
             // the other three rather than left as the one site whose measured equivalence a later
             // reader would have to rediscover before daring to touch it.
             if (ws.State == WebSocketState.Open)
+            {
                 await ws.SendAsync(CloseStreamFrame, WebSocketMessageType.Text, true, ct)
                     .ConfigureAwait(false);
+                silence.Arm();
+            }
         }
         catch (OperationCanceledException) { /* the caller's own instruction — not a failure (ADR-0050 E6) */ }
         catch (WebSocketException) { /* the receive loop reports why the session died (ADR-0050 E1) */ }
@@ -152,6 +163,7 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
         ClientWebSocket ws,
         System.Threading.Channels.ChannelWriter<SpeechRecognitionResult> writer,
         string provider,
+        EndOfInputSilenceBound silence,
         CancellationToken ct)
     {
         var buf = new byte[65536];
@@ -165,8 +177,11 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
             ValueWebSocketReceiveResult result;
             try
             {
-                result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
+                result = await ws.ReceiveAsync(buf.AsMemory(), silence.Token).ConfigureAwait(false);
             }
+            // The vendor went silent after the terminator and never closed: the result is incomplete
+            // (ADR-0050 E2c). Placed before the caller's arm, which it must not absorb.
+            catch (OperationCanceledException) when (silence.Expired) { throw silence.ToFailure(provider); }
             // Cancellation is the caller's own instruction and never a provider failure
             // (ADR-0050 E6).
             catch (OperationCanceledException) { break; }
@@ -192,6 +207,7 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
             }
 
             sawVendorFrame = true;
+            silence.Heard();
             if (result.MessageType != WebSocketMessageType.Text) continue;
 
             var json = System.Text.Encoding.UTF8.GetString(buf, 0, result.Count);

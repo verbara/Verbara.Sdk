@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.VoiceAi.Internal;
 using Verbara.Sdk.VoiceAi.Stt.Internal;
 using Microsoft.Extensions.Options;
 
@@ -107,8 +108,13 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
 
         var channel = Channel.CreateUnbounded<SpeechRecognitionResult>();
 
+        // Bounds the vendor's silence once `Terminate` is out: a vendor that never answers it no longer
+        // holds the caller, and the pipeline above it, past the hangup (ADR-0050 E2c). It runs on this
+        // client's clock, so a test moves it rather than waits it out.
+        using var silence = new EndOfInputSilenceBound(EndOfInputSilenceBound.Default, TimeProvider, ct);
+
         // Fire-and-forget: stream audio to the server as binary WebSocket messages.
-        var sendTask = SendLoopAsync(ws, audioFrames, wireFormat, ct);
+        var sendTask = SendLoopAsync(ws, audioFrames, wireFormat, silence, ct);
 
         // Receive loop writes transcripts to channel, then completes the writer — with the failure
         // when the session failed.
@@ -117,7 +123,7 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
         {
             try
             {
-                sawVendorFrame = await ReceiveLoopAsync(ws, channel.Writer, ProviderName, ct)
+                sawVendorFrame = await ReceiveLoopAsync(ws, channel.Writer, ProviderName, silence, ct)
                     .ConfigureAwait(false);
                 channel.Writer.TryComplete();
             }
@@ -174,6 +180,7 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
         ClientWebSocket ws,
         IAsyncEnumerable<ReadOnlyMemory<byte>> frames,
         AudioFormat format,
+        EndOfInputSilenceBound silence,
         CancellationToken ct)
     {
         var floorBytes = format.BytesPerFrame(MinMessageDuration);
@@ -245,8 +252,11 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
             // 0/10 again. So the half-close is not supplemented here, it is removed — a client
             // that sends it loses the transcript it was waiting for.
             if (ws.State == WebSocketState.Open)
+            {
                 await ws.SendAsync(TerminateFrame, WebSocketMessageType.Text, true, ct)
                     .ConfigureAwait(false);
+                silence.Arm();
+            }
         }
         catch (OperationCanceledException) { /* the caller's own instruction — not a failure (ADR-0050 E6) */ }
         catch (WebSocketException) { /* the receive loop reports why the session died (ADR-0050 E1) */ }
@@ -266,6 +276,7 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
         ClientWebSocket ws,
         ChannelWriter<SpeechRecognitionResult> writer,
         string provider,
+        EndOfInputSilenceBound silence,
         CancellationToken ct)
     {
         var buf = new byte[65536];
@@ -279,8 +290,11 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
             ValueWebSocketReceiveResult result;
             try
             {
-                result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
+                result = await ws.ReceiveAsync(buf.AsMemory(), silence.Token).ConfigureAwait(false);
             }
+            // The vendor went silent after the end of input and never ended the session: the result
+            // is incomplete (ADR-0050 E2c). Placed before the caller's arm, which it must not absorb.
+            catch (OperationCanceledException) when (silence.Expired) { throw silence.ToFailure(provider); }
             // Cancellation is the caller's own instruction and never a provider failure
             // (ADR-0050 E6).
             catch (OperationCanceledException) { break; }
@@ -307,6 +321,7 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
             }
 
             sawVendorFrame = true;
+            silence.Heard();
             if (result.MessageType != WebSocketMessageType.Text) continue;
 
             var json = Encoding.UTF8.GetString(buf, 0, result.Count);

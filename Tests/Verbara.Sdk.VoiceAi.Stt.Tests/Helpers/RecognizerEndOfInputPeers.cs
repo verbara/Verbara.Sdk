@@ -89,29 +89,44 @@ internal static class RecognizerEndOfInputPeers
         _ => throw new ArgumentOutOfRangeException(nameof(client), client, null),
     };
 
-    /// <summary>The recognizer <paramref name="client"/> names, pointed at a peer on <paramref name="port"/>.</summary>
-    public static SpeechRecognizer CreateRecognizer(string client, int port) => client switch
+    /// <summary>
+    /// The recognizer <paramref name="client"/> names, pointed at a peer on <paramref name="port"/>,
+    /// with its bounds on <paramref name="clock"/> (<see cref="TimeProvider.System"/> when none is given).
+    /// </summary>
+    public static SpeechRecognizer CreateRecognizer(string client, int port, TimeProvider? clock = null) => client switch
     {
         "Deepgram" => new DeepgramSpeechRecognizer(Options.Create(new DeepgramOptions
         {
             ApiKey = "test-key",
             BaseUri = $"ws://127.0.0.1:{port}/v1/listen",
-        })),
+        }))
+        {
+            TimeProvider = clock ?? TimeProvider.System,
+        },
         "AssemblyAI" => new AssemblyAiSpeechRecognizer(Options.Create(new AssemblyAiOptions
         {
             ApiKey = "test-key",
             BaseUri = $"ws://127.0.0.1:{port}/v3/ws",
-        })),
+        }))
+        {
+            TimeProvider = clock ?? TimeProvider.System,
+        },
         "Cartesia" => new CartesiaSpeechRecognizer(Options.Create(new CartesiaOptions
         {
             ApiKey = "test-key",
             BaseUri = $"ws://127.0.0.1:{port}/stt/websocket",
-        })),
+        }))
+        {
+            TimeProvider = clock ?? TimeProvider.System,
+        },
         "Speechmatics" => new SpeechmaticsSpeechRecognizer(Options.Create(new SpeechmaticsOptions
         {
             ApiKey = "test-key",
             BaseUri = $"ws://127.0.0.1:{port}/v2",
-        })),
+        }))
+        {
+            TimeProvider = clock ?? TimeProvider.System,
+        },
         _ => throw new ArgumentOutOfRangeException(nameof(client), client, null),
     };
 
