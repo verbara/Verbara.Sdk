@@ -64,6 +64,9 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     // Settable by tests (via InternalsVisibleTo) to redirect to a local fake server.
     internal Uri BaseUri { get; set; } = DefaultBaseUri;
 
+    // Settable by tests (via InternalsVisibleTo) to run the session's time bounds on a manual clock.
+    internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
+
     /// <summary>Observable stream of Realtime bridge events from all active sessions.</summary>
     public IObservable<RealtimeEvent> Events => _events;
 
