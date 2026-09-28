@@ -180,8 +180,14 @@ public sealed class AriOutboundListener : IAriOutboundListener
             {
                 var client = await AcceptAsync(ct);
                 backoff = InitialAcceptBackoff;
-                client.NoDelay = true;
 
+                // Nothing runs between the accept and the hand-off, not even configuring the socket.
+                // Anything that can fail for this one connection fails in the handler, which closes it
+                // and reports it as that connection's error. Here it would reach the catches below,
+                // which classify by type only: a SocketException would be logged as an accept failure
+                // and backed off for, with the socket left open, and an ObjectDisposedException would
+                // end the loop as if the listener had been stopped.
+                //
                 // CancellationToken.None on the hand-off, and deliberately so: this work item carries
                 // the only reference to a connection already accepted, and a Task.Run token that
                 // skipped it would leave that connection with no owner and nothing to close it. `ct`
@@ -256,10 +262,18 @@ public sealed class AriOutboundListener : IAriOutboundListener
         // now satisfied literally rather than approximately: one dispose site instead of three.
         using (client)
         {
-            var remoteEndpoint = client.Client.RemoteEndPoint?.ToString() ?? "unknown";
+            var remoteEndpoint = "unknown";
             NetworkStream? stream = null;
             try
             {
+                // Reading the endpoint and configuring the socket are part of serving this connection,
+                // so they run inside this try, where a failure is reported as this connection's error
+                // and the `using` closes it. Both can throw: a socket that is already closed throws
+                // ObjectDisposedException from the endpoint read, and one that rejects the option
+                // throws SocketException. The endpoint is read first, so the error line names the peer
+                // whenever the socket can still say who it is.
+                remoteEndpoint = client.Client.RemoteEndPoint?.ToString() ?? "unknown";
+                client.NoDelay = true;
                 stream = client.GetStream();
 
                 var upgradeRequest = await ReadUpgradeRequestAsync(stream, ct);

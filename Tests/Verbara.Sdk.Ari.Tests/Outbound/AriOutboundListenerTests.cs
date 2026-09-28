@@ -6,7 +6,9 @@ using System.Reactive.Linq;
 using System.Text;
 using Verbara.Sdk;
 using Verbara.Sdk.Ari.Outbound;
+using Verbara.Sdk.Ari.Tests.TestSupport;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -619,6 +621,163 @@ public sealed class AriOutboundListenerTests
             "the stop ran to the end rather than being left behind by a loop still waiting");
     }
 
+    // ------------------------------------- a connection whose configuration fails after the accept
+
+    [Fact]
+    public async Task AcceptLoopAsync_ShouldCloseTheAcceptedSocket_WhenConfiguringItThrows()
+    {
+        // Arrange — the accept seam hands over a client whose socket is a UDP socket, so setting
+        // TCP_NODELAY on it throws a SocketException (setsockopt answers ENOPROTOOPT) while the socket
+        // is still open. The clock is fake and never moves. A loop that takes the failure for an
+        // accept failure asks it for a backoff timer, and that timer is the signal the test ends on
+        // in that case; otherwise the handler releasing the client is.
+        var time = new FakeTimeProvider();
+        var logger = new CapturingLogger();
+        var (listener, _) = CreateListener(logger: logger, timeProvider: time);
+        using var accepted = AcceptedClients.UdpBacked();
+        using var client = new ReleaseSignallingClient(accepted.Socket);
+        var attempts = 0;
+        listener.AcceptOverride = token => Interlocked.Increment(ref attempts) == 1
+            ? ValueTask.FromResult<TcpClient>(client)
+            : AcceptedClients.ParkUntilCancelledAsync(token);
+        var backoffRequested = time.TimersCreated.ReadAsync().AsTask();
+
+        await listener.StartAsync();
+        try
+        {
+            // Act
+            await Task.WhenAny(client.Released, backoffRequested).WaitAsync(SignalTimeout);
+
+            // Assert
+            using (new AssertionScope())
+            {
+                accepted.IsSocketClosed.Should().BeTrue(
+                    "a connection the loop accepted and could not configure is closed, not leaked; the " +
+                    "listener logged [{0}]",
+                    Describe(logger));
+                logger.Entries.Should().ContainSingle(
+                    entry => entry.Level == LogLevel.Error
+                        && entry.EventName == "ConnectionError"
+                        && entry.ExceptionType == nameof(SocketException),
+                    "the failure belongs to that one connection, so it is reported once as its error");
+                logger.Entries.Should().NotContain(
+                    entry => entry.EventName == "AcceptLoopFailed",
+                    "no accept failed: the accept returned a connection, and configuring it is serving it");
+                listener.IsRunning.Should().BeTrue("one connection failing is not the listener failing");
+            }
+        }
+        finally
+        {
+            await listener.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task AcceptLoopAsync_ShouldKeepAccepting_WhenConfiguringAnAcceptedClientThrowsObjectDisposed()
+    {
+        // Arrange — the accept seam hands over a client whose socket is already disposed, so setting
+        // TCP_NODELAY on it throws an ObjectDisposedException: the type the loop reads as its own
+        // listener's stop. The second accept is the signal. A loop that ends on the first connection
+        // never makes it, so in that case only the bound ends the wait.
+        var logger = new CapturingLogger();
+        var (listener, _) = CreateListener(logger: logger, timeProvider: new FakeTimeProvider());
+        using var accepted = AcceptedClients.DisposedSocket();
+        using var client = new ReleaseSignallingClient(accepted.Socket);
+        var attempts = 0;
+        var secondAttempt = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        listener.AcceptOverride = token =>
+        {
+            if (Interlocked.Increment(ref attempts) == 1)
+                return ValueTask.FromResult<TcpClient>(client);
+
+            secondAttempt.TrySetResult();
+            return AcceptedClients.ParkUntilCancelledAsync(token);
+        };
+
+        await listener.StartAsync();
+        try
+        {
+            // Act
+            var nextAccept = () => secondAttempt.Task;
+            await nextAccept.Should().CompleteWithinAsync(
+                SignalTimeout,
+                "one connection's closed socket is not the listener's stop, so the loop accepts again");
+            await client.Released.WaitAsync(SignalTimeout);
+
+            // Assert
+            using (new AssertionScope())
+            {
+                listener.IsRunning.Should().BeTrue("the listener is still bound and still accepting");
+                logger.Entries.Should().ContainSingle(
+                    entry => entry.Level == LogLevel.Error
+                        && entry.EventName == "ConnectionError"
+                        && entry.ExceptionType == nameof(ObjectDisposedException),
+                    "the failure belongs to that one connection, so it is reported once as its error; " +
+                    "the listener logged [{0}]",
+                    Describe(logger));
+                logger.Entries.Should().NotContain(
+                    entry => entry.EventName == "AcceptLoopFailed",
+                    "no accept failed");
+            }
+        }
+        finally
+        {
+            await listener.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task AcceptLoopAsync_ShouldAcceptTheNextConnectionWithoutWaiting_WhenConfiguringOneFails()
+    {
+        // Arrange — the configure fails with a SocketException, the type the loop backs off for when an
+        // accept fails. The clock is fake and never moves, so a backoff would park the loop for good,
+        // and the timer it asks for is the signal the test ends on in that case. Otherwise the next
+        // accept is.
+        var time = new FakeTimeProvider();
+        var logger = new CapturingLogger();
+        var (listener, _) = CreateListener(logger: logger, timeProvider: time);
+        using var accepted = AcceptedClients.UdpBacked();
+        using var client = new ReleaseSignallingClient(accepted.Socket);
+        var attempts = 0;
+        var secondAttempt = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        listener.AcceptOverride = token =>
+        {
+            if (Interlocked.Increment(ref attempts) == 1)
+                return ValueTask.FromResult<TcpClient>(client);
+
+            secondAttempt.TrySetResult();
+            return AcceptedClients.ParkUntilCancelledAsync(token);
+        };
+        var backoffRequested = time.TimersCreated.ReadAsync().AsTask();
+
+        await listener.StartAsync();
+        try
+        {
+            // Act
+            await Task.WhenAny(secondAttempt.Task, backoffRequested).WaitAsync(SignalTimeout);
+
+            // Assert — the loop requests a backoff timer before its next accept, never after it, so
+            // at the moment of the next accept, no timer means none was requested
+            using (new AssertionScope())
+            {
+                secondAttempt.Task.IsCompleted.Should().BeTrue(
+                    "no accept failed, so there is nothing to wait out before the next one; attempts = " +
+                    "{0}, the listener logged [{1}]",
+                    Volatile.Read(ref attempts),
+                    Describe(logger));
+                backoffRequested.IsCompleted.Should().BeFalse("one connection's failure costs the next one no wait");
+                logger.Entries.Should().NotContain(
+                    entry => entry.EventName == "AcceptLoopFailed",
+                    "no accept failed");
+                listener.IsRunning.Should().BeTrue();
+            }
+        }
+        finally
+        {
+            await listener.DisposeAsync();
+        }
+    }
+
     // ------------------------------------------------ a connection that fails after it was accepted
 
     [Fact]
@@ -796,6 +955,11 @@ public sealed class AriOutboundListenerTests
                 entry => entry.EventName == "ConnectionError",
                 "a handshake cut short by the listener stopping is the stop, not a connection " +
                 "error, so it is swallowed rather than reported");
+
+            // StopAsync returned only after the loop ended, so anything the loop logs is already here
+            logger.Entries.Should().NotContain(
+                entry => entry.EventName == "AcceptLoopFailed",
+                "the accept the loop was parked on ended with the stop, which is not an accept failure");
             logger.Entries.Should().Contain(
                 entry => entry.EventName == "ListenerStopped",
                 "the stop ran to the end");
@@ -857,6 +1021,37 @@ public sealed class AriOutboundListenerTests
     /// <summary>The next timer created on <paramref name="time"/>, as soon as it exists.</summary>
     private static Task<FakeTimeProvider.FakeTimer> NextTimerAsync(FakeTimeProvider time) =>
         time.TimersCreated.ReadAsync().AsTask().WaitAsync(SignalTimeout);
+
+    /// <summary>What the listener logged so far, for a failure message.</summary>
+    private static string Describe(CapturingLogger logger) =>
+        string.Join(", ", logger.Entries.Select(entry => $"{entry.Level}:{entry.EventName}({entry.ExceptionType})"));
+
+    /// <summary>
+    /// A client around a socket an accept fixture built, that completes <see cref="Released"/> when its
+    /// owner disposes it. For this listener that is the last thing the handler does, in the
+    /// <c>using (client)</c> it opens with, so it comes after anything the handler logs.
+    /// </summary>
+    private sealed class ReleaseSignallingClient : TcpClient
+    {
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ReleaseSignallingClient(Socket socket)
+            : base(AddressFamily.InterNetwork)
+        {
+            var unused = Client;
+            Client = socket;
+            unused.Dispose();
+        }
+
+        public Task Released => _released.Task;
+
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            if (disposing)
+                _released.TrySetResult();
+        }
+    }
 
     /// <summary>A listener log entry, reduced to what these tests assert on.</summary>
     private sealed record LogEntry(LogLevel Level, string? EventName, string? ExceptionType);
