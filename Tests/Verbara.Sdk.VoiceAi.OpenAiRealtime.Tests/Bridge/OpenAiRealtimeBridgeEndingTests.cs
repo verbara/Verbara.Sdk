@@ -348,14 +348,16 @@ public sealed class OpenAiRealtimeBridgeEndingTests
             using var forwarded = new RealtimeEventCollector(
                 bridge.Events, e => e.OfType<RealtimeTranscriptEvent>().Any(t => t.Transcript == lateFrame));
 
-            var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
+            var sessionTask = receive.Watch(
+                () => bridge.HandleSessionAsync(session, CancellationToken.None).AsTask());
             await fakeOpenAi.SessionUpdateReceived.WaitAsync(SignalTimeout);
             await fakeOpenAi.SendEventAsync(LoopsRunningMarkerEvent);
             await loopsRunning.Satisfied.WaitAsync(SignalTimeout);
             var armedDue = await HangUpAndWaitForTheArmAsync(client, fakeOpenAi, clock);
 
             // Act: the vendor sends one more frame, and the whole bound passes inside the read that
-            // returns it
+            // returns it. The bridge has read every frame sent before this one: session.created went
+            // out ahead of the marker, and the marker is published.
             receive.Arm(() => clock.Advance(CloseAnswerBound));
             await fakeOpenAi.SendEventAsync(
                 $$"""{"type":"response.output_audio_transcript.delta","delta":"{{lateFrame}}"}""");
@@ -1126,15 +1128,30 @@ public sealed class OpenAiRealtimeBridgeEndingTests
     /// test using this also checks what the hook was for, and fails if it stops being true.
     /// </para>
     /// <para>
-    /// Only the first such event after <see cref="Arm"/> runs the action. The listener hears every
-    /// WebSocket in the process. When the test arms it, the fake's own reads have ended at the client's
-    /// close, so the bridge's pending read is the only one left. <see cref="ReceivesStartedAfterwards"/>
-    /// counts the reads begun once the action has run.
+    /// Only the reads of the session started through <see cref="Watch"/> count, and of those the first
+    /// to end after <see cref="Arm"/> runs the action. The listener hears every WebSocket in the process,
+    /// so the session's reads are told apart by the execution context <see cref="Watch"/> marks, which
+    /// each read carries into the events it writes. The test also sees to it that the read ending first
+    /// is the one holding its frame: the bridge has read every frame the fake sent before the arm.
+    /// </para>
+    /// <para>
+    /// A CI run once failed with the action run in another read: the bound ran out before the frame
+    /// was read, so the frame was never forwarded, while every other assertion held. Two routes
+    /// reproduce that failure exactly. One is another socket's read ending after the arm. The other is
+    /// the bridge reading <c>session.created</c> after the arm, because the fake, descheduled between
+    /// starting its receive loop and sending <c>session.created</c>, let the test's frames overtake it;
+    /// the fake now sends it before its receive loop starts.
+    /// </para>
+    /// <para>
+    /// <see cref="ReceivesStartedAfterwards"/> counts the session's reads begun once the action has run.
     /// </para>
     /// </remarks>
     private sealed class WebSocketReceiveHook : EventListener
     {
         private const string SourceName = "Private.InternalDiagnostics.System.Net.WebSockets";
+
+        /// <summary>True in the execution context <see cref="Watch"/> starts the session in, and so in its reads.</summary>
+        private readonly AsyncLocal<bool> _watched = new();
 
         private readonly TaskCompletionSource _fired = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private Action? _action;
@@ -1143,8 +1160,26 @@ public sealed class OpenAiRealtimeBridgeEndingTests
         /// <summary>Completes once the action has run inside a read; faults if the action threw.</summary>
         public Task Fired => _fired.Task;
 
-        /// <summary>How many reads began after the action ran.</summary>
+        /// <summary>How many of the watched session's reads began after the action ran.</summary>
         public int ReceivesStartedAfterwards => Volatile.Read(ref _receivesStartedAfterwards);
+
+        /// <summary>
+        /// Starts the session whose reads this hook watches. Every read the session issues runs in the
+        /// execution context marked here; the caller's own context is left unmarked, so the frames the
+        /// test sends through the fake afterwards are not the session's.
+        /// </summary>
+        public Task Watch(Func<Task> startSession)
+        {
+            _watched.Value = true;
+            try
+            {
+                return startSession();
+            }
+            finally
+            {
+                _watched.Value = false;
+            }
+        }
 
         public void Arm(Action action) => Volatile.Write(ref _action, action);
 
@@ -1156,6 +1191,10 @@ public sealed class OpenAiRealtimeBridgeEndingTests
 
         protected override void OnEventWritten(EventWrittenEventArgs eventData)
         {
+            // Another socket's read, or anything else outside the watched session.
+            if (!_watched.Value)
+                return;
+
             if (_fired.Task.IsCompleted)
             {
                 if (eventData.EventName == "ReceiveStart")

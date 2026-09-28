@@ -184,7 +184,8 @@ internal sealed class RealtimeFakeServer : IAsyncDisposable
 
     /// <summary>
     /// Completes once the client's <c>session.update</c> frame has been captured — the join point a
-    /// test waits on instead of guessing a delay.
+    /// test waits on instead of guessing a delay. By then <c>session.created</c> is on the wire, so a
+    /// frame the test sends afterwards reaches the client behind it.
     /// </summary>
     public Task SessionUpdateReceived => _sessionUpdateReceived.Task;
 
@@ -429,9 +430,13 @@ internal sealed class RealtimeFakeServer : IAsyncDisposable
         _transport = session.Transport;
         _socket = ws;
 
-        var receiveTask = StartReceiveLoopAsync(ws, ct);
-
+        // session.created goes out before the receive loop starts, and so before SessionUpdateReceived
+        // can complete: whatever a test sends once it has seen session.update reaches the client behind
+        // session.created, as it does from the live vendor. With the loop started first, a handler
+        // descheduled between the two let a test's frames overtake session.created on the wire.
         await SendJsonAsync(ws, """{"type":"session.created","session":{}}""", ct).ConfigureAwait(false);
+
+        var receiveTask = StartReceiveLoopAsync(ws, ct);
 
         // Answer only once the client's session.update has arrived. The 30 ms delay this replaces
         // was the whole synchronisation behind HandleSessionAsync_SendsSessionUpdate_OnConnect:
