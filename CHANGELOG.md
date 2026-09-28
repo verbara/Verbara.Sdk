@@ -67,6 +67,27 @@ All notable changes to this project will be documented in this file.
   URI, not one per call. A server that was over-admitting after such an ending now refuses at its
   configured limit. No public API changes.
 
+### Fixed — a transport failure under an AudioSocket session looked like a hangup, and one accepted connection's failure could leak it or stop its server accepting (#337)
+
+- **A transport failure under a live ARI AudioSocket session is logged and counted.** The session
+  swallowed an `IOException` from its socket, so a connection reset mid-call and a normal hangup
+  produced the same `Connected → Disconnected` sequence with no log and no metric. The session now logs
+  the failure at Warning and counts it on `audio.transport.failures` (meter `Verbara.Sdk.Ari.Audio`).
+  It still ends as `Disconnected`, so a consumer that handles the ending sees no change.
+- **An accepted connection whose setup fails is closed and reported as that connection's error.** In
+  the ARI outbound listener, the ARI AudioSocket and WebSocket audio servers and the FastAGI server,
+  configuring an accepted socket ran in the accept loop, and in the AudioSocket and FastAGI servers so
+  did taking its stream. A connection that failed there leaked its socket, or ended the accept loop for
+  every later caller, because the loop read its `ObjectDisposedException` as the server's own stop. The
+  setup now runs in the connection's handler, which closes the connection and reports it as a
+  connection error; only the server's stop ends the loop. In FastAGI such a connection is not counted
+  as a failed script, and not as an accepted connection.
+- **`IAriOutboundListener.ActiveConnectionCount` no longer counts a connection an observer rejected.**
+  An `OnConnectionAccepted` observer that threw left the closed connection counted; the listener now
+  releases it and removes it from the count.
+- These are guarantees for a socket that fails, not a report of an outage: no natural trigger was found
+  on Linux (0 of 60 attempts), and every red run used a socket built to fail.
+
 ### Fixed — BREAKING: an AMI heartbeat timeout hung the connection instead of reconnecting (#327)
 
 - **A Ping left unanswered past `HeartbeatTimeout` now ends the connection the way a peer-side close
