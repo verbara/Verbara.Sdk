@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.Metrics;
 using System.Reactive.Subjects;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Agents;
@@ -36,6 +37,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
     private readonly SessionStoreBase _store;
     private readonly ILogger<CallSessionManager> _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly Meter _residencyMeter;
     private CancellationToken _shutdownToken;
 
     public CallSessionManager(
@@ -64,7 +66,17 @@ public sealed partial class CallSessionManager : ICallSessionManager
         _store = store;
         _timeProvider = timeProvider;
         _correlator = new SessionCorrelator(_options);
+        _residencyMeter = SessionMetrics.CreateResidencyMeter(
+            active: () => CountHeld(ended: false),
+            retained: () => CountHeld(ended: true));
     }
+
+    /// <summary>
+    /// The meter this manager publishes its resident counts on (<c>sessions.active</c>,
+    /// <c>sessions.retained</c>), disposed with the manager. Every manager has its own under the
+    /// <c>Verbara.Sdk.Sessions</c> name; a test picks this manager's gauges out by it.
+    /// </summary>
+    internal Meter ResidencyMeter => _residencyMeter;
 
     /// <summary>
     /// Sets the token <em>every</em> persistence call runs under, not only the ones at shutdown.
@@ -117,10 +129,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
     public IObservable<SessionDomainEvent> Events => _events;
 
-    public IEnumerable<CallSession> ActiveSessions => _sessions.Values
-        .Where(s => s.State is not CallSessionState.Completed
-            and not CallSessionState.Failed
-            and not CallSessionState.TimedOut);
+    public IEnumerable<CallSession> ActiveSessions => _sessions.Values.Where(s => !HasEnded(s));
 
     public CallSession? GetById(string sessionId) => _sessions.GetValueOrDefault(sessionId);
     public CallSession? GetByLinkedId(string linkedId) => _byLinkedId.GetValueOrDefault(linkedId);
@@ -133,9 +142,47 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
     public IEnumerable<CallSession> GetRecentCompleted(int count = 100) =>
         _sessions.Values
-            .Where(s => s.State is CallSessionState.Completed or CallSessionState.Failed or CallSessionState.TimedOut)
+            .Where(HasEnded)
             .OrderByDescending(s => s.CompletedAt)
             .Take(count);
+
+    /// <summary>
+    /// Whether <paramref name="session"/> is in a terminal state. The one split between the calls this
+    /// manager holds in progress and the ended ones it still holds: <see cref="ActiveSessions"/>,
+    /// <see cref="GetRecentCompleted"/> and the resident-count gauges all read it.
+    /// </summary>
+    private static bool HasEnded(CallSession session) =>
+        session.State is CallSessionState.Completed or CallSessionState.Failed or CallSessionState.TimedOut;
+
+    /// <summary>
+    /// How many sessions this manager holds that have ended (<paramref name="ended"/>) or have not —
+    /// the values of the <c>sessions.retained</c> and <c>sessions.active</c> gauges.
+    /// <para>
+    /// The ended count is of the sessions held, not of the release queue's entries. The queue holds
+    /// the ended calls whose release is pending, and some ended calls are held with no entry: one the
+    /// timeout sweep ended while its legs were still up, and whose legs are never seen to leave; one
+    /// whose entry carried no completion time and was dropped with the call kept; one registered
+    /// already ended. A count of the queue would report those released while the process keeps them
+    /// — a bound that looks as if it works while the memory stays held, which is what these gauges
+    /// exist to show (<c>ADR-0063</c>).
+    /// </para>
+    /// <para>
+    /// One pass over the held sessions, which takes no lock and copies nothing (unlike
+    /// <c>_sessions.Values</c>). It runs only when a listener collects the gauges, never on a call's
+    /// path.
+    /// </para>
+    /// </summary>
+    private long CountHeld(bool ended)
+    {
+        var count = 0L;
+        foreach (var held in _sessions)
+        {
+            if (HasEnded(held.Value) == ended)
+                count++;
+        }
+
+        return count;
+    }
 
     public void AttachToServer(VerbaraServer server, string serverId)
     {
@@ -746,6 +793,10 @@ public sealed partial class CallSessionManager : ICallSessionManager
             DetachFromServer(serverId);
         _events.OnCompleted();
         _events.Dispose();
+
+        // Withdraws the gauges. Their callbacks hold this manager, and a meter stays published until it
+        // is disposed, so an undisposed one would keep every call the manager held reachable.
+        _residencyMeter.Dispose();
         return ValueTask.CompletedTask;
     }
 

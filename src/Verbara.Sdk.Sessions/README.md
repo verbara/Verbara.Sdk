@@ -10,6 +10,7 @@ Session Engine for the Verbara.Sdk ecosystem. Provides call session correlation,
 - **Domain Events** - Observable stream of CallStarted, CallConnected, CallQueued, CallHeld, CallEnded, CallFailed events
 - **Extension Points** - Abstract base classes for custom routing (CallRouterBase), agent selection (AgentSelectorBase), and persistence (SessionStoreBase)
 - **SessionMetrics** - System.Diagnostics.Metrics counters for sessions created, completed, failed, timed out
+- **Resident-count gauges** - `sessions.active` (calls in progress) and `sessions.retained` (ended calls still held), published by each `CallSessionManager` under the `Verbara.Sdk.Sessions` meter name and withdrawn when it is disposed
 
 ## Quick Start
 
