@@ -38,7 +38,13 @@ public sealed class SynthesizerEndOfInputPeersTests
         // Act
         await peer.EndOfInputSeen.WaitAsync(SignalTimeout);
         await peer.SendFrameAsync().WaitAsync(SignalTimeout);
-        await peer.AnswerAsync().WaitAsync(SignalTimeout);
+
+        // The answer request's own outcome is not asserted. Cartesia, Deepgram and LMNT end on the
+        // vendor's terminal frame and drop the connection at once, which can beat the peer's close
+        // frame: the request then faults with the session's ending although everything the
+        // synthesizer needed arrived. A terminal frame that never arrived shows as the stream not
+        // completing below.
+        _ = await Record.ExceptionAsync(() => peer.AnswerAsync().WaitAsync(SignalTimeout));
         await run.WaitAsync(SignalTimeout);
 
         // Assert — the frame sent on the end of input and the progress round
