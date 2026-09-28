@@ -3,8 +3,16 @@ using System.IO.Pipelines;
 using System.Reactive.Subjects;
 using System.Text;
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
+using Verbara.Sdk.Ari.Diagnostics;
 
 namespace Verbara.Sdk.Ari.Audio;
+
+internal static partial class AudioSocketSessionLog
+{
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AudioSocket] Transport failed under a live session, which ends as Disconnected: channel_id={ChannelId}")]
+    public static partial void TransportFailed(ILogger logger, Exception exception, string channelId);
+}
 
 /// <summary>
 /// A single AudioSocket connection. Read pump parses frames via AudioSocketProtocol,
@@ -17,6 +25,8 @@ internal sealed class AudioSocketSession : IAudioStream
     private readonly BehaviorSubject<AudioStreamState> _state = new(AudioStreamState.Connecting);
     private readonly Channel<ReadOnlyMemory<byte>> _audioInChannel;
     private readonly CancellationTokenSource _cts = new();
+    private readonly ILogger _logger;
+    private Exception? _transportFailure;
     private Task? _readPumpTask;
     private Task? _pipeFillTask;
     private volatile bool _disposed;
@@ -27,9 +37,17 @@ internal sealed class AudioSocketSession : IAudioStream
     public bool IsConnected => !_disposed && _state.Value == AudioStreamState.Connected;
     public IObservable<AudioStreamState> StateChanges => _state;
 
-    internal AudioSocketSession(Stream stream, string format)
+    /// <param name="stream">The connection's stream, read until it ends.</param>
+    /// <param name="format">The audio format the connection carries.</param>
+    /// <param name="logger">
+    /// Where a transport failure under a live session is reported. Required, not optional: a call
+    /// site that forgot it would compile and silently lose the only line that tells a reset from a
+    /// hangup. The server passes its own logger, so the line carries the server's category.
+    /// </param>
+    internal AudioSocketSession(Stream stream, string format, ILogger logger)
     {
         _stream = stream;
+        _logger = logger;
         Format = format;
         SampleRate = FormatToSampleRate(format);
 
@@ -83,9 +101,23 @@ internal sealed class AudioSocketSession : IAudioStream
             // on the other end of the pipe finish instead of waiting for bytes that stopped coming.
             /* Best effort — the session is being disposed */
         }
-        catch (IOException) { }
+        catch (IOException ex)
+        {
+            // The transport failed: the connection was reset, or the read otherwise broke. It is
+            // recorded here and reported where the session ends, not here, because only the read
+            // pump knows whether this ended a live session: a connection that never identified
+            // itself is no session, and a hangup frame already read ahead of the failure has ended
+            // the session as a hangup. The write happens before the writer is completed below, and
+            // the read pump reads it only after the pipe reports that completion, so it sees it.
+            Volatile.Write(ref _transportFailure, ex);
+        }
         finally
         {
+            // Completed without the exception on purpose: completing it with one would make the read
+            // pump's next read throw instead of returning what is still buffered in the pipe. The
+            // reader runs inline on each flush, so bytes are left buffered only when the failure
+            // lands before the read pump's first read, and there the identification frame and the
+            // audio behind it would be lost.
             await writer.CompleteAsync();
         }
     }
@@ -145,8 +177,22 @@ internal sealed class AudioSocketSession : IAudioStream
         finally
         {
             await reader.CompleteAsync();
+
+            // A session still Connected here is ending without a hangup or error frame. If the fill
+            // loop recorded a transport failure, and the owner is not the one tearing the session
+            // down, the transport broke under a live call: report it before either ending a consumer
+            // can observe, the audio channel's completion and Disconnected, so whoever reacts to the
+            // ending already finds the line and the count. The ending itself stays Disconnected.
+            var endsLive = _state.Value == AudioStreamState.Connected;
+            var failure = Volatile.Read(ref _transportFailure);
+            if (endsLive && failure is not null && !_disposed)
+            {
+                AudioSocketSessionLog.TransportFailed(_logger, failure, ChannelId);
+                AudioStreamMetrics.TransportFailures.Add(1);
+            }
+
             _audioInChannel.Writer.TryComplete();
-            if (_state.Value == AudioStreamState.Connected)
+            if (endsLive)
                 _state.OnNext(AudioStreamState.Disconnected);
         }
     }

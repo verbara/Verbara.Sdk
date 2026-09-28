@@ -1,5 +1,6 @@
 using System.Buffers;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Verbara.Sdk.Ari.Audio;
 using Verbara.Sdk.TestInfrastructure.Wire;
 
@@ -104,7 +105,7 @@ public sealed class AudioSocketCapturedWireTests
     {
         await using var stream = new MemoryStream(captured);
 
-        var session = new AudioSocketSession(stream, "slin16");
+        var session = new AudioSocketSession(stream, "slin16", NullLogger.Instance);
         session.Start();
 
         // Causal, not timed: the read pump completes the audio channel when the capture is

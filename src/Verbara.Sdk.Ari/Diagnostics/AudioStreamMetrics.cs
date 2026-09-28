@@ -64,6 +64,17 @@ public static class AudioStreamMetrics
         Meter.CreateCounter<long>("audio.error.frames", "frames",
             "AudioSocket error frames received");
 
+    /// <summary>
+    /// AudioSocket sessions whose transport failed while the session was live: the connection was
+    /// reset, or a read from the socket otherwise failed, after the identification frame and before
+    /// any hangup or error frame. Such a session still ends as <c>Disconnected</c>, exactly as a
+    /// hangup does, so this counter and the session's Warning are what tell the two apart. Internal:
+    /// the instrument's name is the contract an exporter sees, and the field adds no public API.
+    /// </summary>
+    internal static readonly Counter<long> TransportFailures =
+        Meter.CreateCounter<long>("audio.transport.failures", "sessions",
+            "AudioSocket sessions that ended because their transport failed, not on a hangup");
+
     // --- Latency ---
 
     /// <summary>Time from receive to consumer read.</summary>

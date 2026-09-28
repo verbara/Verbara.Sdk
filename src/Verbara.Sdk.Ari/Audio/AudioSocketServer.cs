@@ -288,7 +288,7 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
     {
         using (client)
         {
-            await using var session = new AudioSocketSession(client.GetStream(), _options.DefaultFormat);
+            await using var session = new AudioSocketSession(client.GetStream(), _options.DefaultFormat, _logger);
             session.Start();
 
             // The id this connection registered under, read once after the identification wait. The
