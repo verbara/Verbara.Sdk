@@ -122,10 +122,14 @@ public sealed class CallSession
     internal bool QueueVisitAnnounced { get; set; }
 
     /// <summary>
-    /// When the current queue visit opened: the instant the manager saw the call join its queue, read
-    /// from the manager's clock and reset at each join. The queue wait-time histogram records the visit's
-    /// wait from it. <c>null</c> when the manager never saw the join, as for a session restored from a
-    /// snapshot. Written only under <see cref="SyncRoot"/>; not persisted.
+    /// When the current queue visit started, by Asterisk's account, on the manager's clock: the instant
+    /// the manager handled the call's live join; or, for a visit opened from a queue snapshot (the load at
+    /// start or a reconnect reload), that instant minus the wait the snapshot reports for the caller, in
+    /// whole seconds, and the instant itself when it reports none. Reset at each visit the manager opens,
+    /// and carried by that visit's <c>CallQueuedEvent</c>. The queue wait-time histogram records the
+    /// visit's wait from it. It can be earlier than <see cref="CreatedAt"/> and <see cref="QueuedAt"/>,
+    /// which say when this SDK learned of the call. <c>null</c> when the manager never saw the visit open,
+    /// as for a session restored from a snapshot. Written only under <see cref="SyncRoot"/>; not persisted.
     /// </summary>
     internal DateTimeOffset? QueueVisitStartedAt { get; set; }
 

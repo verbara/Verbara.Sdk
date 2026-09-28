@@ -52,10 +52,13 @@ public sealed partial class CallSessionManager : ICallSessionManager
     /// Initializes a manager whose release cutoff — the instant an ended session must have
     /// completed before to be past <see cref="SessionOptions.CompletedRetention"/> — is read from
     /// <paramref name="timeProvider"/>, so a test can move past the retention period with a fake
-    /// clock instead of sitting it out. The same clock gives the two instants of a queue visit: the
-    /// join, which stamps <see cref="CallQueuedEvent"/>, and the connect, which stamps
+    /// clock instead of sitting it out. The same clock gives the two instants of a queue visit: its
+    /// start, which stamps <see cref="CallQueuedEvent"/>, and the connect, which stamps
     /// <see cref="CallConnectedEvent"/>; the queue wait-time histogram records the difference, so a
-    /// test fixes a visit's length exactly. Nothing else reads it: the session's own timestamps
+    /// test fixes a visit's length exactly. The start is the instant the manager handles the join or,
+    /// for a caller a reload's queue snapshot reports waiting, that instant minus the wait Asterisk
+    /// reports for it: a duration Asterisk measured, subtracted from this clock, so no two clocks are
+    /// compared. Nothing else reads it: the session's own timestamps
     /// (<see cref="CallSession.CreatedAt"/>, <see cref="CallSession.ConnectedAt"/>) and its audit
     /// trail still come from the wall clock.
     /// </summary>
@@ -610,25 +613,44 @@ public sealed partial class CallSessionManager : ICallSessionManager
             s.Participants.Any(p => p.Channel == entry.Channel));
         if (session is null) return;
 
-        DateTimeOffset joinedAt;
+        DateTimeOffset visitStartedAt;
         lock (session.SyncRoot)
         {
-            // Each join opens a new visit: it has not been announced yet, and its wait starts now. The
-            // one instant stamps both the visit's start and CallQueuedEvent, so the queue's metrics and
-            // the histogram measure the visit from the same moment.
-            joinedAt = _timeProvider.GetUtcNow();
+            // Each join opens a new visit, not announced yet, which starts when Asterisk says the caller
+            // joined: for a caller a queue snapshot reports waiting, now minus the wait it reports, and
+            // otherwise now. The one start stamps both the visit and CallQueuedEvent, so the queue's
+            // metrics and the histogram measure the visit from the same moment.
+            var now = _timeProvider.GetUtcNow();
+            visitStartedAt = ReportedJoin(now, entry) ?? now;
             session.QueueName = queueName;
             session.QueueVisitAnnounced = false;
-            session.QueueVisitStartedAt = joinedAt;
+            session.QueueVisitStartedAt = visitStartedAt;
             session.TryTransition(CallSessionState.Queued);
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.QueueJoined, entry.Channel, null, queueName));
         }
 
         _events.OnNext(new CallQueuedEvent(session.SessionId, session.ServerId,
-            joinedAt, queueName, entry.Position));
+            visitStartedAt, queueName, entry.Position));
         _ = PersistAsync(session);
     }
+
+    /// <summary>
+    /// When the caller joined the queue by Asterisk's own account, for a queue entry the manager handles at
+    /// <paramref name="now"/>: <paramref name="now"/> minus the wait a queue snapshot reports for the caller
+    /// (<c>QueueEntry</c>'s <c>Wait</c>, in whole seconds, so up to a second later than the true join).
+    /// <para>
+    /// <c>null</c> when the entry reports no such wait: a live join, which Asterisk sends as the caller
+    /// joins; a snapshot entry with no <c>Wait</c>; a negative one, which Asterisk does not send; and one
+    /// reaching back before the earliest instant a <see cref="DateTimeOffset"/> can hold, which Asterisk
+    /// cannot have measured either, and which would otherwise fail the whole reload on this one entry.
+    /// </para>
+    /// </summary>
+    private static DateTimeOffset? ReportedJoin(DateTimeOffset now, AsteriskQueueEntry entry) =>
+        entry is { FromSnapshot: true, ReportedWaitSeconds: long waitSeconds and >= 0 }
+        && waitSeconds <= now.UtcTicks / TimeSpan.TicksPerSecond
+            ? now - TimeSpan.FromSeconds(waitSeconds)
+            : null;
 
     /// <summary>
     /// Publishes <see cref="CallConnectedEvent"/> for <paramref name="session"/> and, for a call that
@@ -638,8 +660,9 @@ public sealed partial class CallSessionManager : ICallSessionManager
     /// <list type="bullet">
     /// <item>A call that joined a queue (<see cref="CallSession.QueueName"/> set) is announced once per
     /// visit: the first connect after a join publishes, and every later one until the next join does
-    /// nothing. Its sample is the visit's wait, from the join to this connect, both read from the
-    /// manager's clock; a session whose join the manager never saw (restored from a snapshot) falls back
+    /// nothing. Its sample is the visit's wait, from the visit's start
+    /// (<see cref="CallSession.QueueVisitStartedAt"/>) to this connect, both on the manager's clock; a
+    /// session whose join the manager never saw (restored from a snapshot) falls back
     /// to the call's wait since it was created, as the queue's metrics do. A wait of zero is a sample;
     /// only a negative one, from a clock stepping back, is dropped.</item>
     /// <item>A call that never joined a queue is published every time, as it always has been, and records

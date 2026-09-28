@@ -166,6 +166,32 @@ public sealed class QueueReloadVisitStartTests
     }
 
     /// <summary>
+    /// A fallback pin: a <c>Wait</c> reaching back before the earliest instant a clock can hold, which Asterisk
+    /// cannot have measured, is treated as absent. The visit starts at the reload instant, and the reload runs to
+    /// its end instead of failing on the one entry.
+    /// </summary>
+    [Fact]
+    public async Task Reload_ShouldRecordTheWaitSinceTheReload_WhenTheSnapshotReportsAWaitNoClockCanReachBackTo()
+    {
+        var clock = new ManualClock(T0);
+        await using var rig = await QueueCallRig.StartAsync(clock);
+        using var samples = new WaitTimeSamples();
+
+        await FoundWaitingByAReload(rig, clock, wait: long.MaxValue);
+        var reload = clock.GetUtcNow();
+        clock.Advance(TimeSpan.FromSeconds(7));
+        rig.Deliver(MemberAnswers(holdTime: 7));
+
+        using var scope = new AssertionScope();
+        scope.AddReportable("samples", samples.Describe());
+        rig.Queued.Should().ContainSingle("the reload is the one report of the caller joining")
+            .Which.Timestamp.Should().Be(reload, "a wait no clock can reach back to is no wait at all");
+        rig.Tracker.GetByQueueName("q-pjsip")!.TotalWaitTime.Should().Be(TimeSpan.FromSeconds(7),
+            "with no usable reported wait, the visit is measured from the reload");
+        samples.Milliseconds.Should().Equal([7_000d], "one visit was answered, 7 s after the reload");
+    }
+
+    /// <summary>
     /// The backdated start reaches neither of the call's own public values: the event's wait is still the
     /// call's wait since it was created, and the call's queued time is not before it was created.
     /// </summary>
