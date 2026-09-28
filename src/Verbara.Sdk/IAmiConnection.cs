@@ -60,6 +60,14 @@ public interface IAmiConnection : IAsyncDisposable
     event Action? Reconnected;
 
     /// <summary>Gracefully disconnect from the AMI.</summary>
+    /// <remarks>
+    /// The connection ends for good, including a reconnect in progress: the reconnect loop stops wherever it
+    /// is, in its backoff delay or in a connect attempt, and afterwards creates no socket, sends no login and
+    /// raises no <see cref="Reconnected"/>. When the call returns, <see cref="State"/> is
+    /// <see cref="AmiConnectionState.Disconnected"/> and the socket has been released. The connection cannot be
+    /// connected again: a later <see cref="ConnectAsync"/> throws <see cref="ObjectDisposedException"/>.
+    /// <c>DisposeAsync</c> ends the connection the same way.
+    /// </remarks>
     ValueTask DisconnectAsync(CancellationToken cancellationToken = default);
 }
 

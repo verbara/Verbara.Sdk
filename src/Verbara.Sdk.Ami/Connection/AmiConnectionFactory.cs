@@ -34,7 +34,19 @@ public sealed class AmiConnectionFactory : IAmiConnectionFactory
         CancellationToken cancellationToken = default)
     {
         var connection = Create(options);
-        await connection.ConnectAsync(cancellationToken);
+        try
+        {
+            await connection.ConnectAsync(cancellationToken);
+        }
+        catch
+        {
+            // The caller never receives a connection whose connect failed, so it could never dispose it: release
+            // the socket, and whatever else the failed connect left open, here. The error, a cancellation
+            // included, then reaches the caller unchanged.
+            await connection.DisposeAsync();
+            throw;
+        }
+
         return connection;
     }
 }
