@@ -53,6 +53,22 @@ internal sealed class ManualClock(DateTimeOffset start) : TimeProvider
         }
     }
 
+    /// <summary>
+    /// Sets the clock to <paramref name="instant"/>, as a capture replay does from each frame's own
+    /// <c>Timestamp</c>. The clock never moves back: an instant earlier than the current one is a replay
+    /// out of order, and throws.
+    /// </summary>
+    public void MoveTo(DateTimeOffset instant)
+    {
+        lock (_gate)
+        {
+            if (instant < _now)
+                throw new InvalidOperationException($"The clock is at {_now:O} and cannot move back to {instant:O}.");
+
+            _now = instant;
+        }
+    }
+
     /// <summary>Parks the next reader of this clock until the returned hold is released.</summary>
     public ReadHold HoldNextRead()
     {

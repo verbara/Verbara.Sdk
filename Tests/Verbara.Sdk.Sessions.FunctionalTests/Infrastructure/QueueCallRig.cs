@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using NSubstitute;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Live.Server;
 using Verbara.Sdk.Sessions.Internal;
@@ -27,14 +26,14 @@ internal sealed class QueueCallRig : IAsyncDisposable
 
     private readonly List<SessionDomainEvent> _events = [];
     private readonly IDisposable _subscription;
-    private readonly IObserver<ManagerEvent> _observer;
+    private readonly ReloadableConnection _connection;
 
-    private QueueCallRig(VerbaraServer server, CallSessionManager manager, QueueSessionTracker tracker, IObserver<ManagerEvent> observer)
+    private QueueCallRig(VerbaraServer server, CallSessionManager manager, QueueSessionTracker tracker, ReloadableConnection connection)
     {
         Server = server;
         Manager = manager;
         Tracker = tracker;
-        _observer = observer;
+        _connection = connection;
         _subscription = manager.Events.Subscribe(_events.Add);
     }
 
@@ -50,7 +49,13 @@ internal sealed class QueueCallRig : IAsyncDisposable
     /// <summary>The <see cref="CallConnectedEvent"/>s the manager published, in order.</summary>
     public IReadOnlyList<CallConnectedEvent> Connected => [.. _events.OfType<CallConnectedEvent>()];
 
-    /// <summary>Starts a server whose state-load actions return nothing, and attaches a manager and a tracker to it.</summary>
+    /// <summary>The <see cref="CallQueuedEvent"/>s the manager published, in order.</summary>
+    public IReadOnlyList<CallQueuedEvent> Queued => [.. _events.OfType<CallQueuedEvent>()];
+
+    /// <summary>
+    /// Starts a server whose state-load actions return nothing outside <see cref="ReconnectAsync"/>, and
+    /// attaches a manager and a tracker to it.
+    /// </summary>
     /// <param name="clock">
     /// Optional. The manager's clock seam, the internal constructor's <see cref="TimeProvider"/>; the
     /// system clock when omitted, as in production. A test that moves it between deliveries fixes how
@@ -58,15 +63,9 @@ internal sealed class QueueCallRig : IAsyncDisposable
     /// </param>
     public static async Task<QueueCallRig> StartAsync(TimeProvider? clock = null)
     {
-        var connection = Substitute.For<IAmiConnection>();
-        connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
-            .Returns(_ => NoEvents());
-        IObserver<ManagerEvent>? observer = null;
-        connection.Subscribe(Arg.Do<IObserver<ManagerEvent>>(o => observer = o))
-            .Returns(Substitute.For<IDisposable>());
-
+        var connection = new ReloadableConnection();
         var options = Options.Create(new SessionOptions());
-        var server = new VerbaraServer(connection, NullLogger<VerbaraServer>.Instance);
+        var server = new VerbaraServer(connection.Connection, NullLogger<VerbaraServer>.Instance);
         var manager = new CallSessionManager(options, NullLogger<CallSessionManager>.Instance, new InMemorySessionStore(),
             clock ?? TimeProvider.System);
         var tracker = new QueueSessionTracker(manager, options);
@@ -74,8 +73,10 @@ internal sealed class QueueCallRig : IAsyncDisposable
         {
             manager.AttachToServer(server, ServerId);
             await server.StartAsync();
-            return new QueueCallRig(server, manager, tracker, observer
-                ?? throw new InvalidOperationException("VerbaraServer.StartAsync subscribed no event observer."));
+
+            // Throws now, not at the first delivery, if the server subscribed no event observer.
+            _ = connection.Observer;
+            return new QueueCallRig(server, manager, tracker, connection);
         }
         catch
         {
@@ -90,8 +91,22 @@ internal sealed class QueueCallRig : IAsyncDisposable
     public void Deliver(IEnumerable<ManagerEvent> frames)
     {
         foreach (var frame in frames)
-            _observer.OnNext(frame);
+            _connection.Observer.OnNext(frame);
     }
+
+    /// <summary>
+    /// Makes the connection reconnect and runs the server's reload, answered with <paramref name="status"/>
+    /// for <c>Status</c> and <paramref name="queueStatus"/> for <c>QueueStatus</c>, and returns once the
+    /// reload has read both. Frames delivered afterwards go to the observer the reload subscribed.
+    /// </summary>
+    /// <remarks>
+    /// The reload reconciles the channel table against <paramref name="status"/>, as it does against
+    /// Asterisk's own answer: a channel the table holds and the snapshot omits is removed. So the snapshot
+    /// lists every channel still up (<see cref="QueueFrames.Status"/>). The manager reads its clock when it
+    /// handles each queue entry, so a test sets the clock to the reload instant first.
+    /// </remarks>
+    public Task ReconnectAsync(IReadOnlyList<ManagerEvent> status, IReadOnlyList<ManagerEvent> queueStatus) =>
+        _connection.ReloadAsync(status, queueStatus);
 
     /// <summary>
     /// Takes frames off <paramref name="frames"/> and delivers them, up to and including the first one
@@ -101,7 +116,7 @@ internal sealed class QueueCallRig : IAsyncDisposable
     {
         while (frames.TryDequeue(out var frame))
         {
-            _observer.OnNext(frame);
+            _connection.Observer.OnNext(frame);
             if (last(frame))
                 return;
         }
@@ -121,12 +136,6 @@ internal sealed class QueueCallRig : IAsyncDisposable
         Tracker.Dispose();
         await Manager.DisposeAsync();
         await Server.DisposeAsync();
-    }
-
-    private static async IAsyncEnumerable<ManagerEvent> NoEvents()
-    {
-        await Task.CompletedTask;
-        yield break;
     }
 }
 
@@ -255,4 +264,77 @@ internal static class QueueFrames
         };
 
     public static HangupEvent Hangup(string uniqueId, int cause) => new() { EventType = "Hangup", UniqueId = uniqueId, Cause = cause };
+
+    // --- A reload's snapshot ------------------------------------------------------------------------
+    //
+    // Shaped as Asterisk 22.9.0 answered Status and QueueStatus, sent on a raw manager connection, for a
+    // caller waiting in a queue while a member's leg rang: the fields VerbaraServer's reload reads, with
+    // Asterisk's names, and the numeric ChannelState it reads the state from.
+
+    /// <summary>
+    /// One channel of a <c>Status</c> answer. <paramref name="state"/> is Asterisk's numeric
+    /// <c>ChannelState</c> (4 a caller waiting in a queue, 5 a member's leg ringing, 6 up).
+    /// </summary>
+    public static StatusEvent Status(string uniqueId, string channel, string linkedId, string state,
+        string? callerIdNum = null, string? context = null, string? exten = null, string? application = null,
+        string? data = null)
+    {
+        var fields = new Dictionary<string, string>
+        {
+            ["Channel"] = channel, ["ChannelState"] = state, ["Uniqueid"] = uniqueId, ["Linkedid"] = linkedId,
+            ["Type"] = "PJSIP", ["Seconds"] = "1",
+        };
+        if (callerIdNum is not null)
+            fields["CallerIDNum"] = callerIdNum;
+        if (context is not null)
+            fields["Context"] = context;
+        if (exten is not null)
+            fields["Exten"] = exten;
+        if (application is not null)
+            fields["Application"] = application;
+        if (data is not null)
+            fields["Data"] = data;
+
+        return new()
+        {
+            EventType = "Status", UniqueId = uniqueId, Channel = channel, LinkedId = linkedId, Extension = exten,
+            Application = application, Data = data, RawFields = fields,
+        };
+    }
+
+    /// <summary>A queue's parameters, the first frame of a <c>QueueStatus</c> answer for it.</summary>
+    public static QueueParamsEvent QueueParams(string queue, int calls) => new()
+    {
+        EventType = "QueueParams", Queue = queue, Max = 0, Strategy = "ringall", Calls = calls, HoldTime = 0,
+        TalkTime = 0, Completed = 0, Abandoned = 0,
+        RawFields = new Dictionary<string, string>
+        {
+            ["Queue"] = queue, ["Max"] = "0", ["Strategy"] = "ringall",
+            ["Calls"] = calls.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        },
+    };
+
+    /// <summary>
+    /// A caller waiting in <paramref name="queue"/>, as a <c>QueueStatus</c> answer lists it.
+    /// <paramref name="wait"/> is the <c>Wait</c> header, the whole seconds the caller has waited in this
+    /// queue; <c>null</c> leaves the header out, a frame no measured version sends.
+    /// </summary>
+    public static QueueEntryEvent Entry(string queue, string channel, string uniqueId, string callerIdNum, long? wait,
+        int position = 1)
+    {
+        var fields = new Dictionary<string, string>
+        {
+            ["Queue"] = queue, ["Position"] = position.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["Channel"] = channel, ["Uniqueid"] = uniqueId, ["CallerIDNum"] = callerIdNum,
+            ["ConnectedLineNum"] = "unknown", ["ConnectedLineName"] = "unknown", ["Priority"] = "0",
+        };
+        if (wait is { } w)
+            fields["Wait"] = w.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        return new()
+        {
+            EventType = "QueueEntry", Queue = queue, Position = position, Channel = channel, Uniqueid = uniqueId,
+            CallerIDNum = callerIdNum, Wait = wait, Priority = 0, RawFields = fields,
+        };
+    }
 }

@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Ami.Generated;
 using Verbara.Sdk.Ami.Internal;
 using Verbara.Sdk.Live.Server;
@@ -62,6 +63,18 @@ internal static class AmiCaptureReplay
         "queue-shapes-asterisk-20.20.1.raw",
         "queue-shapes-asterisk-22.9.0.raw",
         "queue-shapes-asterisk-23.4.1.raw",
+    ];
+
+    /// <summary>
+    /// The queue-reload captures, one per Asterisk version (20.20.1, 22.9.0, 23.4.1). Each places the same
+    /// four calls into <c>q-late</c>, one after the other, and holds the snapshots the tap took of each
+    /// (<see cref="CapturedSnapshot"/>, the folder's README, <i>The reload captures</i>).
+    /// </summary>
+    public static readonly IReadOnlyList<string> QueueReloadCaptures =
+    [
+        "queue-reload-asterisk-20.20.1.raw",
+        "queue-reload-asterisk-22.9.0.raw",
+        "queue-reload-asterisk-23.4.1.raw",
     ];
 
     private const string MarkerUserEvent = "N5Marker";
@@ -245,6 +258,321 @@ internal static class AmiCaptureReplay
         return change;
     }
 
+    /// <summary>
+    /// Replays one call of the queue-reload capture <paramref name="fixture"/> into a fresh server, session
+    /// manager and <see cref="QueueSessionTracker"/>, optionally withholding part of the call's live frames and
+    /// running a reconnect reload answered with one of the snapshots the capture holds.
+    /// </summary>
+    /// <param name="fixture">The capture's file name, one of <see cref="QueueReloadCaptures"/>.</param>
+    /// <param name="callerNumber">
+    /// The call to replay, by its caller number. Only its frames are replayed: from its caller's
+    /// <c>Newchannel</c> up to the next call's first <c>Newchannel</c>. The captures place their calls one
+    /// after the other, and the replay throws if a frame of this call lies outside that range.
+    /// </param>
+    /// <param name="reloadWith">
+    /// The snapshot to answer the reload with, or <c>null</c> for no reload. The reload runs where that
+    /// snapshot sits in the capture: at its <c>UserEvent</c> marker, whose own <c>Timestamp</c> is the reload
+    /// instant. The last live frame before the marker cannot stand in for it: a caller waiting in a queue
+    /// emits nothing, so that frame can be seconds older.
+    /// </param>
+    /// <param name="outage">
+    /// The call's live frames to withhold, from where the outage starts up to the reload; <c>null</c> for
+    /// none. It needs a reload to end at.
+    /// </param>
+    /// <param name="clock">
+    /// The manager's clock seam. The replay sets it from each live frame's <c>Timestamp</c> before
+    /// delivering the frame, and to the marker's before the reload, so every instant the manager reads is
+    /// one Asterisk stamped.
+    /// </param>
+    /// <remarks>
+    /// Only live frames are delivered to the server's observer: every frame that carries an
+    /// <c>ActionID</c> is the tap's own marker or an answer to the tap's own actions. At the reload, the
+    /// substitute connection reconnects, and the server's <c>Status</c> and <c>QueueStatus</c> are answered
+    /// with the snapshot's captured frames, parsed by the production reader, and <c>Agents</c> with nothing
+    /// (<see cref="ReloadableConnection"/>). An exception the observer throws is caught and recorded, as the
+    /// dispatcher does.
+    /// </remarks>
+    public static async Task<QueueReloadReplay> ReplayQueueReloadAsync(string fixture, string callerNumber,
+        CapturedSnapshot? reloadWith, Outage? outage, ManualClock clock)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        if (outage is not null && reloadWith is null)
+            throw new ArgumentException("An outage ends at a reload; give the snapshot to reload with.", nameof(outage));
+
+        var frames = await ReadCaptureAsync(fixture);
+        var call = CallWindow.Find(fixture, frames, callerNumber);
+
+        var markerIndex = reloadWith is null ? -1 : call.MarkerOf(reloadWith);
+        var withheldFrom = outage is null ? -1 : call.OutageStart(outage);
+        if (outage is not null && withheldFrom > markerIndex)
+            throw new ArgumentException($"{fixture}: the outage starts after the snapshot it ends at.", nameof(outage));
+
+        var status = reloadWith is null ? [] : frames.Where(f => HasActionId(f, reloadWith.StatusActionId)).ToList();
+        var queueStatus = reloadWith is null ? [] : frames.Where(f => HasActionId(f, reloadWith.QueueStatusActionId)).ToList();
+        if (reloadWith is not null && (status.Count == 0 || queueStatus.Count == 0))
+            throw new ArgumentException($"{fixture}: no answer carries the ActionIDs of {reloadWith}.", nameof(reloadWith));
+
+        var options = new SessionOptions();
+        var connection = new ReloadableConnection();
+        var server = new VerbaraServer(connection.Connection, NullLogger<VerbaraServer>.Instance);
+        var manager = new CallSessionManager(Options.Create(options), NullLogger<CallSessionManager>.Instance,
+            new InMemorySessionStore(), clock);
+        try
+        {
+            using var tracker = new QueueSessionTracker(manager, Options.Create(options));
+            manager.AttachToServer(server, "reload-replay");
+            await server.StartAsync();
+
+            var sessions = new List<CallSession>();
+            var queued = new List<CallQueuedEvent>();
+            var connected = new List<CallConnectedEvent>();
+            using var recording = manager.Events.Subscribe(evt =>
+            {
+                switch (evt)
+                {
+                    case CallStartedEvent started when manager.GetById(started.SessionId) is { } session:
+                        sessions.Add(session);
+                        break;
+                    case CallQueuedEvent q:
+                        queued.Add(q);
+                        break;
+                    case CallConnectedEvent c:
+                        connected.Add(c);
+                        break;
+                }
+            });
+
+            var dispatch = new QueueShapeDispatch();
+            using var samples = new WaitTimeSamples(dispatch);
+            var swallowed = new List<SwallowedObserverException>();
+            DateTimeOffset? reloadInstant = null;
+
+            for (var i = call.First; i < call.End; i++)
+            {
+                var frame = frames[i];
+                if (i == markerIndex)
+                {
+                    reloadInstant = InstantOf(frame);
+                    clock.MoveTo(reloadInstant.Value);
+                    await connection.ReloadAsync(status, queueStatus);
+                    continue;
+                }
+
+                if (frame.RawFields?.ContainsKey("ActionID") == true)
+                    continue;
+                if (withheldFrom >= 0 && i >= withheldFrom && i < markerIndex)
+                    continue;
+
+                clock.MoveTo(InstantOf(frame));
+                dispatch.Begin(callerNumber, frame.EventType);
+                Exception? thrown;
+                try
+                {
+                    connection.Observer.OnNext(frame);
+                    thrown = null;
+                }
+                catch (Exception ex)
+                {
+                    // AmiConnection.DispatchEventAsync catches what an observer throws and carries on, and
+                    // so does a replay; the exception is reported with the result.
+                    thrown = ex;
+                }
+                finally
+                {
+                    dispatch.End();
+                }
+
+                if (thrown is not null)
+                    swallowed.Add(new SwallowedObserverException(callerNumber, frame.EventType ?? "", thrown));
+            }
+
+            var counts = tracker.ActiveQueues.ToDictionary(
+                q => q.QueueName,
+                q => new QueueCounters(q.CallsOffered, q.CallsAnswered, q.CallsAbandoned, q.CallsWaiting),
+                StringComparer.Ordinal);
+            var recordedWait = tracker.ActiveQueues.ToDictionary(q => q.QueueName, q => q.TotalWaitTime, StringComparer.Ordinal);
+            var entry = queueStatus.OfType<QueueEntryEvent>()
+                .SingleOrDefault(e => string.Equals(e.Uniqueid, call.CallerUniqueId, StringComparison.Ordinal));
+
+            return new QueueReloadReplay(fixture, callerNumber, counts, recordedWait, queued, connected,
+                [.. samples.All.Where(s => s.Shape == callerNumber).Select(s => s.Milliseconds)],
+                sessions, reloadInstant, entry, call.CallerQueueFrames(withheldFrom, markerIndex), swallowed);
+        }
+        finally
+        {
+            await manager.DisposeAsync();
+            await server.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// The events of <paramref name="fixture"/> (a file name in <c>Recordings/asterisk-ami/</c>), in order,
+    /// parsed as a live connection parses them: live events, markers and the answers to the tap's actions
+    /// alike.
+    /// </summary>
+    public static Task<IReadOnlyList<ManagerEvent>> ReadCaptureAsync(string fixture) =>
+        ReadCaptureAsync(File.ReadAllBytes(FixturePath(fixture)));
+
+    /// <summary>The events of a capture held in memory, parsed as <see cref="ReadCaptureAsync(string)"/> parses a file.</summary>
+    public static async Task<IReadOnlyList<ManagerEvent>> ReadCaptureAsync(byte[] capture)
+    {
+        var events = new List<ManagerEvent>();
+        await foreach (var evt in ReadEventsAsync(new MemoryStream(capture, writable: false)))
+            events.Add(evt);
+        return events;
+    }
+
+    /// <summary>The bytes of <paramref name="fixture"/>, for a test that alters a copy in memory.</summary>
+    public static byte[] ReadCaptureBytes(string fixture) => File.ReadAllBytes(FixturePath(fixture));
+
+    /// <summary>
+    /// The instant Asterisk stamped on <paramref name="evt"/>: its <c>Timestamp</c> header, read as the exact
+    /// decimal it is (a <see cref="double"/> would round away the microseconds).
+    /// </summary>
+    public static DateTimeOffset InstantOf(ManagerEvent evt) =>
+        evt.RawFields?.GetValueOrDefault("Timestamp") is { } stamp
+            ? DateTimeOffset.UnixEpoch.AddTicks(
+                (long)(decimal.Parse(stamp, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture) * TimeSpan.TicksPerSecond))
+            : throw new InvalidOperationException(
+                $"A {evt.EventType} frame carries no Timestamp: the capture was not taken with timestampevents = yes.");
+
+    private static bool HasActionId(ManagerEvent evt, string actionId) =>
+        evt.RawFields?.GetValueOrDefault("ActionID") is { } id && string.Equals(id, actionId, StringComparison.Ordinal);
+
+    /// <summary>One call's frames within a queue-reload capture, and where its snapshots and queue frames sit.</summary>
+    private sealed class CallWindow
+    {
+        private readonly string _fixture;
+        private readonly IReadOnlyList<ManagerEvent> _frames;
+
+        private CallWindow(string fixture, IReadOnlyList<ManagerEvent> frames, int first, int end, string callerUniqueId)
+        {
+            _fixture = fixture;
+            _frames = frames;
+            First = first;
+            End = end;
+            CallerUniqueId = callerUniqueId;
+        }
+
+        /// <summary>The index of the call's first frame, its caller's <c>Newchannel</c>.</summary>
+        public int First { get; }
+
+        /// <summary>The index just past the call's last frame.</summary>
+        public int End { get; }
+
+        public string CallerUniqueId { get; }
+
+        public static CallWindow Find(string fixture, IReadOnlyList<ManagerEvent> frames, string callerNumber)
+        {
+            var first = -1;
+            for (var i = 0; i < frames.Count && first < 0; i++)
+            {
+                if (StartsACall(frames[i])
+                    && string.Equals(frames[i].RawFields?.GetValueOrDefault("CallerIDNum"), callerNumber, StringComparison.Ordinal))
+                {
+                    first = i;
+                }
+            }
+
+            if (first < 0)
+                throw new ArgumentException($"{fixture}: no call from {callerNumber}.", nameof(callerNumber));
+
+            var end = first + 1;
+            while (end < frames.Count && !StartsACall(frames[end]))
+                end++;
+
+            var callerUniqueId = frames[first].UniqueId ?? "";
+            for (var i = 0; i < frames.Count; i++)
+            {
+                if ((i < first || i >= end)
+                    && string.Equals(frames[i].RawFields?.GetValueOrDefault("Linkedid"), callerUniqueId, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"{fixture}: frame {i} ({frames[i].EventType}) belongs to the call from {callerNumber} but lies "
+                        + "outside its range; the capture's calls overlap.");
+                }
+            }
+
+            return new CallWindow(fixture, frames, first, end, callerUniqueId);
+        }
+
+        /// <summary>The index of the <c>UserEvent</c> marker the tap sent right before <paramref name="snapshot"/>.</summary>
+        public int MarkerOf(CapturedSnapshot snapshot)
+        {
+            var answer = -1;
+            for (var i = First; i < End && answer < 0; i++)
+            {
+                if (HasActionId(_frames[i], snapshot.StatusActionId))
+                    answer = i;
+            }
+
+            for (var i = answer - 1; i >= First; i--)
+            {
+                if (string.Equals(_frames[i].EventType, "UserEvent", StringComparison.OrdinalIgnoreCase))
+                    return i;
+            }
+
+            throw new ArgumentException($"{_fixture}: {snapshot} is not a snapshot of this call, or has no marker.", nameof(snapshot));
+        }
+
+        /// <summary>The index of the first live frame <paramref name="outage"/> withholds.</summary>
+        public int OutageStart(Outage outage)
+        {
+            if (outage.AfterCallerEvent is null)
+                return First;
+
+            var seen = 0;
+            for (var i = First; i < End; i++)
+            {
+                if (IsOnCaller(_frames[i], outage.AfterCallerEvent) && ++seen == outage.Ordinal)
+                    return i + 1;
+            }
+
+            throw new ArgumentException($"{_fixture}: the caller has no {outage.AfterCallerEvent} #{outage.Ordinal}.", nameof(outage));
+        }
+
+        /// <summary>
+        /// app_queue's frames on the caller's channel, in order, withheld or not: its joins, leaves, abandons
+        /// and connections, each with the instant Asterisk stamped on it.
+        /// </summary>
+        public List<CapturedQueueFrame> CallerQueueFrames(int withheldFrom, int markerIndex)
+        {
+            var found = new List<CapturedQueueFrame>();
+            for (var i = First; i < End; i++)
+            {
+                var frame = _frames[i];
+                if (frame.RawFields is not { } fields
+                    || fields.ContainsKey("ActionID")
+                    || !string.Equals(fields.GetValueOrDefault("Uniqueid"), CallerUniqueId, StringComparison.Ordinal)
+                    || frame.EventType is not ("QueueCallerJoin" or "QueueCallerLeave" or "QueueCallerAbandon" or "AgentConnect"))
+                {
+                    continue;
+                }
+
+                var holdTime = fields.GetValueOrDefault("HoldTime") is { } h
+                    ? long.Parse(h, NumberStyles.None, CultureInfo.InvariantCulture)
+                    : (long?)null;
+                var delivered = !(withheldFrom >= 0 && i >= withheldFrom && i < markerIndex);
+                found.Add(new CapturedQueueFrame(frame.EventType, fields.GetValueOrDefault("Queue") ?? "", InstantOf(frame), holdTime, delivered));
+            }
+
+            return found;
+        }
+
+        private bool IsOnCaller(ManagerEvent frame, string eventType) =>
+            string.Equals(frame.EventType, eventType, StringComparison.OrdinalIgnoreCase)
+            && !(frame.RawFields?.ContainsKey("ActionID") ?? false)
+            && string.Equals(frame.RawFields?.GetValueOrDefault("Uniqueid"), CallerUniqueId, StringComparison.Ordinal);
+
+        /// <summary>A call's first channel: a live <c>Newchannel</c> whose <c>Linkedid</c> is its own <c>Uniqueid</c>.</summary>
+        private static bool StartsACall(ManagerEvent frame) =>
+            string.Equals(frame.EventType, "Newchannel", StringComparison.OrdinalIgnoreCase)
+            && frame.RawFields is { } fields
+            && !fields.ContainsKey("ActionID")
+            && fields.GetValueOrDefault("Uniqueid") is { } uniqueId
+            && string.Equals(fields.GetValueOrDefault("Linkedid"), uniqueId, StringComparison.Ordinal);
+    }
+
     private static string FixturePath(string fixture)
     {
         var path = Path.Join(AppContext.BaseDirectory, "Recordings", "asterisk-ami", fixture);
@@ -259,6 +587,13 @@ internal static class AmiCaptureReplay
     private static async IAsyncEnumerable<ManagerEvent> ReadEventsAsync(string path)
     {
         await using var stream = File.OpenRead(path);
+        await foreach (var evt in ReadEventsAsync(stream))
+            yield return evt;
+    }
+
+    /// <summary>The events of <paramref name="stream"/>, in order, parsed as a live connection parses them.</summary>
+    private static async IAsyncEnumerable<ManagerEvent> ReadEventsAsync(Stream stream)
+    {
         var reader = new AmiProtocolReader(PipeReader.Create(stream));
         while (await reader.ReadMessageAsync() is { } message)
         {
@@ -659,4 +994,144 @@ internal sealed class QueueShapeDispatch
         _connectedShape = null;
         _frame = null;
     }
+}
+
+/// <summary>
+/// A snapshot the queue-reload captures' tap took: a <c>UserEvent</c> marker, then <c>Status</c>, then
+/// <c>QueueStatus</c>, named by the <c>ActionID</c>s of its two answers.
+/// </summary>
+internal sealed record CapturedSnapshot(string StatusActionId, string QueueStatusActionId)
+{
+    /// <summary>
+    /// The snapshot the tap named <paramref name="id"/> (<c>a1</c>, <c>b1</c>, <c>b2</c>, <c>c1</c>,
+    /// <c>d1</c>): its answers carry the <c>ActionID</c>s <c>w2qr-&lt;id&gt;-st</c> and <c>w2qr-&lt;id&gt;-qs</c>.
+    /// </summary>
+    public static CapturedSnapshot Named(string id) => new($"w2qr-{id}-st", $"w2qr-{id}-qs");
+
+    public override string ToString() => $"snapshot {StatusActionId}/{QueueStatusActionId}";
+}
+
+/// <summary>
+/// Where a replay's outage starts: the first of the call's live frames it withholds. It ends at the
+/// reload. <see cref="FromTheCallsFirstFrame"/> withholds the whole call up to the reload, so the SDK first
+/// learns of it from the snapshot; <see cref="After"/> delivers the call through the
+/// <paramref name="ordinal"/>th frame of type <paramref name="callerEvent"/> on the caller's own channel.
+/// </summary>
+internal sealed record Outage(string? AfterCallerEvent, int Ordinal)
+{
+    public static Outage FromTheCallsFirstFrame { get; } = new(null, 0);
+
+    public static Outage After(string callerEvent, int ordinal = 1) => new(callerEvent, ordinal);
+}
+
+/// <summary>
+/// One of app_queue's frames on a replayed call's caller channel: its type, its queue, the instant Asterisk
+/// stamped on it, its <c>HoldTime</c> when it carries one, and whether the replay delivered it.
+/// </summary>
+internal sealed record CapturedQueueFrame(string EventType, string Queue, DateTimeOffset At, long? HoldTime, bool Delivered)
+{
+    public override string ToString() =>
+        string.Create(CultureInfo.InvariantCulture,
+            $"{EventType}({Queue}{(HoldTime is { } h ? $", HoldTime {h}" : "")}) at {At:HH:mm:ss.ffffff}{(Delivered ? "" : " withheld")}");
+}
+
+/// <summary>What a queue-reload replay produced for its one call.</summary>
+internal sealed class QueueReloadReplay(
+    string fixture,
+    string callerNumber,
+    IReadOnlyDictionary<string, QueueCounters> queues,
+    IReadOnlyDictionary<string, TimeSpan> recordedWait,
+    IReadOnlyList<CallQueuedEvent> queued,
+    IReadOnlyList<CallConnectedEvent> connected,
+    IReadOnlyList<double> samples,
+    IReadOnlyList<CallSession> sessions,
+    DateTimeOffset? reloadInstant,
+    QueueEntryEvent? snapshotEntry,
+    IReadOnlyList<CapturedQueueFrame> callerQueueFrames,
+    IReadOnlyList<SwallowedObserverException> observerExceptions)
+{
+    public string Fixture { get; } = fixture;
+
+    public string CallerNumber { get; } = callerNumber;
+
+    /// <summary>The tracker's counters, per queue.</summary>
+    public IReadOnlyDictionary<string, QueueCounters> Queues { get; } = queues;
+
+    /// <summary>The <see cref="CallQueuedEvent"/>s the manager published, in order.</summary>
+    public IReadOnlyList<CallQueuedEvent> Queued { get; } = queued;
+
+    /// <summary>The <see cref="CallConnectedEvent"/>s the manager published, in order.</summary>
+    public IReadOnlyList<CallConnectedEvent> Connected { get; } = connected;
+
+    /// <summary>The <c>sessions.wait_time</c> samples recorded while the call's frames were delivered, in milliseconds.</summary>
+    public IReadOnlyList<double> SamplesMs { get; } = samples;
+
+    /// <summary>The sessions the manager opened, in order.</summary>
+    public IReadOnlyList<CallSession> Sessions { get; } = sessions;
+
+    /// <summary>The reload's instant, the snapshot marker's <c>Timestamp</c>; <c>null</c> when none ran.</summary>
+    public DateTimeOffset? ReloadInstant { get; } = reloadInstant;
+
+    /// <summary>The caller's <c>QueueEntry</c> in the reload's snapshot, if it listed one.</summary>
+    public QueueEntryEvent? SnapshotEntry { get; } = snapshotEntry;
+
+    /// <summary>app_queue's frames on the caller's channel, in capture order, withheld or not.</summary>
+    public IReadOnlyList<CapturedQueueFrame> CallerQueueFrames { get; } = callerQueueFrames;
+
+    /// <summary>Every exception the server's observer threw, in delivery order.</summary>
+    public IReadOnlyList<SwallowedObserverException> ObserverExceptions { get; } = observerExceptions;
+
+    /// <summary>The tracker's counters for <paramref name="queue"/>, or zeros for a queue it never saw.</summary>
+    public QueueCounters Queue(string queue) => Queues.GetValueOrDefault(queue);
+
+    /// <summary>The wait the tracker recorded for <paramref name="queue"/>: the sum over its answered visits.</summary>
+    public TimeSpan RecordedWait(string queue) => recordedWait.GetValueOrDefault(queue);
+
+    /// <summary>The caller's <paramref name="ordinal"/>th <c>QueueCallerJoin</c>, 1-based.</summary>
+    public CapturedQueueFrame Join(int ordinal) => Nth("QueueCallerJoin", ordinal);
+
+    /// <summary>app_queue's one <c>AgentConnect</c> for the caller.</summary>
+    public CapturedQueueFrame AgentConnect => CallerQueueFrames.Single(f => f.EventType == "AgentConnect");
+
+    /// <summary>How many <c>AgentConnect</c>s app_queue sent for the caller.</summary>
+    public int AsteriskConnects => CallerQueueFrames.Count(f => f.EventType == "AgentConnect");
+
+    /// <summary>How many <c>QueueCallerAbandon</c>s app_queue sent for the caller.</summary>
+    public int AsteriskAbandons => CallerQueueFrames.Count(f => f.EventType == "QueueCallerAbandon");
+
+    /// <summary>The snapshot's reported start of the caller's visit: the reload instant minus its <c>Wait</c>.</summary>
+    public DateTimeOffset SnapshotReportedStart =>
+        ReloadInstant is { } reload && SnapshotEntry?.Wait is { } wait
+            ? reload - TimeSpan.FromSeconds(wait)
+            : throw new InvalidOperationException($"{Fixture}: no reload ran, or its snapshot reported no Wait for the caller.");
+
+    /// <summary>What the replay produced, for assertion messages.</summary>
+    public string Describe()
+    {
+        var sb = new StringBuilder();
+        sb.Append(CultureInfo.InvariantCulture, $"{Fixture}, caller {CallerNumber}").AppendLine();
+        sb.Append("   asterisk: ").AppendJoin(" -> ", CallerQueueFrames).AppendLine();
+        sb.Append(CultureInfo.InvariantCulture,
+            $"   reload: {(ReloadInstant is { } r ? r.ToString("HH:mm:ss.ffffff", CultureInfo.InvariantCulture) : "none")}, "
+            + $"snapshot entry: {(SnapshotEntry is { } e ? $"{e.Queue} Wait {e.Wait?.ToString(CultureInfo.InvariantCulture) ?? "absent"}" : "none")}").AppendLine();
+        foreach (var (queue, c) in Queues.OrderBy(q => q.Key, StringComparer.Ordinal))
+        {
+            sb.Append(CultureInfo.InvariantCulture,
+                $"   tracker {queue}: offered={c.Offered} answered={c.Answered} abandoned={c.Abandoned} waiting={c.Waiting} "
+                + $"recordedWait={RecordedWait(queue).TotalMilliseconds:0.###}ms").AppendLine();
+        }
+
+        sb.Append("   CallQueuedEvent: ").AppendJoin(", ", Queued.Select(q =>
+            string.Create(CultureInfo.InvariantCulture, $"{q.QueueName}@{q.Timestamp:HH:mm:ss.ffffff}"))).AppendLine();
+        sb.Append("   CallConnectedEvent: ").AppendJoin(", ", Connected.Select(c =>
+            string.Create(CultureInfo.InvariantCulture, $"{c.QueueName ?? "-"}@{c.Timestamp:HH:mm:ss.ffffff}"))).AppendLine();
+        sb.Append("   samples: ").AppendJoin(", ", SamplesMs.Select(v => v.ToString("0.###", CultureInfo.InvariantCulture) + "ms"));
+        if (ObserverExceptions.Count > 0)
+            sb.AppendLine().Append("   swallowed: ").AppendJoin("; ", ObserverExceptions);
+        return sb.ToString();
+    }
+
+    private CapturedQueueFrame Nth(string eventType, int ordinal) =>
+        CallerQueueFrames.Where(f => f.EventType == eventType).ElementAtOrDefault(ordinal - 1)
+        ?? throw new InvalidOperationException($"{Fixture}: the caller has no {eventType} #{ordinal}.");
 }
