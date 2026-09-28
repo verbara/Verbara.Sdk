@@ -115,6 +115,18 @@ public sealed class AmiConnection : IAmiConnection
     // first and no loop starts.
     private Task? _reconnectLoop;
 
+    // True on the event pump's consumer, where every dispatch runs, and in whatever an observer's OnNext or an
+    // OnEvent handler calls or awaits from there. Set by DispatchEventAsync.
+    private readonly AsyncLocal<bool> _inDispatch = new();
+
+    // Completed when the caller ends the connection from inside its own event dispatch. That dispatch is the
+    // pump's consumer, and the reconnect loop's release may be waiting on it, so from then on no ending waits on
+    // either, and the pump dispatches no further event. Never reset: a caller's ending is final.
+    private readonly TaskCompletionSource _endedFromDispatch = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    // The release of the last event pump a cleanup detached: complete once that pump's consumer has returned.
+    private Task _pumpReleased = Task.CompletedTask;
+
     public AmiConnectionState State => _state;
     public string? AsteriskVersion { get; private set; }
 
@@ -776,6 +788,17 @@ public sealed class AmiConnection : IAmiConnection
 
     private ValueTask DispatchEventAsync(ManagerEvent evt)
     {
+        // The caller ended the connection from inside a dispatch, which the pump may still be finishing: the pump
+        // dispatches nothing after the event in progress, and stops once that dispatch returns.
+        if (_endedFromDispatch.Task.IsCompleted)
+            return ValueTask.CompletedTask;
+
+        // Marks the pump's consumer as the dispatch. Set once: it persists on that task for every later event, and
+        // flows into each OnNext and each OnEvent handler and into whatever they call or await, so an ending
+        // called from there knows not to wait for the dispatch it runs in.
+        if (!_inDispatch.Value)
+            _inDispatch.Value = true;
+
         var sw = Stopwatch.GetTimestamp();
 
         // Lock-free read: volatile array reference swap is atomic
@@ -811,9 +834,19 @@ public sealed class AmiConnection : IAmiConnection
     /// that ending and returns when it has finished, whether it is still releasing or finished long ago.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// A caller's ending also cancels the lifetime token, which stops the reconnect loop, and waits for the
     /// loop to leave before it releases. The connection's own ending does neither, and joins no ending under
     /// way: the give-up runs on the reconnect loop, which a caller's ending in flight is waiting for.
+    /// </para>
+    /// <para>
+    /// A caller's ending called from inside the connection's own event dispatch completes
+    /// <see cref="_endedFromDispatch"/> first. That dispatch is the event pump's consumer, and the reconnect
+    /// loop's release may be waiting on it, so no ending waits on either from then on: not this one, and not an
+    /// ending already under way that this call joins. The ending releases everything else, reports
+    /// Disconnected and returns; the pump stops once the dispatch returns, and the loop, when its release is
+    /// over, finds the ending recorded and leaves without dialling.
+    /// </para>
     /// </remarks>
     /// <param name="byCaller">
     /// <see langword="true"/> for <see cref="DisconnectAsync"/> and <see cref="DisposeAsync"/>, which also
@@ -842,6 +875,13 @@ public sealed class AmiConnection : IAmiConnection
             reconnectLoop = _reconnectLoop;
         }
 
+        if (byCaller && _inDispatch.Value)
+        {
+            // Called from inside this connection's own event dispatch, which waits for this call: no ending may
+            // wait for that dispatch, or for the loop whose release may be waiting on it.
+            _endedFromDispatch.TrySetResult();
+        }
+
         if (byCaller)
         {
             // Stops the reconnect loop wherever it is: at the top of an iteration, in its backoff delay, or in
@@ -861,8 +901,11 @@ public sealed class AmiConnection : IAmiConnection
         {
             // A caller's ending waits for the reconnect loop to leave, so that whatever the loop acquired is in
             // place for the release below. The connection's own ending never waits: the give-up runs on the loop.
+            // Nor does any ending once the caller has ended the connection from inside a dispatch: the loop's release
+            // may be waiting for that dispatch. The loop then acquires nothing more, because its next state write
+            // yields to the ending recorded above.
             if (byCaller && reconnectLoop is not null)
-                await reconnectLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                await Task.WhenAny(reconnectLoop, _endedFromDispatch.Task);
 
             // Try to send Logoff
             if (byCaller && _writer is not null && _socket?.IsConnected == true)
@@ -877,7 +920,7 @@ public sealed class AmiConnection : IAmiConnection
                 }
             }
 
-            await CleanupAsync();
+            await CleanupAsync(byEnding: true);
         }
         finally
         {
@@ -888,15 +931,31 @@ public sealed class AmiConnection : IAmiConnection
     }
 
     /// <summary>
-    /// Stops the heartbeat and reader loops and releases the event pump, the socket and the token
-    /// source. Serialized and idempotent: a second caller waits for the first and finds nothing left.
+    /// Stops the heartbeat and reader loops and releases the socket, the token source and the event pump, in
+    /// that order. Serialized and idempotent: a second caller waits for the first, finds nothing left, and
+    /// waits for the pump that one detached.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// It awaits the heartbeat task and the reader loop, so it must never run on either of them: both
-    /// hand an ending to a task of their own instead of calling this.
+    /// hand an ending to a task of their own instead of calling this. Neither of them ever waits for an event
+    /// dispatch, so the lock is held across them and across the socket's disposal: a second caller that gets
+    /// the lock finds the socket released.
+    /// </para>
+    /// <para>
+    /// The pump goes last, and is detached under the lock but awaited outside it. Its consumer runs the event
+    /// dispatches, and a dispatch may be what ends the connection: a lock held while waiting for that consumer
+    /// would block the dispatch's own ending on it for good.
+    /// </para>
     /// </remarks>
-    private async ValueTask CleanupAsync()
+    /// <param name="byEnding">
+    /// <see langword="true"/> for the connection's ending, which stops waiting for the pump once the caller has
+    /// ended the connection from inside a dispatch (<see cref="_endedFromDispatch"/>). The reconnect loop's
+    /// release waits for the pump until its consumer returns, so no two consumers ever dispatch at once.
+    /// </param>
+    private async ValueTask CleanupAsync(bool byEnding = false)
     {
+        Task pumpReleased;
         await _cleanupLock.WaitAsync();
         try
         {
@@ -915,12 +974,6 @@ public sealed class AmiConnection : IAmiConnection
             {
                 await _readerLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
                 _readerLoop = null;
-            }
-
-            if (_eventPump is not null)
-            {
-                await _eventPump.DisposeAsync();
-                _eventPump = null;
             }
 
             if (_socket is not null)
@@ -949,11 +1002,25 @@ public sealed class AmiConnection : IAmiConnection
             }
 
             _pendingEventActions.Clear();
+
+            // Completes the pump's channel and cancels it here; its consumer is awaited below, outside the lock.
+            if (_eventPump is not null)
+            {
+                _pumpReleased = _eventPump.DisposeAsync().AsTask();
+                _eventPump = null;
+            }
+
+            pumpReleased = _pumpReleased;
         }
         finally
         {
             _cleanupLock.Release();
         }
+
+        if (byEnding)
+            await Task.WhenAny(pumpReleased, _endedFromDispatch.Task);
+        else
+            await pumpReleased;
     }
 
     public async ValueTask DisposeAsync()
