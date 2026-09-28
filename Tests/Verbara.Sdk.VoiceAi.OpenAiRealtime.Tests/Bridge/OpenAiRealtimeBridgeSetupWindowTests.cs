@@ -136,6 +136,54 @@ public sealed class OpenAiRealtimeBridgeSetupWindowTests
         await CleanupAsync(client, audioServer);
     }
 
+    [Fact]
+    public async Task HandleSessionAsync_ShouldCountAFailureAndRethrow_WhenTheUpgradeIsNeverAnswered()
+    {
+        // Arrange — the peer takes the connection and never answers the upgrade, and nobody cancels.
+        // Without a bound on the connect this held the session past the caller's hangup and past the
+        // AudioSocket server's stop, and counted it completed only when the host finally cancelled.
+        // The bound runs on the bridge's clock, so the test moves it instead of waiting it out.
+        await using var stalled = new StalledHandshakeListener();
+        stalled.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        var clock = new FakeTimeProvider();
+        var log = new RecordingLogger<OpenAiRealtimeBridge>();
+        await using var bridge = CreateBridge(stalled.Port, log);
+        bridge.TimeProvider = clock;
+        using var metrics = new MeterCapture(MeterName);
+
+        // Act — an uncancelled token, so only the bound can end the connect
+        var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
+        await stalled.RequestReceived.WaitAsync(SignalTimeout);   // the upgrade is on the wire, unanswered
+        var armedDue = await clock.TimersArmed.ReadAsync().AsTask().WaitAsync(SignalTimeout);
+        clock.Advance(armedDue);
+
+        var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+        // Assert — the classification of a refused upgrade, in a type no caller can read as its own
+        // cancel. The exception's type goes last: a failed type check ends the scope at its `Which`.
+        using (new AssertionScope())
+        {
+            armedDue.Should().Be(TimeSpan.FromSeconds(5), "the bridge's connect bound is five seconds");
+            sessionTask.Status.Should().Be(TaskStatus.Faulted, "a failed connect faults the session, it does not cancel it");
+            metrics.Get("openai_realtime.sessions.started").Should().Be(1);
+            metrics.Get("openai_realtime.sessions.failed").Should()
+                .Be(1, "an upgrade that never completed is a failed session");
+            metrics.Get("openai_realtime.sessions.completed").Should().Be(0);
+            metrics.GetDouble("openai_realtime.session.duration_ms").Should()
+                .BeGreaterThan(0, "the terminal block runs on the failure path too");
+            log.Entries.Should().Contain(e => e.EventId.Name == "SessionError");
+            log.Entries.Should().Contain(e => e.EventId.Name == "SessionEnded");
+            log.Entries.Should().NotContain(e => e.EventId.Name == "WebSocketConnected");
+            fault.Should().BeOfType<WebSocketException>(
+                    "an upgrade the far end never answered is a failed connect, not a cancellation the caller asked for")
+                .Which.InnerException.Should().BeOfType<TimeoutException>();
+        }
+
+        await CleanupAsync(client, audioServer);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static async Task<(AudioSocketSession session, AudioSocketServer audioServer, AudioSocketClient client)>

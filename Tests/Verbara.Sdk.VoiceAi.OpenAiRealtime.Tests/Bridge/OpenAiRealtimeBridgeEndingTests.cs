@@ -38,6 +38,8 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Bridge;
 /// clock to report the bound armed, and only then moves the clock. The bound's timer is created with
 /// the session, with no due time, so its creation is not the arm. A function call the vendor requested
 /// holds the bound while it runs, so when one is running at the hangup, the arm comes at its return.
+/// The bridge's connect bound runs on the same clock and arms first, when the dial starts; it is spent
+/// once the session opens, so a test passes over its arm before it reads the close bound's.
 /// </para>
 /// </remarks>
 public sealed class OpenAiRealtimeBridgeEndingTests
@@ -65,6 +67,12 @@ public sealed class OpenAiRealtimeBridgeEndingTests
     /// close. It is a private constant of the bridge, not an option, so the tests state it here.
     /// </summary>
     private static readonly TimeSpan CloseAnswerBound = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// How long the bridge's connect may take: five seconds, the first bound it arms on its clock. It
+    /// is a private value of the bridge, not an option, so the tests state it here.
+    /// </summary>
+    private static readonly TimeSpan ConnectBound = TimeSpan.FromSeconds(5);
 
     [Fact]
     public async Task HandleSessionAsync_ShouldCloseTheVendorSessionAndComplete_WhenTheCallerHangsUpOnAHealthySession()
@@ -615,6 +623,7 @@ public sealed class OpenAiRealtimeBridgeEndingTests
             await fakeOpenAi.ClientCloseReceived.WaitAsync(SignalTimeout);
 
             function.Release();
+            PassOverTheConnectArm(clock);
             var armedDue = await clock.TimersArmed.ReadAsync().AsTask().WaitAsync(SignalTimeout);
             clock.Advance(CloseAnswerBound);
 
@@ -681,6 +690,7 @@ public sealed class OpenAiRealtimeBridgeEndingTests
             // the clock
             var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
             var clientClose = await fakeOpenAi.ClientCloseReceived.WaitAsync(SignalTimeout);
+            PassOverTheConnectArm(clock);
             var armedDue = await clock.TimersArmed.ReadAsync().AsTask().WaitAsync(SignalTimeout);
             var endedBeforeTheBound = sessionTask.IsCompleted;
 
@@ -743,6 +753,7 @@ public sealed class OpenAiRealtimeBridgeEndingTests
             var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
             var clientClose = await fakeOpenAi.ClientCloseReceived.WaitAsync(SignalTimeout);
             var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+            PassOverTheConnectArm(clock);
 
             // Assert
             using (new AssertionScope())
@@ -1238,7 +1249,19 @@ public sealed class OpenAiRealtimeBridgeEndingTests
     {
         await client.SendHangupAsync();
         await fakeOpenAi.ClientCloseReceived.WaitAsync(SignalTimeout);
+        PassOverTheConnectArm(clock);
         return await clock.TimersArmed.ReadAsync().AsTask().WaitAsync(SignalTimeout);
+    }
+
+    /// <summary>
+    /// Passes over the connect bound's arm, when the clock holds one: the bridge makes it first, when
+    /// its dial starts, and it is spent once the session opens, so the next arm read is the close
+    /// bound's. Called once the session has opened, by which time that arm is already on the clock.
+    /// </summary>
+    private static void PassOverTheConnectArm(FakeTimeProvider clock)
+    {
+        if (clock.TimersArmed.TryPeek(out var due) && due == ConnectBound)
+            clock.TimersArmed.TryRead(out _);
     }
 
     private static async Task<(AudioSocketSession session, AudioSocketServer audioServer, AudioSocketClient client)>
