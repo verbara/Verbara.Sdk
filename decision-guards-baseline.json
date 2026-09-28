@@ -9,13 +9,6 @@
       "owner": "a-server-that-stops-stops-what-it-started"
     },
     {
-      "guard": "task-run-handoff-token",
-      "path": "src/Verbara.Sdk.VoiceAi.AudioSocket/AudioSocketServer.cs",
-      "key": "Task.Run(() => AcceptLoopAsync(_cts.Token), cancellationToken)",
-      "reason": "StartAsync hands the accept loop to Task.Run gated on the start token (ADR-0058 R1/R2): a start whose token is already cancelled returns with the listener bound and the accept loop never runs. The fix passes CancellationToken.None and deletes this entry.",
-      "owner": "a-server-that-stops-stops-what-it-started"
-    },
-    {
       "guard": "empty-catch-block",
       "path": "src/Verbara.Sdk.Ari/Audio/AudioSocketSession.cs",
       "key": "catch (IOException) { }",
