@@ -63,11 +63,13 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
 
         try
         {
-            await ws.ConnectAsync(wsUri, ct).ConfigureAwait(false);
+            await WebSocketConnectBound.ConnectAsync(
+                ws, wsUri, TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
         }
         catch (WebSocketException ex)
         {
-            // ADR-0050 E7 — one type whether the vendor validates at the upgrade or in band.
+            // ADR-0050 E7 — one type whether the vendor validates at the upgrade or in band, and
+            // whether the upgrade was refused or never answered.
             throw SpeechProviderFailureException.FromHandshake(ProviderName, ws.HttpStatusCode, ex);
         }
 
