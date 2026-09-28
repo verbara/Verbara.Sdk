@@ -6,7 +6,7 @@ namespace Verbara.Sdk.Sessions.Manager;
 internal sealed class QueueSessionTracker : IQueueSessionTracker, IDisposable
 {
     private readonly ConcurrentDictionary<string, QueueSession> _queues = new();
-    private readonly Dictionary<string, string> _waitingSessionQueues = []; // sessionId → queueName
+    private readonly Dictionary<string, OpenVisit> _openVisits = []; // sessionId → the queue visit it is waiting in
     private readonly Lock _waitingLock = new();
     private readonly TimeSpan _metricsWindow;
     private readonly TimeSpan _slaThreshold;
@@ -35,17 +35,25 @@ internal sealed class QueueSessionTracker : IQueueSessionTracker, IDisposable
 
     private void HandleCallQueued(CallQueuedEvent evt)
     {
+        // A call still waiting in one queue that joins another (an overflow, or any join while waiting)
+        // left the first without a connection: that visit closes there as abandoned.
+        bool leftOpenVisit;
+        OpenVisit left;
+        lock (_waitingLock)
+        {
+            leftOpenVisit = _openVisits.Remove(evt.SessionId, out left);
+            _openVisits[evt.SessionId] = new OpenVisit(evt.QueueName, evt.Timestamp);
+        }
+
+        if (leftOpenVisit)
+            CloseAbandoned(left.QueueName);
+
         var queue = GetOrCreateQueue(evt.QueueName);
         lock (queue.SyncRoot)
         {
             CheckWindowExpiry(queue);
             queue.CallsOffered++;
             queue.CallsWaiting++;
-        }
-
-        lock (_waitingLock)
-        {
-            _waitingSessionQueues[evt.SessionId] = evt.QueueName;
         }
     }
 
@@ -54,10 +62,16 @@ internal sealed class QueueSessionTracker : IQueueSessionTracker, IDisposable
         if (evt.QueueName is null) return;
 
         bool wasWaiting;
+        OpenVisit visit;
         lock (_waitingLock)
         {
-            wasWaiting = _waitingSessionQueues.Remove(evt.SessionId);
+            wasWaiting = _openVisits.Remove(evt.SessionId, out visit);
         }
+
+        // The visit's wait runs from its join to this connection. When no join was observed (the tracker
+        // was built after it, or the session was reconstructed), the event's own wait since the call was
+        // created stands in for it, so the answer still carries a wait.
+        var wait = wasWaiting ? evt.Timestamp - visit.OpenedAt : evt.WaitTime;
 
         var queue = GetOrCreateQueue(evt.QueueName);
         lock (queue.SyncRoot)
@@ -69,28 +83,33 @@ internal sealed class QueueSessionTracker : IQueueSessionTracker, IDisposable
                 queue.CallsWaiting--;
 
             // Record wait time
-            queue.TotalWaitTime += evt.WaitTime;
-            if (evt.WaitTime > queue.MaxWaitTime)
-                queue.MaxWaitTime = evt.WaitTime;
-            if (evt.WaitTime < queue.MinWaitTime)
-                queue.MinWaitTime = evt.WaitTime;
+            queue.TotalWaitTime += wait;
+            if (wait > queue.MaxWaitTime)
+                queue.MaxWaitTime = wait;
+            if (wait < queue.MinWaitTime)
+                queue.MinWaitTime = wait;
 
             // SLA check
-            if (evt.WaitTime <= _slaThreshold)
+            if (wait <= _slaThreshold)
                 queue.CallsWithinSla++;
         }
     }
 
     private void HandleCallEnded(CallEndedEvent evt)
     {
-        string? queueName;
+        OpenVisit visit;
         lock (_waitingLock)
         {
-            if (!_waitingSessionQueues.Remove(evt.SessionId, out queueName))
+            if (!_openVisits.Remove(evt.SessionId, out visit))
                 return;
         }
 
         // Caller ended while still waiting in queue → abandoned
+        CloseAbandoned(visit.QueueName);
+    }
+
+    private void CloseAbandoned(string queueName)
+    {
         var queue = GetOrCreateQueue(queueName);
         lock (queue.SyncRoot)
         {
@@ -101,6 +120,9 @@ internal sealed class QueueSessionTracker : IQueueSessionTracker, IDisposable
     }
 
     public void Dispose() => _subscription.Dispose();
+
+    /// <summary>A queue visit still waiting for a connection: the queue it joined, and when.</summary>
+    private readonly record struct OpenVisit(string QueueName, DateTimeOffset OpenedAt);
 
     private sealed class EventObserver(QueueSessionTracker tracker) : IObserver<SessionDomainEvent>
     {
