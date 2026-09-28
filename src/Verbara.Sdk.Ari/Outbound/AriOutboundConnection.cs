@@ -54,7 +54,8 @@ public sealed class AriOutboundConnection : IAsyncDisposable
 
     /// <summary>
     /// Send a graceful WebSocket close to Asterisk and mark this session disposed.
-    /// Idempotent — safe to call multiple times.
+    /// Waits at most 5 s for Asterisk's answering close; an Asterisk that never answers it does not
+    /// hold the call past that bound. Idempotent — safe to call multiple times.
     /// </summary>
     public async ValueTask DisconnectAsync(CancellationToken ct = default)
     {
