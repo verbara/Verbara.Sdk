@@ -150,22 +150,30 @@ internal static class QueueFrames
     public static NewStateEvent NewState(string uniqueId, string state) =>
         new() { EventType = "Newstate", UniqueId = uniqueId, ChannelState = state };
 
-    public static QueueCallerJoinEvent Join(string queue, string channel, string uniqueId, string callerIdNum, int position = 1) => new()
-    {
-        EventType = "QueueCallerJoin", UniqueId = uniqueId, LinkedId = uniqueId, Position = position,
-        RawFields = new Dictionary<string, string>
+    /// <summary>
+    /// The caller joining <paramref name="queue"/>. Its <c>Linkedid</c> is the caller's own
+    /// <paramref name="uniqueId"/> unless <paramref name="linkedId"/> names the call's first channel, as it
+    /// does for a caller that is not that channel.
+    /// </summary>
+    public static QueueCallerJoinEvent Join(string queue, string channel, string uniqueId, string callerIdNum, int position = 1,
+        string? linkedId = null) => new()
         {
-            ["Queue"] = queue, ["Channel"] = channel, ["CallerIDNum"] = callerIdNum,
-            ["Uniqueid"] = uniqueId, ["Linkedid"] = uniqueId, ["Position"] = position.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        },
-    };
+            EventType = "QueueCallerJoin", UniqueId = uniqueId, LinkedId = linkedId ?? uniqueId, Position = position,
+            RawFields = new Dictionary<string, string>
+            {
+                ["Queue"] = queue, ["Channel"] = channel, ["CallerIDNum"] = callerIdNum,
+                ["Uniqueid"] = uniqueId, ["Linkedid"] = linkedId ?? uniqueId,
+                ["Position"] = position.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            },
+        };
 
-    public static QueueCallerLeaveEvent Leave(string queue, string channel, string uniqueId) => new()
+    /// <summary>The caller leaving <paramref name="queue"/>; <paramref name="linkedId"/> as for <see cref="Join"/>.</summary>
+    public static QueueCallerLeaveEvent Leave(string queue, string channel, string uniqueId, string? linkedId = null) => new()
     {
-        EventType = "QueueCallerLeave", UniqueId = uniqueId, LinkedId = uniqueId, Position = 1,
+        EventType = "QueueCallerLeave", UniqueId = uniqueId, LinkedId = linkedId ?? uniqueId, Position = 1,
         RawFields = new Dictionary<string, string>
         {
-            ["Queue"] = queue, ["Channel"] = channel, ["Uniqueid"] = uniqueId, ["Linkedid"] = uniqueId,
+            ["Queue"] = queue, ["Channel"] = channel, ["Uniqueid"] = uniqueId, ["Linkedid"] = linkedId ?? uniqueId,
         },
     };
 

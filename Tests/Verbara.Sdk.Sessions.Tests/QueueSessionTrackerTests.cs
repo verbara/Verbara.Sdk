@@ -230,6 +230,40 @@ public sealed class QueueSessionTrackerTests : IDisposable
         second.MinWaitTime.Should().Be(TimeSpan.FromSeconds(2), "the second queue connected the call 2 s after it joined");
     }
 
+    /// <summary>
+    /// The tracker never saw the call join (it was built after the join, or the session was
+    /// reconstructed), so it has no visit to measure: the answer takes the event's own wait since the call
+    /// was created, and still counts, rather than being dropped from the queue's figures.
+    /// </summary>
+    [Fact]
+    public void OnCallConnected_ShouldRecordTheEventsWait_WhenTheQueueJoinWasNotObserved()
+    {
+        EmitConnected("session-1", "support", T0.AddSeconds(30), waitSinceCreated: TimeSpan.FromSeconds(7));
+
+        var queue = _sut.GetByQueueName("support")!;
+        queue.CallsAnswered.Should().Be(1, "the queue connected the call");
+        queue.TotalWaitTime.Should().Be(TimeSpan.FromSeconds(7), "with no join observed, the event's wait since the call was created stands in");
+        queue.CallsWithinSla.Should().Be(1, "7 s is within the 20 s threshold");
+    }
+
+    /// <summary>
+    /// The first queue's metrics window has expired when the caller leaves it for a second queue. The
+    /// visit it left closes as abandoned in a new window, which does not carry the expired window's offer.
+    /// </summary>
+    [Fact]
+    public void OnCallQueued_ShouldCloseTheLeftVisitInANewWindow_WhenTheFirstQueuesWindowHadExpired()
+    {
+        EmitQueued("session-1", "first", T0);
+        var first = _sut.GetByQueueName("first")!;
+        first.WindowStart = DateTimeOffset.UtcNow - TimeSpan.FromMinutes(31);
+
+        EmitQueued("session-1", "second", T0.AddSeconds(6));
+
+        first.CallsOffered.Should().Be(0, "the offer belonged to the window that expired");
+        first.CallsAbandoned.Should().Be(1, "the visit closed without a connection, in the new window");
+        first.CallsWaiting.Should().Be(0, "the caller left the first queue");
+    }
+
     [Fact]
     public void ActiveQueues_ShouldReturnAllTrackedQueues()
     {

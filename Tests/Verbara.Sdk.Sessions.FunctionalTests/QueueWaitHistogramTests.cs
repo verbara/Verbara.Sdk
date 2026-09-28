@@ -190,6 +190,59 @@ public sealed class QueueWaitHistogramTests
             "the histogram and the queue's metrics both measure the visit that the tracker saw open and close");
     }
 
+    /// <summary>
+    /// app_queue connects the caller at the instant it joins, as it does for the pooled agents of shapes A
+    /// and AO, whose <c>AgentConnect</c> reports <c>HoldTime: 0</c>. The visit's wait is zero, and it is
+    /// still one answered visit, so it still records one sample.
+    /// </summary>
+    [Fact]
+    public async Task WaitHistogram_ShouldRecordAZeroWait_WhenAppQueueConnectsTheCallAtTheInstantItJoined()
+    {
+        var clock = new ManualClock(T0);
+        await using var rig = await QueueCallRig.StartAsync(clock);
+        using var samples = new WaitTimeSamples();
+
+        const string c = "c4", cCh = "PJSIP/pstn-00000021";
+        rig.Deliver([
+            NewChannel(c, cCh, "4", c, "5550017", "from-pstn", "4000"),
+            Join("q-pjsip", cCh, c, "5550017"),
+            .. MemberAnswers(c, cCh, "m4", "PJSIP/agent1-00000022", "q-pjsip", "PJSIP/agent1", "b4", holdTime: 0),
+        ]);
+
+        samples.Milliseconds.Should().Equal([0d],
+            "app_queue connected the visit at the instant it opened: one answered visit, whose wait is zero");
+    }
+
+    /// <summary>
+    /// A call the manager holds with its queue already named, although the manager never saw it join: what
+    /// a session restored from a snapshot carries, and what a consumer can write through the public
+    /// <see cref="CallSession.QueueName"/>. With no visit start, the sample falls back to the call's wait
+    /// since it was created, and the queue's metrics, which never saw the visit open either, fall back to
+    /// the same wait.
+    /// </summary>
+    [Fact]
+    public async Task WaitHistogram_ShouldRecordTheWaitSinceTheCallWasCreated_WhenTheManagerNeverSawTheVisitOpen()
+    {
+        var clock = new ManualClock(T0);
+        await using var rig = await QueueCallRig.StartAsync(clock);
+        using var samples = new WaitTimeSamples();
+
+        const string c = "c5", cCh = "PJSIP/pstn-00000023";
+        rig.Deliver([NewChannel(c, cCh, "4", c, "5550018", "from-pstn", "4000")]);
+        var session = rig.Manager.GetByChannelId(c);
+        session.Should().NotBeNull("the caller's channel opened the call");
+        session!.QueueName = "q-pjsip";
+        rig.Deliver(MemberAnswers(c, cCh, "m5", "PJSIP/agent1-00000024", "q-pjsip", "PJSIP/agent1", "b5", holdTime: 3));
+
+        rig.Connected.Should().ContainSingle("app_queue connected the call once")
+            .Which.QueueName.Should().Be("q-pjsip");
+        var sinceCreated = rig.Connected[0].WaitTime;
+        samples.Milliseconds.Should().Equal([sinceCreated.TotalMilliseconds],
+            "the manager never saw the visit open, so the sample is the call's wait since it was created");
+        rig.Tracker.GetByQueueName("q-pjsip")!.TotalWaitTime.Should().Be(sinceCreated,
+            "the queue's metrics never saw the visit open either, and fall back to the same wait");
+    }
+
     // --- The frames ---------------------------------------------------------------------------
 
     /// <summary>
