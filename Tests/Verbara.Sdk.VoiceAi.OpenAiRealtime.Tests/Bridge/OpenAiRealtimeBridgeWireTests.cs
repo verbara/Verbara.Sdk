@@ -141,6 +141,31 @@ public sealed class OpenAiRealtimeBridgeWireTests
             "turn_detection", "the endpoint refuses a top-level turn_detection as an unknown parameter");
     }
 
+    [Fact]
+    public async Task HandleSessionAsync_ShouldRequestGptRealtime_WhenTheModelIsNotSet()
+    {
+        // Arrange: the options a caller writes when it takes the default model, so Model is never set.
+        await using var fakeOpenAi = new RealtimeFakeServer();
+        var options = new OpenAiRealtimeOptions
+        {
+            ApiKey = ApiKey,
+            InputFormat = Audio.AudioFormat.Slin16Mono8kHz,
+        };
+
+        // Act
+        await OpenOneSessionAsync(fakeOpenAi, options);
+
+        // Assert
+        var target = fakeOpenAi.UpgradeRequestUri;
+        target.Should().NotBeNull("the fake captures the upgrade's target once it accepts a session");
+        QueryValues(target!, "model").Should().ContainSingle(
+                "the model travels once, in the upgrade's query, and the upgrade asked for {0}", target)
+            .Which.Should().Be(
+                "gpt-realtime",
+                "the default is the generally available alias the vendor's model listing carries, and the endpoint closes a session on the old preview id with 4004 model_not_found; the upgrade asked for {0}",
+                target);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /// <summary>Options as a test starts from: the fake's key and model, the defaults for the rest.</summary>
@@ -238,6 +263,26 @@ public sealed class OpenAiRealtimeBridgeWireTests
     }
 
     private static string[] MemberNames(JsonElement obj) => obj.EnumerateObject().Select(p => p.Name).ToArray();
+
+    /// <summary>
+    /// Every value of the query parameter <paramref name="name"/> in <paramref name="requestTarget"/>
+    /// (a path and query, as the fake captures it), percent-decoded, in the order they were sent.
+    /// </summary>
+    private static string[] QueryValues(string requestTarget, string name)
+    {
+        var queryStart = requestTarget.IndexOf('?', StringComparison.Ordinal);
+        if (queryStart < 0)
+        {
+            return [];
+        }
+
+        return requestTarget[(queryStart + 1)..]
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(pair => pair.Split('=', 2))
+            .Where(pair => string.Equals(Uri.UnescapeDataString(pair[0]), name, StringComparison.Ordinal))
+            .Select(pair => pair.Length == 2 ? Uri.UnescapeDataString(pair[1]) : string.Empty)
+            .ToArray();
+    }
 
     /// <summary>Asserts that <paramref name="actual"/> is the JSON value <paramref name="expected"/>, member order aside.</summary>
     private static void ShouldBeJson(JsonElement actual, string expected, string at)
