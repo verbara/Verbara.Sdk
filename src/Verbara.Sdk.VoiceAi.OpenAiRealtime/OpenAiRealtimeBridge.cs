@@ -348,7 +348,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                     break;
                 }
 
-                // All other events (response.audio.done, session.updated, etc.) are intentionally ignored.
+                // All other events (response.output_audio.done, session.updated, etc.) are intentionally ignored.
             }
         }
     }

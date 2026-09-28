@@ -74,7 +74,7 @@ public sealed class RealtimeMessageSerializationTests
     {
         var evt = new ResponseAudioDeltaEvent
         {
-            Type = "response.audio.delta",
+            Type = "response.output_audio.delta",
             Delta = "SGVsbG8=",
         };
 
@@ -82,19 +82,19 @@ public sealed class RealtimeMessageSerializationTests
         var deserialized = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ResponseAudioDeltaEvent);
 
         deserialized.Should().NotBeNull();
-        deserialized!.Type.Should().Be("response.audio.delta");
+        deserialized!.Type.Should().Be("response.output_audio.delta");
         deserialized.Delta.Should().Be("SGVsbG8=");
     }
 
     [Fact]
     public void ResponseAudioDeltaEvent_ShouldDeserializeFromOpenAiJson()
     {
-        const string json = """{"type":"response.audio.delta","delta":"AAAA"}""";
+        const string json = """{"type":"response.output_audio.delta","delta":"AAAA"}""";
 
         var evt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ResponseAudioDeltaEvent);
 
         evt.Should().NotBeNull();
-        evt!.Type.Should().Be("response.audio.delta");
+        evt!.Type.Should().Be("response.output_audio.delta");
         evt.Delta.Should().Be("AAAA");
     }
 
@@ -250,7 +250,7 @@ public sealed class RealtimeMessageSerializationTests
     {
         var evt = new ResponseAudioTranscriptDeltaEvent
         {
-            Type = "response.audio_transcript.delta",
+            Type = "response.output_audio_transcript.delta",
             Delta = "Hello",
         };
 
@@ -268,7 +268,7 @@ public sealed class RealtimeMessageSerializationTests
     {
         var evt = new ResponseAudioTranscriptDoneEvent
         {
-            Type = "response.audio_transcript.done",
+            Type = "response.output_audio_transcript.done",
             Transcript = "Hello world",
         };
 
