@@ -31,10 +31,10 @@ public enum SpeechProviderFailureSignal
     CloseCode,
 
     /// <summary>
-    /// The vendor rejected the HTTP upgrade, so no session ever opened. Wrapped rather than left as
-    /// a raw transport exception (<c>ADR-0050</c> E7) because <em>where</em> a vendor validates a
-    /// credential is a property of the vendor, not of this client, and it can change with no line of
-    /// this repository changing.
+    /// The vendor rejected the HTTP upgrade, or did not answer it within the client's connect
+    /// timeout, so no session ever opened. Wrapped rather than left as a raw transport exception
+    /// (<c>ADR-0050</c> E7) because <em>where</em> a vendor validates a credential is a property of
+    /// the vendor, not of this client, and it can change with no line of this repository changing.
     /// </summary>
     Handshake,
 

@@ -79,6 +79,13 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     // Settable by tests (via InternalsVisibleTo) to run the session's time bounds on a manual clock.
     internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
+    // How long the dial, TLS and the upgrade may take together, on TimeProvider. Before this bound a
+    // vendor that accepted the connection and never answered the upgrade held the session, past the
+    // caller's hangup and past the AudioSocket server's stop, and counted it completed only when the
+    // host finally cancelled. Its expiry fails the session like a refused upgrade. Settable by tests
+    // (via InternalsVisibleTo); a private value, not an option, for the close bound's reason.
+    internal TimeSpan ConnectTimeout { get; set; } = WebSocketConnectBound.Default;
+
     /// <summary>Observable stream of Realtime bridge events from all active sessions.</summary>
     public IObservable<RealtimeEvent> Events => _events;
 
@@ -125,7 +132,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         try
         {
             var uri = new Uri($"{BaseUri}?model={Uri.EscapeDataString(_options.Model)}");
-            await ws.ConnectAsync(uri, ct).ConfigureAwait(false);
+            await WebSocketConnectBound.ConnectAsync(ws, uri, ConnectTimeout, TimeProvider, ct).ConfigureAwait(false);
             RealtimeLog.WebSocketConnected(_logger, channelId);
 
             // Send session.update (voice, instructions, VAD, tools)

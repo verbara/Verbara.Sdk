@@ -73,3 +73,5 @@ override Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsSpeechRecognizer.Strea
 static Verbara.Sdk.VoiceAi.Stt.DependencyInjection.SttServiceCollectionExtensions.AddSpeechmaticsStt(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Stt.Speechmatics.SpeechmaticsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.BaseUri.get -> string!
 Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.BaseUri.set -> void
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.ConnectTimeoutSeconds.get -> int
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.ConnectTimeoutSeconds.set -> void

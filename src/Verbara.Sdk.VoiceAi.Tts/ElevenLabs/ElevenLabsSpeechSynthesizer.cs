@@ -70,13 +70,14 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
 
         try
         {
-            await ws.ConnectAsync(uri, ct).ConfigureAwait(false);
+            await WebSocketConnectBound.ConnectAsync(
+                ws, uri, TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
         }
         catch (WebSocketException ex)
         {
             // ADR-0050 E7 — one type whether the vendor validates here or in band. This vendor was
             // measured validating in band (a `1008` failure frame), but that is the vendor's choice
-            // and not this client's contract.
+            // and not this client's contract. An upgrade never answered arrives here too.
             throw SpeechProviderFailureException.FromHandshake(ProviderName, ws.HttpStatusCode, ex);
         }
 

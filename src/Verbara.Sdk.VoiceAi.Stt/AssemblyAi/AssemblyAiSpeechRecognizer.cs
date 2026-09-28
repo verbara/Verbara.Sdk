@@ -94,11 +94,10 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
         // so every test asserts that shape rather than the vendor being the first to check it.
         ws.Options.SetRequestHeader("Authorization", _options.ApiKey);
 
-        using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
         try
         {
-            await ws.ConnectAsync(wsUri, connectCts.Token).ConfigureAwait(false);
+            await WebSocketConnectBound.ConnectAsync(
+                ws, wsUri, TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
         }
         catch (WebSocketException ex)
         {

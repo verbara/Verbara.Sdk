@@ -15,8 +15,9 @@ using Xunit;
 namespace Verbara.Sdk.VoiceAi.Stt.Tests.Helpers;
 
 /// <summary>
-/// The user-visible half of the end-of-input bound: a <see cref="VoiceAiPipeline"/> call whose
-/// recognizer's vendor never answers the end of input ends when the caller hangs up, and is counted.
+/// The user-visible half of the recognizers' bounds: a <see cref="VoiceAiPipeline"/> call whose
+/// recognizer's vendor never answers the end of input, or never answers the upgrade, ends when the
+/// caller hangs up, and is counted.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -30,13 +31,20 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Helpers;
 /// <para>
 /// The recognizer's bound runs on a <see cref="FakeTimeProvider"/>, which the test advances past the
 /// bound once it has armed. This is the only class in the assembly that runs a pipeline, so the
-/// process-wide VoiceAi counters it reads see no one else's session; xunit runs its rows one at a time.
+/// process-wide VoiceAi counters it reads see no one else's session; xunit runs its tests one at a
+/// time. That is why the connect row lives here rather than beside the connect-bound tests.
 /// </para>
 /// </remarks>
 public sealed class SttPipelineMuteVendorTests
 {
     /// <summary>Upper bound on any single wait. Reaching it is a failure, never a pace.</summary>
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>The ruled silence bound after the end of input.</summary>
+    private static readonly TimeSpan EndOfInputBound = TimeSpan.FromSeconds(10);
+
+    /// <summary>The connect bound of a recognizer built with default options.</summary>
+    private static readonly TimeSpan ConnectBound = TimeSpan.FromSeconds(5);
 
     public static TheoryData<string> Clients => RecognizerEndOfInputPeers.Clients;
 
@@ -70,7 +78,7 @@ public sealed class SttPipelineMuteVendorTests
 
         // Act — the caller hangs up while the recognizer waits on its vendor.
         await call.HangUpAsync();
-        await AdvancePastTheArmedBoundAsync(clock);
+        await AdvancePastTheArmedBoundAsync(clock, EndOfInputBound);
         var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
 
         // Assert
@@ -90,12 +98,74 @@ public sealed class SttPipelineMuteVendorTests
     }
 
     /// <summary>
-    /// Waits for the recognizer to arm its bound on <paramref name="clock"/>, then moves the clock past
-    /// it. Before the bound existed nothing arms, and this times out with the handler still running.
+    /// Deepgram's upgrade is held unanswered. Before the connect bound, Deepgram had none: the turn
+    /// waited on the dial after the caller hung up, and after the AudioSocket server stopped, and the
+    /// session was never counted.
     /// </summary>
-    private static async Task AdvancePastTheArmedBoundAsync(FakeTimeProvider clock)
+    [Fact]
+    public async Task HandleSessionAsync_ShouldReturnAndCountTheRecognitionFailed_WhenTheSttVendorNeverAnswersTheUpgrade()
     {
-        var due = await clock.TimersArmed.ReadAsync().AsTask().WaitAsync(SignalTimeout);
+        // Arrange
+        await using var stalled = new StalledUpgradeListener();
+        stalled.Start();
+        var clock = new FakeTimeProvider();
+        using var meters = new VoiceAiMeters();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConversationHandler>(new FixedAnswerHandler());
+        services.AddSingleton<ITurnDetector>(new OneUtteranceDetector());
+        await using var provider = services.BuildServiceProvider();
+        await using var pipeline = new VoiceAiPipeline(
+            RecognizerEndOfInputPeers.CreateRecognizer("Deepgram", stalled.Port, clock),
+            new OneChunkSynthesizer(),
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(new VoiceAiPipelineOptions()),
+            NullLogger<VoiceAiPipeline>.Instance);
+        using var errors = new PipelineErrors(pipeline);
+        await using var call = await AudioSocketCall.StartAsync();
+
+        var sessionTask = pipeline.HandleSessionAsync(call.Session, CancellationToken.None).AsTask();
+        for (var i = 0; i < 3; i++)
+            await call.Caller.SendAudioAsync(new byte[320]);
+        await stalled.RequestReceived.WaitAsync(SignalTimeout);
+
+        // Act — the caller hangs up while the recognizer's dial is held.
+        await call.HangUpAsync();
+        await AdvancePastTheArmedBoundAsync(clock, ConnectBound);
+        var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+        // Assert
+        using (new AssertionScope())
+        {
+            fault.Should().BeNull("the handler returns once the recognition it had in flight reached its connect bound");
+            meters.Count("voiceai.sessions.completed").Should().Be(1, "a call that ends at the hangup is a completed session");
+            meters.Count("voiceai.sessions.failed").Should().Be(0);
+            meters.Records("voiceai.session.duration_ms").Should().Be(1, "the session's duration was recorded");
+            meters.Count("stt.transcriptions.failed").Should().BeGreaterThanOrEqualTo(1, "the unanswered upgrade failed the recognition");
+        }
+
+        var error = errors.Snapshot.Should().ContainSingle("one recognition was in flight").Subject;
+        error.Source.Should().Be(PipelineErrorSource.Stt);
+        error.Exception.Should().BeOfType<SpeechProviderFailureException>()
+            .Which.Signal.Should().Be(SpeechProviderFailureSignal.Handshake);
+    }
+
+    /// <summary>
+    /// Waits for the recognizer to arm the bound of <paramref name="bound"/> on <paramref name="clock"/>,
+    /// then moves the clock past it. The recognizer arms its connect bound (5 s) as it dials and its
+    /// end-of-input bound (10 s) once its end of input is out, both on this clock, so each test names the
+    /// one it runs out. Before that bound existed nothing arms it, and this times out with the handler
+    /// still running.
+    /// </summary>
+    private static async Task AdvancePastTheArmedBoundAsync(FakeTimeProvider clock, TimeSpan bound)
+    {
+        TimeSpan due;
+        do
+        {
+            due = await clock.TimersArmed.ReadAsync().AsTask().WaitAsync(SignalTimeout);
+        }
+        while (due != bound);
+
         clock.Advance(due);
     }
 

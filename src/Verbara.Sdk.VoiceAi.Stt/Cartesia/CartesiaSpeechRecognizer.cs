@@ -70,11 +70,10 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
         ws.Options.SetRequestHeader("X-API-Key", _options.ApiKey);
         ws.Options.SetRequestHeader("Cartesia-Version", _options.ApiVersion);
 
-        using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
         try
         {
-            await ws.ConnectAsync(wsUri, connectCts.Token).ConfigureAwait(false);
+            await WebSocketConnectBound.ConnectAsync(
+                ws, wsUri, TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
         }
         catch (WebSocketException ex)
         {

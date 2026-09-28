@@ -91,14 +91,18 @@ internal static class RecognizerEndOfInputPeers
 
     /// <summary>
     /// The recognizer <paramref name="client"/> names, pointed at a peer on <paramref name="port"/>,
-    /// with its bounds on <paramref name="clock"/> (<see cref="TimeProvider.System"/> when none is given).
+    /// with its bounds on <paramref name="clock"/> (<see cref="TimeProvider.System"/> when none is given)
+    /// and its <c>ConnectTimeoutSeconds</c> at <paramref name="connectTimeoutSeconds"/> (the option's own
+    /// default when none is given).
     /// </summary>
-    public static SpeechRecognizer CreateRecognizer(string client, int port, TimeProvider? clock = null) => client switch
+    public static SpeechRecognizer CreateRecognizer(
+        string client, int port, TimeProvider? clock = null, int? connectTimeoutSeconds = null) => client switch
     {
         "Deepgram" => new DeepgramSpeechRecognizer(Options.Create(new DeepgramOptions
         {
             ApiKey = "test-key",
             BaseUri = $"ws://127.0.0.1:{port}/v1/listen",
+            ConnectTimeoutSeconds = connectTimeoutSeconds ?? new DeepgramOptions().ConnectTimeoutSeconds,
         }))
         {
             TimeProvider = clock ?? TimeProvider.System,
@@ -107,6 +111,7 @@ internal static class RecognizerEndOfInputPeers
         {
             ApiKey = "test-key",
             BaseUri = $"ws://127.0.0.1:{port}/v3/ws",
+            ConnectTimeoutSeconds = connectTimeoutSeconds ?? new AssemblyAiOptions().ConnectTimeoutSeconds,
         }))
         {
             TimeProvider = clock ?? TimeProvider.System,
@@ -115,6 +120,7 @@ internal static class RecognizerEndOfInputPeers
         {
             ApiKey = "test-key",
             BaseUri = $"ws://127.0.0.1:{port}/stt/websocket",
+            ConnectTimeoutSeconds = connectTimeoutSeconds ?? new CartesiaOptions().ConnectTimeoutSeconds,
         }))
         {
             TimeProvider = clock ?? TimeProvider.System,
@@ -123,6 +129,7 @@ internal static class RecognizerEndOfInputPeers
         {
             ApiKey = "test-key",
             BaseUri = $"ws://127.0.0.1:{port}/v2",
+            ConnectTimeoutSeconds = connectTimeoutSeconds ?? new SpeechmaticsOptions().ConnectTimeoutSeconds,
         }))
         {
             TimeProvider = clock ?? TimeProvider.System,

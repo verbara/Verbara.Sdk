@@ -150,11 +150,10 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
         // is sent as part of the first JSON message body (see LmntInitMessage).
         // No request headers are set on ws.Options; auth is embedded in the first JSON frame.
 
-        using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
         try
         {
-            await ws.ConnectAsync(uri, connectCts.Token).ConfigureAwait(false);
+            await WebSocketConnectBound.ConnectAsync(
+                ws, uri, TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
         }
         catch (WebSocketException ex)
         {
