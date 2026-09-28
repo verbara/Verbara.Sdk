@@ -60,7 +60,7 @@ internal sealed class RealtimeFakeServer : IAsyncDisposable
     /// Released by the client's <c>session.update</c> frame — the bridge's unconditional first
     /// frame, sent immediately after <c>ConnectAsync</c> and before either loop starts
     /// (<c>src/Verbara.Sdk.VoiceAi.OpenAiRealtime/OpenAiRealtimeBridge.cs</c>, the send that precedes
-    /// <c>Task.WhenAll(InputLoop, OutputLoop)</c>). Nothing else the client sends qualifies:
+    /// the start of <c>InputLoop</c> and <c>OutputLoop</c>). Nothing else the client sends qualifies:
     /// <c>input_audio_buffer.append</c> only appears once the caller speaks, and
     /// <c>conversation.item.create</c> only after a function call — so a session with neither would
     /// never release a sentinel keyed on those.

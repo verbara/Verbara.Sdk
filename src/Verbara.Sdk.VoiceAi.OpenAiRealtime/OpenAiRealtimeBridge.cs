@@ -123,10 +123,37 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             finally { wsWriteLock.Release(); }
             RealtimeMetrics.MessagesSent.Add(1);
 
-            await Task.WhenAll(
-                InputLoop(session, ws, wsWriteLock, upsampler, ct),
-                OutputLoop(session, ws, wsWriteLock, downsampler, ct)
-            ).ConfigureAwait(false);
+            var input = InputLoop(session, ws, wsWriteLock, upsampler, ct);
+            var output = OutputLoop(session, ws, wsWriteLock, downsampler, ct);
+            var first = await Task.WhenAny(input, output).ConfigureAwait(false);
+
+            // The caller hung up. OpenAI never closes a healthy session on its own (measured live:
+            // still open sixty seconds after the hangup), so OutputLoop would wait on ReceiveAsync
+            // until the host stops, with nothing counted and no duration recorded. Start the close
+            // handshake instead; OutputLoop returns on the vendor's answering close frame (about
+            // 1.1 s later, live). CloseOutputAsync, not CloseAsync: CloseAsync waits for that answer
+            // by receiving, a second concurrent receive on the socket OutputLoop is reading.
+            if (first == input && input.IsCompletedSuccessfully && !output.IsCompleted)
+            {
+                await wsWriteLock.WaitAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    if (ws.State == WebSocketState.Open)
+                        await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", ct).ConfigureAwait(false);
+                }
+                catch (Exception) when (!ct.IsCancellationRequested)
+                {
+                    // A connection that died under the hangup fails this close. OutputLoop's own
+                    // receive fault is the one that classifies the session, so this one must not
+                    // replace it: left to escape, it reached the caller as an
+                    // OperationCanceledException instead of the transport's WebSocketException.
+                }
+                finally { wsWriteLock.Release(); }
+            }
+
+            // Whichever loop ended first, both are awaited, so a fault of either one reaches the
+            // terminal block below and the session is classified there, once.
+            await Task.WhenAll(input, output).ConfigureAwait(false);
         }
         // The filter tests the token, never ex.CancellationToken: a cancelled ConnectAsync surfaces
         // a TaskCanceledException carrying a *different* token, so an identity check would silently
