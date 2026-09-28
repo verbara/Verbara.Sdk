@@ -105,7 +105,7 @@ All notable changes to this project will be documented in this file.
   old clear-and-reload ticked nothing — a dashboard reading it will show a step at a reconnect that
   ends calls.
 
-### Fixed — BREAKING: a call that ended could stay held for the life of the process, and its ending could be reported twice (#N)
+### Fixed — BREAKING: a call that ended could stay held for the life of the process, and its ending could be reported twice (#333)
 
 - **Releasing ended calls no longer stops for good, and it also runs when calls arrive.** The session
   manager lets an ended call go once `CompletedRetention` (10 minutes by default) has passed
