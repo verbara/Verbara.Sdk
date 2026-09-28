@@ -13,19 +13,20 @@ public sealed class VerbaraServerPoolTests : IAsyncDisposable
     private readonly IAmiConnectionFactory _connectionFactory;
     private readonly VerbaraServerPool _sut;
 
+    /// <summary>Every connection the factory has returned to the pool, in order.</summary>
+    private readonly List<IAmiConnection> _created = [];
+
     public VerbaraServerPoolTests()
     {
         _connectionFactory = Substitute.For<IAmiConnectionFactory>();
 
-        // Each call to CreateAndConnectAsync returns a new mock connection
+        // Each call to CreateAndConnectAsync returns a new mock connection, recorded in _created
 #pragma warning disable CA2012 // NSubstitute setup requires evaluating the ValueTask
         _connectionFactory.CreateAndConnectAsync(Arg.Any<AmiConnectionOptions>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
-                var conn = Substitute.For<IAmiConnection>();
-                conn.Subscribe(Arg.Any<IObserver<ManagerEvent>>()).Returns(Substitute.For<IDisposable>());
-                conn.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
-                    .Returns(EmptyAsyncEnumerable());
+                var conn = NewConnection();
+                _created.Add(conn);
                 return new ValueTask<IAmiConnection>(conn);
             });
 #pragma warning restore CA2012
@@ -39,10 +40,102 @@ public sealed class VerbaraServerPoolTests : IAsyncDisposable
         GC.SuppressFinalize(this);
     }
 
+    private static IAmiConnection NewConnection()
+    {
+        var conn = Substitute.For<IAmiConnection>();
+        conn.Subscribe(Arg.Any<IObserver<ManagerEvent>>()).Returns(Substitute.For<IDisposable>());
+        conn.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
+            .Returns(_ => EmptyAsyncEnumerable());
+        return conn;
+    }
+
+    /// <summary>A server over a connection its caller created and connected, as a cluster orchestrator hands one in.</summary>
+    private static VerbaraServer HandedInServer(IAmiConnection connection) =>
+        new(connection, NullLoggerFactory.Instance.CreateLogger<VerbaraServer>());
+
+    private static AmiConnectionOptions Credentials() => new() { Username = "admin", Password = "secret" };
+
     private static async IAsyncEnumerable<ManagerEvent> EmptyAsyncEnumerable()
     {
         await Task.CompletedTask;
         yield break;
+    }
+
+    // ── The pool releases the AMI connection behind every server it drops ────────────────────────────
+
+    [Fact]
+    public async Task RemoveServerAsync_ShouldDisposeTheConnection_WhenThePoolCreatedIt()
+    {
+        await _sut.AddServerAsync("created", Credentials());
+        var connection = _created.Should().ContainSingle("the pool created one connection").Subject;
+
+        await _sut.RemoveServerAsync("created");
+
+        // "Remove and disconnect a server from the pool": the connection is released exactly once.
+        await connection.Received(1).DisposeAsync();
+    }
+
+    /// <summary>
+    /// The cluster failover shape: the caller creates and connects the connection itself, wraps it in a
+    /// server and hands the server in. The pool accepted it, so the pool releases it on removal.
+    /// </summary>
+    [Fact]
+    public async Task RemoveServerAsync_ShouldDisposeTheConnection_WhenTheServerWasHandedIn()
+    {
+        var connection = NewConnection();
+        _sut.AddExistingServer("handed-in", HandedInServer(connection));
+
+        await _sut.RemoveServerAsync("handed-in");
+
+        await connection.Received(1).DisposeAsync();
+    }
+
+    [Fact]
+    public async Task AddServerAsync_ShouldDisposeTheNewConnection_WhenTheIdIsADuplicate()
+    {
+        await _sut.AddServerAsync("dup-server", Credentials());
+
+        var act = async () => await _sut.AddServerAsync("dup-server", Credentials());
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*already exists*");
+        _created.Should().HaveCount(2, "the pool created and connected the second connection before it found the id in use");
+        // The rejected server's connection was created for it and never reaches the caller: the pool releases it.
+        await _created[1].Received(1).DisposeAsync();
+        // The server the pool already holds under that id keeps its connection.
+        await _created[0].DidNotReceive().DisposeAsync();
+    }
+
+    /// <summary>One server the pool created and one handed in: the pool's disposal releases both connections.</summary>
+    [Fact]
+    public async Task DisposeAsync_ShouldDisposeEveryConnection_WhenThePoolHoldsTwoServers()
+    {
+        await _sut.AddServerAsync("created", Credentials());
+        var created = _created.Should().ContainSingle("the pool created one connection").Subject;
+        var handedIn = NewConnection();
+        _sut.AddExistingServer("handed-in", HandedInServer(handedIn));
+
+        await _sut.DisposeAsync();
+
+        await created.Received(1).DisposeAsync();
+        await handedIn.Received(1).DisposeAsync();
+    }
+
+    /// <summary>
+    /// A pin, green before and after the pool releases connections: <c>AddExistingServer</c> never accepted
+    /// the rejected server, so that server and its connection stay its caller's, and the held one keeps its own.
+    /// </summary>
+    [Fact]
+    public async Task AddExistingServer_ShouldLeaveTheConnectionUndisposed_WhenTheIdIsADuplicate()
+    {
+        var held = NewConnection();
+        var rejected = NewConnection();
+        _sut.AddExistingServer("dup", HandedInServer(held));
+
+        var act = () => _sut.AddExistingServer("dup", HandedInServer(rejected));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*already exists*");
+        await rejected.DidNotReceive().DisposeAsync();
+        await held.DidNotReceive().DisposeAsync();
     }
 
     [Fact]

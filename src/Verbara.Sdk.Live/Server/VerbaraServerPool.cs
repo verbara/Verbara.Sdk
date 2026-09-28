@@ -48,6 +48,7 @@ public sealed class VerbaraServerPool : IAsyncDisposable
         if (!_servers.TryAdd(serverId, server))
         {
             await server.DisposeAsync();
+            await connection.DisposeAsync();
             throw new InvalidOperationException($"Server '{serverId}' already exists in pool");
         }
 
@@ -98,7 +99,11 @@ public sealed class VerbaraServerPool : IAsyncDisposable
             {
                 _agentRouting.TryRemove(agent.AgentId, out _);
             }
+            // Read before the server is disposed. The server goes first, so it has unhooked the
+            // connection before the connection ends.
+            var connection = server.Connection;
             await server.DisposeAsync();
+            await connection.DisposeAsync();
         }
     }
 
@@ -125,7 +130,9 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     {
         foreach (var server in _servers.Values)
         {
+            var connection = server.Connection;
             await server.DisposeAsync();
+            await connection.DisposeAsync();
         }
         _servers.Clear();
         _agentRouting.Clear();
