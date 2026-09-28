@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Verbara.Sdk.Agi.Diagnostics;
 using Verbara.Sdk.Agi.Mapping;
@@ -349,17 +350,16 @@ public sealed class FastAgiConnectionWindowTests
         // the pending accept and cancels the script. StopAsync does not wait for handlers; the handler
         // releases the connection only after its catch has run, so the peer reading the end of the
         // stream is what orders the assertions after everything the handler logged.
-        var port = GetAvailablePort();
         var scriptReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var strategy = Substitute.For<IMappingStrategy>();
         strategy.Resolve(Arg.Any<AgiRequest>()).Returns(new ParkedScript(scriptReached));
         var logger = new CapturingLogger();
-        var server = new FastAgiServer(port, strategy, logger);
+        var server = new FastAgiServer(0, strategy, logger);
         await server.StartAsync();
         try
         {
             using var peer = new TcpClient();
-            await peer.ConnectAsync(IPAddress.Loopback, port);
+            await peer.ConnectAsync(IPAddress.Loopback, BoundPort(server));
             var stream = peer.GetStream();
             await stream.WriteAsync(Encoding.UTF8.GetBytes(AgiRequestHeaders));
             await stream.FlushAsync();
@@ -407,14 +407,17 @@ public sealed class FastAgiConnectionWindowTests
         TimeProvider timeProvider) =>
         new(0, strategy, logger, timeProvider);
 
-    private static int GetAvailablePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
+    /// <summary>
+    /// The port the server's own listener is bound to. The server is started on port 0, so the OS
+    /// picks the port when it binds. <see cref="FastAgiServer.Port"/> reports the configured port, not
+    /// the bound one. A port probed first and bound later can be taken in between by any process on
+    /// the machine, and the start then fails with "Address already in use".
+    /// </summary>
+    private static int BoundPort(FastAgiServer server) =>
+        ((IPEndPoint)ListenerOf(server)!.LocalEndpoint).Port;
+
+    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_listener")]
+    private static extern ref TcpListener? ListenerOf(FastAgiServer server);
 
     /// <summary>
     /// A client that wraps a fixture's socket and signals when the server disposes it, so a test can

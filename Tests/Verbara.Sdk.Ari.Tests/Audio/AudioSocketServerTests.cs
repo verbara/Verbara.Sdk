@@ -73,6 +73,14 @@ public class AudioSocketServerTests : IAsyncDisposable
     private static byte[] BuildHangupFrame() =>
         BuildFrame(AudioFrameType.Hangup, []);
 
+    /// <summary>
+    /// Port 0, so the OS picks the port when the server binds. It is for a server the test never
+    /// dials, because its accepts come from <c>AcceptOverride</c>. A port probed with
+    /// <see cref="GetFreePort"/> is released before the server binds it, and any process on the
+    /// machine can take it in between; the start then fails with "Address already in use".
+    /// </summary>
+    private const int PortTheOsPicks = 0;
+
     private AudioSocketServer CreateServer(
         int port,
         int maxStreams = 1000,
@@ -726,7 +734,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         // in that case; otherwise the handler releasing the client is.
         var time = new FakeTimeProvider();
         var logger = new CapturingLogger();
-        var server = CreateServer(GetFreePort(), logger: logger, timeProvider: time);
+        var server = CreateServer(PortTheOsPicks, logger: logger, timeProvider: time);
         using var accepted = AcceptedClients.UdpBacked();
         using var client = new ReleaseSignallingClient(accepted.Socket);
         var attempts = 0;
@@ -774,7 +782,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         // listener's stop. The second accept is the signal. A loop that ends on the first connection
         // never makes it, so in that case only the bound ends the wait.
         var logger = new CapturingLogger();
-        var server = CreateServer(GetFreePort(), logger: logger, timeProvider: new FakeTimeProvider());
+        var server = CreateServer(PortTheOsPicks, logger: logger, timeProvider: new FakeTimeProvider());
         using var accepted = AcceptedClients.DisposedSocket();
         using var client = new ReleaseSignallingClient(accepted.Socket);
         var attempts = 0;
@@ -830,7 +838,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         // accept is.
         var time = new FakeTimeProvider();
         var logger = new CapturingLogger();
-        var server = CreateServer(GetFreePort(), logger: logger, timeProvider: time);
+        var server = CreateServer(PortTheOsPicks, logger: logger, timeProvider: time);
         using var accepted = AcceptedClients.UdpBacked();
         using var client = new ReleaseSignallingClient(accepted.Socket);
         var attempts = 0;
@@ -889,7 +897,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         // checked below, because the unobserved-exception witness reads nothing from a task that had
         // not completed when the collection ran.
         var logger = new CapturingLogger();
-        var server = CreateServer(GetFreePort(), logger: logger, timeProvider: new FakeTimeProvider());
+        var server = CreateServer(PortTheOsPicks, logger: logger, timeProvider: new FakeTimeProvider());
         using var accepted = AcceptedClients.NeverConnected();
         using var client = new ReleaseSignallingClient(accepted.Socket);
         using var unobserved = new UnobservedServerFaults();

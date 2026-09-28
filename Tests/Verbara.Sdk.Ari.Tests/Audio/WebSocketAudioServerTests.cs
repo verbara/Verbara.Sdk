@@ -592,7 +592,7 @@ public class WebSocketAudioServerTests
         // in that case; otherwise the handler releasing the client is.
         var time = new FakeTimeProvider();
         var logger = new CapturingLogger();
-        await using var server = CreateServer(GetFreePort(), logger, time);
+        await using var server = CreateServer(PortTheOsPicks, logger, time);
         using var accepted = AcceptedClients.UdpBacked();
         using var client = new ReleaseSignallingClient(accepted.Socket);
         var attempts = 0;
@@ -633,7 +633,7 @@ public class WebSocketAudioServerTests
         // listener's stop. The second accept is the signal. A loop that ends on the first connection
         // never makes it, so in that case only the bound ends the wait.
         var logger = new CapturingLogger();
-        await using var server = CreateServer(GetFreePort(), logger, new FakeTimeProvider());
+        await using var server = CreateServer(PortTheOsPicks, logger, new FakeTimeProvider());
         using var accepted = AcceptedClients.DisposedSocket();
         using var client = new ReleaseSignallingClient(accepted.Socket);
         var attempts = 0;
@@ -682,7 +682,7 @@ public class WebSocketAudioServerTests
         // accept is.
         var time = new FakeTimeProvider();
         var logger = new CapturingLogger();
-        await using var server = CreateServer(GetFreePort(), logger, time);
+        await using var server = CreateServer(PortTheOsPicks, logger, time);
         using var accepted = AcceptedClients.UdpBacked();
         using var client = new ReleaseSignallingClient(accepted.Socket);
         var attempts = 0;
@@ -732,7 +732,7 @@ public class WebSocketAudioServerTests
         // this failure comes before the handler's first await, so the handler has released the client
         // before the loop asks for its next accept. That next accept is the signal.
         var logger = new CapturingLogger();
-        await using var server = CreateServer(GetFreePort(), logger, new FakeTimeProvider());
+        await using var server = CreateServer(PortTheOsPicks, logger, new FakeTimeProvider());
         using var accepted = AcceptedClients.NeverConnected();
         using var client = new ReleaseSignallingClient(accepted.Socket);
         var attempts = 0;
@@ -996,6 +996,14 @@ public class WebSocketAudioServerTests
         client.Connected.Should().BeTrue("the delegated construction produced a bound listener");
         server.IsRunning.Should().BeTrue("and a running server");
     }
+
+    /// <summary>
+    /// Port 0, so the OS picks the port when the server binds. It is for a server the test never
+    /// dials, because its accepts come from <c>AcceptOverride</c>. A port probed with
+    /// <see cref="GetFreePort"/> is released before the server binds it, and any process on the
+    /// machine can take it in between; the start then fails with "Address already in use".
+    /// </summary>
+    private const int PortTheOsPicks = 0;
 
     private static WebSocketAudioServer CreateServer(
         int port,
