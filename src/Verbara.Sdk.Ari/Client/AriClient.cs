@@ -80,8 +80,8 @@ public sealed class AriClient : IAriClient
 
     // How long a dial of the events socket made by the reconnect loop may take before it counts as a
     // failed attempt. The reconnect loop's dial only: the caller's own dial in ConnectAsync is not
-    // bounded by it. Settable by tests (via InternalsVisibleTo).
-    internal TimeSpan ConnectTimeout { get; set; } = TimeSpan.FromSeconds(5);
+    // bounded by it. Settable by tests (via InternalsVisibleTo); see AriConnectBound for the value.
+    internal TimeSpan ConnectTimeout { get; set; } = AriConnectBound.Default;
 
     private void SetState(AriConnectionState newState) =>
         Interlocked.Exchange(ref _state, (int)newState);
@@ -312,7 +312,7 @@ public sealed class AriClient : IAriClient
                     .Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase);
                 var uri = new Uri($"{wsUrl}/ari/events?api_key={Uri.EscapeDataString(_options.Username)}:{Uri.EscapeDataString(_options.Password)}&app={Uri.EscapeDataString(_options.Application)}");
 
-                await socket.ConnectAsync(uri, ct);
+                await AriConnectBound.ConnectAsync(socket, uri, ConnectTimeout, TimeProvider, ct);
                 SetState(AriConnectionState.Connected);
                 AriClientLog.ReconnectedSuccess(_logger, attempt);
 
