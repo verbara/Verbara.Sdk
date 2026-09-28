@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed — BREAKING: the Voice AI session broker could not stop the sessions it started, and kept dispatching after it stopped (#N)
+### Fixed — BREAKING: the Voice AI session broker could not stop the sessions it started, and kept dispatching after it stopped (#334)
 
 - **A session handler's token is now cancelled when the host stops ungracefully or is torn down.** The
   broker handed each `ISessionHandler` the token its `StartAsync` received, which nothing cancels once
@@ -24,7 +24,7 @@ All notable changes to this project will be documented in this file.
   completed, so their metrics do not move. `VoiceAiSessionBroker` now implements `IDisposable` through a
   public `Dispose()`.
 
-### Fixed — hosts using the AudioSocket server or the OpenAI Realtime bridge threw when they shut down (#N)
+### Fixed — hosts using the AudioSocket server or the OpenAI Realtime bridge threw when they shut down (#334)
 
 - **`AudioSocketServer` and `OpenAiRealtimeBridge` ignore every disposal after the first.** The SDK's
   own registrations make the container dispose each of them twice, so every host that called
