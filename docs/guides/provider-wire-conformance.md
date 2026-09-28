@@ -500,7 +500,7 @@ padding only concerns the last message. The pre-fix client fails 5, the union of
 
 | Surface | Client type | Transport | Route | Frames | Validation point | Evidence | Date |
 |---|---|---|---|---|---|---|---|
-| OpenAI Realtime | OpenAiRealtimeBridge | `wss://api.openai.com/v1/realtime?model={model}` | **fixed** — `live, uncontrolled` | **6 fixed** — `live + credential control` | `in-band` | `live, uncontrolled` | 2026-09-27 |
+| OpenAI Realtime | OpenAiRealtimeBridge | `wss://api.openai.com/v1/realtime?model={model}` | **fixed** — `live + route control` | **6 fixed** — `live + credential control` | `in-band` | `live + both controls` | 2026-09-28 |
 
 The Client type cell is plain text, not a code span. The bridge is an `ISessionHandler`, not a
 `SpeechSynthesizer` or `SpeechRecognizer`, so the presence guard described under *Maintenance* does
@@ -511,21 +511,30 @@ row checks still apply: its evidence class, date and validation point are read l
 nothing about it. Its session opened with the retired beta opt-in header. The endpoint answered with
 an `error` frame (`beta_api_shape_disabled`, "The Realtime Beta API is no longer supported") and
 closed `4000`: **0 bytes** of audio, and the session was counted as completed when the caller hung
-up, 12 s in, because the close code was never read. Unless a raw-wire probe is named, every run
+up, 12 s in, because the close code was never read (2026-09-27). Re-run from the published 2.6.0
+package on 2026-09-28, the same request drew the same `error` frame, and about 12 s in the connection
+was dropped without a close frame, so 2.6.0 ended that session as a transport failure
+(`ConnectionClosedPrematurely`) — again with **0 bytes**. Unless a raw-wire probe is named, every run
 below drove the SDK's own `OpenAiRealtimeBridge`, with a real AudioSocket caller playing the committed
-8 kHz Speechmatics clip.
+8 kHz Speechmatics clip. The row's date is the run of the committed client, 2026-09-28: three sessions
+answered with audio (2.25 to 4.65 s of it) and a final transcript, and each ended within about 1.1 s
+of the caller's hangup as a completed session, with `sessions.close_unanswered` at 0.
 
-The route half and the frame half sit at different classes, and the row carries the weaker one:
+Each half was controlled by its own arm, in the same run on the same host, so the row is
+`live + both controls`:
 
-- **Route — `live, uncontrolled`.** The path, `/v1/realtime`, was right; the refusal itself names it.
+- **Route — `live + route control`.** The path, `/v1/realtime`, was right; the refusal itself names it.
   The default model was not: the shipped default, a preview id the vendor has retired, is absent from
   its model listing, and a session on it closes `4004` (`model_not_found`). The default is now
-  `gpt-realtime`, which the listing carries and which answered with audio. No wrong-path arm has been
-  run, so nothing yet shows that this probe would notice a wrong route.
+  `gpt-realtime`, which the listing carries and which answered with audio. A wrong-path arm,
+  `/v1/realtime-no-such-route`, was refused at the upgrade with `404` while the right path upgraded in
+  the same run, so the probe tells routes apart.
 - **Frames — `live + credential control`.** An invalid key completed the upgrade and was refused in
   band: an `error` frame, then close `3000` (`invalid_api_key`). That is this surface's measured
   validation point, and the arm that makes the frame evidence controlled. The class's wording about an
-  undocumented path belongs to the Route column and does not apply here. The 2.6.0 request itself,
+  undocumented path belongs to the Route column and does not apply here. On the committed client the
+  refusal surfaces as `SpeechProviderFailureException` (`Signal = CloseCode`, `Code = 3000`) and counts
+  in `sessions.failed`. The 2.6.0 request itself,
   beta header and beta shape, ran beside the fixed one as a protocol control, and was refused
   (`beta_api_shape_disabled`, 0 bytes) each time it ran.
 
@@ -552,15 +561,15 @@ Six frame defects, each measured live:
    itself: a session was still running **60 s** after the hangup. The client now closes toward the
    vendor when the caller hangs up, and the vendor answered that close with `1000` about 1.1 s later.
 
-On that build, which carried every fix but the `null` of item 4, default options returned 35 200 B
-of audio (2.2 s at 8 kHz) and a final transcript, and the handler returned 1.1 s after the hangup,
-counted as completed with its duration.
+On the first build measured (2026-09-27), which carried every fix but the `null` of item 4, default
+options returned 35 200 B of audio (2.2 s at 8 kHz) and a final transcript, and the handler returned
+1.1 s after the hangup, counted as completed with its duration. The committed client did the same on
+2026-09-28, three runs of three.
 
-What this row does **not** claim: the client measured was an uncommitted build of these fixes, not the
-committed one. The committed client also carries two things no live run has exercised: the bound on
-how long it waits for the vendor to answer its close, and the explicit `null` above sent through the
-bridge. A live run of the committed client, with a wrong-path arm beside it, is owed, and this row
-changes with it, date included.
+What this row does **not** claim: two things the committed client carries have not run live. The bound
+on how long it waits for the vendor to answer its close has run only against the test fake, because the
+vendor answered every close in about 1.1 s. The explicit `null` of item 4 has been measured on the raw
+wire, not sent through the bridge, because the live runs used the default server-side detection.
 
 ## Voice catalogs are checked against the vendor — 2026-08-18
 
@@ -780,17 +789,15 @@ Named here rather than left as absence, because absence is what this file exists
   maximum was not, and one of those four frames had been over the buffer all along. Still unmeasured
   on the **Class A** (binary-frame) surfaces, where frame size is chosen by the client and the
   measured headroom is 34×.
-- **OpenAI Realtime** — measured on 2026-09-27 on an uncommitted build, so everything its row claims
-  is still owed a run of the committed client. Beyond that:
+- **OpenAI Realtime** — measured on the committed client on 2026-09-28 (first on a prototype build on
+  2026-09-27). Still open:
   - **Barge-in.** Talking over the assistant produced three responses, and all three completed
     (`response.done` with `status: completed`). `response.cancelled`, the event the client reads an
     interruption from, was never observed, so whether an interruption reaches the client at all is
     unmeasured.
   - **A vendor that does not answer the close.** Every live hangup was answered with `1000` within
-    about 1.1 s. The client's 10 s bound on that answer, and the
+    about 1.1 s, on both dates. The client's 10 s bound on that answer, and the
     `openai_realtime.sessions.close_unanswered` counter it feeds, have run only against the test fake.
-  - **The route.** No wrong-path arm has been run, which is why the route half reads
-    `live, uncontrolled`.
 
 ## Two properties this record keeps having to restate
 
