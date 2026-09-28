@@ -190,8 +190,12 @@ public sealed class VerbaraServer : IVerbaraServer
                         qm.Penalty ?? 0, qm.Paused ?? false, qm.Status ?? 0);
                     break;
                 case QueueEntryEvent qe:
+                    // The entry is marked as a snapshot's, and carries the Wait Asterisk reported, so
+                    // the session manager can tell a caller it already holds from a new one and date
+                    // the visit from when Asterisk says the caller joined.
                     Queues.OnCallerJoined(
-                        qe.Queue ?? "", qe.Channel ?? "", qe.CallerId, qe.Position ?? 0);
+                        qe.Queue ?? "", qe.Channel ?? "", qe.CallerId, qe.Position ?? 0,
+                        fromSnapshot: true, reportedWaitSeconds: qe.Wait);
                     break;
             }
         }

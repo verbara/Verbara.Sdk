@@ -149,7 +149,26 @@ public sealed class QueueManager
     }
 
     /// <summary>Handle QueueCallerJoin event.</summary>
-    public void OnCallerJoined(string queueName, string channel, string? callerId, int position)
+    public void OnCallerJoined(string queueName, string channel, string? callerId, int position) =>
+        Join(queueName, channel, callerId, position, fromSnapshot: false, reportedWaitSeconds: null);
+
+    /// <summary>
+    /// Handle a caller that a <c>QueueStatus</c> snapshot reports waiting in a queue, with the wait
+    /// Asterisk reported for it. The entry is marked with both, see
+    /// <see cref="AsteriskQueueEntry.FromSnapshot"/> and <see cref="AsteriskQueueEntry.ReportedWaitSeconds"/>.
+    /// <para>
+    /// Internal, and an overload rather than new parameters on the public method, because the public
+    /// method's signature is shipped API. Both reach the same core, so the table, the
+    /// <c>live.queue.calls.joined</c> counter, the log line, <see cref="AsteriskQueueEntry.JoinedAt"/>
+    /// and <see cref="CallerJoined"/> are identical for a snapshot entry and a live join.
+    /// </para>
+    /// </summary>
+    internal void OnCallerJoined(string queueName, string channel, string? callerId, int position,
+        bool fromSnapshot, long? reportedWaitSeconds) =>
+        Join(queueName, channel, callerId, position, fromSnapshot, reportedWaitSeconds);
+
+    private void Join(string queueName, string channel, string? callerId, int position,
+        bool fromSnapshot, long? reportedWaitSeconds)
     {
         var queue = _queues.GetOrAdd(queueName, _ => new AsteriskQueue { Name = queueName });
         var entry = new AsteriskQueueEntry
@@ -157,7 +176,9 @@ public sealed class QueueManager
             Channel = channel,
             CallerId = callerId,
             Position = position,
-            JoinedAt = DateTimeOffset.UtcNow
+            JoinedAt = DateTimeOffset.UtcNow,
+            FromSnapshot = fromSnapshot,
+            ReportedWaitSeconds = reportedWaitSeconds
         };
         queue.Entries[channel] = entry;
         LiveMetrics.QueueCallsJoined.Add(1);
@@ -281,4 +302,27 @@ public sealed class AsteriskQueueEntry
     public string? CallerId { get; set; }
     public int Position { get; set; }
     public DateTimeOffset JoinedAt { get; init; }
+
+    /// <summary>
+    /// True when this entry came from a <c>QueueEntry</c> of a <c>QueueStatus</c> snapshot (the
+    /// initial load or a post-reconnect reload), rather than from a live <c>QueueCallerJoin</c>.
+    /// <para>
+    /// A live join is Asterisk's report that the caller has just entered the queue. A snapshot entry
+    /// only says the caller is waiting there now: it may be a caller this process already saw join, or
+    /// one whose join it never saw. <see cref="JoinedAt"/> is when Live handled the entry in both
+    /// cases; this flag is what tells the two apart.
+    /// </para>
+    /// </summary>
+    internal bool FromSnapshot { get; init; }
+
+    /// <summary>
+    /// The <c>Wait</c> header of the snapshot's <c>QueueEntry</c>, in whole seconds, exactly as
+    /// Asterisk sent it: how long the caller had been waiting in this queue when the snapshot was
+    /// taken. <c>null</c> when the header was absent, and always <c>null</c> for a live join.
+    /// <para>
+    /// Live does not interpret it and does not backdate <see cref="JoinedAt"/> with it; a reader that
+    /// needs the time the caller joined subtracts it from its own clock.
+    /// </para>
+    /// </summary>
+    internal long? ReportedWaitSeconds { get; init; }
 }
