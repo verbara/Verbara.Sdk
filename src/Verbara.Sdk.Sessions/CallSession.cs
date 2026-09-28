@@ -83,6 +83,35 @@ public sealed class CallSession
     // Thread safety
     internal readonly Lock SyncRoot = new();
 
+    /// <summary>
+    /// Whether this call's ending has been delivered: its <c>CallEndedEvent</c>, its completion
+    /// measurements and span, and its release-queue entry. The manager sets it the first time every
+    /// participant is found to have left, under <see cref="SyncRoot"/>, and nothing clears it.
+    /// <para>
+    /// It records delivery, not state, and both halves of that are load-bearing. It is kept on the
+    /// session rather than in a manager-side set, so it outlives the session's release: a leg that
+    /// joined the call after it ended still points at this object, and its later departure must not
+    /// deliver the ending again. And it is never derived from <see cref="State"/>: a call the timeout
+    /// sweep made terminal has had no ending delivered, and still gets its one when its participants
+    /// leave (<c>ADR-0063</c>, D2).
+    /// </para>
+    /// </summary>
+    internal bool EndingDelivered { get; private set; }
+
+    /// <summary>
+    /// Marks the ending delivered. Returns <c>true</c> only the first time, which is the one call that
+    /// delivers it; every later call returns <c>false</c> and changes nothing. Called under
+    /// <see cref="SyncRoot"/>.
+    /// </summary>
+    internal bool TryMarkEndingDelivered()
+    {
+        if (EndingDelivered)
+            return false;
+
+        EndingDelivered = true;
+        return true;
+    }
+
     // State transitions (internal — only CallSessionManager drives transitions)
     internal bool TryTransition(CallSessionState newState)
     {

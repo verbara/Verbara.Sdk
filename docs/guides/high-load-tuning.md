@@ -199,7 +199,7 @@ Both AMI and ARI support exponential backoff reconnection.
 | `SessionOptions.ReconciliationInterval` | 30s | Increase to 1-2min under very heavy load to smooth the burst |
 | `SessionOptions.SlaThreshold` | 20s | Align with your contact-center SLA |
 | `SessionOptions.QueueMetricsWindow` | 30min | Rolling window for `QueueSessionTracker` — reduce if per-queue RAM matters |
-| `SessionOptions.WrapUpDuration` | 30s | Post-call wrap-up tracked per `AgentSession` |
+| `SessionOptions.WrapUpDuration` | 30s | Not a lever: nothing in the SDK reads it, and the SDK raises no `CallWrapUpEvent`. An agent that `IAgentSessionTracker` moves to wrap-up when its call ends stays there until its next call connects, whatever this is set to |
 | `AmiConnection.EventPumpCapacity` | 20,000 | Size to absorb 10s of peak event rate **plus** the expected reconcile burst |
 
 <!-- skip-doc-snippet -->

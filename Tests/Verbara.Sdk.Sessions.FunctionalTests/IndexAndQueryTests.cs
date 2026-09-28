@@ -1,12 +1,17 @@
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Sessions.FunctionalTests.Infrastructure;
+using Verbara.Sdk.Sessions.Manager;
 using FluentAssertions;
 
 namespace Verbara.Sdk.Sessions.FunctionalTests;
 
 public sealed class IndexAndQueryTests : IAsyncLifetime
 {
-    private readonly SessionTestFixture _fixture = new();
+    /// <summary>The manager's release clock: it moves only when a test moves it.</summary>
+    private readonly ManualClock _releaseClock = new(DateTimeOffset.UtcNow);
+    private readonly SessionTestFixture _fixture;
+
+    public IndexAndQueryTests() => _fixture = new SessionTestFixture(new SessionOptions(), _releaseClock);
 
     public Task InitializeAsync() => _fixture.InitializeAsync();
     public Task DisposeAsync() => _fixture.DisposeAsync();
@@ -72,31 +77,44 @@ public sealed class IndexAndQueryTests : IAsyncLifetime
         active.Should().NotContain(s => s.LinkedId == "iq-linked-5");
     }
 
+    /// <summary>
+    /// <see cref="CallSessionManager.GetRecentCompleted"/> returns exactly the ended calls the manager
+    /// still holds — no call in progress, none past retention — most recent first. Three calls end; the
+    /// release clock is moved until they ended one tick more than
+    /// <see cref="SessionOptions.CompletedRetention"/> ago; three more end. A list that kept a released
+    /// call, or grew past what retention holds, shows it as an id that should not be there.
+    /// </summary>
     [Fact]
-    public void GetRecentCompleted_ShouldReturnCompletedSessions()
+    public void GetRecentCompleted_ShouldReturnExactlyTheEndedCallsStillHeld_WhenEarlierOnesEndedMoreThanTheRetentionPeriodAgo()
     {
-        // Create and complete 3 sessions
-        for (var i = 0; i < 3; i++)
+        var live = OpenCall("iq-rc-live");
+        var first = EndCalls("iq-rc-first", 3);
+        var beforeRetention = _fixture.SessionManager.GetRecentCompleted(10).ToList();
+
+        // Every call that ends from here on ends within retention; the first three do not.
+        var cutoff = first.Max(s => s.CompletedAt!.Value) + TimeSpan.FromTicks(1);
+        _releaseClock.Advance(cutoff + _fixture.Options.CompletedRetention - _releaseClock.GetUtcNow());
+        var second = EndCalls("iq-rc-second", 3);
+        second.Should().OnlyContain(s => s.CompletedAt >= cutoff, "premise: the second three ended within retention");
+        var afterRetention = _fixture.SessionManager.GetRecentCompleted(10).ToList();
+
+        new
         {
-            var callerUid = $"iq-rc-caller-{i}";
-            var agentUid = $"iq-rc-agent-{i}";
-            var linked = $"iq-rc-linked-{i}";
-
-            _fixture.SimulateNewChannel(callerUid, $"PJSIP/trunk-{10 + i}",
-                ChannelState.Ring, linkedId: linked, context: "from-trunk");
-            _fixture.SimulateNewChannel(agentUid, $"PJSIP/100-{10 + i}",
-                ChannelState.Ring, linkedId: linked);
-            _fixture.SimulateAnswer(agentUid);
-            _fixture.SimulateHangup(agentUid);
-            _fixture.SimulateHangup(callerUid);
-        }
-
-        var recent = _fixture.SessionManager.GetRecentCompleted(10).ToList();
-        recent.Should().HaveCountGreaterOrEqualTo(3);
-        recent.Should().OnlyContain(s =>
-            s.State == CallSessionState.Completed
-            || s.State == CallSessionState.Failed
-            || s.State == CallSessionState.TimedOut);
+            BeforeRetention = beforeRetention.Select(s => s.SessionId),
+            AfterRetention = afterRetention.Select(s => s.SessionId),
+            LiveListed = beforeRetention.Concat(afterRetention).Contains(live),
+        }.Should().BeEquivalentTo(
+            new
+            {
+                BeforeRetention = first.Select(s => s.SessionId),
+                AfterRetention = second.Select(s => s.SessionId),
+                LiveListed = false,
+            },
+            "the recent completed calls are exactly the ended calls the manager still holds: the first three "
+            + "while they are within retention, and only the second three once the first ended more than "
+            + "the retention period ago — never the call still in progress");
+        beforeRetention.Should().BeInDescendingOrder(s => s.CompletedAt, "the most recent ending comes first");
+        afterRetention.Should().BeInDescendingOrder(s => s.CompletedAt, "the most recent ending comes first");
     }
 
     [Fact]
@@ -112,5 +130,33 @@ public sealed class IndexAndQueryTests : IAsyncLifetime
 
         // Non-existent bridge
         _fixture.SessionManager.GetByBridgeId("nonexistent-bridge").Should().BeNull();
+    }
+
+    /// <summary>One leg of a new call, which stays in progress.</summary>
+    private CallSession OpenCall(string linkedId)
+    {
+        _fixture.SimulateNewChannel($"{linkedId}-caller", $"PJSIP/trunk-{linkedId}",
+            ChannelState.Ring, linkedId: linkedId, context: "from-trunk");
+        return _fixture.SessionManager.GetByLinkedId(linkedId)
+            ?? throw new InvalidOperationException($"premise: a call was opened for '{linkedId}'");
+    }
+
+    /// <summary><paramref name="count"/> answered calls, each ended — both legs hung up — before the next starts.</summary>
+    private List<CallSession> EndCalls(string prefix, int count)
+    {
+        var ended = new List<CallSession>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var linked = $"{prefix}-{i}";
+            var call = OpenCall(linked);
+            _fixture.SimulateNewChannel($"{linked}-agent", $"PJSIP/100-{linked}", ChannelState.Ring, linkedId: linked);
+            _fixture.SimulateAnswer($"{linked}-agent");
+            _fixture.SimulateHangup($"{linked}-agent");
+            _fixture.SimulateHangup($"{linked}-caller");
+            call.State.Should().BeOneOf([CallSessionState.Completed, CallSessionState.Failed], $"premise: '{linked}' ended");
+            ended.Add(call);
+        }
+
+        return ended;
     }
 }

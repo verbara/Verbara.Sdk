@@ -31,17 +31,29 @@ public sealed class SessionTestFixture : IAsyncLifetime
     {
     }
 
-    public SessionTestFixture(SessionOptions options)
+    /// <param name="options">The session options the manager runs with.</param>
+    /// <param name="releaseClock">
+    /// The clock the manager reads its release cutoff from, so a test can move past
+    /// <see cref="SessionOptions.CompletedRetention"/> without waiting; <c>null</c> builds the manager
+    /// the way a consumer does, on the wall clock.
+    /// </param>
+    public SessionTestFixture(SessionOptions options, TimeProvider? releaseClock = null)
     {
         Options = options;
         _connection = Substitute.For<IAmiConnection>();
         _connection.AsteriskVersion.Returns("21.0.0");
 
         Server = new VerbaraServer(_connection, NullLogger<VerbaraServer>.Instance);
-        SessionManager = new CallSessionManager(
-            Microsoft.Extensions.Options.Options.Create(options),
-            NullLogger<CallSessionManager>.Instance,
-            new InMemorySessionStore());
+        SessionManager = releaseClock is null
+            ? new CallSessionManager(
+                Microsoft.Extensions.Options.Options.Create(options),
+                NullLogger<CallSessionManager>.Instance,
+                new InMemorySessionStore())
+            : new CallSessionManager(
+                Microsoft.Extensions.Options.Options.Create(options),
+                NullLogger<CallSessionManager>.Instance,
+                new InMemorySessionStore(),
+                releaseClock);
 
         SessionManager.AttachToServer(Server, DefaultServerId);
     }

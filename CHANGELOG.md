@@ -105,6 +105,46 @@ All notable changes to this project will be documented in this file.
   old clear-and-reload ticked nothing — a dashboard reading it will show a step at a reconnect that
   ends calls.
 
+### Fixed — BREAKING: a call that ended could stay held for the life of the process, and its ending could be reported twice (#333)
+
+- **Releasing ended calls no longer stops for good, and it also runs when calls arrive.** The session
+  manager lets an ended call go once `CompletedRetention` (10 minutes by default) has passed
+  (`ADR-0063`). An ended call whose leg reused its `linkedid` and then hung up — or whose `CompletedAt` a
+  consumer cleared — left an entry the release could not evaluate, and release stopped there for the life
+  of the process: after one such call, 200 of 200 later calls stayed held past retention, and
+  `SessionHealthCheck` reported 100 (its cap) recent completed sessions with none of them inside
+  retention. Such an entry is now discarded, and release also runs on each arriving call, so ended calls
+  are let go without waiting for another call to end. This restores what `SessionHealthCheck` is
+  published to do: "Reports active and recent completed session counts".
+- **A call's ending is reported and counted once.** On the same shape, and for a leg that outlived its
+  call's release, `CallEndedEvent` was raised twice, and `sessions.completed`, the duration and
+  talk-time recordings and the call's span were each recorded twice. Each now happens once, as the
+  Sessions package documents: an "observable stream of … `CallEnded` … events" and a
+  `sessions.completed` counter described as "Total sessions completed". A reload that ends a call and
+  admits a leg of it the SDK had not seen (the reload fixed above) likewise reports that call's ending
+  once when the leg hangs up.
+- **An agent's statistics count a call once.** Following from the previous bullet, `CallsHandled` and
+  `TotalTalkTime` no longer count such a call twice (measured: 2 calls and 1 m of talk time for one
+  30-second call), matching the "rolling statistics (calls handled, talk/hold/wrap-up time, idle)"
+  described since 1.7.0.
+- **The default in-memory store lets go of what the manager releases.** It kept every call for the life
+  of the process — about 3,000 bytes per call, measured at 10,000 of 10,000 calls held past retention —
+  and still returned a released call by id and by `linkedid`, and a late leg's save put it back. It now
+  holds none of them, the same as running with no store. No published documentation described this
+  behaviour before this release: `SessionOptions` carried no XML documentation in 2.6.0, and every
+  published retention text is the Redis store's own option. `CompletedRetention` is now documented as
+  the bound for both the manager and the default store; stores that provide durability keep their own
+  retention.
+- **What a consumer observes changes.** Once `CompletedRetention` has passed, an ended call is gone from
+  the manager and from the default store: a lookup by id or `linkedid` returns `null` where it returned
+  the call. A leg that arrives with an ended call's `linkedid` after the call was released starts a new
+  call. Anything counting `CallEndedEvent`, `sessions.completed` or agent statistics sees one per call
+  where it saw two on those shapes.
+- `MaxCompletedSessions` is now documented as not a bound — `CompletedRetention` is the only one — and
+  `WrapUpDuration` as not applied; the high-load tuning guide is corrected to match. Two gauges on the
+  existing `Verbara.Sdk.Sessions` meter, `sessions.active` and `sessions.retained`, report the calls a
+  manager holds that have not ended and the ended calls it still holds. No public API changes.
+
 ### Fixed — the push bus never counted an event dropped by a full buffer (#328)
 
 - `asterisk.push.events.dropped` now increments, tagged `reason=buffer_full`, once for every event a

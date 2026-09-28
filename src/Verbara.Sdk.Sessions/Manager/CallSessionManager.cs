@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.Metrics;
 using System.Reactive.Subjects;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Agents;
@@ -20,25 +21,62 @@ public sealed partial class CallSessionManager : ICallSessionManager
     private readonly ConcurrentDictionary<string, CallSession> _byLinkedId = new();
     private readonly ConcurrentDictionary<string, CallSession> _byChannelId = new();
     private readonly ConcurrentDictionary<string, string> _bridgeToSession = new();
-    private readonly ConcurrentQueue<string> _completedOrder = new();
+    private readonly ConcurrentQueue<ReleaseEntry> _completedOrder = new();
+
+    /// <summary>
+    /// Serializes the release walk. The walk judges an entry after taking it off the queue, which is
+    /// only sound while no other walk can take an entry between its look at the head and its dequeue;
+    /// every arrival and every ending runs a walk, and with several servers attached they run on
+    /// different threads at once.
+    /// </summary>
+    private readonly Lock _releaseLock = new();
     private readonly ConcurrentDictionary<string, ServerSubscriptions> _serverSubs = new();
     private readonly Subject<SessionDomainEvent> _events = new();
     private readonly SessionCorrelator _correlator;
     private readonly SessionOptions _options;
     private readonly SessionStoreBase _store;
     private readonly ILogger<CallSessionManager> _logger;
+    private readonly TimeProvider _timeProvider;
+    private readonly Meter _residencyMeter;
     private CancellationToken _shutdownToken;
 
     public CallSessionManager(
         IOptions<SessionOptions> options,
         ILogger<CallSessionManager> logger,
         SessionStoreBase store)
+        : this(options, logger, store, TimeProvider.System)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a manager whose release cutoff — the instant an ended session must have
+    /// completed before to be past <see cref="SessionOptions.CompletedRetention"/> — is read from
+    /// <paramref name="timeProvider"/>, so a test can move past the retention period with a fake
+    /// clock instead of sitting it out. Nothing else reads it: the session's own timestamps still
+    /// come from the wall clock.
+    /// </summary>
+    internal CallSessionManager(
+        IOptions<SessionOptions> options,
+        ILogger<CallSessionManager> logger,
+        SessionStoreBase store,
+        TimeProvider timeProvider)
     {
         _options = options.Value;
         _logger = logger;
         _store = store;
+        _timeProvider = timeProvider;
         _correlator = new SessionCorrelator(_options);
+        _residencyMeter = SessionMetrics.CreateResidencyMeter(
+            active: () => CountHeld(ended: false),
+            retained: () => CountHeld(ended: true));
     }
+
+    /// <summary>
+    /// The meter this manager publishes its resident counts on (<c>sessions.active</c>,
+    /// <c>sessions.retained</c>), disposed with the manager. Every manager has its own under the
+    /// <c>Verbara.Sdk.Sessions</c> name; a test picks this manager's gauges out by it.
+    /// </summary>
+    internal Meter ResidencyMeter => _residencyMeter;
 
     /// <summary>
     /// Sets the token <em>every</em> persistence call runs under, not only the ones at shutdown.
@@ -51,8 +89,24 @@ public sealed partial class CallSessionManager : ICallSessionManager
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to persist session {SessionId}")]
     private partial void LogPersistError(Exception ex, string sessionId);
 
+    /// <summary>
+    /// Saves <paramref name="session"/> to the store — only while this manager still holds it.
+    /// <para>
+    /// A session it has released is never handed to the store again. A leg can outlive the call it
+    /// joined (a late leg reusing the call's <c>linkedid</c>, or one a reload admitted), and its
+    /// changes still reach this method; a save then would put back into the default store a call the
+    /// SDK has let go of, and hand a durable store a call the SDK no longer tracks. The check runs
+    /// again once the save is done, because with several servers attached a walk on another thread
+    /// can release the session between the first check and the store's write: if it did, the default
+    /// store is told again, after the write, so the write cannot outlast the release
+    /// (<c>ADR-0063</c>, D5).
+    /// </para>
+    /// </summary>
     private async Task PersistAsync(CallSession session)
     {
+        if (!IsHeld(session))
+            return;
+
         try
         {
             await _store.SaveAsync(session, _shutdownToken);
@@ -68,14 +122,14 @@ public sealed partial class CallSessionManager : ICallSessionManager
         {
             LogPersistError(ex, session.SessionId);
         }
+
+        if (!IsHeld(session))
+            _store.OnReleasedByManager(session);
     }
 
     public IObservable<SessionDomainEvent> Events => _events;
 
-    public IEnumerable<CallSession> ActiveSessions => _sessions.Values
-        .Where(s => s.State is not CallSessionState.Completed
-            and not CallSessionState.Failed
-            and not CallSessionState.TimedOut);
+    public IEnumerable<CallSession> ActiveSessions => _sessions.Values.Where(s => !HasEnded(s));
 
     public CallSession? GetById(string sessionId) => _sessions.GetValueOrDefault(sessionId);
     public CallSession? GetByLinkedId(string linkedId) => _byLinkedId.GetValueOrDefault(linkedId);
@@ -88,9 +142,47 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
     public IEnumerable<CallSession> GetRecentCompleted(int count = 100) =>
         _sessions.Values
-            .Where(s => s.State is CallSessionState.Completed or CallSessionState.Failed or CallSessionState.TimedOut)
+            .Where(HasEnded)
             .OrderByDescending(s => s.CompletedAt)
             .Take(count);
+
+    /// <summary>
+    /// Whether <paramref name="session"/> is in a terminal state. The one split between the calls this
+    /// manager holds in progress and the ended ones it still holds: <see cref="ActiveSessions"/>,
+    /// <see cref="GetRecentCompleted"/> and the resident-count gauges all read it.
+    /// </summary>
+    private static bool HasEnded(CallSession session) =>
+        session.State is CallSessionState.Completed or CallSessionState.Failed or CallSessionState.TimedOut;
+
+    /// <summary>
+    /// How many sessions this manager holds that have ended (<paramref name="ended"/>) or have not —
+    /// the values of the <c>sessions.retained</c> and <c>sessions.active</c> gauges.
+    /// <para>
+    /// The ended count is of the sessions held, not of the release queue's entries. The queue holds
+    /// the ended calls whose release is pending, and some ended calls are held with no entry: one the
+    /// timeout sweep ended while its legs were still up, and whose legs are never seen to leave; one
+    /// whose entry carried no completion time and was dropped with the call kept; one registered
+    /// already ended. A count of the queue would report those released while the process keeps them
+    /// — a bound that looks as if it works while the memory stays held, which is what these gauges
+    /// exist to show (<c>ADR-0063</c>).
+    /// </para>
+    /// <para>
+    /// One pass over the held sessions, which takes no lock and copies nothing (unlike
+    /// <c>_sessions.Values</c>). It runs only when a listener collects the gauges, never on a call's
+    /// path.
+    /// </para>
+    /// </summary>
+    private long CountHeld(bool ended)
+    {
+        var count = 0L;
+        foreach (var held in _sessions)
+        {
+            if (HasEnded(held.Value) == ended)
+                count++;
+        }
+
+        return count;
+    }
 
     public void AttachToServer(VerbaraServer server, string serverId)
     {
@@ -182,6 +274,13 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
     private void OnChannelAdded(AsteriskChannel channel, string serverId)
     {
+        // Release rides arrivals as well as endings, so a process that keeps accepting calls but has
+        // stopped completing them still lets go of what it holds past retention. It runs before the
+        // leg is correlated: a leg carrying the linkedid of an ended call past retention then finds
+        // that call released and opens its own, instead of joining a call this same evaluation lets
+        // go of. No timer is involved, so an idle process releases nothing (ADR-0063, D4).
+        EvictStaleCompleted();
+
         var linkedId = channel.LinkedId;
         if (string.IsNullOrEmpty(linkedId)) linkedId = channel.UniqueId;
 
@@ -518,9 +617,29 @@ public sealed partial class CallSessionManager : ICallSessionManager
         _ = PersistAsync(session);
     }
 
+    /// <summary>
+    /// Delivers the ending of a call whose participants have all left: its release-queue entry, its
+    /// tracing span, its completion measurements and its <see cref="CallEndedEvent"/>. Runs under the
+    /// session's lock, from <see cref="OnChannelRemoved"/>.
+    /// <para>
+    /// Every participant can be found to have left more than once: a leg that joined the call after it
+    /// ended — reusing its <c>linkedid</c>, or admitted into it by the reload that ended it — leaves
+    /// too. The ending is delivered only the first time, keyed on the session's own delivery marker,
+    /// never on its state (<c>ADR-0063</c>, D2). A repeat saves the session, which now records the late
+    /// leg — and, like every save, only while this manager still holds that same object
+    /// (<see cref="PersistAsync"/>): once it has been released, a save would hand the store a call the
+    /// SDK has let go of.
+    /// </para>
+    /// </summary>
     private void OnSessionCompleted(CallSession session)
     {
-        _completedOrder.Enqueue(session.SessionId);
+        if (!session.TryMarkEndingDelivered())
+        {
+            _ = PersistAsync(session);
+            return;
+        }
+
+        QueueForRelease(session);
 
         // Record tracing span
         using var activity = SessionActivitySource.StartSessionCompleted(
@@ -553,17 +672,101 @@ public sealed partial class CallSessionManager : ICallSessionManager
         EvictStaleCompleted();
     }
 
-    private void EvictStaleCompleted()
+    /// <summary>
+    /// Whether this manager still holds <paramref name="session"/> itself — not merely a session with
+    /// the same id.
+    /// </summary>
+    private bool IsHeld(CallSession session) =>
+        _sessions.TryGetValue(session.SessionId, out var held) && ReferenceEquals(held, session);
+
+    /// <summary>
+    /// How many entries the release queue holds for <paramref name="sessionId"/>: the number of times
+    /// the session's ending was queued and not yet walked past. Read by tests, which have no other way
+    /// to see the queue; nothing in the manager reads it.
+    /// </summary>
+    internal int ReleaseQueueEntriesFor(string sessionId) =>
+        _completedOrder.Count(entry => string.Equals(entry.Session.SessionId, sessionId, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Queues <paramref name="session"/>, whose ending has just been delivered, for release once
+    /// <see cref="SessionOptions.CompletedRetention"/> has passed since its completion time — the time
+    /// it carries <em>now</em>, recorded with the entry.
+    /// <para>
+    /// Internal rather than private so a test can put at the head an entry no route of the manager
+    /// produces, and show that the walk gets past it: the walk's progress must not depend on how an
+    /// entry went bad.
+    /// </para>
+    /// </summary>
+    internal void QueueForRelease(CallSession session) =>
+        _completedOrder.Enqueue(new ReleaseEntry(session, session.CompletedAt));
+
+    /// <summary>
+    /// Releases every queued call past <see cref="SessionOptions.CompletedRetention"/>, oldest first.
+    /// Runs on every arrival, before the arriving leg is correlated, and on every ending, after its
+    /// <see cref="CallEndedEvent"/>; nothing schedules it, and one walk runs at a time.
+    /// <para>
+    /// An entry leaves the queue first and is judged afterwards. The one thing read before it leaves
+    /// is its own record: a completion time that proves the call ended inside retention keeps it, and
+    /// the walk stops there. Every other entry is taken off — one naming a session no longer held, one
+    /// with no completion time, one past retention — so no entry can hold the head, and with it every
+    /// call queued after it, for the life of the process. That was the wedge: the walk used to take an
+    /// entry off only once it could evaluate it, and stopped at the first it could not (<c>ADR-0063</c>,
+    /// D1).
+    /// </para>
+    /// </summary>
+    internal void EvictStaleCompleted()
     {
-        var cutoff = DateTimeOffset.UtcNow - _options.CompletedRetention;
-        while (_completedOrder.TryPeek(out var oldId) &&
-               _sessions.TryGetValue(oldId, out var old) &&
-               old.CompletedAt < cutoff)
+        lock (_releaseLock)
         {
-            _completedOrder.TryDequeue(out _);
-            _sessions.TryRemove(oldId, out _);
-            _byLinkedId.TryRemove(old.LinkedId, out _);
+            var cutoff = _timeProvider.GetUtcNow() - _options.CompletedRetention;
+
+            // Under the lock only this walk dequeues, so the entry taken off is the head just read.
+            while (_completedOrder.TryPeek(out var head) && !head.EndedWithin(cutoff)
+                   && _completedOrder.TryDequeue(out var entry))
+            {
+                // No completion time: the entry says nothing about how old the call is, so it is
+                // dropped and the call kept. Holding is the direction this bound fails in; releasing
+                // on no evidence is not.
+                if (entry.CompletedAt is null)
+                    continue;
+
+                Release(entry.Session);
+            }
         }
+    }
+
+    /// <summary>
+    /// Lets go of an ended session past retention. Each index gives up its entry only while that entry
+    /// is this very session object, so an entry naming a session no longer held — released by an
+    /// earlier entry for the same call — changes nothing, and a newer session reusing the id or the
+    /// <c>linkedid</c> is never removed on an older one's account.
+    /// <para>
+    /// The store is told last, once the session is out of <c>_sessions</c>, so no save that checks
+    /// afterwards can find it held. The default in-memory store keeps this same object and lets go of
+    /// it; a durable store keeps its own retention and does nothing (<c>ADR-0063</c>, D5).
+    /// </para>
+    /// </summary>
+    private void Release(CallSession session)
+    {
+        _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
+        _byLinkedId.TryRemove(new KeyValuePair<string, CallSession>(session.LinkedId, session));
+        _store.OnReleasedByManager(session);
+    }
+
+    /// <summary>
+    /// One delivered ending waiting for release: the session it ended, and the completion time that
+    /// session carried when the ending was delivered. The walk judges the entry by that recorded time,
+    /// never by reading the session again, so nothing done to a session after its ending — a consumer
+    /// clearing or moving its public <see cref="CallSession.CompletedAt"/> — can make an entry hold the
+    /// queue.
+    /// </summary>
+    private readonly record struct ReleaseEntry(CallSession Session, DateTimeOffset? CompletedAt)
+    {
+        /// <summary>
+        /// Whether this entry's own record proves its call ended at or after <paramref name="cutoff"/>,
+        /// that is, inside retention. An entry with no completion time proves nothing and answers no.
+        /// </summary>
+        public bool EndedWithin(DateTimeOffset cutoff) => CompletedAt >= cutoff;
     }
 
     public bool RegisterReconstructedSession(CallSession session)
@@ -590,6 +793,10 @@ public sealed partial class CallSessionManager : ICallSessionManager
             DetachFromServer(serverId);
         _events.OnCompleted();
         _events.Dispose();
+
+        // Withdraws the gauges. Their callbacks hold this manager, and a meter stays published until it
+        // is disposed, so an undisposed one would keep every call the manager held reachable.
+        _residencyMeter.Dispose();
         return ValueTask.CompletedTask;
     }
 
