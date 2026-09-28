@@ -255,6 +255,103 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncDisposable
     }
 
     // ==========================================================================
+    // AgentConnectEvent -> AgentManager: app_queue's connect, agent or not
+    // ==========================================================================
+
+    // Copied from an AgentConnect captured on Asterisk 22.9.0. The caller is the ;2 half of an
+    // originate to a Local channel that runs Queue(), so its Uniqueid and Linkedid differ. The
+    // capture names its member by its interface; a member configured with a name carries that name
+    // instead, and one is given here so the two arguments can be told apart.
+    private const string QueueCallerUniqueId = "1790566855.1";
+    private const string QueueCallerLinkedId = "1790566855.0";
+    private const string QueueCallerChannel = "Local/qp@dialer-00000000;2";
+    private const string QueueMemberInterface = "PJSIP/agent1";
+    private const string QueueMemberName = "Agent One";
+
+    // Like every captured AgentConnect, it carries no Agent header unless one is given.
+    private static AgentConnectEvent QueueCallerAgentConnect(string? agent = null)
+    {
+        var fields = new Dictionary<string, string>
+        {
+            ["Event"] = "AgentConnect", ["Privilege"] = "agent,all",
+            ["Channel"] = QueueCallerChannel, ["ChannelState"] = "4", ["ChannelStateDesc"] = "Ring",
+            ["CallerIDNum"] = "5550099", ["CallerIDName"] = "LQ", ["Context"] = "dialer", ["Exten"] = "qp",
+            ["Priority"] = "1", ["Uniqueid"] = QueueCallerUniqueId, ["Linkedid"] = QueueCallerLinkedId,
+            ["DestChannel"] = "PJSIP/agent1-00000000", ["DestChannelState"] = "6", ["DestChannelStateDesc"] = "Up",
+            ["DestContext"] = "from-agents", ["DestExten"] = "qp", ["DestPriority"] = "1",
+            ["DestUniqueid"] = "1790566855.2", ["DestLinkedid"] = QueueCallerLinkedId,
+            ["Queue"] = "q-pjsip", ["Interface"] = QueueMemberInterface, ["MemberName"] = QueueMemberName,
+            ["HoldTime"] = "2", ["RingTime"] = "2",
+        };
+        if (agent is not null)
+            fields["Agent"] = agent;
+
+        return new AgentConnectEvent
+        {
+            EventType = "AgentConnect",
+            Privilege = "agent,all",
+            Channel = QueueCallerChannel,
+            UniqueId = QueueCallerUniqueId,
+            LinkedId = QueueCallerLinkedId,
+            DestChannel = "PJSIP/agent1-00000000",
+            DestChannelState = "6",
+            DestChannelStateDesc = "Up",
+            DestContext = "from-agents",
+            DestExten = "qp",
+            DestPriority = "1",
+            DestUniqueId = "1790566855.2",
+            DestLinkedId = QueueCallerLinkedId,
+            Interface = QueueMemberInterface,
+            HoldTime = 2,
+            Ringtime = 2,
+            Agent = agent,
+            RawFields = fields,
+        };
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldRaiseQueueCallerConnected_WhenAgentConnectCarriesNoAgentHeader()
+    {
+        await StartAndGetObserverAsync();
+        var callerConnects = new List<(string? CallerUniqueId, string? MemberName, string? MemberInterface)>();
+        _sut.Agents.QueueCallerConnected += (uniqueId, memberName, memberInterface) =>
+            callerConnects.Add((uniqueId, memberName, memberInterface));
+        var agentConnects = 0;
+        _sut.Agents.AgentConnected += (_, _, _) => agentConnects++;
+
+        _observer!.OnNext(QueueCallerAgentConnect());
+
+        callerConnects.Should().ContainSingle("app_queue connected the caller once, and the frame names no agent")
+            .Which.Should().Be((QueueCallerUniqueId, QueueMemberName, QueueMemberInterface),
+                "the caller is named by its own Uniqueid, not its Linkedid, and the member by its name and interface");
+        agentConnects.Should().Be(0, "no agent the manager knows is named, so the public event stays silent as before");
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldRaiseAgentConnectedAsBeforeAndThenQueueCallerConnected_WhenAgentConnectNamesAKnownAgent()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001", "PJSIP/1001");
+        var raised = new List<(string Event, string? First, string? Second, string? Third)>();
+        _sut.Agents.AgentConnected += (agentId, linkedId, memberInterface) =>
+            raised.Add((nameof(AgentManager.AgentConnected), agentId, linkedId, memberInterface));
+        _sut.Agents.QueueCallerConnected += (uniqueId, memberName, memberInterface) =>
+            raised.Add((nameof(AgentManager.QueueCallerConnected), uniqueId, memberName, memberInterface));
+
+        _observer!.OnNext(QueueCallerAgentConnect(agent: "1001"));
+
+        raised.Should().Equal(
+            [
+                (nameof(AgentManager.AgentConnected), "1001", QueueCallerLinkedId, QueueMemberInterface),
+                (nameof(AgentManager.QueueCallerConnected), QueueCallerUniqueId, QueueMemberName, QueueMemberInterface),
+            ],
+            "a known agent's handlers receive the Linkedid and interface they always did, and run before the internal event");
+        var agent = _sut.Agents.GetById("1001")!;
+        agent.State.Should().Be(AgentState.OnCall);
+        agent.TalkingTo.Should().Be(QueueCallerChannel);
+    }
+
+    // ==========================================================================
     // MeetMeJoinEvent -> MeetMeManager
     // ==========================================================================
 

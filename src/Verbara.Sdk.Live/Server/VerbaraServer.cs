@@ -485,6 +485,11 @@ public sealed class VerbaraServer : IVerbaraServer
                 case AgentConnectEvent ace:
                     server.Agents.OnAgentConnect(ace.Agent ?? "", ace.Channel,
                         ace.LinkedId, ace.Interface);
+                    // app_queue's own report that it connected the caller, agent or not. Raised
+                    // after OnAgentConnect so a known agent's handlers run first, and keyed by the
+                    // caller's Uniqueid, which a Linkedid rewrite does not move.
+                    server.Agents.OnQueueCallerConnected(ace.UniqueId,
+                        ace.RawFields?.GetValueOrDefault("MemberName"), ace.Interface);
                     break;
 
                 case AgentCompleteEvent acoe:

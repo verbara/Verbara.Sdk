@@ -39,6 +39,18 @@ public sealed class AgentManager
     public event Action<AsteriskAgent>? AgentStateChanged;
     public event Action<string, string?, string?>? AgentConnected; // agentId, linkedId, interface
 
+    /// <summary>
+    /// Raised for every <c>AgentConnect</c>: app_queue connected a queue caller to a member, whether
+    /// or not the member is an agent this manager knows by name. <see cref="AgentConnected"/> fires
+    /// only for an agent named by the frame's <c>Agent</c> header, which the <c>AgentConnect</c>
+    /// frames captured from Asterisk 20, 22 and 23 do not carry, so there an answered queue call
+    /// reaches this event alone. Arguments: the caller's <c>Uniqueid</c>, the member's
+    /// <c>MemberName</c> and its <c>Interface</c>. The caller is keyed by its own channel, not by its
+    /// <c>Linkedid</c>: Asterisk rewrites a channel's <c>Linkedid</c> when it shares a bridge with an
+    /// older call, so a caller that did so before it queued carries the other call's.
+    /// </summary>
+    internal event Action<string?, string?, string?>? QueueCallerConnected;
+
     public AgentManager(ILogger logger) => _logger = logger;
 
     public IEnumerable<AsteriskAgent> Agents => _agents.Values;
@@ -104,6 +116,14 @@ public sealed class AgentManager
             AgentConnected?.Invoke(agentId, linkedId, memberInterface);
         }
     }
+
+    /// <summary>
+    /// Raise <see cref="QueueCallerConnected"/> for an <c>AgentConnect</c>. The server calls it
+    /// after <see cref="OnAgentConnect"/>, so a known agent's <see cref="AgentConnected"/> handlers
+    /// run first and see the call as they always did.
+    /// </summary>
+    internal void OnQueueCallerConnected(string? callerUniqueId, string? memberName, string? memberInterface) =>
+        QueueCallerConnected?.Invoke(callerUniqueId, memberName, memberInterface);
 
     /// <summary>Handle AgentComplete event (agent finished a queue call).</summary>
     public void OnAgentComplete(string agentId, long talkTimeSecs = 0, long holdTimeSecs = 0)
