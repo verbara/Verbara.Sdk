@@ -53,6 +53,14 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     private readonly ILogger<OpenAiRealtimeBridge> _logger;
     private readonly Subject<RealtimeEvent> _events = new();
 
+    /// <summary>
+    /// Set by the first <see cref="DisposeAsync"/>, which every later call then ignores. The SDK's own
+    /// registration (<c>TryAddSingleton</c> of the bridge plus an <see cref="ISessionHandler"/> factory
+    /// that resolves the same singleton) makes the container dispose this instance twice, and a second
+    /// pass would complete the event stream over the subject the first one released.
+    /// </summary>
+    private int _disposed;
+
     // Settable by tests (via InternalsVisibleTo) to redirect to a local fake server.
     internal Uri BaseUri { get; set; } = DefaultBaseUri;
 
@@ -454,6 +462,9 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     /// <inheritdoc/>
     public ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return ValueTask.CompletedTask;
+
         GC.SuppressFinalize(this);
         _events.OnCompleted();
         _events.Dispose();
