@@ -24,13 +24,6 @@
     },
     {
       "guard": "hosted-service-start-token",
-      "path": "src/Verbara.Sdk.VoiceAi/Pipeline/VoiceAiSessionBroker.cs",
-      "key": "_stoppingToken = cancellationToken",
-      "reason": "StartAsync keeps the start token in _stoppingToken and hands it to every session it dispatches (ADR-0059 R2). After a completed start the host has released the source behind that token, so nothing ever cancels it, and StopAsync does nothing: a stop cannot end a running session handler. The fix gives the broker a source it owns, cancelled by StopAsync, and deletes this entry.",
-      "owner": "a-server-that-stops-stops-what-it-started"
-    },
-    {
-      "guard": "hosted-service-start-token",
       "path": "src/Verbara.Sdk.Hosting/SessionReconciliationService.cs",
       "key": "_cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)",
       "reason": "StartAsync links the start token into _cts, the source the sweep loop runs under (ADR-0059 R2: not stored, and not linked either). StopAsync cancels _cts itself, so the loop does end on a stop; the link adds only the coupling R2 rejects, an aborted start ending the sweep. Whether R2 reaches a service that links the start token for its own loop, rather than handing a lifetime token to another component, is open ruling L1 of the 2026-09-26 ADR audit, and this entry waits on it: if R2 applies, the fix owns a plain source and deletes this entry.",

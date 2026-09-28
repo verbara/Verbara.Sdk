@@ -12,6 +12,7 @@ Verbara.Sdk.VoiceAi.Pipeline.SilenceTurnDetector
 Verbara.Sdk.VoiceAi.Pipeline.SilenceTurnDetector.Analyze(System.ReadOnlySpan<short> samples, bool isAssistantSpeaking) -> Verbara.Sdk.VoiceAi.TurnSignal
 Verbara.Sdk.VoiceAi.Pipeline.SilenceTurnDetector.Reset() -> void
 Verbara.Sdk.VoiceAi.Pipeline.SilenceTurnDetector.SilenceTurnDetector(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.VoiceAi.Pipeline.VoiceAiPipelineOptions!>! options) -> void
+Verbara.Sdk.VoiceAi.Pipeline.VoiceAiSessionBroker.Dispose() -> void
 Verbara.Sdk.VoiceAi.SpeechProviderEmptyResultException
 Verbara.Sdk.VoiceAi.SpeechProviderEmptyResultException.SpeechProviderEmptyResultException(string! provider, string! message) -> void
 Verbara.Sdk.VoiceAi.SpeechProviderException
