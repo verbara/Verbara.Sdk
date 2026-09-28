@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: the Voice AI session broker could not stop the sessions it started, and kept dispatching after it stopped (#N)
+
+- **A session handler's token is now cancelled when the host stops ungracefully or is torn down.** The
+  broker handed each `ISessionHandler` the token its `StartAsync` received, which nothing cancels once
+  the start has completed — not an already-cancelled stop token, and not disposing the host. Its
+  `StopAsync` did nothing, a session arriving after the stop was still dispatched, and starting the
+  broker twice dispatched each session twice. The broker now owns the handler token (`ADR-0059`): it is
+  cancelled when the host's stop stops being graceful (its token is, or later becomes, cancelled) or
+  when the host or the broker is disposed. A graceful stop does not cancel it, because the AudioSocket
+  server's own stop ends the session. Sessions that arrive after the broker's stop or disposal are not
+  dispatched — the server releases them when it stops — and a second `StartAsync` does not dispatch
+  twice. This restores the published contract of `ISessionHandler.HandleSessionAsync`, "Runs the
+  session until the AudioSocket disconnects or `ct` is cancelled", and the `IHostedService` contract the
+  broker implements.
+- **What a consumer observes changes.** A consumer's handler can now see its token cancelled at a
+  non-graceful stop or at teardown; a handler that treats cancellation as a failure will report one
+  there. The SDK's own handlers (`VoiceAiPipeline`, `OpenAiRealtimeBridge`) count a cancelled session as
+  completed, so their metrics do not move. `VoiceAiSessionBroker` now implements `IDisposable` through a
+  public `Dispose()`.
+
+### Fixed — hosts using the AudioSocket server or the OpenAI Realtime bridge threw when they shut down (#N)
+
+- **`AudioSocketServer` and `OpenAiRealtimeBridge` ignore every disposal after the first.** The SDK's
+  own registrations make the container dispose each of them twice, so every host that called
+  `AddAudioSocketServer` — and therefore every `AddVoiceAiPipeline` host — or `AddOpenAiRealtimeBridge`
+  ended `host.Dispose()` and `RunAsync()` with an unhandled `ObjectDisposedException`. The throw also
+  cut the container's release short: singletons created before those components, the host's logger
+  providers among them, were never disposed. Later disposals now return at once, as `IAsyncDisposable`
+  requires.
+- **`AudioSocketServer.StartAsync` with an already-cancelled token now serves its listener.** It bound
+  the listener (`BoundPort` was set) but never started the accept loop, so peers connected and got no
+  session. The accept loop now always starts; the server's own stop still ends it.
+
 ### Fixed — an AudioSocket or WebSocket connection that ended could unregister another call's live stream (#330)
 
 - **Ari `AudioSocketServer`: a connection releases only the entry it registered.** A connection that
