@@ -278,6 +278,20 @@ internal sealed class ResidencyRig : IAsyncDisposable
     public void MovePastRetention() => Clock.Advance(Options.CompletedRetention + PastRetentionMargin);
 
     /// <summary>
+    /// Moves the release clock forward until <see cref="Cutoff"/> is exactly <paramref name="cutoff"/>:
+    /// a call that completed at that instant then ended exactly <see cref="SessionOptions.CompletedRetention"/>
+    /// ago. Tick-exact, because the clock moves only by what it is told.
+    /// </summary>
+    public void PlaceCutoffAt(DateTimeOffset cutoff)
+    {
+        var by = cutoff - Cutoff;
+        if (by < TimeSpan.Zero)
+            throw new InvalidOperationException($"the cutoff is already past {cutoff:O}; the release clock only moves forward");
+
+        Clock.Advance(by);
+    }
+
+    /// <summary>
     /// Raises <c>Reconnected</c> with <paramref name="channelsAsteriskStillHas"/> as the
     /// <c>Status</c> reply, and returns once the reload has requested its last action.
     /// </summary>
