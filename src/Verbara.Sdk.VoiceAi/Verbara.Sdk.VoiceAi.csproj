@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Verbara.Sdk.VoiceAi.Tests" />
+    <InternalsVisibleTo Include="Verbara.Sdk.VoiceAi.OpenAiRealtime" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Verbara.Sdk.Audio\Verbara.Sdk.Audio.csproj" />
