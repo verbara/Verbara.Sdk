@@ -26,6 +26,10 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
 
     private readonly CartesiaOptions _options;
 
+    // The clock this client's bounds on its vendor run on: the connect, and the wait for the vendor
+    // after the end of input. Settable by tests (via InternalsVisibleTo) to drive them on a manual clock.
+    internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
+
     /// <inheritdoc />
     public override string ProviderName => "Cartesia";
 
