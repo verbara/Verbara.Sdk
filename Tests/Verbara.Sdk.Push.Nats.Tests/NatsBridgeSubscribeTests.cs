@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Threading.Channels;
 
@@ -7,7 +8,9 @@ using Verbara.Sdk.Push.Events;
 using Verbara.Sdk.Push.Nats;
 
 using FluentAssertions;
+using FluentAssertions.Execution;
 
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -19,6 +22,8 @@ namespace Verbara.Sdk.Push.Nats.Tests;
 /// Unit tests for the subscribe side of <see cref="NatsBridge"/>. A fake
 /// <see cref="INatsSubscriber"/> produces in-memory NATS messages covering the three
 /// outcomes the bridge must handle: foreign decoded OK, self-origin skipped, malformed.
+/// A second fake parks its stream, so a test can run a consume loop directly once the bridge's own
+/// loop has subscribed.
 /// </summary>
 public class NatsBridgeSubscribeTests
 {
@@ -155,6 +160,63 @@ public class NatsBridgeSubscribeTests
         meterListener.Get("asterisk.push.nats.events.received").Should().Be(1);
     }
 
+    [Fact]
+    public async Task ConsumeFromNatsAsync_ShouldNotSubscribeOrLog_WhenTheStoppingTokenIsAlreadyCancelled()
+    {
+        const string filter = "asterisk.sdk.stop.>";
+        var subOpts = new NatsSubscribeOptions { SubjectFilters = [filter] };
+        var options = Options.Create(new NatsBridgeOptions
+        {
+            Url = "nats://127.0.0.1:4222",
+            SubjectPrefix = "asterisk.sdk",
+            Subscribe = subOpts,
+        });
+
+        var subscriber = new ParkingNatsSubscriber();
+        var logger = new CapturingLogger();
+        using var bus = BuildBus();
+        using var bridge = new NatsBridge(
+            bus,
+            options,
+            new DefaultNatsPayloadSerializer(options),
+            new DefaultNatsPayloadDeserializer(),
+            new NatsMetrics(),
+            logger,
+            publisherFactory: (_, _) => ValueTask.FromResult<INatsPublisher>(new NoopPublisher()),
+            subscriberFactory: (_, _) => ValueTask.FromResult<INatsSubscriber>(subscriber));
+
+        await bridge.StartAsync(CancellationToken.None);
+        try
+        {
+            // The bridge's own consume loop logs, then subscribes, then parks on the bridge's stopping
+            // token. Once it has subscribed, the subscriber is set, so the direct call below reaches
+            // everything a consume loop does, and both counts start from one.
+            await subscriber.FirstSubscribe.WaitAsync(ObserveTimeout);
+            subscriber.Subjects.Should().Equal([filter], "the bridge's own consume loop subscribed once to its filter");
+            logger.Messages.Where(IsSubscribingEntry).Should().ContainSingle(
+                "the bridge's own consume loop logged that it was subscribing, so the filter below is live");
+
+            var consume = async () => await bridge.ConsumeFromNatsAsync(filter, subOpts, new CancellationToken(canceled: true));
+
+            using (new AssertionScope())
+            {
+                await consume.Should().NotThrowAsync(
+                    "a consume loop handed a stop that already landed ends quietly, as a skipped hand-off did");
+                subscriber.Subjects.Should().ContainSingle(
+                    "a consume loop handed a stop that already landed ends at its first check, before it subscribes to its filter");
+                logger.Messages.Where(IsSubscribingEntry).Should().ContainSingle(
+                    "a consume loop handed a stop that already landed does not log that it is subscribing");
+            }
+        }
+        finally
+        {
+            await bridge.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private static bool IsSubscribingEntry(string message) =>
+        message.StartsWith("NATS bridge subscribing to ", StringComparison.Ordinal);
+
     private static byte[] BuildEnvelope(string nodeId, string eventType)
     {
         var options = Options.Create(new NatsBridgeOptions { NodeId = nodeId });
@@ -219,6 +281,63 @@ public class NatsBridgeSubscribeTests
         }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Records every <see cref="SubscribeAsync"/> call synchronously, when the call is made rather than
+    /// when its stream is first read, then hands back a stream that yields nothing and parks until its
+    /// token is cancelled, the way a live subscription with no traffic does.
+    /// </summary>
+    private sealed class ParkingNatsSubscriber : INatsSubscriber
+    {
+        private readonly ConcurrentQueue<string> _subjects = new();
+        private readonly TaskCompletionSource _firstSubscribe = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _never = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>The subject of every subscribe call, in call order.</summary>
+        public IReadOnlyList<string> Subjects => [.. _subjects];
+
+        /// <summary>Completes on the first subscribe call.</summary>
+        public Task FirstSubscribe => _firstSubscribe.Task;
+
+        public IAsyncEnumerable<NatsSubscriberMessage> SubscribeAsync(
+            string subject,
+            string? queueGroup,
+            CancellationToken cancellationToken)
+        {
+            _subjects.Enqueue(subject);
+            _firstSubscribe.TrySetResult();
+            return ParkAsync(cancellationToken);
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+        private async IAsyncEnumerable<NatsSubscriberMessage> ParkAsync(
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await _never.Task.WaitAsync(cancellationToken);
+            yield break;
+        }
+    }
+
+    /// <summary>Captures every formatted entry the bridge logs, at every level.</summary>
+    private sealed class CapturingLogger : ILogger<NatsBridge>
+    {
+        private readonly ConcurrentQueue<string> _messages = new();
+
+        public IReadOnlyList<string> Messages => [.. _messages];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => _messages.Enqueue(formatter(state, exception));
     }
 
     private sealed class NoopPublisher : INatsPublisher

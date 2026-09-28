@@ -41,7 +41,9 @@ pipeline.Events.Subscribe(evt => Console.WriteLine(evt));
 - Barge-in detection: cancels TTS playback when the caller speaks
 - `IConversationHandler` — scoped per session; implement to plug in any LLM or business logic
 - `ISessionHandler` — low-level interface; implement for fully custom session handling
-- `VoiceAiSessionBroker` — hosted service that routes `AudioSocketSession` instances to the active handler
+- `VoiceAiSessionBroker` — hosted service that hands each `AudioSocketSession` to the active `ISessionHandler`, once
+  - The handler's `CancellationToken` belongs to the broker. It is cancelled when the host's stop is no longer graceful (the token passed to `StopAsync` is, or later becomes, cancelled) or when the broker is disposed. A graceful stop leaves it uncancelled: the AudioSocket server's own stop ends the session.
+  - Once its stop has returned, or once it is disposed, the broker dispatches no new session. The AudioSocket server keeps such a session and releases it when it stops. The broker is not restartable.
 - Observable `Events` stream (`SpeechStartedEvent`, `TranscriptReceivedEvent`, `BargInDetectedEvent`, etc.)
 - Native AOT compatible
 

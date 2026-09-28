@@ -10,7 +10,14 @@ using Xunit;
 
 namespace Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.DependencyInjection;
 
-public sealed class RealtimeDiTests : IAsyncDisposable
+/// <remarks>
+/// The teardown disposes the provider each test built, so every test that resolves the bridge also
+/// holds the bridge's disposal: the container tracks the bridge under both of its registrations and
+/// disposes it twice. The class implements <see cref="IAsyncLifetime"/> because xunit 2 runs a test
+/// class's teardown only through that interface or <see cref="IDisposable"/>. It never calls
+/// <see cref="IAsyncDisposable.DisposeAsync"/>, so a teardown declared that way does not run at all.
+/// </remarks>
+public sealed class RealtimeDiTests : IAsyncLifetime
 {
     private ServiceProvider? _provider;
 
@@ -34,13 +41,12 @@ public sealed class RealtimeDiTests : IAsyncDisposable
         return _provider;
     }
 
-    public async ValueTask DisposeAsync()
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public async Task DisposeAsync()
     {
         if (_provider is not null)
-        {
-            try { await _provider.DisposeAsync(); }
-            catch (ObjectDisposedException) { /* Bridge subjects already disposed — idempotency gap */ }
-        }
+            await _provider.DisposeAsync();
     }
 
     [Fact]

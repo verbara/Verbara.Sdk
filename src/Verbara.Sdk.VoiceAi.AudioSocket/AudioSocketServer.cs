@@ -31,6 +31,14 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     private readonly ConcurrentDictionary<Guid, AudioSocketSession> _sessions = new();
     private readonly Meter _instanceMeter;
 
+    /// <summary>
+    /// Set by the first <see cref="DisposeAsync"/>, which every later call then ignores. The SDK's own
+    /// registration (<c>TryAddSingleton</c> plus an <c>AddHostedService</c> factory that resolves the
+    /// same singleton) makes the container dispose this instance twice, and a second pass would cancel
+    /// the source the first one released.
+    /// </summary>
+    private int _disposed;
+
     /// <summary>Raised when a new AudioSocket session has been established and the UUID frame received.</summary>
     public event Func<AudioSocketSession, ValueTask>? OnSessionStarted;
 
@@ -67,6 +75,9 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// <inheritdoc/>
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        // The parameter is deliberately unused: it means the start was aborted, and this start begins
+        // nothing that can be aborted. The accept loop gets the token this server owns, which the
+        // server's own stop cancels.
         _cts = new CancellationTokenSource();
         var endpoint = new IPEndPoint(IPAddress.Parse(_options.ListenAddress), _options.Port);
         _listener = new TcpListener(endpoint);
@@ -77,7 +88,16 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
             () => ActiveSessionCount,
             unit: "{sessions}",
             description: "Active AudioSocket sessions");
-        _ = Task.Run(() => AcceptLoopAsync(_cts.Token), cancellationToken);
+
+        // CancellationToken.None on the hand-off, and deliberately so. Task.Run's token skips a work
+        // item that has not started yet, and the listener is already bound with this loop as the only
+        // thing that serves it: a skipped hand-off leaves a listener that takes connections into its
+        // backlog and never accepts one. The loop's token is read here rather than inside the lambda. A
+        // DisposeAsync that gets there first releases _cts, whose Token getter would then throw on the
+        // pool and fault a task nobody observes; a token read before the release just reads as
+        // cancelled, and the loop ends at its first check.
+        var token = _cts.Token;
+        _ = Task.Run(() => AcceptLoopAsync(token), CancellationToken.None);
         return Task.CompletedTask;
     }
 
@@ -257,6 +277,9 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
         await StopAsync(CancellationToken.None).ConfigureAwait(false);
         _cts?.Dispose();
         _instanceMeter.Dispose();

@@ -2,20 +2,6 @@
   "_comment": "Known sites of the decision guards in Tests/Verbara.Sdk.Governance.Tests that fired on a defect already owned elsewhere when the guard landed. Each entry is {guard, path, key, reason, owner}: key is the whitespace-normalized text of the site (never a line number) and owner names the change that owns the fix. The match is EXACT: a site not listed fails its guard, and an entry whose site no longer fires fails it too, so the change that fixes a site deletes its entry in the same commit. Never add an entry to let a new violation in.",
   "entries": [
     {
-      "guard": "task-run-handoff-token",
-      "path": "src/Verbara.Sdk.Push.Nats/NatsBridge.cs",
-      "key": "Task.Run(() => ConsumeFromNatsAsync(filter, subOpts, stoppingToken), stoppingToken)",
-      "reason": "Each consume loop is handed to Task.Run gated on the bridge's stopping token (ADR-0058 R2). No observable effect: a skipped consume loop and one that ends at its first check both do nothing. The fix passes CancellationToken.None and deletes this entry.",
-      "owner": "a-server-that-stops-stops-what-it-started"
-    },
-    {
-      "guard": "task-run-handoff-token",
-      "path": "src/Verbara.Sdk.VoiceAi.AudioSocket/AudioSocketServer.cs",
-      "key": "Task.Run(() => AcceptLoopAsync(_cts.Token), cancellationToken)",
-      "reason": "StartAsync hands the accept loop to Task.Run gated on the start token (ADR-0058 R1/R2): a start whose token is already cancelled returns with the listener bound and the accept loop never runs. The fix passes CancellationToken.None and deletes this entry.",
-      "owner": "a-server-that-stops-stops-what-it-started"
-    },
-    {
       "guard": "empty-catch-block",
       "path": "src/Verbara.Sdk.Ari/Audio/AudioSocketSession.cs",
       "key": "catch (IOException) { }",
@@ -28,13 +14,6 @@
       "key": "catch (IOException) { }",
       "reason": "ReadPumpAsync swallows an IOException from the input pipe. FillPipeAsync completes the pipe writer without an exception, so this catch is not reached today (CodeQL #869) and needs a fix of its own; the entry stays with this owner until another is assigned. It shares its key with the FillPipeAsync entry: delete the entry whose reason names the method you fixed.",
       "owner": "a-transport-that-fails-is-not-a-hangup"
-    },
-    {
-      "guard": "hosted-service-start-token",
-      "path": "src/Verbara.Sdk.VoiceAi/Pipeline/VoiceAiSessionBroker.cs",
-      "key": "_stoppingToken = cancellationToken",
-      "reason": "StartAsync keeps the start token in _stoppingToken and hands it to every session it dispatches (ADR-0059 R2). After a completed start the host has released the source behind that token, so nothing ever cancels it, and StopAsync does nothing: a stop cannot end a running session handler. The fix gives the broker a source it owns, cancelled by StopAsync, and deletes this entry.",
-      "owner": "a-server-that-stops-stops-what-it-started"
     },
     {
       "guard": "hosted-service-start-token",
