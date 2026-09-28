@@ -173,7 +173,11 @@ internal sealed class AudioSocketSession : IAudioStream
             // waiting on `StateChanges` is watching for.
             /* Best effort — the session is being disposed */
         }
-        catch (IOException) { }
+        // No IOException arm: the fill loop completes the pipe writer without an exception, so a
+        // transport failure never reaches `reader.ReadAsync` as one. It arrives as the pipe's end,
+        // with the failure recorded for the report below. The one other source of an IOException
+        // here is a consumer's `StateChanges` observer, which leaves the loop as it would with an
+        // exception of any other type.
         finally
         {
             await reader.CompleteAsync();
