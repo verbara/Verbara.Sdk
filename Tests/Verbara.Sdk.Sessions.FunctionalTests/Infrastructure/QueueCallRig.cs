@@ -18,7 +18,8 @@ namespace Verbara.Sdk.Sessions.FunctionalTests.Infrastructure;
 /// Every frame goes to the server's own observer, not to the managers' entry points, so a test sees
 /// what the production switch does with it. Unlike a capture replay, an exception the observer throws
 /// is not caught: a typed test fails on it. Delivery is synchronous and every session transition runs
-/// on the delivering thread, so nothing waits.
+/// on the delivering thread, so nothing waits. A test that needs time to pass between two frames gives
+/// the manager its own clock (<see cref="StartAsync"/>) and moves it between deliveries.
 /// </remarks>
 internal sealed class QueueCallRig : IAsyncDisposable
 {
@@ -50,7 +51,12 @@ internal sealed class QueueCallRig : IAsyncDisposable
     public IReadOnlyList<CallConnectedEvent> Connected => [.. _events.OfType<CallConnectedEvent>()];
 
     /// <summary>Starts a server whose state-load actions return nothing, and attaches a manager and a tracker to it.</summary>
-    public static async Task<QueueCallRig> StartAsync()
+    /// <param name="clock">
+    /// Optional. The manager's clock seam, the internal constructor's <see cref="TimeProvider"/>; the
+    /// system clock when omitted, as in production. A test that moves it between deliveries fixes how
+    /// much time the manager sees pass between two frames.
+    /// </param>
+    public static async Task<QueueCallRig> StartAsync(TimeProvider? clock = null)
     {
         var connection = Substitute.For<IAmiConnection>();
         connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
@@ -61,7 +67,8 @@ internal sealed class QueueCallRig : IAsyncDisposable
 
         var options = Options.Create(new SessionOptions());
         var server = new VerbaraServer(connection, NullLogger<VerbaraServer>.Instance);
-        var manager = new CallSessionManager(options, NullLogger<CallSessionManager>.Instance, new InMemorySessionStore());
+        var manager = new CallSessionManager(options, NullLogger<CallSessionManager>.Instance, new InMemorySessionStore(),
+            clock ?? TimeProvider.System);
         var tracker = new QueueSessionTracker(manager, options);
         try
         {
@@ -176,21 +183,40 @@ internal static class QueueFrames
 
     /// <summary>
     /// app_queue's report that it connected the caller to a member. As on every captured frame, it
-    /// carries no <c>Agent</c> header: the member is named by <c>MemberName</c> and <c>Interface</c>.
+    /// carries no <c>Agent</c> header unless <paramref name="agent"/> is given: the member is named by
+    /// <c>MemberName</c> and <c>Interface</c>. With <paramref name="agent"/>, it names an agent the SDK
+    /// may know by name from an <see cref="AgentLogin"/> — a shape no capture holds.
     /// </summary>
     public static AgentConnectEvent AgentConnect(string queue, string callerUniqueId, string callerChannel, string linkedId,
-        string member, string memberUniqueId, string memberChannel, long holdTime) => new()
+        string member, string memberUniqueId, string memberChannel, long holdTime, string? agent = null)
+    {
+        var fields = new Dictionary<string, string>
+        {
+            ["Channel"] = callerChannel, ["Uniqueid"] = callerUniqueId, ["Linkedid"] = linkedId,
+            ["DestChannel"] = memberChannel, ["DestUniqueid"] = memberUniqueId, ["Queue"] = queue,
+            ["Interface"] = member, ["MemberName"] = member,
+            ["HoldTime"] = holdTime.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        };
+        if (agent is not null)
+            fields["Agent"] = agent;
+
+        return new()
         {
             EventType = "AgentConnect", UniqueId = callerUniqueId, Channel = callerChannel, LinkedId = linkedId,
             Interface = member, HoldTime = holdTime, DestUniqueId = memberUniqueId, DestChannel = memberChannel,
-            RawFields = new Dictionary<string, string>
-            {
-                ["Channel"] = callerChannel, ["Uniqueid"] = callerUniqueId, ["Linkedid"] = linkedId,
-                ["DestChannel"] = memberChannel, ["DestUniqueid"] = memberUniqueId, ["Queue"] = queue,
-                ["Interface"] = member, ["MemberName"] = member,
-                ["HoldTime"] = holdTime.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            },
+            Agent = agent, RawFields = fields,
         };
+    }
+
+    /// <summary>An agent logging in, as app_agent_pool reports it: the SDK then knows the agent by name.</summary>
+    public static AgentLoginEvent AgentLogin(string agent, string channel, string uniqueId) => new()
+    {
+        EventType = "AgentLogin", UniqueId = uniqueId, Agent = agent, Channel = channel,
+        RawFields = new Dictionary<string, string>
+        {
+            ["Channel"] = channel, ["Uniqueid"] = uniqueId, ["Linkedid"] = uniqueId, ["Agent"] = agent,
+        },
+    };
 
     public static AgentCompleteEvent AgentComplete(string callerUniqueId, string callerChannel, string member, long holdTime, long talkTime) => new()
     {
