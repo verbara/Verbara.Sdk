@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.CompilerServices;
 using System.Text;
 using Verbara.Sdk.Agi.Diagnostics;
 using Verbara.Sdk.Agi.Mapping;
@@ -359,7 +358,9 @@ public sealed class FastAgiConnectionWindowTests
         try
         {
             using var peer = new TcpClient();
-            await peer.ConnectAsync(IPAddress.Loopback, BoundPort(server));
+            // The server is started on port 0, so the OS picks the port when it binds; a port probed
+            // first and bound later can be taken in between by any process on the machine.
+            await peer.ConnectAsync(IPAddress.Loopback, server.BoundPort);
             var stream = peer.GetStream();
             await stream.WriteAsync(Encoding.UTF8.GetBytes(AgiRequestHeaders));
             await stream.FlushAsync();
@@ -406,18 +407,6 @@ public sealed class FastAgiConnectionWindowTests
         ILogger<FastAgiServer> logger,
         TimeProvider timeProvider) =>
         new(0, strategy, logger, timeProvider);
-
-    /// <summary>
-    /// The port the server's own listener is bound to. The server is started on port 0, so the OS
-    /// picks the port when it binds. <see cref="FastAgiServer.Port"/> reports the configured port, not
-    /// the bound one. A port probed first and bound later can be taken in between by any process on
-    /// the machine, and the start then fails with "Address already in use".
-    /// </summary>
-    private static int BoundPort(FastAgiServer server) =>
-        ((IPEndPoint)ListenerOf(server)!.LocalEndpoint).Port;
-
-    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_listener")]
-    private static extern ref TcpListener? ListenerOf(FastAgiServer server);
 
     /// <summary>
     /// A client that wraps a fixture's socket and signals when the server disposes it, so a test can

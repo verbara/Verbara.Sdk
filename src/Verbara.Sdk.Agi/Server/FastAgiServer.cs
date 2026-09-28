@@ -55,6 +55,12 @@ public sealed class FastAgiServer : IAgiServer
     private int _state = (int)AgiServerState.Stopped;
 
     public int Port { get; }
+
+    /// <summary>
+    /// The port the listener is bound to. With <see cref="Port"/> 0 the OS picks it when the server
+    /// starts; before the start this reads <see cref="Port"/>.
+    /// </summary>
+    internal int BoundPort => (_listener?.LocalEndpoint as IPEndPoint)?.Port ?? Port;
     public AgiServerState State => (AgiServerState)Volatile.Read(ref _state);
     public bool IsRunning => State == AgiServerState.Listening;
 

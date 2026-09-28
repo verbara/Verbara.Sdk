@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Text;
 using System.Threading.Channels;
@@ -1001,6 +1002,10 @@ public sealed class AriOutboundListenerTests
         await listener.StartAsync();
         try
         {
+            // The observer takes the subscription, so it cannot be the resource of a using itself;
+            // this declaration disposes it before the finally disposes the listener, as before.
+            using var eventsRelease = Disposable.Create(() => eventsSubscription?.Dispose());
+
             // Act
             using var peer = await ConnectClientAsync(seam.Port, app: "first").WaitAsync(SignalTimeout);
             var served = await seam.NextHandedOverAsync();
@@ -1033,7 +1038,6 @@ public sealed class AriOutboundListenerTests
         }
         finally
         {
-            eventsSubscription?.Dispose();
             await listener.DisposeAsync();
         }
     }

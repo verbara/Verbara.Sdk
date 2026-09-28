@@ -57,12 +57,11 @@ public sealed class TestSupportTests
     [Fact]
     public void Dispose_ShouldCloseTheSocket_WhenTheClientIsDisposed()
     {
-        var accepted = AcceptedClients.UdpBacked();
+        using var accepted = AcceptedClients.UdpBacked();
 
         accepted.Client.Dispose();
 
         accepted.IsSocketClosed.Should().BeTrue("IsSocketClosed reads the handle the client wraps");
-        accepted.Dispose();
     }
 
     [Fact]
