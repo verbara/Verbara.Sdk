@@ -7,6 +7,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using Verbara.Sdk.Audio.Resampling;
 using Verbara.Sdk.VoiceAi.AudioSocket;
+using Verbara.Sdk.VoiceAi.Internal;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.Internal;
@@ -26,6 +27,15 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime;
 public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 {
     private static readonly Uri DefaultBaseUri = new("wss://api.openai.com/v1/realtime");
+
+    // How long the bridge waits for OpenAI to answer its close once the caller has hung up, counted
+    // from that close and not restarted by anything the vendor sends. The live vendor answered in
+    // about 1.1 s in both measured runs; one that never answers would otherwise hold the handler, its
+    // socket and its buffers until the host cancels the session. Against the fake, ten seconds kept
+    // every healthy answer, up to 9.9 s; five seconds took the answers at 5.0, 7.0 and 9.9 s for
+    // unanswered. It is fixed rather than an option: an unvalidated value breaks every session (zero
+    // counts every close as unanswered, and a negative value faults every session).
+    private static readonly TimeSpan CloseAnswerBound = TimeSpan.FromSeconds(10);
 
     /// <summary>
     /// Writes the <c>function_call_output</c> text for a handler that threw.
@@ -123,23 +133,32 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             finally { wsWriteLock.Release(); }
             RealtimeMetrics.MessagesSent.Add(1);
 
+            // Bounds the wait for the vendor's answer once the bridge has sent its own close (below).
+            // Only OutputLoop's reads run on its token. The session token stays the host's: a host
+            // cancellation still ends the session as it always did, and is never taken for the bound
+            // running out.
+            using var silence = new EndOfInputSilenceBound(CloseAnswerBound, TimeProvider, ct);
             var input = InputLoop(session, ws, wsWriteLock, upsampler, ct);
-            var output = OutputLoop(session, ws, wsWriteLock, downsampler, ct);
+            var output = OutputLoop(session, ws, wsWriteLock, downsampler, silence, ct);
             var first = await Task.WhenAny(input, output).ConfigureAwait(false);
 
             // The caller hung up. OpenAI never closes a healthy session on its own (measured live:
             // still open sixty seconds after the hangup), so OutputLoop would wait on ReceiveAsync
             // until the host stops, with nothing counted and no duration recorded. Start the close
             // handshake instead; OutputLoop returns on the vendor's answering close frame (about
-            // 1.1 s later, live). CloseOutputAsync, not CloseAsync: CloseAsync waits for that answer
-            // by receiving, a second concurrent receive on the socket OutputLoop is reading.
+            // 1.1 s later, live), or when the bound on that answer runs out. CloseOutputAsync, not
+            // CloseAsync: CloseAsync waits for that answer by receiving, a second concurrent receive
+            // on the socket OutputLoop is reading.
             if (first == input && input.IsCompletedSuccessfully && !output.IsCompleted)
             {
                 await wsWriteLock.WaitAsync(ct).ConfigureAwait(false);
                 try
                 {
                     if (ws.State == WebSocketState.Open)
+                    {
                         await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", ct).ConfigureAwait(false);
+                        silence.Arm();
+                    }
                 }
                 catch (Exception) when (!ct.IsCancellationRequested)
                 {
@@ -154,6 +173,15 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             // Whichever loop ended first, both are awaited, so a fault of either one reaches the
             // terminal block below and the session is classified there, once.
             await Task.WhenAll(input, output).ConfigureAwait(false);
+
+            // The bound ended the wait. The caller ended the session, so the terminal block counts it
+            // as completed; what the bound cost is the vendor's close code, and this warning and this
+            // counter are the only record of it. A host cancellation is not the bound running out.
+            if (await output.ConfigureAwait(false) && !ct.IsCancellationRequested)
+            {
+                RealtimeLog.CloseUnanswered(_logger, channelId, silence.Limit.TotalMilliseconds);
+                RealtimeMetrics.SessionsCloseUnanswered.Add(1);
+            }
         }
         // The filter tests the token, never ex.CancellationToken: a cancelled ConnectAsync surfaces
         // a TaskCanceledException carrying a *different* token, so an identity check would silently
@@ -231,11 +259,13 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     }
 
     // ── OutputLoop — OpenAI events → Asterisk + event stream ────────────────
-    private async Task OutputLoop(
+    // Returns true when the bound on the vendor's answer to the bridge's close ended the loop.
+    private async Task<bool> OutputLoop(
         AudioSocketSession session,
         ClientWebSocket ws,
         SemaphoreSlim wsWriteLock,
         PolyphaseResampler? downsampler,
+        EndOfInputSilenceBound silence,
         CancellationToken ct)
     {
         var channelId = session.ChannelId;
@@ -251,15 +281,20 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             {
                 try
                 {
-                    result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
+                    result = await ws.ReceiveAsync(buf.AsMemory(), silence.Token).ConfigureAwait(false);
                 }
+                // The caller hung up, the bridge sent its close, and the vendor did not answer within the
+                // bound. Nothing more is owed on a session the caller ended, so it ends as a completion;
+                // HandleSessionAsync reports what the bound cost once both loops are done. Cancelling
+                // the read aborted the socket, so an answer that comes later is not read.
+                catch (OperationCanceledException) when (silence.Expired) { return true; }
                 // Only a cancellation the caller asked for ends this loop quietly. A transport that dies
                 // mid-session faults it instead, and once InputLoop has ended too, HandleSessionAsync
                 // counts the session as failed and rethrows. A bare catch here used to report that
                 // ending as a session that completed normally.
-                catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { return false; }
 
-                if (result.MessageType == WebSocketMessageType.Close) return;
+                if (result.MessageType == WebSocketMessageType.Close) return false;
                 if (result.MessageType != WebSocketMessageType.Text)
                 {
                     // Non-text frame, skip entire message
@@ -305,7 +340,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                     // counted as SessionsFailed — the same misclassification the read side was
                     // fixed for, two hundred lines away (ADR-0053).
                     try { await session.WriteAudioAsync(pcm, ct).ConfigureAwait(false); }
-                    catch (ObjectDisposedException) { return; }
+                    catch (ObjectDisposedException) { return false; }
                     break;
                 }
 
@@ -377,6 +412,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 // All other events (response.output_audio.done, session.updated, etc.) are intentionally ignored.
             }
         }
+        return false;
     }
 
     private async Task HandleFunctionCallAsync(

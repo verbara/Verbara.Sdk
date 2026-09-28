@@ -1,1 +1,2 @@
 #nullable enable
+static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsCloseUnanswered -> System.Diagnostics.Metrics.Counter<long>!

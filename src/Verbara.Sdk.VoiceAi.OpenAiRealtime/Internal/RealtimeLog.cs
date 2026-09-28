@@ -28,4 +28,7 @@ internal static partial class RealtimeLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[{ChannelId}] OpenAI error: {ErrorMessage}")]
     public static partial void OpenAiError(ILogger logger, Guid channelId, string errorMessage);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[{ChannelId}] OpenAI did not answer the close within {BoundMs} ms after the caller hung up; the session ended without the vendor's close code")]
+    public static partial void CloseUnanswered(ILogger logger, Guid channelId, double boundMs);
 }
