@@ -116,39 +116,29 @@ public sealed class AriOutboundConnectionTests
                 NullLogger<AriOutboundListener>.Instance,
                 listenerClock);
             var asterisk = new ClientWebSocket();
-            var opened = false;
-            try
-            {
-                await listener.StartAsync();
+            // A session that never opens has no owner to dispose what it started, so this scope releases
+            // it, and the failure still reaches the test. Once the session opens, it owns both.
+            await using var untilOpened = new ReleasedUnlessOpened(listener, asterisk);
 
-                var accepted = new TaskCompletionSource<AriOutboundConnection>(TaskCreationOptions.RunContinuationsAsynchronously);
-                using var onAccepted = listener.OnConnectionAccepted.Subscribe(c => accepted.TrySetResult(c));
-                await asterisk.ConnectAsync(
-                    new Uri($"ws://127.0.0.1:{listener.BoundPort}/ari/events?app=myapp"), CancellationToken.None);
-                var connection = await accepted.Task.WaitAsync(SignalTimeout);
+            await listener.StartAsync();
 
-                var delivered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                using var onEvent = connection.Events.Subscribe(_ => delivered.TrySetResult());
-                await asterisk.SendAsync(
-                    Encoding.UTF8.GetBytes("""{"type":"DeviceStateChanged","application":"myapp"}"""),
-                    WebSocketMessageType.Text,
-                    endOfMessage: true,
-                    CancellationToken.None);
-                await delivered.Task.WaitAsync(SignalTimeout);
+            var accepted = new TaskCompletionSource<AriOutboundConnection>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var onAccepted = listener.OnConnectionAccepted.Subscribe(c => accepted.TrySetResult(c));
+            await asterisk.ConnectAsync(
+                new Uri($"ws://127.0.0.1:{listener.BoundPort}/ari/events?app=myapp"), CancellationToken.None);
+            var connection = await accepted.Task.WaitAsync(SignalTimeout);
 
-                opened = true;
-                return new OutboundSession(listener, asterisk, connection);
-            }
-            finally
-            {
-                // A session that never opened has no owner to dispose what it started: release it here,
-                // and the failure still reaches the test.
-                if (!opened)
-                {
-                    asterisk.Dispose();
-                    await listener.DisposeAsync();
-                }
-            }
+            var delivered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var onEvent = connection.Events.Subscribe(_ => delivered.TrySetResult());
+            await asterisk.SendAsync(
+                Encoding.UTF8.GetBytes("""{"type":"DeviceStateChanged","application":"myapp"}"""),
+                WebSocketMessageType.Text,
+                endOfMessage: true,
+                CancellationToken.None);
+            await delivered.Task.WaitAsync(SignalTimeout);
+
+            untilOpened.Opened();
+            return new OutboundSession(listener, asterisk, connection);
         }
 
         /// <summary>
@@ -172,6 +162,25 @@ public sealed class AriOutboundConnectionTests
         {
             await _listener.DisposeAsync();
             _asterisk.Dispose();
+        }
+
+        /// <summary>
+        /// Releases the Asterisk socket and the listener unless <see cref="Opened"/> was called, in the
+        /// order the session's own disposal cannot reach: before the session exists.
+        /// </summary>
+        private sealed class ReleasedUnlessOpened(AriOutboundListener listener, ClientWebSocket asterisk) : IAsyncDisposable
+        {
+            private bool _opened;
+
+            public void Opened() => _opened = true;
+
+            public async ValueTask DisposeAsync()
+            {
+                if (_opened)
+                    return;
+                asterisk.Dispose();
+                await listener.DisposeAsync();
+            }
         }
     }
 }
