@@ -27,6 +27,7 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime;
 public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 {
     private static readonly Uri DefaultBaseUri = new("wss://api.openai.com/v1/realtime");
+    private const string ProviderName = "OpenAiRealtime";
 
     // How long the bridge waits for OpenAI to answer its close once the caller has hung up, or reading
     // the caller has failed, counted from that close and not restarted by anything the vendor sends. A
@@ -109,7 +110,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 
         var inputRate = _options.InputFormat.SampleRate;
         // PolyphaseResampler implements IDisposable. Disposed as the method exits, after the finally
-        // below — by then Task.WhenAll has seen both loops finish, or they never started.
+        // below — by then both loops have been awaited to their end, or they never started.
         using var upsampler = inputRate != 24000 ? ResamplerFactory.Create(inputRate, 24000) : null;
         using var downsampler = inputRate != 24000 ? ResamplerFactory.Create(24000, inputRate) : null;
 
@@ -134,59 +135,85 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             finally { wsWriteLock.Release(); }
             RealtimeMetrics.MessagesSent.Add(1);
 
+            // The input loop's own source, linked to the session token, so that this method can stop
+            // reading the caller when the vendor ends the session first (below).
+            using var inputCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             // Bounds the wait for the vendor's answer once the bridge has sent its own close (below).
             // Only OutputLoop's reads run on its token. The session token stays the host's: a host
             // cancellation still ends the session as it always did, and is never taken for the bound
             // running out.
             using var silence = new EndOfInputSilenceBound(CloseAnswerBound, TimeProvider, ct);
-            var input = InputLoop(session, ws, wsWriteLock, upsampler, ct);
+            var input = InputLoop(session, ws, wsWriteLock, upsampler, inputCts.Token);
             var output = OutputLoop(session, ws, wsWriteLock, downsampler, silence, ct);
             var first = await Task.WhenAny(input, output).ConfigureAwait(false);
 
-            // The caller hung up, or reading the caller failed. OpenAI never closes a healthy session
-            // on its own (measured live: still open sixty seconds after the hangup), so OutputLoop
-            // would wait on ReceiveAsync until the host stops, with nothing counted and no duration
-            // recorded — and a failed read would hold its fault back from this method's caller all
-            // that time. Start the close handshake instead; OutputLoop returns on the vendor's
-            // answering close frame (about 1.1 s later, live), or when the bound on that answer runs
-            // out. A failed read's exception then rethrows from the WhenAll below, so the session
-            // fails with it once the wait is over. Only a cancelled input is left out: the host
-            // cancelled the session, which ends OutputLoop's read as well. CloseOutputAsync, not
-            // CloseAsync: CloseAsync waits for that answer by receiving, a second concurrent receive
-            // on the socket OutputLoop is reading.
-            if (first == input && !input.IsCanceled && !output.IsCompleted)
+            if (first == output && !input.IsCompleted)
             {
-                await wsWriteLock.WaitAsync(ct).ConfigureAwait(false);
-                try
+                // The vendor ended the session while the caller is still on the line. Nothing the
+                // caller says can reach it now, and waiting for the hangup held the ending back: a
+                // session OpenAI refused in its first 20 ms went on reading the caller until the
+                // hangup, sending 597 messages into the closed socket (measured live). So stop the
+                // input loop here and end at the vendor's close.
+                await inputCts.CancelAsync().ConfigureAwait(false);
+                try { await input.ConfigureAwait(false); }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
-                    if (ws.State == WebSocketState.Open)
-                    {
-                        await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", ct).ConfigureAwait(false);
-                        silence.Arm();
-                    }
+                    // This method stopped the input loop itself, just above, so its cancellation is
+                    // not the session's. Left to escape, it would reach the terminal block as a
+                    // failure; a cancellation the host asked for still escapes and completes there.
                 }
-                catch (Exception) when (!ct.IsCancellationRequested)
-                {
-                    // A connection that died under the hangup fails this close. OutputLoop's own
-                    // receive fault is the one that classifies the session, so this one must not
-                    // replace it: left to escape, it reached the caller as an
-                    // OperationCanceledException instead of the transport's WebSocketException.
-                }
-                finally { wsWriteLock.Release(); }
+
+                // Rethrows the vendor's failure close, when the close was one, so the session fails
+                // with it in the terminal block below.
+                await output.ConfigureAwait(false);
             }
-
-            // Whichever loop ended first, both are awaited, so a fault of either one reaches the
-            // terminal block below and the session is classified there, once.
-            await Task.WhenAll(input, output).ConfigureAwait(false);
-
-            // The bound ended the wait. The caller ended the session, so the terminal block counts it
-            // as completed; what the bound cost is the vendor's close code, and this warning and this
-            // counter are the only record of it. A host cancellation is not the bound running out, and
-            // a failed read never gets here: its fault left through the WhenAll above.
-            if (await output.ConfigureAwait(false) && !ct.IsCancellationRequested)
+            else
             {
-                RealtimeLog.CloseUnanswered(_logger, channelId, silence.Limit.TotalMilliseconds);
-                RealtimeMetrics.SessionsCloseUnanswered.Add(1);
+                // The caller hung up, or reading the caller failed. OpenAI never closes a healthy
+                // session on its own (measured live: still open sixty seconds after the hangup), so
+                // OutputLoop would wait on ReceiveAsync until the host stops, with nothing counted and
+                // no duration recorded — and a failed read would hold its fault back from this
+                // method's caller all that time. Start the close handshake instead; OutputLoop returns
+                // on the vendor's answering close frame (about 1.1 s later, live), or when the bound on
+                // that answer runs out. A failed read's exception then rethrows from the WhenAll below,
+                // so the session fails with it once the wait is over. Only a cancelled input is left
+                // out: the host cancelled the session, which ends OutputLoop's read as well.
+                // CloseOutputAsync, not CloseAsync: CloseAsync waits for that answer by receiving, a
+                // second concurrent receive on the socket OutputLoop is reading.
+                if (first == input && !input.IsCanceled && !output.IsCompleted)
+                {
+                    await wsWriteLock.WaitAsync(ct).ConfigureAwait(false);
+                    try
+                    {
+                        if (ws.State == WebSocketState.Open)
+                        {
+                            await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", ct).ConfigureAwait(false);
+                            silence.Arm();
+                        }
+                    }
+                    catch (Exception) when (!ct.IsCancellationRequested)
+                    {
+                        // A connection that died under the hangup fails this close. OutputLoop's own
+                        // receive fault is the one that classifies the session, so this one must not
+                        // replace it: left to escape, it reached the caller as an
+                        // OperationCanceledException instead of the transport's WebSocketException.
+                    }
+                    finally { wsWriteLock.Release(); }
+                }
+
+                // Both loops are awaited, so a fault of either one reaches the terminal block below
+                // and the session is classified there, once.
+                await Task.WhenAll(input, output).ConfigureAwait(false);
+
+                // The bound ended the wait. The caller ended the session, so the terminal block counts
+                // it as completed; what the bound cost is the vendor's close code, and this warning and
+                // this counter are the only record of it. A host cancellation is not the bound running
+                // out, and a failed read never gets here: its fault left through the WhenAll above.
+                if (await output.ConfigureAwait(false) && !ct.IsCancellationRequested)
+                {
+                    RealtimeLog.CloseUnanswered(_logger, channelId, silence.Limit.TotalMilliseconds);
+                    RealtimeMetrics.SessionsCloseUnanswered.Add(1);
+                }
             }
         }
         // The filter tests the token, never ex.CancellationToken: a cancelled ConnectAsync surfaces
@@ -300,7 +327,19 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 // ending as a session that completed normally.
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { return false; }
 
-                if (result.MessageType == WebSocketMessageType.Close) return false;
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    // The close code is a failure signal in its own right, whether the vendor closed
+                    // first or answered the bridge's close within the bound: OpenAI ends a refused
+                    // session right behind its error frame, with 4000, 4004 or 3000 (measured live).
+                    // The shared rule decides, so 1000 and a close with no code stay completions and
+                    // every other code, 1001 included, is a failure, as for every speech client.
+                    RealtimeLog.VendorClosed(_logger, channelId, (int?)ws.CloseStatus ?? -1, ws.CloseStatusDescription ?? "");
+                    var failure = SpeechProviderFailureException.FromCloseStatus(
+                        ProviderName, ws.CloseStatus, ws.CloseStatusDescription);
+                    if (failure is not null) throw failure;
+                    return false;
+                }
                 if (result.MessageType != WebSocketMessageType.Text)
                 {
                     // Non-text frame, skip entire message

@@ -1,4 +1,5 @@
 using System.Diagnostics.Tracing;
+using System.Globalization;
 using System.Net.WebSockets;
 using Verbara.Sdk.VoiceAi.AudioSocket;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling;
@@ -51,6 +52,13 @@ public sealed class OpenAiRealtimeBridgeEndingTests
     private const string LoopsRunningMarkerEvent = """{"type":"input_audio_buffer.speech_started"}""";
 
     private const string MeterName = "Verbara.Sdk.VoiceAi.OpenAiRealtime";
+
+    /// <summary>The message of <see cref="RefusalFrame"/>.</summary>
+    private const string RefusalMessage = "The session was refused.";
+
+    /// <summary>The error frame a refusing vendor sends before its close.</summary>
+    private const string RefusalFrame =
+        """{"type":"error","error":{"type":"invalid_request_error","message":"The session was refused."}}""";
 
     /// <summary>
     /// How long the bridge waits for the vendor to answer its close: ten seconds, counted from the
@@ -761,7 +769,277 @@ public sealed class OpenAiRealtimeBridgeEndingTests
         }
     }
 
+    /// <summary>
+    /// The vendor rejects the session: an error frame, then a close with a failure code, as the live
+    /// vendor ended a refused session (<c>4000 beta_api_shape_disabled</c> for the retired beta shape,
+    /// <c>4004 model_not_found</c> for a retired model, <c>3000 invalid_api_key</c> for a bogus key, all
+    /// measured 2026-09-27). The close code is the vendor saying why, so the session is a failure that
+    /// carries it, counted once as failed. <c>1001</c> is a failure here as it is for every speech
+    /// client. The caller hangs up after the close, so that a bridge which ignores the close still
+    /// returns rather than holding the test: measured on the fake before the fix, it returned normally at
+    /// the hangup and counted a completion (<c>FAKE-today-close4000</c>).
+    /// </summary>
+    [Theory]
+    [InlineData(4000, "invalid_request_error.beta_api_shape_disabled")]
+    [InlineData(4004, "invalid_request_error.model_not_found")]
+    [InlineData(3000, "invalid_request_error.invalid_api_key")]
+    [InlineData(1001, "going away")]
+    public async Task HandleSessionAsync_ShouldThrowACloseCodeFailure_WhenTheVendorClosesWithAFailureCode(
+        int code, string reason)
+    {
+        // Arrange: a vendor that holds the socket and never closes on its own, so the only close is the
+        // one the test sends. EventsToSend stays empty: every frame goes through SendEventAsync.
+        await using var fakeOpenAi = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        fakeOpenAi.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        try
+        {
+            var log = new RecordingLogger<OpenAiRealtimeBridge>();
+            await using var bridge = CreateBridge(fakeOpenAi, new FakeTimeProvider(), log);
+            using var metrics = new MeterCapture(MeterName);
+            using var errors = new RealtimeEventCollector(
+                bridge.Events, e => e.OfType<RealtimeErrorEvent>().Any());
+
+            // Act: the vendor sends an error frame and closes; after the close, the caller hangs up
+            var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
+            await VendorRefusesTheSessionAsync(fakeOpenAi, errors, (WebSocketCloseStatus)code, reason);
+            await client.SendHangupAsync();
+
+            var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+            // Assert
+            var failure = fault as SpeechProviderFailureException;
+            var expectedCode = code.ToString(CultureInfo.InvariantCulture);
+            using (new AssertionScope())
+            {
+                fault.Should().BeOfType<SpeechProviderFailureException>(
+                    "a close with any code but a normal closure is the vendor saying the session failed");
+                (failure?.Signal).Should().Be(
+                    SpeechProviderFailureSignal.CloseCode, "the close code carried the failure");
+                (failure?.Code).Should().Be(expectedCode, "the vendor's own close code, verbatim");
+                (failure?.Provider).Should().Be("OpenAiRealtime", "the bridge names the provider that failed");
+                (failure?.Message).Should().Contain(reason, "the vendor's reason says why the session failed");
+                errors.Events.OfType<RealtimeErrorEvent>().Should().ContainSingle(
+                    e => e.Message == RefusalMessage,
+                    "the error frame before the close is still published as an event");
+                sessionTask.Status.Should().Be(TaskStatus.Faulted, "the vendor ended the session with a failure");
+                metrics.Get("openai_realtime.sessions.failed").Should().Be(
+                    1, "the failure reaches the terminal block, which counts it once");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(
+                    0, "a session the vendor refused did not complete");
+                log.Entries.Should().ContainSingle(
+                    e => e.EventId.Name == "SessionError"
+                        && e.Level == LogLevel.Error
+                        && e.Message.Contains(reason, StringComparison.Ordinal),
+                    "the terminal block logs the failure with the vendor's reason");
+                log.Entries.Should().ContainSingle(
+                    e => e.EventId.Name == "VendorClosed"
+                        && e.Level == LogLevel.Information
+                        && e.Message.Contains($"{expectedCode} {reason}", StringComparison.Ordinal),
+                    "every close from the vendor is logged with its code and reason");
+            }
+        }
+        finally
+        {
+            await client.DisposeAsync();
+            await audioServer.StopAsync(CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// A control: the same refusal shape, an error frame and then a close, but with a normal closure or
+    /// with a close that carries no code. Both are the vendor ending the session, not failing it, so the
+    /// session completes: the close-code rule does not reach past the codes that mean failure. On a
+    /// <see cref="ClientWebSocket"/> the close with no code reads as a normal closure with no reason
+    /// (see <c>RealtimeFakeServerTests</c>), so its row shows that the fake's code-less close is not read
+    /// as a failure.
+    /// </summary>
+    [Theory]
+    [InlineData(WebSocketCloseStatus.NormalClosure, "")]
+    [InlineData(WebSocketCloseStatus.Empty, null)]
+    public async Task HandleSessionAsync_ShouldComplete_WhenTheVendorClosesNormally(
+        WebSocketCloseStatus status, string? reason)
+    {
+        // Arrange: a vendor that holds the socket and never closes on its own
+        await using var fakeOpenAi = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        fakeOpenAi.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        try
+        {
+            var log = new RecordingLogger<OpenAiRealtimeBridge>();
+            await using var bridge = CreateBridge(fakeOpenAi, new FakeTimeProvider(), log);
+            using var metrics = new MeterCapture(MeterName);
+            using var errors = new RealtimeEventCollector(
+                bridge.Events, e => e.OfType<RealtimeErrorEvent>().Any());
+
+            // Act: the vendor sends an error frame and closes; after the close, the caller hangs up
+            var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
+            await VendorRefusesTheSessionAsync(fakeOpenAi, errors, status, reason);
+            await client.SendHangupAsync();
+
+            var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+            // Assert
+            using (new AssertionScope())
+            {
+                fault.Should().BeNull("a normal closure, or a close with no code, ends the session without failing it");
+                sessionTask.Status.Should().Be(TaskStatus.RanToCompletion, "the session completed");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(1, "the session completed");
+                metrics.Get("openai_realtime.sessions.failed").Should().Be(
+                    0, "an error frame the vendor closed normally after is an event, not a failure");
+                log.Entries.Should().NotContain(e => e.EventId.Name == "SessionError", "nothing failed");
+            }
+        }
+        finally
+        {
+            await client.DisposeAsync();
+            await audioServer.StopAsync(CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// The vendor closes while the caller is still on the line and still sending audio. The session
+    /// ends at that close, not at a hangup that may come much later: it returns for a normal closure and
+    /// throws for a failure code. Measured against the fake before the fix, a session the vendor closed
+    /// with either code went on reading the caller until the hangup (<c>FAKE-today-close1000</c>,
+    /// <c>FAKE-today-close4000</c>); live, a session refused in its first 20 ms sent 597 messages into
+    /// the closed socket. This test never hangs up before its assertions.
+    /// </summary>
+    [Theory]
+    [InlineData(WebSocketCloseStatus.NormalClosure, "", "returned")]
+    [InlineData((WebSocketCloseStatus)4004, "invalid_request_error.model_not_found", "threw close code 4004")]
+    public async Task HandleSessionAsync_ShouldEndAtTheVendorsClose_WhenTheCallerIsStillOnTheLine(
+        WebSocketCloseStatus status, string reason, string expectedOutcome)
+    {
+        // Arrange: a vendor that holds the socket and never closes on its own
+        await using var fakeOpenAi = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        fakeOpenAi.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        try
+        {
+            await using var bridge = CreateBridge(fakeOpenAi, new FakeTimeProvider());
+            using var metrics = new MeterCapture(MeterName);
+
+            // Act: the caller speaks, and the bridge forwards it to the vendor; then the vendor closes
+            var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
+            await fakeOpenAi.SessionUpdateReceived.WaitAsync(SignalTimeout);
+            await client.SendAudioAsync(new byte[320]);
+            await fakeOpenAi.WaitForClientFrameAsync("\"input_audio_buffer.append\"").WaitAsync(SignalTimeout);
+
+            await fakeOpenAi.SendCloseAsync(status, reason);
+            var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+            // Assert
+            var outcome = fault switch
+            {
+                null => "returned",
+                SpeechProviderFailureException failure => $"threw close code {failure.Code}",
+                _ => $"threw {fault.GetType().Name}",
+            };
+            using (new AssertionScope())
+            {
+                outcome.Should().Be(
+                    expectedOutcome,
+                    "the session ends at the vendor's close while the caller is still on the line, "
+                    + "and is classified by that close");
+                (metrics.Get("openai_realtime.sessions.completed") + metrics.Get("openai_realtime.sessions.failed"))
+                    .Should().Be(1, "the session was counted once, when the vendor ended it");
+            }
+        }
+        finally
+        {
+            await client.DisposeAsync();
+            await audioServer.StopAsync(CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// The caller hangs up, and the vendor answers the bridge's close with a failure code six seconds
+    /// later, inside the bound. A close with an error is still a failure, whoever closed first, so the
+    /// session fails with that code; the bound did not run out, so nothing is counted as unanswered.
+    /// Measured on the wall clock before the manual clock existed: <c>Q2-answer-4000-at-6000</c>,
+    /// <c>Faulted</c> at 6,010 ms. A 5 s bound counted that session as a completion.
+    /// </summary>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldFail_WhenTheVendorAnswersTheCloseWithAFailureCodeWithinTheBound()
+    {
+        // Arrange: a vendor that answers the client's close only when the test says so
+        await using var fakeOpenAi = new RealtimeFakeServer { AnswerClientCloseOnRequest = true };
+        fakeOpenAi.EventsToSend.Add(LoopsRunningMarkerEvent);
+        fakeOpenAi.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        try
+        {
+            var clock = new FakeTimeProvider();
+            var log = new RecordingLogger<OpenAiRealtimeBridge>();
+            await using var bridge = CreateBridge(fakeOpenAi, clock, log);
+            using var metrics = new MeterCapture(MeterName);
+            using var loopsRunning = new RealtimeEventCollector(
+                bridge.Events, e => e.OfType<RealtimeSpeechStartedEvent>().Any());
+
+            // Act: the caller hangs up; 6 s pass; then the vendor answers the close with 4000
+            var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
+            await loopsRunning.Satisfied.WaitAsync(SignalTimeout);
+            var armedDue = await HangUpAndWaitForTheArmAsync(client, fakeOpenAi, clock);
+
+            clock.Advance(TimeSpan.FromSeconds(6));
+            // Recorded rather than thrown, as in the 1000 control above: the assertions below say why
+            // better than a failed send does.
+            var answerFault = await Record.ExceptionAsync(
+                () => fakeOpenAi.AnswerClientCloseAsync((WebSocketCloseStatus)4000, "probe_error"));
+            var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+            // Assert
+            var failure = fault as SpeechProviderFailureException;
+            using (new AssertionScope())
+            {
+                armedDue.Should().Be(CloseAnswerBound, "the bound is ten seconds, counted from the bridge's close");
+                answerFault.Should().BeNull("the vendor answers on a connection the bridge still holds");
+                fault.Should().BeOfType<SpeechProviderFailureException>(
+                    "a close with an error is a failure, even when it answers the bridge's own close");
+                (failure?.Signal).Should().Be(
+                    SpeechProviderFailureSignal.CloseCode, "the close code carried the failure");
+                (failure?.Code).Should().Be("4000", "the vendor's own close code, verbatim");
+                (failure?.Message).Should().Contain("probe_error", "the vendor's reason says why");
+                sessionTask.Status.Should().Be(TaskStatus.Faulted, "the vendor's answer was a failure");
+                metrics.Get("openai_realtime.sessions.failed").Should().Be(
+                    1, "the failure reaches the terminal block, which counts it once");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(0, "the session failed");
+                metrics.Get("openai_realtime.sessions.close_unanswered").Should().Be(
+                    0, "the vendor answered within the bound");
+                log.Entries.Should().NotContain(
+                    e => e.EventId.Name == "CloseUnanswered", "the vendor answered the close");
+            }
+        }
+        finally
+        {
+            await client.DisposeAsync();
+            await audioServer.StopAsync(CancellationToken.None);
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The vendor refuses the session the way the live one did: an error frame, then a close. Waits for
+    /// the bridge to publish the error frame before sending the close, so the close is the next thing
+    /// the bridge reads.
+    /// </summary>
+    private static async Task VendorRefusesTheSessionAsync(
+        RealtimeFakeServer fakeOpenAi,
+        RealtimeEventCollector errors,
+        WebSocketCloseStatus status,
+        string? reason)
+    {
+        await fakeOpenAi.SessionUpdateReceived.WaitAsync(SignalTimeout);
+        await fakeOpenAi.SendEventAsync(RefusalFrame);
+        await errors.Satisfied.WaitAsync(SignalTimeout);
+        await fakeOpenAi.SendCloseAsync(status, reason);
+    }
 
     /// <summary>
     /// What a function call that returned after the bridge's close leaves behind: it ran to its end, so
