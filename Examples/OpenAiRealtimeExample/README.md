@@ -6,7 +6,7 @@ Demonstrates a GPT-4o Realtime voice bridge: Asterisk sends audio over AudioSock
 
 - .NET 10 SDK
 - Asterisk PBX with AudioSocket support
-- OpenAI API key with access to `gpt-4o-realtime-preview`
+- OpenAI API key with access to `gpt-realtime`
 
 ## Setup
 

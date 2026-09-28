@@ -530,7 +530,7 @@ services.AddAzureSpeechSynthesizer(o => { o.SubscriptionKey = "..."; o.Region = 
 services.AddVoiceAiPipeline<MyConversationHandler>();
 
 // Or OpenAI Realtime (voice-to-voice, no separate STT/TTS needed)
-services.AddOpenAiRealtimeBridge(o => { o.ApiKey = "..."; o.Model = "gpt-4o-realtime"; });
+services.AddOpenAiRealtimeBridge(o => { o.ApiKey = "..."; o.Model = "gpt-realtime"; });
 ```
 
 ---
