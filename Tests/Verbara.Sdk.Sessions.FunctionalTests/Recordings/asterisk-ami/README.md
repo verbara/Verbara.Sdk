@@ -1,18 +1,26 @@
 # Recordings — asterisk-ami
 
-Byte captures of the AMI stream a real Asterisk PBX sent to one manager client while twelve call
-shapes ran against it, one capture per Asterisk version. This suite replays them through the SDK's
-own parsing path, so a call-session assertion made here is checked against what Asterisk actually
-sent rather than against what a test author believed it sends.
+Byte captures of the AMI stream a real Asterisk PBX sent to one manager client, one capture per
+Asterisk version for each of two runs: twelve call shapes (`call-shapes-*`) and seventeen queue
+shapes (`queue-shapes-*`). This suite replays them through the SDK's own parsing path, so a
+call-session assertion made here is checked against what Asterisk actually sent rather than against
+what a test author believed it sends.
 
 | File | Asterisk | AMI banner | Bytes |
 |------|----------|------------|-------|
 | `call-shapes-asterisk-20.20.1.raw` | 20.20.1 | `Asterisk Call Manager/9.0.0` | 183 623 |
 | `call-shapes-asterisk-22.9.0.raw` | 22.9.0 | `Asterisk Call Manager/11.0.0` | 183 621 |
 | `call-shapes-asterisk-23.4.1.raw` | 23.4.1 | `Asterisk Call Manager/12.0.0` | 183 623 |
+| `queue-shapes-asterisk-20.20.1.raw` | 20.20.1 | `Asterisk Call Manager/9.0.0` | 256 349 |
+| `queue-shapes-asterisk-22.9.0.raw` | 22.9.0 | `Asterisk Call Manager/11.0.0` | 256 350 |
+| `queue-shapes-asterisk-23.4.1.raw` | 23.4.1 | `Asterisk Call Manager/12.0.0` | 256 350 |
 
 Captured 2026-09-27. The `.gitattributes` rule `**/Recordings/**/*.raw binary` keeps the CRLF framing
 byte-exact; never open and re-save these files in an editor.
+
+The sections from *Topology* to *What was changed from the raw capture* describe the call-shape
+captures. The queue-shape captures were made on a different topology and reduced differently; they
+are described in [The queue-shape captures](#the-queue-shape-captures).
 
 ## Topology
 
@@ -187,3 +195,295 @@ Everything not listed here is the byte stream exactly as the PBX sent it.
   so every frame that named the same bridge still names the same one. It exists because the
   repository's recording redaction check rejects any UUID-shaped value that is not a placeholder.
   The replay was compared with and without the fill and reports the same calls.
+
+## The queue-shape captures
+
+Fifteen queue shapes and two calls that never join a queue, run one after another against Asterisk
+20.20.1, 22.9.0 and 23.4.1. Each file holds 711 frames after the banner line. They are replayed by
+`AmiCaptureReplay.ReplayQueueShapesAsync`, which scores every shape against Asterisk's own verdict in
+the same file: app_queue's `AgentConnect` on the caller's channel is an answered visit, and its
+`QueueCallerAbandon` an abandoned one.
+
+### Topology
+
+Two containers per version on a private Docker network, with no host ports published:
+
+- **`dut`** — the Asterisk the capture observes. Its PJSIP endpoint `pstn` is the trunk to the other
+  container and takes every inbound call (context `from-pstn`). Its endpoints `agent1`, `agent2`,
+  `agent3`, `agentphone` and `agentphone2` (context `from-agents`) each have their contact on the
+  other container, where a dialplan extension plays the phone.
+- **`far`** — a second Asterisk acting as the public network: it places the inbound calls over its
+  endpoint `dut`, answers the dialer's customer leg, and plays the phones behind the agent endpoints
+  (context `from-dut`).
+
+### How the capture was driven
+
+A raw TCP tap, not the SDK, logged in to the PBX's manager interface (a `read = all` account) one
+second before the run started, and wrote every byte the PBX sent on that connection to a file until
+45 s passed without a `Newchannel` or a `Hangup`. `timestampevents` was off, so no frame carries an
+event time. The run itself was driven by an SDK host connected as a second manager client; its own
+action responses went to its own connection and do not appear here.
+
+1. **Agents.** Two AMI `Originate`s on the PBX log in the `app_agent_pool` agents from their phones:
+   `PJSIP/agentphone` → `agent-login,1001` and `PJSIP/agentphone2` → `agent-login,1002`.
+2. **Shapes.** Each inbound shape is an AMI `Originate` on the far end, `PJSIP/<exten>@dut` with the
+   application `Wait` and the caller id `<id> <number>`, so the PBX sees an ordinary inbound call on
+   `pstn`. The dialer shape `PD` is instead an `Originate` on the PBX itself: `PJSIP/1001@pstn` into
+   `dialer,qp,1`, caller id `Dialer <7000>`.
+3. **The transfer.** For `T`, once the receptionist's `PJSIP/agent1` channel is up the driver waits
+   1.5 s and sends AMI `BlindTransfer` for that channel to `4015@from-pstn`.
+4. **Pacing.** The next shape starts once every call of the current one has ended and 1.5 s passed
+   with no AMI traffic, so no two shapes' calls overlap.
+
+### The seventeen shapes
+
+A replay keys each shape by the caller number its caller's channel reports in `Newchannel`. The
+dialer's customer leg is created by the PBX before any caller id is set on it, so its `Newchannel`
+reports `CallerIDNum: <unknown>` on a `PJSIP/pstn-` channel; a replay reads that pair as `7000`.
+
+| Id | Caller | Extension | What happens | Asterisk: connect / abandon |
+|----|--------|-----------|--------------|-----------------------------|
+| `L` | 5550001 | 4001 | `Queue(q-local)`; the `Local/agent@agents/n` member rings 2 s and answers. | 1 / 0 |
+| `P` | 5550002 | 4002 | `Queue(q-pjsip)`; the `PJSIP/agent1` phone rings 2 s and answers. | 1 / 0 |
+| `P2` | 5550003 | 4003 | `Queue(q-ringall)` over `agent1`, which answers, and `agent2`, which never does. | 1 / 0 |
+| `PI` | 5550004 | 4004 | The PBX answers, plays 3 s, then `Queue(q-pjsip)`. | 1 / 0 |
+| `PD` | 7000 | `dialer,qp` | Dialer: the customer rings 1 s and answers, then `Queue(q-pjsip)`. | 1 / 0 |
+| `A` | 5550005 | 4005 | `Queue(q-agent)`; the member `Local/1001@agent-request/n` runs `AgentRequest(1001)`. | 1 / 0 |
+| `AO` | 5550006 | 4006 | The same agent through a `Local` member without `/n`, which optimizes away. | 1 / 0 |
+| `F` | 5550007 | 4007 | `Queue(q-freepbx)`; a FreePBX-style member `Local/agent1@from-queue/n` that dials `PJSIP/agent1`. | 1 / 0 |
+| `XC` | 5550013 | 4013 | `Queue(q-confirm)`; the member's phone answers but a `U()` gosub rejects the call, so the caller is never connected and gives up at 8 s. | 0 / 1 |
+| `AX` | 5550014 | 4014 | `Queue(q-agent-ack)`; agent 1002 must acknowledge (`ackcall = yes`) and never does; the caller gives up at 8 s. | 0 / 1 |
+| `X1` | 5550008 | 4008 | `Queue(q-noans)`; nobody answers and the caller gives up at 5 s. | 0 / 1 |
+| `X2` | 5550009 | 4009 | The PBX answers, then `Queue(q-noans)`; the caller hangs up 5 s after the answer. | 0 / 1 |
+| `X3` | 5550010 | 4010 | `Queue(q-noans,,,,4)` times out after 4 s; the dialplan waits 1 s and hangs up. | 0 / 1 |
+| `T` | 5550015 | 4011 → 4015 | A direct dial to `agent1`, the receptionist, who blind-transfers the caller to `Queue(q-pjsip3)`; `agent3` answers. | 1 / 0 |
+| `O` | 5550016 | 4016 | `Queue(q-noans,,,,4)` times out after 4 s, then `Queue(q-pjsip3)`; `agent3` answers. | 1 / 1 |
+| `D` | 5550011 | 4011 | Control, no queue: a direct `Dial(PJSIP/agent1)`, answered. | 0 / 0 |
+| `I` | 5550012 | 4012 | Control, no queue: the PBX answers, plays 4 s and hangs up. | 0 / 0 |
+
+### Dialplans, queues and agents
+
+`dut`, `extensions.conf`:
+
+```ini
+[general]
+static = yes
+writeprotect = no
+
+[from-pstn]
+exten => 4001,1,Queue(q-local)
+ same => n,Hangup()
+exten => 4002,1,Queue(q-pjsip)
+ same => n,Hangup()
+exten => 4003,1,Queue(q-ringall)
+ same => n,Hangup()
+exten => 4004,1,Answer()
+ same => n,Wait(3)
+ same => n,Queue(q-pjsip)
+ same => n,Hangup()
+exten => 4005,1,Queue(q-agent)
+ same => n,Hangup()
+exten => 4006,1,Queue(q-agent-opt)
+ same => n,Hangup()
+exten => 4007,1,Queue(q-freepbx)
+ same => n,Hangup()
+exten => 4013,1,Queue(q-confirm)
+ same => n,Hangup()
+exten => 4014,1,Queue(q-agent-ack)
+ same => n,Hangup()
+exten => 4008,1,Queue(q-noans)
+ same => n,Hangup()
+exten => 4009,1,Answer()
+ same => n,Queue(q-noans)
+ same => n,Hangup()
+exten => 4010,1,Queue(q-noans,,,,4)
+ same => n,Wait(1)
+ same => n,Hangup()
+exten => 4011,1,Dial(PJSIP/agent1,30)
+ same => n,Hangup()
+exten => 4012,1,Answer()
+ same => n,Wait(4)
+ same => n,Hangup()
+exten => 4015,1,Queue(q-pjsip3)
+ same => n,Hangup()
+exten => 4016,1,Queue(q-noans,,,,4)
+ same => n,Queue(q-pjsip3)
+ same => n,Hangup()
+
+[dialer]
+exten => qp,1,Queue(q-pjsip)
+ same => n,Hangup()
+
+[agents]
+exten => agent,1,Ringing()
+ same => n,Wait(2)
+ same => n,Answer()
+ same => n,Wait(60)
+ same => n,Hangup()
+
+[from-queue]
+exten => agent1,1,Dial(PJSIP/agent1,30)
+ same => n,Hangup()
+
+[from-queue-confirm]
+exten => agent1,1,Dial(PJSIP/agent1,30,U(sub-reject))
+ same => n,Hangup()
+
+[sub-reject]
+exten => s,1,Wait(1)
+ same => n,Set(GOSUB_RESULT=ABORT)
+ same => n,Return()
+
+[agent-request]
+exten => _X.,1,AgentRequest(${EXTEN})
+ same => n,Hangup()
+
+[agent-login]
+exten => _X.,1,AgentLogin(${EXTEN},s)
+ same => n,Hangup()
+
+[from-agents]
+exten => _X.,1,Hangup()
+```
+
+`dut`, `queues.conf`:
+
+```ini
+[general]
+persistentmembers = no
+
+[qdefaults](!)
+strategy = ringall
+timeout = 30
+retry = 1
+wrapuptime = 0
+joinempty = yes
+leavewhenempty = no
+ringinuse = yes
+announce-frequency = 0
+periodic-announce-frequency = 0
+
+[q-local](qdefaults)
+member => Local/agent@agents/n
+
+[q-pjsip](qdefaults)
+member => PJSIP/agent1
+
+[q-ringall](qdefaults)
+member => PJSIP/agent1
+member => PJSIP/agent2
+
+[q-agent](qdefaults)
+member => Local/1001@agent-request/n,0,Agent One,Agent:1001
+
+[q-agent-opt](qdefaults)
+member => Local/1001@agent-request,0,Agent One,Agent:1001
+
+[q-freepbx](qdefaults)
+member => Local/agent1@from-queue/n,0,Agent1 FreePBX,PJSIP/agent1
+
+[q-confirm](qdefaults)
+member => Local/agent1@from-queue-confirm/n,0,Agent1 Confirm,PJSIP/agent1
+
+[q-noans](qdefaults)
+member => PJSIP/agent2
+
+[q-agent-ack](qdefaults)
+member => Local/1002@agent-request/n,0,Agent Two,Agent:1002
+
+[q-pjsip3](qdefaults)
+member => PJSIP/agent3
+```
+
+`dut`, `agents.conf`:
+
+```ini
+[general]
+
+[agent-defaults](!)
+ackcall = no
+autologoff = 0
+wrapuptime = 0
+
+[1001](agent-defaults)
+fullname = Agent One
+
+[1002](agent-defaults)
+fullname = Agent Two
+ackcall = yes
+```
+
+`far`, `extensions.conf`:
+
+```ini
+[general]
+static = yes
+writeprotect = no
+
+[from-dut]
+; the dialer's customer: rings 1 s, answers, stays 8 s
+exten => 1001,1,Ringing()
+ same => n,Wait(1)
+ same => n,Answer()
+ same => n,Wait(8)
+ same => n,Hangup()
+; the phone behind PJSIP/agent1: rings 2 s, answers, stays until the caller hangs up
+exten => agent1,1,Ringing()
+ same => n,Wait(2)
+ same => n,Answer()
+ same => n,Wait(60)
+ same => n,Hangup()
+; the phone behind PJSIP/agent2: rings and never answers
+exten => agent2,1,Ringing()
+ same => n,Wait(120)
+ same => n,Hangup()
+; agent 1001's phone: answers the login call at once and stays
+exten => agentphone,1,Answer()
+ same => n,Wait(3600)
+ same => n,Hangup()
+; agent 1002's phone: answers the login call and never sends the acknowledging DTMF
+exten => agentphone2,1,Answer()
+ same => n,Wait(3600)
+ same => n,Hangup()
+; the phone behind PJSIP/agent3: rings 2 s, answers
+exten => agent3,1,Ringing()
+ same => n,Wait(2)
+ same => n,Answer()
+ same => n,Wait(60)
+ same => n,Hangup()
+```
+
+`manager.conf` and `pjsip.conf` are not reproduced: they hold the containers' credentials. The
+endpoint layout they define is the one under *Topology*.
+
+### What was changed from the raw capture
+
+Each raw capture held 1,863 frames after the banner, about 764 KB, over the 256 KiB per-file cap. It
+was reduced by removing **whole frames** of the types the SDK does not read, so every frame that is
+left is byte-exact, CRLF framing included, apart from the bridge ids below.
+
+- **Kept** (the same counts in each version): the banner line; every frame of a type
+  `VerbaraServer`'s event observer dispatches — `Newchannel` 49, `Newstate` 58, `Hangup` 49,
+  `DialBegin` 26, `DialEnd` 32, `BridgeCreate` 17, `BridgeEnter` 35, `BridgeLeave` 35,
+  `BridgeDestroy` 16, `QueueCallerJoin` 16, `QueueCallerLeave` 16, `QueueMemberStatus` 151,
+  `DeviceStateChange` 157, `AgentLogin` 2, `AgentLogoff` 2, `AgentConnect` 10, `AgentComplete` 10,
+  `BlindTransfer` 1, `Unhold` 1; and app_queue's verdict and member frames, which the observer does
+  not dispatch — `QueueCallerAbandon` 6, `AgentCalled` 18, `AgentRingNoAnswer` 4 (no `AgentDump` was
+  sent). The dispatched set was read from the observer's `switch` when the files were reduced; a type
+  it starts dispatching later is not in these files.
+- **Removed** (the same counts in each version, 1,152 frames): `VarSet` 737, `Newexten` 93,
+  `RTCPSent` 72, `RTCPReceived` 72, `NewConnectedLine` 52, `NewCallerid` 38, `SoftHangupRequest` 28,
+  `DialState` 24, `HangupRequest` 22, `LocalBridge` 7, `OriginateResponse` 3, `SuccessfulAuth` 2,
+  `FullyBooted` 1, and the login `Response` 1. Every frame that carried a container address
+  (`RTCPSent`, `RTCPReceived`, `SuccessfulAuth`) is among them, as are the manager account name and
+  session ids `SuccessfulAuth` carries.
+- **Replaced:** each of the 17 distinct `BridgeUniqueid` values is replaced by a single-character
+  fill of the same length, in order of first appearance: `11111111-1111-1111-1111-111111111111`
+  through `99999999-…`, then `aaaaaaaa-…` through `hhhhhhhh-…`. There are more bridges than
+  single-character hexadecimal fills, so the last two are not hexadecimal; the SDK treats a bridge
+  id as an opaque string. The fill exists for the same reason as in the call-shape captures, the
+  recording redaction check.
+
+The reduction was checked by replaying the full capture, the reduced capture before the fill and
+the reduced capture after it: every shape scored the same in each (its `CallConnectedEvent`s,
+answered, abandoned, left waiting, and the exceptions the observer threw).
