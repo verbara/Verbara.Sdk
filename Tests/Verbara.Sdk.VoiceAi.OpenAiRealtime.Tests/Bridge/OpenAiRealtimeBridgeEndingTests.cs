@@ -639,6 +639,128 @@ public sealed class OpenAiRealtimeBridgeEndingTests
         }
     }
 
+    /// <summary>
+    /// Reading the caller fails, and the vendor never answers a close. The bridge closes toward the
+    /// vendor as it does at a hangup, waits for the answer for the same ten seconds, and when they pass
+    /// the session fails with the read's own exception. The unanswered-close count and its warning are
+    /// for a session the caller ended, so neither moves for this one. The read fails because the owner
+    /// disposed the AudioSocket session before handing it over (ADR-0053 R2). Measured on the wall
+    /// clock before the manual clock existed (<c>Q8-input-fault-never</c>): a bridge that closed only
+    /// after a completed read was still waiting on the vendor at 30 s, with nothing counted; one that
+    /// closed on the fault as well ended the session <c>Faulted</c> with this exception, counted once as
+    /// failed and never as unanswered.
+    /// </summary>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldCloseAndFailWithTheReadFault_WhenReadingTheCallerFailsAndTheVendorIsSilent()
+    {
+        // Arrange: a vendor that holds the socket and never answers a close; a caller's session its
+        // owner has already disposed, so the bridge's first read of it throws
+        await using var fakeOpenAi = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        fakeOpenAi.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        try
+        {
+            await session.DisposeAsync();
+            var clock = new FakeTimeProvider();
+            var log = new RecordingLogger<OpenAiRealtimeBridge>();
+            await using var bridge = CreateBridge(fakeOpenAi, clock, log);
+            using var metrics = new MeterCapture(MeterName);
+
+            // Act: the bridge's close reaches the vendor and arms the bound; the whole bound passes on
+            // the clock
+            var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
+            var clientClose = await fakeOpenAi.ClientCloseReceived.WaitAsync(SignalTimeout);
+            var armedDue = await clock.TimersArmed.ReadAsync().AsTask().WaitAsync(SignalTimeout);
+            var endedBeforeTheBound = sessionTask.IsCompleted;
+
+            clock.Advance(CloseAnswerBound);
+            var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+            // Assert
+            using (new AssertionScope())
+            {
+                clientClose.Should().Be(
+                    WebSocketCloseStatus.NormalClosure,
+                    "a failed read closes toward the vendor by the same rule as a hangup");
+                armedDue.Should().Be(CloseAnswerBound, "the bound is ten seconds, counted from the bridge's close");
+                endedBeforeTheBound.Should().BeFalse(
+                    "the bridge waits for the vendor's answer before it reports the fault, as it does at a hangup");
+                fault.Should().BeOfType<ObjectDisposedException>(
+                    "the session fails with the read's own exception once the bound ends the wait");
+                sessionTask.Status.Should().Be(TaskStatus.Faulted, "a failed read is a failure, not an ending");
+                metrics.Get("openai_realtime.sessions.failed").Should().Be(
+                    1, "the read's fault reaches the terminal block, which counts the failure once");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(0, "the session failed");
+                metrics.Get("openai_realtime.sessions.close_unanswered").Should().Be(
+                    0, "the counter is for a session the caller ended; this one failed");
+                log.Entries.Should().NotContain(
+                    e => e.EventId.Name == "CloseUnanswered",
+                    "the warning speaks of a caller who hung up, and this caller did not");
+            }
+        }
+        finally
+        {
+            await client.DisposeAsync();
+            await audioServer.StopAsync(CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Reading the caller fails, and the vendor answers the bridge's close with <c>1000</c>, as the live
+    /// one did (about 1.1 s later; the fake answers at once). The answer ends the wait, with no time
+    /// passing on the clock, and the session fails with the read's own exception. The bound is armed by
+    /// the close but never runs out, so nothing is counted as unanswered.
+    /// </summary>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldFailWithTheReadFault_WhenReadingTheCallerFailsAndTheVendorAnswers()
+    {
+        // Arrange: a vendor that answers the client's close with 1000 at once; a caller's session its
+        // owner has already disposed, so the bridge's first read of it throws
+        await using var fakeOpenAi = new RealtimeFakeServer { HoldOpenUntilClientCloses = true };
+        fakeOpenAi.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        try
+        {
+            await session.DisposeAsync();
+            var clock = new FakeTimeProvider();
+            var log = new RecordingLogger<OpenAiRealtimeBridge>();
+            await using var bridge = CreateBridge(fakeOpenAi, clock, log);
+            using var metrics = new MeterCapture(MeterName);
+
+            // Act: nothing moves the clock; the vendor's answer is the only thing that can end the wait
+            var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
+            var clientClose = await fakeOpenAi.ClientCloseReceived.WaitAsync(SignalTimeout);
+            var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+            // Assert
+            using (new AssertionScope())
+            {
+                clientClose.Should().Be(
+                    WebSocketCloseStatus.NormalClosure,
+                    "a failed read closes toward the vendor by the same rule as a hangup");
+                clock.TimersArmed.TryRead(out var armedDue).Should().BeTrue("the bridge's close arms the bound");
+                armedDue.Should().Be(CloseAnswerBound, "the bound is ten seconds, counted from the bridge's close");
+                fault.Should().BeOfType<ObjectDisposedException>(
+                    "the session fails with the read's own exception once the vendor answers");
+                sessionTask.Status.Should().Be(TaskStatus.Faulted, "a failed read is a failure, not an ending");
+                metrics.Get("openai_realtime.sessions.failed").Should().Be(
+                    1, "the read's fault reaches the terminal block, which counts the failure once");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(0, "the session failed");
+                metrics.Get("openai_realtime.sessions.close_unanswered").Should().Be(
+                    0, "the vendor answered the close, and the bound never ran out");
+                log.Entries.Should().NotContain(
+                    e => e.EventId.Name == "CloseUnanswered", "the vendor answered the close");
+            }
+        }
+        finally
+        {
+            await client.DisposeAsync();
+            await audioServer.StopAsync(CancellationToken.None);
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /// <summary>

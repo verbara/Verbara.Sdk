@@ -28,14 +28,14 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 {
     private static readonly Uri DefaultBaseUri = new("wss://api.openai.com/v1/realtime");
 
-    // How long the bridge waits for OpenAI to answer its close once the caller has hung up, counted
-    // from that close and not restarted by anything the vendor sends. A function call running then
-    // holds it, and the function's return restarts it in full. The live vendor answered in about
-    // 1.1 s in both measured runs; one that never answers would otherwise hold the handler, its socket
-    // and its buffers until the host cancels the session. Against the fake, ten seconds kept every
-    // healthy answer, up to 9.9 s; five seconds took the answers at 5.0, 7.0 and 9.9 s for unanswered.
-    // It is fixed rather than an option: an unvalidated value breaks every session (zero counts every
-    // close as unanswered, and a negative value faults every session).
+    // How long the bridge waits for OpenAI to answer its close once the caller has hung up, or reading
+    // the caller has failed, counted from that close and not restarted by anything the vendor sends. A
+    // function call running then holds it, and the function's return restarts it in full. The live
+    // vendor answered in about 1.1 s in both measured runs; one that never answers would otherwise hold
+    // the handler, its socket and its buffers until the host cancels the session. Against the fake,
+    // ten seconds kept every healthy answer, up to 9.9 s; five seconds took the answers at 5.0, 7.0
+    // and 9.9 s for unanswered. It is fixed rather than an option: an unvalidated value breaks every
+    // session (zero counts every close as unanswered, and a negative value faults every session).
     private static readonly TimeSpan CloseAnswerBound = TimeSpan.FromSeconds(10);
 
     /// <summary>
@@ -143,14 +143,18 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             var output = OutputLoop(session, ws, wsWriteLock, downsampler, silence, ct);
             var first = await Task.WhenAny(input, output).ConfigureAwait(false);
 
-            // The caller hung up. OpenAI never closes a healthy session on its own (measured live:
-            // still open sixty seconds after the hangup), so OutputLoop would wait on ReceiveAsync
-            // until the host stops, with nothing counted and no duration recorded. Start the close
-            // handshake instead; OutputLoop returns on the vendor's answering close frame (about
-            // 1.1 s later, live), or when the bound on that answer runs out. CloseOutputAsync, not
+            // The caller hung up, or reading the caller failed. OpenAI never closes a healthy session
+            // on its own (measured live: still open sixty seconds after the hangup), so OutputLoop
+            // would wait on ReceiveAsync until the host stops, with nothing counted and no duration
+            // recorded — and a failed read would hold its fault back from this method's caller all
+            // that time. Start the close handshake instead; OutputLoop returns on the vendor's
+            // answering close frame (about 1.1 s later, live), or when the bound on that answer runs
+            // out. A failed read's exception then rethrows from the WhenAll below, so the session
+            // fails with it once the wait is over. Only a cancelled input is left out: the host
+            // cancelled the session, which ends OutputLoop's read as well. CloseOutputAsync, not
             // CloseAsync: CloseAsync waits for that answer by receiving, a second concurrent receive
             // on the socket OutputLoop is reading.
-            if (first == input && input.IsCompletedSuccessfully && !output.IsCompleted)
+            if (first == input && !input.IsCanceled && !output.IsCompleted)
             {
                 await wsWriteLock.WaitAsync(ct).ConfigureAwait(false);
                 try
@@ -177,7 +181,8 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 
             // The bound ended the wait. The caller ended the session, so the terminal block counts it
             // as completed; what the bound cost is the vendor's close code, and this warning and this
-            // counter are the only record of it. A host cancellation is not the bound running out.
+            // counter are the only record of it. A host cancellation is not the bound running out, and
+            // a failed read never gets here: its fault left through the WhenAll above.
             if (await output.ConfigureAwait(false) && !ct.IsCancellationRequested)
             {
                 RealtimeLog.CloseUnanswered(_logger, channelId, silence.Limit.TotalMilliseconds);
