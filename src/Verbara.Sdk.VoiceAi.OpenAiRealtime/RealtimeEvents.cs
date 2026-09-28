@@ -40,12 +40,16 @@ public sealed record RealtimeResponseEndedEvent(
     Guid ChannelId, DateTimeOffset Timestamp, TimeSpan Duration)
     : RealtimeEvent(ChannelId, Timestamp);
 
-/// <summary>A function tool was invoked by OpenAI and its result was sent back.</summary>
+/// <summary>
+/// A function tool was invoked by OpenAI and ran. Its result is sent back to OpenAI, unless the caller
+/// hung up while the function ran: the session is closing then, and the result is not sent.
+/// </summary>
 /// <param name="ChannelId">Identifies which AudioSocket session produced this event.</param>
 /// <param name="Timestamp">UTC wall-clock time when the event was created.</param>
 /// <param name="FunctionName">The name of the function tool that was invoked.</param>
 /// <param name="ArgumentsJson">The JSON-encoded arguments passed by OpenAI to the function.</param>
-/// <param name="ResultJson">The JSON-encoded result returned to OpenAI after execution.</param>
+/// <param name="ResultJson">The JSON-encoded result of the call: what the function returned, or the error
+/// output the bridge wrote for a function that threw.</param>
 public sealed record RealtimeFunctionCalledEvent(
     Guid ChannelId, DateTimeOffset Timestamp,
     string FunctionName, string ArgumentsJson, string ResultJson)

@@ -99,7 +99,7 @@ public sealed class OpenAiRealtimeOptionsValidatorTests
     [Fact]
     public void Validate_ShouldSucceed_WithDefaultModelValue()
     {
-        // OpenAiRealtimeOptions.Model defaults to "gpt-4o-realtime-preview"
+        // OpenAiRealtimeOptions.Model defaults to "gpt-realtime"
         var options = new OpenAiRealtimeOptions
         {
             ApiKey = "sk-test-key",

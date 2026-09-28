@@ -45,6 +45,17 @@ public static class RealtimeMetrics
         Meter.CreateCounter<long>("openai_realtime.function_calls.total", "calls",
             "Total function calls dispatched by the OpenAI Realtime model");
 
+    /// <summary>
+    /// OpenAI Realtime sessions the caller ended whose close OpenAI did not answer in time: once the
+    /// caller hangs up, the bridge closes toward OpenAI and waits 10 seconds for the answer, counted
+    /// from its own close, or from the return of a function call still running then. Each is also
+    /// counted in <see cref="SessionsCompleted"/>, because the caller ended the session; what was lost
+    /// is OpenAI's close code.
+    /// </summary>
+    public static readonly Counter<long> SessionsCloseUnanswered =
+        Meter.CreateCounter<long>("openai_realtime.sessions.close_unanswered", "sessions",
+            "OpenAI Realtime sessions whose close OpenAI did not answer within 10 s after the caller hung up; each is also counted as completed");
+
     // --- Histograms ---
 
     /// <summary>Duration of an OpenAI Realtime session in milliseconds.</summary>

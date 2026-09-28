@@ -81,7 +81,7 @@ All five VoiceAi packages publish a `Meter` + `ActivitySource` + `IHealthCheck`.
 | `Verbara.Sdk.VoiceAi.Stt` | `stt.transcriptions.started` / `.completed` / `.failed`, `stt.transcription.latency` |
 | `Verbara.Sdk.VoiceAi.Tts` | `tts.syntheses.started` / `.completed` / `.failed`, `tts.synthesis.latency`, `tts.synthesis.characters` |
 | `Verbara.Sdk.VoiceAi.AudioSocket` | `audiosocket.frames.{in,out}`, `audiosocket.bytes.{in,out}` |
-| `Verbara.Sdk.VoiceAi.OpenAiRealtime` | `openai.realtime.sessions.{started,completed,failed}`, `openai.realtime.session.duration` |
+| `Verbara.Sdk.VoiceAi.OpenAiRealtime` | `openai_realtime.sessions.{started,completed,failed,close_unanswered}`, `openai_realtime.session.duration_ms` |
 
 HealthChecks exposed via `/health` when using the standard ASP.NET Core pipeline:
 `VoiceAiHealthCheck`, `SttHealthCheck`, `TtsHealthCheck`, `AudioSocketHealthCheck`, `OpenAiRealtimeHealthCheck`.

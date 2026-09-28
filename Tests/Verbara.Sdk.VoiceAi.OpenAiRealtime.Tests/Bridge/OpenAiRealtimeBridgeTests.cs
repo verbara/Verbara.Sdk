@@ -65,7 +65,7 @@ public sealed class OpenAiRealtimeBridgeTests
     /// samples are never inspected — what matters is that a write to Asterisk is attempted at all.
     /// </summary>
     private static readonly string AssistantAudioDeltaEvent =
-        $$"""{"type":"response.audio.delta","delta":"{{Convert.ToBase64String(new byte[960])}}"}""";
+        $$"""{"type":"response.output_audio.delta","delta":"{{Convert.ToBase64String(new byte[960])}}"}""";
 
     [Fact]
     public async Task HandleSessionAsync_SendsSessionUpdate_OnConnect()
@@ -155,8 +155,8 @@ public sealed class OpenAiRealtimeBridgeTests
     {
         // Arrange
         await using var fakeOpenAi = new RealtimeFakeServer();
-        fakeOpenAi.EventsToSend.Add("""{"type":"response.audio_transcript.delta","delta":"Hello"}""");
-        fakeOpenAi.EventsToSend.Add("""{"type":"response.audio_transcript.done","transcript":"Hello world"}""");
+        fakeOpenAi.EventsToSend.Add("""{"type":"response.output_audio_transcript.delta","delta":"Hello"}""");
+        fakeOpenAi.EventsToSend.Add("""{"type":"response.output_audio_transcript.done","transcript":"Hello world"}""");
         fakeOpenAi.Start();
 
         var (session, audioServer, client) = await CreateAudioSessionAsync();

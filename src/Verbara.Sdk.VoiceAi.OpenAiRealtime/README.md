@@ -18,7 +18,7 @@ services.AddAudioSocketServer(opts => opts.Port = 9092);
 services.AddOpenAiRealtimeBridge(opts =>
 {
     opts.ApiKey = configuration["OpenAI:ApiKey"]!;
-    opts.Model = "gpt-4o-realtime-preview";
+    opts.Model = "gpt-realtime";
     opts.Voice = "alloy";
     opts.Instructions = "You are a helpful call center assistant.";
     opts.VadMode = VadMode.ServerSide;

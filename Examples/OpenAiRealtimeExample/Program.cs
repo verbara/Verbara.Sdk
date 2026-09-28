@@ -17,7 +17,7 @@ var host = Host.CreateDefaultBuilder(args)
         {
             o.ApiKey       = ctx.Configuration["OpenAI:ApiKey"]
                 ?? throw new InvalidOperationException("OpenAI:ApiKey is required. Set it in appsettings.json or environment variables.");
-            o.Model        = "gpt-4o-realtime-preview";
+            o.Model        = "gpt-realtime";
             o.Voice        = "alloy";
             o.Instructions = "You are a friendly contact center assistant. Always respond in English. Be concise.";
         })

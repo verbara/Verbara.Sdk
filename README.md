@@ -360,7 +360,7 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddOpenAiRealtimeBridge(o =>
         {
             o.ApiKey       = ctx.Configuration["OpenAI:ApiKey"]!;
-            o.Model        = "gpt-4o-realtime-preview";
+            o.Model        = "gpt-realtime";
             o.Voice        = "alloy";
             o.Instructions = "You are a helpful contact center assistant.";
         })

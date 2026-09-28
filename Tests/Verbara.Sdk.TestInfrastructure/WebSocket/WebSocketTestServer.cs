@@ -163,7 +163,7 @@ public sealed class WebSocketTestServer : IAsyncDisposable
                     : raw;
 
                 _currentSocket = ws;
-                var session = new WebSocketTestSession(ws, requestUri, headers, _cts.Token);
+                var session = new WebSocketTestSession(ws, requestUri, headers, stream, _cts.Token);
                 await _onConnection(session).ConfigureAwait(false);
             }
         }
