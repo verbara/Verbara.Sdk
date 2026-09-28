@@ -56,6 +56,36 @@ All notable changes to this project will be documented in this file.
 - When the loop stops at `MaxReconnectAttempts`, the socket its last attempt created is now disposed,
   and the connection ends as a loss without `AutoReconnect` does. The number of attempts is unchanged.
 
+### Fixed — an AMI connection that its caller ended could keep reconnecting, hang, or report `Disconnected` before it had let go (#N)
+
+- **Ending a connection while it is reconnecting now ends it.** A `DisposeAsync` or `DisconnectAsync`
+  issued during the reconnect loop left the loop dialling — forever with the default
+  `MaxReconnectAttempts = 0` — and it logged in again once Asterisk came back. The connection now stays
+  ended, as its `IAsyncDisposable` contract and `DisconnectAsync`'s summary ("Gracefully disconnect from
+  the AMI") say, and as `ConnectAsync` already treated it by throwing `ObjectDisposedException` on a
+  connection its caller ended. Measured against 2.6.0; `AriClient` had the same defect, fixed in 2.5.2.
+- **An ending awaited from inside the connection's own event dispatch now returns.** A `DisconnectAsync`
+  or `DisposeAsync` awaited from an `OnEvent` handler, or waited on from an observer, hung: it waited
+  for the dispatch it was running in, the socket was never released, and every later ending returned
+  without releasing it.
+- **`State` reads `Disconnected` only once the socket is released**, and a `DisposeAsync` issued while
+  another ending is still releasing waits for that release instead of returning with the socket open.
+- **A connection whose `ConnectAsync` fails inside `AmiConnectionFactory.CreateAndConnectAsync` is
+  released.** A rejected login, a refused connect or a missing protocol identifier left the socket open
+  in `CLOSE_WAIT` on a connection the caller never received and so could not release. The original
+  exception still reaches the caller unchanged, and a cancellation is still a cancellation.
+
+### Fixed — BREAKING: `VerbaraServerPool` left the AMI connection behind every server it dropped logged in, and it logged in again after every Asterisk restart (#N)
+
+- `RemoveServerAsync`, the duplicate-id path of `AddServerAsync` and the pool's `DisposeAsync` now
+  dispose the AMI connection behind the server, including one handed in with `AddExistingServer`. Before,
+  that connection kept its socket open, kept pinging, never logged off, and logged in again after every
+  PBX restart — measured against 2.6.0 and against a real Asterisk 22. This restores what the pool is
+  documented to do: "Remove and disconnect a server from the pool."
+- **What a consumer observes changes.** A caller that kept using a connection after its server was
+  removed, or after the pool was disposed, now finds it disposed. A server that `AddExistingServer`
+  rejects stays the caller's.
+
 ### Fixed — BREAKING: an AMI reconnect discarded every channel it was tracking, stranding the calls that ended during the outage and splitting the ones that survived (#315)
 
 - **An AMI reconnect no longer discards the call state it is holding.** The reload now reconciles
