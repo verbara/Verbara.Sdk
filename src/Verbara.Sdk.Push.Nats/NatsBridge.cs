@@ -233,12 +233,23 @@ public sealed partial class NatsBridge : BackgroundService
         foreach (var filter in filters)
         {
             // The foreach variable is fresh per iteration, so the closure captures each filter.
-            _ = Task.Run(() => ConsumeFromNatsAsync(filter, subOpts, stoppingToken), stoppingToken);
+            // CancellationToken.None on the hand-off, and deliberately so: Task.Run's token skips a work
+            // item that has not started yet, so a live token would decide whether the loop runs at all.
+            // The stopping token reaches the loop as its argument instead, and a loop handed a stop that
+            // already landed ends at its own first check.
+            _ = Task.Run(() => ConsumeFromNatsAsync(filter, subOpts, stoppingToken), CancellationToken.None);
         }
     }
 
-    private async Task ConsumeFromNatsAsync(string filter, NatsSubscribeOptions subOpts, CancellationToken ct)
+    /// <summary>
+    /// Consumes one subject filter until <paramref name="ct"/> is cancelled, reinjecting each decoded
+    /// message into the local bus. A loop whose token is already cancelled returns before it subscribes
+    /// or logs, exactly where a hand-off skipped by that token used to leave it. Internal so a test can
+    /// run it directly with a cancelled token.
+    /// </summary>
+    internal async Task ConsumeFromNatsAsync(string filter, NatsSubscribeOptions subOpts, CancellationToken ct)
     {
+        if (ct.IsCancellationRequested) return;
         var subscriber = _subscriber;
         if (subscriber is null) return;
 

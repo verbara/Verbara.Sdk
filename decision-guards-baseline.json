@@ -2,13 +2,6 @@
   "_comment": "Known sites of the decision guards in Tests/Verbara.Sdk.Governance.Tests that fired on a defect already owned elsewhere when the guard landed. Each entry is {guard, path, key, reason, owner}: key is the whitespace-normalized text of the site (never a line number) and owner names the change that owns the fix. The match is EXACT: a site not listed fails its guard, and an entry whose site no longer fires fails it too, so the change that fixes a site deletes its entry in the same commit. Never add an entry to let a new violation in.",
   "entries": [
     {
-      "guard": "task-run-handoff-token",
-      "path": "src/Verbara.Sdk.Push.Nats/NatsBridge.cs",
-      "key": "Task.Run(() => ConsumeFromNatsAsync(filter, subOpts, stoppingToken), stoppingToken)",
-      "reason": "Each consume loop is handed to Task.Run gated on the bridge's stopping token (ADR-0058 R2). No observable effect: a skipped consume loop and one that ends at its first check both do nothing. The fix passes CancellationToken.None and deletes this entry.",
-      "owner": "a-server-that-stops-stops-what-it-started"
-    },
-    {
       "guard": "empty-catch-block",
       "path": "src/Verbara.Sdk.Ari/Audio/AudioSocketSession.cs",
       "key": "catch (IOException) { }",
