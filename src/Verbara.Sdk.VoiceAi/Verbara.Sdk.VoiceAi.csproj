@@ -8,6 +8,7 @@
     <InternalsVisibleTo Include="Verbara.Sdk.VoiceAi.OpenAiRealtime" />
     <!-- The WebSocket speech clients bound their wait on the vendor with the shared helpers in Internal/. -->
     <InternalsVisibleTo Include="Verbara.Sdk.VoiceAi.Stt" />
+    <InternalsVisibleTo Include="Verbara.Sdk.VoiceAi.Tts" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Verbara.Sdk.Audio\Verbara.Sdk.Audio.csproj" />

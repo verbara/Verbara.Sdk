@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.VoiceAi.Internal;
 using Verbara.Sdk.VoiceAi.Tts.Internal;
 using Microsoft.Extensions.Options;
 
@@ -81,8 +82,14 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
 
         var channel = Channel.CreateUnbounded<ReadOnlyMemory<byte>>();
 
+        // Once the empty-text chunk is out, the vendor owes the audio and `isFinal`. This bounds how
+        // long it may stay silent before the synthesis is reported as failed: a vendor that never
+        // answered held the caller, and the pipeline above it, past the hangup (ADR-0050 E2c). It runs
+        // on this client's clock, so a test moves it rather than waits it out.
+        using var silence = new EndOfInputSilenceBound(EndOfInputSilenceBound.Default, TimeProvider, ct);
+
         // Fire-and-forget: send text chunks to the server.
-        var sendTask = SendTextAsync(ws, text, ct);
+        var sendTask = SendTextAsync(ws, text, silence, ct);
 
         // Receive loop decodes audio to the channel, then completes the writer — with the failure
         // when there is one.
@@ -90,7 +97,7 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
         {
             try
             {
-                await ReceiveFramesAsync(ws, channel.Writer, ProviderName, ct).ConfigureAwait(false);
+                await ReceiveFramesAsync(ws, channel.Writer, ProviderName, silence, ct).ConfigureAwait(false);
                 channel.Writer.TryComplete();
             }
             catch (Exception ex)
@@ -128,11 +135,12 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
     /// the provider already closed must not fault this task as well: the caller would see whichever
     /// of the two arrived first, and the second would be an unobserved task exception.
     /// </remarks>
-    private async Task SendTextAsync(ClientWebSocket ws, string text, CancellationToken ct)
+    private async Task SendTextAsync(ClientWebSocket ws, string text, EndOfInputSilenceBound silence, CancellationToken ct)
     {
         try
         {
             await SendChunksAsync(ws, text, ct).ConfigureAwait(false);
+            silence.Arm();
         }
         catch (OperationCanceledException) { /* the caller's own instruction — not a failure (E6) */ }
         catch (WebSocketException) { /* the receive loop reports why the session died */ }
@@ -186,6 +194,7 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
         ClientWebSocket ws,
         ChannelWriter<ReadOnlyMemory<byte>> writer,
         string provider,
+        EndOfInputSilenceBound silence,
         CancellationToken ct)
     {
         var buf = new byte[ReceiveBufferSize];
@@ -196,8 +205,11 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
             ValueWebSocketReceiveResult result;
             try
             {
-                result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
+                result = await ws.ReceiveAsync(buf.AsMemory(), silence.Token).ConfigureAwait(false);
             }
+            // The vendor went silent after the end of input and never ended the session: the audio
+            // is incomplete (ADR-0050 E2c). Placed before the caller's arm, which it must not absorb.
+            catch (OperationCanceledException) when (silence.Expired) { throw silence.ToFailure(provider); }
             // Cancellation is the caller's own instruction and never a provider failure
             // (ADR-0050 E6).
             catch (OperationCanceledException) { break; }
@@ -219,6 +231,10 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
                 if (closeFailure is not null) throw closeFailure;
                 break;
             }
+
+            // Every read restarts the bound, a fragment of a message still being assembled included:
+            // a vendor that is sending is not silent.
+            silence.Heard();
 
             // Assemble until the message is whole. The vendor sizes these frames, not this client:
             // one measured run returned ~29 KB of base64 per frame against this 64 KiB buffer, so a

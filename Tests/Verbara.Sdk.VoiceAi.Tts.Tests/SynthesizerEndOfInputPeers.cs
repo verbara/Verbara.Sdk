@@ -63,32 +63,47 @@ internal static class SynthesizerEndOfInputPeers
         _ => throw new ArgumentOutOfRangeException(nameof(client), client, null),
     };
 
-    /// <summary>The synthesizer <paramref name="client"/> names, pointed at a peer on <paramref name="port"/>.</summary>
-    public static SpeechSynthesizer CreateSynthesizer(string client, int port) => client switch
+    /// <summary>
+    /// The synthesizer <paramref name="client"/> names, pointed at a peer on <paramref name="port"/>,
+    /// with its bounds on <paramref name="clock"/> (<see cref="TimeProvider.System"/> when none is given).
+    /// </summary>
+    public static SpeechSynthesizer CreateSynthesizer(string client, int port, TimeProvider? clock = null) => client switch
     {
         "Cartesia" => new CartesiaSpeechSynthesizer(Options.Create(new CartesiaOptions
         {
             ApiKey = "test-key",
             VoiceId = "test-voice",
             BaseUri = $"ws://127.0.0.1:{port}/tts/websocket",
-        })),
+        }))
+        {
+            TimeProvider = clock ?? TimeProvider.System,
+        },
         "Deepgram" => new DeepgramSpeechSynthesizer(Options.Create(new DeepgramTtsOptions
         {
             ApiKey = "test-key",
             BaseUri = $"ws://127.0.0.1:{port}/v1/speak",
-        })),
+        }))
+        {
+            TimeProvider = clock ?? TimeProvider.System,
+        },
         "ElevenLabs" => new ElevenLabsSpeechSynthesizer(Options.Create(new ElevenLabsOptions
         {
             ApiKey = "test-key",
             VoiceId = "test-voice",
             BaseUri = $"ws://127.0.0.1:{port}/v1/text-to-speech",
-        })),
+        }))
+        {
+            TimeProvider = clock ?? TimeProvider.System,
+        },
         "LMNT" => new LmntSpeechSynthesizer(Options.Create(new LmntTtsOptions
         {
             ApiKey = "test-key",
             Voice = LmntVoices.Leah,
             Transport = LmntTransport.WebSocket,
-        }), port),
+        }), port)
+        {
+            TimeProvider = clock ?? TimeProvider.System,
+        },
         _ => throw new ArgumentOutOfRangeException(nameof(client), client, null),
     };
 }
