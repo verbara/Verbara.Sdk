@@ -496,6 +496,72 @@ option as the declared rate fails exactly 1 test and nothing else, removing the 
 that rate assertion still passes, and sending the tail short fails 3 — a strict subset of those 4, since
 padding only concerns the last message. The pre-fix client fails 5, the union of the first two.
 
+## Speech-to-speech
+
+| Surface | Client type | Transport | Route | Frames | Validation point | Evidence | Date |
+|---|---|---|---|---|---|---|---|
+| OpenAI Realtime | OpenAiRealtimeBridge | `wss://api.openai.com/v1/realtime?model={model}` | **fixed** — `live, uncontrolled` | **6 fixed** — `live + credential control` | `in-band` | `live, uncontrolled` | 2026-09-27 |
+
+The Client type cell is plain text, not a code span. The bridge is an `ISessionHandler`, not a
+`SpeechSynthesizer` or `SpeechRecognizer`, so the presence guard described under *Maintenance* does
+not cover it, and that guard's reverse direction would read a code span here as an orphaned row. The
+row checks still apply: its evidence class, date and validation point are read like every other row's.
+
+**OpenAI Realtime** — the bridge as shipped in 2.6.0 got nothing back from the endpoint, and said
+nothing about it. Its session opened with the retired beta opt-in header. The endpoint answered with
+an `error` frame (`beta_api_shape_disabled`, "The Realtime Beta API is no longer supported") and
+closed `4000`: **0 bytes** of audio, and the session was counted as completed when the caller hung
+up, 12 s in, because the close code was never read. Unless a raw-wire probe is named, every run
+below drove the SDK's own `OpenAiRealtimeBridge`, with a real AudioSocket caller playing the committed
+8 kHz Speechmatics clip.
+
+The route half and the frame half sit at different classes, and the row carries the weaker one:
+
+- **Route — `live, uncontrolled`.** The path, `/v1/realtime`, was right; the refusal itself names it.
+  The default model was not: the shipped default, a preview id the vendor has retired, is absent from
+  its model listing, and a session on it closes `4004` (`model_not_found`). The default is now
+  `gpt-realtime`, which the listing carries and which answered with audio. No wrong-path arm has been
+  run, so nothing yet shows that this probe would notice a wrong route.
+- **Frames — `live + credential control`.** An invalid key completed the upgrade and was refused in
+  band: an `error` frame, then close `3000` (`invalid_api_key`). That is this surface's measured
+  validation point, and the arm that makes the frame evidence controlled. The class's wording about an
+  undocumented path belongs to the Route column and does not apply here. The 2.6.0 request itself,
+  beta header and beta shape, ran beside the fixed one as a protocol control, and was refused
+  (`beta_api_shape_disabled`, 0 bytes) each time it ran.
+
+Six frame defects, each measured live:
+
+1. The upgrade carried `OpenAI-Beta: realtime=v1`, which the endpoint refuses outright (above).
+2. The session configuration was the beta shape. Without the header, the bridge's session was
+   refused for a missing `session.type`, and a raw-wire walk from the beta shape to the current one
+   found the rest one member at a time: `voice`, `modalities`, `turn_detection` and
+   `input_audio_format` are unknown at the top level, and `["audio","text"]` is not a supported output
+   combination. The configuration now declares `type: realtime` and `output_modalities: ["audio"]`,
+   and carries the voice, both audio formats and turn detection under `audio.input` and `audio.output`.
+3. The output arrives under renamed event types (`response.output_audio.delta`,
+   `response.output_audio_transcript.delta` and `.done`), which the client did not read. A session
+   the endpoint accepted would still have been silent at the caller.
+4. Disabled voice activity detection was sent by omitting `turn_detection`, and an omitted
+   `turn_detection` is the vendor's default, `server_vad`; only an explicit `null` disables it. This
+   one was measured on the raw wire, not through the bridge.
+5. The close code was never read, so `4000`, `4004` and `3000` all ended as completed sessions: the
+   close-code door of *The silent-failure class* below, still open on this client. Any close code but
+   `1000` now raises `SpeechProviderFailureException` with signal `CloseCode`; a close that carries no
+   code stays a completion.
+6. The caller hanging up was never passed on, and the vendor does not end a healthy session by
+   itself: a session was still running **60 s** after the hangup. The client now closes toward the
+   vendor when the caller hangs up, and the vendor answered that close with `1000` about 1.1 s later.
+
+On that build, which carried every fix but the `null` of item 4, default options returned 35 200 B
+of audio (2.2 s at 8 kHz) and a final transcript, and the handler returned 1.1 s after the hangup,
+counted as completed with its duration.
+
+What this row does **not** claim: the client measured was an uncommitted build of these fixes, not the
+committed one. The committed client also carries two things no live run has exercised: the bound on
+how long it waits for the vendor to answer its close, and the explicit `null` above sent through the
+bridge. A live run of the committed client, with a wrong-path arm beside it, is owed, and this row
+changes with it, date included.
+
 ## Voice catalogs are checked against the vendor — 2026-08-18
 
 Three providers ship a voice identifier the caller can rely on without looking anything up: a
@@ -714,6 +780,17 @@ Named here rather than left as absence, because absence is what this file exists
   maximum was not, and one of those four frames had been over the buffer all along. Still unmeasured
   on the **Class A** (binary-frame) surfaces, where frame size is chosen by the client and the
   measured headroom is 34×.
+- **OpenAI Realtime** — measured on 2026-09-27 on an uncommitted build, so everything its row claims
+  is still owed a run of the committed client. Beyond that:
+  - **Barge-in.** Talking over the assistant produced three responses, and all three completed
+    (`response.done` with `status: completed`). `response.cancelled`, the event the client reads an
+    interruption from, was never observed, so whether an interruption reaches the client at all is
+    unmeasured.
+  - **A vendor that does not answer the close.** Every live hangup was answered with `1000` within
+    about 1.1 s. The client's 10 s bound on that answer, and the
+    `openai_realtime.sessions.close_unanswered` counter it feeds, have run only against the test fake.
+  - **The route.** No wrong-path arm has been run, which is why the route half reads
+    `live, uncontrolled`.
 
 ## Two properties this record keeps having to restate
 
