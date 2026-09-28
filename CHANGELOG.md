@@ -243,6 +243,46 @@ All notable changes to this project will be documented in this file.
   packages that depend on `Data.Npgsql` (`Sessions.Postgres`, `Cluster.Postgres`, `Hosting`) were not
   affected, because they already resolve the higher version.
 
+### Fixed — the OpenAI Realtime bridge speaks the API OpenAI serves, and a session ends when the caller hangs up (#338)
+
+- **Sessions open again.** The bridge sent the retired beta opt-in header and the beta session shape,
+  and OpenAI now refuses both: every session was closed with `4000` (`beta_api_shape_disabled`) and the
+  caller heard nothing. The bridge now opens sessions in the generally available shape and reads the
+  generally available event names.
+- **The default model is one OpenAI serves.** The default moves from `gpt-4o-realtime-preview`, which
+  the endpoint closes with `4004` (`model_not_found`), to `gpt-realtime`. The README and the example
+  follow. A consumer that pins a retired model id must pick a listed one.
+- **`VadMode.Disabled` disables turn detection.** The bridge omitted the setting, which leaves the
+  vendor's default detection on; it now sends `"turn_detection": null`.
+- **A session ends when the caller hangs up.** The bridge now closes toward the vendor and waits at
+  most 10 seconds for its answer, with the wait paused while a function call runs. Before, it waited on
+  the vendor indefinitely, and the session never completed or recorded a duration. This restores what
+  2.5.3 documents: "the session still ends when its input loop ends".
+- **A function call still running at the hangup runs to its end without failing the session.** Its
+  result is no longer sent to a vendor session that is closing, which used to fail the session, and
+  `RealtimeFunctionCalledEvent` is still published.
+- **When reading the caller fails, the bridge closes toward the vendor by the same rule** and the
+  session ends as a failure with the read's error. Before, it waited on the vendor until the host
+  cancelled it.
+
+### Fixed — BREAKING: a Realtime session that OpenAI closes with a failure code ends as a failure (#338)
+
+- As soon as the vendor closes with a failure code, `HandleSessionAsync` throws
+  `SpeechProviderFailureException` (`Signal = CloseCode`, `Code` = the vendor's close code) and the
+  session counts in `openai_realtime.sessions.failed`, published as "Total OpenAI Realtime sessions that
+  failed with an error". Before, such a session counted in `openai_realtime.sessions.completed`,
+  published as "completed successfully", and did not end until the caller hung up.
+- **What a consumer observes changes.** This narrows the 2.5.3 bullet "a close frame from the far end
+  still count[s] as completed" to a normal close (`1000`) and a close that carries no code; `1001` and
+  every other code are now failures. A dashboard of failed Realtime sessions rises by the sessions the
+  vendor ended with an error.
+
+### Added — `openai_realtime.sessions.close_unanswered` (#338)
+
+- `RealtimeMetrics.SessionsCloseUnanswered` counts sessions whose close the vendor did not answer
+  within 10 seconds after the caller hung up. Each is also counted in
+  `openai_realtime.sessions.completed`, and the bridge logs a Warning for it.
+
 ## [2.6.0] - 2026-09-24
 
 ### Changed — `Microsoft.ML.OnnxRuntime` moved from 1.28.0 to 1.30.0 (#296)
