@@ -303,7 +303,30 @@ public sealed class AriOutboundListener : IAriOutboundListener
                 _connections.TryAdd(tracked.Id, tracked);
 
                 AriOutboundListenerLog.ConnectionAccepted(_logger, remoteEndpoint, appName!);
-                _connectionSubject.OnNext(connection);
+
+                // The connection is tracked before it is announced, so an observer can look up the
+                // connection it is being told about. Only the read pump's `finally` untracks it, and an
+                // observer that throws here means the read pump never runs. So a failed announcement is
+                // released where it failed: untracked, aborted, then disposed, which completes its event
+                // stream. The observer's exception then goes on to the catch below, which reports it
+                // once as this connection's error. The abort comes first because a graceful dispose
+                // sends a close frame and waits, with no bound, for the far end to answer it, and a far
+                // end that does not read never does.
+                var announced = false;
+                try
+                {
+                    _connectionSubject.OnNext(connection);
+                    announced = true;
+                }
+                finally
+                {
+                    if (!announced)
+                    {
+                        _connections.TryRemove(tracked.Id, out _);
+                        webSocket.Abort();
+                        await connection.DisposeAsync();
+                    }
+                }
 
                 await ReadPumpAsync(tracked, webSocket, subject, ct);
             }

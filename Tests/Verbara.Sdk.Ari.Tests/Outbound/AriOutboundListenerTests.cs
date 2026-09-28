@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Reactive.Linq;
 using System.Text;
+using System.Threading.Channels;
 using Verbara.Sdk;
 using Verbara.Sdk.Ari.Outbound;
 using Verbara.Sdk.Ari.Tests.TestSupport;
@@ -971,6 +972,217 @@ public sealed class AriOutboundListenerTests
         }
     }
 
+    // ------------------------------------------------------------ a connection whose announcement fails
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldReleaseTheConnection_WhenAnObserverOfAcceptedConnectionsThrows()
+    {
+        // Arrange — the listener tracks a connection before it announces it, and only the read pump's
+        // `finally` untracks it. An observer that throws during the announcement means the read pump
+        // never runs, so this test follows the connection that observer was told about. The observer
+        // subscribes to that connection's events while it is being told, the one moment it can: a
+        // released connection's event stream takes no more subscribers. The accept seam hands the
+        // listener a loopback connection this test accepted itself, and the wait ends on the handler
+        // releasing it, which is the handler's last step.
+        var logger = new CapturingLogger();
+        var (listener, _) = CreateListener(logger: logger);
+        using var seam = new LoopbackAcceptSeam();
+        listener.AcceptOverride = seam.AcceptAsync;
+        AriOutboundConnection? announced = null;
+        IDisposable? eventsSubscription = null;
+        var eventsCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = listener.OnConnectionAccepted.Subscribe(connection =>
+        {
+            announced = connection;
+            eventsSubscription = connection.Events.Subscribe(_ => { }, () => eventsCompleted.TrySetResult());
+            throw new InvalidOperationException("the consumer's handler failed");
+        });
+
+        await listener.StartAsync();
+        try
+        {
+            // Act
+            using var peer = await ConnectClientAsync(seam.Port, app: "first").WaitAsync(SignalTimeout);
+            var served = await seam.NextHandedOverAsync();
+            await served.Released.WaitAsync(SignalTimeout);
+            var peerSawItClosed = await SeesItsConnectionClosedAsync(peer);
+
+            // Assert
+            announced.Should().NotBeNull("the handler announced the connection before the observer threw");
+            using (new AssertionScope())
+            {
+                listener.ActiveConnectionCount.Should().Be(
+                    0,
+                    "a connection whose handler already ended and closed its socket is not active");
+                listener.GetByApplication("first").Should().BeEmpty(
+                    "a lookup returns the connections the listener serves, and it serves this one no more");
+                announced!.IsConnected.Should().BeFalse(
+                    "the connection the observer was told about has been closed");
+                eventsCompleted.Task.IsCompleted.Should().BeTrue(
+                    "a released connection completes its event stream, so no subscriber waits on events " +
+                    "that will never come");
+                peerSawItClosed.Should().BeTrue("the far end sees its connection closed");
+                logger.Entries.Should().ContainSingle(
+                    entry => entry.Level == LogLevel.Error
+                        && entry.EventName == "ConnectionError"
+                        && entry.ExceptionType == nameof(InvalidOperationException),
+                    "the observer's failure is reported once, as that connection's error; the listener " +
+                    "logged [{0}]",
+                    Describe(logger));
+            }
+        }
+        finally
+        {
+            eventsSubscription?.Dispose();
+            await listener.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldReportTheFailureWithinABound_WhenTheFarEndDoesNotRead()
+    {
+        // Arrange — a raw peer that sends its upgrade request and never reads again, so it never answers
+        // a close frame. A graceful close sends one and then waits for the answer with no bound, so a
+        // release that closed gracefully would hold the handler for as long as this peer stays
+        // connected. The bound starts once the observer is being told, after the handshake, so it
+        // measures the release and the report alone.
+        var logger = new CapturingLogger();
+        var (listener, _) = CreateListener(logger: logger);
+        using var seam = new LoopbackAcceptSeam();
+        listener.AcceptOverride = seam.AcceptAsync;
+        var announcing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = listener.OnConnectionAccepted.Subscribe(_ =>
+        {
+            announcing.TrySetResult();
+            throw new InvalidOperationException("the consumer's handler failed");
+        });
+
+        await listener.StartAsync();
+        try
+        {
+            using var peer = new TcpClient();
+            await peer.ConnectAsync(IPAddress.Loopback, seam.Port);
+            await peer.GetStream().WriteAsync(UpgradeRequest(app: "first"));
+            var served = await seam.NextHandedOverAsync();
+            await announcing.Task.WaitAsync(SignalTimeout);
+
+            // Act
+            var release = () => served.Released;
+
+            // Assert — the handler's last step is the release, so once it has returned, what it
+            // reports is already logged
+            await release.Should().CompleteWithinAsync(
+                ReleaseBound,
+                "a failed announcement is released without waiting for the far end to answer a close, " +
+                "and this far end never answers one");
+            logger.Entries.Should().ContainSingle(
+                entry => entry.Level == LogLevel.Error
+                    && entry.EventName == "ConnectionError"
+                    && entry.ExceptionType == nameof(InvalidOperationException),
+                "the observer's failure is reported once, as that connection's error");
+        }
+        finally
+        {
+            await listener.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldAnnounceTheNextConnection_WhenTheObserverThrewForThePreviousOne()
+    {
+        // Arrange — the observer throws for the first connection only. The second connection is made
+        // once the handler has released the first, so by then the observer has already thrown.
+        var logger = new CapturingLogger();
+        var (listener, _) = CreateListener(logger: logger);
+        using var seam = new LoopbackAcceptSeam();
+        listener.AcceptOverride = seam.AcceptAsync;
+        var told = 0;
+        var secondAnnounced = new TaskCompletionSource<AriOutboundConnection>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = listener.OnConnectionAccepted.Subscribe(connection =>
+        {
+            if (Interlocked.Increment(ref told) == 1)
+                throw new InvalidOperationException("the consumer's handler failed");
+
+            secondAnnounced.TrySetResult(connection);
+        });
+
+        await listener.StartAsync();
+        try
+        {
+            using var first = await ConnectClientAsync(seam.Port, app: "first").WaitAsync(SignalTimeout);
+            var firstServed = await seam.NextHandedOverAsync();
+            await firstServed.Released.WaitAsync(SignalTimeout);
+
+            // Act — a second connection, which sends one event once it has been announced
+            var connecting = ConnectClientAsync(seam.Port, app: "second");
+            var announcement = () => secondAnnounced.Task;
+            var connection = (await announcement.Should().CompleteWithinAsync(
+                SignalTimeout,
+                "one observer throwing costs only the connection it threw on, so the listener goes on " +
+                "accepting and announcing")).Which;
+            using var second = await connecting.WaitAsync(SignalTimeout);
+            var received = new TaskCompletionSource<AriEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var events = connection.Events.Subscribe(evt => received.TrySetResult(evt));
+            const string json = """{"type":"StasisStart","application":"second","timestamp":"2026-04-19T10:00:00Z","args":[],"channel":{"id":"ch-2","name":"PJSIP/test","state":"Up"}}""";
+            await second.SendAsync(
+                Encoding.UTF8.GetBytes(json),
+                WebSocketMessageType.Text,
+                endOfMessage: true,
+                CancellationToken.None);
+            var delivered = await received.Task.WaitAsync(SignalTimeout);
+
+            // Assert
+            using (new AssertionScope())
+            {
+                connection.ApplicationName.Should().Be("second", "the observer is told about the next connection");
+                listener.GetByApplication("second").Should().ContainSingle(
+                    tracked => ReferenceEquals(tracked, connection),
+                    "the next connection is counted");
+                connection.IsConnected.Should().BeTrue("and it is being served");
+                delivered.Should().BeOfType<Verbara.Sdk.Ari.Events.StasisStartEvent>(
+                    "its events reach its subscribers as they did before");
+                logger.Entries.Should().ContainSingle(
+                    entry => entry.EventName == "ConnectionError",
+                    "only the announcement the observer threw on failed");
+            }
+        }
+        finally
+        {
+            await listener.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldLetAnObserverFindTheConnectionItIsToldAbout()
+    {
+        // Arrange — an observer that looks the connection up while it is being told about it. Releasing
+        // a failed announcement must not be bought by announcing before tracking.
+        var (listener, _) = CreateListener();
+        var lookedUp = new TaskCompletionSource<(AriOutboundConnection Told, AriOutboundConnection[] Found)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = listener.OnConnectionAccepted.Subscribe(connection =>
+            lookedUp.TrySetResult((connection, listener.GetByApplication(connection.ApplicationName).ToArray())));
+
+        await listener.StartAsync();
+        try
+        {
+            // Act
+            using var peer = await ConnectClientAsync(listener.BoundPort, app: "myapp").WaitAsync(SignalTimeout);
+            var (told, found) = await lookedUp.Task.WaitAsync(SignalTimeout);
+
+            // Assert
+            found.Should().ContainSingle(
+                tracked => ReferenceEquals(tracked, told),
+                "the listener tracks a connection before it announces it, so an observer can find the " +
+                "connection it is being told about");
+        }
+        finally
+        {
+            await listener.DisposeAsync();
+        }
+    }
+
     // ------------------------------------------------------- the constructor consumers actually use
 
     [Fact]
@@ -1018,6 +1230,40 @@ public sealed class AriOutboundListenerTests
         return await parked.Task;
     }
 
+    /// <summary>
+    /// How long releasing a failed announcement may take. Far shorter than a graceful close's wait, which
+    /// against a far end that never answers has no end at all.
+    /// </summary>
+    private static readonly TimeSpan ReleaseBound = TimeSpan.FromSeconds(2);
+
+    /// <summary>A WebSocket upgrade request for this listener's path, as a raw peer sends it.</summary>
+    private static byte[] UpgradeRequest(string app) => Encoding.ASCII.GetBytes(
+        $"GET /ari/events?app={app} HTTP/1.1\r\n" +
+        "Host: 127.0.0.1\r\n" +
+        "Upgrade: websocket\r\n" +
+        "Connection: Upgrade\r\n" +
+        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+        "Sec-WebSocket-Version: 13\r\n\r\n");
+
+    /// <summary>
+    /// Whether <paramref name="peer"/>'s next receive finds its connection closed, by a close frame or by
+    /// the transport ending without one. The receive ends on that close, not on a clock.
+    /// </summary>
+    private static async Task<bool> SeesItsConnectionClosedAsync(ClientWebSocket peer)
+    {
+        try
+        {
+            var result = await peer.ReceiveAsync(new ArraySegment<byte>(new byte[16]), CancellationToken.None)
+                .WaitAsync(SignalTimeout);
+            return result.MessageType == WebSocketMessageType.Close;
+        }
+        catch (WebSocketException)
+        {
+            // The transport ended without a close handshake, which is how an aborted connection ends
+            return true;
+        }
+    }
+
     /// <summary>The next timer created on <paramref name="time"/>, as soon as it exists.</summary>
     private static Task<FakeTimeProvider.FakeTimer> NextTimerAsync(FakeTimeProvider time) =>
         time.TimersCreated.ReadAsync().AsTask().WaitAsync(SignalTimeout);
@@ -1050,6 +1296,41 @@ public sealed class AriOutboundListenerTests
             base.Dispose(disposing);
             if (disposing)
                 _released.TrySetResult();
+        }
+    }
+
+    /// <summary>
+    /// The listener's accept, served from a loopback listener of the test's own. Each connection a peer
+    /// makes to <see cref="Port"/> is handed to the listener in a <see cref="ReleaseSignallingClient"/>,
+    /// and to the test as well, so the test can wait for the handler to release that connection.
+    /// </summary>
+    private sealed class LoopbackAcceptSeam : IDisposable
+    {
+        private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
+        private readonly Channel<ReleaseSignallingClient> _handedOver = Channel.CreateUnbounded<ReleaseSignallingClient>();
+        private readonly ConcurrentQueue<ReleaseSignallingClient> _all = new();
+
+        public LoopbackAcceptSeam() => _listener.Start();
+
+        public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
+
+        public async ValueTask<TcpClient> AcceptAsync(CancellationToken token)
+        {
+            var client = new ReleaseSignallingClient(await _listener.AcceptSocketAsync(token));
+            _all.Enqueue(client);
+            _handedOver.Writer.TryWrite(client);
+            return client;
+        }
+
+        /// <summary>The next connection handed to the listener, as soon as it has been.</summary>
+        public Task<ReleaseSignallingClient> NextHandedOverAsync() =>
+            _handedOver.Reader.ReadAsync().AsTask().WaitAsync(SignalTimeout);
+
+        public void Dispose()
+        {
+            _listener.Dispose();
+            while (_all.TryDequeue(out var client))
+                client.Dispose();
         }
     }
 
