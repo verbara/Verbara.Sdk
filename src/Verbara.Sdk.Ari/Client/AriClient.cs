@@ -83,6 +83,10 @@ public sealed class AriClient : IAriClient
     // bounded by it. Settable by tests (via InternalsVisibleTo); see AriConnectBound for the value.
     internal TimeSpan ConnectTimeout { get; set; } = AriConnectBound.Default;
 
+    // How long DisconnectAsync waits for Asterisk to answer its close frame before it lets the socket go.
+    // Five seconds, the same as the reconnect dial's bound; it runs on TimeProvider.
+    private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(5);
+
     private void SetState(AriConnectionState newState) =>
         Interlocked.Exchange(ref _state, (int)newState);
 
@@ -441,9 +445,16 @@ public sealed class AriClient : IAriClient
 
         if (_webSocket?.State == WebSocketState.Open)
         {
+            // CloseAsync waits for Asterisk to answer the close frame and has no deadline of its own, so an
+            // Asterisk that never answered held this call, and DisposeAsync behind it, for as long as the
+            // caller's token allowed: for good, when there was none. The wait now ends at the bound or at
+            // the caller's token, whichever comes first, and either ending is absorbed below like any
+            // other failed close.
+            using var closeBound = new CancellationTokenSource(CloseTimeout, TimeProvider);
+            using var close = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, closeBound.Token);
             try
             {
-                await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", cancellationToken);
+                await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", close.Token);
             }
             catch { /* Best effort */ }
         }

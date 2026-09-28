@@ -48,6 +48,10 @@ public sealed class AriOutboundConnection : IAsyncDisposable
     // InternalsVisibleTo) to drive it on a manual clock; the listener's own clock is not passed in.
     internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
+    // How long DisconnectAsync waits for Asterisk to answer its close frame before it lets the socket go.
+    // Five seconds, the same as AriClient's; it runs on TimeProvider.
+    private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(5);
+
     /// <summary>
     /// Send a graceful WebSocket close to Asterisk and mark this session disposed.
     /// Idempotent — safe to call multiple times.
@@ -59,12 +63,19 @@ public sealed class AriOutboundConnection : IAsyncDisposable
 
         if (_webSocket.State == WebSocketState.Open)
         {
+            // CloseAsync waits for Asterisk to answer the close frame and has no deadline of its own, so an
+            // Asterisk that never answered held this call, and DisposeAsync behind it, until the listener's
+            // idle timeout aborted the socket: five minutes by default, and never when that timeout is off.
+            // The wait now ends at the bound or at the caller's token, whichever comes first, and either
+            // ending is absorbed below like any other failed close.
+            using var closeBound = new CancellationTokenSource(CloseTimeout, TimeProvider);
+            using var close = CancellationTokenSource.CreateLinkedTokenSource(ct, closeBound.Token);
             try
             {
                 await _webSocket.CloseAsync(
                     WebSocketCloseStatus.NormalClosure,
                     "Disconnect requested",
-                    ct);
+                    close.Token);
             }
             catch (WebSocketException) { /* Best effort */ }
             catch (ObjectDisposedException) { /* Best effort */ }
