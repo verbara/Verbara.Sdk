@@ -39,7 +39,10 @@ public enum SpeechProviderFailureSignal
     Handshake,
 
     /// <summary>
-    /// The connection died mid-session. Distinct from the others in that nothing was said: the
+    /// The connection died mid-session, including a vendor that sent nothing for 10 s after the end
+    /// of input and did not end the session: a WebSocket speech client of this SDK treats that
+    /// silence as a connection lost without a close, and the inner exception is then a
+    /// <see cref="TimeoutException"/>. Distinct from the others in that nothing was said: the
     /// evidence is the inner exception. Previously this ended the stream <em>normally</em>, which
     /// left a caller an empty — or silently truncated — result and no error.
     /// </summary>
