@@ -55,6 +55,12 @@ public sealed class FastAgiServer : IAgiServer
     private int _state = (int)AgiServerState.Stopped;
 
     public int Port { get; }
+
+    /// <summary>
+    /// The port the listener is bound to. With <see cref="Port"/> 0 the OS picks it when the server
+    /// starts; before the start this reads <see cref="Port"/>.
+    /// </summary>
+    internal int BoundPort => (_listener?.LocalEndpoint as IPEndPoint)?.Port ?? Port;
     public AgiServerState State => (AgiServerState)Volatile.Read(ref _state);
     public bool IsRunning => State == AgiServerState.Listening;
 
@@ -126,12 +132,13 @@ public sealed class FastAgiServer : IAgiServer
             {
                 var client = await AcceptAsync(ct);
                 backoff = InitialAcceptBackoff;
-                client.NoDelay = true;
 
-                var endpoint = client.Client.RemoteEndPoint?.ToString();
-                FastAgiServerLog.ConnectionAccepted(_logger, endpoint);
-
-                // Handle each connection concurrently
+                // Hand the connection off at once. Nothing that can fail for this one connection runs
+                // between the accept and the hand-off, not even configuring the socket: the handler
+                // does that, closes the connection and reports it as that connection's error. Here it
+                // would reach the catches below, which classify by type only: a SocketException would
+                // be logged as an accept failure and backed off for, with the socket left open, and an
+                // ObjectDisposedException would end the loop as if the server had been stopped.
                 _ = HandleConnectionAsync(client, ct);
                 continue;
             }
@@ -204,6 +211,30 @@ public sealed class FastAgiServer : IAgiServer
 
     private async Task HandleConnectionAsync(TcpClient client, CancellationToken ct)
     {
+        // Configuring the socket, reading its remote endpoint and obtaining its stream are part of
+        // serving this connection, so they run here, and a failure closes the connection and is
+        // reported once as this connection's error. Each can throw for this one connection: a socket
+        // that rejects the option throws SocketException, one already closed throws
+        // ObjectDisposedException, and one that is not connected throws InvalidOperationException
+        // from GetStream(). Outside this catch, that last failure would escape the task the accept
+        // loop discards, where nothing observes it, and leave the socket open. No script ran, so it is
+        // not counted in agi.scripts.failed, and a connection that never got a stream is not counted
+        // in agi.connections.accepted. The catch is filtered to what these statements throw.
+        NetworkStream stream;
+        try
+        {
+            client.NoDelay = true;
+            var endpoint = client.Client.RemoteEndPoint?.ToString();
+            FastAgiServerLog.ConnectionAccepted(_logger, endpoint);
+            stream = client.GetStream();
+        }
+        catch (Exception ex) when (ex is SocketException or ObjectDisposedException or InvalidOperationException)
+        {
+            FastAgiServerLog.ConnectionError(_logger, ex);
+            client.Dispose();
+            return;
+        }
+
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         if (ConnectionTimeout > TimeSpan.Zero)
         {
@@ -214,7 +245,7 @@ public sealed class FastAgiServer : IAgiServer
 
         AgiMetrics.ConnectionsAccepted.Add(1);
 
-        await using var conn = PipelineSocketConnection.FromStream(client.GetStream());
+        await using var conn = PipelineSocketConnection.FromStream(stream);
 
         var sw = Stopwatch.GetTimestamp();
         System.Diagnostics.Activity? activity = null;

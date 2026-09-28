@@ -1,6 +1,7 @@
 using System.Buffers;
 using Verbara.Sdk.Ari.Audio;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Verbara.Sdk.Ari.Tests.Audio;
 
@@ -41,7 +42,7 @@ public class AudioSocketSessionTests
         hangupFrame.CopyTo(allData, uuidFrame.Length + audioFrame.Length);
 
         await using var memStream = new MemoryStream(allData);
-        var session = new AudioSocketSession(memStream, "slin16");
+        var session = new AudioSocketSession(memStream, "slin16", NullLogger.Instance);
         session.Start();
 
         // Wait for UUID to be parsed
@@ -68,7 +69,7 @@ public class AudioSocketSessionTests
         // branch of ReadFrameAsync; Session_ShouldParseUuidAndReadAudio covers the true branch.
         var hangupFrame = BuildFrame(AudioFrameType.Hangup, []);
         await using var memStream = new MemoryStream(hangupFrame);
-        var session = new AudioSocketSession(memStream, "slin16");
+        var session = new AudioSocketSession(memStream, "slin16", NullLogger.Instance);
         session.Start();
 
         // Causal, not timed: channel completion is exactly what resolves this await, so no settling
@@ -92,7 +93,7 @@ public class AudioSocketSessionTests
         var states = new List<AudioStreamState>();
         var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var memStream = new MemoryStream(allData);
-        var session = new AudioSocketSession(memStream, "ulaw");
+        var session = new AudioSocketSession(memStream, "ulaw", NullLogger.Instance);
         using var sub = session.StateChanges.Subscribe(s =>
         {
             states.Add(s);
@@ -121,7 +122,7 @@ public class AudioSocketSessionTests
         var states = new List<AudioStreamState>();
         var errored = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var memStream = new MemoryStream(allData);
-        var session = new AudioSocketSession(memStream, "slin16");
+        var session = new AudioSocketSession(memStream, "slin16", NullLogger.Instance);
         using var sub = session.StateChanges.Subscribe(s =>
         {
             states.Add(s);
@@ -140,7 +141,7 @@ public class AudioSocketSessionTests
     {
         var uuidFrame = BuildFrame(AudioFrameType.Uuid, UuidPayload(Guid.NewGuid()));
         await using var memStream = new MemoryStream(uuidFrame);
-        var session = new AudioSocketSession(memStream, "slin16");
+        var session = new AudioSocketSession(memStream, "slin16", NullLogger.Instance);
         var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var sub = session.StateChanges.Subscribe(s =>
         {

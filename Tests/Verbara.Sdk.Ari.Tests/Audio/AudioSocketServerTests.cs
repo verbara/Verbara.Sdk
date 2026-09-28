@@ -3,7 +3,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
 using Verbara.Sdk.Ari.Audio;
+using Verbara.Sdk.Ari.Tests.TestSupport;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -70,6 +72,14 @@ public class AudioSocketServerTests : IAsyncDisposable
 
     private static byte[] BuildHangupFrame() =>
         BuildFrame(AudioFrameType.Hangup, []);
+
+    /// <summary>
+    /// Port 0, so the OS picks the port when the server binds. It is for a server the test never
+    /// dials, because its accepts come from <c>AcceptOverride</c>. A port probed with
+    /// <see cref="GetFreePort"/> is released before the server binds it, and any process on the
+    /// machine can take it in between; the start then fails with "Address already in use".
+    /// </summary>
+    private const int PortTheOsPicks = 0;
 
     private AudioSocketServer CreateServer(
         int port,
@@ -712,6 +722,238 @@ public class AudioSocketServerTests : IAsyncDisposable
         server.IsRunning.Should().BeFalse();
     }
 
+    // ------------------------------------- a connection whose configuration fails after the accept
+
+    [Fact]
+    public async Task AcceptLoopAsync_ShouldCloseTheAcceptedSocket_WhenConfiguringItThrows()
+    {
+        // Arrange — the accept seam hands over a client whose socket is a UDP socket, so setting
+        // TCP_NODELAY on it throws a SocketException (setsockopt answers ENOPROTOOPT) while the socket
+        // is still open. The clock is fake and never moves. A loop that takes the failure for an
+        // accept failure asks it for a backoff timer, and that timer is the signal the test ends on
+        // in that case; otherwise the handler releasing the client is.
+        var time = new FakeTimeProvider();
+        var logger = new CapturingLogger();
+        var server = CreateServer(PortTheOsPicks, logger: logger, timeProvider: time);
+        using var accepted = AcceptedClients.UdpBacked();
+        using var client = new ReleaseSignallingClient(accepted.Socket);
+        var attempts = 0;
+        server.AcceptOverride = token => Interlocked.Increment(ref attempts) == 1
+            ? ValueTask.FromResult<TcpClient>(client)
+            : AcceptedClients.ParkUntilCancelledAsync(token);
+        var backoffRequested = time.TimersCreated.ReadAsync().AsTask();
+
+        await server.StartAsync();
+        try
+        {
+            // Act
+            await Task.WhenAny(client.Released, backoffRequested).WaitAsync(SignalTimeout);
+
+            // Assert
+            using (new AssertionScope())
+            {
+                accepted.IsSocketClosed.Should().BeTrue(
+                    "a connection the loop accepted and could not configure is closed, not leaked; the " +
+                    "server logged [{0}]",
+                    Describe(logger));
+                logger.Entries.Should().ContainSingle(
+                    entry => entry.Level == LogLevel.Error
+                        && entry.EventName == "ConnectionError"
+                        && entry.ExceptionType == nameof(SocketException),
+                    "the failure belongs to that one connection, so it is reported once as its error");
+                logger.Entries.Should().NotContain(
+                    entry => entry.EventName == "AcceptLoopFailed",
+                    "no accept failed: the accept returned a connection, and configuring it is serving it");
+                server.IsRunning.Should().BeTrue("one connection failing is not the server failing");
+            }
+        }
+        finally
+        {
+            _server = null;
+            await server.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task AcceptLoopAsync_ShouldKeepAccepting_WhenConfiguringAnAcceptedClientThrowsObjectDisposed()
+    {
+        // Arrange — the accept seam hands over a client whose socket is already disposed, so setting
+        // TCP_NODELAY on it throws an ObjectDisposedException: the type the loop reads as its own
+        // listener's stop. The second accept is the signal. A loop that ends on the first connection
+        // never makes it, so in that case only the bound ends the wait.
+        var logger = new CapturingLogger();
+        var server = CreateServer(PortTheOsPicks, logger: logger, timeProvider: new FakeTimeProvider());
+        using var accepted = AcceptedClients.DisposedSocket();
+        using var client = new ReleaseSignallingClient(accepted.Socket);
+        var attempts = 0;
+        var secondAttempt = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.AcceptOverride = token =>
+        {
+            if (Interlocked.Increment(ref attempts) == 1)
+                return ValueTask.FromResult<TcpClient>(client);
+
+            secondAttempt.TrySetResult();
+            return AcceptedClients.ParkUntilCancelledAsync(token);
+        };
+
+        await server.StartAsync();
+        try
+        {
+            // Act
+            var nextAccept = () => secondAttempt.Task;
+            await nextAccept.Should().CompleteWithinAsync(
+                SignalTimeout,
+                "one connection's closed socket is not the server's stop, so the loop accepts again");
+            await client.Released.WaitAsync(SignalTimeout);
+
+            // Assert
+            using (new AssertionScope())
+            {
+                server.IsRunning.Should().BeTrue("the server is still bound and still accepting");
+                logger.Entries.Should().ContainSingle(
+                    entry => entry.Level == LogLevel.Error
+                        && entry.EventName == "ConnectionError"
+                        && entry.ExceptionType == nameof(ObjectDisposedException),
+                    "the failure belongs to that one connection, so it is reported once as its error; " +
+                    "the server logged [{0}]",
+                    Describe(logger));
+                logger.Entries.Should().NotContain(
+                    entry => entry.EventName == "AcceptLoopFailed",
+                    "no accept failed");
+            }
+        }
+        finally
+        {
+            _server = null;
+            await server.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task AcceptLoopAsync_ShouldAcceptTheNextConnectionWithoutWaiting_WhenConfiguringOneFails()
+    {
+        // Arrange — the configure fails with a SocketException, the type the loop backs off for when an
+        // accept fails. The clock is fake and never moves, so a backoff would park the loop for good,
+        // and the timer it asks for is the signal the test ends on in that case. Otherwise the next
+        // accept is.
+        var time = new FakeTimeProvider();
+        var logger = new CapturingLogger();
+        var server = CreateServer(PortTheOsPicks, logger: logger, timeProvider: time);
+        using var accepted = AcceptedClients.UdpBacked();
+        using var client = new ReleaseSignallingClient(accepted.Socket);
+        var attempts = 0;
+        var secondAttempt = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.AcceptOverride = token =>
+        {
+            if (Interlocked.Increment(ref attempts) == 1)
+                return ValueTask.FromResult<TcpClient>(client);
+
+            secondAttempt.TrySetResult();
+            return AcceptedClients.ParkUntilCancelledAsync(token);
+        };
+        var backoffRequested = time.TimersCreated.ReadAsync().AsTask();
+
+        await server.StartAsync();
+        try
+        {
+            // Act
+            await Task.WhenAny(secondAttempt.Task, backoffRequested).WaitAsync(SignalTimeout);
+
+            // Assert — the loop requests a backoff timer before its next accept, never after it, so
+            // at the moment of the next accept, no timer means none was requested
+            using (new AssertionScope())
+            {
+                secondAttempt.Task.IsCompleted.Should().BeTrue(
+                    "no accept failed, so there is nothing to wait out before the next one; attempts = " +
+                    "{0}, the server logged [{1}]",
+                    Volatile.Read(ref attempts),
+                    Describe(logger));
+                backoffRequested.IsCompleted.Should().BeFalse("one connection's failure costs the next one no wait");
+                logger.Entries.Should().NotContain(
+                    entry => entry.EventName == "AcceptLoopFailed",
+                    "no accept failed");
+                server.IsRunning.Should().BeTrue();
+            }
+        }
+        finally
+        {
+            _server = null;
+            await server.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldReportTheFailure_WhenTheAcceptedClientIsNotConnected()
+    {
+        // Arrange — the accept seam hands over a TCP client that was never connected. Setting
+        // TCP_NODELAY on it succeeds, so the failure lands one step later, when the handler asks the
+        // client for its stream (GetStream() throws InvalidOperationException). The handler owns the
+        // connection by then, so it has to close it and report the failure itself: nothing observes the
+        // task the loop discards.
+        //
+        // Ordered by construction: the loop starts the handler inline, on its own continuation, and
+        // this failure comes before the handler's first await, so the handler's task has completed
+        // before the loop asks for its next accept. That next accept is the signal. The premise is
+        // checked below, because the unobserved-exception witness reads nothing from a task that had
+        // not completed when the collection ran.
+        var logger = new CapturingLogger();
+        var server = CreateServer(PortTheOsPicks, logger: logger, timeProvider: new FakeTimeProvider());
+        using var accepted = AcceptedClients.NeverConnected();
+        using var client = new ReleaseSignallingClient(accepted.Socket);
+        using var unobserved = new UnobservedServerFaults();
+        var attempts = 0;
+        var releasedBeforeNextAccept = false;
+        var secondAttempt = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.AcceptOverride = token =>
+        {
+            if (Interlocked.Increment(ref attempts) == 1)
+                return ValueTask.FromResult<TcpClient>(client);
+
+            releasedBeforeNextAccept = client.Released.IsCompleted;
+            secondAttempt.TrySetResult();
+            return AcceptedClients.ParkUntilCancelledAsync(token);
+        };
+
+        await server.StartAsync();
+        try
+        {
+            // Act
+            await secondAttempt.Task.WaitAsync(SignalTimeout);
+            await client.Released.WaitAsync(SignalTimeout);
+            UnobservedServerFaults.CollectDiscardedTasks();
+
+            // Assert
+            using (new AssertionScope())
+            {
+                releasedBeforeNextAccept.Should().BeTrue(
+                    "the premise of this test is a handler that had finished with the connection before " +
+                    "the loop accepted again; otherwise the collection may run before its task completes");
+                accepted.IsSocketClosed.Should().BeTrue(
+                    "the handler owns the connection, so it closes it when it cannot serve it");
+                logger.Entries.Should().ContainSingle(
+                    entry => entry.Level == LogLevel.Error
+                        && entry.EventName == "ConnectionError"
+                        && entry.ExceptionType == nameof(InvalidOperationException),
+                    "a connection whose stream cannot be obtained is that connection's failure, reported " +
+                    "once as its error; the server logged [{0}]",
+                    Describe(logger));
+                unobserved.Faults.Should().BeEmpty(
+                    "the failure is reported where it happened, so it does not escape the task the loop " +
+                    "discards, where nothing observes it; every unobserved exception seen: [{0}]",
+                    string.Join("; ", unobserved.All));
+                logger.Entries.Should().NotContain(
+                    entry => entry.EventName == "AcceptLoopFailed",
+                    "no accept failed");
+                server.IsRunning.Should().BeTrue("one connection failing is not the server failing");
+            }
+        }
+        finally
+        {
+            _server = null;
+            await server.DisposeAsync();
+        }
+    }
+
     // -------------------------------------- a connection that fails after the server took it on
 
     [Fact]
@@ -1132,6 +1374,83 @@ public class AudioSocketServerTests : IAsyncDisposable
     /// <summary>The next timer created on <paramref name="time"/>, as soon as it exists.</summary>
     private static Task<FakeTimeProvider.FakeTimer> NextTimerAsync(FakeTimeProvider time) =>
         time.TimersCreated.ReadAsync().AsTask().WaitAsync(SignalTimeout);
+
+    /// <summary>What the server logged so far, for a failure message.</summary>
+    private static string Describe(CapturingLogger logger) =>
+        string.Join(", ", logger.Entries.Select(entry => $"{entry.Level}:{entry.EventName}({entry.ExceptionType})"));
+
+    /// <summary>
+    /// A client around a socket an accept fixture built, that completes <see cref="Released"/> when its
+    /// owner disposes it. For this server that is the handler's <c>using (client)</c>, the last thing
+    /// it does, so it comes after anything the handler logs.
+    /// </summary>
+    private sealed class ReleaseSignallingClient : TcpClient
+    {
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ReleaseSignallingClient(Socket socket)
+            : base(AddressFamily.InterNetwork)
+        {
+            var unused = Client;
+            Client = socket;
+            unused.Dispose();
+        }
+
+        public Task Released => _released.Task;
+
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            if (disposing)
+                _released.TrySetResult();
+        }
+    }
+
+    /// <summary>
+    /// Records every task exception that went unobserved while it is subscribed and whose stack names
+    /// this server. The subscription is process-wide, so the filter keeps a fault from another test
+    /// class running in parallel out of this one's assertion; <see cref="All"/> keeps everything, for
+    /// the failure message.
+    /// </summary>
+    private sealed class UnobservedServerFaults : IDisposable
+    {
+        private readonly ConcurrentQueue<Exception> _seen = new();
+
+        public UnobservedServerFaults() => TaskScheduler.UnobservedTaskException += OnUnobserved;
+
+        /// <summary>The unobserved exceptions thrown through <see cref="AudioSocketServer"/>.</summary>
+        public IReadOnlyList<string> Faults =>
+        [
+            .. _seen
+                .Where(ex => ex.StackTrace?.Contains(nameof(AudioSocketServer), StringComparison.Ordinal) == true)
+                .Select(ex => $"{ex.GetType().Name}: {ex.Message}")
+        ];
+
+        /// <summary>Every unobserved exception seen, whatever threw it.</summary>
+        public IReadOnlyList<string> All => [.. _seen.Select(ex => $"{ex.GetType().Name}: {ex.Message}")];
+
+        /// <summary>
+        /// Collects, so a faulted task that nothing references any more is finalised and its
+        /// exception, if nothing observed it, is published before this returns. Call it only once the
+        /// task in question has completed.
+        /// </summary>
+        public static void CollectDiscardedTasks()
+        {
+            for (var pass = 0; pass < 3; pass++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+        }
+
+        public void Dispose() => TaskScheduler.UnobservedTaskException -= OnUnobserved;
+
+        private void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e)
+        {
+            foreach (var inner in e.Exception.InnerExceptions)
+                _seen.Enqueue(inner);
+        }
+    }
 
     /// <summary>A server log entry, reduced to what these tests assert on.</summary>
     private sealed record LogEntry(LogLevel Level, string? EventName, string? ExceptionType);
