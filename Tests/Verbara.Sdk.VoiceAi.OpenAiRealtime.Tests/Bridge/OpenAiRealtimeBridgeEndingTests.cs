@@ -1,3 +1,4 @@
+using System.Diagnostics.Tracing;
 using System.Net.WebSockets;
 using Verbara.Sdk.VoiceAi.AudioSocket;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling;
@@ -273,6 +274,104 @@ public sealed class OpenAiRealtimeBridgeEndingTests
                     1, "the caller ended the session; a vendor that talks on does not make it a failure");
                 metrics.Get("openai_realtime.sessions.close_unanswered").Should().Be(
                     1, "the bound ended the wait although the last frame came two seconds before it ran out");
+                metrics.Get("openai_realtime.sessions.failed").Should().Be(0, "nothing broke");
+                log.Entries.Should().ContainSingle(
+                    e => e.EventId.Name == "CloseUnanswered"
+                        && e.Level == LogLevel.Warning
+                        && e.Message.Contains("10000 ms", StringComparison.Ordinal),
+                    "the warning names the bound that ended the session");
+                metrics.GetDouble("openai_realtime.session.duration_ms").Should().BeGreaterThan(
+                    0, "the session ended, so its duration is recorded");
+            }
+        }
+        finally
+        {
+            await client.DisposeAsync();
+            await audioServer.StopAsync(CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// The bound running out in the instant a vendor frame arrives. Cancelling the bound's token aborts
+    /// the socket under the read in flight, but a read that already holds the frame still returns it.
+    /// The bridge forwards that frame, and its loop then ends on the socket's state, not through the
+    /// cancellation's catch. That ending is the bound's too, so it is reported the same way: once in
+    /// <c>sessions.close_unanswered</c> and with the warning. Measured on the wall clock before the
+    /// manual clock existed (<c>T5</c>): with the loop's end reporting nothing, 6 and 7 of 10 runs in two
+    /// trees ended with neither the count nor the warning; with it reporting the bound, 10 of 10 counted.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The instant is made, not waited for: <see cref="WebSocketReceiveHook"/> moves the clock inside the
+    /// bridge's read, after the read has the frame and before it returns it. Two frames written back to
+    /// back, with the clock moved from the bridge's event for the first, do not reach this ending: the
+    /// next read then starts on a token that is already cancelled and throws before it looks at the
+    /// frame waiting for it, so the session ends through the catch. Measured: 20 of 20 such sessions
+    /// counted with the loop's end reporting nothing, so that trigger cannot tell the fix from its
+    /// absence. Without the hook, one frame sent and the clock moved at once left 6, 9, 15 and 18 of 20
+    /// sessions unreported in four runs, and 0 of 20 once the loop's end reports the bound: the race is
+    /// the bridge's, not the hook's.
+    /// </para>
+    /// <para>
+    /// The hook listens to the runtime's private WebSocket diagnostics, which may change in any release.
+    /// If they do, this test fails rather than passing without reaching the race: the hook's signal
+    /// never comes, the frame is not forwarded, or the bridge reads again after it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldReportTheBound_WhenItRunsOutAsAVendorFrameArrives()
+    {
+        // Arrange: a vendor that holds after the client's close and answers only when asked, which
+        // this test never does. Every frame goes through SendEventAsync, so EventsToSend stays empty.
+        await using var fakeOpenAi = new RealtimeFakeServer { AnswerClientCloseOnRequest = true };
+        fakeOpenAi.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        try
+        {
+            const string lateFrame = "a late frame";
+            var clock = new FakeTimeProvider();
+            var log = new RecordingLogger<OpenAiRealtimeBridge>();
+            await using var bridge = CreateBridge(fakeOpenAi, clock, log);
+            using var metrics = new MeterCapture(MeterName);
+            using var receive = new WebSocketReceiveHook();
+            using var loopsRunning = new RealtimeEventCollector(
+                bridge.Events, e => e.OfType<RealtimeSpeechStartedEvent>().Any());
+            using var forwarded = new RealtimeEventCollector(
+                bridge.Events, e => e.OfType<RealtimeTranscriptEvent>().Any(t => t.Transcript == lateFrame));
+
+            var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
+            await fakeOpenAi.SessionUpdateReceived.WaitAsync(SignalTimeout);
+            await fakeOpenAi.SendEventAsync(LoopsRunningMarkerEvent);
+            await loopsRunning.Satisfied.WaitAsync(SignalTimeout);
+            var armedDue = await HangUpAndWaitForTheArmAsync(client, fakeOpenAi, clock);
+
+            // Act: the vendor sends one more frame, and the whole bound passes inside the read that
+            // returns it
+            receive.Arm(() => clock.Advance(CloseAnswerBound));
+            await fakeOpenAi.SendEventAsync(
+                $$"""{"type":"response.output_audio_transcript.delta","delta":"{{lateFrame}}"}""");
+            await receive.Fired.WaitAsync(SignalTimeout);
+
+            await sessionTask.WaitAsync(SignalTimeout);
+
+            // Assert
+            using (new AssertionScope())
+            {
+                armedDue.Should().Be(CloseAnswerBound, "the bound is ten seconds, counted from the bridge's close");
+                forwarded.Events.OfType<RealtimeTranscriptEvent>().Should().Contain(
+                    t => t.Transcript == lateFrame,
+                    "the read already held the frame when the bound ran out, so it returned it");
+                receive.ReceivesStartedAfterwards.Should().Be(
+                    0,
+                    "the bound aborted the socket under that read, so the loop ended on the socket's state "
+                    + "without reading again: the ending under test, not the cancellation's catch");
+                sessionTask.Status.Should().Be(
+                    TaskStatus.RanToCompletion, "the caller ended the session, so it completed");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(
+                    1, "the caller ended the session; a frame at the bound does not make it a failure");
+                metrics.Get("openai_realtime.sessions.close_unanswered").Should().Be(
+                    1, "the bound ended the wait, whichever way the loop left, and every such session is counted once");
                 metrics.Get("openai_realtime.sessions.failed").Should().Be(0, "nothing broke");
                 log.Entries.Should().ContainSingle(
                     e => e.EventId.Name == "CloseUnanswered"
@@ -609,6 +708,88 @@ public sealed class OpenAiRealtimeBridgeEndingTests
             _started.TrySetResult();
             await _released.Task.WaitAsync(ct).ConfigureAwait(false);
             return Result;
+        }
+    }
+
+    /// <summary>
+    /// Runs an action inside a WebSocket read, after the read has taken a whole frame off the connection
+    /// and before it returns the frame: the instant a bound that runs out as a frame arrives needs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The runtime's WebSocket reports that instant on its private diagnostics source,
+    /// <c>Private.InternalDiagnostics.System.Net.WebSockets</c>. Its event <c>MutexExit</c>, with member
+    /// <c>ReceiveAsyncPrivate</c>, is written as a read releases its lock. By then the read has built
+    /// its result, and its registration on the caller's token still stands. So a token cancelled from
+    /// the action aborts the socket, and the read still returns the frame (read in the decompiled
+    /// <c>ManagedWebSocket</c> of .NET 10.0.12). The source is not a public contract, which is why the
+    /// test using this also checks what the hook was for, and fails if it stops being true.
+    /// </para>
+    /// <para>
+    /// Only the first such event after <see cref="Arm"/> runs the action. The listener hears every
+    /// WebSocket in the process. When the test arms it, the fake's own reads have ended at the client's
+    /// close, so the bridge's pending read is the only one left. <see cref="ReceivesStartedAfterwards"/>
+    /// counts the reads begun once the action has run.
+    /// </para>
+    /// </remarks>
+    private sealed class WebSocketReceiveHook : EventListener
+    {
+        private const string SourceName = "Private.InternalDiagnostics.System.Net.WebSockets";
+
+        private readonly TaskCompletionSource _fired = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private Action? _action;
+        private int _receivesStartedAfterwards;
+
+        /// <summary>Completes once the action has run inside a read; faults if the action threw.</summary>
+        public Task Fired => _fired.Task;
+
+        /// <summary>How many reads began after the action ran.</summary>
+        public int ReceivesStartedAfterwards => Volatile.Read(ref _receivesStartedAfterwards);
+
+        public void Arm(Action action) => Volatile.Write(ref _action, action);
+
+        protected override void OnEventSourceCreated(EventSource eventSource)
+        {
+            if (eventSource.Name == SourceName)
+                EnableEvents(eventSource, EventLevel.Verbose, EventKeywords.All);
+        }
+
+        protected override void OnEventWritten(EventWrittenEventArgs eventData)
+        {
+            if (_fired.Task.IsCompleted)
+            {
+                if (eventData.EventName == "ReceiveStart")
+                    Interlocked.Increment(ref _receivesStartedAfterwards);
+                return;
+            }
+
+            if (eventData.EventName != "MutexExit" || PayloadText(eventData, "memberName") != "ReceiveAsyncPrivate")
+                return;
+
+            var action = Interlocked.Exchange(ref _action, null);
+            if (action is null) return;
+
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                // Handed to the test through Fired: the event source's dispatch would swallow it, and
+                // the test would then time out without saying why.
+                _fired.TrySetException(ex);
+                return;
+            }
+
+            _fired.TrySetResult();
+        }
+
+        private static string? PayloadText(EventWrittenEventArgs eventData, string name)
+        {
+            var index = eventData.PayloadNames?.IndexOf(name) ?? -1;
+            return index >= 0 && eventData.Payload is { } payload && index < payload.Count
+                ? payload[index] as string
+                : null;
         }
     }
 

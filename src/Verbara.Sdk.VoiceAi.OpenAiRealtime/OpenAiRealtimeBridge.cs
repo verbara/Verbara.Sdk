@@ -423,7 +423,11 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 // All other events (response.output_audio.done, session.updated, etc.) are intentionally ignored.
             }
         }
-        return false;
+        // The loop also ends here when the bound runs out in the instant a vendor frame lands: the
+        // cancellation aborts the socket under the read, the read still returns the frame it already
+        // held, and the state check above ends the loop instead of the catch. It is the same ending, so
+        // it is reported the same way; reporting false here left the session uncounted and unwarned.
+        return silence.Expired;
     }
 
     private async Task HandleFunctionCallAsync(
