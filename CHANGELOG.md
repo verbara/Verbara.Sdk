@@ -56,7 +56,7 @@ All notable changes to this project will be documented in this file.
 - When the loop stops at `MaxReconnectAttempts`, the socket its last attempt created is now disposed,
   and the connection ends as a loss without `AutoReconnect` does. The number of attempts is unchanged.
 
-### Fixed — an AMI connection that its caller ended could keep reconnecting, hang, or report `Disconnected` before it had let go (#N)
+### Fixed — an AMI connection that its caller ended could keep reconnecting, hang, or report `Disconnected` before it had let go (#335)
 
 - **Ending a connection while it is reconnecting now ends it.** A `DisposeAsync` or `DisconnectAsync`
   issued during the reconnect loop left the loop dialling — forever with the default
@@ -75,7 +75,7 @@ All notable changes to this project will be documented in this file.
   in `CLOSE_WAIT` on a connection the caller never received and so could not release. The original
   exception still reaches the caller unchanged, and a cancellation is still a cancellation.
 
-### Fixed — BREAKING: `VerbaraServerPool` left the AMI connection behind every server it dropped logged in, and it logged in again after every Asterisk restart (#N)
+### Fixed — BREAKING: `VerbaraServerPool` left the AMI connection behind every server it dropped logged in, and it logged in again after every Asterisk restart (#335)
 
 - `RemoveServerAsync`, the duplicate-id path of `AddServerAsync` and the pool's `DisposeAsync` now
   dispose the AMI connection behind the server, including one handed in with `AddExistingServer`. Before,
