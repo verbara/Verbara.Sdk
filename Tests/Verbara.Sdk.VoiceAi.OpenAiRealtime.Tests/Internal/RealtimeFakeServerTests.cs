@@ -97,7 +97,8 @@ public sealed class RealtimeFakeServerTests
         await ReadUpgradeResponseAsync(stream);
 
         var payload = Encoding.UTF8.GetBytes(SessionUpdate);
-        await stream.WriteAsync((byte[])[0x81, (byte)(0x80 | payload.Length), 0, 0, 0, 0, .. payload]);
+        byte[] maskedFrame = [0x81, (byte)(0x80 | payload.Length), 0, 0, 0, 0, .. payload];
+        await stream.WriteAsync(maskedFrame);
         await fake.SessionUpdateReceived.WaitAsync(SignalTimeout);
 
         var created = await ReadFrameAsync(stream);

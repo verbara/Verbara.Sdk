@@ -1169,15 +1169,12 @@ public sealed class OpenAiRealtimeBridgeEndingTests
             var action = Interlocked.Exchange(ref _action, null);
             if (action is null) return;
 
-            try
+            // A failure is handed to the test through Fired: the event source's dispatch would swallow
+            // it, and the test would then time out without saying why.
+            var failure = Record.Exception(action);
+            if (failure is not null)
             {
-                action();
-            }
-            catch (Exception ex)
-            {
-                // Handed to the test through Fired: the event source's dispatch would swallow it, and
-                // the test would then time out without saying why.
-                _fired.TrySetException(ex);
+                _fired.TrySetException(failure);
                 return;
             }
 
