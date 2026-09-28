@@ -44,6 +44,10 @@ public sealed class AriOutboundConnection : IAsyncDisposable
     /// <summary>Stream of ARI events received from Asterisk over this session.</summary>
     public IObservable<AriEvent> Events => _eventSubject;
 
+    // The clock the wait for Asterisk to answer a disconnect's close runs on. Settable by tests (via
+    // InternalsVisibleTo) to drive it on a manual clock; the listener's own clock is not passed in.
+    internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
+
     /// <summary>
     /// Send a graceful WebSocket close to Asterisk and mark this session disposed.
     /// Idempotent — safe to call multiple times.

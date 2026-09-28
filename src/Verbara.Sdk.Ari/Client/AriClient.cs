@@ -73,6 +73,16 @@ public sealed class AriClient : IAriClient
     /// </summary>
     internal Task? EventLoop => _eventLoop;
 
+    // The clock this client's bounds on Asterisk run on: the reconnect loop's dial, and the wait for
+    // Asterisk to answer a disconnect's close. Settable by tests (via InternalsVisibleTo) to drive them on
+    // a manual clock.
+    internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
+
+    // How long a dial of the events socket made by the reconnect loop may take before it counts as a
+    // failed attempt. The reconnect loop's dial only: the caller's own dial in ConnectAsync is not
+    // bounded by it. Settable by tests (via InternalsVisibleTo).
+    internal TimeSpan ConnectTimeout { get; set; } = TimeSpan.FromSeconds(5);
+
     private void SetState(AriConnectionState newState) =>
         Interlocked.Exchange(ref _state, (int)newState);
 
