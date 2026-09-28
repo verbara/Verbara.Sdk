@@ -265,6 +265,22 @@ All notable changes to this project will be documented in this file.
   tagged `buffer_full`. The `filter_rejected` tag the metric's documentation listed was never emitted
   and is no longer documented.
 
+### Fixed — BREAKING: a speech vendor that went silent after the end of input held the call (#339)
+
+- **The eight WebSocket speech clients fail when the vendor goes silent after the end of input.** The
+  Deepgram, AssemblyAI, Cartesia and Speechmatics recognizers and the Cartesia, Deepgram, ElevenLabs and
+  LMNT synthesizers now end with `SpeechProviderFailureException` (`Signal = Transport`) when the vendor
+  sends nothing for 10 seconds after the end of input; every frame it sends restarts the wait. Before,
+  such a vendor held the stream open indefinitely: in the Voice AI pipeline, with any one of the eight
+  providers mute, the session handler ran on after the caller hung up and after the AudioSocket server
+  stopped (8 of 8). This restores what the SDK publishes: `ISessionHandler.HandleSessionAsync` "Runs the
+  session until the AudioSocket disconnects or `ct` is cancelled", `VoiceAiPipeline` "Returns when the
+  session ends or the token is cancelled", and 2.5.0's "a provider failure now reaches the caller instead
+  of an empty stream".
+- **What a consumer observes changes.** A single gap of more than 10 seconds after the end of input,
+  which used to complete, now fails as a transport failure (measured on Cartesia TTS: a 12-second gap
+  completed before and fails at 10 seconds now). A vendor that keeps sending, however slowly, is not cut.
+
 ### Fixed — an originate's dial events threw inside the AMI dispatcher (#331)
 
 - For an AMI `Originate`, Asterisk's `DialBegin` and `DialEnd` carry only the dialed side
