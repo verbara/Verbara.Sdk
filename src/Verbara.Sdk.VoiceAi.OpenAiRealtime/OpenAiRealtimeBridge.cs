@@ -94,7 +94,6 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         // ── Per-session state (stack-lifetime) ──────────────────────────────
         using var ws = new ClientWebSocket();
         ws.Options.SetRequestHeader("Authorization", $"Bearer {_options.ApiKey}");
-        ws.Options.SetRequestHeader("OpenAI-Beta", "realtime=v1");
         using var wsWriteLock = new SemaphoreSlim(1, 1);
 
         var inputRate = _options.InputFormat.SampleRate;
@@ -415,6 +414,11 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 
     // ── session.update builder (Utf8JsonWriter — NOT JsonSerializer) ─────────
     // Uses WriteRawValue for tools[].parameters to insert literal JSON schema strings.
+    //
+    // The shape is the generally available one the endpoint serves. It refused the beta shape one
+    // member at a time (measured 2026-09-27): session.type is required, and a top-level voice,
+    // modalities, turn_detection or input_audio_format is an unknown parameter. The voice now lives
+    // under audio.output and turn detection under audio.input.
     private static ReadOnlyMemory<byte> BuildSessionUpdate(
         IReadOnlyCollection<IRealtimeFunctionHandler> tools,
         OpenAiRealtimeOptions opts)
@@ -426,13 +430,26 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         writer.WriteString("type", RealtimeProtocol.SessionUpdate);
         writer.WritePropertyName("session");
         writer.WriteStartObject();
-        writer.WriteString("voice", opts.Voice);
-        writer.WriteStartArray("modalities");
+        writer.WriteString("type", "realtime");
+        // ["audio","text"] is refused: the endpoint accepts ["audio"] or ["text"]. With audio, the
+        // transcript of the spoken answer still arrives, as response.output_audio_transcript.*.
+        writer.WriteStartArray("output_modalities");
         writer.WriteStringValue("audio");
-        writer.WriteStringValue("text");
         writer.WriteEndArray();
         writer.WriteString("instructions", opts.Instructions);
 
+        // Both formats are written although the vendor's defaults match today: the resamplers are
+        // built for 24000 Hz, so a changed default becomes a refused session.update the bridge
+        // reports, rather than audio played at the wrong rate.
+        writer.WritePropertyName("audio");
+        writer.WriteStartObject();
+        writer.WritePropertyName("input");
+        writer.WriteStartObject();
+        writer.WritePropertyName("format");
+        writer.WriteStartObject();
+        writer.WriteString("type", "audio/pcm");
+        writer.WriteNumber("rate", 24000);
+        writer.WriteEndObject();
         if (opts.VadMode == VadMode.ServerSide)
         {
             writer.WritePropertyName("turn_detection");
@@ -440,6 +457,23 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             writer.WriteString("type", "server_vad");
             writer.WriteEndObject();
         }
+        else if (opts.VadMode == VadMode.Disabled)
+        {
+            // An explicit null. Omitting the member leaves the vendor's default, server_vad, in
+            // force, so detection would stay on (measured 2026-09-27).
+            writer.WriteNull("turn_detection");
+        }
+        writer.WriteEndObject(); // input
+        writer.WritePropertyName("output");
+        writer.WriteStartObject();
+        writer.WritePropertyName("format");
+        writer.WriteStartObject();
+        writer.WriteString("type", "audio/pcm");
+        writer.WriteNumber("rate", 24000);
+        writer.WriteEndObject();
+        writer.WriteString("voice", opts.Voice);
+        writer.WriteEndObject(); // output
+        writer.WriteEndObject(); // audio
 
         writer.WriteStartArray("tools");
         foreach (var handler in tools)
