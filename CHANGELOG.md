@@ -281,6 +281,35 @@ All notable changes to this project will be documented in this file.
   which used to complete, now fails as a transport failure (measured on Cartesia TTS: a 12-second gap
   completed before and fails at 10 seconds now). A vendor that keeps sending, however slowly, is not cut.
 
+### Fixed — a speech vendor, the OpenAI Realtime bridge or ARI that never answered a connect held the call (#347)
+
+- **A connection upgrade the far end never answers fails like a failed connect.** The eight WebSocket
+  speech clients and the OpenAI Realtime bridge now end a connect that gets no answer within its bound
+  with `SpeechProviderFailureException` (`Signal = Handshake`), the failure a refused upgrade already
+  takes. Before, six of the clients threw an `OperationCanceledException` with the caller's token still
+  live, which their contract reserves for a cancellation the caller asked for ("Cancellation is never
+  reported as a provider failure", as 2.5.0 put it), and the Deepgram recognizer, the ElevenLabs
+  synthesizer and the bridge waited without limit, holding the session handler after the hangup and
+  after the AudioSocket server stopped.
+- **`AriClient` keeps reconnecting when a reconnect dial is never answered.** A dial with no answer now
+  ends within 5 seconds and the loop dials again, as `AutoReconnect` ("Auto-reconnect WebSocket on
+  disconnect") and `MaxReconnectAttempts` ("0 = unlimited") document. Before, one unanswered dial ended
+  reconnection for good.
+- **`AriClient.DisconnectAsync` and `DisposeAsync` return within 5 seconds** when Asterisk does not
+  answer the close, and the client reads `Disconnected`. Before, 97 of 100 immediate disconnects stayed
+  `Disconnecting`.
+
+### Changed — `AriOutboundConnection.DisconnectAsync` waits at most 5 seconds for the close (#347)
+
+- A graceful close that the far end does not answer now gives up after 5 seconds. Before, it waited
+  until the listener's `ConnectionIdleTimeout` (5 minutes by default) closed the connection. Nothing
+  published promised either wait, so this is a change, not a fix, and it breaks nothing.
+
+### Added — `ConnectTimeoutSeconds` on `DeepgramOptions` and `ElevenLabsOptions` (#347)
+
+- The connect bound of the Deepgram recognizer and the ElevenLabs synthesizer, in seconds, default 5 —
+  the same option and default the other six speech clients already carry.
+
 ### Fixed — an originate's dial events threw inside the AMI dispatcher (#331)
 
 - For an AMI `Originate`, Asterisk's `DialBegin` and `DialEnd` carry only the dialed side
