@@ -80,11 +80,10 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
         // skipped under test.
         ws.Options.SetRequestHeader("Authorization", $"Token {_options.ApiKey}");
 
-        using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
         try
         {
-            await ws.ConnectAsync(uri, connectCts.Token).ConfigureAwait(false);
+            await WebSocketConnectBound.ConnectAsync(
+                ws, uri, TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
         }
         catch (WebSocketException ex)
         {

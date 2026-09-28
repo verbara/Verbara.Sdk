@@ -65,15 +65,19 @@ internal static class SynthesizerEndOfInputPeers
 
     /// <summary>
     /// The synthesizer <paramref name="client"/> names, pointed at a peer on <paramref name="port"/>,
-    /// with its bounds on <paramref name="clock"/> (<see cref="TimeProvider.System"/> when none is given).
+    /// with its bounds on <paramref name="clock"/> (<see cref="TimeProvider.System"/> when none is given)
+    /// and its <c>ConnectTimeoutSeconds</c> at <paramref name="connectTimeoutSeconds"/> (the option's own
+    /// default when none is given).
     /// </summary>
-    public static SpeechSynthesizer CreateSynthesizer(string client, int port, TimeProvider? clock = null) => client switch
+    public static SpeechSynthesizer CreateSynthesizer(
+        string client, int port, TimeProvider? clock = null, int? connectTimeoutSeconds = null) => client switch
     {
         "Cartesia" => new CartesiaSpeechSynthesizer(Options.Create(new CartesiaOptions
         {
             ApiKey = "test-key",
             VoiceId = "test-voice",
             BaseUri = $"ws://127.0.0.1:{port}/tts/websocket",
+            ConnectTimeoutSeconds = connectTimeoutSeconds ?? new CartesiaOptions().ConnectTimeoutSeconds,
         }))
         {
             TimeProvider = clock ?? TimeProvider.System,
@@ -82,6 +86,7 @@ internal static class SynthesizerEndOfInputPeers
         {
             ApiKey = "test-key",
             BaseUri = $"ws://127.0.0.1:{port}/v1/speak",
+            ConnectTimeoutSeconds = connectTimeoutSeconds ?? new DeepgramTtsOptions().ConnectTimeoutSeconds,
         }))
         {
             TimeProvider = clock ?? TimeProvider.System,
@@ -91,6 +96,7 @@ internal static class SynthesizerEndOfInputPeers
             ApiKey = "test-key",
             VoiceId = "test-voice",
             BaseUri = $"ws://127.0.0.1:{port}/v1/text-to-speech",
+            ConnectTimeoutSeconds = connectTimeoutSeconds ?? new ElevenLabsOptions().ConnectTimeoutSeconds,
         }))
         {
             TimeProvider = clock ?? TimeProvider.System,
@@ -100,6 +106,7 @@ internal static class SynthesizerEndOfInputPeers
             ApiKey = "test-key",
             Voice = LmntVoices.Leah,
             Transport = LmntTransport.WebSocket,
+            ConnectTimeoutSeconds = connectTimeoutSeconds ?? new LmntTtsOptions().ConnectTimeoutSeconds,
         }), port)
         {
             TimeProvider = clock ?? TimeProvider.System,

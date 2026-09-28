@@ -176,3 +176,5 @@ const Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntVoices.Elowen = "elowen" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntVoices.Leah = "leah" -> string!
 const Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntVoices.Lily = "lily" -> string!
 static Verbara.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions.AddLmntSpeechSynthesizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.ConnectTimeoutSeconds.get -> int
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.ConnectTimeoutSeconds.set -> void

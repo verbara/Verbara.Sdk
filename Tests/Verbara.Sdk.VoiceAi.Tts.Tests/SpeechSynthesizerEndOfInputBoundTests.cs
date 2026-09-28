@@ -284,13 +284,19 @@ public sealed class SpeechSynthesizerEndOfInputBoundTests
         => _ = await Record.ExceptionAsync(() => peer.AnswerAsync().WaitAsync(SignalTimeout));
 
     /// <summary>
-    /// Waits until the synthesizer has armed a timer on <paramref name="clock"/>: its end of input is
-    /// out and the bound is running. Before the bound existed nothing arms, and this times out.
+    /// Waits until the synthesizer has armed its silence bound on <paramref name="clock"/>: its end of
+    /// input is out and the bound is running. The connect bound arms on the same clock first, as the
+    /// dial starts, with the option's 5 s, and is released once the session opens; only an arm of
+    /// <see cref="Bound"/> counts. Before the bound existed nothing arms it, and this times out.
     /// </summary>
     private static async Task WaitForTheBoundToArmAsync(FakeTimeProvider clock)
     {
-        var due = await clock.TimersArmed.ReadAsync().AsTask().WaitAsync(SignalTimeout);
-        due.Should().Be(Bound, "the bound armed is the silence bound, not some other timer");
+        TimeSpan due;
+        do
+        {
+            due = await clock.TimersArmed.ReadAsync().AsTask().WaitAsync(SignalTimeout);
+        }
+        while (due != Bound);
     }
 
     /// <summary>

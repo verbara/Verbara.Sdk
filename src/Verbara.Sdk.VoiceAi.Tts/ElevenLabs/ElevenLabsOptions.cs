@@ -104,4 +104,13 @@ public sealed class ElevenLabsOptions
     /// Maps to ElevenLabs' <c>output_format</c> URL parameter.
     /// </summary>
     public ElevenLabsOutputFormat OutputFormat { get; set; } = ElevenLabsOutputFormat.Pcm16k;
+
+    /// <summary>
+    /// How long, in whole seconds, the WebSocket connect (the TCP dial, TLS and the HTTP upgrade) may
+    /// take before the synthesis fails with a <see cref="SpeechProviderFailureException"/> whose
+    /// <see cref="SpeechProviderFailureException.Signal"/> is <see cref="SpeechProviderFailureSignal.Handshake"/>,
+    /// the failure a refused upgrade also takes. Must be positive. Defaults to 5, the default of every
+    /// other WebSocket speech client in this SDK.
+    /// </summary>
+    public int ConnectTimeoutSeconds { get; set; } = 5;
 }
