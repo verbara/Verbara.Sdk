@@ -29,12 +29,13 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     private static readonly Uri DefaultBaseUri = new("wss://api.openai.com/v1/realtime");
 
     // How long the bridge waits for OpenAI to answer its close once the caller has hung up, counted
-    // from that close and not restarted by anything the vendor sends. The live vendor answered in
-    // about 1.1 s in both measured runs; one that never answers would otherwise hold the handler, its
-    // socket and its buffers until the host cancels the session. Against the fake, ten seconds kept
-    // every healthy answer, up to 9.9 s; five seconds took the answers at 5.0, 7.0 and 9.9 s for
-    // unanswered. It is fixed rather than an option: an unvalidated value breaks every session (zero
-    // counts every close as unanswered, and a negative value faults every session).
+    // from that close and not restarted by anything the vendor sends. A function call running then
+    // holds it, and the function's return restarts it in full. The live vendor answered in about
+    // 1.1 s in both measured runs; one that never answers would otherwise hold the handler, its socket
+    // and its buffers until the host cancels the session. Against the fake, ten seconds kept every
+    // healthy answer, up to 9.9 s; five seconds took the answers at 5.0, 7.0 and 9.9 s for unanswered.
+    // It is fixed rather than an option: an unvalidated value breaks every session (zero counts every
+    // close as unanswered, and a negative value faults every session).
     private static readonly TimeSpan CloseAnswerBound = TimeSpan.FromSeconds(10);
 
     /// <summary>
@@ -388,8 +389,18 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 }
 
                 case RealtimeProtocol.ResponseFunctionCallArgumentsDone:
-                    await HandleFunctionCallAsync(
-                        json, channelId, ws, wsWriteLock, ct).ConfigureAwait(false);
+                    // The function runs on the session token, never on the bound's: a caller hanging up
+                    // does not cancel work the model already started. Nothing reads the socket while it
+                    // runs, so a vendor answer that lands meanwhile waits there, and the bound is held
+                    // rather than taking the loop's own silence for the vendor's. It restarts in full
+                    // once the function returns; a close sent while the function ran starts it then.
+                    silence.Pause();
+                    try
+                    {
+                        await HandleFunctionCallAsync(
+                            json, channelId, ws, wsWriteLock, ct).ConfigureAwait(false);
+                    }
+                    finally { silence.Resume(); }
                     break;
 
                 case RealtimeProtocol.InputAudioBufferSpeechStarted:
@@ -462,15 +473,30 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         var responseCreateBytes = JsonSerializer.SerializeToUtf8Bytes(
             responseCreate, RealtimeJsonContext.Default.ResponseCreateRequest);
 
+        var sent = false;
         await wsWriteLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            await ws.SendAsync(itemCreateBytes, WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
-            await ws.SendAsync(responseCreateBytes, WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+            // Checked under the write lock the bridge's close is sent under. Once that close is out, the
+            // caller has hung up: the socket refuses data frames (InvalidState, which failed a session
+            // the caller had ended normally), and a response.create would only ask the vendor to speak
+            // to nobody.
+            if (ws.State != WebSocketState.Open)
+            {
+                RealtimeLog.FunctionResultNotSent(_logger, channelId, fnEvt.Name);
+            }
+            else
+            {
+                await ws.SendAsync(itemCreateBytes, WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+                await ws.SendAsync(responseCreateBytes, WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+                sent = true;
+            }
         }
         finally { wsWriteLock.Release(); }
-        RealtimeMetrics.MessagesSent.Add(2);
+        if (sent) RealtimeMetrics.MessagesSent.Add(2);
 
+        // The function ran, whether or not its result could still reach the model, so an observer
+        // auditing tool calls sees every call that executed.
         Publish(new RealtimeFunctionCalledEvent(
             channelId, DateTimeOffset.UtcNow, fnEvt.Name, fnEvt.Arguments, resultJson));
     }

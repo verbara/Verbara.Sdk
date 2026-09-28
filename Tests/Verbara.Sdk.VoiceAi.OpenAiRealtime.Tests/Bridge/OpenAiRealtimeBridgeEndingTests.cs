@@ -34,7 +34,8 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Bridge;
 /// bound equals <see cref="SignalTimeout"/>, so a test that let it run would race its own safety net.
 /// Such a test hangs the caller up, waits for the bridge's close to reach the fake and then for the
 /// clock to report the bound armed, and only then moves the clock. The bound's timer is created with
-/// the session, with no due time, so its creation is not the arm.
+/// the session, with no due time, so its creation is not the arm. A function call the vendor requested
+/// holds the bound while it runs, so when one is running at the hangup, the arm comes at its return.
 /// </para>
 /// </remarks>
 public sealed class OpenAiRealtimeBridgeEndingTests
@@ -401,7 +402,215 @@ public sealed class OpenAiRealtimeBridgeEndingTests
         }
     }
 
+    /// <summary>
+    /// A function call still running when the caller hangs up, with a vendor that answers the close
+    /// with <c>1000</c> at once. The bridge does not read while the function runs, so the answer waits
+    /// in the socket, and the bound is held for as long as the function takes: fifteen seconds pass on
+    /// the clock and the session is not counted. The function runs to its end on the session token. Its
+    /// result is not sent, because the bridge's close is already out; the call is still published. The
+    /// session then reads the answer and completes. Measured on the wall clock before the manual clock
+    /// existed: <c>Q4-fn15000-honor-answer1100</c>, 14,505 ms, no count. With the result sent, the
+    /// session failed with <see cref="WebSocketException"/> <c>InvalidState</c>
+    /// (<c>Q4-H2-nobound</c>).
+    /// </summary>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldCompleteAndPublishTheCall_WhenAFunctionOutlastsTheBoundAndTheVendorAnswers()
+    {
+        // Arrange: a vendor that asks for one function call and then answers the client's close only
+        // when the test says so; a function that runs until the test releases it
+        await using var fakeOpenAi = new RealtimeFakeServer { AnswerClientCloseOnRequest = true };
+        fakeOpenAi.EventsToSend.Add(LoopsRunningMarkerEvent);
+        fakeOpenAi.EventsToSend.Add(HeldFunction.CallEvent);
+        fakeOpenAi.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        try
+        {
+            var clock = new FakeTimeProvider();
+            var log = new RecordingLogger<OpenAiRealtimeBridge>();
+            var function = new HeldFunction();
+            await using var bridge = CreateBridge(fakeOpenAi, clock, log, function);
+            using var metrics = new MeterCapture(MeterName);
+            using var calls = new RealtimeEventCollector(
+                bridge.Events, e => e.OfType<RealtimeFunctionCalledEvent>().Any());
+
+            // Act: the caller hangs up while the function runs; the vendor answers the close at once;
+            // fifteen seconds pass; then the function returns
+            var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
+            await function.Started.WaitAsync(SignalTimeout);
+            await client.SendHangupAsync();
+            await fakeOpenAi.ClientCloseReceived.WaitAsync(SignalTimeout);
+
+            await fakeOpenAi.AnswerClientCloseAsync(WebSocketCloseStatus.NormalClosure, "");
+            clock.Advance(TimeSpan.FromSeconds(15));
+            function.Release();
+
+            var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+            // Assert
+            using (new AssertionScope())
+            {
+                fault.Should().BeNull("a function's result that can no longer be sent does not fail the session");
+                sessionTask.Status.Should().Be(
+                    TaskStatus.RanToCompletion, "the caller ended the session, so it completed");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(1, "the vendor answered the close");
+                metrics.Get("openai_realtime.sessions.close_unanswered").Should().Be(
+                    0, "the bound is held while the function runs, and the answer was waiting when it returned");
+                metrics.Get("openai_realtime.sessions.failed").Should().Be(0, "nothing broke");
+                log.Entries.Should().NotContain(
+                    e => e.EventId.Name == "CloseUnanswered", "the vendor answered the close");
+                AssertTheCallRanAndItsResultWasNotSent(fakeOpenAi, metrics, log, calls);
+            }
+        }
+        finally
+        {
+            await client.DisposeAsync();
+            await audioServer.StopAsync(CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// A function call still running when the caller hangs up, with a vendor that never answers the
+    /// close. The close goes out while the function runs, and does not start the bound; the function's
+    /// return does, with the full ten seconds. When they pass, the session completes and is counted,
+    /// and the call is published although its result was not sent. Measured on the wall clock before
+    /// the manual clock existed: <c>Q4-fn3000-honor-never</c>, 12,512 ms, counted. A bound that was
+    /// never resumed after the function left the session running until the host cancelled it.
+    /// </summary>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldRestartTheFullBound_WhenAFunctionReturnsAfterTheHangupAndTheVendorIsSilent()
+    {
+        // Arrange: a vendor that asks for one function call and never answers a close; a function that
+        // runs until the test releases it
+        await using var fakeOpenAi = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        fakeOpenAi.EventsToSend.Add(LoopsRunningMarkerEvent);
+        fakeOpenAi.EventsToSend.Add(HeldFunction.CallEvent);
+        fakeOpenAi.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        try
+        {
+            var clock = new FakeTimeProvider();
+            var log = new RecordingLogger<OpenAiRealtimeBridge>();
+            var function = new HeldFunction();
+            await using var bridge = CreateBridge(fakeOpenAi, clock, log, function);
+            using var metrics = new MeterCapture(MeterName);
+            using var calls = new RealtimeEventCollector(
+                bridge.Events, e => e.OfType<RealtimeFunctionCalledEvent>().Any());
+
+            // Act: the caller hangs up while the function runs; the function returns; the bound it
+            // restarts passes on the clock
+            var sessionTask = bridge.HandleSessionAsync(session, CancellationToken.None).AsTask();
+            await function.Started.WaitAsync(SignalTimeout);
+            await client.SendHangupAsync();
+            await fakeOpenAi.ClientCloseReceived.WaitAsync(SignalTimeout);
+
+            function.Release();
+            var armedDue = await clock.TimersArmed.ReadAsync().AsTask().WaitAsync(SignalTimeout);
+            clock.Advance(CloseAnswerBound);
+
+            var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+            // Assert
+            using (new AssertionScope())
+            {
+                fault.Should().BeNull("a function's result that can no longer be sent does not fail the session");
+                armedDue.Should().Be(CloseAnswerBound, "the function's return restarts the full bound");
+                clock.TimersArmed.TryRead(out _).Should().BeFalse(
+                    "the bound was armed once, when the function returned: the close that went out while it ran did not start it");
+                sessionTask.Status.Should().Be(
+                    TaskStatus.RanToCompletion, "the caller ended the session, so it completed");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(
+                    1, "the caller ended the session; the vendor's silence does not make it a failure");
+                metrics.Get("openai_realtime.sessions.close_unanswered").Should().Be(
+                    1, "the bound ended the wait, and every such session is counted once");
+                metrics.Get("openai_realtime.sessions.failed").Should().Be(0, "nothing broke");
+                log.Entries.Should().ContainSingle(
+                    e => e.EventId.Name == "CloseUnanswered"
+                        && e.Level == LogLevel.Warning
+                        && e.Message.Contains("10000 ms", StringComparison.Ordinal),
+                    "the warning names the bound that ended the session");
+                AssertTheCallRanAndItsResultWasNotSent(fakeOpenAi, metrics, log, calls);
+            }
+        }
+        finally
+        {
+            await client.DisposeAsync();
+            await audioServer.StopAsync(CancellationToken.None);
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// What a function call that returned after the bridge's close leaves behind: it ran to its end, so
+    /// it is published once with its own result; its result and the <c>response.create</c> that would
+    /// follow it never reached the vendor, which is logged; and <c>messages.sent</c> counts only the
+    /// <c>session.update</c>, the one frame these sessions send (the caller sends no audio).
+    /// </summary>
+    private static void AssertTheCallRanAndItsResultWasNotSent(
+        RealtimeFakeServer fakeOpenAi,
+        MeterCapture metrics,
+        RecordingLogger<OpenAiRealtimeBridge> log,
+        RealtimeEventCollector calls)
+    {
+        // Two assertions rather than ContainSingle(...).Which: a failed Which ends the assertion scope,
+        // and the red would then hide the assertions below it.
+        var published = calls.Events.OfType<RealtimeFunctionCalledEvent>().ToArray();
+        published.Should().ContainSingle(
+            "the function ran, so the call is published whether or not its result could be sent");
+        published.Should().OnlyContain(
+            e => e.ResultJson == HeldFunction.Result,
+            "the function ran to its end on the session token; the hangup did not cancel it");
+        log.Entries.Should().ContainSingle(
+            e => e.EventId.Name == "FunctionResultNotSent"
+                && e.Level == LogLevel.Information
+                && e.Message.Contains(HeldFunction.FunctionName, StringComparison.Ordinal),
+            "a result that is dropped is logged, naming its function");
+        fakeOpenAi.ReceivedMessages.Should().NotContain(
+            m => m.Contains("\"type\":\"conversation.item.create\"", StringComparison.Ordinal)
+                || m.Contains("\"type\":\"response.create\"", StringComparison.Ordinal),
+            "the result came after the bridge's close, so neither it nor a new response reaches the vendor");
+        metrics.Get("openai_realtime.messages.sent").Should().Be(
+            1, "only the session.update went out; a result that was not sent is not counted");
+    }
+
+    /// <summary>
+    /// A function the vendor calls once per session, which reports when it starts and then runs until
+    /// the test calls <see cref="Release"/>. It honours its token: a cancelled token would end it with an
+    /// <see cref="OperationCanceledException"/>, which the bridge turns into an error result.
+    /// </summary>
+    private sealed class HeldFunction : IRealtimeFunctionHandler
+    {
+        public const string FunctionName = "lookup_account";
+
+        public const string Result = """{"balance":42}""";
+
+        /// <summary>The vendor's request for this function, as it arrives on the wire.</summary>
+        public const string CallEvent =
+            """{"type":"response.function_call_arguments.done","call_id":"call-held","name":"lookup_account","arguments":"{}"}""";
+
+        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public string Name => FunctionName;
+
+        public string Description => "Looks up an account, for as long as the test says";
+
+        public string ParametersSchema => """{"type":"object","properties":{}}""";
+
+        /// <summary>Completes when the bridge has called the function.</summary>
+        public Task Started => _started.Task;
+
+        public void Release() => _released.TrySetResult();
+
+        public async ValueTask<string> ExecuteAsync(string argumentsJson, CancellationToken ct = default)
+        {
+            _started.TrySetResult();
+            await _released.Task.WaitAsync(ct).ConfigureAwait(false);
+            return Result;
+        }
+    }
 
     /// <summary>
     /// Hangs the caller up and returns the bound's due time, once the bridge's close has reached the
@@ -441,7 +650,8 @@ public sealed class OpenAiRealtimeBridgeEndingTests
     private static OpenAiRealtimeBridge CreateBridge(
         RealtimeFakeServer fakeOpenAi,
         TimeProvider? clock = null,
-        ILogger<OpenAiRealtimeBridge>? logger = null)
+        ILogger<OpenAiRealtimeBridge>? logger = null,
+        IRealtimeFunctionHandler? function = null)
     {
         var options = Options.Create(new OpenAiRealtimeOptions
         {
@@ -451,7 +661,7 @@ public sealed class OpenAiRealtimeBridgeEndingTests
         });
         return new OpenAiRealtimeBridge(
             options,
-            new RealtimeFunctionRegistry([]),
+            new RealtimeFunctionRegistry(function is null ? [] : [function]),
             logger ?? NullLogger<OpenAiRealtimeBridge>.Instance)
         {
             BaseUri = new Uri($"ws://127.0.0.1:{fakeOpenAi.Port}/"),
