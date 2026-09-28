@@ -208,6 +208,31 @@ All notable changes to this project will be documented in this file.
   existing `Verbara.Sdk.Sessions` meter, `sessions.active` and `sessions.retained`, report the calls a
   manager holds that have not ended and the ended calls it still holds. No public API changes.
 
+### Fixed — an answered queue call was counted as abandoned, and the queue-wait histogram did not measure queue waits (#336)
+
+- **A queue call is answered when app_queue connects it.** `QueueSessionTracker` counted most answered
+  queue calls as abandoned: on 17 call shapes captured from Asterisk 20, 22 and 23, 9 disagreed with
+  Asterisk's own count on every version — Local, PJSIP, ringall and `app_agent_pool` members alike — and
+  0 do now. A pooled agent that never acknowledged a call is no longer counted as answering it, and a call
+  that overflows to a second queue no longer stays counted as waiting in the first. This restores what
+  the tracker is published to do: "Tracks aggregate queue performance metrics from session domain
+  events", the aggregate queue SLA it has carried since 1.7.0.
+- **The SLA wait is measured per queue visit**, from the call's join to app_queue's connect in that
+  queue. Against Asterisk 20, 22 and 23 it lands within one second of Asterisk's own `HoldTime`.
+- **`CallConnectedEvent` is published once per queue visit, when app_queue connects the call**, including
+  for queue calls that were never announced, and no longer again on a later bridge of the same visit. A
+  call that never joined a queue is announced exactly as before. `CallConnectedEvent.WaitTime` and
+  `CallSession.WaitTime` still report the time since the call was created.
+- **`sessions.wait_time` records queue waits**, as its published description, "Queue wait time", says:
+  one sample per answered queue visit, from the join to app_queue's connect — including a call answered
+  by an agent the SDK knows by name, which recorded none — and none for an abandoned visit. A call that
+  never joined a queue no longer records anything there; it used to record its time since creation each
+  time a bridge reconnected it. On the captured shapes that is 10 samples per version where there were 3.
+- **What a consumer observes changes.** Answered and abandoned counts, SLA percentages and anything
+  built on `sessions.wait_time` show different values after the upgrade, and a `CallConnectedEvent`
+  handler sees a queue call at app_queue's connect rather than at the agent's bridge. No public API
+  changes.
+
 ### Fixed — the push bus never counted an event dropped by a full buffer (#328)
 
 - `asterisk.push.events.dropped` now increments, tagged `reason=buffer_full`, once for every event a
