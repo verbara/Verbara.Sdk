@@ -115,7 +115,7 @@ public sealed class CallSession
     /// <summary>
     /// Whether the current queue visit has been announced: its <c>CallConnectedEvent</c> published. The
     /// manager consults it only for a session whose <see cref="QueueName"/> is set, sets it when it
-    /// announces the visit, and clears it at each queue join, so a queued call is announced once per
+    /// announces the visit, and clears it at each visit it opens, so a queued call is announced once per
     /// visit whichever of app_queue's connect or a known agent's connect reaches it first. Written only
     /// under <see cref="SyncRoot"/>; not persisted.
     /// </summary>
@@ -132,6 +132,16 @@ public sealed class CallSession
     /// as for a session restored from a snapshot. Written only under <see cref="SyncRoot"/>; not persisted.
     /// </summary>
     internal DateTimeOffset? QueueVisitStartedAt { get; set; }
+
+    /// <summary>
+    /// Whether Asterisk has reported the caller leaving the current visit's queue (a
+    /// <c>QueueCallerLeave</c> for <see cref="QueueName"/>) since the manager opened the visit. app_queue
+    /// closes every visit with that leave, so a later report of the caller waiting in the same queue is a
+    /// re-join, never the visit the manager holds. The manager reads it only to tell those apart when a
+    /// reload's queue snapshot reports the caller, sets it at the leave, and clears it at each visit it
+    /// opens. Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal bool QueueVisitLeft { get; set; }
 
     // State transitions (internal — only CallSessionManager drives transitions)
     internal bool TryTransition(CallSessionState newState)

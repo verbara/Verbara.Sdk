@@ -23,6 +23,7 @@ public sealed class QueueReloadPinTests(ITestOutputHelper output)
 {
     private const string CallB = "5552102";
     private const string CallC = "5552103";
+    private const string CallD = "5552104";
     private const string LateQueue = "q-late";
     private const string NoAnswerQueue = "q-noans";
 
@@ -109,6 +110,31 @@ public sealed class QueueReloadPinTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// Call (d), the shortest loop: <c>Queue(q-late,,,,1)</c> then <c>Queue(q-late)</c> with no announcement. The
+    /// SDK saw the first visit time out and the caller leave <c>q-late</c>, then was disconnected through the
+    /// re-join, about 1 s after the first join, and the snapshot 1 s after it.
+    /// </summary>
+    /// <remarks>
+    /// Call (b)'s re-join comes about 7 s after its first join, so its snapshot's <c>Wait</c> alone already shows
+    /// the re-join. Here the snapshot places the join within 2 s of the held start, so only the leave the SDK
+    /// saw tells the report apart from the visit it held.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(QueueReloadCaptures))]
+    public async Task Reload_ShouldOpenANewVisit_WhenTheSdkSawTheLeaveAndTheUnseenReJoinCameWithinTwoSecondsOfTheFirstJoin(string fixture)
+    {
+        var replay = await AmiCaptureReplay.ReplayQueueReloadAsync(fixture, CallD, CapturedSnapshot.Named("d1"),
+            Outage.After("QueueCallerLeave"), new ManualClock(DateTimeOffset.UnixEpoch));
+
+        using var scope = new AssertionScope();
+        scope.AddReportable("replay", replay.Describe());
+        (replay.SnapshotReportedStart - replay.Join(1).At).Should().BeLessThanOrEqualTo(TimeSpan.FromSeconds(2),
+            "premise: the snapshot places the re-join within 2 s of the first join, so its Wait cannot show it");
+        replay.Queue(LateQueue).Should().Be(new QueueCounters(Offered: 2, Answered: 1, Abandoned: 1, Waiting: 0),
+            "the SDK saw the first visit leave, so the reload's report is a second visit, and the first was abandoned");
+    }
+
+    /// <summary>
     /// Call (b): the SDK saw the first join, then was disconnected through the timeout and the leave; the
     /// reload runs while the caller is in the dialplan's <c>Wait(3)</c> and lists it in no queue; the SDK then
     /// sees the caller re-join <c>q-late</c> live.
@@ -144,6 +170,46 @@ public sealed class QueueReloadPinTests(ITestOutputHelper output)
             "the caller left q-noans without a connection");
         replay.Queue(LateQueue).Should().Be(new QueueCounters(Offered: 1, Answered: 1, Abandoned: 0, Waiting: 0),
             "the report of q-late is a new offer there, answered");
+    }
+
+    /// <summary>
+    /// The SDK saw the caller join <c>q-pjsip</c> at T0. During an outage the caller left it and joined
+    /// <c>q-other</c> at T0 + 1 s; the reload at T0 + 2 s reports it waiting in <c>q-other</c> with <c>Wait: 1</c>.
+    /// </summary>
+    /// <remarks>
+    /// The captured move, call (c), joins its second queue about 4 s after the first, so its snapshot's
+    /// <c>Wait</c> alone already places the report after the held visit. This move is quick enough that only the
+    /// queue's name tells the report apart from the visit the SDK holds.
+    /// </remarks>
+    [Fact]
+    public async Task Reload_ShouldCloseTheFirstQueuesVisitAndOfferTheSecond_WhenTheCallerMovedWithinTwoSecondsOfItsJoin()
+    {
+        var clock = new ManualClock(T0);
+        await using var rig = await QueueCallRig.StartAsync(clock);
+
+        const string caller = "c-moved", callerChannel = "PJSIP/pstn-00000030";
+        rig.Deliver([
+            NewChannel(caller, callerChannel, "4", caller, "5552130", "from-pstn", "4023"),
+            Join("q-pjsip", callerChannel, caller, "5552130"),
+        ]);
+        clock.Advance(TimeSpan.FromSeconds(2));
+        await rig.ReconnectAsync(
+            [Status(caller, callerChannel, caller, "4", "5552130", "from-pstn", "4023", "Queue", "q-other")],
+            [
+                QueueParams("q-pjsip", calls: 0),
+                QueueParams("q-other", calls: 1),
+                Entry("q-other", callerChannel, caller, "5552130", wait: 1),
+            ]);
+
+        using var scope = new AssertionScope();
+        rig.Queued.Select(q => q.QueueName).Should().Equal(["q-pjsip", "q-other"],
+            "the report of another queue is a new visit there");
+        var first = rig.Tracker.GetByQueueName("q-pjsip")!;
+        (first.CallsOffered, first.CallsAbandoned, first.CallsWaiting).Should().Be((1, 1, 0),
+            "the caller left q-pjsip without a connection");
+        var second = rig.Tracker.GetByQueueName("q-other");
+        second.Should().NotBeNull("the report of q-other is a new offer there");
+        (second?.CallsOffered, second?.CallsWaiting).Should().Be((1, 1), "the report of q-other is a new offer there, still waiting");
     }
 
     /// <summary>

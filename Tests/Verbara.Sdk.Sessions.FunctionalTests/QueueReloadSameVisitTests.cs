@@ -67,6 +67,35 @@ public sealed class QueueReloadSameVisitTests
     }
 
     /// <summary>
+    /// Call (b): the SDK saw the first visit time out, the caller leave <c>q-late</c> and re-join it, then was
+    /// disconnected until the snapshot 2 s after the re-join, which reports the caller still waiting there. The
+    /// leave the SDK saw closed the first visit, not the second: the re-join opened a visit of its own, and the
+    /// reload finds the caller in that one.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(QueueReloadCaptures))]
+    public async Task Reload_ShouldKeepTheReJoinedVisit_WhenTheSdkSawTheLeaveAndTheReJoinAndAReloadFindsTheCallerStillWaiting(string fixture)
+    {
+        var replay = await AmiCaptureReplay.ReplayQueueReloadAsync(fixture, CallB, CapturedSnapshot.Named("b2"),
+            Outage.After("QueueCallerJoin", 2), new ManualClock(DateTimeOffset.UnixEpoch));
+
+        using var scope = new AssertionScope();
+        scope.AddReportable("replay", replay.Describe());
+        var connect = replay.AgentConnect;
+
+        replay.Queue(LateQueue).Should().Be(new QueueCounters(Offered: 2, Answered: 1, Abandoned: 1, Waiting: 0),
+            "Asterisk reported two visits, the first abandoned at its timeout; the reload adds no offer and no abandon");
+        replay.Queued.Should().HaveCount(2, "the call joined the queue twice, and the SDK saw both joins");
+        replay.SamplesMs.Should().ContainSingle("app_queue connected one visit");
+        replay.RecordedWait(LateQueue).TotalMilliseconds.Should().Be(replay.SamplesMs.Single(),
+            "the tracker and the histogram measure the same visit");
+        replay.RecordedWait(LateQueue).Should().Be(connect.At - replay.Join(2).At,
+            "the answered visit runs from the re-join the SDK saw, not from the reload");
+        replay.RecordedWait(LateQueue).Should().BeCloseTo(TimeSpan.FromSeconds(connect.HoldTime!.Value), OneSecond,
+            "Asterisk's own HoldTime is the answered visit's wait, floored to the second");
+    }
+
+    /// <summary>
     /// Call (b): the SDK saw the first join, then was disconnected through the first visit's timeout, its
     /// leave, the re-join into <c>q-late</c> about 7 s after the first join, and the snapshot 2 s after the
     /// re-join. The snapshot's <c>Wait</c> places the join far after the held start: a re-join, so a new visit.
@@ -151,6 +180,43 @@ public sealed class QueueReloadSameVisitTests
             "the accepted residual: one visit, where Asterisk counts two and an abandon");
         queue.TotalWaitTime.Should().Be(TimeSpan.FromSeconds(12), "the accepted residual: the one visit runs from the first join");
         samples.Milliseconds.Should().Equal([12_000d], "the accepted residual: one sample, from the first join");
+    }
+
+    /// <summary>
+    /// The 2 s the rule allows, at its edge. The SDK saw the caller join at T0; a reload at T0 + 5 s reports it
+    /// waiting in the same queue with a <c>Wait</c> that places its join exactly 2 s after T0 (<c>Wait: 3</c>),
+    /// which is still the visit held, or 3 s after it (<c>Wait: 2</c>), which is a re-join the SDK did not see.
+    /// A member answers at T0 + 10 s.
+    /// </summary>
+    [Theory]
+    [InlineData(3, 1, 0, 10)]
+    [InlineData(2, 2, 1, 7)]
+    public async Task Reload_ShouldKeepTheHeldVisitOnlyUpToTwoSecondsAfterItsStart_WhenTheSnapshotsWaitPlacesTheJoinAfterIt(
+        int waitSeconds, int offered, int abandoned, int answeredWaitSeconds)
+    {
+        var clock = new ManualClock(T0);
+        await using var rig = await QueueCallRig.StartAsync(clock);
+        using var samples = new WaitTimeSamples();
+
+        rig.Deliver([
+            NewChannel(Caller, CallerChannel, "4", Caller, "5552104", "from-pstn", "4024"),
+            Join("q-pjsip", CallerChannel, Caller, "5552104"),
+        ]);
+        clock.Advance(TimeSpan.FromSeconds(5));
+        await rig.ReconnectAsync(
+            [Status(Caller, CallerChannel, Caller, "4", "5552104", "from-pstn", "4024", "Queue", "q-pjsip")],
+            [QueueParams("q-pjsip", calls: 1), Entry("q-pjsip", CallerChannel, Caller, "5552104", wait: waitSeconds)]);
+        clock.Advance(TimeSpan.FromSeconds(5));
+        rig.Deliver(NewMemberAnswers(holdTime: answeredWaitSeconds));
+
+        using var scope = new AssertionScope();
+        scope.AddReportable("samples", samples.Describe());
+        var queue = rig.Tracker.GetByQueueName("q-pjsip")!;
+        (queue.CallsOffered, queue.CallsAnswered, queue.CallsAbandoned, queue.CallsWaiting).Should().Be((offered, 1, abandoned, 0),
+            "a join the snapshot places no more than 2 s after the held start is the visit held, and one placed later is a re-join");
+        queue.TotalWaitTime.Should().Be(TimeSpan.FromSeconds(answeredWaitSeconds),
+            "the answered visit runs from its own start: the join the SDK saw, or the re-join the snapshot reports");
+        samples.Milliseconds.Should().Equal([answeredWaitSeconds * 1000d], "one sample, equal to the tracker's wait");
     }
 
     /// <summary>
