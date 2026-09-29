@@ -12,9 +12,11 @@
     <!-- Verbara.Sdk.Live's load of live state calls AmiConnection.FullyBooted, the SendEventGeneratingActionAsync
          overload that takes an EventActionOutcome, and EventActionOutcome's constructor, Rejection and SessionEnded,
          to tell a refusal from an Asterisk still loading its modules, or an action whose session ended, from an empty
-         answer. Those members keep their signatures until 3.0, because a Live package of the 2.x line runs on any
-         newer Ami: NuGet resolves Live's dependency on Ami as a minimum version, and package validation does not see
-         internal members. Tests/Verbara.Sdk.Ami.Tests/Connection/AmiInternalsUsedByLiveTests.cs pins them. -->
+         answer. VerbaraServer raises its public ConnectionLost from AmiConnection.Lost, the reader loop's announcement of
+         a loss nobody asked for, which a patch could not add as public API. Those members keep their signatures until
+         3.0, because a Live package of the 2.x line runs on any newer Ami: NuGet resolves Live's dependency on Ami as a
+         minimum version, and package validation does not see internal members.
+         Tests/Verbara.Sdk.Ami.Tests/Connection/AmiInternalsUsedByLiveTests.cs pins them. -->
     <InternalsVisibleTo Include="Verbara.Sdk.Live" />
   </ItemGroup>
 

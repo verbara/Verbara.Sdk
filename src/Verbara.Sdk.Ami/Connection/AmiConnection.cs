@@ -54,6 +54,9 @@ internal static partial class AmiConnectionLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI] Heartbeat timed out — connection appears dead")]
     public static partial void HeartbeatTimeout(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Connection-lost handler error")]
+    public static partial void LostHandlerError(ILogger logger, Exception exception);
 }
 
 /// <summary>
@@ -134,6 +137,15 @@ public sealed class AmiConnection : IAmiConnection
     // and so no report: it is cancelled.
     private volatile TaskCompletionSource _fullyBooted = NoSessionYet();
 
+    // Set by the heartbeat when a Ping goes unanswered, before it closes the transport, so the loss the reader loop
+    // announces says what ended the connection. Cleared by every connect attempt, next to the renewal of _fullyBooted.
+    private volatile TimeoutException? _heartbeatFailure;
+
+    // The queue Lost and Reconnected are delivered on: one notification at a time, in the order they were queued, on the
+    // thread pool. The reader, the heartbeat and the reconnect loop only append to it; nothing awaits it.
+    private readonly Lock _notifyLock = new();
+    private Task _notifyTail = Task.CompletedTask;
+
     public AmiConnectionState State => _state;
     public string? AsteriskVersion { get; private set; }
 
@@ -155,6 +167,44 @@ public sealed class AmiConnection : IAmiConnection
     /// </para>
     /// </remarks>
     internal Task FullyBooted => _fullyBooted.Task;
+
+    /// <summary>
+    /// Raised once for each loss of an established connection that its caller did not ask for, with what ended it:
+    /// <see langword="null"/> when the stream ended (Asterisk closed it, or it was reset, which the socket transport
+    /// reports the same way), a <see cref="TimeoutException"/> when the heartbeat's Ping went unanswered, or the
+    /// exception the reader failed with when the AMI stream could not be read. Never for the caller's
+    /// <see cref="DisconnectAsync"/> or <see cref="DisposeAsync"/>, from outside the connection or from inside its own
+    /// event dispatch, not for a reconnect attempt that fails, and not again when the reconnect loop gives up.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Queued once <see cref="State"/> has left <see cref="AmiConnectionState.Connected"/>, before the reconnect loop or
+    /// the release starts, and delivered on the same ordered queue as <see cref="Reconnected"/>: every handler of a loss
+    /// has returned before the first <see cref="Reconnected"/> handler of the same outage runs. Handlers run one at a
+    /// time on the thread pool, read when the loss is delivered, never on the reader, the heartbeat or the reconnect
+    /// loop; a handler that throws is logged and the ones after it still run. Nothing is queued for a loss while the
+    /// event has no handler.
+    /// </para>
+    /// <para>
+    /// Called by Verbara.Sdk.Live, which raises its public <c>ConnectionLost</c> from it; kept with this signature until
+    /// 3.0, because a Live package of the 2.x line runs on any newer Ami.
+    /// </para>
+    /// </remarks>
+    internal event Action<Exception?>? Lost;
+
+    /// <summary>
+    /// The tail of the queue <see cref="Lost"/> and <see cref="Reconnected"/> are delivered on: it completes once every
+    /// notification queued before the read has been delivered. For tests, which await it after an ending to assert that
+    /// nothing more was announced. Not called by Verbara.Sdk.Live, and not part of what it binds to.
+    /// </summary>
+    internal Task PendingNotifications
+    {
+        get
+        {
+            lock (_notifyLock)
+                return _notifyTail;
+        }
+    }
 
 #pragma warning disable CS0067
     public event Func<ManagerEvent, ValueTask>? OnEvent;
@@ -197,6 +247,8 @@ public sealed class AmiConnection : IAmiConnection
         // from then on the reader loop's ending does.
         var fullyBooted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _fullyBooted = fullyBooted;
+        // A heartbeat failure belongs to the session it ended; this attempt's session starts without one.
+        _heartbeatFailure = null;
         var readerLoopStarted = false;
         try
         {
@@ -672,6 +724,9 @@ public sealed class AmiConnection : IAmiConnection
                     // Heartbeat timed out — the connection is dead. End the transport so the reader
                     // loop ends; the socket itself is disposed by whichever cleanup follows.
                     AmiConnectionLog.HeartbeatTimeout(_logger);
+                    // Recorded before the transport closes, so the reader loop's ending finds it and announces the
+                    // loss with this cause instead of as an end of stream.
+                    _heartbeatFailure = new TimeoutException("The AMI heartbeat Ping was not answered in time.");
                     await socket.CloseAsync(CancellationToken.None);
                     return;
                 }
@@ -684,13 +739,15 @@ public sealed class AmiConnection : IAmiConnection
     }
 
     /// <summary>
-    /// Reads one session until it ends, then chooses how the connection ends and ends the session for whoever waits on
-    /// it.
+    /// Reads one session until it ends, then chooses how the connection ends, announces a loss nobody asked for, and ends
+    /// the session for whoever waits on it.
     /// </summary>
     /// <param name="fullyBooted">This session's <see cref="FullyBooted"/>, which the connect that started the loop created.</param>
     /// <param name="ct">Cancelled by the cleanup that ends the session.</param>
     private async Task ReaderLoopAsync(TaskCompletionSource fullyBooted, CancellationToken ct)
     {
+        // What the read failed with, if it did: the cause of the loss, unless the heartbeat recorded its own.
+        Exception? endedBy = null;
         try
         {
             while (!ct.IsCancellationRequested)
@@ -754,6 +811,8 @@ public sealed class AmiConnection : IAmiConnection
         }
         catch (Exception ex)
         {
+            // Any failure of the read ends this session; it is logged, and kept as the cause the ending announces.
+            endedBy = ex;
             AmiConnectionLog.ReaderError(_logger, ex);
         }
         finally
@@ -770,14 +829,20 @@ public sealed class AmiConnection : IAmiConnection
             {
                 if (_state == AmiConnectionState.Connected)
                 {
+                    // Nobody asked for this ending, so it is a loss. It is queued for Lost's handlers, with what ended
+                    // it, once State has left Connected and before the reconnect loop or the release starts, so ahead of
+                    // the Reconnected of this outage. A caller's ending and the give-up never reach this branch.
+                    var cause = (Exception?)_heartbeatFailure ?? endedBy;
                     if (_options.AutoReconnect)
                     {
                         _state = AmiConnectionState.Reconnecting;
+                        NotifyLost(cause);
                         _reconnectLoop = Task.Run(() => ReconnectLoopAsync(), CancellationToken.None);
                     }
                     else
                     {
                         _state = AmiConnectionState.Disconnecting;
+                        NotifyLost(cause);
                         _ = Task.Run(() => EndLostConnectionAsync(), CancellationToken.None);
                     }
                 }
@@ -890,25 +955,82 @@ public sealed class AmiConnection : IAmiConnection
     }
 
     /// <summary>
-    /// Fires the Reconnected event safely. Any async work triggered by subscribers
-    /// runs via Task.Run to avoid async-void hazards on the reconnect path.
+    /// Queues <see cref="Reconnected"/> on the notification queue, behind the loss of the same outage, and delivers it
+    /// handler by handler, so one that throws does not keep the handlers after it (the live server's reload among
+    /// them) from hearing the reconnect.
     /// </summary>
     private void OnReconnected()
     {
-        var handler = Reconnected;
-        if (handler is not null)
+        if (Reconnected is null)
+            return;
+
+        Notify(() =>
         {
-            _ = Task.Run(() =>
+            // Read at delivery time: a handler removed while this notification waited is not called.
+            var handlers = Reconnected;
+            if (handlers is null)
+                return;
+
+            foreach (var handler in handlers.GetInvocationList())
             {
                 try
                 {
-                    handler.Invoke();
+                    ((Action)handler).Invoke();
                 }
                 catch (Exception ex)
                 {
+                    // A subscriber's failure is its own: logged, and the handlers after it still run.
                     AmiConnectionLog.ReconnectHandlerError(_logger, ex);
                 }
-            });
+            }
+        });
+    }
+
+    /// <summary>
+    /// Queues a loss for <see cref="Lost"/>'s handlers, delivered handler by handler, so one that throws does not keep
+    /// the handlers after it from being told. Nothing is queued while the event has no handler.
+    /// </summary>
+    private void NotifyLost(Exception? cause)
+    {
+        if (Lost is null)
+            return;
+
+        Notify(() =>
+        {
+            // Read at delivery time: a handler removed while this notification waited is not called.
+            var handlers = Lost;
+            if (handlers is null)
+                return;
+
+            foreach (var handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    ((Action<Exception?>)handler).Invoke(cause);
+                }
+                catch (Exception ex)
+                {
+                    // A subscriber's failure is its own: logged, and the handlers after it still run.
+                    AmiConnectionLog.LostHandlerError(_logger, ex);
+                }
+            }
+        });
+    }
+
+    /// <summary>
+    /// Appends a notification to the queue: it runs on the thread pool once the one before it has returned. Nothing
+    /// awaits the queue, so no loop is ever held by a handler.
+    /// </summary>
+    private void Notify(Action notification)
+    {
+        lock (_notifyLock)
+        {
+            _notifyTail = _notifyTail.ContinueWith(
+                static (_, state) => ((Action)state!).Invoke(),
+                notification,
+                CancellationToken.None,
+                TaskContinuationOptions.None,
+                TaskScheduler.Default);
         }
     }
 
