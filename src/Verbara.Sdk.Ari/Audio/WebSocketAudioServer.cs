@@ -48,6 +48,10 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     private readonly ILogger<WebSocketAudioServer> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly ConcurrentDictionary<string, WebSocketAudioSession> _streams = new();
+    // Every announced connection still open: the holder of each key and each connection waiting for a
+    // key another one holds. ActiveStreams and ActiveStreamCount read it, so a waiting connection is
+    // listed and counted like any other live stream.
+    private readonly ConcurrentDictionary<WebSocketAudioSession, byte> _live = new();
     private readonly Subject<IAudioStream> _streamSubject = new();
     // Connection handlers that have not finished. Each handler removes and disposes its own session
     // on its way out, so StopAsync waits for these until its token is cancelled.
@@ -64,18 +68,27 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     /// Get an active stream by the last path segment of the HTTP upgrade request URL it arrived on,
     /// query string stripped — not by an ARI channel id, and not by the AudioSocket identification
     /// UUID. When several live connections present one segment, this returns the earliest of them
-    /// still connected, and the others are announced on <see cref="OnStreamConnected"/> but are not
-    /// listed, counted or found until they take the segment over. See
+    /// still connected; the others are announced on <see cref="OnStreamConnected"/>, listed and
+    /// counted, but not found until they take the segment over. See
     /// <see cref="IAudioServer.GetStream(string)"/>.
     /// </summary>
     public IAudioStream? GetStream(string channelId) =>
         _streams.TryGetValue(channelId, out var session) ? session : null;
 
-    /// <summary>All currently active audio streams.</summary>
-    public IEnumerable<IAudioStream> ActiveStreams => _streams.Values;
+    /// <summary>
+    /// All currently active audio streams: every connection announced on
+    /// <see cref="OnStreamConnected"/> that has not ended, including one that waits for a path segment
+    /// another live connection holds. chan_websocket upgrades every call of one websocket_client
+    /// connection on the same URI, so several entries can report the same
+    /// <see cref="IAudioStream.ChannelId"/>.
+    /// </summary>
+    public IEnumerable<IAudioStream> ActiveStreams => _live.Keys;
 
-    /// <summary>Number of currently active audio streams.</summary>
-    public int ActiveStreamCount => _streams.Count;
+    /// <summary>
+    /// Number of currently active audio streams: one per live announced connection, whatever path it
+    /// upgraded on, so it counts calls and not distinct URIs.
+    /// </summary>
+    public int ActiveStreamCount => _live.Count;
 
     /// <summary>
     /// Whether the server is bound and accepting. Reads <c>false</c> from the moment a stop
@@ -138,13 +151,18 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 backoff = InitialAcceptBackoff;
 
                 // Nothing that can fail for this one connection runs between the accept and the
-                // hand-off, not even configuring the socket; the capacity check only reads a count
-                // and closes what it refuses. Configuring fails in the handler, which closes the
+                // hand-off, not even configuring the socket; the capacity check only takes a place
+                // from a count and closes what it refuses. Configuring fails in the handler, which closes the
                 // connection and reports it as that connection's error. Here it would reach the catches
                 // below, which classify by type only: a SocketException would be logged as an accept
                 // failure and backed off for, with the socket left open, and an
                 // ObjectDisposedException would end the loop as if the server had been stopped.
-                if (_streams.Count >= _options.MaxConcurrentStreams)
+                //
+                // The place is taken here, at the accept and before the upgrade is read, from the count
+                // every server built with these options shares, so a connection that has not sent its
+                // upgrade yet, or that will wait for a held key, is bounded like any other. The handler
+                // gives it back when it ends.
+                if (!_options.Admission.TryEnter(_options.MaxConcurrentStreams))
                 {
                     client.Dispose();
                     continue;
@@ -230,9 +248,10 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     // Several live connections can present one key: chan_websocket upgrades every call through one
     // websocket_client connection on the same URI, so on this server a shared key is the normal case.
     // The first to register holds it. Each later one is announced but waits here, unregistered, in
-    // arrival order, and takes the key over when the connections ahead of it have ended. The gate
-    // orders Register's retry against every Release. Lookups, counts and ActiveStreams read _streams
-    // and never take it.
+    // arrival order, and takes the key over when the connections ahead of it have ended. It is still
+    // listed and counted: ActiveStreams and ActiveStreamCount read _live, which holds every announced
+    // connection. The gate orders Register's retry against every Release. Lookups read _streams, and
+    // neither they nor the counts take it.
     private readonly Lock _registryGate = new();
     private readonly Dictionary<string, List<WebSocketAudioSession>> _waiting = new(StringComparer.Ordinal);
 
@@ -317,6 +336,19 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
 
     private async Task HandleConnectionAsync(TcpClient client, CancellationToken ct)
     {
+        try
+        {
+            await ServeConnectionAsync(client, ct);
+        }
+        finally
+        {
+            // The place the accept loop took for this connection, given back once on every path.
+            _options.Admission.Exit();
+        }
+    }
+
+    private async Task ServeConnectionAsync(TcpClient client, CancellationToken ct)
+    {
         using (client)
         {
             WebSocketAudioSession? session = null;
@@ -329,8 +361,26 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 client.NoDelay = true;
                 var stream = client.GetStream();
 
-                // Read HTTP upgrade request
-                var (wsKey, channelId) = await ReadUpgradeRequestAsync(stream, ct);
+                // Read HTTP upgrade request, within IdleTimeout. The connection holds a place in the
+                // shared admission count from its accept, so one that never sends its upgrade must give
+                // it back, as the AudioSocket server's identification wait already does.
+                (string? wsKey, string? channelId) upgrade;
+                using (var idle = new CancellationTokenSource(_options.IdleTimeout, _timeProvider))
+                using (var upgradeCts = CancellationTokenSource.CreateLinkedTokenSource(ct, idle.Token))
+                {
+                    try
+                    {
+                        upgrade = await ReadUpgradeRequestAsync(stream, upgradeCts.Token);
+                    }
+                    catch (OperationCanceledException) when (idle.IsCancellationRequested && !ct.IsCancellationRequested)
+                    {
+                        // No upgrade within IdleTimeout: the `using (client)` closes the connection
+                        // and the handler gives its place back.
+                        return;
+                    }
+                }
+
+                var (wsKey, channelId) = upgrade;
                 if (wsKey is null || channelId is null)
                 {
                     WebSocketAudioServerLog.InvalidUpgrade(_logger);
@@ -350,6 +400,7 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 WebSocketAudioServerLog.ConnectionAccepted(_logger, endpoint, channelId);
 
                 Register(channelId, session);
+                _live.TryAdd(session, 0);
                 _streamSubject.OnNext(session);
 
                 // Wait for session to disconnect
@@ -390,6 +441,7 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 // waiting for the id only leaves the waiting list.
                 if (session is not null)
                 {
+                    _live.TryRemove(session, out _);
                     Release(session.ChannelId, session);
                     await session.DisposeAsync();
                 }
@@ -490,8 +542,9 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
         // Empty unless a wait was cancelled. A session disposed here makes its handler's own dispose a
         // no-op, and a handler that registers a session after this point still disposes it, because
         // its token is already cancelled.
-        foreach (var session in _streams.Values)
+        foreach (var session in _live.Keys)
             await session.DisposeAsync();
+        _live.Clear();
         _streams.Clear();
 
         WebSocketAudioServerLog.ServerStopped(_logger);

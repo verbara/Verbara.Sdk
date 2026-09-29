@@ -490,17 +490,21 @@ public class WebSocketAudioServerTests
 
         await server.StartAsync();
 
-        // Act — the first failure's wait, then the success, then the second failure's wait
+        // Act — the first failure's wait, then the success, then the second failure's wait. The
+        // success is a real connection whose handler bounds its upgrade read by IdleTimeout on the
+        // same clock, so two timers follow the first advance, in whichever order the handler and the
+        // loop reach them: that bound and the second failure's wait. Both are read, and the assertion
+        // names each by its due time.
         var afterFirstFailure = await NextTimerAsync(time);
         time.Advance(afterFirstFailure.DueTime);
-        var afterSuccess = await NextTimerAsync(time);
+        var afterSuccess = new[] { await NextTimerAsync(time), await NextTimerAsync(time) };
 
         // Assert
         afterFirstFailure.DueTime.Should().Be(WebSocketAudioServer.InitialAcceptBackoff);
-        afterSuccess.DueTime.Should().Be(
-            WebSocketAudioServer.InitialAcceptBackoff,
+        afterSuccess.Select(timer => timer.DueTime).Should().BeEquivalentTo(
+            new[] { new AudioServerOptions().IdleTimeout, WebSocketAudioServer.InitialAcceptBackoff },
             "a successful accept starts the run over, so the next failure waits the initial " +
-            "backoff again rather than the doubled one");
+            "backoff again rather than the doubled one, beside the accepted connection's upgrade bound");
     }
 
     [Fact]
