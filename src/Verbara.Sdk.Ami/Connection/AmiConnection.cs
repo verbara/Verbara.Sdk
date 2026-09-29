@@ -127,8 +127,34 @@ public sealed class AmiConnection : IAmiConnection
     // The release of the last event pump a cleanup detached: complete once that pump's consumer has returned.
     private Task _pumpReleased = Task.CompletedTask;
 
+    // Whether Asterisk has reported FullyBooted on the current session. Every connect attempt replaces it before it
+    // logs in, so a report made on an earlier session never counts for this one. Unless the report came first, it is
+    // cancelled by the attempt that created it when that attempt fails, or else by the reader loop's ending, so no
+    // caller ever waits on a task that nothing will complete or cancel. Before the first connect there is no session,
+    // and so no report: it is cancelled.
+    private volatile TaskCompletionSource _fullyBooted = NoSessionYet();
+
     public AmiConnectionState State => _state;
     public string? AsteriskVersion { get; private set; }
+
+    /// <summary>
+    /// Completes when Asterisk reports <c>FullyBooted</c> on the current AMI session, including a report that arrives
+    /// while the connection is still logging in. If the session ends first, it is cancelled, once the ending has written
+    /// the <see cref="State"/> it chose; so is the task of a connect attempt that fails. Each session, every reconnect's
+    /// included, has a task of its own.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asterisk sends <c>FullyBooted</c> once it has finished loading its modules, and only to AMI users whose read
+    /// permissions include <c>system</c>. For any other user the task never completes while the session lives, so a
+    /// caller bounds its wait. An Asterisk that had already started sends it right after the login's response.
+    /// </para>
+    /// <para>
+    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
+    /// any newer Ami.
+    /// </para>
+    /// </remarks>
+    internal Task FullyBooted => _fullyBooted.Task;
 
 #pragma warning disable CS0067
     public event Func<ManagerEvent, ValueTask>? OnEvent;
@@ -166,46 +192,63 @@ public sealed class AmiConnection : IAmiConnection
         SetConnectState(AmiConnectionState.Connecting, byLoop);
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        // Apply ConnectionTimeout to socket connect + banner read so the reconnect loop
-        // never hangs indefinitely on a slow or unresponsive Asterisk instance.
-        // Block form on purpose: the timeout source is released here, before the pumps start.
-        using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts.Token))
+        // This attempt's session. Renewed before the login, because an Asterisk that has already started reports
+        // FullyBooted right after the login's response. The attempt ends it if it fails before its reader loop runs;
+        // from then on the reader loop's ending does.
+        var fullyBooted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _fullyBooted = fullyBooted;
+        var readerLoopStarted = false;
+        try
         {
-            connectCts.CancelAfter(_options.ConnectionTimeout);
-            var connectToken = connectCts.Token;
-
-            _socket = _socketFactory.Create();
-            await _socket.ConnectAsync(_options.Hostname, _options.Port, _options.UseSsl, connectToken);
-
-            _reader = new AmiProtocolReader(_socket.Input);
-            _writer = new AmiProtocolWriter(_socket.Output);
-
-            // Read protocol identifier
-            var identMsg = await _reader.ReadMessageAsync(connectToken);
-            if (identMsg is null || !identMsg.IsProtocolIdentifier)
+            // Apply ConnectionTimeout to socket connect + banner read so the reconnect loop
+            // never hangs indefinitely on a slow or unresponsive Asterisk instance.
+            // Block form on purpose: the timeout source is released here, before the pumps start.
+            using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts.Token))
             {
-                throw new AmiProtocolException("Expected Asterisk protocol identifier");
+                connectCts.CancelAfter(_options.ConnectionTimeout);
+                var connectToken = connectCts.Token;
+
+                _socket = _socketFactory.Create();
+                await _socket.ConnectAsync(_options.Hostname, _options.Port, _options.UseSsl, connectToken);
+
+                _reader = new AmiProtocolReader(_socket.Input);
+                _writer = new AmiProtocolWriter(_socket.Output);
+
+                // Read protocol identifier
+                var identMsg = await _reader.ReadMessageAsync(connectToken);
+                if (identMsg is null || !identMsg.IsProtocolIdentifier)
+                {
+                    throw new AmiProtocolException("Expected Asterisk protocol identifier");
+                }
+
+                // MD5 challenge-response login
+                await LoginAsync(connectToken);
+
+                // Detect Asterisk version
+                await DetectVersionAsync(connectToken, cancellationToken);
             }
 
-            // MD5 challenge-response login
-            await LoginAsync(connectToken);
+            SetConnectState(AmiConnectionState.Connected, byLoop);
 
-            // Detect Asterisk version
-            await DetectVersionAsync(connectToken, cancellationToken);
+            // Start event pump and reader loop
+            _eventPump = new AsyncEventPump(_options.EventPumpCapacity);
+            _eventPump.OnEventDropped = evt =>
+            {
+                AmiMetrics.EventsDropped.Add(1);
+                var channel = evt.RawFields is not null && evt.RawFields.TryGetValue("Channel", out var ch) ? ch : null;
+                AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
+            };
+            _eventPump.Start(DispatchEventAsync);
+            var readerToken = _cts.Token;
+            _readerLoop = Task.Run(() => ReaderLoopAsync(fullyBooted, readerToken), CancellationToken.None);
+            readerLoopStarted = true;
         }
-
-        SetConnectState(AmiConnectionState.Connected, byLoop);
-
-        // Start event pump and reader loop
-        _eventPump = new AsyncEventPump(_options.EventPumpCapacity);
-        _eventPump.OnEventDropped = evt =>
+        finally
         {
-            AmiMetrics.EventsDropped.Add(1);
-            var channel = evt.RawFields is not null && evt.RawFields.TryGetValue("Channel", out var ch) ? ch : null;
-            AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
-        };
-        _eventPump.Start(DispatchEventAsync);
-        _readerLoop = Task.Run(() => ReaderLoopAsync(_cts.Token), CancellationToken.None);
+            // A session that never came up never reports FullyBooted: whoever bound to its task learns it here.
+            if (!readerLoopStarted)
+                fullyBooted.TrySetCanceled(CancellationToken.None);
+        }
 
         // Register observable gauges only once (avoid accumulation on reconnect)
         if (!_gaugesRegistered)
@@ -348,8 +391,9 @@ public sealed class AmiConnection : IAmiConnection
     }
 
     /// <summary>
-    /// Read messages until we find the response matching the given actionId.
-    /// Messages that aren't the expected response are buffered as events.
+    /// Read messages until we find the response matching the given actionId. It serves the connect, before the reader
+    /// loop runs: every other message it reads is dropped, except that a <c>FullyBooted</c> event completes the
+    /// session's <see cref="FullyBooted"/>.
     /// </summary>
     private async ValueTask<AmiMessage> ReadResponseAsync(string actionId, CancellationToken ct)
     {
@@ -366,8 +410,28 @@ public sealed class AmiConnection : IAmiConnection
                 return msg;
             }
 
-            // Buffer non-matching messages (events during login)
+            // An Asterisk that has already started reports FullyBooted right after the login's response, before the
+            // reader loop exists to see it: read here, or never.
+            ObserveFullyBooted(msg, _fullyBooted);
         }
+    }
+
+    /// <summary>Completes <paramref name="session"/>'s task when <paramref name="msg"/> is Asterisk's <c>FullyBooted</c>.</summary>
+    private static void ObserveFullyBooted(AmiMessage msg, TaskCompletionSource session)
+    {
+        if (!session.Task.IsCompleted
+            && string.Equals(msg.EventType, "FullyBooted", StringComparison.OrdinalIgnoreCase))
+        {
+            session.TrySetResult();
+        }
+    }
+
+    /// <summary>The task of a connection that has not opened a session yet: no session, so no report.</summary>
+    private static TaskCompletionSource NoSessionYet()
+    {
+        var none = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        none.SetCanceled();
+        return none;
     }
 
     /// <inheritdoc />
@@ -457,8 +521,34 @@ public sealed class AmiConnection : IAmiConnection
     }
 
     /// <inheritdoc />
-    public async IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
-        ManagerAction action, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
+        ManagerAction action, CancellationToken cancellationToken = default) =>
+        SendEventGeneratingActionAsync(action, outcome: null, cancellationToken);
+
+    /// <summary>
+    /// <see cref="SendEventGeneratingActionAsync(ManagerAction, CancellationToken)"/>, which also writes to
+    /// <paramref name="outcome"/> how the action ended, once its sequence has ended on its own.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asterisk may refuse the action with <c>Response: Error</c>, or its session may end before the action completes.
+    /// The sequence then ends as it does when Asterisk completes the action: with the events received so far, and no
+    /// error. For a caller of the public overload a refusal, an ending and an empty answer are the same. With an
+    /// <paramref name="outcome"/>, the caller can tell them apart: <see cref="EventActionOutcome.Rejection"/> holds
+    /// the refusal's <c>Message</c>, and <see cref="EventActionOutcome.SessionEnded"/> says that the connection gave
+    /// the action up because its session ended. Neither is set when Asterisk completed the action.
+    /// </para>
+    /// <para>
+    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
+    /// any newer Ami.
+    /// </para>
+    /// </remarks>
+    /// <param name="action">The action to send.</param>
+    /// <param name="outcome">Receives how the action ended; <see langword="null"/> for a caller that does not ask.</param>
+    /// <param name="cancellationToken">Cancels the enumeration.</param>
+    internal async IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
+        ManagerAction action, EventActionOutcome? outcome,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         EnsureConnected();
 
@@ -493,6 +583,12 @@ public sealed class AmiConnection : IAmiConnection
             {
                 eventCount++;
                 yield return evt;
+            }
+
+            if (outcome is not null)
+            {
+                outcome.Rejection = collector.Rejection;
+                outcome.SessionEnded = collector.SessionEnded;
             }
 
             activity?.SetTag("ami.event_count", eventCount);
@@ -587,7 +683,13 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
-    private async Task ReaderLoopAsync(CancellationToken ct)
+    /// <summary>
+    /// Reads one session until it ends, then chooses how the connection ends and ends the session for whoever waits on
+    /// it.
+    /// </summary>
+    /// <param name="fullyBooted">This session's <see cref="FullyBooted"/>, which the connect that started the loop created.</param>
+    /// <param name="ct">Cancelled by the cleanup that ends the session.</param>
+    private async Task ReaderLoopAsync(TaskCompletionSource fullyBooted, CancellationToken ct)
     {
         try
         {
@@ -607,17 +709,18 @@ public sealed class AmiConnection : IAmiConnection
                         tcs.TrySetResult(msg);
                     }
 
-                    // If an event-generating action receives an error response,
-                    // complete its collector so the await foreach doesn't hang forever.
+                    // If an event-generating action receives an error response, end its collector so the await
+                    // foreach doesn't hang forever, and keep the refusal's Message for a caller that asks.
                     if (msg.ActionId is not null
                         && string.Equals(msg.ResponseStatus, "Error", StringComparison.OrdinalIgnoreCase)
                         && _pendingEventActions.TryRemove(msg.ActionId, out var errorCollector))
                     {
-                        errorCollector.Complete();
+                        errorCollector.Reject(msg["Message"]);
                     }
                 }
                 else if (msg.IsEvent)
                 {
+                    ObserveFullyBooted(msg, fullyBooted);
                     AmiMetrics.EventsReceived.Add(1);
                     AmiConnectionLog.EventReceived(_logger, msg.EventType, msg["Channel"], msg["Uniqueid"]);
 
@@ -679,6 +782,29 @@ public sealed class AmiConnection : IAmiConnection
                     }
                 }
             }
+
+            // Only now that the state is chosen: a caller woken by the end of its session reads what comes next.
+            EndSession(fullyBooted);
+        }
+    }
+
+    /// <summary>
+    /// Tells whoever waits on the session that it has ended: its <see cref="FullyBooted"/> is cancelled unless Asterisk
+    /// had reported it, and every event-generating action still pending ends as abandoned, with the events it received
+    /// and no error.
+    /// </summary>
+    /// <remarks>
+    /// The reader loop's ending calls it after it has written the <see cref="State"/> it chose, whether that is
+    /// <see cref="AmiConnectionState.Reconnecting"/> or <see cref="AmiConnectionState.Disconnecting"/>. A caller woken
+    /// here reads that state, never the <see cref="AmiConnectionState.Connected"/> of the session that just ended.
+    /// </remarks>
+    private void EndSession(TaskCompletionSource fullyBooted)
+    {
+        fullyBooted.TrySetCanceled();
+
+        foreach (var collector in _pendingEventActions.Values)
+        {
+            collector.Abandon();
         }
     }
 
@@ -997,9 +1123,11 @@ public sealed class AmiConnection : IAmiConnection
 
             _pendingActions.Clear();
 
+            // The reader loop's ending has abandoned every event action pending then. This covers one registered after
+            // it, still waiting on the session that ended.
             foreach (var collector in _pendingEventActions.Values)
             {
-                collector.Complete();
+                collector.Abandon();
             }
 
             _pendingEventActions.Clear();
@@ -1089,9 +1217,52 @@ public sealed class AmiConnection : IAmiConnection
 }
 
 /// <summary>
+/// How an event-generating action ended, besides its events: written by
+/// <see cref="AmiConnection.SendEventGeneratingActionAsync(ManagerAction, EventActionOutcome, CancellationToken)"/>
+/// once the action's sequence has ended on its own. Both stay at their defaults when Asterisk completed the action.
+/// </summary>
+internal sealed class EventActionOutcome
+{
+    /// <summary>An outcome that nothing has written yet, for the caller to pass in.</summary>
+    /// <remarks>
+    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
+    /// any newer Ami.
+    /// </remarks>
+    public EventActionOutcome()
+    {
+        // Nothing to set: an action that has not ended was neither refused nor abandoned.
+    }
+
+    /// <summary>
+    /// The <c>Message</c> of the <c>Response: Error</c> with which Asterisk refused the action, or
+    /// <see cref="string.Empty"/> for a refusal without one; <see langword="null"/> when Asterisk did not refuse it.
+    /// </summary>
+    /// <remarks>
+    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
+    /// any newer Ami.
+    /// </remarks>
+    public string? Rejection { get; internal set; }
+
+    /// <summary>
+    /// <see langword="true"/> when the connection gave the action up because its AMI session ended before Asterisk
+    /// completed it; the events received until then were delivered.
+    /// </summary>
+    /// <remarks>
+    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
+    /// any newer Ami.
+    /// </remarks>
+    public bool SessionEnded { get; internal set; }
+}
+
+/// <summary>
 /// Collects response events for event-generating actions.
 /// Uses a bounded System.Threading.Channel to prevent unbounded memory growth.
 /// </summary>
+/// <remarks>
+/// It ends once, in one of three ways: Asterisk completes the list (<see cref="Complete"/>), Asterisk refuses the action
+/// (<see cref="Reject"/>), or the session ends first (<see cref="Abandon"/>). The first way to arrive is the one it
+/// records, and each records how it ended before it completes the channel, so a reader that sees the end sees why.
+/// </remarks>
 internal sealed class ResponseEventCollector
 {
     private readonly System.Threading.Channels.Channel<ManagerEvent> _channel =
@@ -1103,9 +1274,46 @@ internal sealed class ResponseEventCollector
                 SingleWriter = true
             });
 
+    // 1 once the collector has ended, whichever way came first.
+    private int _ended;
+
+    /// <summary>The refusal's <c>Message</c> (empty when it had none), or <see langword="null"/> when not refused.</summary>
+    public string? Rejection { get; private set; }
+
+    /// <summary>Whether the session ended before Asterisk completed or refused the action.</summary>
+    public bool SessionEnded { get; private set; }
+
     public void Add(ManagerEvent evt) => _channel.Writer.TryWrite(evt);
 
-    public void Complete() => _channel.Writer.TryComplete();
+    /// <summary>Asterisk completed the action's list.</summary>
+    public void Complete()
+    {
+        if (Interlocked.Exchange(ref _ended, 1) == 0)
+            _channel.Writer.TryComplete();
+    }
+
+    /// <summary>Asterisk refused the action with <c>Response: Error</c>. It ends quietly, as a completed one does.</summary>
+    public void Reject(string? message)
+    {
+        if (Interlocked.Exchange(ref _ended, 1) != 0)
+            return;
+
+        Rejection = message ?? string.Empty;
+        _channel.Writer.TryComplete();
+    }
+
+    /// <summary>
+    /// The session ended before the action did. It ends quietly, with the events already received, as a completed one
+    /// does: a caller that does not ask how it ended sees what it always saw.
+    /// </summary>
+    public void Abandon()
+    {
+        if (Interlocked.Exchange(ref _ended, 1) != 0)
+            return;
+
+        SessionEnded = true;
+        _channel.Writer.TryComplete();
+    }
 
     public IAsyncEnumerable<ManagerEvent> ReadAllAsync(CancellationToken ct = default) =>
         _channel.Reader.ReadAllAsync(ct);
