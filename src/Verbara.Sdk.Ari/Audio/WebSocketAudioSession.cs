@@ -118,6 +118,13 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
             // Malformed or unknown-discriminator JSON: drop silently (logged at server level in future).
             return;
         }
+        catch (NotSupportedException)
+        {
+            // JSON with no `kind` discriminator, which is every JSON control message Asterisk sends: it
+            // names the message in `event` ({"event":"MEDIA_START",...}, captured on 22.9.0 and 23.4.1).
+            // Uncaught, this ended the read pump and so the call's stream right after MEDIA_START.
+            return;
+        }
 
         if (message is not null)
         {
