@@ -262,3 +262,27 @@ Open the resulting `.nettrace` in PerfView or Chromium `about:tracing`.
 3. **Opt out entirely** in non-critical deployments by not registering `SessionReconciliationService` (skip `AddSessions(reconcile: true)` and call the reconciler manually on demand).
 
 **Observability:** watch the `Verbara.Sdk.Sessions` activity source — `reconcile` spans carry a `sessions.scanned` tag so you can correlate burst size with reconnect events.
+
+---
+
+## Voice AI / AudioSocket
+
+### `ChannelIdInUse`: a connection presented a UUID that another call still holds
+
+**Symptoms:** `[AudioSocket] Channel <uuid> still has a live session after <n> ms, refusing the connection that presented it again`, at Warning, from `Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer`; `<n>` is about 1000.
+
+**Cause:** two calls that are live at the same time presented one AudioSocket UUID, usually a dialplan that takes the UUID from a global variable or a fixed string. A call that comes back to the bot with the UUID it saved (a second `AudioSocket()`, a transfer, a redirect) is not a refusal: the server waits up to 1 second for the previous session with that UUID to end and then serves it.
+
+**Solutions:**
+1. Give every concurrent AudioSocket call its own UUID, for example `Set(BOTID=${UUID()})` once per call, and reuse it only when the same call comes back.
+2. If the log shows the call that came back was the same call (its previous session ended just after the Warning), look for an `OnHangup` handler that does slow work: the previous session keeps its UUID until every `OnHangup` handler has returned. Hand slow work off from the handler.
+
+The refused connection receives a hangup frame, so on Asterisk 20 and later `AudioSocket()` returns and the dialplan goes on; on Asterisk 18 any end from the server, a hangup frame included, hangs the call up. The call already holding the UUID is untouched.
+
+### `SessionLimitReached`: the server is at `MaxConcurrentSessions`
+
+**Symptoms:** `[AudioSocket] Session limit reached (<limit>), rejecting connection`, at Warning.
+
+**Cause:** the number of live sessions has reached `AudioSocketOptions.MaxConcurrentSessions`. A call that comes back with a UUID a live session holds is not counted against the limit, since it takes that session's place.
+
+**Solutions:** raise `MaxConcurrentSessions` if the host has room, or spread calls over more servers. The refused connection receives a hangup frame, with the same Asterisk 20 and later / Asterisk 18 behaviour as above. Refused connections are not counted in `audiosocket.connections.accepted` and open no `audiosocket.session` activity.

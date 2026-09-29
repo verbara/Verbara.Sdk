@@ -42,6 +42,18 @@ internal sealed class FakeTimeProvider : TimeProvider
         }
     }
 
+    /// <summary>One tick per <see cref="TimeSpan"/> tick, so an elapsed time measured through
+    /// <see cref="GetTimestamp"/> moves with <see cref="Advance"/> and with nothing else.</summary>
+    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+    public override long GetTimestamp()
+    {
+        lock (_gate)
+        {
+            return _now.UtcTicks;
+        }
+    }
+
     public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
     {
         ArgumentNullException.ThrowIfNull(callback);

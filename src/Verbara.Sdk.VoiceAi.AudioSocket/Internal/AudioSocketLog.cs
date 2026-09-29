@@ -22,6 +22,9 @@ internal static partial class AudioSocketLog
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AudioSocket] Session limit reached ({Limit}), rejecting connection")]
     public static partial void SessionLimitReached(ILogger logger, int limit);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AudioSocket] Channel {ChannelId} still has a live session after {WaitedMs} ms, refusing the connection that presented it again")]
+    public static partial void ChannelIdInUse(ILogger logger, Guid channelId, long waitedMs);
+
     [LoggerMessage(Level = LogLevel.Debug, Message = "[AudioSocket] Session started: channel_id={ChannelId}")]
     public static partial void SessionStarted(ILogger logger, Guid channelId);
 

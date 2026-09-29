@@ -65,11 +65,51 @@ All notable changes to this project will be documented in this file.
   that registered after the stop; that session then dropped out of `ActiveSessionCount`, the
   `audiosocket.sessions.active` gauge and the `MaxConcurrentSessions` admission, and the next stop did
   not dispose it — 47 to 88 of 200 in three probe runs on 2.6.0. The release now removes the entry only
-  while it still maps to that session. This server still refuses a same-id connection when it connects.
+  while it still maps to that session. A same-id connection that arrives while a session still holds its id is now
+  served once that session ends; see *the Voice AI AudioSocket server serves a call that comes back with the same
+  UUID* below.
 - **Not changed:** until it takes the id over, a waiting connection is not listed, counted or admitted
   against `MaxConcurrentStreams`, so with chan_websocket's shared key `ActiveStreamCount` counts one per
   URI, not one per call. A server that was over-admitting after such an ending now refuses at its
   configured limit. No public API changes.
+
+### Fixed — the Voice AI AudioSocket server logged a call that came back as "Session limit reached", and counted every refused connection as accepted (#352)
+
+- **`[AudioSocket] Session limit reached ({Limit}), rejecting connection` again means the limit was reached.** A
+  connection that presented the UUID of a session still ending was refused with this Warning while one session was
+  live, sending the operator after a capacity problem that did not exist. The Warning now appears only when the
+  number of live sessions has reached `MaxConcurrentSessions`; a UUID still in use has its own Warning (below).
+- **`audiosocket.connections.accepted` counts only accepted connections.** Every refused connection was counted as
+  accepted and never as closed, so `accepted − closed` rose by one per refusal, and each refusal also opened an
+  `audiosocket.session` activity. A refused connection now moves neither counter and opens no activity.
+- **Every refusal writes a hangup frame before closing.** A refusal used to close the connection bare; with the
+  caller's audio unread, that reset the connection and `AudioSocket()` failed the call. With the hangup frame,
+  on Asterisk 20 and later `AudioSocket()` returns and the dialplan goes on (measured on 20.20.1, 22.9.0 and
+  23.4.1). On Asterisk 18.26.4 any end from the server, a hangup frame included, fails the application and the
+  call is hung up.
+
+### Changed — the Voice AI AudioSocket server serves a call that comes back with the same UUID (#352)
+
+- **A connection that presents the UUID of a session that is still ending is served.** Asterisk does not keep the
+  AudioSocket UUID unique: a dialplan that runs `AudioSocket()` or `Dial(AudioSocket/…)` again with the UUID it
+  saved, a transfer, and an AMI `Redirect` that re-enters the bot reconnect with the same UUID 0.1–7 ms after the
+  previous connection ends, before the server had released it. The server refused that connection: 1–2.3 % of
+  re-entries at rest, 12.5–21 % of `Redirect` + `Dial` transfers with 300 other calls on the server, and 25–50 % of
+  the first 20 calls of a new process, depending on the route. The caller lost the bot's turn and, with the usual
+  `Hangup()` after `AudioSocket()`, the call. The connection now waits, at most 1 second, for the previous session's
+  hangup to finish and is then served: 0 of 1,600 re-entries refused at rest on Asterisk 22.9.0 and 23.4.1, and
+  0 of 800 with 300 other calls on the server.
+- **`OnSessionStarted` for a call that comes back is raised after every `OnHangup` handler of the previous session
+  has returned**, so a consumer that keys its state by `ChannelId` never holds two live sessions under one UUID.
+  While those handlers run, the previous session still holds its UUID and counts in `ActiveSessionCount` and the
+  `audiosocket.sessions.active` gauge; keep `OnHangup` handlers short, since one that runs longer than the wait makes
+  the call that comes back be refused.
+- **A server at `MaxConcurrentSessions` serves a call that comes back**, since it takes its previous session's place.
+- **A UUID still live after 1 second is refused** (two concurrent calls configured with one UUID): the connection
+  receives a hangup frame, the server logs `ChannelIdInUse` at Warning naming the UUID and the milliseconds waited,
+  and the call holding the UUID is untouched. Before, the duplicate was refused at once and logged as the session
+  limit.
+- No public API changes.
 
 ### Fixed — a transport failure under an AudioSocket session looked like a hangup, and one accepted connection's failure could leak it or stop its server accepting (#337)
 
