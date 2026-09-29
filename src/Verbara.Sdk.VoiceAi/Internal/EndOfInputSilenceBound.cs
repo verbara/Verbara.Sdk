@@ -22,7 +22,8 @@ namespace Verbara.Sdk.VoiceAi.Internal;
 /// answer its close) does not call <see cref="Heard"/>, so a vendor that keeps talking cannot extend
 /// the wait. When the limit passes, <see cref="Token"/> is cancelled. That cancels only the receive,
 /// which aborts the socket (platform contract), and <see cref="Expired"/> tells the receive loop that
-/// this bound, not the caller, ended the wait.
+/// this bound, not the caller, ended the wait. The receive loop reports the bound however it leaves,
+/// including after a read that returned data with the socket aborted under it.
 /// </para>
 /// <para>
 /// <see cref="Pause"/> and <see cref="Resume"/> hold the bound while the receive loop is busy with
