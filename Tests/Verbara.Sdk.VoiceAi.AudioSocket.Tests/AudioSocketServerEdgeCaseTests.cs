@@ -4,6 +4,7 @@ using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Verbara.Sdk.VoiceAi.AudioSocket.Internal;
@@ -293,14 +294,16 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncDisposable
     [Fact]
     public async Task HandleConnectionAsync_ShouldKeepTheHolderRegistered_WhenASameIdConnectionIsRefused()
     {
-        // A characterization pin, green before the release changed. This server refuses a connection
-        // that presents a held id and disposes its session before the read loop starts, so that
-        // session's hangup never fires and it releases nothing: the invariant the key-only release
-        // relied on. The refusal itself is the policy, and it is unchanged.
+        // A characterization pin since the registry change. It pins what a refusal of a same-id
+        // connection leaves behind: the connection waits for the holder, and is refused with a hangup
+        // frame only once the grace has run out with the holder still live. Its session is disposed
+        // before the read loop starts, so its hangup never fires and it releases nothing, which is the
+        // invariant the by-value release relies on: the live holder keeps its entry.
         var x = Guid.NewGuid();
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
-        await using var server = NewServerOnStoppedClock();
+        var time = new FakeTimeProvider();
+        await using var server = NewServer(time, new CapturingLogger());
         var announcements = 0;
         server.OnSessionStarted += _ =>
         {
@@ -309,17 +312,22 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncDisposable
         };
         using var holderPeer = await ConnectAndIdentifyAsync(listener, x);
         var holder = await HandOverAndAwaitAnnouncementAsync(server, listener);
+        await NextTimerAsync(time); // the holder's UUID deadline
 
-        // Act — a second connection presents X through the same handler
+        // Act — a second connection presents X through the same handler, which parks on the holder;
+        // the grace then runs out with the holder still live
         using var refusedPeer = await ConnectAndIdentifyAsync(listener, x);
         using var refusedEnd = await listener.AcceptTcpClientAsync();
         var refusing = server.HandleConnectionAsync(refusedEnd, CancellationToken.None);
+        await NextTimerAsync(time); // the second connection's UUID deadline
+        var grace = await NextTimerAsync(time);
+        time.Advance(grace.DueTime);
 
-        // Assert — the server closes the refused connection only after it lost the registration, so
-        // that read returning 0 orders every check below after the refusal
-        (await ReadFromServerAsync(refusedPeer)).Should().Be(
-            0,
-            "the server refuses a connection that presents an id a live session holds, and closes it");
+        // Assert — the server closes the refused connection only after it gave up on the registration,
+        // so that read ending orders every check below after the refusal
+        (await ReadUntilServerClosesAsync(refusedPeer)).Should().Equal(
+            HangupFrame,
+            "the server refuses a connection whose id stays held, with a hangup frame so the call goes on in the dialplan");
         await refusing.WaitAsync(SignalTimeout);
         server.ActiveSessionCount.Should().Be(
             1,
@@ -330,6 +338,259 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncDisposable
         (await ReadFromServerAsync(holderPeer)).Should().Be(
             0,
             "the holder is still registered, so the stop finds it and closes its connection");
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldServeAConnectionThatPresentsAHeldId_WhenTheHolderHangsUpWithinTheGrace()
+    {
+        // Arrange — the order a re-entered AudioSocket(), a redirect or a transfer produces: Asterisk
+        // connects again with the id it saved 0.1–7 ms after the previous connection ends, before this
+        // server has released it. Refusing it at once lost 1–2.3 % of re-entries at rest, 12.5–21 % of
+        // redirect-and-dial transfers with 300 other calls on the server, and 25–50 % of the first 20
+        // calls of a new process. The clock never moves, so only the holder's hangup can end the wait.
+        var x = Guid.NewGuid();
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var time = new FakeTimeProvider();
+        var logger = new CapturingLogger();
+        await using var server = NewServer(time, logger);
+        using var holderPeer = await ConnectAndIdentifyAsync(listener, x);
+        var holder = await HandOverAndAwaitAnnouncementAsync(server, listener);
+        await NextTimerAsync(time); // the holder's UUID deadline
+
+        var order = new ConcurrentQueue<string>();
+        holder.OnHangup += () => order.Enqueue("holder hung up");
+        var announced = new TaskCompletionSource<AudioSocketSession>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.OnSessionStarted += session =>
+        {
+            order.Enqueue("second announced");
+            announced.TrySetResult(session);
+            return ValueTask.CompletedTask;
+        };
+
+        using var secondPeer = await ConnectAndIdentifyAsync(listener, x);
+        using var secondEnd = await listener.AcceptTcpClientAsync();
+        var handling = server.HandleConnectionAsync(secondEnd, CancellationToken.None);
+        await NextTimerAsync(time); // the second connection's UUID deadline
+        (await NextTimerAsync(time)).DueTime.Should().Be(
+            TimeSpan.FromSeconds(1),
+            "a connection that presents a held id waits for the holder, bounded by the grace");
+
+        // Act — the holder's call leaves the bot
+        await SendFrameAsync(holderPeer, AudioSocketFrameType.Hangup, []);
+        var second = await announced.Task.WaitAsync(SignalTimeout);
+        await handling.WaitAsync(SignalTimeout);
+
+        // Assert
+        second.ChannelId.Should().Be(x);
+        second.IsConnected.Should().BeTrue("the connection that came back is served, not refused");
+        order.Should().Equal(
+            ["holder hung up", "second announced"],
+            "the second session is announced after every hangup handler of the first, so a consumer keyed by channel id never holds two");
+        server.ActiveSessionCount.Should().Be(1, "the holder released X and the second connection holds it");
+        logger.Entries.Should().NotContain(entry => entry.Level >= LogLevel.Warning, "a connection that comes back is not a refusal");
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldAnnounceTheConnectionThatCameBack_OnlyAfterEveryHangupHandlerOfThePrevious()
+    {
+        // Arrange — the connection that comes back arrives while a consumer's OnHangup handler for the
+        // holder is still running. A release that runs in the server's own handler, before the
+        // consumer's, lets it in early: measured live, 8 of 1500 re-entries on one harness were announced
+        // before the consumer's hangup handler of the previous session had returned. Here the consumer's
+        // handler blocks on a gate, so the order is decided by signals alone and never by a clock.
+        var x = Guid.NewGuid();
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var time = new FakeTimeProvider();
+        await using var server = NewServer(time, new CapturingLogger());
+        using var holderPeer = await ConnectAndIdentifyAsync(listener, x);
+        var holder = await HandOverAndAwaitAnnouncementAsync(server, listener);
+        await NextTimerAsync(time); // the holder's UUID deadline
+
+        using var gate = new ManualResetEventSlim(false);
+        var consumerHandlerRunning = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        holder.OnHangup += () =>
+        {
+            consumerHandlerRunning.TrySetResult();
+            gate.Wait(SignalTimeout);
+        };
+        var announced = new TaskCompletionSource<AudioSocketSession>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.OnSessionStarted += session =>
+        {
+            announced.TrySetResult(session);
+            return ValueTask.CompletedTask;
+        };
+
+        await SendFrameAsync(holderPeer, AudioSocketFrameType.Hangup, []);
+        await consumerHandlerRunning.Task.WaitAsync(SignalTimeout);
+
+        try
+        {
+            // Act — the call comes back while the consumer is still handling the previous session's hangup
+            using var secondPeer = await ConnectAndIdentifyAsync(listener, x);
+            using var secondEnd = await listener.AcceptTcpClientAsync();
+            var handling = server.HandleConnectionAsync(secondEnd, CancellationToken.None);
+            await NextTimerAsync(time); // the second connection's UUID deadline
+            var nextTimer = NextTimerAsync(time);
+            var first = await Task.WhenAny(announced.Task, nextTimer);
+
+            // Assert — a connection that parks on the holder creates the grace timer and is not announced;
+            // one that finds the entry already gone is announced with no further timer
+            first.Should().BeSameAs(
+                nextTimer,
+                "the call that came back must not be announced before the consumer's handler returned: a consumer keyed by channel id would hold two sessions under one id");
+            (await nextTimer).DueTime.Should().Be(
+                TimeSpan.FromSeconds(1),
+                "the connection waits for the holder, bounded by the grace");
+            announced.Task.IsCompleted.Should().BeFalse("the consumer's hangup handler for the holder has not returned");
+
+            gate.Set();
+            (await announced.Task.WaitAsync(SignalTimeout)).ChannelId.Should().Be(
+                x,
+                "once every hangup handler of the holder has returned, the call that came back is served");
+            await handling.WaitAsync(SignalTimeout);
+        }
+        finally
+        {
+            // Never leave the holder's read loop blocked in the consumer's handler past the test.
+            gate.Set();
+        }
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldServeAConnectionThatPresentsAHeldId_WhenTheServerIsAtItsLimit()
+    {
+        // Arrange — the same re-entry, on a server at MaxConcurrentSessions = 1 whose only session's call
+        // comes back. That call holds its place through its previous connection, which is ending;
+        // admitting it replaces that session and never raises the count past the limit.
+        var x = Guid.NewGuid();
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var time = new FakeTimeProvider();
+        var logger = new CapturingLogger();
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { Port = 0, ConnectionTimeout = TimeSpan.FromSeconds(30), MaxConcurrentSessions = 1 },
+            logger,
+            time);
+        using var holderPeer = await ConnectAndIdentifyAsync(listener, x);
+        await HandOverAndAwaitAnnouncementAsync(server, listener);
+        await NextTimerAsync(time); // the holder's UUID deadline
+        var announced = new TaskCompletionSource<AudioSocketSession>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.OnSessionStarted += session =>
+        {
+            announced.TrySetResult(session);
+            return ValueTask.CompletedTask;
+        };
+
+        using var secondPeer = await ConnectAndIdentifyAsync(listener, x);
+        using var secondEnd = await listener.AcceptTcpClientAsync();
+        var handling = server.HandleConnectionAsync(secondEnd, CancellationToken.None);
+        await NextTimerAsync(time); // the second connection's UUID deadline
+
+        // Act — the holder's call leaves the bot
+        await SendFrameAsync(holderPeer, AudioSocketFrameType.Hangup, []);
+        await handling.WaitAsync(SignalTimeout);
+
+        // Assert
+        using (new AssertionScope())
+        {
+            announced.Task.IsCompletedSuccessfully.Should().BeTrue(
+                "the connection that came back is the call that already held the only place, not a new call over the limit");
+            logger.Entries.Select(entry => entry.EventName).Should().NotContain(
+                "SessionLimitReached", "the limit was not exceeded: one call, one live session");
+        }
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldLogTheChannelIdNotTheLimit_WhenItRefusesASameIdConnection()
+    {
+        // Arrange
+        var x = Guid.NewGuid();
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var time = new FakeTimeProvider();
+        var logger = new CapturingLogger();
+        await using var server = NewServer(time, logger);
+        using var holderPeer = await ConnectAndIdentifyAsync(listener, x);
+        await HandOverAndAwaitAnnouncementAsync(server, listener);
+        await NextTimerAsync(time); // the holder's UUID deadline
+        using var refusedPeer = await ConnectAndIdentifyAsync(listener, x);
+        using var refusedEnd = await listener.AcceptTcpClientAsync();
+        var refusing = server.HandleConnectionAsync(refusedEnd, CancellationToken.None);
+        await NextTimerAsync(time); // the second connection's UUID deadline
+        var grace = await NextTimerAsync(time);
+
+        // Act
+        time.Advance(grace.DueTime);
+        await refusing.WaitAsync(SignalTimeout);
+
+        // Assert
+        logger.Entries.Where(entry => entry.Level >= LogLevel.Warning).Select(entry => entry.EventName).Should().Equal(
+            ["ChannelIdInUse"],
+            "the refusal is logged as what it is: the session limit was not reached");
+        logger.Messages.Should().ContainSingle(
+            message => message.Contains(x.ToString(), StringComparison.Ordinal) && message.Contains("1000 ms", StringComparison.Ordinal),
+            "the warning names the channel id and how long the connection waited for it");
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldRefuseWithAHangupFrameAndLogTheLimit_WhenMaxConcurrentSessionsIsReached()
+    {
+        // Arrange
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var logger = new CapturingLogger();
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { Port = 0, ConnectionTimeout = TimeSpan.FromSeconds(30), MaxConcurrentSessions = 1 },
+            logger,
+            new FakeTimeProvider());
+        using var holderPeer = await ConnectAndIdentifyAsync(listener, Guid.NewGuid());
+        await HandOverAndAwaitAnnouncementAsync(server, listener);
+
+        // Act — a connection with another id, over the limit
+        using var refusedPeer = await ConnectAndIdentifyAsync(listener, Guid.NewGuid());
+        using var refusedEnd = await listener.AcceptTcpClientAsync();
+        await server.HandleConnectionAsync(refusedEnd, CancellationToken.None).WaitAsync(SignalTimeout);
+
+        // Assert
+        (await ReadUntilServerClosesAsync(refusedPeer)).Should().Equal(
+            HangupFrame,
+            "a refusal writes a hangup frame, so the call goes on in the dialplan whatever the refusal's timing");
+        logger.Entries.Where(entry => entry.Level >= LogLevel.Warning).Select(entry => entry.EventName).Should().Equal(
+            ["SessionLimitReached"],
+            "only a refusal for the limit is logged as the limit");
+        server.ActiveSessionCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldLogNothing_WhenTheServerStopsWhileASameIdConnectionWaits()
+    {
+        // Arrange
+        var x = Guid.NewGuid();
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var time = new FakeTimeProvider();
+        var logger = new CapturingLogger();
+        await using var server = NewServer(time, logger);
+        using var holderPeer = await ConnectAndIdentifyAsync(listener, x);
+        await HandOverAndAwaitAnnouncementAsync(server, listener);
+        await NextTimerAsync(time); // the holder's UUID deadline
+        using var serverStopping = new CancellationTokenSource();
+        using var waitingPeer = await ConnectAndIdentifyAsync(listener, x);
+        using var waitingEnd = await listener.AcceptTcpClientAsync();
+        var waiting = server.HandleConnectionAsync(waitingEnd, serverStopping.Token);
+        await NextTimerAsync(time); // the second connection's UUID deadline
+        await NextTimerAsync(time); // parked on the holder
+
+        // Act
+        await serverStopping.CancelAsync();
+        await waiting.WaitAsync(SignalTimeout);
+
+        // Assert
+        (await ReadUntilServerClosesAsync(waitingPeer)).Should().Equal(HangupFrame, "a stopping server still lets the call go on");
+        logger.Entries.Should().NotContain(entry => entry.Level >= LogLevel.Warning, "a stop is not a refusal the client caused");
+        server.ActiveSessionCount.Should().Be(1, "the holder is untouched until the stop reaches it");
     }
 
     [Fact]
@@ -417,6 +678,28 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncDisposable
     /// </summary>
     private static Task<int> ReadFromServerAsync(TcpClient client) =>
         client.GetStream().ReadAsync(new byte[1]).AsTask().WaitAsync(SignalTimeout);
+
+    /// <summary>The frame a server writes before it closes a connection it will not serve.</summary>
+    private static readonly byte[] HangupFrame = [0x00, 0x00, 0x00];
+
+    /// <summary>
+    /// A server on <paramref name="time"/> that logs to <paramref name="logger"/>. It is never started: a
+    /// test hands it connections through the handler, and moves its clock only with <c>Advance</c>.
+    /// </summary>
+    private static AudioSocketServer NewServer(FakeTimeProvider time, CapturingLogger logger) =>
+        new(new AudioSocketOptions { Port = 0, ConnectionTimeout = TimeSpan.FromSeconds(30) }, logger, time);
+
+    /// <summary>Everything the server writes to <paramref name="client"/> until it closes the connection.</summary>
+    private static async Task<byte[]> ReadUntilServerClosesAsync(TcpClient client)
+    {
+        using var all = new MemoryStream();
+        var buffer = new byte[256];
+        int read;
+        while ((read = await client.GetStream().ReadAsync(buffer).AsTask().WaitAsync(SignalTimeout)) > 0)
+            all.Write(buffer, 0, read);
+
+        return all.ToArray();
+    }
 
     /// <summary>
     /// A server whose UUID timeout runs on a fake clock that never moves, so nothing a test does with
@@ -519,6 +802,11 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncDisposable
 
         public IReadOnlyCollection<LogEntry> Entries => _entries.ToArray();
 
+        private readonly ConcurrentQueue<string> _messages = new();
+
+        /// <summary>Every entry's formatted message, in logging order.</summary>
+        public IReadOnlyCollection<string> Messages => _messages.ToArray();
+
         public Task<LogEntry> FirstWarningOrAbove => _firstWarningOrAbove.Task;
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
@@ -534,6 +822,7 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncDisposable
         {
             var entry = new LogEntry(logLevel, eventId.Id, eventId.Name, exception?.GetType().Name);
             _entries.Enqueue(entry);
+            _messages.Enqueue(formatter(state, exception));
             if (logLevel >= LogLevel.Warning)
                 _firstWarningOrAbove.TrySetResult(entry);
         }
