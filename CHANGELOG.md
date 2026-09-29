@@ -21,8 +21,12 @@ All notable changes to this project will be documented in this file.
 - **What a consumer observes changes.** A consumer's handler can now see its token cancelled at a
   non-graceful stop or at teardown; a handler that treats cancellation as a failure will report one
   there. The SDK's own handlers (`VoiceAiPipeline`, `OpenAiRealtimeBridge`) count a cancelled session as
-  completed, so their metrics do not move. `VoiceAiSessionBroker` now implements `IDisposable` through a
-  public `Dispose()`.
+  completed, so their metrics do not move. For `OpenAiRealtimeBridge` this holds also when the host's
+  cancellation lands inside the read that returns only part of a vendor message, which 2.6.0 counted as
+  failed (60 of 60 such cancellations, end to end through Asterisk), restoring 2.5.3's "A requested
+  cancellation on a healthy connection … still count as completed": `openai_realtime.sessions.failed`
+  falls by the host cancellations that land inside a partial read. `VoiceAiSessionBroker` now implements
+  `IDisposable` through a public `Dispose()`.
 
 ### Fixed — hosts using the AudioSocket server or the OpenAI Realtime bridge threw when they shut down (#334)
 
@@ -348,6 +352,14 @@ All notable changes to this project will be documented in this file.
 - **What a consumer observes changes.** A single gap of more than 10 seconds after the end of input,
   which used to complete, now fails as a transport failure (measured on Cartesia TTS: a 12-second gap
   completed before and fails at 10 seconds now). A vendor that keeps sending, however slowly, is not cut.
+- **The bound is reported also when it runs out in the instant a frame arrives.** The stream used to
+  complete as though the vendor had finished, with the synthesis or the transcript cut short. The frame
+  is now delivered and the stream then fails with `SpeechProviderFailureException` (`Signal = Transport`);
+  the part already read of a message larger than 64 KiB (the Cartesia and ElevenLabs synthesizers) is not
+  delivered. A frame carrying a final transcript or a synthesizer's final flag that arrives as the bound
+  runs out is a tie, and a tie is a failure: the frame is delivered and the stream fails, because the
+  bound found the vendor silent. A close, or a message by which the vendor ends the stream, that arrives
+  in the same instant still ends it as the vendor said.
 
 ### Fixed — a speech vendor, the OpenAI Realtime bridge or ARI that never answered a connect held the call (#347)
 
@@ -441,6 +453,10 @@ All notable changes to this project will be documented in this file.
 - `RealtimeMetrics.SessionsCloseUnanswered` counts sessions whose close the vendor did not answer
   within 10 seconds after the caller hung up. Each is also counted in
   `openai_realtime.sessions.completed`, and the bridge logs a Warning for it.
+- The count holds also when the bound runs out inside the read that returns only part of a vendor
+  message: a frame larger than the bridge's 64 KiB read buffer, or the first fragment of a message. Such
+  a session used to count in `openai_realtime.sessions.failed` instead, every time the bound ran out at
+  that instant, and in 3.7–12.7 % of unanswered closes in an unforced race with such messages.
 
 ## [2.6.0] - 2026-09-24
 
