@@ -1,8 +1,10 @@
 using System.Diagnostics.Metrics;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using Verbara.Sdk;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Ami.Actions;
+using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Ami.Events.Base;
 using Verbara.Sdk.Live.Agents;
@@ -31,6 +33,14 @@ internal static partial class VerbaraServerLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[LIVE] Reconnect reload failed")]
     public static partial void ReconnectReloadFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "[LIVE] {Action} not registered yet: Asterisk is still loading its modules; asking again when it reports FullyBooted, or every {IntervalMs} ms")]
+    public static partial void ActionNotRegisteredYet(ILogger logger, string action, int intervalMs);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "[LIVE] {Action} never registered: still refused {BudgetSeconds} s after the load's first refusal, so the load completes without it (Asterisk: {Message}). An AMI user with 'system' in read receives FullyBooted and is not kept waiting")]
+    public static partial void ActionNeverRegistered(ILogger logger, string action, int budgetSeconds, string message);
 }
 
 /// <summary>
@@ -40,6 +50,43 @@ internal static partial class VerbaraServerLog
 /// </summary>
 public sealed class VerbaraServer : IVerbaraServer
 {
+    /// <summary>
+    /// How long a load waits before it asks again for a request that Asterisk refused because the module answering it
+    /// has not registered it yet, when Asterisk has not reported <c>FullyBooted</c> on the session. It is the whole
+    /// wait only for an AMI user without <c>system</c> in its read permissions, which never receives the report.
+    /// </summary>
+    /// <remarks>
+    /// Measured on Asterisk 20.20.1, 22.9.0 and 23.4.1, over raw AMI sessions logged in right after a container
+    /// restart: <c>QueueStatus</c> starts working 80–131 ms after the login and <c>Agents</c> 50–111 ms after it, and
+    /// <c>FullyBooted</c> arrives 17–28 ms after <c>QueueStatus</c> works. At this interval a load that logged in at
+    /// the start of that window is answered within one or two more asks.
+    /// </remarks>
+    internal static readonly TimeSpan NotRegisteredRetryInterval = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>
+    /// How long after its first refusal of that kind a load stops asking again, and completes without the refused
+    /// state. One budget per load: a load whose two refused modules are both absent waits it once, not once per request.
+    /// </summary>
+    /// <remarks>
+    /// Measured on Asterisk 20.20.1, 22.9.0 and 23.4.1: <c>FullyBooted</c> arrives 101–154 ms after the login, so an
+    /// Asterisk still refusing a request 10 s after the first refusal has finished starting, and does not have the
+    /// module loaded. Only a user who never receives <c>FullyBooted</c> reaches the budget: with the report, a refusal
+    /// after it is taken as final at once, and one before it is asked again when it arrives.
+    /// </remarks>
+    internal static readonly TimeSpan NotRegisteredRetryBudget = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// The start of the <c>Message</c> with which Asterisk refuses an action no module has registered, matched ordinally
+    /// and ignoring case.
+    /// </summary>
+    /// <remarks>
+    /// Measured as <c>Response: Error</c> with <c>Message: Invalid/unknown command: QueueStatus. Use Action:
+    /// ListCommands to show available commands.</c>, and the same for <c>Agents</c>, on Asterisk 18.26.4, 20.20.1,
+    /// 22.9.0 and 23.4.1. Asterisk answers it both while app_queue or app_agent_pool is still loading, and for good when
+    /// the module is not loaded at all; only <c>FullyBooted</c> tells the two apart.
+    /// </remarks>
+    internal const string UnknownCommandPrefix = "Invalid/unknown command";
+
     private readonly IAmiConnection _connection;
     private readonly ILogger<VerbaraServer> _logger;
     private IDisposable? _subscription;
@@ -63,6 +110,11 @@ public sealed class VerbaraServer : IVerbaraServer
 
     /// <summary>The Asterisk version string.</summary>
     public string? AsteriskVersion => _connection.AsteriskVersion;
+
+    // The clock a load's waits for a starting Asterisk run on: the interval between two asks, and the budget, which
+    // is measured with GetTimestamp so that a step of the wall clock cannot stretch or cut it. Settable by tests (via
+    // InternalsVisibleTo) to drive both on a manual clock.
+    internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
     public VerbaraServer(IAmiConnection connection, ILogger<VerbaraServer> logger)
     {
@@ -167,6 +219,9 @@ public sealed class VerbaraServer : IVerbaraServer
     {
         using var activity = LiveActivitySource.StartStateLoad(_connection.AsteriskVersion ?? "unknown");
 
+        // Bound once, here: every decision this load takes about a starting Asterisk is about the session it began on.
+        var session = _connection is AmiConnection ami ? new LoadSession(ami, TimeProvider) : null;
+
         // Populate channels from StatusAction. Buffer first, then reconcile: a snapshot that
         // throws, is cancelled or never completes must leave every held channel alone, and it can
         // only do that if nothing was mutated while it was being read (ADR-0062, design D1).
@@ -174,7 +229,8 @@ public sealed class VerbaraServer : IVerbaraServer
         Channels.ReconcileWithSnapshot(channelSnapshot, admittedThrough);
 
         // Populate queues from QueueStatusAction
-        await foreach (var evt in _connection.SendEventGeneratingActionAsync(new QueueStatusAction(), cancellationToken))
+        await foreach (var evt in AskWhileAsteriskStartsAsync(
+            "QueueStatus", static () => new QueueStatusAction(), session, cancellationToken))
         {
             switch (evt)
             {
@@ -200,7 +256,7 @@ public sealed class VerbaraServer : IVerbaraServer
             }
         }
 
-        await PopulateAgentsAsync(cancellationToken);
+        await PopulateAgentsAsync(session, cancellationToken);
 
         VerbaraServerLog.InitialStateLoaded(_logger, Channels.ChannelCount, Queues.QueueCount, Agents.AgentCount);
         LiveActivitySource.SetStateLoadResult(activity, Channels.ChannelCount, Queues.QueueCount, Agents.AgentCount);
@@ -313,9 +369,10 @@ public sealed class VerbaraServer : IVerbaraServer
                 : ChannelState.Unknown;
     }
 
-    private async ValueTask PopulateAgentsAsync(CancellationToken cancellationToken)
+    private async ValueTask PopulateAgentsAsync(LoadSession? session, CancellationToken cancellationToken)
     {
-        await foreach (var evt in _connection.SendEventGeneratingActionAsync(new AgentsAction(), cancellationToken))
+        await foreach (var evt in AskWhileAsteriskStartsAsync(
+            "Agents", static () => new AgentsAction(), session, cancellationToken))
         {
             if (evt is not AgentsEvent ae || ae.Agent is null)
                 continue;
@@ -330,6 +387,136 @@ public sealed class VerbaraServer : IVerbaraServer
             Agents.OnAgentLogin(ae.Agent, ae.LoggedInChan);
             if (ae.Name is not null)
                 Agents.GetById(ae.Agent)?.SetName(ae.Name);
+        }
+    }
+
+    /// <summary>
+    /// Sends one of a load's requests and yields its events, asking again while Asterisk refuses it because it is
+    /// still starting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asterisk accepts an AMI login before its modules have loaded. Until app_queue and app_agent_pool have registered
+    /// <c>QueueStatus</c> and <c>Agents</c>, it refuses them as an unknown command, which is also what it answers for
+    /// good when the module is not loaded at all. A refusal carries no events, so taken as it comes it reads like an
+    /// empty table: a load in that window would record no queues and no agents, and nothing would bring them back
+    /// before the next reconnect. The decision uses only the two signals Asterisk gives, the refusal and
+    /// <c>FullyBooted</c> on the load's session:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>an answer that is not a refusal as an unknown command ends the request, as it always
+    /// did;</description></item>
+    /// <item><description>a refusal as an unknown command when <c>FullyBooted</c> had arrived before the ask is final: the
+    /// module is not loaded, and the empty answer is true;</description></item>
+    /// <item><description>one before it is asked again once <c>FullyBooted</c> arrives, or after
+    /// <see cref="NotRegisteredRetryInterval"/> for a user who never receives it;</description></item>
+    /// <item><description>once <see cref="NotRegisteredRetryBudget"/> has passed since the load's first such refusal,
+    /// the request ends without the refused state, and a warning names it.</description></item>
+    /// </list>
+    /// <para>
+    /// Only an <see cref="AmiConnection"/> says how an action ended and when its session reported <c>FullyBooted</c>;
+    /// any other <see cref="IAmiConnection"/> is asked once, as before.
+    /// </para>
+    /// </remarks>
+    /// <param name="actionName">The request's AMI action name, for the log.</param>
+    /// <param name="newAction">Creates the request. Each ask sends a new one, because an action keeps the
+    /// <c>ActionID</c> it was first sent with.</param>
+    /// <param name="session">The session the load began on, or <see langword="null"/> for a connection that cannot
+    /// tell a refusal from an empty answer.</param>
+    /// <param name="cancellationToken">Cancels the request and any wait between two asks.</param>
+    private async IAsyncEnumerable<ManagerEvent> AskWhileAsteriskStartsAsync(
+        string actionName, Func<ManagerAction> newAction, LoadSession? session,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        if (session is null)
+        {
+            await foreach (var evt in _connection.SendEventGeneratingActionAsync(newAction(), cancellationToken))
+                yield return evt;
+
+            yield break;
+        }
+
+        var toldWaiting = false;
+        while (true)
+        {
+            // Read before the ask, never once its answer is in: a report that lands between the two says nothing about
+            // the module at the moment it was asked, and taking that refusal as final would drop a module still loading.
+            var reportedBeforeAsk = session.FullyBooted.IsCompletedSuccessfully;
+
+            var outcome = new EventActionOutcome();
+            await foreach (var evt in session.Connection.SendEventGeneratingActionAsync(newAction(), outcome, cancellationToken))
+                yield return evt;
+
+            if (outcome.Rejection is not { } rejection
+                || reportedBeforeAsk
+                || !rejection.StartsWith(UnknownCommandPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                yield break;
+            }
+
+            if (session.BudgetSpent())
+            {
+                VerbaraServerLog.ActionNeverRegistered(
+                    _logger, actionName, (int)NotRegisteredRetryBudget.TotalSeconds, rejection);
+                yield break;
+            }
+
+            if (!toldWaiting)
+            {
+                VerbaraServerLog.ActionNotRegisteredYet(
+                    _logger, actionName, (int)NotRegisteredRetryInterval.TotalMilliseconds);
+                toldWaiting = true;
+            }
+
+            if (!await session.WaitForFullyBootedAsync(cancellationToken))
+            {
+                // The session ended while the load waited for it: nothing more is asked on it.
+                yield break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The AMI session a load began on, as that load sees it: the session's <c>FullyBooted</c>, and the load's one budget
+    /// for asking a starting Asterisk again.
+    /// </summary>
+    private sealed class LoadSession(AmiConnection connection, TimeProvider clock)
+    {
+        // The timestamp of the load's first refusal from a starting Asterisk, on the clock's monotonic timestamp.
+        private long? _firstRefusalAt;
+
+        public AmiConnection Connection { get; } = connection;
+
+        /// <summary>
+        /// The session's report, read once, when the load begins. A reconnect gives the connection a new task, and a
+        /// report made on another session says nothing about the requests this load makes on its own.
+        /// </summary>
+        public Task FullyBooted { get; } = connection.FullyBooted;
+
+        /// <summary>
+        /// Whether the load's budget is spent. The first call starts it, at the load's first refusal from a starting
+        /// Asterisk, whichever request that was; every later refusal of the same load reads the same budget.
+        /// </summary>
+        public bool BudgetSpent()
+        {
+            _firstRefusalAt ??= clock.GetTimestamp();
+            return clock.GetElapsedTime(_firstRefusalAt.Value) >= NotRegisteredRetryBudget;
+        }
+
+        /// <summary>
+        /// Waits for the session's <c>FullyBooted</c> or for <see cref="NotRegisteredRetryInterval"/>, whichever comes
+        /// first. Returns <see langword="false"/> when the session ended during the wait. The interval's timer is
+        /// cancelled when the report wins, so no timer outlives the wait.
+        /// </summary>
+        public async Task<bool> WaitForFullyBootedAsync(CancellationToken cancellationToken)
+        {
+            using var intervalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var interval = Task.Delay(NotRegisteredRetryInterval, clock, intervalCts.Token);
+            if (await Task.WhenAny(FullyBooted, interval) != interval)
+                await intervalCts.CancelAsync();
+
+            cancellationToken.ThrowIfCancellationRequested();
+            return !FullyBooted.IsCanceled;
         }
     }
 

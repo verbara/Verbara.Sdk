@@ -57,9 +57,8 @@ internal sealed class Run : IAsyncDisposable
             }),
             _sockets,
             ConnectionLog);
-        Server = new VerbaraServer(Connection, ServerLog);
-        // VerbaraServer has no clock seam yet, so nothing on it reads Clock. Once it has one, the rig assigns Clock
-        // to it here, and the load's interval and budget run on the manual clock.
+        // The load's interval and budget run on the manual clock.
+        Server = new VerbaraServer(Connection, ServerLog) { TimeProvider = Clock };
         Connection.Reconnected += () => _reconnected.TrySetResult();
     }
 
