@@ -618,11 +618,15 @@ public sealed class BootWindowPremiseTests : IClassFixture<BootWindowPremiseTest
             while (true)
             {
                 var asterisk = new TcpClient { NoDelay = true };
+                var handedOver = false;
                 try
                 {
                     await asterisk.ConnectAsync(_host, _port, stopped);
                     if (await ReadBannerAsync(asterisk.GetStream(), stopped) is { } banner)
+                    {
+                        handedOver = true;
                         return (asterisk, banner);
+                    }
                 }
                 catch (SocketException)
                 {
@@ -632,8 +636,14 @@ public sealed class BootWindowPremiseTests : IClassFixture<BootWindowPremiseTest
                 {
                     // Asterisk dropped the connection before its banner; the next dial follows at the relay's cadence.
                 }
+                finally
+                {
+                    // Only the caller owns a connection that answered with the banner; any other ending,
+                    // a cancellation included, releases it here.
+                    if (!handedOver)
+                        asterisk.Dispose();
+                }
 
-                asterisk.Dispose();
                 await cadence.WaitForNextTickAsync(stopped);
             }
         }
