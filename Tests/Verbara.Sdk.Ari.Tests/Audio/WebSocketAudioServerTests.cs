@@ -940,8 +940,15 @@ public class WebSocketAudioServerTests
         // Act — a connection that waits for the key ends
         await third.CloseAsync();
 
-        // Assert
-        server.ActiveStreamCount.Should().Be(2, "the two connections still open are counted");
+        // Assert — it leaves the count and the list, and the id still resolves to the holder
+        using (new AssertionScope())
+        {
+            server.ActiveStreamCount.Should().Be(2, "the two connections still open are counted");
+            server.ActiveStreams.Should().HaveCount(2).And.NotContain(
+                third.Stream, "a connection whose ending has been processed is no longer listed");
+            server.GetStream("ch-count").Should().BeSameAs(
+                first.Stream, "the ending of a connection that did not hold the id leaves the holder in place");
+        }
     }
 
     [Fact]
