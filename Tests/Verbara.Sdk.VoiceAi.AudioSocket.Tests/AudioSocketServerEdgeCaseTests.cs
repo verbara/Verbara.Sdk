@@ -605,14 +605,12 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncDisposable
         var holder = await HandOverAndAwaitAnnouncementAsync(server, listener);
         server.ActiveSessionCount.Should().Be(1, "the handler announces a session only after registering it");
 
-        // The handler subscribed its release to the session when it created it, before this handler,
-        // and an event runs its handlers in subscription order: once this one runs, the release has.
-        var hungUp = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        holder.OnHangup += () => hungUp.TrySetResult();
+        // HungUp completes only after every OnHangup handler has returned and the release has run, so it
+        // (not a handler of this test's own) is the edge that orders the check below after the release.
 
         // Act
         await SendFrameAsync(holderPeer, AudioSocketFrameType.Hangup, []);
-        await hungUp.Task.WaitAsync(SignalTimeout);
+        await holder.HungUp.WaitAsync(SignalTimeout);
 
         // Assert
         server.ActiveSessionCount.Should().Be(0, "a session that hangs up releases the entry it holds");

@@ -37,7 +37,27 @@ public sealed class AudioSocketSession : IAsyncDisposable
     public bool IsConnected => _disposed == 0 && !_cts.IsCancellationRequested;
 
     /// <summary>Raised when the channel hangs up (from either side).</summary>
+    /// <remarks>
+    /// While the handlers run, the session still holds its channel id on the server that accepted it
+    /// and still counts as active there: a connection that presents the same id waits until every
+    /// handler has returned before it is served.
+    /// </remarks>
     public event Action? OnHangup;
+
+    private readonly TaskCompletionSource _hungUp = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// Completes once <see cref="OnHangup"/> has been raised, every handler has returned and
+    /// <see cref="Released"/> has run. A connection that presents the same channel id waits on this, so
+    /// it is served only after every hangup handler of this session, the consumer's included.
+    /// </summary>
+    internal Task HungUp => _hungUp.Task;
+
+    /// <summary>
+    /// Run once, after every <see cref="OnHangup"/> handler and before <see cref="HungUp"/> completes. The
+    /// registering server releases the session's registry entry here.
+    /// </summary>
+    internal Action? Released { get; set; }
 
     internal AudioSocketSession(
         Guid channelId,
@@ -131,6 +151,29 @@ public sealed class AudioSocketSession : IAsyncDisposable
         await TerminateAsync().ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Ends the connection from the server's side: a hangup frame if the transport still takes one, then
+    /// the teardown every ending runs. On Asterisk 20 and later, app_audiosocket reads the hangup frame
+    /// as the end of the AudioSocket turn and the call continues in the dialplan, where a bare close with
+    /// the caller's audio still unread resets the connection and fails the call. On Asterisk 18 any end
+    /// from the server fails the application, frame or not.
+    /// </summary>
+    internal async ValueTask EndFromServerAsync()
+    {
+        if (Volatile.Read(ref _disposed) == 0)
+        {
+            try
+            {
+                AudioSocketFrameCodec.WriteFrame(_writer, AudioSocketFrameType.Hangup, []);
+                await _writer.FlushAsync().ConfigureAwait(false);
+            }
+            catch (IOException) { /* the far end is already gone: nothing to tell it */ }
+            catch (ObjectDisposedException) { /* a teardown raced this one: the transport is closed */ }
+        }
+
+        await TerminateAsync().ConfigureAwait(false);
+    }
+
     private async Task ReadLoopAsync(CancellationToken ct)
     {
         try
@@ -200,8 +243,26 @@ public sealed class AudioSocketSession : IAsyncDisposable
     {
         if (Interlocked.CompareExchange(ref _hangupFired, 1, 0) == 0)
         {
-            _audioChannel.Writer.TryComplete();
-            OnHangup?.Invoke();
+            try
+            {
+                _audioChannel.Writer.TryComplete();
+                OnHangup?.Invoke();
+            }
+            finally
+            {
+                // The release follows every OnHangup handler, the consumer's included, and precedes
+                // HungUp: a connection presenting this channel id waits on HungUp, so it must find the
+                // entry already gone when it wakes, and must not be announced while a consumer keyed by
+                // channel id is still handling this session's hangup. A throwing handler still releases.
+                try
+                {
+                    Released?.Invoke();
+                }
+                finally
+                {
+                    _hungUp.TrySetResult();
+                }
+            }
         }
     }
 
