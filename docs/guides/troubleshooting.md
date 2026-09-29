@@ -118,9 +118,26 @@ See [High-Load Tuning Guide](high-load-tuning.md) for sizing recommendations.
 
 ### State lost after reconnect
 
-**Symptoms:** After AMI reconnect, channels/agents/queues are empty.
+**Symptoms:** After an AMI reconnect, an Asterisk restart or the application's start, channels, queues or agents are missing from `VerbaraServer`'s managers.
 
-**Expected behavior:** `VerbaraServer` clears and reloads all managers on reconnect via the `Reconnected` event. There may be a brief gap during reload.
+**Expected behavior:** `VerbaraServer.StartAsync` loads the current state from Asterisk, and the `Reconnected` event loads it again after every reconnect. A load asks for the channels (`Status`), the queues with their members and waiting callers (`QueueStatus`), and the agents (`Agents`). On a reload the channel table is reconciled against Asterisk's snapshot, so a call that ended during the outage ends, while the queues and the agents are cleared and loaded again. There may be a brief gap during reload.
+
+**Right after Asterisk starts.** Asterisk accepts an AMI login before its modules have loaded. Until app_queue has registered `QueueStatus` and app_agent_pool has registered `Agents`, it refuses them as an unknown command (`Response: Error`, `Message: Invalid/unknown command: …`), which is also its answer when the module is not loaded at all. A load does not take that refusal as "no queues" or "no agents":
+
+- It asks again once Asterisk reports `FullyBooted` on the AMI session. A refusal of a request sent after the report is final: the module is not loaded, and the load does not wait.
+- Asterisk sends `FullyBooted` only to an AMI user with `system` in `read`. For a user without it, the load asks again every 200 ms, and logs `[LIVE] QueueStatus not registered yet …` (or `Agents`) at Information.
+- The load stops asking 10 s after its first such refusal, logs `[LIVE] QueueStatus never registered …` (or `Agents`) at Warning, and completes without that state. The 10 s is spent once per load, however many of its requests are refused.
+
+So an AMI user without `system`, on a PBX where app_queue or app_agent_pool is not loaded, waits 10 s on every load: the start's and every reload's. Put `system` in the user's `read` line in `manager.conf` (`read = all` includes it) and the load does not wait there.
+
+Measured on 2026-09-28 against Asterisk 20.20.1, 22.9.0 and 23.4.1, with raw AMI sessions logged in as soon as the AMI port accepted after a container restart: `Agents` worked 50–111 ms after the login, `QueueStatus` 80–131 ms after it, and `FullyBooted` arrived 17–28 ms after `QueueStatus` worked. A load whose login lands in that window takes longer, by the time Asterisk still needs to finish starting.
+
+**When the AMI session ends during the load.** Asterisk may close a session it has just opened while it starts, or the network may drop it. The load then stops: it sends nothing more on that session, and it ends no call on a channel snapshot it did not finish reading.
+
+- With `AutoReconnect` on (the default) and the connection reconnecting, `StartAsync` returns without an exception and logs `[LIVE] Initial state load interrupted …` at Warning. The reload after the reconnect loads the state; until then the managers hold what the load had read. A reload cut short the same way logs `[LIVE] Reconnect reload interrupted …` at Warning, and the next reconnect reloads.
+- With `AutoReconnect` off, or once the reconnect has given up or the connection has been disconnected, `StartAsync` throws `AmiNotConnectedException`: nothing will reload the state.
+- `StartAsync` called before the connection is established (`Initial`, or `Connecting` while a connect attempt runs) throws `AmiNotConnectedException`, as it always did. Call it after `ConnectAsync` returns.
+- A direct call to `RequestInitialStateAsync` throws `AmiNotConnectedException` whenever its session ends before the load completes, reconnecting or not.
 
 ---
 
