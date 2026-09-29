@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.VoiceAi.Internal;
 using Verbara.Sdk.VoiceAi.Tts.Internal;
 using Microsoft.Extensions.Options;
 
@@ -25,6 +26,10 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
     private const int ReceiveBufferSize = 65536;
 
     private readonly CartesiaOptions _options;
+
+    // The clock this client's bounds on its vendor run on: the connect, and the wait for the vendor
+    // after the end of input. Settable by tests (via InternalsVisibleTo) to drive them on a manual clock.
+    internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
     /// <inheritdoc />
     public override string ProviderName => "Cartesia";
@@ -73,11 +78,10 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         ws.Options.SetRequestHeader("X-API-Key", _options.ApiKey);
         ws.Options.SetRequestHeader("Cartesia-Version", _options.ApiVersion);
 
-        using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
         try
         {
-            await ws.ConnectAsync(uri, connectCts.Token).ConfigureAwait(false);
+            await WebSocketConnectBound.ConnectAsync(
+                ws, uri, TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
         }
         catch (WebSocketException ex)
         {
@@ -94,15 +98,21 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         // SendAsync / CloseOutputAsync on the half-dead socket.
         using var sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
+        // The request is the end of input; from then on the vendor owes audio and `done`. This bounds
+        // how long it may stay silent before the synthesis is reported as failed: a vendor that never
+        // answered held the caller, and the pipeline above it, past the hangup (ADR-0050 E2c). It runs
+        // on this client's clock, so a test moves it rather than waits it out.
+        using var silence = new EndOfInputSilenceBound(EndOfInputSilenceBound.Default, TimeProvider, sessionCts.Token);
+
         // Fire-and-forget: send the synthesis request. Nothing follows it — see SendRequestAsync.
-        var sendTask = SendRequestAsync(ws, text, outputFormat, sessionCts.Token);
+        var sendTask = SendRequestAsync(ws, text, outputFormat, silence, sessionCts.Token);
 
         // Receive loop writes decoded audio to the channel, stops on `done`, throws on a failure.
         var receiveTask = Task.Run(async () =>
         {
             try
             {
-                await ReceiveFramesAsync(ws, channel.Writer, ProviderName, sessionCts.Token)
+                await ReceiveFramesAsync(ws, channel.Writer, ProviderName, silence, sessionCts.Token)
                     .ConfigureAwait(false);
                 channel.Writer.TryComplete();
             }
@@ -146,6 +156,7 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         ClientWebSocket ws,
         string text,
         AudioFormat outputFormat,
+        EndOfInputSilenceBound silence,
         CancellationToken ct)
     {
         var request = new CartesiaTtsRequest
@@ -182,6 +193,8 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         catch (OperationCanceledException) { return; }
         catch (WebSocketException) { return; }
 
+        silence.Arm();
+
         // The request IS the end of input for a non-continued synthesis, and it is the last thing
         // this method sends.
         //
@@ -200,6 +213,7 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         ClientWebSocket ws,
         ChannelWriter<ReadOnlyMemory<byte>> writer,
         string provider,
+        EndOfInputSilenceBound silence,
         CancellationToken ct)
     {
         var buf = new byte[ReceiveBufferSize];
@@ -210,8 +224,11 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
             ValueWebSocketReceiveResult result;
             try
             {
-                result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
+                result = await ws.ReceiveAsync(buf.AsMemory(), silence.Token).ConfigureAwait(false);
             }
+            // The vendor went silent after the end of input and never ended the session: the audio
+            // is incomplete (ADR-0050 E2c). Placed before the caller's arm, which it must not absorb.
+            catch (OperationCanceledException) when (silence.Expired) { throw silence.ToFailure(provider); }
             catch (OperationCanceledException) { break; }
             catch (WebSocketException ex)
             {
@@ -231,6 +248,10 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
                 if (closeFailure is not null) throw closeFailure;
                 break;
             }
+
+            // Every read restarts the bound, a fragment of a message still being assembled included:
+            // a vendor that is sending is not silent.
+            silence.Heard();
 
             // Assemble until the message is whole. The vendor sizes these frames, not this client,
             // and a loop that parsed each read as a complete message would hand JSON a truncated

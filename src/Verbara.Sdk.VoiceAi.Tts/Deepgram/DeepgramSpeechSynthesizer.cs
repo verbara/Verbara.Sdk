@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.VoiceAi.Internal;
 using Verbara.Sdk.VoiceAi.Tts.Internal;
 using Microsoft.Extensions.Options;
 
@@ -35,6 +36,10 @@ namespace Verbara.Sdk.VoiceAi.Tts.Deepgram;
 public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
 {
     private readonly DeepgramTtsOptions _options;
+
+    // The clock this client's bounds on its vendor run on: the connect, and the wait for the vendor
+    // after the end of input. Settable by tests (via InternalsVisibleTo) to drive them on a manual clock.
+    internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
     /// <inheritdoc />
     public override string ProviderName => "DeepgramTts";
@@ -75,11 +80,10 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
         // skipped under test.
         ws.Options.SetRequestHeader("Authorization", $"Token {_options.ApiKey}");
 
-        using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
         try
         {
-            await ws.ConnectAsync(uri, connectCts.Token).ConfigureAwait(false);
+            await WebSocketConnectBound.ConnectAsync(
+                ws, uri, TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
         }
         catch (WebSocketException ex)
         {
@@ -94,8 +98,14 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
         // cancel the session so any in-flight send unblocks.
         using var sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
+        // Once `Flush` is out, the vendor owes the audio and `Flushed`. This bounds how long it may stay
+        // silent before the synthesis is reported as failed: a vendor that never answered held the
+        // caller, and the pipeline above it, past the hangup (ADR-0050 E2c). It runs on this client's
+        // clock, so a test moves it rather than waits it out.
+        using var silence = new EndOfInputSilenceBound(EndOfInputSilenceBound.Default, TimeProvider, sessionCts.Token);
+
         // Fire-and-forget: send Speak + Flush messages, then send Close.
-        var sendTask = SendRequestAsync(ws, text, sessionCts.Token);
+        var sendTask = SendRequestAsync(ws, text, silence, sessionCts.Token);
 
         // Receive loop writes binary audio frames to the channel; stops on Flushed/Close — and
         // completes the writer with the failure when the session failed.
@@ -103,7 +113,7 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
         {
             try
             {
-                await ReceiveFramesAsync(ws, channel.Writer, ProviderName, sessionCts.Token)
+                await ReceiveFramesAsync(ws, channel.Writer, ProviderName, silence, sessionCts.Token)
                     .ConfigureAwait(false);
                 channel.Writer.TryComplete();
             }
@@ -143,6 +153,7 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
     private static async Task SendRequestAsync(
         ClientWebSocket ws,
         string text,
+        EndOfInputSilenceBound silence,
         CancellationToken ct)
     {
         // Speak and Flush are fire-and-forget request frames, and the receive loop owns this session's
@@ -164,6 +175,7 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
             await ws.SendAsync(
                 Encoding.UTF8.GetBytes(flushJson).AsMemory(),
                 WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+            silence.Arm();
         }
         catch (OperationCanceledException) { return; /* the session ended: nothing left to send */ }
         catch (WebSocketException) { return; /* peer aborted the connection mid-send */ }
@@ -191,6 +203,7 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
         ClientWebSocket ws,
         ChannelWriter<ReadOnlyMemory<byte>> writer,
         string provider,
+        EndOfInputSilenceBound silence,
         CancellationToken ct)
     {
         var buf = new byte[65536];
@@ -200,8 +213,11 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
             ValueWebSocketReceiveResult result;
             try
             {
-                result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
+                result = await ws.ReceiveAsync(buf.AsMemory(), silence.Token).ConfigureAwait(false);
             }
+            // The vendor went silent after the end of input and never ended the session: the audio
+            // is incomplete (ADR-0050 E2c). Placed before the caller's arm, which it must not absorb.
+            catch (OperationCanceledException) when (silence.Expired) { throw silence.ToFailure(provider); }
             // Cancellation is the caller's own instruction and never a provider failure
             // (ADR-0050 E6).
             catch (OperationCanceledException) { break; }
@@ -222,6 +238,9 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
                 if (closeFailure is not null) throw closeFailure;
                 break;
             }
+
+            // Every frame restarts the bound, whatever its type: a vendor that is sending is not silent.
+            silence.Heard();
 
             if (result.MessageType == WebSocketMessageType.Binary)
             {

@@ -136,8 +136,14 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
             {
                 var client = await AcceptAsync(ct);
                 backoff = InitialAcceptBackoff;
-                client.NoDelay = true;
 
+                // Nothing that can fail for this one connection runs between the accept and the
+                // hand-off, not even configuring the socket; the capacity check only reads a count
+                // and closes what it refuses. Configuring fails in the handler, which closes the
+                // connection and reports it as that connection's error. Here it would reach the catches
+                // below, which classify by type only: a SocketException would be logged as an accept
+                // failure and backed off for, with the socket left open, and an
+                // ObjectDisposedException would end the loop as if the server had been stopped.
                 if (_streams.Count >= _options.MaxConcurrentStreams)
                 {
                     client.Dispose();
@@ -316,6 +322,11 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
             WebSocketAudioSession? session = null;
             try
             {
+                // Configuring the socket and obtaining its stream are part of serving this connection,
+                // so they come first in this try: a failure of either (a socket that rejects the option,
+                // one already closed, one that is not connected) is reported once below as this
+                // connection's error, the finally finds no session, and the `using` closes the client.
+                client.NoDelay = true;
                 var stream = client.GetStream();
 
                 // Read HTTP upgrade request

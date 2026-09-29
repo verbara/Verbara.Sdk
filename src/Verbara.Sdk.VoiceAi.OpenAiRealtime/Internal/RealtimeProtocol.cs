@@ -5,10 +5,10 @@ internal static class RealtimeProtocol
 {
     // Inbound (OpenAI -> client)
     public const string SessionCreated                    = "session.created";
-    public const string ResponseAudioDelta                = "response.audio.delta";
-    public const string ResponseAudioDone                 = "response.audio.done";
-    public const string ResponseAudioTranscriptDelta      = "response.audio_transcript.delta";
-    public const string ResponseAudioTranscriptDone       = "response.audio_transcript.done";
+    public const string ResponseAudioDelta                = "response.output_audio.delta";
+    public const string ResponseAudioDone                 = "response.output_audio.done";
+    public const string ResponseAudioTranscriptDelta      = "response.output_audio_transcript.delta";
+    public const string ResponseAudioTranscriptDone       = "response.output_audio_transcript.done";
     public const string ResponseCreated                   = "response.created";
     public const string ResponseDone                      = "response.done";
     public const string ResponseCancelled                 = "response.cancelled";

@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.VoiceAi.Internal;
 using Verbara.Sdk.VoiceAi.Stt.Internal;
 using Microsoft.Extensions.Options;
 
@@ -28,6 +29,10 @@ namespace Verbara.Sdk.VoiceAi.Stt.Speechmatics;
 public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
 {
     private readonly SpeechmaticsOptions _options;
+
+    // The clock this client's bounds on its vendor run on: the connect, and the wait for the vendor
+    // after the end of input. Settable by tests (via InternalsVisibleTo) to drive them on a manual clock.
+    internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
     /// <inheritdoc />
     public override string ProviderName => "Speechmatics";
@@ -60,11 +65,10 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
 
         ApplyCredential(ws);
 
-        using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        connectCts.CancelAfter(TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds));
         try
         {
-            await ws.ConnectAsync(wsUri, connectCts.Token).ConfigureAwait(false);
+            await WebSocketConnectBound.ConnectAsync(
+                ws, wsUri, TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
         }
         catch (WebSocketException ex)
         {
@@ -112,8 +116,13 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
 
         var channel = Channel.CreateUnbounded<SpeechRecognitionResult>();
 
+        // Bounds the vendor's silence once `EndOfStream` is out: a vendor that never answers it no
+        // longer holds the caller, and the pipeline above it, past the hangup (ADR-0050 E2c). It runs
+        // on this client's clock, so a test moves it rather than waits it out.
+        using var silence = new EndOfInputSilenceBound(EndOfInputSilenceBound.Default, TimeProvider, ct);
+
         // Fire-and-forget: stream audio frames to the server as binary WebSocket messages.
-        var sendTask = SendLoopAsync(ws, audioFrames, ct);
+        var sendTask = SendLoopAsync(ws, audioFrames, silence, ct);
 
         // Receive loop writes transcripts to channel, then completes the writer — with the failure
         // when the session failed.
@@ -122,7 +131,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
         {
             try
             {
-                sawVendorFrame = await ReceiveLoopAsync(ws, channel.Writer, ProviderName, ct)
+                sawVendorFrame = await ReceiveLoopAsync(ws, channel.Writer, ProviderName, silence, ct)
                     .ConfigureAwait(false);
                 channel.Writer.TryComplete();
             }
@@ -157,6 +166,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
     private static async Task SendLoopAsync(
         ClientWebSocket ws,
         IAsyncEnumerable<ReadOnlyMemory<byte>> frames,
+        EndOfInputSilenceBound silence,
         CancellationToken ct)
     {
         try
@@ -187,6 +197,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
                 await ws.SendAsync(
                     Encoding.UTF8.GetBytes(endOfStreamJson).AsMemory(),
                     WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+                silence.Arm();
             }
         }
         catch (OperationCanceledException) { /* the caller's own instruction — not a failure (ADR-0050 E6) */ }
@@ -203,6 +214,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
         ClientWebSocket ws,
         ChannelWriter<SpeechRecognitionResult> writer,
         string provider,
+        EndOfInputSilenceBound silence,
         CancellationToken ct)
     {
         var buf = new byte[65536];
@@ -221,8 +233,11 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
             ValueWebSocketReceiveResult result;
             try
             {
-                result = await ws.ReceiveAsync(buf.AsMemory(), ct).ConfigureAwait(false);
+                result = await ws.ReceiveAsync(buf.AsMemory(), silence.Token).ConfigureAwait(false);
             }
+            // The vendor went silent after the end of input and never ended the session: the result
+            // is incomplete (ADR-0050 E2c). Placed before the caller's arm, which it must not absorb.
+            catch (OperationCanceledException) when (silence.Expired) { throw silence.ToFailure(provider); }
             // Cancellation is the caller's own instruction and never a provider failure
             // (ADR-0050 E6).
             catch (OperationCanceledException) { break; }
@@ -251,6 +266,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
             }
 
             sawVendorFrame = true;
+            silence.Heard();
             if (result.MessageType != WebSocketMessageType.Text) continue;
 
             var json = Encoding.UTF8.GetString(buf, 0, result.Count);

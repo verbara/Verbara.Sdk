@@ -1,8 +1,9 @@
 # Recordings — asterisk-ami
 
 Byte captures of the AMI stream a real Asterisk PBX sent to one manager client, one capture per
-Asterisk version for each of two runs: twelve call shapes (`call-shapes-*`) and seventeen queue
-shapes (`queue-shapes-*`). This suite replays them through the SDK's own parsing path, so a
+Asterisk version for each of three runs: twelve call shapes (`call-shapes-*`), seventeen queue
+shapes (`queue-shapes-*`), and four queue calls with the PBX's own state snapshots taken while they
+waited (`queue-reload-*`). This suite replays them through the SDK's own parsing path, so a
 call-session assertion made here is checked against what Asterisk actually sent rather than against
 what a test author believed it sends.
 
@@ -14,13 +15,19 @@ what a test author believed it sends.
 | `queue-shapes-asterisk-20.20.1.raw` | 20.20.1 | `Asterisk Call Manager/9.0.0` | 256 349 |
 | `queue-shapes-asterisk-22.9.0.raw` | 22.9.0 | `Asterisk Call Manager/11.0.0` | 256 350 |
 | `queue-shapes-asterisk-23.4.1.raw` | 23.4.1 | `Asterisk Call Manager/12.0.0` | 256 350 |
+| `queue-reload-asterisk-20.20.1.raw` | 20.20.1 | `Asterisk Call Manager/9.0.0` | 122 799 |
+| `queue-reload-asterisk-22.9.0.raw` | 22.9.0 | `Asterisk Call Manager/11.0.0` | 122 800 |
+| `queue-reload-asterisk-23.4.1.raw` | 23.4.1 | `Asterisk Call Manager/12.0.0` | 122 800 |
 
-Captured 2026-09-27. The `.gitattributes` rule `**/Recordings/**/*.raw binary` keeps the CRLF framing
-byte-exact; never open and re-save these files in an editor.
+The call and queue shapes were captured 2026-09-27, the reload captures 2026-09-28. The
+`.gitattributes` rule `**/Recordings/**/*.raw binary` keeps the CRLF framing byte-exact; never open
+and re-save these files in an editor.
 
 The sections from *Topology* to *What was changed from the raw capture* describe the call-shape
 captures. The queue-shape captures were made on a different topology and reduced differently; they
-are described in [The queue-shape captures](#the-queue-shape-captures).
+are described in [The queue-shape captures](#the-queue-shape-captures). The reload captures reuse the
+queue-shape topology with a few additions; they are described in
+[The reload captures](#the-reload-captures).
 
 ## Topology
 
@@ -487,3 +494,130 @@ left is byte-exact, CRLF framing included, apart from the bridge ids below.
 The reduction was checked by replaying the full capture, the reduced capture before the fill and
 the reduced capture after it: every shape scored the same in each (its `CallConnectedEvent`s,
 answered, abandoned, left waiting, and the exceptions the observer threw).
+
+## The reload captures
+
+Four queue calls, run one after another against Asterisk 20.20.1, 22.9.0 and 23.4.1, each with its
+own caller number. While a caller waited, the tap asked the PBX for the two snapshots
+`VerbaraServer.RequestInitialStateAsync` reads on a reload, `Status` and `QueueStatus`, so each file
+holds Asterisk's own answers beside the live events around them. A replay can then run the SDK's
+reload at the point where Asterisk returned a snapshot, answered by that snapshot, with the live
+frames of an outage withheld. Each file holds 360 frames after the banner line. They are replayed one
+call at a time by `AmiCaptureReplay.ReplayQueueReloadAsync`, which sets the session manager's clock
+from each frame's `Timestamp` and delivers only live frames: a frame that carries an `ActionID` is the
+tap's own marker or an answer to the tap's own action.
+
+### Topology and additions
+
+The topology, the dialplans, the queues and the agents are those of
+[The queue-shape captures](#the-queue-shape-captures), with these additions and nothing else:
+
+- `manager.conf`, `[general]`: `timestampevents = yes`. Every live event therefore carries a
+  `Timestamp` header, Asterisk's own time of the event in seconds with microseconds. The snapshot
+  answers (`Status`, `StatusComplete`, `QueueParams`, `QueueMember`, `QueueEntry`,
+  `QueueStatusComplete`) carry none.
+- `queues.conf`:
+
+  ```ini
+  [q-late](qdefaults)
+  member => Local/late@agents-late/n
+  ```
+
+- `extensions.conf`, in `[from-pstn]`:
+
+  ```ini
+  exten => 4021,1,Queue(q-late)
+   same => n,Hangup()
+  exten => 4022,1,Queue(q-late,,,,4)
+   same => n,Wait(3)
+   same => n,Queue(q-late)
+   same => n,Hangup()
+  exten => 4023,1,Queue(q-noans,,,,4)
+   same => n,Queue(q-late)
+   same => n,Hangup()
+  exten => 4024,1,Queue(q-late,,,,1)
+   same => n,Queue(q-late)
+   same => n,Hangup()
+  ```
+
+  and a new context for the member of `q-late`, which rings 10 s and answers:
+
+  ```ini
+  [agents-late]
+  exten => late,1,Ringing()
+   same => n,Wait(10)
+   same => n,Answer()
+   same => n,Wait(60)
+   same => n,Hangup()
+  ```
+
+### How the capture was driven
+
+A raw TCP tap, not the SDK, logged in to the PBX's manager interface (a `read = all` account) with
+`Events: on` and wrote every byte the PBX sent on that connection to a file. No SDK host was
+connected. Each call is an AMI `Originate` on the far end, `PJSIP/<exten>@dut` with the application
+`Wait(4)` and the caller id `<id> <number>`: the PBX answers the caller only when the queue connects
+it, so the far end hangs up 4 s after the connect. The next call starts once every channel of the
+current one has gone and 2 s passed with no `Newchannel` or `Hangup`.
+
+A snapshot is three actions the tap sends on its own connection, in this order, each with its own
+`ActionID`:
+
+1. `UserEvent` with `UserEvent: W2qrSnapshot` and `Snapshot: <id>`, `ActionID: w2qr-<id>-mark`.
+   Asterisk echoes it as an `Event: UserEvent` frame with its own `Timestamp`, and copies the
+   `ActionID` and `Snapshot` headers into it. That `Timestamp` is the instant of the snapshot: the last
+   live event before it can be seconds older, because a caller waiting in a queue emits nothing.
+2. `Status`, `ActionID: w2qr-<id>-st`.
+3. `QueueStatus` with no `Queue` header, so every queue is listed, as the SDK asks on a reload;
+   `ActionID: w2qr-<id>-qs`.
+
+Each snapshot is triggered by an event of the call as the tap received it, never by the time since
+the originate. In every file each snapshot's answer frames are contiguous: no live event falls
+between its first and its last frame. `w2qr` is only the name of the measurement.
+
+### The four calls
+
+| Id | Caller | Extension | Asterisk, in wire order | Snapshots |
+|----|--------|-----------|-------------------------|-----------|
+| `a` | 5552101 | 4021 | `QueueCallerJoin(q-late)` → `QueueCallerLeave(q-late)` → `AgentConnect(q-late)`, `HoldTime: 10` | `a1`, 3 s after the join: the caller's `QueueEntry` in `q-late`, `Wait: 3` |
+| `b` | 5552102 | 4022 | `QueueCallerJoin(q-late)` → `QueueCallerAbandon(q-late)`, `HoldTime: 4` → `QueueCallerLeave(q-late)` → `QueueCallerJoin(q-late)` → `QueueCallerLeave(q-late)` → `AgentConnect(q-late)`, `HoldTime: 10` | `b1`, 1 s after the first `QueueCallerLeave`: no `QueueEntry` for the caller (its `Status` shows `Application: Wait`); `b2`, 2 s after the second join: `q-late`, `Wait: 2` |
+| `c` | 5552103 | 4023 | `QueueCallerJoin(q-noans)` → `QueueCallerAbandon(q-noans)`, `HoldTime: 4` → `QueueCallerLeave(q-noans)` → `QueueCallerJoin(q-late)` → `QueueCallerLeave(q-late)` → `AgentConnect(q-late)`, `HoldTime: 10` | `c1`, 2 s after the join to `q-late`: `q-late`, `Wait: 2` |
+| `d` | 5552104 | 4024 | `QueueCallerJoin(q-late)` → `QueueCallerAbandon(q-late)`, `HoldTime: 1` → `QueueCallerLeave(q-late)` → `QueueCallerJoin(q-late)` → `QueueCallerLeave(q-late)` → `AgentConnect(q-late)`, `HoldTime: 10` | `d1`, 1 s after the second join: `q-late`, `Wait: 1` |
+
+The order and every value in the table are the same in the three files. Asterisk's verdicts, one
+`AgentConnect` or `QueueCallerAbandon` per visit: `a` 1 connect and 0 abandons, `b` 1 and 1, `c` 1
+and 1 (the abandon in `q-noans`), `d` 1 and 1. Every `QueueEntry` in every snapshot carries `Wait`.
+
+The snapshot's reported start of the caller's current visit, the marker's `Timestamp` minus `Wait`,
+falls between 0.0004 s and 0.0014 s after that visit's `QueueCallerJoin` in every snapshot of every
+file. For `d`, the shortest loop (a 1 s timeout straight back into the same queue), that start is
+1.0018 s (20.20.1), 1.0022 s (22.9.0) and 1.0018 s (23.4.1) after the call's first
+`QueueCallerJoin`; for `b` it is 7.007 s, 7.006 s and 7.008 s.
+
+### What was changed from the raw capture
+
+Each raw capture held 645 frames after the banner, about 251 KB. It was reduced by removing whole
+frames, so every frame that is left is byte-exact, CRLF framing included, apart from the bridge ids
+below.
+
+- **Kept** (the same counts in each version): the banner line; every frame of a type
+  `VerbaraServer`'s event observer dispatches — `Newchannel` 17, `Newstate` 19, `Hangup` 17,
+  `DialBegin` 7, `DialEnd` 10, `BridgeCreate` 4, `BridgeEnter` 8, `BridgeLeave` 8, `BridgeDestroy` 4,
+  `QueueCallerJoin` 7, `QueueCallerLeave` 7, `QueueMemberStatus` 16, `DeviceStateChange` 53,
+  `AgentConnect` 4, `AgentComplete` 4; app_queue's verdict and member frames, which the observer does
+  not dispatch — `QueueCallerAbandon` 3, `AgentCalled` 7, `AgentRingNoAnswer` 3; the five snapshot
+  markers (`UserEvent` 5); and every frame of the five snapshot answers — the three `Response`
+  frames of each snapshot (15), `Status` 13, `StatusComplete` 5, `QueueParams` 55, `QueueMember` 60,
+  `QueueEntry` 4, `QueueStatusComplete` 5. The dispatched set was read from the observer's `switch`
+  when the files were reduced.
+- **Removed** (the same counts in each version, 285 frames): `VarSet` 181, `Newexten` 42,
+  `NewCallerid` 13, `NewConnectedLine` 13, `HangupRequest` 10, `SoftHangupRequest` 10, `DialState` 7,
+  `LocalBridge` 6, `FullyBooted` 1, `SuccessfulAuth` 1, and the login `Response` 1. `SuccessfulAuth`
+  carries a container address, the manager account name and a manager session id.
+- **Replaced:** each of the 4 distinct `BridgeUniqueid` values is replaced by a single-character fill
+  of the same length, in order of first appearance: `11111111-1111-1111-1111-111111111111` through
+  `44444444-…`, for the recording redaction check. 24 frames carry one.
+
+The reduction was checked by reading the raw and the reduced capture with the same script: for every
+call, the lifecycle frames in order with their `Timestamp`, `HoldTime` and verdicts, and for every
+snapshot its marker, the caller's `Status` and `QueueEntry`, and the reported start, are identical.

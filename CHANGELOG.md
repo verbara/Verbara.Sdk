@@ -67,6 +67,27 @@ All notable changes to this project will be documented in this file.
   URI, not one per call. A server that was over-admitting after such an ending now refuses at its
   configured limit. No public API changes.
 
+### Fixed — a transport failure under an AudioSocket session looked like a hangup, and one accepted connection's failure could leak it or stop its server accepting (#337)
+
+- **A transport failure under a live ARI AudioSocket session is logged and counted.** The session
+  swallowed an `IOException` from its socket, so a connection reset mid-call and a normal hangup
+  produced the same `Connected → Disconnected` sequence with no log and no metric. The session now logs
+  the failure at Warning and counts it on `audio.transport.failures` (meter `Verbara.Sdk.Ari.Audio`).
+  It still ends as `Disconnected`, so a consumer that handles the ending sees no change.
+- **An accepted connection whose setup fails is closed and reported as that connection's error.** In
+  the ARI outbound listener, the ARI AudioSocket and WebSocket audio servers and the FastAGI server,
+  configuring an accepted socket ran in the accept loop, and in the AudioSocket and FastAGI servers so
+  did taking its stream. A connection that failed there leaked its socket, or ended the accept loop for
+  every later caller, because the loop read its `ObjectDisposedException` as the server's own stop. The
+  setup now runs in the connection's handler, which closes the connection and reports it as a
+  connection error; only the server's stop ends the loop. In FastAGI such a connection is not counted
+  as a failed script, and not as an accepted connection.
+- **`IAriOutboundListener.ActiveConnectionCount` no longer counts a connection an observer rejected.**
+  An `OnConnectionAccepted` observer that threw left the closed connection counted; the listener now
+  releases it and removes it from the count.
+- These are guarantees for a socket that fails, not a report of an outage: no natural trigger was found
+  on Linux (0 of 60 attempts), and every red run used a socket built to fail.
+
 ### Fixed — BREAKING: an AMI heartbeat timeout hung the connection instead of reconnecting (#327)
 
 - **A Ping left unanswered past `HeartbeatTimeout` now ends the connection the way a peer-side close
@@ -233,6 +254,30 @@ All notable changes to this project will be documented in this file.
   handler sees a queue call at app_queue's connect rather than at the agent's bridge. No public API
   changes.
 
+### Fixed — a reconnect counted a caller still waiting in a queue as an abandon and a second offer, and a caller first seen by a reload lost the wait before it (#348)
+
+- **A caller a reconnect finds still waiting in its queue keeps its visit.** After an AMI reconnect, the reload
+  re-announced every caller waiting in a queue as a new join: `QueueSessionTracker` closed the visit it held as
+  abandoned, counted a second offer and measured the wait from the reload. Such a caller is now counted once,
+  with its wait from the join the SDK saw, and `CallQueuedEvent` is not published for it again.
+- **A caller the SDK first learns of from a reload has its queue wait counted from when Asterisk says it
+  joined**: the reload instant minus the `Wait` Asterisk reports for it. Its SLA wait, its SLA check and its
+  `sessions.wait_time` sample include the time it waited before the reload, and land within one second of
+  Asterisk's own `HoldTime`. When Asterisk reports no wait, the visit starts at the reload, as before. For such a
+  caller, `CallQueuedEvent.Timestamp` is now the time Asterisk reports it joined, which can be earlier than the
+  session's `CreatedAt` and its `CallStartedEvent`.
+- **A caller that re-joined the same queue while the SDK was disconnected is counted as a new visit** when the
+  reported wait places the re-join more than 2 s after the start of the visit the SDK held. The first visit is
+  counted abandoned, as Asterisk counts a queue timeout, and the answered visit's wait runs from the re-join.
+- **What remains:** when Asterisk reports no wait, or a re-join within 2 s of the visit the SDK held, a caller
+  that left and re-joined the same queue during the outage is counted as one visit with its wait from the first
+  join, where Asterisk counts two and an abandon. Queue visits that began and ended entirely during an outage are
+  not counted.
+- This restores what the tracker is published to do, "Tracks aggregate queue performance metrics from session
+  domain events", the aggregate queue SLA it has carried since 1.7.0, and what `sessions.wait_time` is published
+  as, "Queue wait time". `CallConnectedEvent.WaitTime`, `CallSession.WaitTime` and `CallSession.QueuedAt` keep
+  their meaning, and Live's queue metrics are unchanged. No public API changes.
+
 ### Fixed — the push bus never counted an event dropped by a full buffer (#328)
 
 - `asterisk.push.events.dropped` now increments, tagged `reason=buffer_full`, once for every event a
@@ -243,6 +288,51 @@ All notable changes to this project will be documented in this file.
 - A publish that loses the race with disposal is now tagged `reason=writer_closed`, where it was
   tagged `buffer_full`. The `filter_rejected` tag the metric's documentation listed was never emitted
   and is no longer documented.
+
+### Fixed — BREAKING: a speech vendor that went silent after the end of input held the call (#346)
+
+- **The eight WebSocket speech clients fail when the vendor goes silent after the end of input.** The
+  Deepgram, AssemblyAI, Cartesia and Speechmatics recognizers and the Cartesia, Deepgram, ElevenLabs and
+  LMNT synthesizers now end with `SpeechProviderFailureException` (`Signal = Transport`) when the vendor
+  sends nothing for 10 seconds after the end of input; every frame it sends restarts the wait. Before,
+  such a vendor held the stream open indefinitely: in the Voice AI pipeline, with any one of the eight
+  providers mute, the session handler ran on after the caller hung up and after the AudioSocket server
+  stopped (8 of 8). This restores what the SDK publishes: `ISessionHandler.HandleSessionAsync` "Runs the
+  session until the AudioSocket disconnects or `ct` is cancelled", `VoiceAiPipeline` "Returns when the
+  session ends or the token is cancelled", and 2.5.0's "a provider failure now reaches the caller instead
+  of an empty stream".
+- **What a consumer observes changes.** A single gap of more than 10 seconds after the end of input,
+  which used to complete, now fails as a transport failure (measured on Cartesia TTS: a 12-second gap
+  completed before and fails at 10 seconds now). A vendor that keeps sending, however slowly, is not cut.
+
+### Fixed — a speech vendor, the OpenAI Realtime bridge or ARI that never answered a connect held the call (#347)
+
+- **A connection upgrade the far end never answers fails like a failed connect.** The eight WebSocket
+  speech clients and the OpenAI Realtime bridge now end a connect that gets no answer within its bound
+  with `SpeechProviderFailureException` (`Signal = Handshake`), the failure a refused upgrade already
+  takes. Before, six of the clients threw an `OperationCanceledException` with the caller's token still
+  live, which their contract reserves for a cancellation the caller asked for ("Cancellation is never
+  reported as a provider failure", as 2.5.0 put it), and the Deepgram recognizer, the ElevenLabs
+  synthesizer and the bridge waited without limit, holding the session handler after the hangup and
+  after the AudioSocket server stopped.
+- **`AriClient` keeps reconnecting when a reconnect dial is never answered.** A dial with no answer now
+  ends within 5 seconds and the loop dials again, as `AutoReconnect` ("Auto-reconnect WebSocket on
+  disconnect") and `MaxReconnectAttempts` ("0 = unlimited") document. Before, one unanswered dial ended
+  reconnection for good.
+- **`AriClient.DisconnectAsync` and `DisposeAsync` return within 5 seconds** when Asterisk does not
+  answer the close, and the client reads `Disconnected`. Before, 97 of 100 immediate disconnects stayed
+  `Disconnecting`.
+
+### Changed — `AriOutboundConnection.DisconnectAsync` waits at most 5 seconds for the close (#347)
+
+- A graceful close that the far end does not answer now gives up after 5 seconds. Before, it waited
+  until the listener's `ConnectionIdleTimeout` (5 minutes by default) closed the connection. Nothing
+  published promised either wait, so this is a change, not a fix, and it breaks nothing.
+
+### Added — `ConnectTimeoutSeconds` on `DeepgramOptions` and `ElevenLabsOptions` (#347)
+
+- The connect bound of the Deepgram recognizer and the ElevenLabs synthesizer, in seconds, default 5 —
+  the same option and default the other six speech clients already carry.
 
 ### Fixed — an originate's dial events threw inside the AMI dispatcher (#331)
 
@@ -267,6 +357,46 @@ All notable changes to this project will be documented in this file.
   on the old package and restores, builds and runs on the new one. ASP.NET Core projects and the
   packages that depend on `Data.Npgsql` (`Sessions.Postgres`, `Cluster.Postgres`, `Hosting`) were not
   affected, because they already resolve the higher version.
+
+### Fixed — the OpenAI Realtime bridge speaks the API OpenAI serves, and a session ends when the caller hangs up (#338)
+
+- **Sessions open again.** The bridge sent the retired beta opt-in header and the beta session shape,
+  and OpenAI now refuses both: every session was closed with `4000` (`beta_api_shape_disabled`) and the
+  caller heard nothing. The bridge now opens sessions in the generally available shape and reads the
+  generally available event names.
+- **The default model is one OpenAI serves.** The default moves from `gpt-4o-realtime-preview`, which
+  the endpoint closes with `4004` (`model_not_found`), to `gpt-realtime`. The README and the example
+  follow. A consumer that pins a retired model id must pick a listed one.
+- **`VadMode.Disabled` disables turn detection.** The bridge omitted the setting, which leaves the
+  vendor's default detection on; it now sends `"turn_detection": null`.
+- **A session ends when the caller hangs up.** The bridge now closes toward the vendor and waits at
+  most 10 seconds for its answer, with the wait paused while a function call runs. Before, it waited on
+  the vendor indefinitely, and the session never completed or recorded a duration. This restores what
+  2.5.3 documents: "the session still ends when its input loop ends".
+- **A function call still running at the hangup runs to its end without failing the session.** Its
+  result is no longer sent to a vendor session that is closing, which used to fail the session, and
+  `RealtimeFunctionCalledEvent` is still published.
+- **When reading the caller fails, the bridge closes toward the vendor by the same rule** and the
+  session ends as a failure with the read's error. Before, it waited on the vendor until the host
+  cancelled it.
+
+### Fixed — BREAKING: a Realtime session that OpenAI closes with a failure code ends as a failure (#338)
+
+- As soon as the vendor closes with a failure code, `HandleSessionAsync` throws
+  `SpeechProviderFailureException` (`Signal = CloseCode`, `Code` = the vendor's close code) and the
+  session counts in `openai_realtime.sessions.failed`, published as "Total OpenAI Realtime sessions that
+  failed with an error". Before, such a session counted in `openai_realtime.sessions.completed`,
+  published as "completed successfully", and did not end until the caller hung up.
+- **What a consumer observes changes.** This narrows the 2.5.3 bullet "a close frame from the far end
+  still count[s] as completed" to a normal close (`1000`) and a close that carries no code; `1001` and
+  every other code are now failures. A dashboard of failed Realtime sessions rises by the sessions the
+  vendor ended with an error.
+
+### Added — `openai_realtime.sessions.close_unanswered` (#338)
+
+- `RealtimeMetrics.SessionsCloseUnanswered` counts sessions whose close the vendor did not answer
+  within 10 seconds after the caller hung up. Each is also counted in
+  `openai_realtime.sessions.completed`, and the bridge logs a Warning for it.
 
 ## [2.6.0] - 2026-09-24
 

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
+using System.Threading.Channels;
 using Verbara.Sdk.Ari.Audio;
 using Verbara.Sdk.Ari.Client;
 using Verbara.Sdk.Ari.Diagnostics;
@@ -18,6 +19,12 @@ namespace Verbara.Sdk.Ari.Tests.Client;
 public sealed class AriClientStateTests
 {
     private static readonly TimeSpan WaitLimit = TimeSpan.FromSeconds(10);
+
+    // The reconnect loop's dial bound, as the requirement states it.
+    private static readonly TimeSpan ReconnectDialBound = TimeSpan.FromSeconds(5);
+
+    // How long a disconnect waits for the far end to answer its close, as the requirement states it.
+    private static readonly TimeSpan CloseBound = TimeSpan.FromSeconds(5);
 
     private static AriClient CreateClient()
     {
@@ -549,6 +556,281 @@ public sealed class AriClientStateTests
     }
 
     [Fact]
+    public async Task ReconnectLoop_ShouldDialAgain_WhenAReconnectUpgradeIsNeverAnswered()
+    {
+        // Connected, the events socket drops, the first reconnect dial is held unanswered and the
+        // second is answered. Before the bound the loop sat on the first dial for good: one attempt,
+        // Reconnecting, never Connected again even after the far end recovered.
+        var clock = new FakeTimeProvider();
+        await using var peer = new ReconnectPeer(answer: dial => dial >= 2);
+        var sut = new AriClient(ReconnectOptions(peer.Port), NullLogger<AriClient>.Instance)
+        {
+            TimeProvider = clock,
+        };
+
+        try
+        {
+            await sut.ConnectAsync();
+            await peer.NextDialAsync();
+
+            // The dial's bound is on the clock before its request goes out, so moving the clock now
+            // runs it out: the far end has had its five seconds.
+            clock.Advance(ReconnectDialBound);
+
+            var reconnected = await WaitForAsync(
+                () => peer.ReconnectDials == 2 && sut.State == AriConnectionState.Connected, WaitLimit);
+
+            using (new AssertionScope())
+            {
+                reconnected.Should().BeTrue("a dial the far end never answers must end, so the loop dials again");
+                peer.ReconnectDials.Should().Be(2);
+                sut.State.Should().Be(AriConnectionState.Connected);
+            }
+        }
+        finally
+        {
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ReconnectLoop_ShouldGiveUpAfterMaxAttempts_WhenEveryReconnectUpgradeIsNeverAnswered()
+    {
+        // Every reconnect dial is held unanswered. A dial that runs out is a failed attempt like a
+        // refused one, so the loop reaches MaxReconnectAttempts and gives up. Before the bound it never
+        // left its first dial.
+        var clock = new FakeTimeProvider();
+        var logger = new RecordingLogger();
+        await using var peer = new ReconnectPeer(answer: _ => false);
+        var sut = new AriClient(ReconnectOptions(peer.Port, maxReconnectAttempts: 2), logger)
+        {
+            TimeProvider = clock,
+        };
+
+        try
+        {
+            await sut.ConnectAsync();
+
+            // Each dial's bound is on the clock before its request goes out: read what it was armed
+            // with, then run it out.
+            List<TimeSpan?> bounds = [];
+            for (var dial = 1; dial <= 2; dial++)
+            {
+                await peer.NextDialAsync();
+                bounds.Add(clock.TimersCreated.TryRead(out var bound) ? bound.DueTime : null);
+                clock.Advance(ReconnectDialBound);
+            }
+
+            // The loop ends on its own, at MaxReconnectAttempts; nothing here cancels it.
+            await sut.EventLoop!.WaitAsync(WaitLimit);
+
+            using (new AssertionScope())
+            {
+                sut.State.Should().Be(AriConnectionState.Faulted, "the loop gave up after its last attempt");
+                peer.ReconnectDials.Should().Be(2, "two expired dials use up both attempts, and no third is made");
+                bounds.Should().Equal(
+                    [ReconnectDialBound, ReconnectDialBound], "each reconnect dial is bounded at five seconds");
+                logger.Entries
+                    .Where(e => e.EventId.Name == "Reconnecting")
+                    .Select(e => e.Properties.Single(p => p.Key == "Attempt").Value)
+                    .Should().Equal([1, 2], "an expired dial counts as an attempt, like a refused one");
+                logger.Entries
+                    .Where(e => e.EventId.Name == "WebSocketError"
+                        && e.Exception is WebSocketException { InnerException: TimeoutException })
+                    .Should().HaveCount(2, "each expired dial is logged as a failed connection");
+                logger.Entries.Should().ContainSingle(e => e.EventId.Name == "ReconnectGaveUp")
+                    .Which.Properties.Should().ContainSingle(p => p.Key == "MaxAttempts")
+                    .Which.Value.Should().Be(2);
+            }
+        }
+        finally
+        {
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ShouldStopReconnecting_WhenAReconnectUpgradeIsHeld()
+    {
+        // The reconnect loop is inside a dial the far end never answers. Disposal cancels that dial
+        // itself and does not wait for the dial's bound, so the clock is never moved.
+        var clock = new FakeTimeProvider();
+        var logger = new RecordingLogger();
+        await using var peer = new ReconnectPeer(answer: _ => false);
+        var sut = new AriClient(ReconnectOptions(peer.Port), logger)
+        {
+            TimeProvider = clock,
+        };
+
+        try
+        {
+            await sut.ConnectAsync();
+            await peer.NextDialAsync();
+        }
+        finally
+        {
+            await sut.DisposeAsync().AsTask().WaitAsync(WaitLimit);
+        }
+
+        using (new AssertionScope())
+        {
+            sut.EventLoop!.IsCompleted.Should().BeTrue("disposal returns once the reconnect loop has ended");
+            peer.ReconnectDials.Should().Be(1, "a disposed client dials no more");
+            logger.Entries
+                .Where(e => e.Exception is WebSocketException { InnerException: TimeoutException })
+                .Should().BeEmpty("a dial the caller's own disposal ended is not one the far end left unanswered");
+        }
+    }
+
+    [Fact]
+    public async Task DisconnectAsync_ShouldReturnWithinTheCloseBound_WhenAsteriskNeverAnswersTheClose()
+    {
+        // Disconnected right after connecting, while the events loop is still handling Asterisk's first
+        // event, the client finds the events socket open, sends its close frame and waits for Asterisk to
+        // answer it. This Asterisk never does. Before the bound that wait had no end: DisconnectAsync
+        // never returned and the state stayed Disconnecting.
+        var clock = new FakeTimeProvider();
+        using var logger = new EventLoopHoldingLogger();
+        await using var peer = new ClosePeer(answerClose: false);
+        var sut = new AriClient(CloseOptions(peer.Port), logger)
+        {
+            TimeProvider = clock,
+        };
+
+        try
+        {
+            await sut.ConnectAsync();
+            await logger.HeldAsync();
+            var disconnect = sut.DisconnectAsync().AsTask();
+            logger.Release();
+
+            // The bound is on the clock before the close frame goes out: once Asterisk holds the frame,
+            // read what the bound was armed with, then run it out.
+            await peer.CloseSeen.WaitAsync(WaitLimit);
+            var armed = clock.TimersCreated.TryRead(out var bound) ? bound.DueTime : (TimeSpan?)null;
+            clock.Advance(CloseBound);
+            await disconnect.WaitAsync(WaitLimit);
+
+            using (new AssertionScope())
+            {
+                armed.Should().Be(CloseBound, "the wait for Asterisk's answer is bounded at five seconds, on the client's clock");
+                sut.State.Should().Be(
+                    AriConnectionState.Disconnected, "a close the far end never answers ends at the bound, as a disconnect");
+            }
+        }
+        finally
+        {
+            logger.Release();
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ShouldReturnWithinTheCloseBound_WhenAsteriskNeverAnswersTheClose()
+    {
+        // Disposal disconnects first, so it waited on the same unanswered close, for good.
+        var clock = new FakeTimeProvider();
+        using var logger = new EventLoopHoldingLogger();
+        await using var peer = new ClosePeer(answerClose: false);
+        var sut = new AriClient(CloseOptions(peer.Port), logger)
+        {
+            TimeProvider = clock,
+        };
+
+        Task dispose;
+        try
+        {
+            await sut.ConnectAsync();
+            await logger.HeldAsync();
+            dispose = sut.DisposeAsync().AsTask();
+        }
+        finally
+        {
+            logger.Release();
+        }
+
+        await peer.CloseSeen.WaitAsync(WaitLimit);
+        var armed = clock.TimersCreated.TryRead(out var bound) ? bound.DueTime : (TimeSpan?)null;
+        clock.Advance(CloseBound);
+        await dispose.WaitAsync(WaitLimit);
+
+        using (new AssertionScope())
+        {
+            armed.Should().Be(CloseBound, "disposal disconnects first, and that close is bounded too");
+            sut.State.Should().Be(AriConnectionState.Disconnected, "disposal returned through an ordinary disconnect");
+        }
+    }
+
+    [Fact]
+    public async Task DisconnectAsync_ShouldNotWaitForTheCloseBound_WhenAsteriskAnswersTheClose()
+    {
+        // An Asterisk that answers the close ends the wait by itself: the clock is never moved.
+        var clock = new FakeTimeProvider();
+        using var logger = new EventLoopHoldingLogger();
+        await using var peer = new ClosePeer(answerClose: true);
+        var sut = new AriClient(CloseOptions(peer.Port), logger)
+        {
+            TimeProvider = clock,
+        };
+
+        try
+        {
+            await sut.ConnectAsync();
+            await logger.HeldAsync();
+            var disconnect = sut.DisconnectAsync().AsTask();
+            logger.Release();
+
+            await disconnect.WaitAsync(WaitLimit);
+
+            using (new AssertionScope())
+            {
+                peer.CloseSeen.IsCompleted.Should().BeTrue("the client sent its close frame, and the far end answered it");
+                sut.State.Should().Be(AriConnectionState.Disconnected, "the far end answered the close");
+            }
+        }
+        finally
+        {
+            logger.Release();
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task DisconnectAsync_ShouldStopWaitingForTheClose_WhenTheCallerCancelsItsToken()
+    {
+        // The bound joins the caller's token, it does not replace it: a caller that cancels while
+        // Asterisk has not answered still ends the wait at once, with the clock never moved.
+        var clock = new FakeTimeProvider();
+        using var logger = new EventLoopHoldingLogger();
+        using var caller = new CancellationTokenSource();
+        await using var peer = new ClosePeer(answerClose: false);
+        var sut = new AriClient(CloseOptions(peer.Port), logger)
+        {
+            TimeProvider = clock,
+        };
+
+        try
+        {
+            await sut.ConnectAsync();
+            await logger.HeldAsync();
+            var disconnect = sut.DisconnectAsync(caller.Token).AsTask();
+            logger.Release();
+
+            await peer.CloseSeen.WaitAsync(WaitLimit);
+            await caller.CancelAsync();
+            await disconnect.WaitAsync(WaitLimit);
+
+            sut.State.Should().Be(
+                AriConnectionState.Disconnected, "a caller that stops waiting for the close still gets an ordinary disconnect");
+        }
+        finally
+        {
+            logger.Release();
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
     public async Task State_ShouldBeInitial_WhenNewClientCreated()
     {
         await using var sut = CreateClient();
@@ -579,6 +861,266 @@ public sealed class AriClientStateTests
     /// </summary>
     private static byte[] RefusalBytes(string status) =>
         Encoding.ASCII.GetBytes($"HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+
+    /// <summary>
+    /// Options for the reconnect tests: auto-reconnect on, and no backoff, so the loop's next dial
+    /// follows a failed one at once and nothing in the loop waits on the wall clock.
+    /// </summary>
+    private static IOptions<AriClientOptions> ReconnectOptions(int port, int maxReconnectAttempts = 0) =>
+        Options.Create(new AriClientOptions
+        {
+            BaseUrl = $"http://127.0.0.1:{port}",
+            Username = "asterisk",
+            Password = "asterisk",
+            Application = "test-app",
+            ReconnectInitialDelay = TimeSpan.Zero,
+            ReconnectMaxDelay = TimeSpan.Zero,
+            MaxReconnectAttempts = maxReconnectAttempts,
+        });
+
+    /// <summary>Options for the close tests: the defaults, pointed at <paramref name="port"/>.</summary>
+    private static IOptions<AriClientOptions> CloseOptions(int port) =>
+        Options.Create(new AriClientOptions
+        {
+            BaseUrl = $"http://127.0.0.1:{port}",
+            Username = "asterisk",
+            Password = "asterisk",
+            Application = "test-app",
+        });
+
+    /// <summary>
+    /// The Asterisk side of the reconnect tests. It answers the caller's dial and drops it at once,
+    /// which starts the client's reconnect loop, then takes every reconnect dial in turn: it counts
+    /// it, reads its upgrade request, answers it only when <c>answer</c> says so, and publishes its
+    /// number on <see cref="NextDialAsync"/>. A dial it does not answer is held open, never refused,
+    /// until the peer is disposed. An answered dial is dropped as soon as the client sends anything on
+    /// it, its close frame included, so no disposal waits on a close answer this peer never gives.
+    /// </summary>
+    private sealed class ReconnectPeer : IAsyncDisposable
+    {
+        private readonly TcpListener _server = new(IPAddress.Loopback, 0);
+        private readonly CancellationTokenSource _stop = new();
+        private readonly Channel<int> _dialed = Channel.CreateUnbounded<int>();
+        private readonly List<TcpClient> _connections = [];
+        private readonly List<Task> _answered = [];
+        private readonly Func<int, bool> _answer;
+        private readonly Task _run;
+        private int _reconnectDials;
+
+        public ReconnectPeer(Func<int, bool> answer)
+        {
+            _answer = answer;
+            _server.Start();
+            Port = ((IPEndPoint)_server.LocalEndpoint).Port;
+            _run = Task.Run(RunAsync);
+        }
+
+        public int Port { get; }
+
+        /// <summary>How many reconnect dials reached this peer. The caller's own dial is not counted.</summary>
+        public int ReconnectDials => Volatile.Read(ref _reconnectDials);
+
+        /// <summary>
+        /// The number of the next reconnect dial, once its upgrade request has been read (and, for an
+        /// answered dial, answered). Faults with <see cref="TimeoutException"/> when none comes.
+        /// </summary>
+        public Task<int> NextDialAsync() => _dialed.Reader.ReadAsync().AsTask().WaitAsync(WaitLimit);
+
+        public async ValueTask DisposeAsync()
+        {
+            await _stop.CancelAsync();
+            await _run.ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            lock (_connections)
+            {
+                foreach (var connection in _connections)
+                    connection.Dispose();
+            }
+
+            foreach (var answered in _answered)
+                await answered.ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+
+            _server.Stop();
+            _stop.Dispose();
+        }
+
+        private async Task RunAsync()
+        {
+            var ct = _stop.Token;
+
+            // The caller's dial: answered, then dropped, which is what starts the reconnect loop.
+            using (var first = await _server.AcceptTcpClientAsync(ct))
+            {
+                var stream = first.GetStream();
+                var (wsKey, _) = await WebSocketAudioServer.ReadUpgradeRequestAsync(stream, ct);
+                await WebSocketAudioServer.SendUpgradeResponseAsync(stream, wsKey!, ct);
+            }
+
+            while (!ct.IsCancellationRequested)
+            {
+                var dial = await _server.AcceptTcpClientAsync(ct);
+                lock (_connections)
+                    _connections.Add(dial);
+
+                var number = Interlocked.Increment(ref _reconnectDials);
+                var stream = dial.GetStream();
+                var (wsKey, _) = await WebSocketAudioServer.ReadUpgradeRequestAsync(stream, ct);
+                if (_answer(number))
+                {
+                    await WebSocketAudioServer.SendUpgradeResponseAsync(stream, wsKey!, ct);
+                    _answered.Add(DropOnFirstByteAsync(dial, ct));
+                }
+
+                _dialed.Writer.TryWrite(number);
+            }
+        }
+
+        private static async Task DropOnFirstByteAsync(TcpClient connection, CancellationToken ct)
+        {
+            // What arrives, or whether anything does, does not matter: the first byte, an end of
+            // stream or an abort all mean the client is done with this connection.
+            var received = new byte[1];
+            try
+            {
+                _ = await connection.GetStream().ReadAsync(received, ct);
+            }
+            catch (IOException)
+            {
+                // The client aborted the socket instead of closing it: the connection is already gone.
+            }
+
+            connection.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The Asterisk side of the close tests. It answers the caller's dial, sends one event, and then
+    /// only watches the connection for the client's close frame: it publishes its arrival on
+    /// <see cref="CloseSeen"/> and answers it only when told to. A close it does not answer is held,
+    /// with the connection open, until the peer is disposed.
+    /// </summary>
+    private sealed class ClosePeer : IAsyncDisposable
+    {
+        private static readonly byte[] FirstEvent =
+            Encoding.UTF8.GetBytes("""{"type":"StasisStart","application":"test-app"}""");
+
+        private readonly TcpListener _server = new(IPAddress.Loopback, 0);
+        private readonly CancellationTokenSource _stop = new();
+        private readonly TaskCompletionSource _closeSeen = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly bool _answerClose;
+        private readonly Task _run;
+
+        public ClosePeer(bool answerClose)
+        {
+            _answerClose = answerClose;
+            _server.Start();
+            Port = ((IPEndPoint)_server.LocalEndpoint).Port;
+            _run = Task.Run(RunAsync);
+        }
+
+        public int Port { get; }
+
+        /// <summary>Completes when the client's close frame has arrived.</summary>
+        public Task CloseSeen => _closeSeen.Task;
+
+        public async ValueTask DisposeAsync()
+        {
+            await _stop.CancelAsync();
+            await _run.ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            _server.Stop();
+            _stop.Dispose();
+        }
+
+        private async Task RunAsync()
+        {
+            var ct = _stop.Token;
+
+            using var connection = await _server.AcceptTcpClientAsync(ct);
+            var stream = connection.GetStream();
+            var (wsKey, _) = await WebSocketAudioServer.ReadUpgradeRequestAsync(stream, ct);
+            await WebSocketAudioServer.SendUpgradeResponseAsync(stream, wsKey!, ct);
+
+            using var ws = WebSocket.CreateFromStream(stream, new WebSocketCreationOptions { IsServer = true });
+            await ws.SendAsync(FirstEvent, WebSocketMessageType.Text, endOfMessage: true, ct);
+
+            var buffer = new byte[1024];
+            try
+            {
+                ValueWebSocketReceiveResult result;
+                do
+                {
+                    result = await ws.ReceiveAsync(buffer.AsMemory(), ct);
+                }
+                while (result.MessageType != WebSocketMessageType.Close);
+            }
+            catch (WebSocketException)
+            {
+                // The client dropped the connection without a close frame: a disconnect that finds its
+                // events loop inside a receive aborts the socket instead of closing it. There is no close
+                // to see or to answer.
+                return;
+            }
+
+            _closeSeen.TrySetResult();
+            if (_answerClose)
+            {
+                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "bye", ct);
+                return;
+            }
+
+            // Never answered: the connection stays open, with the close unanswered, until disposal.
+            var released = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            await using (ct.Register(static state => ((TaskCompletionSource)state!).TrySetResult(), released))
+            {
+                await released.Task;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Holds the client's events loop, once, where it logs the first event it received: after that
+    /// receive has completed and before the next one starts. A disconnect made while the loop is held
+    /// finds the events socket open and sends its close frame, every time. Made while the loop sits
+    /// inside a receive, the same disconnect aborts the socket and sends none, so without the hold the
+    /// test would depend on which of the two threads got there first. Everything else is discarded.
+    /// </summary>
+    private sealed class EventLoopHoldingLogger : ILogger<AriClient>, IDisposable
+    {
+        private readonly TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly ManualResetEventSlim _released = new();
+        private int _holds;
+
+        /// <summary>Completes once the events loop is held. Faults with <see cref="TimeoutException"/> when it never is.</summary>
+        public Task HeldAsync() => _held.Task.WaitAsync(WaitLimit);
+
+        /// <summary>Lets the events loop go on. Idempotent.</summary>
+        public void Release() => _released.Set();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (eventId.Name != "EventReceived" || Interlocked.Exchange(ref _holds, 1) != 0)
+                return;
+
+            _held.TrySetResult();
+
+            // Bounded, so a test that fails before it releases the loop cannot hold it for good.
+            _released.Wait(WaitLimit);
+        }
+
+        public void Dispose()
+        {
+            _released.Set();
+            _released.Dispose();
+        }
+    }
 
     /// <summary>
     /// Keeps what the client logged. <see cref="Entries"/> hands out a copy taken under the write lock.

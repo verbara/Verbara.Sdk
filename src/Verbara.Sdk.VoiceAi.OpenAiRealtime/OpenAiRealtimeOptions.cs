@@ -10,9 +10,17 @@ public sealed class OpenAiRealtimeOptions
     [Required]
     public string ApiKey { get; set; } = string.Empty;
 
-    /// <summary>OpenAI Realtime model identifier (required).</summary>
+    /// <summary>
+    /// OpenAI Realtime model identifier (required). Defaults to <c>gpt-realtime</c>, the vendor's
+    /// generally available alias.
+    /// </summary>
+    /// <remarks>
+    /// A preview or dated identifier is retired on the vendor's schedule, and the endpoint closes a
+    /// session that asks for a model it no longer serves with <c>4004</c> (<c>model_not_found</c>).
+    /// Set this to pin another identifier the vendor lists.
+    /// </remarks>
     [Required]
-    public string Model { get; set; } = "gpt-4o-realtime-preview";
+    public string Model { get; set; } = "gpt-realtime";
 
     /// <summary>Voice for TTS output. Defaults to <c>alloy</c>.</summary>
     public string Voice { get; set; } = "alloy";

@@ -47,7 +47,12 @@ public sealed class AssemblyAiOptions
     /// </summary>
     public int EndOfTurnConfidenceThreshold { get; set; } = 800;
 
-    /// <summary>WebSocket connect timeout in seconds.</summary>
+    /// <summary>
+    /// How long, in whole seconds, the WebSocket connect (the TCP dial, TLS and the HTTP upgrade) may
+    /// take before the stream fails with a <see cref="SpeechProviderFailureException"/> whose
+    /// <see cref="SpeechProviderFailureException.Signal"/> is <see cref="SpeechProviderFailureSignal.Handshake"/>,
+    /// the failure a refused upgrade also takes. Must be positive. Defaults to 5.
+    /// </summary>
     public int ConnectTimeoutSeconds { get; set; } = 5;
 }
 

@@ -28,4 +28,13 @@ internal static partial class RealtimeLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[{ChannelId}] OpenAI error: {ErrorMessage}")]
     public static partial void OpenAiError(ILogger logger, Guid channelId, string errorMessage);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "[{ChannelId}] OpenAI closed the socket: {CloseStatus} {CloseDescription}")]
+    public static partial void VendorClosed(ILogger logger, Guid channelId, int closeStatus, string closeDescription);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[{ChannelId}] OpenAI did not answer the close within {BoundMs} ms after the caller hung up (the bound pauses while a function runs); the session ended without the vendor's close code")]
+    public static partial void CloseUnanswered(ILogger logger, Guid channelId, double boundMs);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "[{ChannelId}] Function '{FunctionName}' returned after the caller hung up; its result was not sent")]
+    public static partial void FunctionResultNotSent(ILogger logger, Guid channelId, string functionName);
 }
