@@ -1,0 +1,6248 @@
+Asterisk Call Manager/11.0.0
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633830.356961
+Channel: PJSIP/pstn-00000000
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.0
+Linkedid: 1790633830.0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633830.357144
+Device: Queue:q-late
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1790633830.357160
+Channel: PJSIP/pstn-00000000
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.0
+Linkedid: 1790633830.0
+Queue: q-late
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633830.357223
+Channel: Local/late@agents-late-00000000;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 1
+Uniqueid: 1790633830.1
+Linkedid: 1790633830.0
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633830.357239
+Channel: Local/late@agents-late-00000000;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 1
+Uniqueid: 1790633830.2
+Linkedid: 1790633830.0
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1790633830.357338
+Channel: PJSIP/pstn-00000000
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.0
+Linkedid: 1790633830.0
+DestChannel: Local/late@agents-late-00000000;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 4021
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552101
+DestConnectedLineName: QRA
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4021
+DestPriority: 1
+DestUniqueid: 1790633830.1
+DestLinkedid: 1790633830.0
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1790633830.357345
+Channel: PJSIP/pstn-00000000
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.0
+Linkedid: 1790633830.0
+DestChannel: Local/late@agents-late-00000000;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 4021
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: late
+DestPriority: 1
+DestUniqueid: 1790633830.1
+DestLinkedid: 1790633830.0
+DialString: Local/late@agents-late/n
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633830.357410
+Channel: Local/late@agents-late-00000000;1
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 4021
+CallerIDName: <unknown>
+ConnectedLineNum: 5552101
+ConnectedLineName: QRA
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.1
+Linkedid: 1790633830.0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633830.357498
+Device: Local/late@agents-late
+State: INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633830.357548
+Queue: q-late
+MemberName: Local/late@agents-late/n
+Interface: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633830.357565
+Device: Queue:q-late_avail
+State: NOT_INUSE
+
+Response: Success
+ActionID: w2qr-a1-mark
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1790633833.357626
+UserEvent: W2qrSnapshot
+ActionID: w2qr-a1-mark
+Snapshot: a1
+
+Response: Success
+ActionID: w2qr-a1-st
+EventList: start
+Message: Channel status will follow
+
+Event: Status
+Privilege: Call
+Channel: Local/late@agents-late-00000000;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: 4021
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 2
+Uniqueid: 1790633830.2
+Linkedid: 1790633830.0
+Type: Local
+DNID: 
+EffectiveConnectedLineNum: 4021
+EffectiveConnectedLineName: <unknown>
+TimeToHangup: 0
+BridgeID: 
+Application: Wait
+Data: 10
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 3
+ActionID: w2qr-a1-st
+
+Event: Status
+Privilege: Call
+Channel: Local/late@agents-late-00000000;1
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 4021
+CallerIDName: <unknown>
+ConnectedLineNum: 5552101
+ConnectedLineName: QRA
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.1
+Linkedid: 1790633830.0
+Type: Local
+DNID: 
+EffectiveConnectedLineNum: 5552101
+EffectiveConnectedLineName: QRA
+TimeToHangup: 0
+BridgeID: 
+Application: AppQueue
+Data: (Outgoing Line)
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 3
+ActionID: w2qr-a1-st
+
+Event: Status
+Privilege: Call
+Channel: PJSIP/pstn-00000000
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.0
+Linkedid: 1790633830.0
+Type: PJSIP
+DNID: 4021
+EffectiveConnectedLineNum: <unknown>
+EffectiveConnectedLineName: <unknown>
+TimeToHangup: 0
+BridgeID: 
+Application: Queue
+Data: q-late
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 3
+ActionID: w2qr-a1-st
+
+Event: StatusComplete
+ActionID: w2qr-a1-st
+EventList: Complete
+ListItems: 3
+Items: 3
+
+Response: Success
+ActionID: w2qr-a1-qs
+EventList: start
+Message: Queue status will follow
+
+Event: QueueParams
+Queue: q-ringall
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueMember
+Queue: q-ringall
+Name: PJSIP/agent1
+Location: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueMember
+Queue: q-ringall
+Name: PJSIP/agent2
+Location: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueParams
+Queue: q-confirm
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueMember
+Queue: q-confirm
+Name: Agent1 Confirm
+Location: Local/agent1@from-queue-confirm/n
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueParams
+Queue: q-pjsip3
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueMember
+Queue: q-pjsip3
+Name: PJSIP/agent3
+Location: PJSIP/agent3
+StateInterface: PJSIP/agent3
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueParams
+Queue: q-pjsip
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueMember
+Queue: q-pjsip
+Name: PJSIP/agent1
+Location: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueParams
+Queue: q-agent-opt
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueMember
+Queue: q-agent-opt
+Name: Agent One
+Location: Local/1001@agent-request
+StateInterface: Agent:1001
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueParams
+Queue: q-late
+Max: 0
+Strategy: ringall
+Calls: 1
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueMember
+Queue: q-late
+Name: Local/late@agents-late/n
+Location: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueEntry
+Queue: q-late
+Position: 1
+Channel: PJSIP/pstn-00000000
+Uniqueid: 1790633830.0
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: unknown
+ConnectedLineName: unknown
+Wait: 3
+Priority: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueParams
+Queue: q-freepbx
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueMember
+Queue: q-freepbx
+Name: Agent1 FreePBX
+Location: Local/agent1@from-queue/n
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueParams
+Queue: q-agent-ack
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueMember
+Queue: q-agent-ack
+Name: Agent Two
+Location: Local/1002@agent-request/n
+StateInterface: Agent:1002
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueParams
+Queue: q-noans
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueMember
+Queue: q-noans
+Name: PJSIP/agent2
+Location: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueParams
+Queue: q-agent
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueMember
+Queue: q-agent
+Name: Agent One
+Location: Local/1001@agent-request/n
+StateInterface: Agent:1001
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueParams
+Queue: q-local
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueMember
+Queue: q-local
+Name: Local/agent@agents/n
+Location: Local/agent@agents/n
+StateInterface: Local/agent@agents/n
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-a1-qs
+
+Event: QueueStatusComplete
+ActionID: w2qr-a1-qs
+EventList: Complete
+ListItems: 24
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633840.363702
+Channel: Local/late@agents-late-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: 4021
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 3
+Uniqueid: 1790633830.2
+Linkedid: 1790633830.0
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633840.363708
+Channel: Local/late@agents-late-00000000;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4021
+CallerIDName: <unknown>
+ConnectedLineNum: 5552101
+ConnectedLineName: QRA
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.1
+Linkedid: 1790633830.0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633840.363714
+Device: Local/late@agents-late
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633840.363716
+Device: Local/late@agents-late
+State: INUSE
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790633840.363731
+Channel: PJSIP/pstn-00000000
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.0
+Linkedid: 1790633830.0
+DestChannel: Local/late@agents-late-00000000;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 4021
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552101
+DestConnectedLineName: QRA
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4021
+DestPriority: 1
+DestUniqueid: 1790633830.1
+DestLinkedid: 1790633830.0
+DialStatus: ANSWER
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633840.363747
+Device: Queue:q-late
+State: NOT_INUSE
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1790633840.363762
+Channel: PJSIP/pstn-00000000
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.0
+Linkedid: 1790633830.0
+Queue: q-late
+Position: 1
+Count: 0
+
+Event: AgentConnect
+Privilege: agent,all
+Timestamp: 1790633840.363805
+Channel: PJSIP/pstn-00000000
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.0
+Linkedid: 1790633830.0
+DestChannel: Local/late@agents-late-00000000;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 4021
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552101
+DestConnectedLineName: QRA
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4021
+DestPriority: 1
+DestUniqueid: 1790633830.1
+DestLinkedid: 1790633830.0
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+HoldTime: 10
+RingTime: 10
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633840.363848
+Channel: PJSIP/pstn-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.0
+Linkedid: 1790633830.0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633840.363858
+Device: PJSIP/pstn
+State: INUSE
+
+Event: BridgeCreate
+Privilege: call,all
+Timestamp: 1790633840.364174
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1790633840.364279
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/late@agents-late-00000000;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4021
+CallerIDName: <unknown>
+ConnectedLineNum: 5552101
+ConnectedLineName: QRA
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.1
+Linkedid: 1790633830.0
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1790633840.364322
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/pstn-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.0
+Linkedid: 1790633830.0
+
+Event: AgentComplete
+Privilege: agent,all
+Timestamp: 1790633844.368323
+Channel: PJSIP/pstn-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.0
+Linkedid: 1790633830.0
+DestChannel: Local/late@agents-late-00000000;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 4021
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552101
+DestConnectedLineName: QRA
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4021
+DestPriority: 1
+DestUniqueid: 1790633830.1
+DestLinkedid: 1790633830.0
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+HoldTime: 10
+TalkTime: 4
+Reason: caller
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1790633844.368340
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/pstn-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.0
+Linkedid: 1790633830.0
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1790633844.368345
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: Local/late@agents-late-00000000;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4021
+CallerIDName: <unknown>
+ConnectedLineNum: 5552101
+ConnectedLineName: QRA
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.1
+Linkedid: 1790633830.0
+
+Event: BridgeDestroy
+Privilege: call,all
+Timestamp: 1790633844.368369
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633844.368398
+Channel: Local/late@agents-late-00000000;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4021
+CallerIDName: <unknown>
+ConnectedLineNum: 5552101
+ConnectedLineName: QRA
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.1
+Linkedid: 1790633830.0
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633844.368420
+Channel: PJSIP/pstn-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4021
+Priority: 1
+Uniqueid: 1790633830.0
+Linkedid: 1790633830.0
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633844.368423
+Channel: Local/late@agents-late-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552101
+CallerIDName: QRA
+ConnectedLineNum: 4021
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 4
+Uniqueid: 1790633830.2
+Linkedid: 1790633830.0
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633844.368459
+Device: Local/late@agents-late
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633844.368461
+Device: PJSIP/pstn
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633844.368464
+Device: Local/late@agents-late
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633844.368483
+Queue: q-late
+MemberName: Local/late@agents-late/n
+Interface: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1790633844
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633846.373866
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633846.374002
+Device: Queue:q-late
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1790633846.374010
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+Queue: q-late
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633846.374066
+Channel: Local/late@agents-late-00000001;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 1
+Uniqueid: 1790633846.4
+Linkedid: 1790633846.3
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633846.374077
+Channel: Local/late@agents-late-00000001;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 1
+Uniqueid: 1790633846.5
+Linkedid: 1790633846.3
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1790633846.374139
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+DestChannel: Local/late@agents-late-00000001;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 4022
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552102
+DestConnectedLineName: QRB
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4022
+DestPriority: 1
+DestUniqueid: 1790633846.4
+DestLinkedid: 1790633846.3
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1790633846.374145
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+DestChannel: Local/late@agents-late-00000001;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 4022
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: late
+DestPriority: 1
+DestUniqueid: 1790633846.4
+DestLinkedid: 1790633846.3
+DialString: Local/late@agents-late/n
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633846.374186
+Channel: Local/late@agents-late-00000001;1
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 4022
+CallerIDName: <unknown>
+ConnectedLineNum: 5552102
+ConnectedLineName: QRB
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633846.4
+Linkedid: 1790633846.3
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633846.374208
+Device: Local/late@agents-late
+State: INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633846.374221
+Queue: q-late
+MemberName: Local/late@agents-late/n
+Interface: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1790633844
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: AgentRingNoAnswer
+Privilege: agent,all
+Timestamp: 1790633850.375714
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+DestChannel: Local/late@agents-late-00000001;1
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 4022
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552102
+DestConnectedLineName: QRB
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4022
+DestPriority: 1
+DestUniqueid: 1790633846.4
+DestLinkedid: 1790633846.3
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+RingTime: 4000
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790633850.375745
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+DestChannel: Local/late@agents-late-00000001;1
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 4022
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552102
+DestConnectedLineName: QRB
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4022
+DestPriority: 1
+DestUniqueid: 1790633846.4
+DestLinkedid: 1790633846.3
+DialStatus: NOANSWER
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790633850.375751
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+DestChannel: Local/late@agents-late-00000001;1
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 4022
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552102
+DestConnectedLineName: QRB
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4022
+DestPriority: 1
+DestUniqueid: 1790633846.4
+DestLinkedid: 1790633846.3
+DialStatus: CANCEL
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633850.375763
+Channel: Local/late@agents-late-00000001;1
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 4022
+CallerIDName: <unknown>
+ConnectedLineNum: 5552102
+ConnectedLineName: QRB
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633846.4
+Linkedid: 1790633846.3
+Cause: 0
+Cause-txt: Unknown
+
+Event: QueueCallerAbandon
+Privilege: agent,all
+Timestamp: 1790633850.375795
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+Queue: q-late
+Position: 1
+OriginalPosition: 1
+HoldTime: 4
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633850.375815
+Channel: Local/late@agents-late-00000001;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: 4022
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 2
+Uniqueid: 1790633846.5
+Linkedid: 1790633846.3
+Cause: 0
+Cause-txt: Unknown
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633850.375837
+Device: Local/late@agents-late
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633850.375838
+Device: Local/late@agents-late
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633850.375839
+Device: Queue:q-late
+State: NOT_INUSE
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1790633850.375843
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+Queue: q-late
+Position: 1
+Count: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633850.375859
+Queue: q-late
+MemberName: Local/late@agents-late/n
+Interface: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1790633844
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Response: Success
+ActionID: w2qr-b1-mark
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1790633851.376701
+UserEvent: W2qrSnapshot
+ActionID: w2qr-b1-mark
+Snapshot: b1
+
+Response: Success
+ActionID: w2qr-b1-st
+EventList: start
+Message: Channel status will follow
+
+Event: Status
+Privilege: Call
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 2
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+Type: PJSIP
+DNID: 4022
+EffectiveConnectedLineNum: <unknown>
+EffectiveConnectedLineName: <unknown>
+TimeToHangup: 0
+BridgeID: 
+Application: Wait
+Data: 3
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 5
+ActionID: w2qr-b1-st
+
+Event: StatusComplete
+ActionID: w2qr-b1-st
+EventList: Complete
+ListItems: 1
+Items: 1
+
+Response: Success
+ActionID: w2qr-b1-qs
+EventList: start
+Message: Queue status will follow
+
+Event: QueueParams
+Queue: q-ringall
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueMember
+Queue: q-ringall
+Name: PJSIP/agent1
+Location: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueMember
+Queue: q-ringall
+Name: PJSIP/agent2
+Location: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueParams
+Queue: q-confirm
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueMember
+Queue: q-confirm
+Name: Agent1 Confirm
+Location: Local/agent1@from-queue-confirm/n
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueParams
+Queue: q-pjsip3
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueMember
+Queue: q-pjsip3
+Name: PJSIP/agent3
+Location: PJSIP/agent3
+StateInterface: PJSIP/agent3
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueParams
+Queue: q-pjsip
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueMember
+Queue: q-pjsip
+Name: PJSIP/agent1
+Location: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueParams
+Queue: q-agent-opt
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueMember
+Queue: q-agent-opt
+Name: Agent One
+Location: Local/1001@agent-request
+StateInterface: Agent:1001
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueParams
+Queue: q-late
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 10
+TalkTime: 4
+Completed: 1
+Abandoned: 1
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueMember
+Queue: q-late
+Name: Local/late@agents-late/n
+Location: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1790633844
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueParams
+Queue: q-freepbx
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueMember
+Queue: q-freepbx
+Name: Agent1 FreePBX
+Location: Local/agent1@from-queue/n
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueParams
+Queue: q-agent-ack
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueMember
+Queue: q-agent-ack
+Name: Agent Two
+Location: Local/1002@agent-request/n
+StateInterface: Agent:1002
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueParams
+Queue: q-noans
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueMember
+Queue: q-noans
+Name: PJSIP/agent2
+Location: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueParams
+Queue: q-agent
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueMember
+Queue: q-agent
+Name: Agent One
+Location: Local/1001@agent-request/n
+StateInterface: Agent:1001
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueParams
+Queue: q-local
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueMember
+Queue: q-local
+Name: Local/agent@agents/n
+Location: Local/agent@agents/n
+StateInterface: Local/agent@agents/n
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b1-qs
+
+Event: QueueStatusComplete
+ActionID: w2qr-b1-qs
+EventList: Complete
+ListItems: 23
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633853.379027
+Device: Queue:q-late
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1790633853.379034
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 3
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+Queue: q-late
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633853.379065
+Channel: Local/late@agents-late-00000002;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 1
+Uniqueid: 1790633853.6
+Linkedid: 1790633846.3
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633853.379082
+Channel: Local/late@agents-late-00000002;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 1
+Uniqueid: 1790633853.7
+Linkedid: 1790633846.3
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1790633853.379155
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 3
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+DestChannel: Local/late@agents-late-00000002;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 4022
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552102
+DestConnectedLineName: QRB
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4022
+DestPriority: 1
+DestUniqueid: 1790633853.6
+DestLinkedid: 1790633846.3
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1790633853.379163
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 3
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+DestChannel: Local/late@agents-late-00000002;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 4022
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: late
+DestPriority: 1
+DestUniqueid: 1790633853.6
+DestLinkedid: 1790633846.3
+DialString: Local/late@agents-late/n
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633853.379176
+Channel: Local/late@agents-late-00000002;1
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 4022
+CallerIDName: <unknown>
+ConnectedLineNum: 5552102
+ConnectedLineName: QRB
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633853.6
+Linkedid: 1790633846.3
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633853.379205
+Device: Local/late@agents-late
+State: INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633853.379219
+Queue: q-late
+MemberName: Local/late@agents-late/n
+Interface: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1790633844
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Response: Success
+ActionID: w2qr-b2-mark
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1790633855.379954
+UserEvent: W2qrSnapshot
+ActionID: w2qr-b2-mark
+Snapshot: b2
+
+Response: Success
+ActionID: w2qr-b2-st
+EventList: start
+Message: Channel status will follow
+
+Event: Status
+Privilege: Call
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 3
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+Type: PJSIP
+DNID: 4022
+EffectiveConnectedLineNum: <unknown>
+EffectiveConnectedLineName: <unknown>
+TimeToHangup: 0
+BridgeID: 
+Application: Queue
+Data: q-late
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 9
+ActionID: w2qr-b2-st
+
+Event: Status
+Privilege: Call
+Channel: Local/late@agents-late-00000002;1
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 4022
+CallerIDName: <unknown>
+ConnectedLineNum: 5552102
+ConnectedLineName: QRB
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633853.6
+Linkedid: 1790633846.3
+Type: Local
+DNID: 
+EffectiveConnectedLineNum: 5552102
+EffectiveConnectedLineName: QRB
+TimeToHangup: 0
+BridgeID: 
+Application: AppQueue
+Data: (Outgoing Line)
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 2
+ActionID: w2qr-b2-st
+
+Event: Status
+Privilege: Call
+Channel: Local/late@agents-late-00000002;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: 4022
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 2
+Uniqueid: 1790633853.7
+Linkedid: 1790633846.3
+Type: Local
+DNID: 
+EffectiveConnectedLineNum: 4022
+EffectiveConnectedLineName: <unknown>
+TimeToHangup: 0
+BridgeID: 
+Application: Wait
+Data: 10
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 2
+ActionID: w2qr-b2-st
+
+Event: StatusComplete
+ActionID: w2qr-b2-st
+EventList: Complete
+ListItems: 3
+Items: 3
+
+Response: Success
+ActionID: w2qr-b2-qs
+EventList: start
+Message: Queue status will follow
+
+Event: QueueParams
+Queue: q-ringall
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueMember
+Queue: q-ringall
+Name: PJSIP/agent1
+Location: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueMember
+Queue: q-ringall
+Name: PJSIP/agent2
+Location: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueParams
+Queue: q-confirm
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueMember
+Queue: q-confirm
+Name: Agent1 Confirm
+Location: Local/agent1@from-queue-confirm/n
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueParams
+Queue: q-pjsip3
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueMember
+Queue: q-pjsip3
+Name: PJSIP/agent3
+Location: PJSIP/agent3
+StateInterface: PJSIP/agent3
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueParams
+Queue: q-pjsip
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueMember
+Queue: q-pjsip
+Name: PJSIP/agent1
+Location: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueParams
+Queue: q-agent-opt
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueMember
+Queue: q-agent-opt
+Name: Agent One
+Location: Local/1001@agent-request
+StateInterface: Agent:1001
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueParams
+Queue: q-late
+Max: 0
+Strategy: ringall
+Calls: 1
+Holdtime: 10
+TalkTime: 4
+Completed: 1
+Abandoned: 1
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueMember
+Queue: q-late
+Name: Local/late@agents-late/n
+Location: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1790633844
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueEntry
+Queue: q-late
+Position: 1
+Channel: PJSIP/pstn-00000001
+Uniqueid: 1790633846.3
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: unknown
+ConnectedLineName: unknown
+Wait: 2
+Priority: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueParams
+Queue: q-freepbx
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueMember
+Queue: q-freepbx
+Name: Agent1 FreePBX
+Location: Local/agent1@from-queue/n
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueParams
+Queue: q-agent-ack
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueMember
+Queue: q-agent-ack
+Name: Agent Two
+Location: Local/1002@agent-request/n
+StateInterface: Agent:1002
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueParams
+Queue: q-noans
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueMember
+Queue: q-noans
+Name: PJSIP/agent2
+Location: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueParams
+Queue: q-agent
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueMember
+Queue: q-agent
+Name: Agent One
+Location: Local/1001@agent-request/n
+StateInterface: Agent:1001
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueParams
+Queue: q-local
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueMember
+Queue: q-local
+Name: Local/agent@agents/n
+Location: Local/agent@agents/n
+StateInterface: Local/agent@agents/n
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-b2-qs
+
+Event: QueueStatusComplete
+ActionID: w2qr-b2-qs
+EventList: Complete
+ListItems: 24
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633863.387696
+Channel: Local/late@agents-late-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: 4022
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 3
+Uniqueid: 1790633853.7
+Linkedid: 1790633846.3
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633863.387701
+Channel: Local/late@agents-late-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4022
+CallerIDName: <unknown>
+ConnectedLineNum: 5552102
+ConnectedLineName: QRB
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633853.6
+Linkedid: 1790633846.3
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633863.387707
+Device: Local/late@agents-late
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633863.387709
+Device: Local/late@agents-late
+State: INUSE
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790633863.387718
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 3
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+DestChannel: Local/late@agents-late-00000002;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 4022
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552102
+DestConnectedLineName: QRB
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4022
+DestPriority: 1
+DestUniqueid: 1790633853.6
+DestLinkedid: 1790633846.3
+DialStatus: ANSWER
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633863.387725
+Device: Queue:q-late
+State: NOT_INUSE
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1790633863.387741
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 3
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+Queue: q-late
+Position: 1
+Count: 0
+
+Event: AgentConnect
+Privilege: agent,all
+Timestamp: 1790633863.387773
+Channel: PJSIP/pstn-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 3
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+DestChannel: Local/late@agents-late-00000002;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 4022
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552102
+DestConnectedLineName: QRB
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4022
+DestPriority: 1
+DestUniqueid: 1790633853.6
+DestLinkedid: 1790633846.3
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+HoldTime: 10
+RingTime: 10
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633863.387819
+Channel: PJSIP/pstn-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 3
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633863.387844
+Device: PJSIP/pstn
+State: INUSE
+
+Event: BridgeCreate
+Privilege: call,all
+Timestamp: 1790633863.388125
+BridgeUniqueid: 22222222-2222-2222-2222-222222222222
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1790633863.388178
+BridgeUniqueid: 22222222-2222-2222-2222-222222222222
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/late@agents-late-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4022
+CallerIDName: <unknown>
+ConnectedLineNum: 5552102
+ConnectedLineName: QRB
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633853.6
+Linkedid: 1790633846.3
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1790633863.388210
+BridgeUniqueid: 22222222-2222-2222-2222-222222222222
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/pstn-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 3
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+
+Event: AgentComplete
+Privilege: agent,all
+Timestamp: 1790633867.392587
+Channel: PJSIP/pstn-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 3
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+DestChannel: Local/late@agents-late-00000002;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 4022
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552102
+DestConnectedLineName: QRB
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4022
+DestPriority: 1
+DestUniqueid: 1790633853.6
+DestLinkedid: 1790633846.3
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+HoldTime: 10
+TalkTime: 4
+Reason: caller
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1790633867.392624
+BridgeUniqueid: 22222222-2222-2222-2222-222222222222
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/pstn-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 3
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1790633867.392637
+BridgeUniqueid: 22222222-2222-2222-2222-222222222222
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: Local/late@agents-late-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4022
+CallerIDName: <unknown>
+ConnectedLineNum: 5552102
+ConnectedLineName: QRB
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633853.6
+Linkedid: 1790633846.3
+
+Event: BridgeDestroy
+Privilege: call,all
+Timestamp: 1790633867.392678
+BridgeUniqueid: 22222222-2222-2222-2222-222222222222
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633867.392704
+Channel: Local/late@agents-late-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4022
+CallerIDName: <unknown>
+ConnectedLineNum: 5552102
+ConnectedLineName: QRB
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4022
+Priority: 1
+Uniqueid: 1790633853.6
+Linkedid: 1790633846.3
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633867.392729
+Channel: Local/late@agents-late-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: 4022
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 4
+Uniqueid: 1790633853.7
+Linkedid: 1790633846.3
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633867.392773
+Device: Local/late@agents-late
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633867.392777
+Device: Local/late@agents-late
+State: NOT_INUSE
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633867.392787
+Channel: PJSIP/pstn-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552102
+CallerIDName: QRB
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4022
+Priority: 3
+Uniqueid: 1790633846.3
+Linkedid: 1790633846.3
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633867.392807
+Queue: q-late
+MemberName: Local/late@agents-late/n
+Interface: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 2
+LastCall: 1790633867
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633867.392836
+Device: PJSIP/pstn
+State: NOT_INUSE
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633869.397889
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633869.398035
+Device: Queue:q-noans
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1790633869.398043
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+Queue: q-noans
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633869.398172
+Channel: PJSIP/agent2-00000003
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790633869.9
+Linkedid: 1790633869.8
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1790633869.398387
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+DestChannel: PJSIP/agent2-00000003
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 4023
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552103
+DestConnectedLineName: QRC
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 4023
+DestPriority: 1
+DestUniqueid: 1790633869.9
+DestLinkedid: 1790633869.8
+Queue: q-noans
+Interface: PJSIP/agent2
+MemberName: PJSIP/agent2
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1790633869.398396
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+DestChannel: PJSIP/agent2-00000003
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 4023
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790633869.9
+DestLinkedid: 1790633869.8
+DialString: PJSIP/agent2
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633869.398987
+Channel: PJSIP/agent2-00000003
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 4023
+CallerIDName: <unknown>
+ConnectedLineNum: 5552103
+ConnectedLineName: QRC
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633869.9
+Linkedid: 1790633869.8
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633869.399005
+Device: PJSIP/agent2
+State: RINGING
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633869.399023
+Queue: q-ringall
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633869.399028
+Device: Queue:q-ringall_avail
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633869.399038
+Queue: q-noans
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633869.399041
+Device: Queue:q-noans_avail
+State: NOT_INUSE
+
+Event: AgentRingNoAnswer
+Privilege: agent,all
+Timestamp: 1790633873.401673
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+DestChannel: PJSIP/agent2-00000003
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 4023
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552103
+DestConnectedLineName: QRC
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 4023
+DestPriority: 1
+DestUniqueid: 1790633869.9
+DestLinkedid: 1790633869.8
+Queue: q-noans
+Interface: PJSIP/agent2
+MemberName: PJSIP/agent2
+RingTime: 4000
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790633873.401704
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+DestChannel: PJSIP/agent2-00000003
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 4023
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552103
+DestConnectedLineName: QRC
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 4023
+DestPriority: 1
+DestUniqueid: 1790633869.9
+DestLinkedid: 1790633869.8
+DialStatus: NOANSWER
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790633873.401711
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+DestChannel: PJSIP/agent2-00000003
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 4023
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552103
+DestConnectedLineName: QRC
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 4023
+DestPriority: 1
+DestUniqueid: 1790633869.9
+DestLinkedid: 1790633869.8
+DialStatus: CANCEL
+
+Event: QueueCallerAbandon
+Privilege: agent,all
+Timestamp: 1790633873.401726
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+Queue: q-noans
+Position: 1
+OriginalPosition: 1
+HoldTime: 4
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633873.401755
+Device: Queue:q-noans
+State: NOT_INUSE
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1790633873.401759
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+Queue: q-noans
+Position: 1
+Count: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633873.401808
+Device: Queue:q-late
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1790633873.401812
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 2
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+Queue: q-late
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633873.401855
+Channel: Local/late@agents-late-00000003;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 1
+Uniqueid: 1790633873.10
+Linkedid: 1790633869.8
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633873.401868
+Channel: Local/late@agents-late-00000003;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 1
+Uniqueid: 1790633873.11
+Linkedid: 1790633869.8
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633873.401905
+Channel: PJSIP/agent2-00000003
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 4023
+CallerIDName: <unknown>
+ConnectedLineNum: 5552103
+ConnectedLineName: QRC
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633869.9
+Linkedid: 1790633869.8
+Cause: 0
+Cause-txt: Unknown
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1790633873.401941
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 2
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+DestChannel: Local/late@agents-late-00000003;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 4023
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552103
+DestConnectedLineName: QRC
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4023
+DestPriority: 1
+DestUniqueid: 1790633873.10
+DestLinkedid: 1790633869.8
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633873.401946
+Device: PJSIP/agent2
+State: NOT_INUSE
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1790633873.401952
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 2
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+DestChannel: Local/late@agents-late-00000003;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 4023
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: late
+DestPriority: 1
+DestUniqueid: 1790633873.10
+DestLinkedid: 1790633869.8
+DialString: Local/late@agents-late/n
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633873.401963
+Channel: Local/late@agents-late-00000003;1
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 4023
+CallerIDName: <unknown>
+ConnectedLineNum: 5552103
+ConnectedLineName: QRC
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633873.10
+Linkedid: 1790633869.8
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633873.401974
+Queue: q-ringall
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633873.401986
+Queue: q-noans
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633873.401988
+Device: Local/late@agents-late
+State: INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633873.401995
+Queue: q-late
+MemberName: Local/late@agents-late/n
+Interface: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 2
+LastCall: 1790633867
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Response: Success
+ActionID: w2qr-c1-mark
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1790633875.402482
+UserEvent: W2qrSnapshot
+ActionID: w2qr-c1-mark
+Snapshot: c1
+
+Response: Success
+ActionID: w2qr-c1-st
+EventList: start
+Message: Channel status will follow
+
+Event: Status
+Privilege: Call
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 2
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+Type: PJSIP
+DNID: 4023
+EffectiveConnectedLineNum: <unknown>
+EffectiveConnectedLineName: <unknown>
+TimeToHangup: 0
+BridgeID: 
+Application: Queue
+Data: q-late
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 6
+ActionID: w2qr-c1-st
+
+Event: Status
+Privilege: Call
+Channel: Local/late@agents-late-00000003;1
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 4023
+CallerIDName: <unknown>
+ConnectedLineNum: 5552103
+ConnectedLineName: QRC
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633873.10
+Linkedid: 1790633869.8
+Type: Local
+DNID: 
+EffectiveConnectedLineNum: 5552103
+EffectiveConnectedLineName: QRC
+TimeToHangup: 0
+BridgeID: 
+Application: AppQueue
+Data: (Outgoing Line)
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 2
+ActionID: w2qr-c1-st
+
+Event: Status
+Privilege: Call
+Channel: Local/late@agents-late-00000003;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: 4023
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 2
+Uniqueid: 1790633873.11
+Linkedid: 1790633869.8
+Type: Local
+DNID: 
+EffectiveConnectedLineNum: 4023
+EffectiveConnectedLineName: <unknown>
+TimeToHangup: 0
+BridgeID: 
+Application: Wait
+Data: 10
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 2
+ActionID: w2qr-c1-st
+
+Event: StatusComplete
+ActionID: w2qr-c1-st
+EventList: Complete
+ListItems: 3
+Items: 3
+
+Response: Success
+ActionID: w2qr-c1-qs
+EventList: start
+Message: Queue status will follow
+
+Event: QueueParams
+Queue: q-ringall
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueMember
+Queue: q-ringall
+Name: PJSIP/agent1
+Location: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueMember
+Queue: q-ringall
+Name: PJSIP/agent2
+Location: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueParams
+Queue: q-confirm
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueMember
+Queue: q-confirm
+Name: Agent1 Confirm
+Location: Local/agent1@from-queue-confirm/n
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueParams
+Queue: q-pjsip3
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueMember
+Queue: q-pjsip3
+Name: PJSIP/agent3
+Location: PJSIP/agent3
+StateInterface: PJSIP/agent3
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueParams
+Queue: q-pjsip
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueMember
+Queue: q-pjsip
+Name: PJSIP/agent1
+Location: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueParams
+Queue: q-agent-opt
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueMember
+Queue: q-agent-opt
+Name: Agent One
+Location: Local/1001@agent-request
+StateInterface: Agent:1001
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueParams
+Queue: q-late
+Max: 0
+Strategy: ringall
+Calls: 1
+Holdtime: 10
+TalkTime: 4
+Completed: 2
+Abandoned: 1
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueMember
+Queue: q-late
+Name: Local/late@agents-late/n
+Location: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 2
+LastCall: 1790633867
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueEntry
+Queue: q-late
+Position: 1
+Channel: PJSIP/pstn-00000002
+Uniqueid: 1790633869.8
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: unknown
+ConnectedLineName: unknown
+Wait: 2
+Priority: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueParams
+Queue: q-freepbx
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueMember
+Queue: q-freepbx
+Name: Agent1 FreePBX
+Location: Local/agent1@from-queue/n
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueParams
+Queue: q-agent-ack
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueMember
+Queue: q-agent-ack
+Name: Agent Two
+Location: Local/1002@agent-request/n
+StateInterface: Agent:1002
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueParams
+Queue: q-noans
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 1
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueMember
+Queue: q-noans
+Name: PJSIP/agent2
+Location: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueParams
+Queue: q-agent
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueMember
+Queue: q-agent
+Name: Agent One
+Location: Local/1001@agent-request/n
+StateInterface: Agent:1001
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueParams
+Queue: q-local
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueMember
+Queue: q-local
+Name: Local/agent@agents/n
+Location: Local/agent@agents/n
+StateInterface: Local/agent@agents/n
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-c1-qs
+
+Event: QueueStatusComplete
+ActionID: w2qr-c1-qs
+EventList: Complete
+ListItems: 24
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633883.411700
+Channel: Local/late@agents-late-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: 4023
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 3
+Uniqueid: 1790633873.11
+Linkedid: 1790633869.8
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633883.411705
+Channel: Local/late@agents-late-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4023
+CallerIDName: <unknown>
+ConnectedLineNum: 5552103
+ConnectedLineName: QRC
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633873.10
+Linkedid: 1790633869.8
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633883.411712
+Device: Local/late@agents-late
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633883.411714
+Device: Local/late@agents-late
+State: INUSE
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790633883.411723
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 2
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+DestChannel: Local/late@agents-late-00000003;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 4023
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552103
+DestConnectedLineName: QRC
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4023
+DestPriority: 1
+DestUniqueid: 1790633873.10
+DestLinkedid: 1790633869.8
+DialStatus: ANSWER
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633883.411744
+Device: Queue:q-late
+State: NOT_INUSE
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1790633883.411752
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 2
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+Queue: q-late
+Position: 1
+Count: 0
+
+Event: AgentConnect
+Privilege: agent,all
+Timestamp: 1790633883.411795
+Channel: PJSIP/pstn-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 2
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+DestChannel: Local/late@agents-late-00000003;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 4023
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552103
+DestConnectedLineName: QRC
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4023
+DestPriority: 1
+DestUniqueid: 1790633873.10
+DestLinkedid: 1790633869.8
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+HoldTime: 10
+RingTime: 10
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633883.411843
+Channel: PJSIP/pstn-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 2
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633883.411864
+Device: PJSIP/pstn
+State: INUSE
+
+Event: BridgeCreate
+Privilege: call,all
+Timestamp: 1790633883.412163
+BridgeUniqueid: 33333333-3333-3333-3333-333333333333
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1790633883.412203
+BridgeUniqueid: 33333333-3333-3333-3333-333333333333
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/late@agents-late-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4023
+CallerIDName: <unknown>
+ConnectedLineNum: 5552103
+ConnectedLineName: QRC
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633873.10
+Linkedid: 1790633869.8
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1790633883.412227
+BridgeUniqueid: 33333333-3333-3333-3333-333333333333
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/pstn-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 2
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+
+Event: AgentComplete
+Privilege: agent,all
+Timestamp: 1790633887.416707
+Channel: PJSIP/pstn-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 2
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+DestChannel: Local/late@agents-late-00000003;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 4023
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552103
+DestConnectedLineName: QRC
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4023
+DestPriority: 1
+DestUniqueid: 1790633873.10
+DestLinkedid: 1790633869.8
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+HoldTime: 10
+TalkTime: 4
+Reason: caller
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1790633887.416743
+BridgeUniqueid: 33333333-3333-3333-3333-333333333333
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/pstn-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 2
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1790633887.416747
+BridgeUniqueid: 33333333-3333-3333-3333-333333333333
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: Local/late@agents-late-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4023
+CallerIDName: <unknown>
+ConnectedLineNum: 5552103
+ConnectedLineName: QRC
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633873.10
+Linkedid: 1790633869.8
+
+Event: BridgeDestroy
+Privilege: call,all
+Timestamp: 1790633887.416767
+BridgeUniqueid: 33333333-3333-3333-3333-333333333333
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633887.416792
+Channel: Local/late@agents-late-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4023
+CallerIDName: <unknown>
+ConnectedLineNum: 5552103
+ConnectedLineName: QRC
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4023
+Priority: 1
+Uniqueid: 1790633873.10
+Linkedid: 1790633869.8
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633887.416814
+Channel: Local/late@agents-late-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: 4023
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 4
+Uniqueid: 1790633873.11
+Linkedid: 1790633869.8
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633887.416860
+Device: Local/late@agents-late
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633887.416865
+Device: Local/late@agents-late
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633887.416907
+Queue: q-late
+MemberName: Local/late@agents-late/n
+Interface: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 3
+LastCall: 1790633887
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633887.416918
+Channel: PJSIP/pstn-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552103
+CallerIDName: QRC
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4023
+Priority: 2
+Uniqueid: 1790633869.8
+Linkedid: 1790633869.8
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633887.416953
+Device: PJSIP/pstn
+State: NOT_INUSE
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633889.422066
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633889.422181
+Device: Queue:q-late
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1790633889.422187
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+Queue: q-late
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633889.422239
+Channel: Local/late@agents-late-00000004;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 1
+Uniqueid: 1790633889.13
+Linkedid: 1790633889.12
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633889.422247
+Channel: Local/late@agents-late-00000004;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 1
+Uniqueid: 1790633889.14
+Linkedid: 1790633889.12
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1790633889.422291
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+DestChannel: Local/late@agents-late-00000004;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 4024
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552104
+DestConnectedLineName: QRD
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4024
+DestPriority: 1
+DestUniqueid: 1790633889.13
+DestLinkedid: 1790633889.12
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1790633889.422297
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+DestChannel: Local/late@agents-late-00000004;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 4024
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: late
+DestPriority: 1
+DestUniqueid: 1790633889.13
+DestLinkedid: 1790633889.12
+DialString: Local/late@agents-late/n
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633889.422303
+Channel: Local/late@agents-late-00000004;1
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 4024
+CallerIDName: <unknown>
+ConnectedLineNum: 5552104
+ConnectedLineName: QRD
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633889.13
+Linkedid: 1790633889.12
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633889.422330
+Device: Local/late@agents-late
+State: INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633889.422335
+Queue: q-late
+MemberName: Local/late@agents-late/n
+Interface: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 3
+LastCall: 1790633887
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: AgentRingNoAnswer
+Privilege: agent,all
+Timestamp: 1790633890.423406
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+DestChannel: Local/late@agents-late-00000004;1
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 4024
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552104
+DestConnectedLineName: QRD
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4024
+DestPriority: 1
+DestUniqueid: 1790633889.13
+DestLinkedid: 1790633889.12
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+RingTime: 1000
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790633890.423429
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+DestChannel: Local/late@agents-late-00000004;1
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 4024
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552104
+DestConnectedLineName: QRD
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4024
+DestPriority: 1
+DestUniqueid: 1790633889.13
+DestLinkedid: 1790633889.12
+DialStatus: NOANSWER
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790633890.423435
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+DestChannel: Local/late@agents-late-00000004;1
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 4024
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552104
+DestConnectedLineName: QRD
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4024
+DestPriority: 1
+DestUniqueid: 1790633889.13
+DestLinkedid: 1790633889.12
+DialStatus: CANCEL
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633890.423443
+Channel: Local/late@agents-late-00000004;1
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 4024
+CallerIDName: <unknown>
+ConnectedLineNum: 5552104
+ConnectedLineName: QRD
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633889.13
+Linkedid: 1790633889.12
+Cause: 0
+Cause-txt: Unknown
+
+Event: QueueCallerAbandon
+Privilege: agent,all
+Timestamp: 1790633890.423465
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+Queue: q-late
+Position: 1
+OriginalPosition: 1
+HoldTime: 1
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633890.423477
+Channel: Local/late@agents-late-00000004;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: 4024
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 2
+Uniqueid: 1790633889.14
+Linkedid: 1790633889.12
+Cause: 0
+Cause-txt: Unknown
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633890.423484
+Device: Queue:q-late
+State: NOT_INUSE
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1790633890.423488
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+Queue: q-late
+Position: 1
+Count: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633890.423495
+Device: Local/late@agents-late
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633890.423496
+Device: Local/late@agents-late
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633890.423525
+Queue: q-late
+MemberName: Local/late@agents-late/n
+Interface: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 3
+LastCall: 1790633887
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633890.423536
+Device: Queue:q-late
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1790633890.423540
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 2
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+Queue: q-late
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633890.423566
+Channel: Local/late@agents-late-00000005;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 1
+Uniqueid: 1790633890.15
+Linkedid: 1790633889.12
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790633890.423576
+Channel: Local/late@agents-late-00000005;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 1
+Uniqueid: 1790633890.16
+Linkedid: 1790633889.12
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1790633890.423636
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 2
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+DestChannel: Local/late@agents-late-00000005;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 4024
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552104
+DestConnectedLineName: QRD
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4024
+DestPriority: 1
+DestUniqueid: 1790633890.15
+DestLinkedid: 1790633889.12
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1790633890.423640
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 2
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+DestChannel: Local/late@agents-late-00000005;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 4024
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: late
+DestPriority: 1
+DestUniqueid: 1790633890.15
+DestLinkedid: 1790633889.12
+DialString: Local/late@agents-late/n
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633890.423658
+Channel: Local/late@agents-late-00000005;1
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 4024
+CallerIDName: <unknown>
+ConnectedLineNum: 5552104
+ConnectedLineName: QRD
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633890.15
+Linkedid: 1790633889.12
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633890.423675
+Device: Local/late@agents-late
+State: INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633890.423678
+Queue: q-late
+MemberName: Local/late@agents-late/n
+Interface: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 3
+LastCall: 1790633887
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Response: Success
+ActionID: w2qr-d1-mark
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1790633891.424385
+UserEvent: W2qrSnapshot
+ActionID: w2qr-d1-mark
+Snapshot: d1
+
+Response: Success
+ActionID: w2qr-d1-st
+EventList: start
+Message: Channel status will follow
+
+Event: Status
+Privilege: Call
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 2
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+Type: PJSIP
+DNID: 4024
+EffectiveConnectedLineNum: <unknown>
+EffectiveConnectedLineName: <unknown>
+TimeToHangup: 0
+BridgeID: 
+Application: Queue
+Data: q-late
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 2
+ActionID: w2qr-d1-st
+
+Event: Status
+Privilege: Call
+Channel: Local/late@agents-late-00000005;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: 4024
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 2
+Uniqueid: 1790633890.16
+Linkedid: 1790633889.12
+Type: Local
+DNID: 
+EffectiveConnectedLineNum: 4024
+EffectiveConnectedLineName: <unknown>
+TimeToHangup: 0
+BridgeID: 
+Application: Wait
+Data: 10
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 1
+ActionID: w2qr-d1-st
+
+Event: Status
+Privilege: Call
+Channel: Local/late@agents-late-00000005;1
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 4024
+CallerIDName: <unknown>
+ConnectedLineNum: 5552104
+ConnectedLineName: QRD
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633890.15
+Linkedid: 1790633889.12
+Type: Local
+DNID: 
+EffectiveConnectedLineNum: 5552104
+EffectiveConnectedLineName: QRD
+TimeToHangup: 0
+BridgeID: 
+Application: AppQueue
+Data: (Outgoing Line)
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 1
+ActionID: w2qr-d1-st
+
+Event: StatusComplete
+ActionID: w2qr-d1-st
+EventList: Complete
+ListItems: 3
+Items: 3
+
+Response: Success
+ActionID: w2qr-d1-qs
+EventList: start
+Message: Queue status will follow
+
+Event: QueueParams
+Queue: q-ringall
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueMember
+Queue: q-ringall
+Name: PJSIP/agent1
+Location: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueMember
+Queue: q-ringall
+Name: PJSIP/agent2
+Location: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueParams
+Queue: q-confirm
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueMember
+Queue: q-confirm
+Name: Agent1 Confirm
+Location: Local/agent1@from-queue-confirm/n
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueParams
+Queue: q-pjsip3
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueMember
+Queue: q-pjsip3
+Name: PJSIP/agent3
+Location: PJSIP/agent3
+StateInterface: PJSIP/agent3
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueParams
+Queue: q-pjsip
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueMember
+Queue: q-pjsip
+Name: PJSIP/agent1
+Location: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueParams
+Queue: q-agent-opt
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueMember
+Queue: q-agent-opt
+Name: Agent One
+Location: Local/1001@agent-request
+StateInterface: Agent:1001
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueParams
+Queue: q-late
+Max: 0
+Strategy: ringall
+Calls: 1
+Holdtime: 10
+TalkTime: 4
+Completed: 3
+Abandoned: 2
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueMember
+Queue: q-late
+Name: Local/late@agents-late/n
+Location: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 3
+LastCall: 1790633887
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueEntry
+Queue: q-late
+Position: 1
+Channel: PJSIP/pstn-00000004
+Uniqueid: 1790633889.12
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: unknown
+ConnectedLineName: unknown
+Wait: 1
+Priority: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueParams
+Queue: q-freepbx
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueMember
+Queue: q-freepbx
+Name: Agent1 FreePBX
+Location: Local/agent1@from-queue/n
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueParams
+Queue: q-agent-ack
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueMember
+Queue: q-agent-ack
+Name: Agent Two
+Location: Local/1002@agent-request/n
+StateInterface: Agent:1002
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueParams
+Queue: q-noans
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 1
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueMember
+Queue: q-noans
+Name: PJSIP/agent2
+Location: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueParams
+Queue: q-agent
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueMember
+Queue: q-agent
+Name: Agent One
+Location: Local/1001@agent-request/n
+StateInterface: Agent:1001
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueParams
+Queue: q-local
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueMember
+Queue: q-local
+Name: Local/agent@agents/n
+Location: Local/agent@agents/n
+StateInterface: Local/agent@agents/n
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: w2qr-d1-qs
+
+Event: QueueStatusComplete
+ActionID: w2qr-d1-qs
+EventList: Complete
+ListItems: 24
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633900.433773
+Channel: Local/late@agents-late-00000005;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: 4024
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 3
+Uniqueid: 1790633890.16
+Linkedid: 1790633889.12
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633900.433778
+Channel: Local/late@agents-late-00000005;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4024
+CallerIDName: <unknown>
+ConnectedLineNum: 5552104
+ConnectedLineName: QRD
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633890.15
+Linkedid: 1790633889.12
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633900.433784
+Device: Local/late@agents-late
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633900.433786
+Device: Local/late@agents-late
+State: INUSE
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790633900.433791
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 2
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+DestChannel: Local/late@agents-late-00000005;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 4024
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552104
+DestConnectedLineName: QRD
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4024
+DestPriority: 1
+DestUniqueid: 1790633890.15
+DestLinkedid: 1790633889.12
+DialStatus: ANSWER
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633900.433817
+Device: Queue:q-late
+State: NOT_INUSE
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1790633900.433823
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 2
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+Queue: q-late
+Position: 1
+Count: 0
+
+Event: AgentConnect
+Privilege: agent,all
+Timestamp: 1790633900.433854
+Channel: PJSIP/pstn-00000004
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 2
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+DestChannel: Local/late@agents-late-00000005;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 4024
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552104
+DestConnectedLineName: QRD
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4024
+DestPriority: 1
+DestUniqueid: 1790633890.15
+DestLinkedid: 1790633889.12
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+HoldTime: 10
+RingTime: 10
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790633900.433887
+Channel: PJSIP/pstn-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 2
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633900.433913
+Device: PJSIP/pstn
+State: INUSE
+
+Event: BridgeCreate
+Privilege: call,all
+Timestamp: 1790633900.434173
+BridgeUniqueid: 44444444-4444-4444-4444-444444444444
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1790633900.434236
+BridgeUniqueid: 44444444-4444-4444-4444-444444444444
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/late@agents-late-00000005;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4024
+CallerIDName: <unknown>
+ConnectedLineNum: 5552104
+ConnectedLineName: QRD
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633890.15
+Linkedid: 1790633889.12
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1790633900.434261
+BridgeUniqueid: 44444444-4444-4444-4444-444444444444
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/pstn-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 2
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+
+Event: AgentComplete
+Privilege: agent,all
+Timestamp: 1790633904.438934
+Channel: PJSIP/pstn-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 2
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+DestChannel: Local/late@agents-late-00000005;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 4024
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 5552104
+DestConnectedLineName: QRD
+DestLanguage: en
+DestAccountCode: 
+DestContext: agents-late
+DestExten: 4024
+DestPriority: 1
+DestUniqueid: 1790633890.15
+DestLinkedid: 1790633889.12
+Queue: q-late
+Interface: Local/late@agents-late/n
+MemberName: Local/late@agents-late/n
+HoldTime: 10
+TalkTime: 4
+Reason: caller
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1790633904.438975
+BridgeUniqueid: 44444444-4444-4444-4444-444444444444
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/pstn-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 2
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1790633904.438987
+BridgeUniqueid: 44444444-4444-4444-4444-444444444444
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: Local/late@agents-late-00000005;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4024
+CallerIDName: <unknown>
+ConnectedLineNum: 5552104
+ConnectedLineName: QRD
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633890.15
+Linkedid: 1790633889.12
+
+Event: BridgeDestroy
+Privilege: call,all
+Timestamp: 1790633904.439003
+BridgeUniqueid: 44444444-4444-4444-4444-444444444444
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633904.439027
+Channel: Local/late@agents-late-00000005;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 4024
+CallerIDName: <unknown>
+ConnectedLineNum: 5552104
+ConnectedLineName: QRD
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: 4024
+Priority: 1
+Uniqueid: 1790633890.15
+Linkedid: 1790633889.12
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633904.439054
+Channel: Local/late@agents-late-00000005;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: 4024
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: agents-late
+Exten: late
+Priority: 4
+Uniqueid: 1790633890.16
+Linkedid: 1790633889.12
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633904.439069
+Device: Local/late@agents-late
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633904.439078
+Device: Local/late@agents-late
+State: NOT_INUSE
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790633904.439090
+Channel: PJSIP/pstn-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5552104
+CallerIDName: QRD
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 4024
+Priority: 2
+Uniqueid: 1790633889.12
+Linkedid: 1790633889.12
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1790633904.439104
+Queue: q-late
+MemberName: Local/late@agents-late/n
+Interface: Local/late@agents-late/n
+StateInterface: Local/late@agents-late/n
+Membership: static
+Penalty: 0
+CallsTaken: 4
+LastCall: 1790633904
+LastPause: 0
+LoginTime: 1790633822
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1790633904.439124
+Device: PJSIP/pstn
+State: NOT_INUSE
+

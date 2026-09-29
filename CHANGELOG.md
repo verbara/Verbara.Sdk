@@ -254,6 +254,30 @@ All notable changes to this project will be documented in this file.
   handler sees a queue call at app_queue's connect rather than at the agent's bridge. No public API
   changes.
 
+### Fixed — a reconnect counted a caller still waiting in a queue as an abandon and a second offer, and a caller first seen by a reload lost the wait before it (#348)
+
+- **A caller a reconnect finds still waiting in its queue keeps its visit.** After an AMI reconnect, the reload
+  re-announced every caller waiting in a queue as a new join: `QueueSessionTracker` closed the visit it held as
+  abandoned, counted a second offer and measured the wait from the reload. Such a caller is now counted once,
+  with its wait from the join the SDK saw, and `CallQueuedEvent` is not published for it again.
+- **A caller the SDK first learns of from a reload has its queue wait counted from when Asterisk says it
+  joined**: the reload instant minus the `Wait` Asterisk reports for it. Its SLA wait, its SLA check and its
+  `sessions.wait_time` sample include the time it waited before the reload, and land within one second of
+  Asterisk's own `HoldTime`. When Asterisk reports no wait, the visit starts at the reload, as before. For such a
+  caller, `CallQueuedEvent.Timestamp` is now the time Asterisk reports it joined, which can be earlier than the
+  session's `CreatedAt` and its `CallStartedEvent`.
+- **A caller that re-joined the same queue while the SDK was disconnected is counted as a new visit** when the
+  reported wait places the re-join more than 2 s after the start of the visit the SDK held. The first visit is
+  counted abandoned, as Asterisk counts a queue timeout, and the answered visit's wait runs from the re-join.
+- **What remains:** when Asterisk reports no wait, or a re-join within 2 s of the visit the SDK held, a caller
+  that left and re-joined the same queue during the outage is counted as one visit with its wait from the first
+  join, where Asterisk counts two and an abandon. Queue visits that began and ended entirely during an outage are
+  not counted.
+- This restores what the tracker is published to do, "Tracks aggregate queue performance metrics from session
+  domain events", the aggregate queue SLA it has carried since 1.7.0, and what `sessions.wait_time` is published
+  as, "Queue wait time". `CallConnectedEvent.WaitTime`, `CallSession.WaitTime` and `CallSession.QueuedAt` keep
+  their meaning, and Live's queue metrics are unchanged. No public API changes.
+
 ### Fixed — the push bus never counted an event dropped by a full buffer (#328)
 
 - `asterisk.push.events.dropped` now increments, tagged `reason=buffer_full`, once for every event a

@@ -52,10 +52,13 @@ public sealed partial class CallSessionManager : ICallSessionManager
     /// Initializes a manager whose release cutoff — the instant an ended session must have
     /// completed before to be past <see cref="SessionOptions.CompletedRetention"/> — is read from
     /// <paramref name="timeProvider"/>, so a test can move past the retention period with a fake
-    /// clock instead of sitting it out. The same clock gives the two instants of a queue visit: the
-    /// join, which stamps <see cref="CallQueuedEvent"/>, and the connect, which stamps
+    /// clock instead of sitting it out. The same clock gives the two instants of a queue visit: its
+    /// start, which stamps <see cref="CallQueuedEvent"/>, and the connect, which stamps
     /// <see cref="CallConnectedEvent"/>; the queue wait-time histogram records the difference, so a
-    /// test fixes a visit's length exactly. Nothing else reads it: the session's own timestamps
+    /// test fixes a visit's length exactly. The start is the instant the manager handles the join or,
+    /// for a caller a reload's queue snapshot reports waiting, that instant minus the wait Asterisk
+    /// reports for it: a duration Asterisk measured, subtracted from this clock, so no two clocks are
+    /// compared. Nothing else reads it: the session's own timestamps
     /// (<see cref="CallSession.CreatedAt"/>, <see cref="CallSession.ConnectedAt"/>) and its audit
     /// trail still come from the wall clock.
     /// </summary>
@@ -202,6 +205,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
         Action<AsteriskBridge> onBridgeDestroyed = OnBridgeDestroyed;
         Action<BridgeTransferInfo> onTransfer = OnTransfer;
         Action<string, AsteriskQueueEntry> onCallerJoined = OnQueueCallerJoined;
+        Action<string, AsteriskQueueEntry> onCallerLeft = OnQueueCallerLeft;
         Action<string, string?, string?> onAgentConnected = OnAgentConnected;
         Action<string?, string?, string?> onQueueCallerConnected = OnQueueCallerConnected;
 
@@ -216,13 +220,14 @@ public sealed partial class CallSessionManager : ICallSessionManager
         server.Bridges.BridgeDestroyed += onBridgeDestroyed;
         server.Bridges.TransferOccurred += onTransfer;
         server.Queues.CallerJoined += onCallerJoined;
+        server.Queues.CallerLeft += onCallerLeft;
         server.Agents.AgentConnected += onAgentConnected;
         server.Agents.QueueCallerConnected += onQueueCallerConnected;
 
         _serverSubs[serverId] = new ServerSubscriptions(server,
             onAdded, onRemoved, onStateChanged, onDialBegin, onDialEnd,
             onHeld, onUnheld, onBridgeEntered, onBridgeDestroyed, onTransfer, onCallerJoined,
-            onAgentConnected, onQueueCallerConnected);
+            onCallerLeft, onAgentConnected, onQueueCallerConnected);
     }
 
     public void DetachFromServer(string serverId)
@@ -605,30 +610,144 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
     private void OnQueueCallerJoined(string queueName, AsteriskQueueEntry entry)
     {
-        // Find session by channel name matching
-        var session = _byChannelId.Values.FirstOrDefault(s =>
-            s.Participants.Any(p => p.Channel == entry.Channel));
+        var session = FindByChannelName(entry.Channel);
         if (session is null) return;
 
-        DateTimeOffset joinedAt;
+        DateTimeOffset visitStartedAt;
         lock (session.SyncRoot)
         {
-            // Each join opens a new visit: it has not been announced yet, and its wait starts now. The
-            // one instant stamps both the visit's start and CallQueuedEvent, so the queue's metrics and
-            // the histogram measure the visit from the same moment.
-            joinedAt = _timeProvider.GetUtcNow();
+            var now = _timeProvider.GetUtcNow();
+            var reportedJoin = ReportedJoin(now, entry);
+
+            // A queue snapshot that finds the caller still waiting in the visit this manager holds open
+            // reports that same visit again. Nothing is published and nothing on the session changes: the
+            // visit keeps its start, and the queue's metrics count neither an abandon nor a second offer.
+            if (IsHeldVisit(session, queueName, entry, reportedJoin))
+                return;
+
+            // Every other join opens a new visit, not announced and not left yet, which starts when
+            // Asterisk says the caller joined: for a caller a queue snapshot reports waiting, now minus the
+            // wait it reports, and otherwise now. The one start stamps both the visit and CallQueuedEvent,
+            // so the queue's metrics and the histogram measure the visit from the same moment.
+            visitStartedAt = reportedJoin ?? now;
             session.QueueName = queueName;
             session.QueueVisitAnnounced = false;
-            session.QueueVisitStartedAt = joinedAt;
+            session.QueueVisitLeft = false;
+            session.QueueVisitStartedAt = visitStartedAt;
             session.TryTransition(CallSessionState.Queued);
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.QueueJoined, entry.Channel, null, queueName));
         }
 
         _events.OnNext(new CallQueuedEvent(session.SessionId, session.ServerId,
-            joinedAt, queueName, entry.Position));
+            visitStartedAt, queueName, entry.Position));
         _ = PersistAsync(session);
     }
+
+    /// <summary>
+    /// Marks the caller's current queue visit as left when Asterisk reports the caller leaving that visit's
+    /// queue. Only <see cref="IsHeldVisit"/> reads the mark. The leave closes nothing in the queue's metrics,
+    /// which still close an unanswered visit at the next join or at the hangup; and app_queue sends the leave
+    /// before it connects the caller, so the mark never keeps a visit from being announced.
+    /// <para>
+    /// A reconnect clears Live's queue table without raising <see cref="QueueManager.CallerLeft"/>, so a
+    /// caller the reload then finds still waiting keeps its visit open, which is what lets the reload
+    /// recognise it. A reconnect that announced those removals as departures would mark every open visit
+    /// left, and every caller a reload finds waiting would count as an abandon and a second offer.
+    /// </para>
+    /// </summary>
+    private void OnQueueCallerLeft(string queueName, AsteriskQueueEntry entry)
+    {
+        var session = FindByChannelName(entry.Channel);
+        if (session is null) return;
+
+        lock (session.SyncRoot)
+        {
+            if (string.Equals(session.QueueName, queueName, StringComparison.OrdinalIgnoreCase))
+                session.QueueVisitLeft = true;
+        }
+    }
+
+    /// <summary>
+    /// The session one of whose participants is on the channel named <paramref name="channel"/>, which is how
+    /// Live's queue events name the caller; <c>null</c> when this manager holds none.
+    /// </summary>
+    private CallSession? FindByChannelName(string channel) =>
+        _byChannelId.Values.FirstOrDefault(s => s.Participants.Any(p => p.Channel == channel));
+
+    /// <summary>
+    /// How far after the start of the visit this manager holds open a queue snapshot may place the caller's
+    /// join and still be reporting that same visit: the last condition of <see cref="IsHeldVisit"/>.
+    /// <para>
+    /// The join a snapshot places is the reload instant minus the <c>Wait</c> Asterisk reports, and Asterisk
+    /// counts that wait in whole seconds. For a caller that never left, the join lands within about a second
+    /// of the one the manager saw, plus the difference between how long the two reports took to reach it. A
+    /// re-join restarts app_queue's wait, so for a caller that left and re-joined the queue while the SDK was
+    /// disconnected, the join lands well after.
+    /// </para>
+    /// <para>
+    /// Measured on Asterisk 20.20.1, 22.9.0 and 23.4.1, with a queue that times the caller out after 4 s, plays
+    /// a 2 s announcement and puts it back into the same queue, while the SDK's AMI connection was cut and
+    /// restored: the join the snapshot placed was between 1.0 s before and 0.1 s after the held start for a
+    /// caller that never left (120 reloads), and between 5.5 s and 18.6 s after it for one that had re-joined
+    /// (360 reloads). 2 s keeps a margin of about 1.9 s on the first side, and lies 3.5 s below the shortest
+    /// re-join measured. A quicker loop is still taken for the same visit: a 1 s queue timeout with no
+    /// announcement re-joins about 1.0 s after the first join, on the same three versions. The value is
+    /// Asterisk's rounding plus delivery delay, not a deployment choice, which is why it is not an option.
+    /// </para>
+    /// </summary>
+    internal static readonly TimeSpan SameVisitWaitTolerance = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Whether a queue entry for <paramref name="queueName"/> reports the visit <paramref name="session"/>
+    /// already holds open, rather than a new one. Called under the session's lock. It does only when all of
+    /// these hold:
+    /// <list type="number">
+    /// <item>The entry came from a queue snapshot. A live join is app_queue's report that the caller has just
+    /// entered the queue, and app_queue never sends one while the caller's previous visit has not left.</item>
+    /// <item>It is for the visit's queue, compared as Live keys queues (ordinal, ignoring case). A report of
+    /// another queue is a move this manager did not see.</item>
+    /// <item>This manager saw the visit open (<see cref="CallSession.QueueVisitStartedAt"/> is set). A session
+    /// restored from elsewhere names its queue, but no visit of it was counted here.</item>
+    /// <item>The visit has not been announced (<see cref="CallSession.QueueVisitAnnounced"/>). A visit the
+    /// queue connected is over, and a later report of the queue is the caller put back into it.</item>
+    /// <item>Asterisk has not reported the caller leaving the queue since the visit opened
+    /// (<see cref="CallSession.QueueVisitLeft"/>). app_queue closes every visit with that leave, so a later
+    /// report is a re-join.</item>
+    /// <item>The join the entry reports, <paramref name="reportedJoin"/>, is no more than
+    /// <see cref="SameVisitWaitTolerance"/> after the visit's start. An entry that reports no join (no
+    /// <c>Wait</c>, or a negative one) meets it.</item>
+    /// </list>
+    /// So a caller that left and re-joined the same queue while the SDK was disconnected, whose snapshot
+    /// reports no wait or a join within the tolerance, is taken for the visit held: one visit, where Asterisk
+    /// counts two and an abandon. Neither its leave nor its re-join reached the SDK.
+    /// </summary>
+    private static bool IsHeldVisit(CallSession session, string queueName, AsteriskQueueEntry entry,
+        DateTimeOffset? reportedJoin) =>
+        entry.FromSnapshot
+        && string.Equals(session.QueueName, queueName, StringComparison.OrdinalIgnoreCase)
+        && session.QueueVisitStartedAt is { } heldStart
+        && !session.QueueVisitAnnounced
+        && !session.QueueVisitLeft
+        && (reportedJoin is not { } join || join - heldStart <= SameVisitWaitTolerance);
+
+    /// <summary>
+    /// When the caller joined the queue by Asterisk's own account, for a queue entry the manager handles at
+    /// <paramref name="now"/>: <paramref name="now"/> minus the wait a queue snapshot reports for the caller
+    /// (<c>QueueEntry</c>'s <c>Wait</c>, which Asterisk counts in whole seconds, so within about a second of
+    /// the true join).
+    /// <para>
+    /// <c>null</c> when the entry reports no such wait: a live join, which Asterisk sends as the caller
+    /// joins; a snapshot entry with no <c>Wait</c>; a negative one, which Asterisk does not send; and one
+    /// reaching back before the earliest instant a <see cref="DateTimeOffset"/> can hold, which Asterisk
+    /// cannot have measured either, and which would otherwise fail the whole reload on this one entry.
+    /// </para>
+    /// </summary>
+    private static DateTimeOffset? ReportedJoin(DateTimeOffset now, AsteriskQueueEntry entry) =>
+        entry is { FromSnapshot: true, ReportedWaitSeconds: long waitSeconds and >= 0 }
+        && waitSeconds <= now.UtcTicks / TimeSpan.TicksPerSecond
+            ? now - TimeSpan.FromSeconds(waitSeconds)
+            : null;
 
     /// <summary>
     /// Publishes <see cref="CallConnectedEvent"/> for <paramref name="session"/> and, for a call that
@@ -638,8 +757,9 @@ public sealed partial class CallSessionManager : ICallSessionManager
     /// <list type="bullet">
     /// <item>A call that joined a queue (<see cref="CallSession.QueueName"/> set) is announced once per
     /// visit: the first connect after a join publishes, and every later one until the next join does
-    /// nothing. Its sample is the visit's wait, from the join to this connect, both read from the
-    /// manager's clock; a session whose join the manager never saw (restored from a snapshot) falls back
+    /// nothing. Its sample is the visit's wait, from the visit's start
+    /// (<see cref="CallSession.QueueVisitStartedAt"/>) to this connect, both on the manager's clock; a
+    /// session whose join the manager never saw (restored from a snapshot) falls back
     /// to the call's wait since it was created, as the queue's metrics do. A wait of zero is a sample;
     /// only a negative one, from a clock stepping back, is dropped.</item>
     /// <item>A call that never joined a queue is published every time, as it always has been, and records
@@ -983,6 +1103,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
         Action<AsteriskBridge> onBridgeDestroyed,
         Action<BridgeTransferInfo> onTransfer,
         Action<string, AsteriskQueueEntry> onCallerJoined,
+        Action<string, AsteriskQueueEntry> onCallerLeft,
         Action<string, string?, string?> onAgentConnected,
         Action<string?, string?, string?> onQueueCallerConnected)
     {
@@ -999,6 +1120,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
             server.Bridges.BridgeDestroyed -= onBridgeDestroyed;
             server.Bridges.TransferOccurred -= onTransfer;
             server.Queues.CallerJoined -= onCallerJoined;
+            server.Queues.CallerLeft -= onCallerLeft;
             server.Agents.AgentConnected -= onAgentConnected;
             server.Agents.QueueCallerConnected -= onQueueCallerConnected;
         }
