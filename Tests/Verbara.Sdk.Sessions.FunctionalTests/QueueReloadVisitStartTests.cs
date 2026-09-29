@@ -30,7 +30,9 @@ public sealed class QueueReloadVisitStartTests
 {
     private const string CallA = "5552101";
     private const string CallB = "5552102";
+    private const string CallC = "5552103";
     private const string LateQueue = "q-late";
+    private const string NoAnswerQueue = "q-noans";
 
     private static readonly DateTimeOffset T0 = new(2026, 9, 28, 9, 0, 0, TimeSpan.Zero);
     private static readonly TimeSpan OneSecond = TimeSpan.FromSeconds(1);
@@ -87,6 +89,39 @@ public sealed class QueueReloadVisitStartTests
             "the reload's visit starts when the snapshot says the caller joined: the reload minus Wait");
         replay.RecordedWait(LateQueue).Should().BeCloseTo(TimeSpan.FromSeconds(replay.AgentConnect.HoldTime!.Value), OneSecond,
             "the answered visit is the re-join, and Asterisk's HoldTime is its wait");
+    }
+
+    /// <summary>
+    /// Call (c): the SDK saw the caller join <c>q-noans</c>, then was disconnected through its timeout, its
+    /// leave, its join to <c>q-late</c> and the snapshot 2 s after it, which reports it waiting in <c>q-late</c>.
+    /// The reload closes the first queue's visit and opens one in <c>q-late</c> (the counts are a pin,
+    /// <see cref="QueueReloadPinTests"/>); this is when the new one starts.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(QueueReloadCaptures))]
+    public async Task Reload_ShouldStartTheSecondQueuesVisitAtTheReloadMinusWait_WhenTheSnapshotReportsTheCallerInAnotherQueue(string fixture)
+    {
+        var replay = await AmiCaptureReplay.ReplayQueueReloadAsync(fixture, CallC, CapturedSnapshot.Named("c1"),
+            Outage.After("QueueCallerJoin"), new ManualClock(DateTimeOffset.UnixEpoch));
+
+        using var scope = new AssertionScope();
+        scope.AddReportable("replay", replay.Describe());
+        replay.SnapshotEntry!.Queue.Should().Be(LateQueue, "premise: the snapshot reports the caller waiting in q-late");
+        replay.Queued.Select(q => q.QueueName).Should().Equal([NoAnswerQueue, LateQueue],
+            "premise: the live join opened the q-noans visit, and the reload's report of q-late opened the second");
+        var reload = replay.ReloadInstant!.Value;
+        var reportedWait = TimeSpan.FromSeconds(replay.SnapshotEntry!.Wait!.Value);
+        var connect = replay.AgentConnect;
+
+        replay.Queued[^1].Timestamp.Should().Be(reload - reportedWait,
+            "the snapshot reports the caller has waited {0} s in q-late, so it joined that long before the reload", reportedWait.TotalSeconds);
+        replay.SamplesMs.Should().ContainSingle("app_queue connected the q-late visit once");
+        replay.RecordedWait(LateQueue).TotalMilliseconds.Should().Be(replay.SamplesMs.Single(),
+            "the tracker and the histogram measure the same visit");
+        replay.RecordedWait(LateQueue).Should().Be(connect.At - reload + reportedWait,
+            "the q-late visit runs from the reload minus the reported Wait to app_queue's connection");
+        replay.RecordedWait(LateQueue).Should().BeCloseTo(TimeSpan.FromSeconds(connect.HoldTime!.Value), OneSecond,
+            "Asterisk's own HoldTime is the q-late visit's wait, floored to the second");
     }
 
     /// <summary>The spec's scenario: the snapshot reports 5 s waited, and the member answers 7 s after the reload.</summary>
