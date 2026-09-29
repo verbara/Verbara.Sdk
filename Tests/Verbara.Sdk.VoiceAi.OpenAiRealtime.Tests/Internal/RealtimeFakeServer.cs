@@ -293,6 +293,39 @@ internal sealed class RealtimeFakeServer : IAsyncDisposable
     }
 
     /// <summary>
+    /// Sends one text message as several frames, one per element of <paramref name="parts"/>: a
+    /// fragmented message (RFC 6455 §5.4), which the client reads one frame at a time. Refused as
+    /// <see cref="SendEventAsync"/> refuses, for the same reasons.
+    /// </summary>
+    public async Task SendFragmentsAsync(IReadOnlyList<string> parts)
+    {
+        ArgumentNullException.ThrowIfNull(parts);
+
+        if (EventsToSend.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "SendFragmentsAsync would race the EventsToSend burst on the same socket. Send every "
+                + "event this way or through SendEventAsync, or none of them.");
+        }
+
+        var ws = _socket ?? throw new InvalidOperationException(
+            "No session has been accepted yet — wait on SessionUpdateReceived first.");
+
+        if (Volatile.Read(ref _serverCloseSent) != 0)
+        {
+            throw new InvalidOperationException(
+                "This session has sent its close frame, and nothing follows a close on the wire (RFC 6455 §5.5.1).");
+        }
+
+        for (var i = 0; i < parts.Count; i++)
+        {
+            await ws.SendAsync(
+                Encoding.UTF8.GetBytes(parts[i]).AsMemory(), WebSocketMessageType.Text, i == parts.Count - 1, CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     /// Tears down the server side of the live session with no close frame, so the client's pending
     /// read meets a connection that ended mid-stream.
     /// </summary>

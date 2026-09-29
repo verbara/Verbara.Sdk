@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Verbara.Sdk.Audio;
 using Verbara.Sdk.TestInfrastructure.WebSocket;
+using Verbara.Sdk.VoiceAi.Stt.Tests.Deepgram;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Xunit;
@@ -70,6 +71,95 @@ public sealed class SpeechRecognizerEndOfInputBoundTests
             failure.InnerException.Should().BeOfType<TimeoutException>()
                 .Which.Message.Should().Contain(client, "the timeout names the provider that went silent");
             caller.Transcripts.Should().Equal(["hello"], "the item sent before the end of input was delivered");
+        }
+    }
+
+    /// <summary>
+    /// The bound running out in the instant a vendor frame arrives, inside the read that returns it. The
+    /// read still succeeds, with the socket aborted under it; the frame is delivered, and the loop then
+    /// found the socket closed and ended as though the vendor had finished: the stream completed, with no
+    /// final result and no failure (20 of 20 per client, measured). The bound found the vendor silent, so
+    /// the stream fails as it does when the bound runs out between reads.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Clients))]
+    public async Task StreamAsync_ShouldThrowTransportFailure_WhenTheBoundRunsOutInsideTheReadThatReturnsAFrame(string client)
+    {
+        // Arrange — the vendor transcribes the audio, and then sends one more frame only when asked.
+        await using var peer = RecognizerEndOfInputPeers.Create(client, EndOfInputPeerMode.FrameOnRequest);
+        peer.Start();
+        var clock = new FakeTimeProvider();
+        using var receive = new WebSocketReceiveHook();
+        var caller = receive.Watch(() => new StreamingCaller(
+            RecognizerEndOfInputPeers.CreateRecognizer(client, peer.Port, clock),
+            RecognizerEndOfInputPeers.Frames(25),
+            CancellationToken.None));
+
+        await peer.EndOfInputSeen.WaitAsync(SignalTimeout);
+        await caller.NextTranscriptAsync().WaitAsync(SignalTimeout);
+        await WaitForTheBoundToArmAsync(clock);
+
+        // Act — the whole bound passes inside the read that returns the vendor's next frame.
+        receive.Arm(() => clock.Advance(Bound));
+        await peer.SendFrameAsync().WaitAsync(SignalTimeout);
+        await receive.Fired.WaitAsync(SignalTimeout);
+        var ending = await Record.ExceptionAsync(() => caller.Run.WaitAsync(SignalTimeout));
+
+        // Assert
+        var failure = ending.Should().BeOfType<SpeechProviderFailureException>(
+            "the bound found the vendor silent, whichever way the receive loop then left").Subject;
+        using (new AssertionScope())
+        {
+            failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
+            failure.InnerException.Should().BeOfType<TimeoutException>();
+            caller.Transcripts.Should().Equal(
+                ["hello", "hello"], "the read already held the frame when the bound ran out, so it returned it");
+            receive.ReceivesStartedAfterwards.Should().Be(0, "the socket is aborted; nothing is read after it");
+        }
+    }
+
+    /// <summary>
+    /// The tie: the frame the read returns as the bound runs out is a final transcript. A final result
+    /// does not end a Deepgram session, which ends only with the vendor's close, so it does not say the
+    /// vendor finished: the transcript is delivered, and then the stream fails, as in the theory above.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowTransportFailure_WhenTheBoundRunsOutAsAFinalTranscriptArrives()
+    {
+        // Arrange — the vendor's frame on request is a final transcript.
+        await using var peer = RecognizerEndOfInputPeers.Create(
+            "Deepgram",
+            EndOfInputPeerMode.FrameOnRequest,
+            progress: [PeerFrame.Text(DeepgramFakeServer.BuildResultJson("hello world", 0.95f, isFinal: true))]);
+        peer.Start();
+        var clock = new FakeTimeProvider();
+        using var receive = new WebSocketReceiveHook();
+        var caller = receive.Watch(() => new StreamingCaller(
+            RecognizerEndOfInputPeers.CreateRecognizer("Deepgram", peer.Port, clock),
+            RecognizerEndOfInputPeers.Frames(25),
+            CancellationToken.None));
+
+        await peer.EndOfInputSeen.WaitAsync(SignalTimeout);
+        await caller.NextTranscriptAsync().WaitAsync(SignalTimeout);
+        await WaitForTheBoundToArmAsync(clock);
+
+        // Act — the whole bound passes inside the read that returns the final transcript.
+        receive.Arm(() => clock.Advance(Bound));
+        await peer.SendFrameAsync().WaitAsync(SignalTimeout);
+        await receive.Fired.WaitAsync(SignalTimeout);
+        var ending = await Record.ExceptionAsync(() => caller.Run.WaitAsync(SignalTimeout));
+
+        // Assert
+        var failure = ending.Should().BeOfType<SpeechProviderFailureException>(
+            "the bound found the vendor silent, whichever way the receive loop then left").Subject;
+        using (new AssertionScope())
+        {
+            failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
+            failure.InnerException.Should().BeOfType<TimeoutException>();
+            caller.Transcripts.Should().Equal(
+                ["hello", "hello world"], "the read already held the final transcript, so it returned it");
+            caller.Results[^1].IsFinal.Should().BeTrue("the frame at the bound was a final result");
+            receive.ReceivesStartedAfterwards.Should().Be(0, "the socket is aborted; nothing is read after it");
         }
     }
 
@@ -227,7 +317,7 @@ public sealed class SpeechRecognizerEndOfInputBoundTests
     private sealed class StreamingCaller
     {
         private readonly Channel<string> _arrived = Channel.CreateUnbounded<string>();
-        private readonly List<string> _transcripts = [];
+        private readonly List<SpeechRecognitionResult> _results = [];
         private readonly Lock _gate = new();
 
         public StreamingCaller(
@@ -240,7 +330,7 @@ public sealed class SpeechRecognizerEndOfInputBoundTests
                     await foreach (var result in recognizer.StreamAsync(audio, AudioFormat.Slin16Mono8kHz, ct))
                     {
                         lock (_gate)
-                            _transcripts.Add(result.Transcript);
+                            _results.Add(result);
                         _arrived.Writer.TryWrite(result.Transcript);
                     }
                 }
@@ -260,7 +350,17 @@ public sealed class SpeechRecognizerEndOfInputBoundTests
             get
             {
                 lock (_gate)
-                    return [.. _transcripts];
+                    return [.. _results.Select(static r => r.Transcript)];
+            }
+        }
+
+        /// <summary>Every result delivered so far, in order.</summary>
+        public IReadOnlyList<SpeechRecognitionResult> Results
+        {
+            get
+            {
+                lock (_gate)
+                    return [.. _results];
             }
         }
 

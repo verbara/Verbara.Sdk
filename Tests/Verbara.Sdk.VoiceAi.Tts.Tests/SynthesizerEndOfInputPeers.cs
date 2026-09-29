@@ -30,34 +30,37 @@ internal static class SynthesizerEndOfInputPeers
     public static TheoryData<string> Clients => ["Cartesia", "Deepgram", "ElevenLabs", "LMNT"];
 
     /// <summary>The peer that speaks <paramref name="client"/>'s protocol up to its end of input.</summary>
-    public static EndOfInputPeer Create(string client, EndOfInputPeerMode mode) => client switch
+    /// <param name="client">The synthesizer.</param>
+    /// <param name="mode">What the peer does once the end of input has arrived.</param>
+    /// <param name="progress">Replaces the profile's <see cref="EndOfInputPeer.Progress"/> round when given.</param>
+    public static EndOfInputPeer Create(string client, EndOfInputPeerMode mode, IReadOnlyList<PeerFrame>? progress = null) => client switch
     {
         "Cartesia" => new EndOfInputPeer(mode)
         {
             IsEndOfInput = static t => t.Contains("\"transcript\"", StringComparison.Ordinal),
             OnEndOfInput = [PeerFrame.Text(CartesiaFakeServer.ReadFrame(CartesiaFakeServer.ChunkFrame))],
-            Progress = [PeerFrame.Text(CartesiaFakeServer.ReadFrame(CartesiaFakeServer.ChunkFrame))],
+            Progress = progress ?? [PeerFrame.Text(CartesiaFakeServer.ReadFrame(CartesiaFakeServer.ChunkFrame))],
             Answer = [PeerFrame.Text(CartesiaFakeServer.ReadFrame(CartesiaFakeServer.DoneFrame))],
         },
         "Deepgram" => new EndOfInputPeer(mode)
         {
             IsEndOfInput = static t => t.Contains("\"Close\"", StringComparison.Ordinal),
             OnEndOfInput = [PeerFrame.Binary(320)],
-            Progress = [PeerFrame.Binary(320)],
+            Progress = progress ?? [PeerFrame.Binary(320)],
             Answer = [PeerFrame.Text(DeepgramTtsFakeServer.ReadFrame(DeepgramTtsFakeServer.FlushedFrame))],
         },
         "ElevenLabs" => new EndOfInputPeer(mode)
         {
             IsEndOfInput = static t => t.Contains("\"text\":\"\"", StringComparison.Ordinal),
             OnEndOfInput = [PeerFrame.Text(ElevenLabsFakeServer.ReadFrame(ElevenLabsFakeServer.AudioOutputFrame))],
-            Progress = [PeerFrame.Text(ElevenLabsFakeServer.ReadFrame(ElevenLabsFakeServer.AudioOutputFrame))],
+            Progress = progress ?? [PeerFrame.Text(ElevenLabsFakeServer.ReadFrame(ElevenLabsFakeServer.AudioOutputFrame))],
             Answer = [PeerFrame.Text("""{"isFinal":true}""")],
         },
         "LMNT" => new EndOfInputPeer(mode)
         {
             IsEndOfInput = static t => t.Contains("\"eof\"", StringComparison.Ordinal),
             OnEndOfInput = [PeerFrame.Binary(320)],
-            Progress = [PeerFrame.Binary(320)],
+            Progress = progress ?? [PeerFrame.Binary(320)],
             Answer = [PeerFrame.Text(LmntWsFakeServer.ReadFrame(LmntWsFakeServer.FinishFrame))],
         },
         _ => throw new ArgumentOutOfRangeException(nameof(client), client, null),

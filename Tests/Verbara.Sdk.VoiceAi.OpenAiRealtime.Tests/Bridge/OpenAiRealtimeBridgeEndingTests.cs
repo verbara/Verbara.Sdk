@@ -1,6 +1,6 @@
-using System.Diagnostics.Tracing;
 using System.Globalization;
 using System.Net.WebSockets;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.AudioSocket;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Internal;
@@ -406,6 +406,144 @@ public sealed class OpenAiRealtimeBridgeEndingTests
             await audioServer.StopAsync(CancellationToken.None);
         }
     }
+
+    /// <summary>
+    /// The same instant one level down: the bound runs out inside the read that returns only the
+    /// <em>first part</em> of a message, a single frame larger than the loop's 64 KiB buffer or the
+    /// first fragment of a fragmented one. That read succeeds with the socket already aborted under it.
+    /// Reading the rest threw <see cref="WebSocketException"/> (<c>InvalidState</c>), which no catch
+    /// took, and the session the caller ended was counted as failed: measured 50 of 50 with the hook,
+    /// and, with no hook, in 3.7–12.7 % of the sessions whose close went unanswered while frames over
+    /// 64 KiB or fragmented messages streamed back to back, depending on the harness.
+    /// </summary>
+    /// <remarks>
+    /// A vendor that merely stops mid-message does not reach this ending: the loop is then waiting in a
+    /// read, and the bound ends it through the cancellation's catch (50 of 50 counted, measured). Only a
+    /// read that returns a part at the bound's instant does, which is why the hook makes the instant.
+    /// </remarks>
+    [Theory]
+    [InlineData("one 70,000-character frame")]
+    [InlineData("the first of two fragments")]
+    public async Task HandleSessionAsync_ShouldReportTheBound_WhenItRunsOutInsideAReadThatReturnsPartOfAMessage(string shape)
+    {
+        // Arrange: a vendor that holds after the client's close and never answers it
+        await using var fakeOpenAi = new RealtimeFakeServer { AnswerClientCloseOnRequest = true };
+        fakeOpenAi.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        try
+        {
+            var clock = new FakeTimeProvider();
+            var log = new RecordingLogger<OpenAiRealtimeBridge>();
+            await using var bridge = CreateBridge(fakeOpenAi, clock, log);
+            using var metrics = new MeterCapture(MeterName);
+            using var receive = new WebSocketReceiveHook();
+            using var loopsRunning = new RealtimeEventCollector(
+                bridge.Events, e => e.OfType<RealtimeSpeechStartedEvent>().Any());
+
+            var sessionTask = receive.Watch(
+                () => bridge.HandleSessionAsync(session, CancellationToken.None).AsTask());
+            await fakeOpenAi.SessionUpdateReceived.WaitAsync(SignalTimeout);
+            await fakeOpenAi.SendEventAsync(LoopsRunningMarkerEvent);
+            await loopsRunning.Satisfied.WaitAsync(SignalTimeout);
+            var armedDue = await HangUpAndWaitForTheArmAsync(client, fakeOpenAi, clock);
+
+            // Act: the whole bound passes inside the read that returns the message's first part
+            receive.Arm(() => clock.Advance(CloseAnswerBound));
+            await SendPartOfAMessageAsync(fakeOpenAi, shape);
+            await receive.Fired.WaitAsync(SignalTimeout);
+            var ending = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+            // Assert
+            using (new AssertionScope())
+            {
+                armedDue.Should().Be(CloseAnswerBound, "the bound is ten seconds, counted from the bridge's close");
+                ending.Should().BeNull("the caller ended the session; the bound aborting a read does not make it a failure");
+                receive.ReceivesStartedAfterwards.Should().Be(
+                    0, "the socket is aborted, so the loop must not read the rest of the message");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(1, "the caller ended the session");
+                metrics.Get("openai_realtime.sessions.close_unanswered").Should().Be(
+                    1, "the bound ended the wait, whichever read it ran out in");
+                metrics.Get("openai_realtime.sessions.failed").Should().Be(0, "nothing broke");
+                log.Entries.Should().ContainSingle(
+                    e => e.EventId.Name == "CloseUnanswered" && e.Level == LogLevel.Warning,
+                    "the warning is the only record of what the bound cost");
+            }
+        }
+        finally
+        {
+            await client.DisposeAsync();
+            await audioServer.StopAsync(CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// The host's cancellation in that same instant. The session token reaches the read through the
+    /// bound's token, so it aborts the socket the same way, and the rest of the message threw
+    /// <see cref="WebSocketException"/> too: a requested cancellation was counted as a failure (50 of 50
+    /// with the hook). A requested cancellation is a completion (see
+    /// <see cref="HandleSessionAsync_ShouldNotCountTheBound_WhenTheHostCancelsAfterTheHangup"/>).
+    /// </summary>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldCompleteWithoutCountingTheBound_WhenTheHostCancelsInsideAReadThatReturnsPartOfAMessage()
+    {
+        // Arrange
+        await using var fakeOpenAi = new RealtimeFakeServer { AnswerClientCloseOnRequest = true };
+        fakeOpenAi.Start();
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        try
+        {
+            var clock = new FakeTimeProvider();
+            var log = new RecordingLogger<OpenAiRealtimeBridge>();
+            await using var bridge = CreateBridge(fakeOpenAi, clock, log);
+            using var metrics = new MeterCapture(MeterName);
+            using var receive = new WebSocketReceiveHook();
+            using var host = new CancellationTokenSource();
+            using var loopsRunning = new RealtimeEventCollector(
+                bridge.Events, e => e.OfType<RealtimeSpeechStartedEvent>().Any());
+
+            var sessionTask = receive.Watch(() => bridge.HandleSessionAsync(session, host.Token).AsTask());
+            await fakeOpenAi.SessionUpdateReceived.WaitAsync(SignalTimeout);
+            await fakeOpenAi.SendEventAsync(LoopsRunningMarkerEvent);
+            await loopsRunning.Satisfied.WaitAsync(SignalTimeout);
+            await HangUpAndWaitForTheArmAsync(client, fakeOpenAi, clock);
+
+            // Act: the host cancels inside the read that returns the first 64 KiB of a 70,000-character frame
+            receive.Arm(host.Cancel);
+            await SendPartOfAMessageAsync(fakeOpenAi, "one 70,000-character frame");
+            await receive.Fired.WaitAsync(SignalTimeout);
+            var ending = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+            // Assert
+            using (new AssertionScope())
+            {
+                ending.Should().BeNull("a requested cancellation is a completion");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(1, "the host ended the session");
+                metrics.Get("openai_realtime.sessions.close_unanswered").Should().Be(
+                    0, "the host's cancellation is not the bound running out");
+                metrics.Get("openai_realtime.sessions.failed").Should().Be(0, "nothing broke");
+                log.Entries.Should().NotContain(e => e.EventId.Name == "CloseUnanswered");
+            }
+        }
+        finally
+        {
+            await client.DisposeAsync();
+            await audioServer.StopAsync(CancellationToken.None);
+        }
+    }
+
+    /// <summary>The first part of a message, in one of the two shapes that make a read return only part.</summary>
+    private static Task SendPartOfAMessageAsync(RealtimeFakeServer fakeOpenAi, string shape) => shape switch
+    {
+        // 70,000 characters in one frame: the first read fills the 64 KiB buffer and returns the rest unread.
+        "one 70,000-character frame" => fakeOpenAi.SendEventAsync(
+            $$"""{"type":"response.output_audio_transcript.delta","delta":"{{new string('x', 70_000)}}"}"""),
+        // A message in two frames: the first read returns the first frame alone.
+        "the first of two fragments" => fakeOpenAi.SendFragmentsAsync(
+            ["""{"type":"response.output_audio_transcript.delta","delta":"ab""", """cd"}"""]),
+        _ => throw new ArgumentOutOfRangeException(nameof(shape), shape, null),
+    };
 
     /// <summary>
     /// A control: a vendor that answers the close with <c>1000</c> just inside the bound. The session
@@ -1121,122 +1259,6 @@ public sealed class OpenAiRealtimeBridgeEndingTests
             _started.TrySetResult();
             await _released.Task.WaitAsync(ct).ConfigureAwait(false);
             return Result;
-        }
-    }
-
-    /// <summary>
-    /// Runs an action inside a WebSocket read, after the read has taken a whole frame off the connection
-    /// and before it returns the frame: the instant a bound that runs out as a frame arrives needs.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The runtime's WebSocket reports that instant on its private diagnostics source,
-    /// <c>Private.InternalDiagnostics.System.Net.WebSockets</c>. Its event <c>MutexExit</c>, with member
-    /// <c>ReceiveAsyncPrivate</c>, is written as a read releases its lock. By then the read has built
-    /// its result, and its registration on the caller's token still stands. So a token cancelled from
-    /// the action aborts the socket, and the read still returns the frame (read in the decompiled
-    /// <c>ManagedWebSocket</c> of .NET 10.0.12). The source is not a public contract, which is why the
-    /// test using this also checks what the hook was for, and fails if it stops being true.
-    /// </para>
-    /// <para>
-    /// Only the reads of the session started through <see cref="Watch"/> count, and of those the first
-    /// to end after <see cref="Arm"/> runs the action. The listener hears every WebSocket in the process,
-    /// so the session's reads are told apart by the execution context <see cref="Watch"/> marks, which
-    /// each read carries into the events it writes. The test also sees to it that the read ending first
-    /// is the one holding its frame: the bridge has read every frame the fake sent before the arm.
-    /// </para>
-    /// <para>
-    /// A CI run once failed with the action run in another read: the bound ran out before the frame
-    /// was read, so the frame was never forwarded, while every other assertion held. Two routes
-    /// reproduce that failure exactly. One is another socket's read ending after the arm. The other is
-    /// the bridge reading <c>session.created</c> after the arm, because the fake, descheduled between
-    /// starting its receive loop and sending <c>session.created</c>, let the test's frames overtake it;
-    /// the fake now sends it before its receive loop starts.
-    /// </para>
-    /// <para>
-    /// <see cref="ReceivesStartedAfterwards"/> counts the session's reads begun once the action has run.
-    /// </para>
-    /// </remarks>
-    private sealed class WebSocketReceiveHook : EventListener
-    {
-        private const string SourceName = "Private.InternalDiagnostics.System.Net.WebSockets";
-
-        /// <summary>True in the execution context <see cref="Watch"/> starts the session in, and so in its reads.</summary>
-        private readonly AsyncLocal<bool> _watched = new();
-
-        private readonly TaskCompletionSource _fired = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private Action? _action;
-        private int _receivesStartedAfterwards;
-
-        /// <summary>Completes once the action has run inside a read; faults if the action threw.</summary>
-        public Task Fired => _fired.Task;
-
-        /// <summary>How many of the watched session's reads began after the action ran.</summary>
-        public int ReceivesStartedAfterwards => Volatile.Read(ref _receivesStartedAfterwards);
-
-        /// <summary>
-        /// Starts the session whose reads this hook watches. Every read the session issues runs in the
-        /// execution context marked here; the caller's own context is left unmarked, so the frames the
-        /// test sends through the fake afterwards are not the session's.
-        /// </summary>
-        public Task Watch(Func<Task> startSession)
-        {
-            _watched.Value = true;
-            try
-            {
-                return startSession();
-            }
-            finally
-            {
-                _watched.Value = false;
-            }
-        }
-
-        public void Arm(Action action) => Volatile.Write(ref _action, action);
-
-        protected override void OnEventSourceCreated(EventSource eventSource)
-        {
-            if (eventSource.Name == SourceName)
-                EnableEvents(eventSource, EventLevel.Verbose, EventKeywords.All);
-        }
-
-        protected override void OnEventWritten(EventWrittenEventArgs eventData)
-        {
-            // Another socket's read, or anything else outside the watched session.
-            if (!_watched.Value)
-                return;
-
-            if (_fired.Task.IsCompleted)
-            {
-                if (eventData.EventName == "ReceiveStart")
-                    Interlocked.Increment(ref _receivesStartedAfterwards);
-                return;
-            }
-
-            if (eventData.EventName != "MutexExit" || PayloadText(eventData, "memberName") != "ReceiveAsyncPrivate")
-                return;
-
-            var action = Interlocked.Exchange(ref _action, null);
-            if (action is null) return;
-
-            // A failure is handed to the test through Fired: the event source's dispatch would swallow
-            // it, and the test would then time out without saying why.
-            var failure = Record.Exception(action);
-            if (failure is not null)
-            {
-                _fired.TrySetException(failure);
-                return;
-            }
-
-            _fired.TrySetResult();
-        }
-
-        private static string? PayloadText(EventWrittenEventArgs eventData, string name)
-        {
-            var index = eventData.PayloadNames?.IndexOf(name) ?? -1;
-            return index >= 0 && eventData.Payload is { } payload && index < payload.Count
-                ? payload[index] as string
-                : null;
         }
     }
 
