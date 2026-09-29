@@ -35,7 +35,7 @@
 **Checklist:**
 1. Verify username/password match `manager.conf`
 2. Check `deny`/`permit` ACL in the AMI user section
-3. Reload manager config: `asterisk -rx "manager reload"`
+3. Reload manager config: `asterisk -rx "manager reload"`. A reload does not end the session of an AMI user deleted from `manager.conf`: an application logged in as that user stays connected until its session ends, and is refused only when it logs in again.
 
 ### ARI: WebSocket connection failed
 
@@ -138,6 +138,29 @@ Measured on 2026-09-28 against Asterisk 20.20.1, 22.9.0 and 23.4.1, with raw AMI
 - With `AutoReconnect` off, or once the reconnect has given up or the connection has been disconnected, `StartAsync` throws `AmiNotConnectedException`: nothing will reload the state.
 - `StartAsync` called before the connection is established (`Initial`, or `Connecting` while a connect attempt runs) throws `AmiNotConnectedException`, as it always did. Call it after `ConnectAsync` returns.
 - A direct call to `RequestInitialStateAsync` throws `AmiNotConnectedException` whenever its session ends before the load completes, reconnecting or not.
+
+### Detecting an AMI loss
+
+**Symptoms:** after a PBX crash or a network cut, `VerbaraServer`'s managers show calls, queue callers or agents that Asterisk no longer has, until the connection is back.
+
+**What the SDK reports.** `VerbaraServer.ConnectionLost` (the same event as `IVerbaraServer.ConnectionLost`) is raised once for each loss of the established AMI connection that the application did not ask for, with what ended it:
+
+- no exception (`null`) when the connection's stream ended: Asterisk stopped or crashed, or the connection was reset;
+- a `TimeoutException` when the heartbeat's `Ping` went unanswered: a frozen PBX, or one the network no longer reaches;
+- the reader's exception when the AMI stream could not be read.
+
+It is raised after the connection's `State` has left `Connected`, whether `AutoReconnect` is on or off, and before the `Reconnected` of the same outage. It is not raised for the application's own `DisconnectAsync` or `DisposeAsync`, nor a second time when the reconnect gives up. From `ConnectionLost` until the reload after the reconnect has completed, the channels, queues and agents the server holds are not being updated: treat them as stale.
+
+**How soon a loss is seen.**
+
+- A stream Asterisk closes or resets is seen at once.
+- A peer that goes silent is seen by the heartbeat, within one `HeartbeatInterval` plus the `Ping` wait, which is the smaller of `HeartbeatTimeout` and `DefaultResponseTimeout`. With the defaults (30 s, 10 s and 2 s) that is up to about 32 s after the peer went silent; measured, 2.2–32.0 s. A shorter `HeartbeatInterval` sees it sooner.
+
+**When the reconnect gives up.** With `MaxReconnectAttempts` set to N, the connection gives up after N backoff delays, plus the time its failed attempts take, and then reads `Disconnected`. The first delay is `ReconnectInitialDelay`; each next one is multiplied by `ReconnectMultiplier` and capped at `ReconnectMaxDelay`. As examples, measured from the moment Asterisk was started again with the application's credentials rejected, not from the loss: 17.2–17.7 s with 1 s ×2 and N = 4; 6.9–8.6 s with 0.5 s ×2 capped at 2 s and N = 4. The give-up raises nothing: read `State`.
+
+**With `MaxReconnectAttempts = 0`** (the default) the connection never gives up: it retries for ever, rejected credentials included, each attempt failing with `AmiAuthenticationException`. `ConnectionLost` is raised once, for the loss, and nothing after it until the connection is back.
+
+**Keep handlers short.** `ConnectionLost` handlers and the connection's `Reconnected` handlers run one at a time on a thread-pool thread, in the order the loss and the reconnect happened. They never hold the connection's reader, heartbeat or reconnect, but the reload after the reconnect waits for every one of them, so a slow handler delays it. A handler that throws is logged and the handlers after it still run; a handler that never returns stops every later notification, the reload of every later reconnect included.
 
 ---
 
