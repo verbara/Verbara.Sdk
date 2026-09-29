@@ -371,10 +371,11 @@ internal static class AmiCaptureReplay
                     connection.Observer.OnNext(frame);
                     thrown = null;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
                     // AmiConnection.DispatchEventAsync catches what an observer throws and carries on, and
-                    // so does a replay; the exception is reported with the result.
+                    // so does a replay; the exception is reported with the result. Running out of memory is
+                    // not the observer's fault, so it ends the replay instead.
                     thrown = ex;
                 }
                 finally
@@ -417,7 +418,8 @@ internal static class AmiCaptureReplay
     public static async Task<IReadOnlyList<ManagerEvent>> ReadCaptureAsync(byte[] capture)
     {
         var events = new List<ManagerEvent>();
-        await foreach (var evt in ReadEventsAsync(new MemoryStream(capture, writable: false)))
+        await using var stream = new MemoryStream(capture, writable: false);
+        await foreach (var evt in ReadEventsAsync(stream))
             events.Add(evt);
         return events;
     }

@@ -21,6 +21,9 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 [Collection(WaitTimeHistogramGroup.Name)]
 public sealed class QueueReloadPinTests(ITestOutputHelper output)
 {
+    /// <summary>The four callers each capture places, one per call (a) to (d).</summary>
+    private static readonly string[] CapturedCallers = ["5552101", "5552102", "5552103", "5552104"];
+
     private const string CallB = "5552102";
     private const string CallC = "5552103";
     private const string CallD = "5552104";
@@ -39,7 +42,7 @@ public sealed class QueueReloadPinTests(ITestOutputHelper output)
             var data = new TheoryData<string, string>();
             foreach (var fixture in AmiCaptureReplay.QueueReloadCaptures)
             {
-                foreach (var caller in (string[])["5552101", "5552102", "5552103", "5552104"])
+                foreach (var caller in CapturedCallers)
                     data.Add(fixture, caller);
             }
 
@@ -201,15 +204,16 @@ public sealed class QueueReloadPinTests(ITestOutputHelper output)
                 Entry("q-other", callerChannel, caller, "5552130", wait: 1),
             ]);
 
+        var second = rig.Tracker.GetByQueueName("q-other");
+        second.Should().NotBeNull("the report of q-other is a new offer there");
+
         using var scope = new AssertionScope();
         rig.Queued.Select(q => q.QueueName).Should().Equal(["q-pjsip", "q-other"],
             "the report of another queue is a new visit there");
         var first = rig.Tracker.GetByQueueName("q-pjsip")!;
         (first.CallsOffered, first.CallsAbandoned, first.CallsWaiting).Should().Be((1, 1, 0),
             "the caller left q-pjsip without a connection");
-        var second = rig.Tracker.GetByQueueName("q-other");
-        second.Should().NotBeNull("the report of q-other is a new offer there");
-        (second?.CallsOffered, second?.CallsWaiting).Should().Be((1, 1), "the report of q-other is a new offer there, still waiting");
+        (second!.CallsOffered, second.CallsWaiting).Should().Be((1, 1), "the report of q-other is a new offer there, still waiting");
     }
 
     /// <summary>
