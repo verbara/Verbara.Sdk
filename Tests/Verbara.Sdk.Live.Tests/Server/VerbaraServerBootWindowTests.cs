@@ -39,6 +39,13 @@ public sealed class VerbaraServerBootWindowTests
 
     private const string ReconnectReloadFailed = "[LIVE] Reconnect reload failed";
 
+    private const string InitialLoadInterrupted = "[LIVE] Initial state load interrupted";
+
+    private const string ReloadInterrupted = "[LIVE] Reconnect reload interrupted";
+
+    /// <summary>What the interruption's warning says when the session ended while the load waited for <c>FullyBooted</c>.</summary>
+    private const string EndedDuringTheWait = "while the live state load waited for FullyBooted";
+
     /// <summary>How long a load waits between two asks when the user never receives <c>FullyBooted</c>.</summary>
     private static readonly TimeSpan Interval = TimeSpan.FromMilliseconds(200);
 
@@ -287,6 +294,8 @@ public sealed class VerbaraServerBootWindowTests
             queue?.MemberCount.Should().Be(1, "the queue keeps its one static member");
             run.Server.Agents.GetById(BootingAsterisk.AgentId).Should().NotBeNull("the reload loads the agent");
             Lines(run.ServerLog, ReconnectReloadFailed).Should().Be(0, "the reload completed");
+            Warnings(run).Should().ContainSingle("the start's interrupted load warns once, and the reload after it completes")
+                .Which.Should().Contain(InitialLoadInterrupted, "the warning says that the start's load was interrupted");
             first.Fault.Should().BeNull("the first peer served its session without failing");
             second.Fault.Should().BeNull("the second peer served its session without failing");
         }
@@ -402,6 +411,9 @@ public sealed class VerbaraServerBootWindowTests
             queue?.MemberCount.Should().Be(1, "the queue keeps its one static member");
             run.Server.Agents.GetById(BootingAsterisk.AgentId).Should().NotBeNull("the reload loads the agent");
             Lines(run.ServerLog, ReconnectReloadFailed).Should().Be(0, "the reload completed");
+            Warnings(run).Should().ContainSingle("the start's interrupted load warns once, and the reload after it completes")
+                .Which.Should().Contain(InitialLoadInterrupted, "the warning says that the start's load was interrupted")
+                .And.Contain(EndedDuringTheWait, "the load stopped at its wait, and asked nothing on the ended session");
             first.Fault.Should().BeNull("the first peer served its session without failing");
             second.Fault.Should().BeNull("the second peer served its session without failing");
         }
@@ -426,6 +438,10 @@ public sealed class VerbaraServerBootWindowTests
                 "the load asks nothing more once its session has ended, and the connection is reconnecting");
             peer.Asked("QueueStatus").Should().Be(1, "the queues were asked once, and refused, before the close");
             peer.Asked("Agents").Should().Be(0, "the load stopped before its next request");
+            Warnings(run).Should().ContainSingle("the start's interrupted load warns once")
+                .Which.Should().Contain(InitialLoadInterrupted, "the warning says that the start's load was interrupted")
+                .And.Contain(EndedDuringTheWait,
+                    "the load stopped at its wait: an ask on the ended session would be refused, and say so");
             peer.Fault.Should().BeNull("the peer served the session without failing");
         }
     }
@@ -442,10 +458,48 @@ public sealed class VerbaraServerBootWindowTests
         using (new AssertionScope())
         {
             outcome.Should().BeOfType<AmiNotConnectedException>(
-                "the connection will not come back, so nothing will ever reload what the load did not finish");
+                "the connection will not come back, so nothing will ever reload what the load did not finish")
+                .Which.Message.Should().Contain(EndedDuringTheWait,
+                    "the load stopped at its wait, and asked nothing on the ended session");
+            Warnings(run).Should().BeEmpty("a start that throws is not an interrupted load");
             Lines(run.ServerLog, StateLoaded).Should().Be(0, "a load cut short by its session is not reported as loaded");
             peer.Asked("QueueStatus").Should().Be(1, "the queues were asked once, and refused, before the close");
             peer.Fault.Should().BeNull("the peer served the session without failing");
+        }
+    }
+
+    [Fact]
+    public async Task Reload_ShouldLogAnInterruptionAndAskNothingMore_WhenTheReconnectedSessionEndsDuringTheReload()
+    {
+        // The start loads on a booted session. After the reconnect, Asterisk ends the second session while the reload's
+        // queues are pending. The connection reconnects again, and that attempt is never served: the next reload is
+        // the next reconnect's.
+        var first = new BootingAsterisk { BootedAtLogin = true };
+        var second = new BootingAsterisk { BootedAtLogin = true, Close = PeerClose.WhenAsked, CloseWhenAsked = "QueueStatus" };
+        await using var run = await Run.StartAsync(first, second, autoReconnect: true);
+
+        run.ReleaseSecondPeer();
+        first.CloseSession();
+        var reconnected = await CompletesWithinBoundAsync(run.Reconnected);
+        var logged = await CompletesWithinBoundAsync(
+            Task.WhenAny(run.ServerLog.Logged(ReloadInterrupted), run.ServerLog.Logged(ReconnectReloadFailed)));
+        var sentAfterClose = await second.ActionsSentAfterCloseAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            reconnected.Should().BeTrue("the connection reconnected to the second session");
+            logged.Should().BeTrue("the reload ended, and said how");
+            Lines(run.ServerLog, ReconnectReloadFailed).Should().Be(0,
+                "a reload whose session ended is interrupted, not failed: the next reconnect reloads");
+            Warnings(run).Should().ContainSingle("the interrupted reload warns once")
+                .Which.Should().Contain(ReloadInterrupted, "the warning says that the reload was interrupted")
+                .And.Contain("QueueStatus", "the warning names the request the session ended during");
+            Lines(run.ServerLog, StateLoaded).Should().Be(1, "only the start's load completed");
+            second.Asked("QueueStatus").Should().Be(1, "the reload asked the queues once, and the session ended");
+            second.Asked("Agents").Should().Be(0, "the reload stopped before its next request");
+            sentAfterClose.Should().BeEmpty("nothing more is sent on a session that has ended");
+            first.Fault.Should().BeNull("the first peer served its session without failing");
+            second.Fault.Should().BeNull("the second peer served its session without failing");
         }
     }
 
