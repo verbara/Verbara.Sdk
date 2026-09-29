@@ -50,6 +50,15 @@ internal static partial class VerbaraServerLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "[LIVE] Reconnect reload interrupted: its AMI session ended and the connection is {State} ({Reason})")]
     public static partial void ReloadInterrupted(ILogger logger, AmiConnectionState state, string reason);
+
+    /// <summary>The Warning a server logs when its AMI connection announces a loss nobody asked for.</summary>
+    internal const string AmiConnectionLostLine = "[LIVE] AMI connection lost: live state is stale until it reconnects and reloads";
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = AmiConnectionLostLine)]
+    public static partial void AmiConnectionLost(ILogger logger, Exception? exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[LIVE] ConnectionLost handler error")]
+    public static partial void ConnectionLostHandlerError(ILogger logger, Exception exception);
 }
 
 /// <summary>
@@ -109,6 +118,32 @@ public sealed class VerbaraServer : IVerbaraServer
     public BridgeManager Bridges { get; }
 
     /// <summary>Fired when the AMI connection is lost or completed.</summary>
+    /// <remarks>
+    /// <para>
+    /// Raised once for each loss of the established AMI connection that the caller did not ask for, with what
+    /// ended it: <see langword="null"/> when the connection's stream ended (Asterisk closed it, or it was reset: the
+    /// socket transport reports both as an end of stream), a <see cref="TimeoutException"/> when the heartbeat's Ping
+    /// went unanswered, or the reader's exception when the AMI stream could not be read. It is raised whether automatic
+    /// reconnection is on or off. From that moment until the connection's <see cref="IAmiConnection.Reconnected"/> and
+    /// the reload that follows it, the channels, queues and agents this server holds are not being updated.
+    /// </para>
+    /// <para>
+    /// It is raised after <see cref="IAmiConnection.State"/> has left <see cref="AmiConnectionState.Connected"/>,
+    /// and before the <see cref="IAmiConnection.Reconnected"/> of the same outage, which is delivered behind it on the
+    /// same ordered queue. It is not raised for the caller's own <c>DisconnectAsync</c> or <c>DisposeAsync</c>, nor a
+    /// second time when the reconnect loop gives up at <c>MaxReconnectAttempts</c>: a connection that gave up reads
+    /// <see cref="AmiConnectionState.Disconnected"/>. Handlers run on a thread-pool thread, one after the other; they
+    /// never hold the connection's reader, heartbeat or reconnect, but this server's reload after the reconnect waits
+    /// for them, so a slow one delays it: keep them short. A handler that throws is logged and the others still run.
+    /// A handler may end the connection, or remove this server from its pool, and wait for that.
+    /// </para>
+    /// <para>
+    /// That is over the SDK's own <see cref="AmiConnection"/>. Over another <see cref="IAmiConnection"/>, it is raised
+    /// when that connection calls <see cref="IObserver{T}.OnError"/> (with the error) or
+    /// <see cref="IObserver{T}.OnCompleted"/> (with <see langword="null"/>) on its observers, on the thread that calls
+    /// it; the SDK's own connection never calls either, so nothing is raised twice.
+    /// </para>
+    /// </remarks>
     public event Action<Exception?>? ConnectionLost;
 
     /// <summary>The underlying AMI connection for this server.</summary>
@@ -173,6 +208,9 @@ public sealed class VerbaraServer : IVerbaraServer
     {
         _subscription = _connection.Subscribe(new EventObserver(this));
         _connection.Reconnected += OnReconnected;
+        // Subscribed before the load, so that a loss which cuts the load short is announced too.
+        if (_connection is AmiConnection amiConnection)
+            amiConnection.Lost += OnConnectionLost;
 
         // Register observable gauges for live state (all typed as long for consistent metric reporting)
         _instanceMeter.CreateObservableGauge<long>("live.channels.active",
@@ -724,10 +762,40 @@ public sealed class VerbaraServer : IVerbaraServer
     public async ValueTask DisposeAsync()
     {
         _connection.Reconnected -= OnReconnected;
+        if (_connection is AmiConnection amiConnection)
+            amiConnection.Lost -= OnConnectionLost;
         _subscription?.Dispose();
         if (_ariClient is not null)
             await _ariClient.DisposeAsync();
         _instanceMeter.Dispose();
+    }
+
+    private void OnConnectionLost(Exception? cause)
+    {
+        VerbaraServerLog.AmiConnectionLost(_logger, cause);
+        RaiseConnectionLost(cause);
+    }
+
+    /// <summary>Raises <see cref="ConnectionLost"/> handler by handler, so that one that throws does not starve the rest.</summary>
+    private void RaiseConnectionLost(Exception? cause)
+    {
+        var handlers = ConnectionLost;
+        if (handlers is null)
+            return;
+
+        foreach (var handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((Action<Exception?>)handler).Invoke(cause);
+            }
+            catch (Exception ex)
+            {
+                // A subscriber's handler is foreign code: whatever it throws is logged, so that the handlers after it
+                // are still told of the loss.
+                VerbaraServerLog.ConnectionLostHandlerError(_logger, ex);
+            }
+        }
     }
 
     /// <summary>Internal observer that dispatches typed AMI events to the appropriate manager.</summary>
@@ -963,13 +1031,13 @@ public sealed class VerbaraServer : IVerbaraServer
         public void OnError(Exception error)
         {
             VerbaraServerLog.ConnectionError(server._logger, error);
-            server.ConnectionLost?.Invoke(error);
+            server.RaiseConnectionLost(error);
         }
 
         public void OnCompleted()
         {
             VerbaraServerLog.ConnectionClosed(server._logger);
-            server.ConnectionLost?.Invoke(null);
+            server.RaiseConnectionLost(null);
         }
     }
 }

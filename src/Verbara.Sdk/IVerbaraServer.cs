@@ -50,5 +50,16 @@ public interface IVerbaraServer : IAsyncDisposable
     ValueTask RequestInitialStateAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Fired when the AMI connection is lost or completed.</summary>
+    /// <remarks>
+    /// Raised once for each loss of the established AMI connection that the caller did not ask for, with what ended it:
+    /// <see langword="null"/> when the connection's stream ended, a <see cref="TimeoutException"/> when the heartbeat's
+    /// Ping went unanswered, or the reader's exception when the AMI stream could not be read. It is raised after
+    /// <see cref="IAmiConnection.State"/> has left <see cref="Enums.AmiConnectionState.Connected"/> and before the
+    /// <see cref="IAmiConnection.Reconnected"/> of the same outage, and not for the caller's own ending, nor again when
+    /// the reconnect loop gives up. Handlers run one at a time on a thread-pool thread; one that throws is logged and the
+    /// others still run; the reload after the reconnect waits for them, so keep them short. Over a connection other than
+    /// the SDK's own, it is raised when that connection faults or completes its event observers. Until the reconnect and
+    /// its reload, the live state is not being updated.
+    /// </remarks>
     event Action<Exception?>? ConnectionLost;
 }
