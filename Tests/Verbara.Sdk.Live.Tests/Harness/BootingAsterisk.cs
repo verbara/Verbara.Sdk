@@ -211,9 +211,10 @@ internal sealed class BootingAsterisk
         {
             // The run ended while the peer was serving. Nothing went wrong with the session itself.
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // Kept for the test to assert on: a peer that failed would otherwise read as an Asterisk that went quiet.
+            // Running out of memory is not the peer's failure, so it is left to end the run.
             Fault = ex;
         }
         finally

@@ -186,9 +186,10 @@ public sealed partial class AmiConnectionEventActionOutcomeTests
 
             return new Ended(received, Error: null);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // How the enumeration ended is what the tests assert: an error is recorded, not rethrown.
+            // How the enumeration ended is what the tests assert: an error is recorded, not rethrown. Running out of
+            // memory is not the action's outcome, so it is left to end the run.
             return new Ended(received, ex);
         }
     }

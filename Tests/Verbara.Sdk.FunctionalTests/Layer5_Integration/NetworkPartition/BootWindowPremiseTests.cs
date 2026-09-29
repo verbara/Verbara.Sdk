@@ -580,72 +580,74 @@ public sealed class BootWindowPremiseTests : IClassFixture<BootWindowPremiseTest
 
         private async Task RelayAsync(TcpClient client, RelaySession session, Task gone, CancellationToken stopped)
         {
-            TcpClient? asterisk = null;
-            try
+            using (client)
             {
-                await gone.WaitAsync(stopped);
-                (asterisk, var banner) = await DialUntilBannerAsync(stopped);
-                var toClient = client.GetStream();
-                await toClient.WriteAsync(banner, stopped);
-                session.Record(banner);
-                var fromAsterisk = PumpAsync(asterisk.GetStream(), toClient, session, stopped);
-                var fromClient = PumpAsync(toClient, asterisk.GetStream(), record: null, stopped);
-                await Task.WhenAny(fromAsterisk, fromClient);
-                // Either side ended: closing both ends the other pump, which never throws.
-                client.Dispose();
-                asterisk.Dispose();
-                await Task.WhenAll(fromAsterisk, fromClient);
-            }
-            catch (OperationCanceledException) when (stopped.IsCancellationRequested)
-            {
-                // The relay was disposed while this client waited for Asterisk; the sockets are closed below.
-            }
-            catch (IOException)
-            {
-                // The client went away before Asterisk answered; the sockets are closed below.
-            }
-            finally
-            {
-                client.Dispose();
-                asterisk?.Dispose();
-            }
-        }
-
-        /// <summary>Dials Asterisk until it accepts and sends its AMI banner; returns the connection and the banner.</summary>
-        private async Task<(TcpClient Asterisk, byte[] Banner)> DialUntilBannerAsync(CancellationToken stopped)
-        {
-            using var cadence = new PeriodicTimer(DialInterval);
-            while (true)
-            {
-                var asterisk = new TcpClient { NoDelay = true };
-                var handedOver = false;
                 try
                 {
-                    await asterisk.ConnectAsync(_host, _port, stopped);
-                    if (await ReadBannerAsync(asterisk.GetStream(), stopped) is { } banner)
+                    await gone.WaitAsync(stopped);
+                    using var cadence = new PeriodicTimer(DialInterval);
+                    while (true)
                     {
-                        handedOver = true;
-                        return (asterisk, banner);
+                        using (var asterisk = new TcpClient { NoDelay = true })
+                        {
+                            if (await TryDialAsync(asterisk, stopped) is { } banner)
+                            {
+                                await ForwardAsync(client, asterisk, banner, session, stopped);
+                                return;
+                            }
+                        }
+
+                        await cadence.WaitForNextTickAsync(stopped);
                     }
                 }
-                catch (SocketException)
+                catch (OperationCanceledException) when (stopped.IsCancellationRequested)
                 {
-                    // Asterisk is not listening yet; the next dial follows at the relay's cadence.
+                    // The relay was disposed while this client waited for Asterisk; the sockets close as their scopes end.
                 }
                 catch (IOException)
                 {
-                    // Asterisk dropped the connection before its banner; the next dial follows at the relay's cadence.
+                    // The client went away before Asterisk answered; the sockets close as their scopes end.
                 }
-                finally
-                {
-                    // Only the caller owns a connection that answered with the banner; any other ending,
-                    // a cancellation included, releases it here.
-                    if (!handedOver)
-                        asterisk.Dispose();
-                }
-
-                await cadence.WaitForNextTickAsync(stopped);
             }
+        }
+
+        /// <summary>
+        /// One dial: the banner when Asterisk answered with it, <see langword="null"/> when it is not listening yet or
+        /// dropped the connection first, so that the next dial follows at the relay's cadence.
+        /// </summary>
+        private async Task<byte[]?> TryDialAsync(TcpClient asterisk, CancellationToken stopped)
+        {
+            try
+            {
+                await asterisk.ConnectAsync(_host, _port, stopped);
+                return await ReadBannerAsync(asterisk.GetStream(), stopped);
+            }
+            catch (SocketException)
+            {
+                // Asterisk is not listening yet; the next dial follows at the relay's cadence.
+                return null;
+            }
+            catch (IOException)
+            {
+                // Asterisk dropped the connection before its banner; the next dial follows at the relay's cadence.
+                return null;
+            }
+        }
+
+        /// <summary>Hands the banner to the client, then forwards both ways until either side ends.</summary>
+        private static async Task ForwardAsync(TcpClient client, TcpClient asterisk, byte[] banner, RelaySession session,
+            CancellationToken stopped)
+        {
+            var toClient = client.GetStream();
+            await toClient.WriteAsync(banner, stopped);
+            session.Record(banner);
+            var fromAsterisk = PumpAsync(asterisk.GetStream(), toClient, session, stopped);
+            var fromClient = PumpAsync(toClient, asterisk.GetStream(), record: null, stopped);
+            await Task.WhenAny(fromAsterisk, fromClient);
+            // Either side ended: closing both ends the other pump, which never throws.
+            client.Dispose();
+            asterisk.Dispose();
+            await Task.WhenAll(fromAsterisk, fromClient);
         }
 
         /// <summary>The banner line, read up to its line break; <see langword="null"/> when the connection ended first.</summary>

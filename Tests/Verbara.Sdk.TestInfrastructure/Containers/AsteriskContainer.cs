@@ -31,6 +31,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
     /// </summary>
     public string NetworkAddress => _container.IpAddress;
 
+    /// <summary>An Asterisk container from <paramref name="image"/>, on <paramref name="network"/>.</summary>
     /// <param name="network">The network the container joins, under the alias <c>asterisk</c>.</param>
     /// <param name="image">The image from <see cref="CreateImageAsync"/>.</param>
     /// <param name="configDirectory">
