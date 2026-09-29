@@ -798,6 +798,11 @@ Named here rather than left as absence, because absence is what this file exists
   - **A vendor that does not answer the close.** Every live hangup was answered with `1000` within
     about 1.1 s, on both dates. The client's 10 s bound on that answer, and the
     `openai_realtime.sessions.close_unanswered` counter it feeds, have run only against the test fake.
+    The bound running out inside a read that returns only part of a message (a frame over the
+    client's 64 KiB read buffer, or the first fragment of a message) is pinned by tests and was
+    measured end to end through Asterisk 18.26.4, 20.20.1, 22.9.0 and 23.4.1: the session completes
+    and counts the close as unanswered on every run. Before the fix it counted as failed on every run
+    there, and in 3.7–12.7 % of unanswered closes in an in-process race that no hook forced.
 
 ## Two properties this record keeps having to restate
 
