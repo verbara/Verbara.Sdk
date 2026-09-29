@@ -72,8 +72,8 @@ public sealed class VerbaraServerBootWindowTests
             loaded.Should().BeTrue("a start that returned has logged its load");
             run.Server.Queues.QueueCount.Should().Be(1, "Asterisk reports one queue");
             queue.Should().NotBeNull("the queue Asterisk reports is loaded");
-            queue?.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
-            queue?.MemberCount.Should().Be(1, "the queue keeps its one static member");
+            queue!.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
+            queue!.MemberCount.Should().Be(1, "the queue keeps its one static member");
             run.Server.Agents.AgentCount.Should().Be(1, "Asterisk reports one agent");
             run.Server.Agents.GetById(BootingAsterisk.AgentId).Should().NotBeNull("the agent Asterisk reports is loaded");
             peer.Asked("Status").Should().Be(1, "the channels are asked once");
@@ -107,8 +107,8 @@ public sealed class VerbaraServerBootWindowTests
             outcome.Should().BeNull("a load that was refused by a starting Asterisk completes once it has started");
             queue.Should().NotBeNull(
                 "a refusal from an Asterisk that is still starting is not an empty table: the queue is asked again");
-            queue?.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
-            queue?.MemberCount.Should().Be(1, "the queue keeps its one static member");
+            queue!.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
+            queue!.MemberCount.Should().Be(1, "the queue keeps its one static member");
             run.Server.Agents.GetById(BootingAsterisk.AgentId).Should().NotBeNull("the agent Asterisk reports is loaded");
             peer.Asked("QueueStatus").Should().Be(2, "once refused, then once more after Asterisk reported FullyBooted");
             peer.Asked("Agents").Should().Be(1, "the agents are asked once Asterisk has started, and answered");
@@ -143,8 +143,8 @@ public sealed class VerbaraServerBootWindowTests
             reloaded.Should().BeTrue("the reload completed and logged its load");
             queue.Should().NotBeNull(
                 "the first session's FullyBooted does not count for the second: the reload asks again");
-            queue?.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
-            queue?.MemberCount.Should().Be(1, "the queue keeps its one static member");
+            queue!.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
+            queue!.MemberCount.Should().Be(1, "the queue keeps its one static member");
             run.Server.Agents.GetById(BootingAsterisk.AgentId).Should().NotBeNull("the agent Asterisk reports is reloaded");
             second.Asked("QueueStatus").Should().Be(2, "once refused, then once more after the second session's report");
             Lines(run.ServerLog, ReconnectReloadFailed).Should().Be(0, "the reload completed");
@@ -189,8 +189,8 @@ public sealed class VerbaraServerBootWindowTests
             outcome.Should().BeNull("the load completes once Asterisk answers");
             peer.Asked("QueueStatus").Should().Be(4, "once at first, then once per step, the last one answered");
             queue.Should().NotBeNull("the queue is loaded once Asterisk has started");
-            queue?.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
-            queue?.MemberCount.Should().Be(1, "the queue keeps its one static member");
+            queue!.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
+            queue!.MemberCount.Should().Be(1, "the queue keeps its one static member");
             run.Server.Agents.GetById(BootingAsterisk.AgentId).Should().NotBeNull("the agent Asterisk reports is loaded");
             peer.Asked("Agents").Should().Be(1, "the agents are asked once Asterisk has started, and answered");
             peer.Fault.Should().BeNull("the peer served the session without failing");
@@ -290,8 +290,8 @@ public sealed class VerbaraServerBootWindowTests
             reconnected.Should().BeTrue("the connection reconnected to the second session");
             reloaded.Should().BeTrue("the reload after the reconnect completed and logged its load");
             queue.Should().NotBeNull("the reload loads the queue");
-            queue?.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
-            queue?.MemberCount.Should().Be(1, "the queue keeps its one static member");
+            queue!.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
+            queue!.MemberCount.Should().Be(1, "the queue keeps its one static member");
             run.Server.Agents.GetById(BootingAsterisk.AgentId).Should().NotBeNull("the reload loads the agent");
             Lines(run.ServerLog, ReconnectReloadFailed).Should().Be(0, "the reload completed");
             Warnings(run).Should().ContainSingle("the start's interrupted load warns once, and the reload after it completes")
@@ -407,8 +407,8 @@ public sealed class VerbaraServerBootWindowTests
             reconnected.Should().BeTrue("the connection reconnected to the second session");
             reloaded.Should().BeTrue("the reload after the reconnect completed and logged its load");
             queue.Should().NotBeNull("the reload loads the queue");
-            queue?.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
-            queue?.MemberCount.Should().Be(1, "the queue keeps its one static member");
+            queue!.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
+            queue!.MemberCount.Should().Be(1, "the queue keeps its one static member");
             run.Server.Agents.GetById(BootingAsterisk.AgentId).Should().NotBeNull("the reload loads the agent");
             Lines(run.ServerLog, ReconnectReloadFailed).Should().Be(0, "the reload completed");
             Warnings(run).Should().ContainSingle("the start's interrupted load warns once, and the reload after it completes")
@@ -591,8 +591,8 @@ public sealed class VerbaraServerBootWindowTests
             peer.Asked("QueueStatus").Should().Be(1, "the queues are asked once");
             peer.Asked("Agents").Should().Be(1, "the agents are asked once");
             queue.Should().NotBeNull("the queue Asterisk reports is loaded");
-            queue?.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
-            queue?.MemberCount.Should().Be(1, "the queue keeps its one static member");
+            queue!.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
+            queue!.MemberCount.Should().Be(1, "the queue keeps its one static member");
             run.Server.Agents.GetById(BootingAsterisk.AgentId).Should().NotBeNull("the agent Asterisk reports is loaded");
             Warnings(run).Should().BeEmpty("nothing went wrong");
             peer.Fault.Should().BeNull("the peer served the session without failing");

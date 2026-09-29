@@ -88,11 +88,16 @@ public sealed class BootWindowPremiseTests : IClassFixture<BootWindowPremiseTest
                 landed = attempt;
         }
 
-        landed.Should().NotBeNull(string.Create(CultureInfo.InvariantCulture,
+        if (landed is null)
+        {
+            Assert.Fail(string.Create(CultureInfo.InvariantCulture,
             $"inconclusive: none of {Attempts} restarts landed a login in Asterisk's boot window, so the premise was not observed"));
+            return;
+        }
+
         using (new AssertionScope())
         {
-            landed!.FirstAnswer.Should().Be("Error", "Asterisk refuses QueueStatus until app_queue has registered it");
+            landed.FirstAnswer.Should().Be("Error", "Asterisk refuses QueueStatus until app_queue has registered it");
             landed.FirstMessage.Should().StartWith("Invalid/unknown command",
                 "the refusal reads exactly like the one for a module that is not loaded at all");
             landed.FullyBootedSequence.Should().NotBeNull("the user with system receives FullyBooted once Asterisk has started");
@@ -164,11 +169,16 @@ public sealed class BootWindowPremiseTests : IClassFixture<BootWindowPremiseTest
             atStart.QueueMembers.Should().Be(1, "positive control: the start loaded the queue's member");
         }
 
-        landed.Should().NotBeNull(string.Create(CultureInfo.InvariantCulture,
+        if (landed is null)
+        {
+            Assert.Fail(string.Create(CultureInfo.InvariantCulture,
             $"inconclusive: none of {Attempts} reloads logged in while Asterisk still refused QueueStatus, so the window was not observed"));
+            return;
+        }
+
         using (new AssertionScope())
         {
-            landed!.Loaded.QueueStrategy.Should().Be(OwnAsterisk.QueueStrategy,
+            landed.Loaded.QueueStrategy.Should().Be(OwnAsterisk.QueueStrategy,
                 "a refusal from an Asterisk that is still starting is not an empty table: the reload loads the queue, with its strategy");
             landed.Loaded.QueueMembers.Should().Be(1, "the reload loads the queue's static member");
             landed.Loaded.AgentLoaded.Should().BeTrue("the reload loads the agent");

@@ -53,7 +53,7 @@ public sealed class RigSelfTests
         using (new AssertionScope())
         {
             created.Should().BeTrue("the wait creates its timer on the fake, where a test can read it before advancing");
-            timer?.DueTime.Should().Be(TimeSpan.FromMilliseconds(200), "the timer carries the delay the wait asked for");
+            timer!.DueTime.Should().Be(TimeSpan.FromMilliseconds(200), "the timer carries the delay the wait asked for");
             completedEarly.Should().BeFalse("199 ms is short of the 200 ms the wait asked for");
             wait.IsFaulted.Should().BeTrue("the fake fired the timer when the clock reached 200 ms");
             wait.Exception?.InnerException.Should().BeOfType<TimeoutException>("the wait ended because its time ran out");
@@ -80,8 +80,8 @@ public sealed class RigSelfTests
         {
             run.Server.Channels.ChannelCount.Should().Be(2, "the peer lists two channels");
             second.Should().NotBeNull("each listed channel is loaded under its Uniqueid");
-            second?.Name.Should().Be("PJSIP/1002-00000002", "the channel keeps its name");
-            second?.LinkedId.Should().Be("1700000000.1", "the channel keeps the Linkedid the peer sent");
+            second!.Name.Should().Be("PJSIP/1002-00000002", "the channel keeps its name");
+            second!.LinkedId.Should().Be("1700000000.1", "the channel keeps the Linkedid the peer sent");
             peer.Fault.Should().BeNull("the peer served the session without failing");
         }
     }

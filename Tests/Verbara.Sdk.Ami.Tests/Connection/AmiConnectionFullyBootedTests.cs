@@ -142,9 +142,9 @@ public sealed class AmiConnectionFullyBootedTests
         using (new AssertionScope())
         {
             atCancellation.Should().NotBeNull("the end of the session ends the task");
-            atCancellation?.Status.Should().Be(TaskStatus.Canceled,
+            atCancellation!.Status.Should().Be(TaskStatus.Canceled,
                 "a session that ended will never report FullyBooted, and the end is not a report");
-            atCancellation?.State.Should().Be(
+            atCancellation!.State.Should().Be(
                 autoReconnect ? AmiConnectionState.Reconnecting : AmiConnectionState.Disconnecting,
                 "the ending writes the state it chose before it cancels the session's task");
         }
@@ -236,7 +236,7 @@ public sealed class AmiConnectionFullyBootedTests
         using (new AssertionScope())
         {
             ended.Should().NotBeNull("the failed attempt ended its session's task instead of leaving it pending");
-            ended?.Status.Should().Be(TaskStatus.Canceled, "a session that never came up never reported FullyBooted");
+            ended!.Status.Should().Be(TaskStatus.Canceled, "a session that never came up never reported FullyBooted");
         }
     }
 
