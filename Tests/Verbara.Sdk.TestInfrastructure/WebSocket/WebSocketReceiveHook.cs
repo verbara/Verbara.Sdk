@@ -103,10 +103,10 @@ public sealed class WebSocketReceiveHook : EventListener
             action();
             _fired.TrySetResult();
         }
-#pragma warning disable CA1031 // Handed to the test through Fired, where it is rethrown.
-        catch (Exception ex)
-#pragma warning restore CA1031
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            // Handed to the test through Fired, where it is rethrown. Running out of memory is not the
+            // action's failure, so it is left to end the run.
             _fired.TrySetException(ex);
         }
     }
