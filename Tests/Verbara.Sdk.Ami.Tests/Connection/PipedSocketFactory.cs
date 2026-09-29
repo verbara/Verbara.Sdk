@@ -218,6 +218,34 @@ internal sealed class PipedSocket(bool refusesConnect = false) : ISocketConnecti
     }
 
     /// <summary>
+    /// Takes, without waiting, every complete action the connection wrote that the peer has not read.
+    /// </summary>
+    /// <remarks>
+    /// Once the socket is closed, <see cref="ReadActionAsync"/> returns <see langword="null"/> without reading, so
+    /// this is how a test sees what the connection still sent on a session that had already ended. It must not run
+    /// while a <see cref="ReadActionAsync"/> is in flight: call it once the peer has stopped reading.
+    /// </remarks>
+    public IReadOnlyList<string> TakeUnreadActions()
+    {
+        var reader = _toPeer.Reader;
+        if (!reader.TryRead(out var result))
+            return [];
+
+        var buffer = result.Buffer;
+        var text = Encoding.UTF8.GetString(buffer);
+        var actions = new List<string>();
+        var consumed = 0;
+        while (text.IndexOf("\r\n\r\n", consumed, StringComparison.Ordinal) is var end and >= 0)
+        {
+            actions.Add(text[consumed..(end + 4)]);
+            consumed = end + 4;
+        }
+
+        reader.AdvanceTo(buffer.GetPosition(consumed), buffer.End);
+        return actions;
+    }
+
+    /// <summary>
     /// Reads the next action if one arrives within <paramref name="window"/>, else <see langword="null"/>.
     /// The window is what is being observed: an action that arrives inside it is returned.
     /// </summary>
@@ -323,19 +351,38 @@ internal sealed class PipedSocket(bool refusesConnect = false) : ISocketConnecti
 internal sealed class SignalingLogger<T> : ILogger<T>
 {
     private readonly Lock _gate = new();
-    private readonly List<string> _lines = [];
-    private readonly List<(string Fragment, TaskCompletionSource Signal)> _waiters = [];
+    private readonly List<(LogLevel Level, string Line)> _entries = [];
+    private readonly List<(string Fragment, int Times, TaskCompletionSource Signal)> _waiters = [];
+
+    /// <summary>Every line logged so far, with its level, in order.</summary>
+    public IReadOnlyList<(LogLevel Level, string Line)> Entries
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _entries];
+            }
+        }
+    }
 
     /// <summary>Completes once a line containing <paramref name="fragment"/> has been logged (already or later).</summary>
-    public Task Logged(string fragment)
+    public Task Logged(string fragment) => Logged(fragment, times: 1);
+
+    /// <summary>
+    /// Completes once <paramref name="times"/> lines containing <paramref name="fragment"/> have been logged, counting
+    /// the ones already logged: the second <c>[LIVE] State loaded</c> is a reload's, when the first was the start's.
+    /// </summary>
+    public Task Logged(string fragment, int times)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(times, 1);
         lock (_gate)
         {
-            if (_lines.Exists(line => line.Contains(fragment, StringComparison.Ordinal)))
+            if (CountLocked(fragment) >= times)
                 return Task.CompletedTask;
 
             var signal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            _waiters.Add((fragment, signal));
+            _waiters.Add((fragment, times, signal));
             return signal.Task;
         }
     }
@@ -351,12 +398,13 @@ internal sealed class SignalingLogger<T> : ILogger<T>
         List<TaskCompletionSource> fired = [];
         lock (_gate)
         {
-            _lines.Add(line);
+            _entries.Add((logLevel, line));
             for (var i = _waiters.Count - 1; i >= 0; i--)
             {
-                if (line.Contains(_waiters[i].Fragment, StringComparison.Ordinal))
+                var (fragment, times, signal) = _waiters[i];
+                if (line.Contains(fragment, StringComparison.Ordinal) && CountLocked(fragment) >= times)
                 {
-                    fired.Add(_waiters[i].Signal);
+                    fired.Add(signal);
                     _waiters.RemoveAt(i);
                 }
             }
@@ -365,4 +413,7 @@ internal sealed class SignalingLogger<T> : ILogger<T>
         foreach (var signal in fired)
             signal.TrySetResult();
     }
+
+    private int CountLocked(string fragment) =>
+        _entries.Count(entry => entry.Line.Contains(fragment, StringComparison.Ordinal));
 }
