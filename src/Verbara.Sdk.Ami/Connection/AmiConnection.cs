@@ -977,9 +977,10 @@ public sealed class AmiConnection : IAmiConnection
                 {
                     ((Action)handler).Invoke();
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    // A subscriber's failure is its own: logged, and the handlers after it still run.
+                    // A subscriber's failure is its own: logged, and the handlers after it still run. Running out of
+                    // memory is the process's failure, not the subscriber's, so it is not swallowed here.
                     AmiConnectionLog.ReconnectHandlerError(_logger, ex);
                 }
             }
@@ -1008,9 +1009,10 @@ public sealed class AmiConnection : IAmiConnection
                 {
                     ((Action<Exception?>)handler).Invoke(cause);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    // A subscriber's failure is its own: logged, and the handlers after it still run.
+                    // A subscriber's failure is its own: logged, and the handlers after it still run. Running out of
+                    // memory is the process's failure, not the subscriber's, so it is not swallowed here.
                     AmiConnectionLog.LostHandlerError(_logger, ex);
                 }
             }

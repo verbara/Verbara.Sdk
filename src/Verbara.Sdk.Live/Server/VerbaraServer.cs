@@ -789,10 +789,11 @@ public sealed class VerbaraServer : IVerbaraServer
             {
                 ((Action<Exception?>)handler).Invoke(cause);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 // A subscriber's handler is foreign code: whatever it throws is logged, so that the handlers after it
-                // are still told of the loss.
+                // are still told of the loss. Running out of memory is the process's failure, not the handler's, so it
+                // is not swallowed here.
                 VerbaraServerLog.ConnectionLostHandlerError(_logger, ex);
             }
         }
