@@ -25,14 +25,38 @@ public sealed class AsteriskContainer : IAsyncDisposable
     public int AriPort => _container.GetMappedPublicPort(8088);
     public string ContainerName => _container.Name;
 
-    public AsteriskContainer(INetwork network, IImage image)
+    /// <summary>
+    /// The container's address on its network. On a Linux Docker host the host reaches it directly, with no published
+    /// port and no userland proxy in between, so a TCP connect to it succeeds only once Asterisk itself listens.
+    /// </summary>
+    public string NetworkAddress => _container.IpAddress;
+
+    /// <summary>An Asterisk container from <paramref name="image"/>, on <paramref name="network"/>.</summary>
+    /// <param name="network">The network the container joins, under the alias <c>asterisk</c>.</param>
+    /// <param name="image">The image from <see cref="CreateImageAsync"/>.</param>
+    /// <param name="configDirectory">
+    /// The directory mounted read-only on <c>/etc/asterisk</c>; the shared functional configuration by default. A test
+    /// that needs a configuration of its own writes one and mounts it here.
+    /// </param>
+    /// <param name="name">The container's name; Testcontainers chooses one by default.</param>
+    /// <param name="publishPorts">
+    /// Whether AMI (5038) and ARI (8088) are published on random host ports, which <see cref="AmiPort"/> and
+    /// <see cref="AriPort"/> read. A test that reaches the container at <see cref="NetworkAddress"/> publishes none.
+    /// </param>
+    public AsteriskContainer(INetwork network, IImage image, string? configDirectory = null, string? name = null,
+        bool publishPorts = true)
     {
-        _container = new ContainerBuilder(image)
-            .WithPortBinding(5038, true)
-            .WithPortBinding(8088, true)
+        var builder = new ContainerBuilder(image);
+        if (name is not null)
+            builder = builder.WithName(name);
+
+        if (publishPorts)
+            builder = builder.WithPortBinding(5038, true).WithPortBinding(8088, true);
+
+        _container = builder
             // Linux Docker: route host.docker.internal → host gateway so Asterisk can reach the FastAGI test server.
             .WithExtraHost("host.docker.internal", "host-gateway")
-            .WithBindMount(DockerPaths.AsteriskConfig, "/etc/asterisk", AccessMode.ReadOnly)
+            .WithBindMount(configDirectory ?? DockerPaths.AsteriskConfig, "/etc/asterisk", AccessMode.ReadOnly)
             .WithNetwork(network)
             .WithNetworkAliases("asterisk")
             .WithWaitStrategy(
