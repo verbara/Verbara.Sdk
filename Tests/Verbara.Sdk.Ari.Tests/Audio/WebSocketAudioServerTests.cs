@@ -904,6 +904,300 @@ public class WebSocketAudioServerTests
         server.ActiveStreamCount.Should().Be(1, "only the third connection is live");
     }
 
+    // ------------------------------------ every live connection is counted and admitted, whatever key it shares
+
+    [Fact]
+    public async Task ActiveStreamCount_ShouldCountEveryLiveConnection_WhenConnectionsShareOnePath()
+    {
+        // Arrange — the chan_websocket shape: three live calls upgrade on one URI
+        var port = GetFreePort();
+        await using var server = await StartServerAsync(port);
+        using var announcements = new Announcements(server);
+
+        using var first = await ConnectAndAwaitAnnouncementAsync(port, "ch-count", announcements);
+        using var second = await ConnectAndAwaitAnnouncementAsync(port, "ch-count", announcements);
+        using var third = await ConnectAndAwaitAnnouncementAsync(port, "ch-count", announcements);
+
+        // Assert — three live audio streams, whichever one the key resolves to
+        using (new AssertionScope())
+        {
+            server.ActiveStreamCount.Should().Be(
+                3,
+                "each live connection is an active audio stream, and Asterisk sends every call of one " +
+                "websocket_client connection on the same URI");
+            server.ActiveStreams.Should().HaveCount(3)
+                .And.Contain(first.Stream)
+                .And.Contain(second.Stream)
+                .And.Contain(third.Stream);
+            server.GetStream("ch-count").Should().BeSameAs(
+                first.Stream, "the key still resolves to the earliest live connection that presented it");
+        }
+
+        // Act — a connection that waits for the key ends
+        await third.CloseAsync();
+
+        // Assert
+        server.ActiveStreamCount.Should().Be(2, "the two connections still open are counted");
+    }
+
+    [Fact]
+    public async Task AcceptLoop_ShouldCloseTheConnectionOverTheLimit_WhenLiveConnectionsSharingOnePathFillIt()
+    {
+        // Arrange — two live calls on one URI, under a limit of two
+        var port = GetFreePort();
+        await using var server = CreateServer(port, maxStreams: 2);
+        await server.StartAsync();
+        using var announcements = new Announcements(server);
+
+        using var first = await ConnectAndAwaitAnnouncementAsync(port, "ch-limit", announcements);
+        using var second = await ConnectAndAwaitAnnouncementAsync(port, "ch-limit", announcements);
+
+        // Act — a third call on the same URI
+        using var third = new ClientWebSocket();
+        var connect = async () =>
+            await third.ConnectAsync(ChannelUri(port, "ch-limit"), CancellationToken.None).WaitAsync(WaitLimit);
+
+        // Assert
+        await connect.Should().ThrowAsync<WebSocketException>(
+            "two live connections fill a limit of two whatever key they share, so the third is closed " +
+            "before its upgrade is read");
+        server.ActiveStreamCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task AcceptLoop_ShouldCloseTheConnectionOverTheLimit_WhenAnEarlierConnectionHasNotSentItsUpgrade()
+    {
+        // Arrange — a connection the server has accepted and that has not sent its upgrade request.
+        // Its handshake completed before the next connection's began, and the loop accepts in that
+        // order, so it has taken its place by the time the next one is admitted or refused.
+        var port = GetFreePort();
+        await using var server = CreateServer(port, maxStreams: 1);
+        await server.StartAsync();
+        using var silent = new TcpClient();
+        await silent.ConnectAsync(IPAddress.Loopback, port);
+
+        // Act
+        using var late = new ClientWebSocket();
+        var connect = async () =>
+            await late.ConnectAsync(ChannelUri(port, "ch-late"), CancellationToken.None).WaitAsync(WaitLimit);
+
+        // Assert
+        await connect.Should().ThrowAsync<WebSocketException>(
+            "the silent connection holds the only place from its accept; a limit that counts only " +
+            "registered sessions lets every accept that lands before a registration past it");
+    }
+
+    [Fact]
+    public async Task AcceptLoop_ShouldGiveThePlaceBack_WhenAConnectionSendsNoUpgradeWithinTheIdleTimeout()
+    {
+        // Arrange — a limit of one, held from its accept by a connection that never sends its upgrade.
+        // The server runs on a fake clock with the default IdleTimeout, and the wait for the upgrade is
+        // bounded on that clock: its timer is read as it is created, and the clock is moved past it.
+        var time = new FakeTimeProvider();
+        var port = GetFreePort();
+        await using var server = CreateServer(port, timeProvider: time, maxStreams: 1);
+        await server.StartAsync();
+        using var announcements = new Announcements(server);
+        using var silent = new TcpClient();
+        await silent.ConnectAsync(IPAddress.Loopback, port);
+
+        var upgradeBound = await time.TimersCreated.ReadAsync().AsTask().WaitAsync(WaitLimit);
+        upgradeBound.DueTime.Should().Be(
+            new AudioServerOptions().IdleTimeout, "the wait for the upgrade is bounded by IdleTimeout");
+
+        // Act — the server's clock passes the idle timeout
+        time.Advance(upgradeBound.DueTime);
+
+        // Assert — the silent connection is closed, and its place serves the next call
+        (await silent.GetStream().ReadAsync(new byte[1]).AsTask().WaitAsync(WaitLimit)).Should().Be(
+            0, "a connection that sent no upgrade within IdleTimeout is closed");
+        using var call = await ConnectUntilAdmittedAsync(port, "ch-after-idle", announcements);
+        server.GetStream("ch-after-idle").Should().BeSameAs(
+            call.Stream, "a place held from the accept is given back when that connection is closed");
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldKeepDeliveringAudio_WhenAsteriskSendsItsJsonMediaStart()
+    {
+        // Arrange — chan_websocket's JSON control format (Dial option f(json)): the first frame is
+        // MEDIA_START, named by `event`, as captured from Asterisk 22.9.0 and 23.4.1. The connection keeps
+        // its path key; nothing here depends on the key.
+        var port = GetFreePort();
+        await using var server = await StartServerAsync(port);
+        using var announcements = new Announcements(server);
+        using var client = new ClientWebSocket();
+        await client.ConnectAsync(ChannelUri(port, "ch-json"), CancellationToken.None);
+        var (stream, _) = await announcements.NextAsync();
+
+        // The SDK's control-message model does not read Asterisk's `event` field yet, so this frame
+        // must be dropped: nothing is published for it. That the audio survives is what is claimed
+        // here, not that control messages are understood.
+        var published = 0;
+        using var controlMessages = ((IChanWebSocketSession)stream).ControlMessages.Subscribe(
+            _ => Interlocked.Increment(ref published));
+
+        await client.SendAsync(
+            Encoding.UTF8.GetBytes(
+                "{\"event\":\"MEDIA_START\",\"connection_id\":\"c1\",\"channel\":\"WebSocket/c1/0x7f0638004770\"," +
+                "\"channel_id\":\"1790617675.20\",\"format\":\"slin16\",\"optimal_frame_size\":640,\"ptime\":20}"),
+            WebSocketMessageType.Text,
+            endOfMessage: true,
+            CancellationToken.None);
+        await client.SendAsync(new byte[640], WebSocketMessageType.Binary, endOfMessage: true, CancellationToken.None);
+
+        // Act
+        var frame = await stream.ReadFrameAsync().AsTask().WaitAsync(WaitLimit);
+
+        // Assert
+        using (new AssertionScope())
+        {
+            frame.Length.Should().Be(
+                640, "a control message the SDK does not model must not end the call's audio stream");
+            Volatile.Read(ref published).Should().Be(
+                0, "a text frame the SDK cannot read is dropped, not published as a control message");
+        }
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldKeepDeliveringAudio_WhenAsteriskSendsItsPlainTextMediaStart()
+    {
+        // Arrange — chan_websocket's default control format: the first frame is a plain-text
+        // MEDIA_START, which is not JSON at all
+        var port = GetFreePort();
+        await using var server = await StartServerAsync(port);
+        using var announcements = new Announcements(server);
+        using var client = new ClientWebSocket();
+        await client.ConnectAsync(ChannelUri(port, "ch-text"), CancellationToken.None);
+        var (stream, _) = await announcements.NextAsync();
+        var published = 0;
+        using var controlMessages = ((IChanWebSocketSession)stream).ControlMessages.Subscribe(
+            _ => Interlocked.Increment(ref published));
+
+        await client.SendAsync(
+            Encoding.UTF8.GetBytes(
+                "MEDIA_START connection_id:c1 channel:WebSocket/c1/0x7f0638004770 channel_id:1790617675.20 " +
+                "format:slin16 optimal_frame_size:640 ptime:20"),
+            WebSocketMessageType.Text,
+            endOfMessage: true,
+            CancellationToken.None);
+        await client.SendAsync(new byte[640], WebSocketMessageType.Binary, endOfMessage: true, CancellationToken.None);
+
+        // Act
+        var frame = await stream.ReadFrameAsync().AsTask().WaitAsync(WaitLimit);
+
+        // Assert
+        using (new AssertionScope())
+        {
+            frame.Length.Should().Be(640, "the plain-text MEDIA_START is dropped and the audio keeps flowing");
+            Volatile.Read(ref published).Should().Be(0, "no control message is published for it");
+        }
+    }
+
+    // ------------------------------------ every place taken at the accept comes back when its connection ends
+
+    [Fact]
+    public async Task AcceptLoop_ShouldGiveThePlaceBack_WhenItsUpgradeIsInvalid()
+    {
+        // Arrange — a limit of one; the first connection's upgrade has no Sec-WebSocket-Key
+        var port = GetFreePort();
+        await using var server = CreateServer(port, maxStreams: 1);
+        await server.StartAsync();
+        using var announcements = new Announcements(server);
+        using (var invalid = new TcpClient())
+        {
+            await invalid.ConnectAsync(IPAddress.Loopback, port);
+            var network = invalid.GetStream();
+            await network.WriteAsync(Encoding.ASCII.GetBytes("GET /ws/ch-invalid HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"));
+            (await network.ReadAsync(new byte[64]).AsTask().WaitAsync(WaitLimit)).Should().Be(
+                0, "an invalid upgrade is closed unanswered");
+        }
+
+        // Act — the next call, admitted once the invalid connection's place is back
+        using var call = await ConnectUntilAdmittedAsync(port, "ch-after-invalid", announcements);
+
+        // Assert
+        server.GetStream("ch-after-invalid").Should().BeSameAs(
+            call.Stream, "a connection closed for an invalid upgrade gives back the place it took at its accept");
+    }
+
+    [Fact]
+    public async Task AcceptLoop_ShouldAdmitAFullSecondWave_WhenEveryConnectionOfTheFirstHasEnded()
+    {
+        // Arrange — a limit of two, filled by two calls on distinct paths that then close
+        var port = GetFreePort();
+        await using var server = CreateServer(port, maxStreams: 2);
+        await server.StartAsync();
+        using var announcements = new Announcements(server);
+
+        using (var first = await ConnectAndAwaitAnnouncementAsync(port, "ch-wave-1", announcements))
+        using (var second = await ConnectAndAwaitAnnouncementAsync(port, "ch-wave-2", announcements))
+        {
+            await first.CloseAsync();
+            await second.CloseAsync();
+        }
+
+        // Act — a second wave of two, then one more
+        using var third = await ConnectUntilAdmittedAsync(port, "ch-wave-3", announcements);
+        using var fourth = await ConnectUntilAdmittedAsync(port, "ch-wave-4", announcements);
+        using var over = new ClientWebSocket();
+        var connect = async () =>
+            await over.ConnectAsync(ChannelUri(port, "ch-wave-5"), CancellationToken.None).WaitAsync(WaitLimit);
+
+        // Assert
+        await connect.Should().ThrowAsync<WebSocketException>(
+            "every place of the first wave came back, and the second wave fills the limit again");
+        using (new AssertionScope())
+        {
+            server.GetStream("ch-wave-3").Should().BeSameAs(third.Stream);
+            server.GetStream("ch-wave-4").Should().BeSameAs(fourth.Stream);
+            server.ActiveStreamCount.Should().Be(2);
+        }
+    }
+
+    /// <summary>
+    /// Connects to <paramref name="channelId"/>'s path until the server admits and announces the
+    /// connection. A connection handler closes its socket before it gives its place back, so a
+    /// connection made right after another one's end of stream can still find the limit full and be
+    /// closed before its upgrade is read; this connects again at once when that happens. One bound
+    /// covers every attempt.
+    /// </summary>
+    private static async Task<AnnouncedClient> ConnectUntilAdmittedAsync(
+        int port, string channelId, Announcements announcements)
+    {
+        using var giveUp = new CancellationTokenSource();
+        try
+        {
+            return await AttemptAsync(giveUp.Token).WaitAsync(WaitLimit);
+        }
+        finally
+        {
+            await giveUp.CancelAsync();
+        }
+
+        async Task<AnnouncedClient> AttemptAsync(CancellationToken token)
+        {
+            var announced = announcements.ReadAsync(token);
+            while (true)
+            {
+                var client = new ClientWebSocket();
+                try
+                {
+                    await client.ConnectAsync(ChannelUri(port, channelId), token);
+                }
+                catch (WebSocketException)
+                {
+                    // Closed before the upgrade was answered: refused at the accept. Connect again.
+                    client.Dispose();
+                    continue;
+                }
+
+                var (stream, disposed) = await announced;
+                stream.ChannelId.Should().Be(channelId, "the announcement is this connection's");
+                return new AnnouncedClient(client, stream, disposed);
+            }
+        }
+    }
+
     /// <summary>
     /// Connects to <paramref name="channelId"/>'s path and waits for the server to announce this
     /// connection. The client's connect completes on the 101 response, which the server sends before
@@ -939,6 +1233,10 @@ public class WebSocketAudioServerTests
 
         public async Task<(IAudioStream Stream, Task Disposed)> NextAsync() =>
             await _announced.Reader.ReadAsync().AsTask().WaitAsync(WaitLimit);
+
+        /// <summary>The next announcement, bounded only by <paramref name="token"/>; for a caller that holds its own bound.</summary>
+        public Task<(IAudioStream Stream, Task Disposed)> ReadAsync(CancellationToken token) =>
+            _announced.Reader.ReadAsync(token).AsTask();
 
         public void Dispose() => _subscription.Dispose();
     }
@@ -1008,9 +1306,17 @@ public class WebSocketAudioServerTests
     private static WebSocketAudioServer CreateServer(
         int port,
         ILogger<WebSocketAudioServer>? logger = null,
-        TimeProvider? timeProvider = null) =>
+        TimeProvider? timeProvider = null,
+        int maxStreams = 1000,
+        TimeSpan? idleTimeout = null) =>
         new(
-            new AudioServerOptions { ListenAddress = "127.0.0.1", WebSocketPort = port },
+            new AudioServerOptions
+            {
+                ListenAddress = "127.0.0.1",
+                WebSocketPort = port,
+                MaxConcurrentStreams = maxStreams,
+                IdleTimeout = idleTimeout ?? TimeSpan.FromSeconds(60),
+            },
             logger ?? NullLogger<WebSocketAudioServer>.Instance,
             timeProvider ?? TimeProvider.System);
 

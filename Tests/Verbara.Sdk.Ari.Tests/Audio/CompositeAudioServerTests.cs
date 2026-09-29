@@ -10,6 +10,55 @@ namespace Verbara.Sdk.Ari.Tests.Audio;
 public sealed class CompositeAudioServerTests
 {
     [Fact]
+    public async Task MaxConcurrentStreams_ShouldBoundBothServers_WhenTheyShareOneOptionsInstance()
+    {
+        // Arrange — one options instance for both servers, as AddVerbara registers them, with a limit
+        // of one; an AudioSocket call holds that place
+        var options = new AudioServerOptions
+        {
+            ListenAddress = "127.0.0.1",
+            AudioSocketPort = FreePort(),
+            WebSocketPort = FreePort(),
+            MaxConcurrentStreams = 1,
+        };
+        await using var audioSocket = new AudioSocketServer(options, Microsoft.Extensions.Logging.Abstractions.NullLogger<AudioSocketServer>.Instance);
+        await using var webSocket = new WebSocketAudioServer(options, Microsoft.Extensions.Logging.Abstractions.NullLogger<WebSocketAudioServer>.Instance);
+        await audioSocket.StartAsync();
+        await webSocket.StartAsync();
+
+        var announced = new TaskCompletionSource<IAudioStream>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var announcement = audioSocket.OnStreamConnected.Subscribe(stream => announced.TrySetResult(stream));
+        using var call = new System.Net.Sockets.TcpClient();
+        await call.ConnectAsync(System.Net.IPAddress.Loopback, options.AudioSocketPort);
+        var uuid = Guid.NewGuid();
+        var frame = new byte[19];
+        frame[0] = (byte)AudioFrameType.Uuid;
+        frame[2] = 16;
+        uuid.TryWriteBytes(frame.AsSpan(3), bigEndian: true, out _);
+        await call.GetStream().WriteAsync(frame);
+        (await announced.Task.WaitAsync(TimeSpan.FromSeconds(10))).ChannelId.Should().Be(uuid.ToString());
+
+        // Act — a WebSocket call arrives while the AudioSocket call is live
+        using var second = new System.Net.WebSockets.ClientWebSocket();
+        var connect = async () => await second
+            .ConnectAsync(new Uri($"ws://127.0.0.1:{options.WebSocketPort}/ws/ch-second"), CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        // Assert
+        await connect.Should().ThrowAsync<System.Net.WebSockets.WebSocketException>(
+            "MaxConcurrentStreams is documented as the limit across both protocols, so the one place is taken");
+    }
+
+    private static int FreePort()
+    {
+        using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
+
+    [Fact]
     public void GetStream_ShouldReturnStreamFromFirstMatchingServer()
     {
         var mockStream = Substitute.For<IAudioStream>();

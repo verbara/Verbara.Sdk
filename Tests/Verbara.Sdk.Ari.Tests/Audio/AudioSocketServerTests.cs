@@ -1258,6 +1258,220 @@ public class AudioSocketServerTests : IAsyncDisposable
         (await secondWaiting.ReadAsync()).Should().Be(0, "and each waiting connection's");
     }
 
+    // ------------------------------------ every live connection is counted and admitted, whatever id it shares
+
+    [Fact]
+    public async Task ActiveStreamCount_ShouldCountEveryLiveConnection_WhenConnectionsShareOneId()
+    {
+        // Arrange — A holds X; B and then C present X while A is live
+        var port = GetFreePort();
+        var server = CreateServer(port);
+        await server.StartAsync();
+        using var announcements = new Announcements(server);
+        var x = Guid.NewGuid();
+
+        using var first = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+        using var second = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+        using var third = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+
+        // Assert — three live audio streams, whichever one the id resolves to
+        using (new AssertionScope())
+        {
+            server.ActiveStreamCount.Should().Be(
+                3, "each live connection is an active audio stream, and Asterisk keeps several open on one UUID");
+            server.ActiveStreams.Should().HaveCount(3)
+                .And.Contain(first.Stream)
+                .And.Contain(second.Stream)
+                .And.Contain(third.Stream);
+            server.GetStream(x.ToString()).Should().BeSameAs(
+                first.Stream, "the id still resolves to the earliest live connection that presented it");
+        }
+
+        // Act — a connection that waits for the id ends
+        await second.HangUpAsync();
+
+        // Assert
+        server.ActiveStreamCount.Should().Be(2, "the two connections still open are counted");
+    }
+
+    [Fact]
+    public async Task AcceptLoop_ShouldCloseTheConnectionOverTheLimit_WhenLiveConnectionsSharingOneIdFillIt()
+    {
+        // Arrange — two live connections on one UUID, under a limit of two
+        var port = GetFreePort();
+        var server = CreateServer(port, maxStreams: 2);
+        await server.StartAsync();
+        using var announcements = new Announcements(server);
+        var x = Guid.NewGuid();
+
+        using var first = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+        using var second = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
+
+        // Act — a third connection presents the same UUID
+        using var third = await ConnectAsync(port);
+        var stream = third.GetStream();
+        await stream.WriteAsync(BuildUuidFrame(x));
+        await stream.FlushAsync();
+
+        // Assert
+        (await stream.ReadAsync(new byte[1]).AsTask().WaitAsync(SignalTimeout)).Should().Be(
+            0,
+            "two live connections fill a limit of two whatever id they share, so the server closes the " +
+            "third before reading it");
+        server.ActiveStreamCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task AcceptLoop_ShouldCloseTheConnectionOverTheLimit_WhenAnEarlierConnectionHasNotIdentifiedYet()
+    {
+        // Arrange — a connection the server has accepted and that has sent no identification frame.
+        // Its handshake completed before the next connection's began, and the loop accepts in that
+        // order, so it has taken its place by the time the next one is admitted or refused.
+        var port = GetFreePort();
+        var server = CreateServer(port, maxStreams: 1);
+        await server.StartAsync();
+        using var silent = await ConnectAsync(port);
+
+        // Act
+        using var late = await ConnectAsync(port);
+        var stream = late.GetStream();
+        var uuid = Guid.NewGuid();
+        await stream.WriteAsync(BuildUuidFrame(uuid));
+        await stream.FlushAsync();
+
+        // Assert
+        (await stream.ReadAsync(new byte[1]).AsTask().WaitAsync(SignalTimeout)).Should().Be(
+            0,
+            "the silent connection holds the only place from its accept; a limit that counts only " +
+            "registered sessions lets every accept that lands before a registration past it");
+        server.GetStream(uuid.ToString()).Should().BeNull();
+    }
+
+    // ------------------------------------ every place taken at the accept comes back when its connection ends
+
+    [Fact]
+    public async Task AcceptLoop_ShouldGiveThePlaceBack_WhenAConnectionEndsBeforeItIdentifiesItself()
+    {
+        // Arrange — a limit of one. The first accept hands over a client that was never connected, so
+        // its handler ends at the socket's configuration, before any identification can arrive. Every
+        // later accept comes from a listener this test owns, so the next calls are real connections.
+        var time = new FakeTimeProvider();
+        var server = CreateServer(PortTheOsPicks, maxStreams: 1, timeProvider: time);
+        using var accepted = AcceptedClients.NeverConnected();
+        using var broken = new ReleaseSignallingClient(accepted.Socket);
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            var attempts = 0;
+            server.AcceptOverride = token => Interlocked.Increment(ref attempts) == 1
+                ? ValueTask.FromResult<TcpClient>(broken)
+                : listener.AcceptTcpClientAsync(token);
+            using var announcements = new Announcements(server);
+            await server.StartAsync();
+            await broken.Released.WaitAsync(SignalTimeout);
+
+            // Act — the next call, admitted once the ended connection's place is back
+            var uuid = Guid.NewGuid();
+            using var call = await ConnectUntilAdmittedAsync(port, uuid, announcements);
+
+            // Assert
+            server.GetStream(uuid.ToString()).Should().BeSameAs(
+                call.Stream,
+                "a connection that ends before it identifies itself gives back the place it took at its accept");
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task AcceptLoop_ShouldAdmitAFullSecondWave_WhenEveryConnectionOfTheFirstHasEnded()
+    {
+        // Arrange — a limit of two, filled by two calls on distinct UUIDs that then hang up
+        var port = GetFreePort();
+        var server = CreateServer(port, maxStreams: 2);
+        await server.StartAsync();
+        using var announcements = new Announcements(server);
+
+        using (var first = await ConnectAndAwaitAnnouncementAsync(port, Guid.NewGuid(), announcements))
+        using (var second = await ConnectAndAwaitAnnouncementAsync(port, Guid.NewGuid(), announcements))
+        {
+            await first.HangUpAsync();
+            await second.HangUpAsync();
+        }
+
+        // Act — a second wave of two
+        var third = Guid.NewGuid();
+        var fourth = Guid.NewGuid();
+        using var thirdCall = await ConnectUntilAdmittedAsync(port, third, announcements);
+        using var fourthCall = await ConnectUntilAdmittedAsync(port, fourth, announcements);
+        using var over = await ConnectAsync(port);
+        var overRead = await over.GetStream().ReadAsync(new byte[1]).AsTask().WaitAsync(SignalTimeout);
+
+        // Assert
+        using (new AssertionScope())
+        {
+            server.GetStream(third.ToString()).Should().BeSameAs(thirdCall.Stream);
+            server.GetStream(fourth.ToString()).Should().BeSameAs(fourthCall.Stream);
+            overRead.Should().Be(
+                0,
+                "every place of the first wave came back, and the second wave fills the limit again, so " +
+                "the connection over it is closed");
+            server.ActiveStreamCount.Should().Be(2);
+        }
+    }
+
+    /// <summary>
+    /// Connects with <paramref name="uuid"/> until the server admits and announces the connection. A
+    /// connection handler closes its socket before it gives its place back, so a connection made right
+    /// after another one's end of stream can still find the limit full and be closed unannounced; this
+    /// connects again at once when that happens. One bound covers every attempt. An admitted
+    /// connection keeps a one-byte read pending, so the caller must not read from it.
+    /// </summary>
+    private static async Task<AnnouncedConnection> ConnectUntilAdmittedAsync(
+        int port, Guid uuid, Announcements announcements)
+    {
+        using var giveUp = new CancellationTokenSource();
+        try
+        {
+            return await AttemptAsync(giveUp.Token).WaitAsync(SignalTimeout);
+        }
+        finally
+        {
+            await giveUp.CancelAsync();
+        }
+
+        async Task<AnnouncedConnection> AttemptAsync(CancellationToken token)
+        {
+            var announced = announcements.ReadAsync(token);
+            while (true)
+            {
+                var client = new TcpClient();
+                await client.ConnectAsync(IPAddress.Loopback, port, token);
+                var stream = client.GetStream();
+                await stream.WriteAsync(BuildUuidFrame(uuid), token);
+                await stream.FlushAsync(token);
+                var ended = stream.ReadAsync(new byte[1], token).AsTask();
+
+                if (await Task.WhenAny(announced, ended) == announced)
+                {
+                    var (announcedStream, disposed) = await announced;
+                    announcedStream.ChannelId.Should().Be(uuid.ToString(), "the announcement is this connection's");
+                    return new AnnouncedConnection(client, announcedStream, disposed);
+                }
+
+                // Closed unannounced: refused at the accept. A close with the UUID frame unread can
+                // reach the client as a reset rather than an end of stream; either is a refusal, so
+                // the outcome is not inspected, only awaited.
+                await ((Task)ended).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                client.Dispose();
+            }
+        }
+    }
+
     /// <summary>
     /// Connects, sends a UUID frame, and waits for the server to announce this connection. Unlike
     /// <see cref="ConnectAndSendUuidAsync"/>, which returns as soon as the UUID resolves, this works
@@ -1296,6 +1510,10 @@ public class AudioSocketServerTests : IAsyncDisposable
 
         public async Task<(IAudioStream Stream, Task Disposed)> NextAsync() =>
             await _announced.Reader.ReadAsync().AsTask().WaitAsync(SignalTimeout);
+
+        /// <summary>The next announcement, bounded only by <paramref name="token"/>; for a caller that holds its own bound.</summary>
+        public Task<(IAudioStream Stream, Task Disposed)> ReadAsync(CancellationToken token) =>
+            _announced.Reader.ReadAsync(token).AsTask();
 
         public void Dispose() => _subscription.Dispose();
     }
