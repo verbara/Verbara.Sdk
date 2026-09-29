@@ -278,6 +278,50 @@ All notable changes to this project will be documented in this file.
   as, "Queue wait time". `CallConnectedEvent.WaitTime`, `CallSession.WaitTime` and `CallSession.QueuedAt` keep
   their meaning, and Live's queue metrics are unchanged. No public API changes.
 
+### Fixed — BREAKING: after an Asterisk restart a reload could lose every queue and agent, and a start the reconnect would repair failed (#349)
+
+- **A load that reaches Asterisk before its modules are up asks again.** Asterisk accepts an AMI login before
+  app_queue and app_agent_pool have registered `QueueStatus` and `Agents`, and until they have, it refuses both as
+  an unknown command. The SDK read that refusal as an empty answer: a reconnect, or a start, whose login landed in
+  that window left `VerbaraServer`'s queues and agents empty and logged nothing, and a queue came back only bare, at
+  its next caller, without its strategy or its static members; the rest waited for the next reconnect. The load now
+  asks again once Asterisk reports `FullyBooted` on the AMI session, or every 200 ms for an AMI user that does not
+  receive it, for at most 10 s per load. A refusal of a request sent after the report is final: the module is not
+  loaded. After a restart, a reload and the first load keep the queues, their members and the agents
+  (measured on Asterisk 20.20.1, 22.9.0 and 23.4.1 in the reconnect's worst timing: 78 of 180 reloads lost the queue before,
+  0 of 180 now). 2.6.0 lost the same, so this is not a regression.
+- **A start the reconnect will repair no longer fails.** When the AMI session ends during `StartAsync`'s load, for
+  example because Asterisk closes a session it has just opened while it starts, the load stops: it sends nothing
+  more on that session, and it ends no call on a channel snapshot it did not finish reading. With `AutoReconnect`
+  on and the connection reconnecting, `StartAsync` returns and logs a Warning, and the reload after the reconnect
+  loads the state. It used to throw `AmiNotConnectedException: Not connected. Current state: Reconnecting`
+  (measured on Asterisk 18.26.4 to 23.4.1: 60 of 60 starts
+  threw before, 0 of 60 now, and the reload after the reconnect completed every time).
+- This restores what the SDK publishes: the troubleshooting guide's "`VerbaraServer` clears and reloads all
+  managers on reconnect via the `Reconnected` event. There may be a brief gap during reload.", and `StartAsync`'s
+  "Initialize state by subscribing to AMI events and loading current state". The guide's *State lost after
+  reconnect* now describes the load.
+- **What a consumer observes changes.**
+  - Asterisk sends `FullyBooted` only to an AMI user with `system` in `read`. A user without it, on a PBX where
+    app_queue or app_agent_pool is not loaded, now waits 10 s on every load, the start's and every reload's, and each
+    such load logs `[LIVE] QueueStatus never registered …` (or `Agents`) at Warning. With both modules absent it
+    waits the 10 s once. Put `system` in the user's `read` line (`read = all` includes it) and the load does not wait.
+  - A load whose login lands while Asterisk starts takes longer, by the time Asterisk still needs to finish
+    starting (measured: median 86 ms, at most 235 ms, over 396 such loads).
+  - `StartAsync` no longer throws when its session ends and the connection is reconnecting. With `AutoReconnect`
+    off, or once the reconnect has given up or the connection was disconnected, it now throws
+    `AmiNotConnectedException` when the session ends during the load's last request or while the load waits for
+    Asterisk to finish starting, where it used to return with the state it had; it already threw for an ending
+    during an earlier request. A start on a connection that is not established throws as before.
+  - `RequestInitialStateAsync` throws `AmiNotConnectedException` when its session ends before the load completes,
+    instead of returning a partial state.
+  - An event-generating action pending when its AMI session ends (`SendEventGeneratingActionAsync`) now completes
+    when the session ends, rather than at the reconnect's cleanup up to `ReconnectInitialDelay` later. It still
+    yields the events received and no error, and a refused action still ends with no events and no error.
+  - A reconnect reload cut short by its session ending logs `[LIVE] Reconnect reload interrupted` at Warning,
+    instead of `[LIVE] Reconnect reload failed` at Error.
+  - No public API changes.
+
 ### Fixed — the push bus never counted an event dropped by a full buffer (#328)
 
 - `asterisk.push.events.dropped` now increments, tagged `reason=buffer_full`, once for every event a
