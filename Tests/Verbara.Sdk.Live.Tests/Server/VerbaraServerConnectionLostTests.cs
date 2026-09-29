@@ -206,7 +206,7 @@ public sealed partial class VerbaraServerConnectionLostTests
 
             using (new AssertionScope())
             {
-                seen.Should().NotBeNull(
+                (seen is not null).Should().BeTrue(
                     "the handler's DisposeAsync returns, instead of waiting on the delivery that runs the handler");
                 if (seen is not null)
                 {

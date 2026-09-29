@@ -430,7 +430,7 @@ public sealed class AmiConnectionLostTests
 
         using (new AssertionScope())
         {
-            seen.Should().NotBeNull("the handler's DisposeAsync returns, instead of waiting on the delivery that runs the handler");
+            (seen is not null).Should().BeTrue("the handler's DisposeAsync returns, instead of waiting on the delivery that runs the handler");
             drained.Should().BeTrue("a later dispose returns and every queued notification is delivered");
             connection.State.Should().Be(AmiConnectionState.Disconnected);
             if (seen is not null)
