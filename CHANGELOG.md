@@ -366,6 +366,34 @@ All notable changes to this project will be documented in this file.
     instead of `[LIVE] Reconnect reload failed` at Error.
   - No public API changes.
 
+### Fixed — BREAKING: VerbaraServer.ConnectionLost was never raised, and a Reconnected handler that threw could stop the live state from reloading (#353)
+
+`VerbaraServer.ConnectionLost` and `IVerbaraServer.ConnectionLost` were documented as "Fired when the AMI connection
+is lost or completed" (`VerbaraServer.cs:54` and `IVerbaraServer.cs:24` in `v2.6.0`), but nothing raised them for a
+real loss. They are now raised once for each loss of the established AMI connection that the application did not
+ask for: with no exception when the stream ended (Asterisk stopped or crashed, or the connection was reset), a
+`TimeoutException` when the heartbeat's `Ping` went unanswered, or the reader's exception. The event comes after
+the connection's `State` has left `Connected`, before the `Reconnected` of the same outage, whether `AutoReconnect`
+is on or off; never for the application's own `DisconnectAsync`/`DisposeAsync`, and not again when the reconnect
+gives up. `IAmiConnection.Reconnected` is now delivered to each handler in turn, so a handler that throws is logged
+and no longer keeps the handlers after it, the live server's reload among them, from running.
+
+**What changes for you:**
+- Handlers subscribed to `ConnectionLost` start running, once per outage, on a thread-pool thread.
+- `Reconnected` is delivered in order behind them, one handler at a time: a slow `ConnectionLost` handler, or an
+  earlier slow `Reconnected` handler, delays the handlers after it and the live state's reload; it never delays the
+  reconnect itself. Keep handlers short.
+- A `Reconnected` handler that throws no longer stops the others; one that used to be skipped now runs.
+- The server logs `[LIVE] AMI connection lost: live state is stale until it reconnects and reloads` at Warning.
+
+Measured against Asterisk 20.20.1, 22.9.0 and 23.4.1 (stop, kill, reset, pause, network cut, rejected credentials):
+exactly one `ConnectionLost` per outage in 195 of 195, before its `Reconnected` in 180 of 180, none on the
+application's own dispose (30 of 30), against none at all in the same 195 outages before the fix. With a throwing
+`Reconnected` handler subscribed before the live server, the state reloaded in 30 of 30 runs; before the fix it never
+did, and the server kept 6 channels and 1 queue caller that Asterisk no longer had (30 of 30). Behind an 8 s
+`ConnectionLost` handler the connection came back 4.1–5.9 s after a crash and the reload followed 2.2–4.0 s later,
+when the handler returned. No public API changes. See *Detecting an AMI loss* in `docs/guides/troubleshooting.md`.
+
 ### Fixed — the push bus never counted an event dropped by a full buffer (#328)
 
 - `asterisk.push.events.dropped` now increments, tagged `reason=buffer_full`, once for every event a
