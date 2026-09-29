@@ -79,7 +79,7 @@ internal sealed class ReloadableConnection
         {
             await done.Task.WaitAsync(ReloadBound);
         }
-        catch (TimeoutException)
+        catch (TimeoutException ex)
         {
             // The reload never reached its last action. OnReconnected swallows every exception into a
             // log line, so report what it did send rather than a bare timeout.
@@ -89,7 +89,7 @@ internal sealed class ReloadableConnection
                 actions = _actionsSeen.Count == 0 ? "(none)" : string.Join(", ", _actionsSeen);
             }
 
-            throw new InvalidOperationException($"The reconnect reload never completed. Actions the server sent: {actions}.");
+            throw new InvalidOperationException($"The reconnect reload never completed. Actions the server sent: {actions}.", ex);
         }
         finally
         {
