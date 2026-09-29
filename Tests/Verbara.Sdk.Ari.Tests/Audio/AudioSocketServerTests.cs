@@ -1366,7 +1366,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         var server = CreateServer(PortTheOsPicks, maxStreams: 1, timeProvider: time);
         using var accepted = AcceptedClients.NeverConnected();
         using var broken = new ReleaseSignallingClient(accepted.Socket);
-        var listener = new TcpListener(IPAddress.Loopback, 0);
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         try
         {
@@ -1457,11 +1457,22 @@ public class AudioSocketServerTests : IAsyncDisposable
             while (true)
             {
                 var client = new TcpClient();
-                await client.ConnectAsync(IPAddress.Loopback, port, token);
-                var stream = client.GetStream();
-                await stream.WriteAsync(BuildUuidFrame(uuid), token);
-                await stream.FlushAsync(token);
-                var ended = stream.ReadAsync(new byte[1], token).AsTask();
+                Task ended;
+                try
+                {
+                    await client.ConnectAsync(IPAddress.Loopback, port, token);
+                    var stream = client.GetStream();
+                    await stream.WriteAsync(BuildUuidFrame(uuid), token);
+                    await stream.FlushAsync(token);
+                    ended = stream.ReadAsync(new byte[1], token).AsTask();
+                }
+                catch (IOException)
+                {
+                    // The server closed it before the UUID frame was written: refused at the accept.
+                    // Connect again.
+                    client.Dispose();
+                    continue;
+                }
 
                 if (await Task.WhenAny(announced, ended) == announced)
                 {
@@ -1473,8 +1484,10 @@ public class AudioSocketServerTests : IAsyncDisposable
                 // Closed unannounced: refused at the accept. A close with the UUID frame unread can
                 // reach the client as a reset rather than an end of stream; either is a refusal, so
                 // the outcome is not inspected, only awaited.
-                await ((Task)ended).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-                client.Dispose();
+                using (client)
+                {
+                    await ended.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                }
             }
         }
     }
