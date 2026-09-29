@@ -184,6 +184,23 @@ internal sealed class PipedSocket(bool refusesConnect = false) : ISocketConnecti
     public void CloseFromPeer() => Close();
 
     /// <summary>
+    /// The stream the connection reads fails with <paramref name="error"/>, as a transport that breaks mid-read does:
+    /// the connection's next read throws it instead of seeing the stream end. The socket is closed as by
+    /// <see cref="CloseFromPeer"/>; the connection still owns it and must dispose it.
+    /// </summary>
+    public void FaultFromPeer(Exception error)
+    {
+        lock (_gate)
+        {
+            if (_closed.IsCancellationRequested)
+                return;
+
+            _closed.Cancel();
+            _toConnection.Writer.Complete(error);
+        }
+    }
+
+    /// <summary>
     /// Reads the next action the connection wrote. Returns <see langword="null"/> once the socket has
     /// been closed; throws <see cref="OperationCanceledException"/> when <paramref name="cancellationToken"/>
     /// fires first.

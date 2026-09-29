@@ -57,6 +57,12 @@ public interface IAmiConnection : IAsyncDisposable
     event Func<ManagerEvent, ValueTask>? OnEvent;
 
     /// <summary>Fired after a successful automatic reconnection.</summary>
+    /// <remarks>
+    /// Delivered on the thread pool, never on the connection's reader, heartbeat or reconnect loop, and in order: every
+    /// handler told of the loss that caused the reconnect has returned before the first <c>Reconnected</c> handler of
+    /// the same outage runs. Handlers run one at a time; one that throws is logged, and the handlers after it still
+    /// receive the event. A slow handler delays the handlers queued behind it, so keep handlers short.
+    /// </remarks>
     event Action? Reconnected;
 
     /// <summary>Gracefully disconnect from the AMI.</summary>

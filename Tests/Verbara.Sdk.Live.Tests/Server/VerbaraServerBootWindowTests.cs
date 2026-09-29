@@ -749,9 +749,15 @@ public sealed class VerbaraServerBootWindowTests
     /// <summary>The server's Warning lines, in order.</summary>
     private static List<string> Warnings(Run run) => Warnings(run.ServerLog);
 
-    /// <summary>The Warning lines of <paramref name="log"/>, in order.</summary>
+    /// <summary>
+    /// The Warning lines of <paramref name="log"/>, in order, apart from the announcement of a lost connection. That
+    /// one is the connection's news, delivered on the thread pool while the load runs, so whether it is in the log yet
+    /// is a race these tests do not own; they count what the load warns.
+    /// </summary>
     private static List<string> Warnings(SignalingLogger<VerbaraServer> log) =>
-        [.. log.Entries.Where(entry => entry.Level == LogLevel.Warning).Select(entry => entry.Line)];
+        [.. log.Entries
+            .Where(entry => entry.Level == LogLevel.Warning && entry.Line != VerbaraServerLog.AmiConnectionLostLine)
+            .Select(entry => entry.Line)];
 
     private static async Task<bool> CompletesWithinBoundAsync(Task task)
     {

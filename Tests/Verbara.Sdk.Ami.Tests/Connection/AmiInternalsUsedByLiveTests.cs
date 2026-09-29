@@ -31,7 +31,11 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// </description></item>
 /// <item><description><c>new EventActionOutcome()</c>;</description></item>
 /// <item><description><c>EventActionOutcome.Rejection</c>, a nullable <see cref="string"/>;</description></item>
-/// <item><description><c>EventActionOutcome.SessionEnded</c>, a <see cref="bool"/>.</description></item>
+/// <item><description><c>EventActionOutcome.SessionEnded</c>, a <see cref="bool"/>;</description></item>
+/// <item><description>
+/// <c>AmiConnection.Lost</c>, an event of <see cref="Action{T}"/> of a nullable <see cref="Exception"/>, which Live
+/// subscribes to and unsubscribes from.
+/// </description></item>
 /// </list>
 /// </remarks>
 public sealed class AmiInternalsUsedByLiveTests
@@ -66,6 +70,11 @@ public sealed class AmiInternalsUsedByLiveTests
         var fullyBooted = connection.FullyBooted;
         Exactly<Task>(ref fullyBooted);
 
+        // AmiConnection.Lost: subscribed and unsubscribed with a handler declared exactly as Live's is.
+        Action<Exception?> onLost = _ => { };
+        connection.Lost += onLost;
+        connection.Lost -= onLost;
+
         // new EventActionOutcome(), and the overload by its exact parameter list and return type.
         var outcome = new EventActionOutcome();
         Func<ManagerAction, EventActionOutcome, CancellationToken, IAsyncEnumerable<ManagerEvent>> send =
@@ -90,6 +99,7 @@ public sealed class AmiInternalsUsedByLiveTests
         using (new AssertionScope())
         {
             send.Should().NotBeNull("the overload binds to the delegate Live's call site needs");
+            onLost.Should().NotBeNull("the event takes the handler type Live's call site declares");
             fullyBooted.IsCompleted.Should().BeFalse("the peer never reported FullyBooted on this session");
             received.Should().BeEmpty("the peer's list was empty");
             rejection.Should().BeNull("Asterisk refused nothing");
