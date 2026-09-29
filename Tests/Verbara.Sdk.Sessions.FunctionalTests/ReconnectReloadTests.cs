@@ -122,7 +122,7 @@ public sealed class ReconnectReloadTests : IAsyncDisposable
         {
             await _reloadDone.Task.WaitAsync(TimeSpan.FromSeconds(5));
         }
-        catch (TimeoutException)
+        catch (TimeoutException ex)
         {
             // The reload never finished. OnReconnected swallows every exception into a log line,
             // so say what the server actually did instead of reporting a bare timeout.
@@ -134,7 +134,8 @@ public sealed class ReconnectReloadTests : IAsyncDisposable
 
             throw new InvalidOperationException(
                 $"The reconnect reload never completed. Actions the server sent: {actions}. "
-                + $"Server log:{Environment.NewLine}{_serverLog}");
+                + $"Server log:{Environment.NewLine}{_serverLog}",
+                ex);
         }
     }
 

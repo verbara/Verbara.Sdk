@@ -195,9 +195,9 @@ public sealed class ExternalMediaActivity : AriActivityBase
             if (_audioStream is null)
                 throw new TimeoutException($"Asterisk did not connect to audio server within {ConnectionTimeout}");
         }
-        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            throw new TimeoutException($"Asterisk did not connect to audio server within {ConnectionTimeout}");
+            throw new TimeoutException($"Asterisk did not connect to audio server within {ConnectionTimeout}", ex);
         }
     }
 
