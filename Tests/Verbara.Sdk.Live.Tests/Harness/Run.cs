@@ -32,6 +32,7 @@ internal sealed class Run : IAsyncDisposable
     private readonly CancellationTokenSource _peerCts = new();
     private readonly TaskCompletionSource _secondPeerReleased = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _reconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _secondSocketCreated = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task _peers = Task.CompletedTask;
     private Task _firstServed = Task.CompletedTask;
 
@@ -81,6 +82,13 @@ internal sealed class Run : IAsyncDisposable
 
     /// <summary>Completes when the connection raises <see cref="AmiConnection.Reconnected"/>.</summary>
     public Task Reconnected => _reconnected.Task;
+
+    /// <summary>
+    /// Completes once the reconnect loop has created its socket. Its connect attempt writes <c>Connecting</c> before it
+    /// creates the socket, and then waits for the banner, which only the second peer sends: until the test calls
+    /// <see cref="ReleaseSecondPeer"/>, the connection reads <c>Connecting</c>.
+    /// </summary>
+    public Task SecondSocketCreated => _secondSocketCreated.Task;
 
     /// <summary>
     /// Connects over <paramref name="firstPeer"/>, without starting the server. The reconnect's socket, when there is
@@ -159,6 +167,7 @@ internal sealed class Run : IAsyncDisposable
 
             // The reconnect loop's socket. Until it is served the attempt waits for its banner.
             var second = await _sockets.NextAsync(cancellationToken);
+            _secondSocketCreated.TrySetResult();
             if (SecondPeer is not null)
             {
                 await _secondPeerReleased.Task.WaitAsync(cancellationToken);

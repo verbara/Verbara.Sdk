@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Verbara.Sdk.Ami;
+using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Ami.Tests.Connection;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Server;
@@ -448,6 +449,216 @@ public sealed class VerbaraServerBootWindowTests
         }
     }
 
+    // ── What must not move: a load with nothing to repair asks once and waits for nothing ───────────────────────────────
+
+    /// <summary>
+    /// Asterisk has started and reports <c>FullyBooted</c> once the connect is done, before the load asks anything.
+    /// Without app_queue it refuses <c>QueueStatus</c> for good, and a refusal that comes after the report is the true
+    /// answer: there are no queues.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ShouldAskOnce_WhenAppQueueIsNotLoadedAtAll()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true, SendsFullyBooted = true, HasAppQueue = false };
+        await using var run = await Run.ConnectAsync(peer);
+
+        var start = run.StartServerAsync();
+        var waits = await DriveTheLoadAsync(run, start);
+        var outcome = await Record.ExceptionAsync(() => start);
+
+        using (new AssertionScope())
+        {
+            outcome.Should().BeNull("a load whose answers are all final completes");
+            waits.Should().BeEmpty("Asterisk reported FullyBooted before the queues were asked, so their refusal is final");
+            peer.Asked("QueueStatus").Should().Be(1, "a refusal after the report is not asked again");
+            run.Server.Queues.QueueCount.Should().Be(0, "app_queue is not loaded, so there are no queues");
+            peer.Asked("Agents").Should().Be(1, "the agents are asked once, and answered");
+            run.Server.Agents.GetById(BootingAsterisk.AgentId).Should().NotBeNull("the agent Asterisk reports is loaded");
+            Lines(run.ServerLog, StateLoaded).Should().Be(1, "the load completed once");
+            Warnings(run).Should().BeEmpty("a module that is not loaded is not a failure to warn about");
+            peer.Fault.Should().BeNull("the peer served the session without failing");
+        }
+    }
+
+    /// <summary>
+    /// The same PBX, where Asterisk sends <c>FullyBooted</c> while the connection is still reading its connect's own
+    /// responses, which is the order an Asterisk that has already started uses: right after the login's response and
+    /// before the version probe's, or even before the login's response. The load that follows must know about it.
+    /// </summary>
+    [Theory]
+    [InlineData(FullyBootedPlacement.AfterLoginResponse)]
+    [InlineData(FullyBootedPlacement.BeforeLoginResponse)]
+    public async Task StartAsync_ShouldAskOnce_WhenFullyBootedArrivedDuringTheLogin(FullyBootedPlacement placement)
+    {
+        var peer = new BootingAsterisk
+        {
+            BootedAtLogin = true, SendsFullyBooted = true, FullyBootedAt = placement, HasAppQueue = false,
+        };
+        await using var run = await Run.ConnectAsync(peer);
+
+        var start = run.StartServerAsync();
+        var waits = await DriveTheLoadAsync(run, start);
+        var outcome = await Record.ExceptionAsync(() => start);
+
+        using (new AssertionScope())
+        {
+            outcome.Should().BeNull("a load whose answers are all final completes");
+            waits.Should().BeEmpty(
+                "Asterisk reported FullyBooted during the login, before the queues were asked, so their refusal is final");
+            peer.Asked("QueueStatus").Should().Be(1, "a refusal after the report is not asked again");
+            run.Server.Queues.QueueCount.Should().Be(0, "app_queue is not loaded, so there are no queues");
+            run.Server.Agents.GetById(BootingAsterisk.AgentId).Should().NotBeNull("the agent Asterisk reports is loaded");
+            Lines(run.ServerLog, StateLoaded).Should().Be(1, "the load completed once");
+            Warnings(run).Should().BeEmpty("a module that is not loaded is not a failure to warn about");
+            peer.Fault.Should().BeNull("the peer served the session without failing");
+        }
+    }
+
+    /// <summary>
+    /// A user without <c>system</c> never receives <c>FullyBooted</c>, but on an Asterisk that has started every request
+    /// is answered at once. Nothing is refused, so nothing is waited for.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ShouldNotWait_WhenTheUserNeverReceivesFullyBootedAndAsteriskHasBooted()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true, SendsFullyBooted = false };
+        await using var run = await Run.ConnectAsync(peer);
+
+        var start = run.StartServerAsync();
+        var waits = await DriveTheLoadAsync(run, start);
+        var outcome = await Record.ExceptionAsync(() => start);
+
+        var queue = run.Server.Queues.GetByName(BootingAsterisk.QueueName);
+        using (new AssertionScope())
+        {
+            outcome.Should().BeNull("every request is answered");
+            waits.Should().BeEmpty("an answered request is not followed by a wait");
+            peer.Asked("Status").Should().Be(1, "the channels are asked once");
+            peer.Asked("QueueStatus").Should().Be(1, "the queues are asked once");
+            peer.Asked("Agents").Should().Be(1, "the agents are asked once");
+            queue.Should().NotBeNull("the queue Asterisk reports is loaded");
+            queue?.Strategy.Should().Be(BootingAsterisk.QueueStrategy, "the queue keeps the strategy Asterisk reports");
+            queue?.MemberCount.Should().Be(1, "the queue keeps its one static member");
+            run.Server.Agents.GetById(BootingAsterisk.AgentId).Should().NotBeNull("the agent Asterisk reports is loaded");
+            Warnings(run).Should().BeEmpty("nothing went wrong");
+            peer.Fault.Should().BeNull("the peer served the session without failing");
+        }
+    }
+
+    /// <summary>
+    /// Asterisk refuses the queues and the agents with <c>Permission denied</c>, and keeps the session. Only an
+    /// <c>Invalid/unknown command</c> means a module may still be loading; any other refusal is final, as it is today.
+    /// The user receives no <c>FullyBooted</c>, so the refusal's text is the only thing that decides.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ShouldNotAskAgain_WhenTheRefusalIsNotAnUnknownCommand()
+    {
+        var peer = new BootingAsterisk
+        {
+            BootedAtLogin = true, SendsFullyBooted = false, HasAppQueue = false, HasAgentPool = false,
+            RefusalMessage = BootingAsterisk.PermissionDenied,
+        };
+        await using var run = await Run.ConnectAsync(peer);
+
+        var start = run.StartServerAsync();
+        var waits = await DriveTheLoadAsync(run, start);
+        var outcome = await Record.ExceptionAsync(() => start);
+
+        using (new AssertionScope())
+        {
+            outcome.Should().BeNull("a refusal other than an unknown command ends its request, as it does today");
+            waits.Should().BeEmpty("only an unknown command is waited for");
+            peer.Asked("QueueStatus").Should().Be(1, "a Permission denied is not asked again");
+            peer.Asked("Agents").Should().Be(1, "a Permission denied is not asked again");
+            run.Server.Queues.QueueCount.Should().Be(0, "the refused request loaded no queue");
+            run.Server.Agents.AgentCount.Should().Be(0, "the refused request loaded no agent");
+            Lines(run.ServerLog, StateLoaded).Should().Be(1, "the load completed once");
+            peer.Fault.Should().BeNull("the peer served the session without failing");
+        }
+    }
+
+    /// <summary>
+    /// A start before the connection was ever established throws what it throws today, from the load's first request:
+    /// on a connection never connected, and on one whose caller's first connect is still running. Neither has a
+    /// reconnect that would reload afterwards.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StartAsync_ShouldThrowNotConnected_WhenTheConnectionWasNeverConnected(bool firstConnectRunning)
+    {
+        var sockets = new PipedSocketFactory();
+        var serverLog = new SignalingLogger<VerbaraServer>();
+        await using var connection = new AmiConnection(
+            Microsoft.Extensions.Options.Options.Create(new AmiConnectionOptions
+            {
+                Hostname = "localhost",
+                Username = "admin",
+                Password = "secret",
+                EnableHeartbeat = false,
+                AutoReconnect = true,
+                // A limit, never a wait: the first connect the test holds must not give up while it holds it.
+                ConnectionTimeout = TimeSpan.FromMinutes(1),
+            }),
+            sockets,
+            new SignalingLogger<AmiConnection>());
+        await using var server = new VerbaraServer(connection, serverLog);
+
+        Task? firstConnect = null;
+        if (firstConnectRunning)
+        {
+            // The connect writes Connecting before it creates its socket, and then waits for a banner nobody sends.
+            firstConnect = connection.ConnectAsync().AsTask();
+            await sockets.NextAsync(CancellationToken.None).AsTask().WaitAsync(Run.Bound);
+        }
+
+        var stateAtStart = connection.State;
+        var outcome = await Record.ExceptionAsync(() => server.StartAsync().WaitAsync(Run.Bound));
+        await connection.DisposeAsync();
+        var connectOutcome = firstConnect is null ? null : await Record.ExceptionAsync(() => firstConnect.WaitAsync(Run.Bound));
+
+        var expectedState = firstConnectRunning ? AmiConnectionState.Connecting : AmiConnectionState.Initial;
+        using (new AssertionScope())
+        {
+            stateAtStart.Should().Be(expectedState);
+            outcome.Should().BeOfType<AmiNotConnectedException>(
+                "a start before the connection was established has nothing to load, and no reconnect will reload it")
+                .Which.Message.Should().Be($"Not connected. Current state: {expectedState}",
+                    "the start throws exactly what it throws today");
+            Lines(serverLog, StateLoaded).Should().Be(0, "nothing was loaded");
+            Warnings(serverLog).Should().BeEmpty("a start that throws is not an interrupted load");
+            if (firstConnectRunning)
+                connectOutcome.Should().NotBeNull("disposing the connection ends the connect that was still running");
+        }
+    }
+
+    /// <summary>
+    /// The reconnect loop's own connect attempt also reads <c>Connecting</c>, and the connection's state cannot tell it
+    /// from a caller's first connect. A start that begins there throws, as it does today.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ShouldThrowNotConnected_WhenItBeginsWhileTheReconnectLoopIsConnecting()
+    {
+        var first = new BootingAsterisk { BootedAtLogin = true, Close = PeerClose.AfterConnect };
+        await using var run = await Run.ConnectAsync(first, autoReconnect: true);
+
+        var attempting = await CompletesWithinBoundAsync(run.SecondSocketCreated);
+        var stateAtStart = run.Connection.State;
+        var outcome = await Record.ExceptionAsync(run.StartServerAsync);
+
+        using (new AssertionScope())
+        {
+            attempting.Should().BeTrue("the reconnect loop started its connect attempt once Asterisk closed the session");
+            stateAtStart.Should().Be(AmiConnectionState.Connecting, "the attempt waits for a banner the test never sends");
+            outcome.Should().BeOfType<AmiNotConnectedException>(
+                "a start that begins in Connecting throws, as it does today")
+                .Which.Message.Should().Be("Not connected. Current state: Connecting",
+                    "the start throws exactly what it throws today");
+            Lines(run.ServerLog, StateLoaded).Should().Be(0, "nothing was loaded");
+            first.Fault.Should().BeNull("the peer served its session without failing");
+        }
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -482,8 +693,11 @@ public sealed class VerbaraServerBootWindowTests
         log.Entries.Count(entry => entry.Line.Contains(fragment, StringComparison.Ordinal));
 
     /// <summary>The server's Warning lines, in order.</summary>
-    private static List<string> Warnings(Run run) =>
-        [.. run.ServerLog.Entries.Where(entry => entry.Level == LogLevel.Warning).Select(entry => entry.Line)];
+    private static List<string> Warnings(Run run) => Warnings(run.ServerLog);
+
+    /// <summary>The Warning lines of <paramref name="log"/>, in order.</summary>
+    private static List<string> Warnings(SignalingLogger<VerbaraServer> log) =>
+        [.. log.Entries.Where(entry => entry.Level == LogLevel.Warning).Select(entry => entry.Line)];
 
     private static async Task<bool> CompletesWithinBoundAsync(Task task)
     {
