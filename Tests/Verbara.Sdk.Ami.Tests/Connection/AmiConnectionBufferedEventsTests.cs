@@ -52,6 +52,9 @@ public sealed class AmiConnectionBufferedEventsTests
     /// <summary>A count no other test in the process records on <c>ami.events.dropped</c>.</summary>
     private const int DistinctiveBuffered = 37;
 
+    /// <summary>A second count no other test records on <c>ami.events.dropped</c>: the faulted loss drain's.</summary>
+    private const int FaultedDrainBuffered = 41;
+
     /// <summary>The loss-drain tests hold the k-th buffered event's dispatch; k of the N are delivered by then.</summary>
     private const int HeldBufferedEvent = 5;
 
@@ -226,6 +229,50 @@ public sealed class AmiConnectionBufferedEventsTests
         }
     }
 
+    /// <summary>
+    /// The session the reconnect loop connects gets its own event pump. The peer closes the first session, the loop
+    /// dials and logs in again, and only then does the second session's peer buffer N events behind a held dispatch.
+    /// The caller disposes there, then the gate opens.
+    /// </summary>
+    [Fact]
+    public async Task DisposeAsync_ShouldDeliverNoBufferedEvent_WhenTheCallerEndsTheSessionTheReconnectLoopConnected()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory();
+        var connection = Create(factory, autoReconnect: true, backoff: TimeSpan.FromMilliseconds(1));
+        var dispatches = new Dispatches(connection);
+        var reconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Reconnected += () => reconnected.TrySetResult();
+        var lost = await ConnectAsync(connection, factory, peerCts);
+        var relogin = Task.Run(async () =>
+        {
+            var peer = await factory.NextAsync(peerCts.Token);
+            await peer.CompleteLoginAsync(peerCts.Token);
+            return peer;
+        }, peerCts.Token);
+
+        lost.CloseFromPeer();
+        var socket = await relogin.WaitAsync(Bound);
+        (await CompletesWithinBoundAsync(reconnected.Task)).Should().BeTrue(
+            "the reconnect loop logs in on the second socket and reports the reconnect");
+        await BufferBehindTheHeldDispatchAsync(connection, socket, dispatches, Buffered, peerCts);
+
+        var asked = dispatches.Count;
+        var end = connection.DisposeAsync().AsTask();
+        dispatches.First.Open();
+        var ended = await CompletesWithinBoundAsync(end);
+
+        using (new AssertionScope())
+        {
+            ended.Should().BeTrue("the caller's DisposeAsync returns once the dispatch in progress has");
+            (dispatches.Count - asked).Should().Be(0,
+                $"the caller's DisposeAsync delivers none of the {Buffered} events buffered in the session the " +
+                "reconnect loop connected: that session's pump observes the caller's ending too");
+            factory.Created.Should().HaveCount(2, "one socket per session, and nothing dials after the caller's ending");
+            connection.State.Should().Be(AmiConnectionState.Disconnected);
+        }
+    }
+
     // ── What the drop leaves behind: one Warning and one tagged measurement ──────────────────────────
 
     [Fact]
@@ -360,6 +407,52 @@ public sealed class AmiConnectionBufferedEventsTests
             dispatches.States().Should().NotContain(AmiConnectionState.Disconnected,
                 "every buffered event is delivered before the lost connection reports Disconnected");
             logger.Entries.Where(e => e.Format == DiscardedFormat).Should().BeEmpty("a loss discards nothing");
+            connection.State.Should().Be(AmiConnectionState.Disconnected);
+        }
+    }
+
+    /// <summary>
+    /// A loss whose drain leaves events undelivered with no caller involved: the held handler throws when its gate
+    /// opens, which ends the pump's consumer with <see cref="FaultedDrainBuffered"/> events still buffered. That is a
+    /// loss alone, so it reports no caller's discard: no <c>Discarded on caller ending</c> Warning and no
+    /// <c>reason=caller_ending</c> measurement. What the fault itself leaves behind is not asserted here.
+    /// </summary>
+    [Fact]
+    public async Task LostConnection_ShouldReportNoCallerEndingDiscard_WhenAHandlerFaultsTheLossDrain()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        using var dropped = new CallerEndingDrops();
+        var factory = new PipedSocketFactory();
+        var logger = new CapturingLogger<AmiConnection>();
+        var connection = Create(factory, autoReconnect: false, logger);
+        var first = new HeldDispatch();
+        var dispatchCount = 0;
+        connection.OnEvent += async _ =>
+        {
+            if (Interlocked.Increment(ref dispatchCount) != 1)
+                return;
+
+            first.Enter();
+            await first.Gate;
+            throw new InvalidOperationException("The handler fails while the loss drains the buffer.");
+        };
+        var disconnected = logger.Logged("[AMI] Disconnected");
+        var socket = await ConnectAsync(connection, factory, peerCts);
+        (await socket.WriteEventAsync("FullyBooted")).Should().BeTrue("the peer sends the first event");
+        (await CompletesWithinBoundAsync(first.Entered)).Should().BeTrue("the handler receives it and holds its dispatch");
+        await BufferAsync(connection, socket, FaultedDrainBuffered, peerCts);
+
+        socket.CloseFromPeer();
+        first.Open();
+        var ended = await CompletesWithinBoundAsync(disconnected);
+
+        using (new AssertionScope())
+        {
+            ended.Should().BeTrue("the peer's close ends the connection, and the release returns once the consumer has");
+            logger.Entries.Where(e => e.Format == DiscardedFormat).Should().BeEmpty(
+                "nobody ended this connection: a loss never logs a caller's discard, whatever its drain left undelivered");
+            dropped.Measurements.Should().NotContain(FaultedDrainBuffered,
+                "a loss records nothing on ami.events.dropped with reason=caller_ending");
             connection.State.Should().Be(AmiConnectionState.Disconnected);
         }
     }
