@@ -112,6 +112,42 @@ public class AsyncEventPumpTests
         pump.TryEnqueue(CreateEvent()).Should().BeFalse();
     }
 
+    /// <summary>
+    /// The handler holds the first event's dispatch while N events are enqueued behind it; <c>DisposeAsync</c> is
+    /// asked, then the handler is released and returns at once. Counts, not clocks: time enters only as the hang
+    /// bound of each wait.
+    /// </summary>
+    [Fact]
+    public async Task DisposeAsync_ShouldDispatchNoBufferedEvent_WhenDisposedWhileAHandlerRuns()
+    {
+        const int buffered = 20;
+        var bound = TimeSpan.FromSeconds(10);
+        var pump = new AsyncEventPump(100);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var dispatched = 0;
+        pump.Start(async _ =>
+        {
+            if (Interlocked.Increment(ref dispatched) != 1)
+                return;
+
+            entered.TrySetResult();
+            await gate.Task;
+        });
+        pump.TryEnqueue(CreateEvent("held")).Should().BeTrue();
+        await entered.Task.WaitAsync(bound);
+        for (var i = 0; i < buffered; i++)
+            pump.TryEnqueue(CreateEvent($"E{i}")).Should().BeTrue();
+
+        var asked = Volatile.Read(ref dispatched);
+        var dispose = pump.DisposeAsync().AsTask();
+        gate.TrySetResult();
+        await dispose.WaitAsync(bound);
+
+        (Volatile.Read(ref dispatched) - asked).Should().Be(0,
+            $"a disposed pump dispatches none of the {buffered} events still buffered behind the dispatch in progress");
+    }
+
     [Fact]
     public async Task DisposeAsync_ShouldNotThrow_WhenNotStarted()
     {
