@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -31,7 +32,8 @@ namespace Verbara.Sdk.Sessions.Tests.Manager;
 /// the manager ends the call inside them — so what the capture sees is exactly what this test's calls
 /// produced. Retention is crossed on the manager's clock seam, never by waiting.</para>
 /// </summary>
-public sealed class CallSessionManagerEndingOnceTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class CallSessionManagerEndingOnceTests : IAsyncLifetime
 {
     private const string ServerId = "srv-1";
 
@@ -51,7 +53,14 @@ public sealed class CallSessionManagerEndingOnceTests : IAsyncDisposable
         _sut.AttachToServer(_server, ServerId);
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         await _sut.DisposeAsync();
         await _server.DisposeAsync();
