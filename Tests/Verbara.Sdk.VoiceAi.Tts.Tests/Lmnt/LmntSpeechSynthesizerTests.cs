@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.WebSockets;
 using System.Text.Json;
@@ -85,7 +86,8 @@ public class LmntTtsOptionsTests
 /// transports, and D3 splits the provider by transport rather than by suite: the HTTP class further
 /// down this file has migrated (§4.6), this one has not. Fidelity here comes from recorded frames (D4).
 /// </summary>
-public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public class LmntSpeechSynthesizerWsTests : IAsyncLifetime
 {
     private readonly LmntWsFakeServer _server;
 
@@ -587,9 +589,15 @@ public class LmntSpeechSynthesizerWsTests : IAsyncDisposable
         allMessages.Should().Contain("\"eof\"");
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
-        GC.SuppressFinalize(this);
         await _server.DisposeAsync();
     }
 }
