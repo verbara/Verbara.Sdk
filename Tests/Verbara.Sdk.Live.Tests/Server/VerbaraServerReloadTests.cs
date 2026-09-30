@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verbara.Sdk;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Events;
@@ -25,7 +26,8 @@ namespace Verbara.Sdk.Live.Tests.Server;
 /// the <c>ChannelRemoved</c> / <c>ChannelAdded</c> events. The session-level consequence is measured
 /// in <c>Verbara.Sdk.Sessions.FunctionalTests</c>.</para>
 /// </summary>
-public sealed class VerbaraServerReloadTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class VerbaraServerReloadTests : IAsyncLifetime
 {
     private const string HeldUid = "1700000000.1";
     private const string HeldName = "PJSIP/2000-0001";
@@ -505,7 +507,17 @@ public sealed class VerbaraServerReloadTests : IAsyncDisposable
             + $"cast into a ChannelState that names nothing. Measured: {Describe()}");
     }
 
-    public async ValueTask DisposeAsync() => await _sut.DisposeAsync();
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
+    {
+        await _sut.DisposeAsync();
+    }
 
     /// <summary>
     /// Records every line the server logs and completes one of two tasks when the reload ends —

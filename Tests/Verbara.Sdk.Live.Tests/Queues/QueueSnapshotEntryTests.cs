@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verbara.Sdk;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Events;
@@ -16,7 +17,8 @@ namespace Verbara.Sdk.Live.Tests.Queues;
 /// <see cref="AsteriskQueueEntry.JoinedAt"/> and <see cref="QueueManager.CallerJoined"/>.
 /// </summary>
 [Collection(LiveQueueJoinCounterGroup.Name)]
-public sealed class QueueSnapshotEntryTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class QueueSnapshotEntryTests : IAsyncLifetime
 {
     private const string Queue = "q-late";
     private const string Caller = "PJSIP/far-00000001";
@@ -38,10 +40,16 @@ public sealed class QueueSnapshotEntryTests : IAsyncDisposable
         _sut.Queues.CallerJoined += (queue, entry) => _joined.Add((queue, entry));
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         await _sut.DisposeAsync();
-        GC.SuppressFinalize(this);
     }
 
     [Theory]

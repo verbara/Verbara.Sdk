@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verbara.Sdk;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Enums;
@@ -10,7 +11,8 @@ using NSubstitute;
 
 namespace Verbara.Sdk.Live.Tests.Server;
 
-public sealed class VerbaraServerEventRoutingTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
 {
     private readonly IAmiConnection _connection;
     private readonly VerbaraServer _sut;
@@ -29,10 +31,16 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncDisposable
         _sut = new VerbaraServer(_connection, NullLogger<VerbaraServer>.Instance);
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         await _sut.DisposeAsync();
-        GC.SuppressFinalize(this);
     }
 
     private static async IAsyncEnumerable<ManagerEvent> EmptyAsyncEnumerable()
