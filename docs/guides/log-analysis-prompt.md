@@ -23,6 +23,7 @@ For each error or warning, classify using this table:
 | `[CONFIG_DB] Operation failed` with DB exception | Infra: DB issue | Check DB connectivity |
 | `[AMI] Reader error` with `IOException` | Infra: network | Check network stability |
 | `[AMI_EVENT] Dropped` | Infra: buffer full | Increase `EventPumpCapacity` |
+| `[AMI_EVENT] Discarded on caller ending` | Expected: the caller ended the connection with events buffered | Ignore; not a capacity problem |
 | `[AMI] Reconnecting` | Infra: connection loss | Check Asterisk uptime |
 | `[CALL_FLOW] Evicted stale` | Infra: zombie call | Investigate missing Hangup events |
 | `[AGENT] Unknown agent` | Config: agent not tracked | Check AgentsAction response |

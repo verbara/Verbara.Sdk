@@ -4,6 +4,7 @@ Practical how-to guides for working with Verbara Sdk.
 
 | Guide | Description |
 |-------|-------------|
+| [ami-caller-ending-buffered-events-migration.md](ami-caller-ending-buffered-events-migration.md) | Moving to an AMI `DisposeAsync`/`DisconnectAsync` that delivers none of the events still buffered -- what a caller's ending and a lost connection each deliver now, the `reason` tag an `ami.events.dropped` alert must filter on, and the Warning that reports the discarded count. |
 | [ari-connection-state-and-accept-loop-migration.md](ari-connection-state-and-accept-loop-migration.md) | Moving to the ARI connect attempt that leaves a terminal state and the outbound listener that survives an accept failure -- what `AriClient.State` reports now, which workarounds can be deleted, and the Error line a persistent accept failure produces. |
 | [asterisk-version-compatibility.md](asterisk-version-compatibility.md) | AMI event coverage matrix across Asterisk 18-23, listing typed classes and fallback behavior per version. |
 | [asterisk-version-matrix.md](asterisk-version-matrix.md) | Supported Asterisk versions (22 LTS primary, 23 Standard secondary), Docker test infrastructure, and known-divergent behavior. |
