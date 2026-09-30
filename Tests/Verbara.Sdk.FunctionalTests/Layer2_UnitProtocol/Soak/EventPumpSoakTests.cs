@@ -1,11 +1,15 @@
 namespace Verbara.Sdk.FunctionalTests.Layer2_UnitProtocol.Soak;
 
+using System.Diagnostics.CodeAnalysis;
 using Verbara.Sdk.Ami.Internal;
 using FluentAssertions;
 
 [Trait("Category", "Soak")]
-public sealed class EventPumpSoakTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class EventPumpSoakTests : IAsyncLifetime
 {
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
     private AsyncEventPump? _pump;
 
     // The semaphore a test's handler waits on or releases. The handler runs on the pump's consumer
@@ -101,7 +105,11 @@ public sealed class EventPumpSoakTests : IAsyncDisposable
         blocker.Release(totalEvents);
     }
 
-    public async ValueTask DisposeAsync()
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         if (_pump is not null)
             await _pump.DisposeAsync();

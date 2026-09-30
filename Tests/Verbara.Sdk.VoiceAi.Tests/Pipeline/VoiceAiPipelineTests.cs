@@ -12,7 +12,7 @@ using Xunit;
 namespace Verbara.Sdk.VoiceAi.Tests.Pipeline;
 
 [Collection(SessionCounterGroup.Name)]
-public class VoiceAiPipelineTests : IAsyncDisposable
+public class VoiceAiPipelineTests
 {
     private static VoiceAiPipelineOptions DefaultOptions() => new()
     {
@@ -498,12 +498,6 @@ public class VoiceAiPipelineTests : IAsyncDisposable
         await client.SendHangupAsync();
         await pipelineTask.WaitAsync(SignalTimeout);
         await server.StopAsync(CancellationToken.None);
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        GC.SuppressFinalize(this);
-        return ValueTask.CompletedTask;
     }
 }
 
