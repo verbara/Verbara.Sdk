@@ -68,10 +68,9 @@ All notable changes to this project will be documented in this file.
   while it still maps to that session. A same-id connection that arrives while a session still holds its id is now
   served once that session ends; see *the Voice AI AudioSocket server serves a call that comes back with the same
   UUID* below.
-- **Not changed:** until it takes the id over, a waiting connection is not listed, counted or admitted
-  against `MaxConcurrentStreams`, so with chan_websocket's shared key `ActiveStreamCount` counts one per
-  URI, not one per call. A server that was over-admitting after such an ending now refuses at its
-  configured limit. No public API changes.
+- A waiting connection is now listed, counted and admitted against `MaxConcurrentStreams` from its accept; see
+  *the ARI audio servers counted one stream per id and let every connection past MaxConcurrentStreams* below. A
+  server that was over-admitting after such an ending now refuses at its configured limit. No public API changes.
 
 ### Fixed — the Voice AI AudioSocket server logged a call that came back as "Session limit reached", and counted every refused connection as accepted (#352)
 
@@ -110,6 +109,55 @@ All notable changes to this project will be documented in this file.
   and the call holding the UUID is untouched. Before, the duplicate was refused at once and logged as the session
   limit.
 - No public API changes.
+
+### Fixed — BREAKING: the ARI audio servers counted one stream per id and let every connection past MaxConcurrentStreams (#354)
+
+- **`ActiveStreams` and `ActiveStreamCount` count every live call again.** Both Ari audio servers listed and counted
+  one stream per id, and Asterisk does not keep the id unique: chan_websocket upgrades every call of one
+  `websocket_client` connection on the same URI, and several AudioSocket connections can present one UUID. 10
+  concurrent chan_websocket calls, all carrying audio, were counted and listed as 1 on Asterisk 20.20.1, 22.9.0 and
+  23.4.1, and 10 AudioSocket calls on one UUID as 1. Every announced connection is now listed and counted until its
+  ending is processed, including one that waits for an id another live call holds: 10 of 10, on every version.
+  This restores "All currently active audio streams" and "Number of currently active audio streams".
+- **`MaxConcurrentStreams` bounds the connections of both protocols together, from the accept.** The limit was
+  compared with the number of registered ids after the accept, in a separate step: at a limit of 2, 10 of 10
+  concurrent chan_websocket calls were admitted on every version; on loopback, one options instance shared by both
+  servers admitted 4 (2 + 2), and a burst of 10 distinct AudioSocket ids admitted all 10 in 100 of 100 bursts. A
+  connection now takes its place when it is accepted, before anything is read, in one atomic step, from a count
+  shared by every server built with the same `AudioServerOptions` (as `AddVerbara` registers them), and gives it back
+  once when it ends. Measured: exactly 2 admitted, with audio, on every route and version at a limit of 2; 2 across
+  both protocols; 2 in 100 of 100 bursts on each protocol; and at N = 200 and N = 500 calls with the limit at N − 10,
+  on Asterisk 22.9.0 and 23.4.1, exactly N − 10 announced, alive and counted, the other 10 refused, the count back
+  to 0 after hangup and a second wave admitted in full, with admission latency (request → announced) p99 at most
+  1.32× the previous release's at the same N. This restores "Max concurrent audio streams across both protocols".
+- **A WebSocket connection that sends no upgrade within `IdleTimeout` (default 60 s) is closed**, and its place is
+  given back, as the AudioSocket identification wait already was. This restores "Inactivity timeout before closing a
+  stream" for a connection that never upgrades.
+- **What a deployment sees.** A deployment that ran past `MaxConcurrentStreams` without knowing it (default 1000, now
+  shared by both protocols) starts refusing at the limit. A refused connection is closed at accept, before anything
+  is read, and is never announced; the SDK neither logs nor counts it. What Asterisk does with it, measured on
+  20.20.1, 22.9.0 and 23.4.1:
+  - a `Dial(WebSocket/…)` ends with `DIALSTATUS=CHANUNAVAIL` and `HANGUPCAUSE=3`, within 3.2 s with up to 500
+    calls, and the dialplan goes on after it;
+  - an ARI `externalMedia` over WebSocket answers HTTP 200, and the channel is then destroyed (`ChannelDestroyed`,
+    cause 3) within 2.6 s;
+  - an ARI `externalMedia` over AudioSocket answers HTTP 200, and the channel is destroyed within 83 ms (cause 0);
+  - `AudioSocket()` returns within 11 ms and the dialplan goes on after it; the call is not failed.
+- Until 2.7.0, `ActiveStreams` can list several streams with the same `ChannelId` on chan_websocket, and `GetStream`
+  with a call's own id still finds none of them.
+- No public API change.
+
+### Fixed — a chan_websocket call on the JSON control format was cut right after MEDIA_START (#354)
+
+- With `f(json)`, Asterisk names every control message in an `event` field, which the SDK's control-message model
+  does not read. Reading the first one, `MEDIA_START`, threw an error nothing handled, so the WebSocket session
+  stopped reading and Asterisk hung the call up: 0 of 5 calls alive two seconds later, in 10 of 10 runs on Asterisk
+  20.20.1, 22.9.0 and 23.4.1. The session now drops a text frame it cannot read, as it already dropped malformed
+  JSON, and keeps delivering the call's audio: 5 of 5 calls alive with audio, in 10 of 10 runs on every version. As
+  `ChanWebSocketControlMessage`'s remarks say, binary frames carry the audio and text frames carry control messages.
+- The call is no longer cut; `ControlMessages` stays empty until 2.7.0. It publishes none of Asterisk's control
+  messages, in either format.
+- No public API change.
 
 ### Fixed — a transport failure under an AudioSocket session looked like a hangup, and one accepted connection's failure could leak it or stop its server accepting (#337)
 

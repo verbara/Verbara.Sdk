@@ -40,6 +40,10 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
     private readonly ILogger<AudioSocketServer> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly ConcurrentDictionary<string, AudioSocketSession> _streams = new();
+    // Every announced connection still open: the holder of each id and each connection waiting for an
+    // id another one holds. ActiveStreams and ActiveStreamCount read it, so a waiting connection is
+    // listed and counted like any other live stream.
+    private readonly ConcurrentDictionary<AudioSocketSession, byte> _live = new();
     private readonly Subject<IAudioStream> _streamSubject = new();
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -55,18 +59,26 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
     /// spelling of the same UUID returns <see langword="null"/>. Over ARI that UUID is the value
     /// the creator passed as <c>data</c>, and it is the created channel's id only if the creator
     /// passed it as <c>channelId</c> too. When several live connections present one UUID, this
-    /// returns the earliest of them still connected, and the others are announced on
-    /// <see cref="OnStreamConnected"/> but are not listed, counted or found until they take the UUID
+    /// returns the earliest of them still connected; the others are announced on
+    /// <see cref="OnStreamConnected"/>, listed and counted, but not found until they take the UUID
     /// over. See <see cref="IAudioServer.GetStream(string)"/>.
     /// </summary>
     public IAudioStream? GetStream(string channelId) =>
         _streams.TryGetValue(channelId, out var session) ? session : null;
 
-    /// <summary>All currently active audio streams.</summary>
-    public IEnumerable<IAudioStream> ActiveStreams => _streams.Values;
+    /// <summary>
+    /// All currently active audio streams: every connection announced on
+    /// <see cref="OnStreamConnected"/> that has not ended, including one that waits for a UUID another
+    /// live connection holds. Several entries can therefore report the same
+    /// <see cref="IAudioStream.ChannelId"/>.
+    /// </summary>
+    public IEnumerable<IAudioStream> ActiveStreams => _live.Keys;
 
-    /// <summary>Number of currently active audio streams.</summary>
-    public int ActiveStreamCount => _streams.Count;
+    /// <summary>
+    /// Number of currently active audio streams: one per live announced connection, whatever UUID it
+    /// presented, so it counts calls and not distinct UUIDs.
+    /// </summary>
+    public int ActiveStreamCount => _live.Count;
 
     /// <summary>
     /// Whether the server is bound and accepting. Reads <c>false</c> from the moment a stop
@@ -129,13 +141,18 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
                 backoff = InitialAcceptBackoff;
 
                 // Nothing that can fail for this one connection runs between the accept and the
-                // hand-off, not even configuring the socket; the capacity check only reads a count
-                // and closes what it refuses. Configuring fails in the handler, which closes the
+                // hand-off, not even configuring the socket; the capacity check only takes a place
+                // from a count and closes what it refuses. Configuring fails in the handler, which closes the
                 // connection and reports it as that connection's error. Here it would reach the catches
                 // below, which classify by type only: a SocketException would be logged as an accept
                 // failure and backed off for, with the socket left open, and an
                 // ObjectDisposedException would end the loop as if the server had been stopped.
-                if (_streams.Count >= _options.MaxConcurrentStreams)
+                //
+                // The place is taken here, at the accept and before anything is read, from the count
+                // every server built with these options shares, so a connection that has not identified
+                // itself yet, or that will wait for a held UUID, is bounded like any other. The handler
+                // gives it back when it ends.
+                if (!_options.Admission.TryEnter(_options.MaxConcurrentStreams))
                 {
                     client.Dispose();
                     continue;
@@ -221,9 +238,10 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
 
     // Asterisk does not keep the identification UUID unique, so several live connections can present
     // one id. The first to register holds it. Each later one is announced but waits here, unregistered,
-    // in arrival order, and takes the id over when the connections ahead of it have ended. The gate
-    // orders Register's retry against every Release. Lookups, counts and ActiveStreams read _streams
-    // and never take it.
+    // in arrival order, and takes the id over when the connections ahead of it have ended. It is still
+    // listed and counted: ActiveStreams and ActiveStreamCount read _live, which holds every announced
+    // connection. The gate orders Register's retry against every Release. Lookups read _streams, and
+    // neither they nor the counts take it.
     private readonly Lock _registryGate = new();
     private readonly Dictionary<string, List<AudioSocketSession>> _waiting = new(StringComparer.Ordinal);
 
@@ -292,6 +310,19 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
 
     private async Task HandleConnectionAsync(TcpClient client, CancellationToken ct)
     {
+        try
+        {
+            await ServeConnectionAsync(client, ct);
+        }
+        finally
+        {
+            // The place the accept loop took for this connection, given back once on every path.
+            _options.Admission.Exit();
+        }
+    }
+
+    private async Task ServeConnectionAsync(TcpClient client, CancellationToken ct)
+    {
         using (client)
         {
             // Configuring the socket and obtaining its stream are part of serving this connection, so
@@ -345,6 +376,7 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
                 // id leaves that id's waiting list when it ends.
                 registeredId = channelId;
                 Register(channelId, session);
+                _live.TryAdd(session, 0);
                 _streamSubject.OnNext(session);
 
                 // Wait for session to disconnect
@@ -388,6 +420,7 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
                 // it registered with, so a same-id connection that ends leaves the live holder
                 // registered. A holder that ends hands the id to the earliest connection still open
                 // that presented it. A connection that never identified itself holds nothing.
+                _live.TryRemove(session, out _);
                 if (registeredId is not null)
                     Release(registeredId, session);
             }
@@ -412,9 +445,10 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
         if (_acceptLoop is not null)
             await _acceptLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
-        // Dispose all active sessions
-        foreach (var session in _streams.Values)
+        // Dispose all active sessions, the waiting ones included
+        foreach (var session in _live.Keys)
             await session.DisposeAsync();
+        _live.Clear();
         _streams.Clear();
 
         AudioSocketServerLog.ServerStopped(_logger);

@@ -195,6 +195,21 @@ public class ChanWebSocketControlMessageTests
     }
 
     [Fact]
+    public void Deserialize_ShouldThrowNotSupportedException_WhenTheMessageIsNamedByEvent()
+    {
+        // Asterisk's JSON control format names each message in `event`, never in `kind`, as captured
+        // from Asterisk 22.9.0 and 23.4.1. The model reads only `kind`, so this is a missing
+        // discriminator, and the reader throws NotSupportedException rather than JsonException: the
+        // session has to drop that type too, or the frame ends its read pump.
+        const string json =
+            """{"event":"MEDIA_START","connection_id":"c1","channel":"WebSocket/c1/0x7f0638004770","channel_id":"1790617675.20","format":"slin16","optimal_frame_size":640,"ptime":20}""";
+
+        Action act = () => ChanWebSocketControlMessageSerializer.Deserialize(json);
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
     public void Deserialize_ShouldReadUtf8Bytes_WhenSpanOverloadUsed()
     {
         var utf8 = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(
