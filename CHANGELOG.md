@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.6.1] - 2026-09-29
+
 ### Fixed — BREAKING: the Voice AI session broker could not stop the sessions it started, and kept dispatching after it stopped (#334)
 
 - **A session handler's token is now cancelled when the host stops ungracefully or is torn down.** The
