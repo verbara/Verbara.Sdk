@@ -70,6 +70,10 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     needs: gate
+    # A hung test otherwise holds the job until GitHub's 6 h default. Measured over 25 green runs
+    # (2026-09-29): the job takes 4.9–12.2 min (p50 9.8), so 25 min is twice the slowest. The test step's
+    # --blame-hang-timeout names a test idle for 5 min; the slowest test measured in those runs takes 16 s.
+    timeout-minutes: 25
     if: ${{ !cancelled() && (needs.gate.result != 'success' || needs.gate.outputs.docs_only != 'true') }}
     # Runs the unit subset once and collects coverage in the same execution
     # (coverlet's collection overhead is small against the ~11 min saved by not
@@ -91,6 +95,7 @@ jobs:
           --collect:"XPlat Code Coverage" --settings coverlet.runsettings
           --results-directory ${{ github.workspace }}/coverage
           --logger "console;verbosity=normal"
+          --blame-hang-timeout 5m --blame-hang-dump-type none
       - name: Upload raw coverage results
         if: ${{ always() }}
         uses: actions/upload-artifact@v7.0.1
