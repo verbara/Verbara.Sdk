@@ -682,7 +682,7 @@ internal static class AmiCaptureReplay
                 _observer.OnNext(evt);
                 return null;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 return ex;
             }

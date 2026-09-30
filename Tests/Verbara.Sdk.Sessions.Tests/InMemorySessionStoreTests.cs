@@ -62,7 +62,7 @@ public sealed class InMemorySessionStoreTests
         var byId = await _sut.GetAsync("s1", CancellationToken.None);
         var byLinkedId = await _sut.GetByLinkedIdAsync("l1", CancellationToken.None);
         new { ById = byId?.SessionId, ByLinkedId = byLinkedId?.SessionId }.Should().BeEquivalentTo(
-            new { ById = (string?)null, ByLinkedId = (string?)null },
+            new { ById = default(string), ByLinkedId = default(string) },
             "the default store keeps the manager's own object, so it lets go of it when the manager does");
     }
 

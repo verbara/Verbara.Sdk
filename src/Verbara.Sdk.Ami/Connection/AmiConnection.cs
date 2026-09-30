@@ -809,7 +809,7 @@ public sealed class AmiConnection : IAmiConnection
         {
             // Normal shutdown
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // Any failure of the read ends this session; it is logged, and kept as the cause the ending announces.
             endedBy = ex;
@@ -942,7 +942,7 @@ public sealed class AmiConnection : IAmiConnection
                 OnReconnected();
                 return; // Success
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 // The attempt wrote Connecting. Reconnecting again keeps the loop going, unless an ending was
                 // recorded meanwhile: that ending owns the state, and the attempt is the one it cut short.
@@ -1165,9 +1165,9 @@ public sealed class AmiConnection : IAmiConnection
                 {
                     await WriteActionLockedAsync("Logoff", NextActionId(), [], logoffToken);
                 }
-                catch
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    // Best effort
+                    // Best effort: the connection is ending either way.
                 }
             }
 

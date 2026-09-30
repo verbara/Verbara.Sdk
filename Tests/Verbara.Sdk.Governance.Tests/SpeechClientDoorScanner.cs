@@ -124,22 +124,17 @@ internal static class SpeechClientDoorScanner
     /// </summary>
     private static HashSet<string> CalledDoors(ClassDeclarationSyntax client, bool importsFailureType)
     {
-        var called = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var invocation in client.DescendantNodes().OfType<InvocationExpressionSyntax>())
-        {
-            var door = invocation.Expression switch
+        return client.DescendantNodes().OfType<InvocationExpressionSyntax>()
+            .Select(invocation => invocation.Expression switch
             {
                 MemberAccessExpressionSyntax access when ReceiverName(access.Expression) == FailureType =>
                     access.Name.Identifier.Text,
                 IdentifierNameSyntax bare when importsFailureType => bare.Identifier.Text,
                 _ => null,
-            };
-
-            if (door is not null && Doors.Contains(door))
-                called.Add(door);
-        }
-
-        return called;
+            })
+            .OfType<string>()
+            .Where(door => Doors.Contains(door))
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     private static bool ImportsFailureTypeStatically(SyntaxNode root) =>

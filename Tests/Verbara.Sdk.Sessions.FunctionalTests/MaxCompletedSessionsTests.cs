@@ -39,10 +39,7 @@ public sealed class MaxCompletedSessionsTests
 
         var inStore = 0;
         foreach (var session in ended)
-        {
-            if (await rig.Store.GetAsync(session.SessionId, CancellationToken.None) is not null)
-                inStore++;
-        }
+            inStore += await rig.Store.GetAsync(session.SessionId, CancellationToken.None) is not null ? 1 : 0;
 
         new
         {

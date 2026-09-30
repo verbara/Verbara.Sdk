@@ -10,6 +10,7 @@ using Xunit;
 
 namespace Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.DependencyInjection;
 
+/// <summary>What the OpenAI Realtime registration puts in the container, and how it is disposed.</summary>
 /// <remarks>
 /// The teardown disposes the provider each test built, so every test that resolves the bridge also
 /// holds the bridge's disposal: the container tracks the bridge under both of its registrations and

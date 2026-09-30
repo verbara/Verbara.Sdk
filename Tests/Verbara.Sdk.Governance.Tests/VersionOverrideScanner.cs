@@ -65,11 +65,8 @@ internal static class VersionOverrideScanner
         var sites = new List<DecisionGuardSite>();
         foreach (var element in Parse(xml, path).Descendants())
         {
-            foreach (var attribute in element.Attributes())
-            {
-                if (IsOverride(attribute.Name))
-                    sites.Add(new DecisionGuardSite(path, LineOf(element), Key(element, attribute.Value)));
-            }
+            foreach (var attribute in element.Attributes().Where(attribute => IsOverride(attribute.Name)))
+                sites.Add(new DecisionGuardSite(path, LineOf(element), Key(element, attribute.Value)));
 
             if (IsOverride(element.Name) && element.Parent is { } item)
                 sites.Add(new DecisionGuardSite(path, LineOf(element), Key(item, element.Value.Trim())));
@@ -120,11 +117,8 @@ internal static class VersionOverrideScanner
         while (pending.Count > 0)
         {
             var directory = pending.Pop();
-            foreach (var file in Directory.EnumerateFiles(directory))
-            {
-                if (ProjectFileExtensions.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase))
-                    files.Add(file);
-            }
+            files.AddRange(Directory.EnumerateFiles(directory)
+                .Where(file => ProjectFileExtensions.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase)));
 
             foreach (var child in Directory.EnumerateDirectories(directory))
             {

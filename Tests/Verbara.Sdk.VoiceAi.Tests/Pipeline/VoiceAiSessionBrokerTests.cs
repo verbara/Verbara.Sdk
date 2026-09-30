@@ -228,14 +228,15 @@ public sealed class VoiceAiSessionBrokerTests
     [Fact]
     public async Task Dispose_ShouldNotThrowAndKeepTheTokenCancelled_WhenCalledASecondTime()
     {
-        // Built without BrokerRig, whose teardown disposes the broker once more: a teardown that threw
-        // would replace this test's own assertion as the reported failure.
+        // Built without BrokerRig, so the broker's disposals are this test's own: the two it asserts on,
+        // and the `using`'s at the end, which also releases it when the setup throws. A repeat that threw
+        // there would be the same defect this test asserts against.
         await using var server = new AudioSocketServer(
             new AudioSocketOptions { ListenAddress = "127.0.0.1", Port = 0 },
             NullLogger<AudioSocketServer>.Instance);
         await server.StartAsync(CancellationToken.None);
         var handler = new ParkingSessionHandler();
-        var broker = new VoiceAiSessionBroker(server, handler, NullLogger<VoiceAiSessionBroker>.Instance);
+        using var broker = new VoiceAiSessionBroker(server, handler, NullLogger<VoiceAiSessionBroker>.Instance);
         await broker.StartAsync(CancellationToken.None);
         await using var peer = await AudioSocketPeer.ConnectAsync(server, Guid.NewGuid());
         var call = await handler.FirstCall.WaitAsync(SignalTimeout);

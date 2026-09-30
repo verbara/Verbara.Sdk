@@ -73,15 +73,11 @@ internal static class ProjectGraph
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(target);
 
-        var chains = new List<string>();
-        foreach (var source in sources.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
-        {
-            var chain = ShortestChain(graph, source, target);
-            if (chain is not null)
-                chains.Add(string.Join(" -> ", chain));
-        }
-
-        return chains;
+        return sources.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)
+            .Select(source => ShortestChain(graph, source, target))
+            .OfType<List<string>>()
+            .Select(chain => string.Join(" -> ", chain))
+            .ToList();
     }
 
     /// <summary>
@@ -105,11 +101,10 @@ internal static class ProjectGraph
             if (!graph.TryGetValue(package, out var references))
                 continue;
 
-            foreach (var reference in references.Order(StringComparer.Ordinal))
+            // Except reads the visited set once, when the loop starts, and yields each unvisited reference once.
+            foreach (var reference in references.Order(StringComparer.Ordinal).Except(visited, StringComparer.Ordinal))
             {
-                if (!visited.Add(reference))
-                    continue;
-
+                visited.Add(reference);
                 cameFrom[reference] = package;
                 if (string.Equals(reference, target, StringComparison.Ordinal))
                     return Unwind(cameFrom, source, target);

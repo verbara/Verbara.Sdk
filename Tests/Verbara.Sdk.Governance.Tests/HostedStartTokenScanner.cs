@@ -85,14 +85,12 @@ internal static class HostedStartTokenScanner
                 continue;
 
             var declared = DeclaredNames(method);
-            foreach (var assignment in body.DescendantNodesAndSelf().OfType<AssignmentExpressionSyntax>())
+            var carriers = body.DescendantNodesAndSelf().OfType<AssignmentExpressionSyntax>()
+                .Where(assignment => assignment.Parent is not InitializerExpressionSyntax
+                    && IsState(assignment.Left, declared)
+                    && CarriesToken(assignment.Right, tokenNames));
+            foreach (var assignment in carriers)
             {
-                if (assignment.Parent is InitializerExpressionSyntax)
-                    continue;
-
-                if (!IsState(assignment.Left, declared) || !CarriesToken(assignment.Right, tokenNames))
-                    continue;
-
                 sites.Add(new DecisionGuardSite(
                     path,
                     assignment.GetLocation().GetLineSpan().StartLinePosition.Line + 1,
@@ -135,11 +133,9 @@ internal static class HostedStartTokenScanner
             if (!hosted)
                 continue;
 
-            foreach (var method in type.Members.OfType<MethodDeclarationSyntax>())
+            foreach (var method in type.Members.OfType<MethodDeclarationSyntax>()
+                .Where(method => method.Identifier.ValueText == "StartAsync"))
             {
-                if (method.Identifier.ValueText != "StartAsync")
-                    continue;
-
                 var tokenNames = method.ParameterList.Parameters
                     .Where(p => p.Type is not null && TrailingName(p.Type) == "CancellationToken")
                     .Select(p => p.Identifier.ValueText)

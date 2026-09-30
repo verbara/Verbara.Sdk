@@ -31,6 +31,7 @@ public sealed class SessionTestFixture : IAsyncLifetime
     {
     }
 
+    /// <summary>Builds the fixture with <paramref name="options"/> and, optionally, a release clock.</summary>
     /// <param name="options">The session options the manager runs with.</param>
     /// <param name="releaseClock">
     /// The clock the manager reads its release cutoff from, so a test can move past

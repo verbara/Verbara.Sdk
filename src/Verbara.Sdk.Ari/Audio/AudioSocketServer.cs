@@ -410,7 +410,7 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
                 // and then close the connection.
                 /* Best effort — the connection is being wound up */
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 AudioSocketServerLog.ConnectionError(_logger, ex);
             }
