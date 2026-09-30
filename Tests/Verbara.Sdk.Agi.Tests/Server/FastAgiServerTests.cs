@@ -37,21 +37,11 @@ public sealed class FastAgiServerTests : IAsyncLifetime
             await _sut.DisposeAsync();
     }
 
-    private static int GetAvailablePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
-
     [Fact]
     public async Task StartAsync_ShouldSetIsRunningTrue()
     {
-        var port = GetAvailablePort();
         var strategy = Substitute.For<IMappingStrategy>();
-        _sut = new FastAgiServer(port, strategy, NullLogger<FastAgiServer>.Instance);
+        _sut = new FastAgiServer(0, strategy, NullLogger<FastAgiServer>.Instance);
 
         _sut.IsRunning.Should().BeFalse();
         await _sut.StartAsync();
@@ -61,9 +51,8 @@ public sealed class FastAgiServerTests : IAsyncLifetime
     [Fact]
     public async Task StopAsync_ShouldSetIsRunningFalse()
     {
-        var port = GetAvailablePort();
         var strategy = Substitute.For<IMappingStrategy>();
-        _sut = new FastAgiServer(port, strategy, NullLogger<FastAgiServer>.Instance);
+        _sut = new FastAgiServer(0, strategy, NullLogger<FastAgiServer>.Instance);
 
         await _sut.StartAsync();
         _sut.IsRunning.Should().BeTrue();
@@ -75,10 +64,10 @@ public sealed class FastAgiServerTests : IAsyncLifetime
     [Fact]
     public async Task StartAsync_ShouldAcceptTcpConnections()
     {
-        var port = GetAvailablePort();
         var strategy = Substitute.For<IMappingStrategy>();
-        _sut = new FastAgiServer(port, strategy, NullLogger<FastAgiServer>.Instance);
+        _sut = new FastAgiServer(0, strategy, NullLogger<FastAgiServer>.Instance);
         await _sut.StartAsync();
+        var port = _sut.BoundPort;
 
         // Attempt to connect a TCP client
         using var client = new TcpClient();
@@ -91,11 +80,11 @@ public sealed class FastAgiServerTests : IAsyncLifetime
     [Fact]
     public async Task StopAsync_ShouldRejectNewConnections()
     {
-        var port = GetAvailablePort();
         var strategy = Substitute.For<IMappingStrategy>();
-        _sut = new FastAgiServer(port, strategy, NullLogger<FastAgiServer>.Instance);
+        _sut = new FastAgiServer(0, strategy, NullLogger<FastAgiServer>.Instance);
 
         await _sut.StartAsync();
+        var port = _sut.BoundPort; // read while bound: a stopped listener reports the port it was given
         await _sut.StopAsync();
 
         // After stop, new connections should fail
@@ -107,9 +96,8 @@ public sealed class FastAgiServerTests : IAsyncLifetime
     [Fact]
     public async Task ConnectionTimeout_ShouldDefaultToFiveMinutes()
     {
-        var port = GetAvailablePort();
         var strategy = Substitute.For<IMappingStrategy>();
-        _sut = new FastAgiServer(port, strategy, NullLogger<FastAgiServer>.Instance);
+        _sut = new FastAgiServer(0, strategy, NullLogger<FastAgiServer>.Instance);
 
         _sut.ConnectionTimeout.Should().Be(TimeSpan.FromMinutes(5));
     }
@@ -117,9 +105,8 @@ public sealed class FastAgiServerTests : IAsyncLifetime
     [Fact]
     public async Task ConnectionTimeout_ShouldBeConfigurable()
     {
-        var port = GetAvailablePort();
         var strategy = Substitute.For<IMappingStrategy>();
-        _sut = new FastAgiServer(port, strategy, NullLogger<FastAgiServer>.Instance)
+        _sut = new FastAgiServer(0, strategy, NullLogger<FastAgiServer>.Instance)
         {
             ConnectionTimeout = TimeSpan.FromSeconds(30)
         };
@@ -130,19 +117,18 @@ public sealed class FastAgiServerTests : IAsyncLifetime
     [Fact]
     public async Task HandleConnection_ShouldTimeout_WhenScriptHangs()
     {
-        var port = GetAvailablePort();
         var hangingScript = new HangingScript();
         var strategy = Substitute.For<IMappingStrategy>();
         strategy.Resolve(Arg.Any<AgiRequest>()).Returns(hangingScript);
 
-        _sut = new FastAgiServer(port, strategy, NullLogger<FastAgiServer>.Instance)
+        _sut = new FastAgiServer(0, strategy, NullLogger<FastAgiServer>.Instance)
         {
             ConnectionTimeout = TimeSpan.FromMilliseconds(200)
         };
         await _sut.StartAsync();
 
         using var client = new TcpClient();
-        await client.ConnectAsync(IPAddress.Loopback, port);
+        await client.ConnectAsync(IPAddress.Loopback, _sut.BoundPort);
 
         // Send minimal AGI request headers
         var stream = client.GetStream();
@@ -159,9 +145,8 @@ public sealed class FastAgiServerTests : IAsyncLifetime
     [Fact]
     public async Task DisposeAsync_ShouldStopIfRunning()
     {
-        var port = GetAvailablePort();
         var strategy = Substitute.For<IMappingStrategy>();
-        _sut = new FastAgiServer(port, strategy, NullLogger<FastAgiServer>.Instance);
+        _sut = new FastAgiServer(0, strategy, NullLogger<FastAgiServer>.Instance);
 
         await _sut.StartAsync();
         _sut.IsRunning.Should().BeTrue();
@@ -188,7 +173,7 @@ public sealed class FastAgiServerTests : IAsyncLifetime
 
         var logger = new CapturingLogger();
         var strategy = Substitute.For<IMappingStrategy>();
-        var server = new FastAgiServer(GetAvailablePort(), strategy, logger);
+        var server = new FastAgiServer(0, strategy, logger);
 
         var attempts = 0;
         var thirdAttempt = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -247,7 +232,7 @@ public sealed class FastAgiServerTests : IAsyncLifetime
         var time = new FakeTimeProvider();
         var strategy = Substitute.For<IMappingStrategy>();
         var server = new FastAgiServer(
-            GetAvailablePort(),
+            0,
             strategy,
             NullLogger<FastAgiServer>.Instance,
             time);
@@ -304,7 +289,7 @@ public sealed class FastAgiServerTests : IAsyncLifetime
         var time = new FakeTimeProvider();
         var strategy = Substitute.For<IMappingStrategy>();
         var server = new FastAgiServer(
-            GetAvailablePort(),
+            0,
             strategy,
             NullLogger<FastAgiServer>.Instance,
             time);
@@ -344,18 +329,17 @@ public sealed class FastAgiServerTests : IAsyncLifetime
         // parked on its next accept when the stop lands. That is the ending StopAsync produces:
         // SetState(Stopping) first, then Stop(), which aborts the pending accept. No override here —
         // the accept under test is the real one, because the abort is what the real one raises.
-        var port = GetAvailablePort();
         var scriptReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var strategy = Substitute.For<IMappingStrategy>();
         strategy.Resolve(Arg.Any<AgiRequest>()).Returns(new SignallingScript(scriptReached));
 
         var logger = new CapturingLogger();
-        var server = new FastAgiServer(port, strategy, logger);
+        var server = new FastAgiServer(0, strategy, logger);
         await server.StartAsync();
         try
         {
             using var client = new TcpClient();
-            await client.ConnectAsync(IPAddress.Loopback, port);
+            await client.ConnectAsync(IPAddress.Loopback, server.BoundPort);
             var stream = client.GetStream();
             await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes(AgiRequestHeaders));
             await stream.FlushAsync();

@@ -28,20 +28,11 @@ public sealed class FastAgiServerStateTests : IAsyncLifetime
             await _sut.DisposeAsync();
     }
 
-    private static int GetAvailablePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
-
     [Fact]
     public void NewServer_ShouldHaveStoppedState()
     {
         var strategy = Substitute.For<IMappingStrategy>();
-        _sut = new FastAgiServer(GetAvailablePort(), strategy, NullLogger<FastAgiServer>.Instance);
+        _sut = new FastAgiServer(0, strategy, NullLogger<FastAgiServer>.Instance);
 
         _sut.State.Should().Be(AgiServerState.Stopped);
     }
@@ -50,7 +41,7 @@ public sealed class FastAgiServerStateTests : IAsyncLifetime
     public async Task StartAsync_ShouldTransitionToListening()
     {
         var strategy = Substitute.For<IMappingStrategy>();
-        _sut = new FastAgiServer(GetAvailablePort(), strategy, NullLogger<FastAgiServer>.Instance);
+        _sut = new FastAgiServer(0, strategy, NullLogger<FastAgiServer>.Instance);
 
         await _sut.StartAsync();
 
@@ -63,7 +54,7 @@ public sealed class FastAgiServerStateTests : IAsyncLifetime
     public async Task StopAsync_ShouldTransitionToStopped()
     {
         var strategy = Substitute.For<IMappingStrategy>();
-        _sut = new FastAgiServer(GetAvailablePort(), strategy, NullLogger<FastAgiServer>.Instance);
+        _sut = new FastAgiServer(0, strategy, NullLogger<FastAgiServer>.Instance);
 
         await _sut.StartAsync();
         await _sut.StopAsync();
