@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
@@ -11,7 +12,8 @@ using Verbara.Sdk.VoiceAi.AudioSocket.Internal;
 
 namespace Verbara.Sdk.VoiceAi.AudioSocket.Tests;
 
-public sealed class AudioSocketServerEdgeCaseTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class AudioSocketServerEdgeCaseTests : IAsyncLifetime
 {
     /// <summary>Upper bound on any single wait. Reaching it is a failure, never a pace.</summary>
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
@@ -665,7 +667,14 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncDisposable
         _server.ActiveSessionCount.Should().Be(0);
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         await _server.DisposeAsync();
     }
