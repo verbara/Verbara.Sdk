@@ -68,7 +68,7 @@
 
 ### Events dropped (AMI)
 
-**Symptoms:** `[AMI_EVENT] Dropped` in logs, `ami.events.dropped` counter increasing.
+**Symptoms:** `[AMI_EVENT] Dropped` in logs, `ami.events.dropped` counter increasing with `reason=buffer_full`. (`reason=caller_ending`, logged once as `[AMI_EVENT] Discarded on caller ending: count=<n>`, is expected: your `DisposeAsync` or `DisconnectAsync` ended the connection with events still buffered, which it does not deliver — see [the migration guide](ami-caller-ending-buffered-events-migration.md). It needs no tuning.)
 
 **Cause:** Event pump buffer is full. Subscribers are processing events slower than they arrive.
 
@@ -268,7 +268,7 @@ Open the resulting `.nettrace` in PerfView or Chromium `about:tracing`.
 
 **Symptoms:**
 - After an AMI reconnect, a large spike in `asterisk.sdk.sessions.state_changed` counter over 5-30 seconds.
-- Transient climb of `asterisk.sdk.ami.events.dropped` during the same window.
+- Transient climb of `ami.events.dropped` (`reason=buffer_full`) during the same window.
 - `SessionReconciliationService` background task logs a large batch of `Reconciling orphaned session ...` entries.
 
 **Cause:** `SessionReconciliationService` runs every `SessionOptions.ReconciliationInterval` (default 30s). After a reconnect it has to re-scan all active sessions to detect orphans / timeouts; if the previous connection was lost with many sessions in flight, the scan enqueues a burst of state-change events.

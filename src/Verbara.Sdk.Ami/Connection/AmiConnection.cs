@@ -46,6 +46,11 @@ internal static partial class AmiConnectionLog
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] Dropped: event_type={EventType} channel={Channel}")]
     public static partial void EventDropped(ILogger logger, string? eventType, string? channel);
 
+    // Not the "[AMI_EVENT] Dropped" prefix: the log-analysis guides map that one to a full buffer, whose action
+    // (a larger EventPumpCapacity) is the wrong one for a caller's close.
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] Discarded on caller ending: count={Count}")]
+    public static partial void EventsDiscardedOnCallerEnding(ILogger logger, long count);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI] Reconnect attempt failed")]
     public static partial void ReconnectAttemptFailed(ILogger logger, Exception exception);
 
@@ -72,6 +77,10 @@ public sealed class AmiConnection : IAmiConnection
     private readonly AmiConnectionOptions _options;
     private readonly ISocketConnectionFactory _socketFactory;
     private readonly ILogger<AmiConnection> _logger;
+
+    // Tags of ami.events.dropped: the reasons AmiMetrics.EventsDropped documents.
+    private static readonly KeyValuePair<string, object?> BufferFullReason = new("reason", "buffer_full");
+    private static readonly KeyValuePair<string, object?> CallerEndingReason = new("reason", "caller_ending");
 
     private ISocketConnection? _socket;
     private AmiProtocolReader? _reader;
@@ -110,7 +119,9 @@ public sealed class AmiConnection : IAmiConnection
 
     // Cancelled by the caller's ending and never reset. The reconnect loop observes it at the top of each
     // iteration, in its backoff delay and in each connect attempt, so a caller's ending stops the loop wherever
-    // it is. It is not _cts, which every connect replaces and every release disposes.
+    // it is. Every session's event pump is created with it as its StopToken, so the same ending stops delivery
+    // after the event in progress, whether the pump is attached, draining after a loss, or waiting out a backoff.
+    // It is not _cts, which every connect replaces and every release disposes.
     private readonly CancellationTokenSource _lifetime = new();
 
     // The reconnect loop's task, started under _endingLock. A caller's ending records itself under the same
@@ -282,11 +293,12 @@ public sealed class AmiConnection : IAmiConnection
 
             SetConnectState(AmiConnectionState.Connected, byLoop);
 
-            // Start event pump and reader loop
-            _eventPump = new AsyncEventPump(_options.EventPumpCapacity);
+            // Start event pump and reader loop. The pump observes the caller's ending from its creation, before
+            // Start: once _lifetime is cancelled it delivers nothing after the event in progress.
+            _eventPump = new AsyncEventPump(_options.EventPumpCapacity) { StopToken = _lifetime.Token };
             _eventPump.OnEventDropped = evt =>
             {
-                AmiMetrics.EventsDropped.Add(1);
+                AmiMetrics.EventsDropped.Add(1, BufferFullReason);
                 var channel = evt.RawFields is not null && evt.RawFields.TryGetValue("Channel", out var ch) ? ch : null;
                 AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
             };
@@ -1091,6 +1103,13 @@ public sealed class AmiConnection : IAmiConnection
     /// way: the give-up runs on the reconnect loop, which a caller's ending in flight is waiting for.
     /// </para>
     /// <para>
+    /// The lifetime token is also every event pump's stop token, so a caller's ending stops delivery as soon as it is
+    /// asked: the event whose handler is running completes, and no event still buffered reaches a handler, whether the
+    /// pump is attached, draining after a loss, or waiting out a backoff. The release counts what it discarded
+    /// (<see cref="ReleasePumpAsync"/>). The connection's own ending cancels nothing, and its release delivers the whole
+    /// buffer in order.
+    /// </para>
+    /// <para>
     /// A caller's ending called from inside the connection's own event dispatch completes
     /// <see cref="_endedFromDispatch"/> first. That dispatch is the event pump's consumer, and the reconnect
     /// loop's release may be waiting on it, so no ending waits on either from then on: not this one, and not an
@@ -1198,6 +1217,12 @@ public sealed class AmiConnection : IAmiConnection
     /// dispatches, and a dispatch may be what ends the connection: a lock held while waiting for that consumer
     /// would block the dispatch's own ending on it for good.
     /// </para>
+    /// <para>
+    /// The release always drains (<see cref="ReleasePumpAsync"/>), and the lifetime token, the pump's stop token,
+    /// decides how far: after a loss alone it delivers the whole buffer in order; once the caller has ended the
+    /// connection, before the detach or during the drain, it delivers nothing after the event in progress and the
+    /// rest is counted as discarded.
+    /// </para>
     /// </remarks>
     /// <param name="byEnding">
     /// <see langword="true"/> for the connection's ending, which stops waiting for the pump once the caller has
@@ -1256,10 +1281,11 @@ public sealed class AmiConnection : IAmiConnection
 
             _pendingEventActions.Clear();
 
-            // Completes the pump's channel and cancels it here; its consumer is awaited below, outside the lock.
+            // Completes the pump's channel here and lets its consumer deliver what is buffered, unless the caller
+            // has ended the connection (the pump's StopToken); the release is awaited below, outside the lock.
             if (_eventPump is not null)
             {
-                _pumpReleased = _eventPump.DisposeAsync().AsTask();
+                _pumpReleased = ReleasePumpAsync(_eventPump);
                 _eventPump = null;
             }
 
@@ -1277,6 +1303,30 @@ public sealed class AmiConnection : IAmiConnection
     }
 
     /// <summary>
+    /// Releases a detached event pump: its consumer delivers what is buffered, in order, until the buffer is empty
+    /// or the caller ends the connection (<see cref="_lifetime"/>, the pump's <c>StopToken</c>), whichever comes
+    /// first. Whatever the caller's ending left undelivered is counted once on <c>ami.events.dropped</c> with
+    /// <c>reason=caller_ending</c> and logged once at Warning with the count.
+    /// </summary>
+    /// <remarks>
+    /// No choice is made here: a loss alone delivers the whole buffer because nothing cancels the lifetime token, and
+    /// a caller's ending, wherever it lands, has cancelled it. The count is reported only when the lifetime token is
+    /// cancelled, so a loss never logs a caller's discard. On the path where the caller ends the connection from inside
+    /// a dispatch this runs after that dispatch returns, once the ending itself has returned.
+    /// </remarks>
+    private async Task ReleasePumpAsync(AsyncEventPump pump)
+    {
+        await pump.DrainAndDisposeAsync();
+
+        var discarded = pump.DroppedOnDispose;
+        if (discarded > 0 && _lifetime.IsCancellationRequested)
+        {
+            AmiMetrics.EventsDropped.Add(discarded, CallerEndingReason);
+            AmiConnectionLog.EventsDiscardedOnCallerEnding(_logger, discarded);
+        }
+    }
+
+    /// <summary>
     /// Ends the connection for good and releases it, as <see cref="DisconnectAsync"/> does: a reconnect in
     /// progress stops wherever it is, nothing is dialled or logged in afterwards, and a later
     /// <see cref="ConnectAsync"/> throws <see cref="ObjectDisposedException"/>.
@@ -1289,6 +1339,12 @@ public sealed class AmiConnection : IAmiConnection
     /// connection has ended returns at once. <see cref="State"/> reads
     /// <see cref="AmiConnectionState.Disconnected"/> only once the socket, the heartbeat, the reader loop and the
     /// event pump have been released.
+    /// </para>
+    /// <para>
+    /// The call waits for the event whose handler is running, if any, and delivers none of the events still buffered,
+    /// including when it lands while a lost connection is delivering its buffer or waiting to reconnect. They are
+    /// counted on <c>ami.events.dropped</c> with <c>reason=caller_ending</c> and logged once at Warning,
+    /// <c>[AMI_EVENT] Discarded on caller ending</c>, with the count.
     /// </para>
     /// <para>
     /// The one exception is a call made from inside the connection's own event dispatch: an
