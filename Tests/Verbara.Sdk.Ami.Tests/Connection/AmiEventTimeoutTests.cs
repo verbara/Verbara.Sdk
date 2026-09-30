@@ -11,16 +11,22 @@ using NSubstitute;
 
 namespace Verbara.Sdk.Ami.Tests.Connection;
 
-public sealed class AmiEventTimeoutTests : IAsyncDisposable
+public sealed class AmiEventTimeoutTests : IAsyncLifetime
 {
     private readonly Pipe _serverToClient = new();
     private readonly Pipe _clientToServer = new();
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         await _serverToClient.Writer.CompleteAsync();
         await _clientToServer.Reader.CompleteAsync();
-        GC.SuppressFinalize(this);
     }
 
     private AmiConnection CreateConnection(AmiConnectionOptions options)

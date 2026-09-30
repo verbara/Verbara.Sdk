@@ -22,7 +22,7 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// <see cref="ArgumentException"/>, leaves no pending registration or held lock behind, and the next
 /// action on the same connection completes.
 /// </summary>
-public sealed class AmiConnectionLineBreakTests : IAsyncDisposable
+public sealed class AmiConnectionLineBreakTests : IAsyncLifetime
 {
     // Rejected strings are built from these runs so a fragment of them in a message is detectable.
     private const string Head = "7qz9xw";
@@ -37,12 +37,18 @@ public sealed class AmiConnectionLineBreakTests : IAsyncDisposable
         _sut = CreateConnection(_serverToClient, _clientToServer, username: "admin");
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         await _serverToClient.Writer.CompleteAsync();
         await _clientToServer.Reader.CompleteAsync();
         await _sut.DisposeAsync();
-        GC.SuppressFinalize(this);
     }
 
     [Theory]
