@@ -269,6 +269,37 @@ public sealed class VoiceAiSessionBrokerTests
             "subscribed after the broker, fires only once the broker's dispatch has run or never will");
     }
 
+    [Fact]
+    public async Task StartAsync_ShouldHandBothSessionsToTheHandlerAndLetBothFinish_WhenTheSameChannelIdConnectsTwiceInSuccession()
+    {
+        // A re-entered AudioSocket(), a redirect or a transfer brings a call back with the id it had,
+        // right after its previous connection ended. Both sessions reach the handler, and each one's run
+        // ends when its audio does. Every wait here ends on a signal of the handler's; none is paced.
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { ListenAddress = "127.0.0.1", Port = 0 },
+            NullLogger<AudioSocketServer>.Instance);
+        await server.StartAsync(CancellationToken.None);
+        var handler = new AudioDrainingSessionHandler();
+        using var broker = new VoiceAiSessionBroker(server, handler, NullLogger<VoiceAiSessionBroker>.Instance);
+        await broker.StartAsync(CancellationToken.None);
+        var x = Guid.NewGuid();
+
+        await using var firstPeer = await AudioSocketPeer.ConnectAsync(server, x);
+        (await handler.Started(0).WaitAsync(SignalTimeout)).Should().Be(x, "the broker hands on the first session");
+        await firstPeer.SendHangupAsync();
+        (await handler.Finished(0).WaitAsync(SignalTimeout)).Should().Be(
+            x, "the hangup frame ends the first session's audio, and with it the handler's run");
+
+        await using var secondPeer = await AudioSocketPeer.ConnectAsync(server, x);
+        (await handler.Started(1).WaitAsync(SignalTimeout)).Should().Be(
+            x, "the call that comes back with the same channel id is a session of its own, handed on again");
+        await secondPeer.SendHangupAsync();
+        (await handler.Finished(1).WaitAsync(SignalTimeout)).Should().Be(x, "and its run ends with its audio too");
+
+        handler.Runs.Should().Be(2, "one handler run per session, no more");
+        await broker.StopAsync(CancellationToken.None);
+    }
+
     /// <summary>
     /// A started server on <c>127.0.0.1</c> port 0 with a broker over it that the test starts itself,
     /// and a <see cref="ParkingSessionHandler"/> behind the broker. Disposing it ends every park, then
@@ -355,4 +386,49 @@ file sealed class NoopConversationHandler : IConversationHandler
 {
     public ValueTask<string> HandleAsync(string transcript, ConversationContext context, CancellationToken ct = default) =>
         ValueTask.FromResult(string.Empty);
+}
+
+/// <summary>
+/// Reads each session's audio to its end, and signals, per run and in the order the broker made them,
+/// when a run started and when it finished. Runs past the second are only counted.
+/// </summary>
+file sealed class AudioDrainingSessionHandler : ISessionHandler
+{
+    private readonly TaskCompletionSource<Guid>[] _started =
+    [
+        new(TaskCreationOptions.RunContinuationsAsynchronously),
+        new(TaskCreationOptions.RunContinuationsAsynchronously),
+    ];
+
+    private readonly TaskCompletionSource<Guid>[] _finished =
+    [
+        new(TaskCreationOptions.RunContinuationsAsynchronously),
+        new(TaskCreationOptions.RunContinuationsAsynchronously),
+    ];
+
+    private int _runs;
+
+    /// <summary>How many runs the broker has started.</summary>
+    public int Runs => Volatile.Read(ref _runs);
+
+    /// <summary>Completes with the session's channel id once run <paramref name="run"/> (0-based) has started.</summary>
+    public Task<Guid> Started(int run) => _started[run].Task;
+
+    /// <summary>Completes with the session's channel id once run <paramref name="run"/> has read its audio to the end.</summary>
+    public Task<Guid> Finished(int run) => _finished[run].Task;
+
+    public async ValueTask HandleSessionAsync(AudioSocketSession session, CancellationToken ct = default)
+    {
+        var run = Interlocked.Increment(ref _runs) - 1;
+        if (run >= _started.Length)
+            return;
+
+        _started[run].TrySetResult(session.ChannelId);
+        await foreach (var _ in session.ReadAudioAsync(ct).ConfigureAwait(false))
+        {
+            // The audio itself is not the point: the run lasts as long as the session's audio does.
+        }
+
+        _finished[run].TrySetResult(session.ChannelId);
+    }
 }

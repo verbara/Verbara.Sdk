@@ -219,8 +219,18 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         var buf = new byte[ReceiveBufferSize];
         var assembled = new ArrayBufferWriter<byte>(ReceiveBufferSize);
 
-        while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
+        while (true)
         {
+            // The bound can run out inside the read that returned the vendor's last frame: that read
+            // succeeds, the socket is aborted under it, and the loop ended here on the socket's state as
+            // though the vendor had finished. A vendor the bound found silent is a failure however the
+            // loop leaves (ADR-0050 E2c; the bridge's rule for the same instant).
+            if (ws.State is not (WebSocketState.Open or WebSocketState.CloseSent))
+            {
+                if (silence.Expired) throw silence.ToFailure(provider);
+                break;
+            }
+
             ValueWebSocketReceiveResult result;
             try
             {

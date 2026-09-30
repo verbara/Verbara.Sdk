@@ -1,22 +1,29 @@
 using System.Threading.Channels;
 
-namespace Verbara.Sdk.VoiceAi.AudioSocket.Tests;
+namespace Verbara.Sdk.Live.Tests.Harness;
 
 /// <summary>
-/// Test double for <see cref="TimeProvider"/> whose clock moves only on <see cref="Advance"/>, and
-/// whose one-shot timers fire only when it does.
+/// Test double for <see cref="TimeProvider"/> whose clock moves only on <see cref="Advance"/>, whose one-shot
+/// timers fire only when it does, and whose timestamps move with it.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Adapted from <c>Tests/Verbara.Sdk.Cluster.Primitives.Tests/FakeTimeProvider.cs</c>, which is
-/// private to that project and has no timers. <see cref="Task.Delay(TimeSpan, TimeProvider, CancellationToken)"/>
-/// waits through <see cref="CreateTimer"/>, so this version adds them; <see cref="GetUtcNow"/> and
-/// <see cref="Advance"/> keep the original's shape.
+/// Copied from <c>Tests/Verbara.Sdk.Ari.Tests/FakeTimeProvider.cs</c>, which is private to that project.
+/// <see cref="Task.Delay(TimeSpan, TimeProvider, CancellationToken)"/> waits through <see cref="CreateTimer"/>,
+/// so a delay made on this clock completes when a test advances the clock past it, and never on its own.
 /// </para>
 /// <para>
-/// Every timer is also published on <see cref="TimersCreated"/> as it is created. That is how a test
-/// reads the delay the code under test asked for without waiting any of it, and how it knows the
-/// code is parked on that delay before it moves the clock.
+/// Unlike that copy, this one also overrides <see cref="GetTimestamp"/> and <see cref="TimestampFrequency"/>.
+/// The base <see cref="TimeProvider.GetTimestamp"/> reads <see cref="System.Diagnostics.Stopwatch"/>, so an
+/// elapsed time measured with <see cref="TimeProvider.GetElapsedTime(long)"/> would follow the wall clock while
+/// every timer followed this one, and a budget measured that way would never run out on a manual clock. Here
+/// the timestamp is the manual time itself, in ticks, so <c>GetElapsedTime</c> reports exactly what the test
+/// advanced, and nothing while it advances nothing.
+/// </para>
+/// <para>
+/// Every timer is also published on <see cref="TimersCreated"/> as it is created. That is how a test reads
+/// the delay the code under test asked for without waiting any of it, and how it knows the code is parked
+/// on that delay before it moves the clock.
 /// </para>
 /// </remarks>
 internal sealed class FakeTimeProvider : TimeProvider
@@ -34,6 +41,9 @@ internal sealed class FakeTimeProvider : TimeProvider
     /// <summary>Every timer created through this provider, in creation order.</summary>
     public ChannelReader<FakeTimer> TimersCreated => _created.Reader;
 
+    /// <summary>One timestamp tick is one <see cref="TimeSpan"/> tick, so elapsed times convert exactly.</summary>
+    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
     public override DateTimeOffset GetUtcNow()
     {
         lock (_gate)
@@ -42,10 +52,7 @@ internal sealed class FakeTimeProvider : TimeProvider
         }
     }
 
-    /// <summary>One tick per <see cref="TimeSpan"/> tick, so an elapsed time measured through
-    /// <see cref="GetTimestamp"/> moves with <see cref="Advance"/> and with nothing else.</summary>
-    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
-
+    /// <summary>The manual time, in ticks: it moves exactly as far as <see cref="Advance"/> moves the clock.</summary>
     public override long GetTimestamp()
     {
         lock (_gate)

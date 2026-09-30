@@ -206,6 +206,38 @@ public sealed class RealtimeFakeServerTests
         await secondAnswer.Should().ThrowAsync<InvalidOperationException>("a session sends one close");
     }
 
+    /// <summary>
+    /// One message sent as two parts is a fragmented message on the wire: a plain client reads it one
+    /// frame at a time, the first read not ending the message, and the two reads together are the
+    /// message. The bridge tests that stop a read at the first part lean on exactly this.
+    /// </summary>
+    [Fact]
+    public async Task SendFragmentsAsync_ShouldDeliverOneMessageAsTwoReads_WhenSentAsTwoParts()
+    {
+        // Arrange
+        await using var fake = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        fake.Start();
+        using var client = await ConnectAsync(fake);
+        const string First = """{"type":"response.output_audio_transcript.delta","delta":"ab""";
+        const string Second = """cd"}""";
+
+        // Act
+        await fake.SendFragmentsAsync([First, Second]);
+        var buffer = new byte[4096];
+        var firstRead = await client.ReceiveAsync(buffer, CancellationToken.None).WaitAsync(SignalTimeout);
+        var firstText = Encoding.UTF8.GetString(buffer, 0, firstRead.Count);
+        var secondRead = await client.ReceiveAsync(buffer, CancellationToken.None).WaitAsync(SignalTimeout);
+        var secondText = Encoding.UTF8.GetString(buffer, 0, secondRead.Count);
+
+        // Assert
+        firstRead.MessageType.Should().Be(WebSocketMessageType.Text);
+        firstRead.EndOfMessage.Should().BeFalse("the first part is a fragment, not the whole message");
+        firstText.Should().Be(First, "a read returns one frame, and the first frame is the first part");
+        secondRead.MessageType.Should().Be(WebSocketMessageType.Text);
+        secondRead.EndOfMessage.Should().BeTrue("the second part ends the message");
+        (firstText + secondText).Should().Be(First + Second, "the parts concatenate to the message");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /// <summary>

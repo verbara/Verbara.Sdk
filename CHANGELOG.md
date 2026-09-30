@@ -21,8 +21,12 @@ All notable changes to this project will be documented in this file.
 - **What a consumer observes changes.** A consumer's handler can now see its token cancelled at a
   non-graceful stop or at teardown; a handler that treats cancellation as a failure will report one
   there. The SDK's own handlers (`VoiceAiPipeline`, `OpenAiRealtimeBridge`) count a cancelled session as
-  completed, so their metrics do not move. `VoiceAiSessionBroker` now implements `IDisposable` through a
-  public `Dispose()`.
+  completed, so their metrics do not move. For `OpenAiRealtimeBridge` this holds also when the host's
+  cancellation lands inside the read that returns only part of a vendor message, which 2.6.0 counted as
+  failed (60 of 60 such cancellations, end to end through Asterisk), restoring 2.5.3's "A requested
+  cancellation on a healthy connection … still count as completed": `openai_realtime.sessions.failed`
+  falls by the host cancellations that land inside a partial read. `VoiceAiSessionBroker` now implements
+  `IDisposable` through a public `Dispose()`.
 
 ### Fixed — hosts using the AudioSocket server or the OpenAI Realtime bridge threw when they shut down (#334)
 
@@ -61,11 +65,99 @@ All notable changes to this project will be documented in this file.
   that registered after the stop; that session then dropped out of `ActiveSessionCount`, the
   `audiosocket.sessions.active` gauge and the `MaxConcurrentSessions` admission, and the next stop did
   not dispose it — 47 to 88 of 200 in three probe runs on 2.6.0. The release now removes the entry only
-  while it still maps to that session. This server still refuses a same-id connection when it connects.
-- **Not changed:** until it takes the id over, a waiting connection is not listed, counted or admitted
-  against `MaxConcurrentStreams`, so with chan_websocket's shared key `ActiveStreamCount` counts one per
-  URI, not one per call. A server that was over-admitting after such an ending now refuses at its
-  configured limit. No public API changes.
+  while it still maps to that session. A same-id connection that arrives while a session still holds its id is now
+  served once that session ends; see *the Voice AI AudioSocket server serves a call that comes back with the same
+  UUID* below.
+- A waiting connection is now listed, counted and admitted against `MaxConcurrentStreams` from its accept; see
+  *the ARI audio servers counted one stream per id and let every connection past MaxConcurrentStreams* below. A
+  server that was over-admitting after such an ending now refuses at its configured limit. No public API changes.
+
+### Fixed — the Voice AI AudioSocket server logged a call that came back as "Session limit reached", and counted every refused connection as accepted (#352)
+
+- **`[AudioSocket] Session limit reached ({Limit}), rejecting connection` again means the limit was reached.** A
+  connection that presented the UUID of a session still ending was refused with this Warning while one session was
+  live, sending the operator after a capacity problem that did not exist. The Warning now appears only when the
+  number of live sessions has reached `MaxConcurrentSessions`; a UUID still in use has its own Warning (below).
+- **`audiosocket.connections.accepted` counts only accepted connections.** Every refused connection was counted as
+  accepted and never as closed, so `accepted − closed` rose by one per refusal, and each refusal also opened an
+  `audiosocket.session` activity. A refused connection now moves neither counter and opens no activity.
+- **Every refusal writes a hangup frame before closing.** A refusal used to close the connection bare; with the
+  caller's audio unread, that reset the connection and `AudioSocket()` failed the call. With the hangup frame,
+  on Asterisk 20 and later `AudioSocket()` returns and the dialplan goes on (measured on 20.20.1, 22.9.0 and
+  23.4.1). On Asterisk 18.26.4 any end from the server, a hangup frame included, fails the application and the
+  call is hung up.
+
+### Changed — the Voice AI AudioSocket server serves a call that comes back with the same UUID (#352)
+
+- **A connection that presents the UUID of a session that is still ending is served.** Asterisk does not keep the
+  AudioSocket UUID unique: a dialplan that runs `AudioSocket()` or `Dial(AudioSocket/…)` again with the UUID it
+  saved, a transfer, and an AMI `Redirect` that re-enters the bot reconnect with the same UUID 0.1–7 ms after the
+  previous connection ends, before the server had released it. The server refused that connection: 1–2.3 % of
+  re-entries at rest, 12.5–21 % of `Redirect` + `Dial` transfers with 300 other calls on the server, and 25–50 % of
+  the first 20 calls of a new process, depending on the route. The caller lost the bot's turn and, with the usual
+  `Hangup()` after `AudioSocket()`, the call. The connection now waits, at most 1 second, for the previous session's
+  hangup to finish and is then served: 0 of 1,600 re-entries refused at rest on Asterisk 22.9.0 and 23.4.1, and
+  0 of 800 with 300 other calls on the server.
+- **`OnSessionStarted` for a call that comes back is raised after every `OnHangup` handler of the previous session
+  has returned**, so a consumer that keys its state by `ChannelId` never holds two live sessions under one UUID.
+  While those handlers run, the previous session still holds its UUID and counts in `ActiveSessionCount` and the
+  `audiosocket.sessions.active` gauge; keep `OnHangup` handlers short, since one that runs longer than the wait makes
+  the call that comes back be refused.
+- **A server at `MaxConcurrentSessions` serves a call that comes back**, since it takes its previous session's place.
+- **A UUID still live after 1 second is refused** (two concurrent calls configured with one UUID): the connection
+  receives a hangup frame, the server logs `ChannelIdInUse` at Warning naming the UUID and the milliseconds waited,
+  and the call holding the UUID is untouched. Before, the duplicate was refused at once and logged as the session
+  limit.
+- No public API changes.
+
+### Fixed — BREAKING: the ARI audio servers counted one stream per id and let every connection past MaxConcurrentStreams (#354)
+
+- **`ActiveStreams` and `ActiveStreamCount` count every live call again.** Both Ari audio servers listed and counted
+  one stream per id, and Asterisk does not keep the id unique: chan_websocket upgrades every call of one
+  `websocket_client` connection on the same URI, and several AudioSocket connections can present one UUID. 10
+  concurrent chan_websocket calls, all carrying audio, were counted and listed as 1 on Asterisk 20.20.1, 22.9.0 and
+  23.4.1, and 10 AudioSocket calls on one UUID as 1. Every announced connection is now listed and counted until its
+  ending is processed, including one that waits for an id another live call holds: 10 of 10, on every version.
+  This restores "All currently active audio streams" and "Number of currently active audio streams".
+- **`MaxConcurrentStreams` bounds the connections of both protocols together, from the accept.** The limit was
+  compared with the number of registered ids after the accept, in a separate step: at a limit of 2, 10 of 10
+  concurrent chan_websocket calls were admitted on every version; on loopback, one options instance shared by both
+  servers admitted 4 (2 + 2), and a burst of 10 distinct AudioSocket ids admitted all 10 in 100 of 100 bursts. A
+  connection now takes its place when it is accepted, before anything is read, in one atomic step, from a count
+  shared by every server built with the same `AudioServerOptions` (as `AddVerbara` registers them), and gives it back
+  once when it ends. Measured: exactly 2 admitted, with audio, on every route and version at a limit of 2; 2 across
+  both protocols; 2 in 100 of 100 bursts on each protocol; and at N = 200 and N = 500 calls with the limit at N − 10,
+  on Asterisk 22.9.0 and 23.4.1, exactly N − 10 announced, alive and counted, the other 10 refused, the count back
+  to 0 after hangup and a second wave admitted in full, with admission latency (request → announced) p99 at most
+  1.32× the previous release's at the same N. This restores "Max concurrent audio streams across both protocols".
+- **A WebSocket connection that sends no upgrade within `IdleTimeout` (default 60 s) is closed**, and its place is
+  given back, as the AudioSocket identification wait already was. This restores "Inactivity timeout before closing a
+  stream" for a connection that never upgrades.
+- **What a deployment sees.** A deployment that ran past `MaxConcurrentStreams` without knowing it (default 1000, now
+  shared by both protocols) starts refusing at the limit. A refused connection is closed at accept, before anything
+  is read, and is never announced; the SDK neither logs nor counts it. What Asterisk does with it, measured on
+  20.20.1, 22.9.0 and 23.4.1:
+  - a `Dial(WebSocket/…)` ends with `DIALSTATUS=CHANUNAVAIL` and `HANGUPCAUSE=3`, within 3.2 s with up to 500
+    calls, and the dialplan goes on after it;
+  - an ARI `externalMedia` over WebSocket answers HTTP 200, and the channel is then destroyed (`ChannelDestroyed`,
+    cause 3) within 2.6 s;
+  - an ARI `externalMedia` over AudioSocket answers HTTP 200, and the channel is destroyed within 83 ms (cause 0);
+  - `AudioSocket()` returns within 11 ms and the dialplan goes on after it; the call is not failed.
+- Until 2.7.0, `ActiveStreams` can list several streams with the same `ChannelId` on chan_websocket, and `GetStream`
+  with a call's own id still finds none of them.
+- No public API change.
+
+### Fixed — a chan_websocket call on the JSON control format was cut right after MEDIA_START (#354)
+
+- With `f(json)`, Asterisk names every control message in an `event` field, which the SDK's control-message model
+  does not read. Reading the first one, `MEDIA_START`, threw an error nothing handled, so the WebSocket session
+  stopped reading and Asterisk hung the call up: 0 of 5 calls alive two seconds later, in 10 of 10 runs on Asterisk
+  20.20.1, 22.9.0 and 23.4.1. The session now drops a text frame it cannot read, as it already dropped malformed
+  JSON, and keeps delivering the call's audio: 5 of 5 calls alive with audio, in 10 of 10 runs on every version. As
+  `ChanWebSocketControlMessage`'s remarks say, binary frames carry the audio and text frames carry control messages.
+- The call is no longer cut; `ControlMessages` stays empty until 2.7.0. It publishes none of Asterisk's control
+  messages, in either format.
+- No public API change.
 
 ### Fixed — a transport failure under an AudioSocket session looked like a hangup, and one accepted connection's failure could leak it or stop its server accepting (#337)
 
@@ -278,6 +370,78 @@ All notable changes to this project will be documented in this file.
   as, "Queue wait time". `CallConnectedEvent.WaitTime`, `CallSession.WaitTime` and `CallSession.QueuedAt` keep
   their meaning, and Live's queue metrics are unchanged. No public API changes.
 
+### Fixed — BREAKING: after an Asterisk restart a reload could lose every queue and agent, and a start the reconnect would repair failed (#349)
+
+- **A load that reaches Asterisk before its modules are up asks again.** Asterisk accepts an AMI login before
+  app_queue and app_agent_pool have registered `QueueStatus` and `Agents`, and until they have, it refuses both as
+  an unknown command. The SDK read that refusal as an empty answer: a reconnect, or a start, whose login landed in
+  that window left `VerbaraServer`'s queues and agents empty and logged nothing, and a queue came back only bare, at
+  its next caller, without its strategy or its static members; the rest waited for the next reconnect. The load now
+  asks again once Asterisk reports `FullyBooted` on the AMI session, or every 200 ms for an AMI user that does not
+  receive it, for at most 10 s per load. A refusal of a request sent after the report is final: the module is not
+  loaded. After a restart, a reload and the first load keep the queues, their members and the agents
+  (measured on Asterisk 20.20.1, 22.9.0 and 23.4.1 in the reconnect's worst timing: 78 of 180 reloads lost the queue before,
+  0 of 180 now). 2.6.0 lost the same, so this is not a regression.
+- **A start the reconnect will repair no longer fails.** When the AMI session ends during `StartAsync`'s load, for
+  example because Asterisk closes a session it has just opened while it starts, the load stops: it sends nothing
+  more on that session, and it ends no call on a channel snapshot it did not finish reading. With `AutoReconnect`
+  on and the connection reconnecting, `StartAsync` returns and logs a Warning, and the reload after the reconnect
+  loads the state. It used to throw `AmiNotConnectedException: Not connected. Current state: Reconnecting`
+  (measured on Asterisk 18.26.4 to 23.4.1: 60 of 60 starts
+  threw before, 0 of 60 now, and the reload after the reconnect completed every time).
+- This restores what the SDK publishes: the troubleshooting guide's "`VerbaraServer` clears and reloads all
+  managers on reconnect via the `Reconnected` event. There may be a brief gap during reload.", and `StartAsync`'s
+  "Initialize state by subscribing to AMI events and loading current state". The guide's *State lost after
+  reconnect* now describes the load.
+- **What a consumer observes changes.**
+  - Asterisk sends `FullyBooted` only to an AMI user with `system` in `read`. A user without it, on a PBX where
+    app_queue or app_agent_pool is not loaded, now waits 10 s on every load, the start's and every reload's, and each
+    such load logs `[LIVE] QueueStatus never registered …` (or `Agents`) at Warning. With both modules absent it
+    waits the 10 s once. Put `system` in the user's `read` line (`read = all` includes it) and the load does not wait.
+  - A load whose login lands while Asterisk starts takes longer, by the time Asterisk still needs to finish
+    starting (measured: median 86 ms, at most 235 ms, over 396 such loads).
+  - `StartAsync` no longer throws when its session ends and the connection is reconnecting. With `AutoReconnect`
+    off, or once the reconnect has given up or the connection was disconnected, it now throws
+    `AmiNotConnectedException` when the session ends during the load's last request or while the load waits for
+    Asterisk to finish starting, where it used to return with the state it had; it already threw for an ending
+    during an earlier request. A start on a connection that is not established throws as before.
+  - `RequestInitialStateAsync` throws `AmiNotConnectedException` when its session ends before the load completes,
+    instead of returning a partial state.
+  - An event-generating action pending when its AMI session ends (`SendEventGeneratingActionAsync`) now completes
+    when the session ends, rather than at the reconnect's cleanup up to `ReconnectInitialDelay` later. It still
+    yields the events received and no error, and a refused action still ends with no events and no error.
+  - A reconnect reload cut short by its session ending logs `[LIVE] Reconnect reload interrupted` at Warning,
+    instead of `[LIVE] Reconnect reload failed` at Error.
+  - No public API changes.
+
+### Fixed — BREAKING: VerbaraServer.ConnectionLost was never raised, and a Reconnected handler that threw could stop the live state from reloading (#353)
+
+`VerbaraServer.ConnectionLost` and `IVerbaraServer.ConnectionLost` were documented as "Fired when the AMI connection
+is lost or completed" (`VerbaraServer.cs:54` and `IVerbaraServer.cs:24` in `v2.6.0`), but nothing raised them for a
+real loss. They are now raised once for each loss of the established AMI connection that the application did not
+ask for: with no exception when the stream ended (Asterisk stopped or crashed, or the connection was reset), a
+`TimeoutException` when the heartbeat's `Ping` went unanswered, or the reader's exception. The event comes after
+the connection's `State` has left `Connected`, before the `Reconnected` of the same outage, whether `AutoReconnect`
+is on or off; never for the application's own `DisconnectAsync`/`DisposeAsync`, and not again when the reconnect
+gives up. `IAmiConnection.Reconnected` is now delivered to each handler in turn, so a handler that throws is logged
+and no longer keeps the handlers after it, the live server's reload among them, from running.
+
+**What changes for you:**
+- Handlers subscribed to `ConnectionLost` start running, once per outage, on a thread-pool thread.
+- `Reconnected` is delivered in order behind them, one handler at a time: a slow `ConnectionLost` handler, or an
+  earlier slow `Reconnected` handler, delays the handlers after it and the live state's reload; it never delays the
+  reconnect itself. Keep handlers short.
+- A `Reconnected` handler that throws no longer stops the others; one that used to be skipped now runs.
+- The server logs `[LIVE] AMI connection lost: live state is stale until it reconnects and reloads` at Warning.
+
+Measured against Asterisk 20.20.1, 22.9.0 and 23.4.1 (stop, kill, reset, pause, network cut, rejected credentials):
+exactly one `ConnectionLost` per outage in 195 of 195, before its `Reconnected` in 180 of 180, none on the
+application's own dispose (30 of 30), against none at all in the same 195 outages before the fix. With a throwing
+`Reconnected` handler subscribed before the live server, the state reloaded in 30 of 30 runs; before the fix it never
+did, and the server kept 6 channels and 1 queue caller that Asterisk no longer had (30 of 30). Behind an 8 s
+`ConnectionLost` handler the connection came back 4.1–5.9 s after a crash and the reload followed 2.2–4.0 s later,
+when the handler returned. No public API changes. See *Detecting an AMI loss* in `docs/guides/troubleshooting.md`.
+
 ### Fixed — the push bus never counted an event dropped by a full buffer (#328)
 
 - `asterisk.push.events.dropped` now increments, tagged `reason=buffer_full`, once for every event a
@@ -304,6 +468,14 @@ All notable changes to this project will be documented in this file.
 - **What a consumer observes changes.** A single gap of more than 10 seconds after the end of input,
   which used to complete, now fails as a transport failure (measured on Cartesia TTS: a 12-second gap
   completed before and fails at 10 seconds now). A vendor that keeps sending, however slowly, is not cut.
+- **The bound is reported also when it runs out in the instant a frame arrives.** The stream used to
+  complete as though the vendor had finished, with the synthesis or the transcript cut short. The frame
+  is now delivered and the stream then fails with `SpeechProviderFailureException` (`Signal = Transport`);
+  the part already read of a message larger than 64 KiB (the Cartesia and ElevenLabs synthesizers) is not
+  delivered. A frame carrying a final transcript or a synthesizer's final flag that arrives as the bound
+  runs out is a tie, and a tie is a failure: the frame is delivered and the stream fails, because the
+  bound found the vendor silent. A close, or a message by which the vendor ends the stream, that arrives
+  in the same instant still ends it as the vendor said.
 
 ### Fixed — a speech vendor, the OpenAI Realtime bridge or ARI that never answered a connect held the call (#347)
 
@@ -397,6 +569,10 @@ All notable changes to this project will be documented in this file.
 - `RealtimeMetrics.SessionsCloseUnanswered` counts sessions whose close the vendor did not answer
   within 10 seconds after the caller hung up. Each is also counted in
   `openai_realtime.sessions.completed`, and the bridge logs a Warning for it.
+- The count holds also when the bound runs out inside the read that returns only part of a vendor
+  message: a frame larger than the bridge's 64 KiB read buffer, or the first fragment of a message. Such
+  a session used to count in `openai_realtime.sessions.failed` instead, every time the bound ran out at
+  that instant, and in 3.7–12.7 % of unanswered closes in an unforced race with such messages.
 
 ## [2.6.0] - 2026-09-24
 

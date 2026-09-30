@@ -35,7 +35,7 @@
 **Checklist:**
 1. Verify username/password match `manager.conf`
 2. Check `deny`/`permit` ACL in the AMI user section
-3. Reload manager config: `asterisk -rx "manager reload"`
+3. Reload manager config: `asterisk -rx "manager reload"`. A reload does not end the session of an AMI user deleted from `manager.conf`: an application logged in as that user stays connected until its session ends, and is refused only when it logs in again.
 
 ### ARI: WebSocket connection failed
 
@@ -118,9 +118,49 @@ See [High-Load Tuning Guide](high-load-tuning.md) for sizing recommendations.
 
 ### State lost after reconnect
 
-**Symptoms:** After AMI reconnect, channels/agents/queues are empty.
+**Symptoms:** After an AMI reconnect, an Asterisk restart or the application's start, channels, queues or agents are missing from `VerbaraServer`'s managers.
 
-**Expected behavior:** `VerbaraServer` clears and reloads all managers on reconnect via the `Reconnected` event. There may be a brief gap during reload.
+**Expected behavior:** `VerbaraServer.StartAsync` loads the current state from Asterisk, and the `Reconnected` event loads it again after every reconnect. A load asks for the channels (`Status`), the queues with their members and waiting callers (`QueueStatus`), and the agents (`Agents`). On a reload the channel table is reconciled against Asterisk's snapshot, so a call that ended during the outage ends, while the queues and the agents are cleared and loaded again. There may be a brief gap during reload.
+
+**Right after Asterisk starts.** Asterisk accepts an AMI login before its modules have loaded. Until app_queue has registered `QueueStatus` and app_agent_pool has registered `Agents`, it refuses them as an unknown command (`Response: Error`, `Message: Invalid/unknown command: …`), which is also its answer when the module is not loaded at all. A load does not take that refusal as "no queues" or "no agents":
+
+- It asks again once Asterisk reports `FullyBooted` on the AMI session. A refusal of a request sent after the report is final: the module is not loaded, and the load does not wait.
+- Asterisk sends `FullyBooted` only to an AMI user with `system` in `read`. For a user without it, the load asks again every 200 ms, and logs `[LIVE] QueueStatus not registered yet …` (or `Agents`) at Information.
+- The load stops asking 10 s after its first such refusal, logs `[LIVE] QueueStatus never registered …` (or `Agents`) at Warning, and completes without that state. The 10 s is spent once per load, however many of its requests are refused.
+
+So an AMI user without `system`, on a PBX where app_queue or app_agent_pool is not loaded, waits 10 s on every load: the start's and every reload's. Put `system` in the user's `read` line in `manager.conf` (`read = all` includes it) and the load does not wait there.
+
+Measured on 2026-09-28 against Asterisk 20.20.1, 22.9.0 and 23.4.1, with raw AMI sessions logged in as soon as the AMI port accepted after a container restart: `Agents` worked 50–111 ms after the login, `QueueStatus` 80–131 ms after it, and `FullyBooted` arrived 17–28 ms after `QueueStatus` worked. A load whose login lands in that window takes longer, by the time Asterisk still needs to finish starting.
+
+**When the AMI session ends during the load.** Asterisk may close a session it has just opened while it starts, or the network may drop it. The load then stops: it sends nothing more on that session, and it ends no call on a channel snapshot it did not finish reading.
+
+- With `AutoReconnect` on (the default) and the connection reconnecting, `StartAsync` returns without an exception and logs `[LIVE] Initial state load interrupted …` at Warning. The reload after the reconnect loads the state; until then the managers hold what the load had read. A reload cut short the same way logs `[LIVE] Reconnect reload interrupted …` at Warning, and the next reconnect reloads.
+- With `AutoReconnect` off, or once the reconnect has given up or the connection has been disconnected, `StartAsync` throws `AmiNotConnectedException`: nothing will reload the state.
+- `StartAsync` called before the connection is established (`Initial`, or `Connecting` while a connect attempt runs) throws `AmiNotConnectedException`, as it always did. Call it after `ConnectAsync` returns.
+- A direct call to `RequestInitialStateAsync` throws `AmiNotConnectedException` whenever its session ends before the load completes, reconnecting or not.
+
+### Detecting an AMI loss
+
+**Symptoms:** after a PBX crash or a network cut, `VerbaraServer`'s managers show calls, queue callers or agents that Asterisk no longer has, until the connection is back.
+
+**What the SDK reports.** `VerbaraServer.ConnectionLost` (the same event as `IVerbaraServer.ConnectionLost`) is raised once for each loss of the established AMI connection that the application did not ask for, with what ended it:
+
+- no exception (`null`) when the connection's stream ended: Asterisk stopped or crashed, or the connection was reset;
+- a `TimeoutException` when the heartbeat's `Ping` went unanswered: a frozen PBX, or one the network no longer reaches;
+- the reader's exception when the AMI stream could not be read.
+
+It is raised after the connection's `State` has left `Connected`, whether `AutoReconnect` is on or off, and before the `Reconnected` of the same outage. It is not raised for the application's own `DisconnectAsync` or `DisposeAsync`, nor a second time when the reconnect gives up. From `ConnectionLost` until the reload after the reconnect has completed, the channels, queues and agents the server holds are not being updated: treat them as stale.
+
+**How soon a loss is seen.**
+
+- A stream Asterisk closes or resets is seen at once.
+- A peer that goes silent is seen by the heartbeat, within one `HeartbeatInterval` plus the `Ping` wait, which is the smaller of `HeartbeatTimeout` and `DefaultResponseTimeout`. With the defaults (30 s, 10 s and 2 s) that is up to about 32 s after the peer went silent; measured, 2.2–32.0 s. A shorter `HeartbeatInterval` sees it sooner.
+
+**When the reconnect gives up.** With `MaxReconnectAttempts` set to N, the connection gives up after N backoff delays, plus the time its failed attempts take, and then reads `Disconnected`. The first delay is `ReconnectInitialDelay`; each next one is multiplied by `ReconnectMultiplier` and capped at `ReconnectMaxDelay`. As examples, measured from the moment Asterisk was started again with the application's credentials rejected, not from the loss: 17.2–17.7 s with 1 s ×2 and N = 4; 6.9–8.6 s with 0.5 s ×2 capped at 2 s and N = 4. The give-up raises nothing: read `State`.
+
+**With `MaxReconnectAttempts = 0`** (the default) the connection never gives up: it retries for ever, rejected credentials included, each attempt failing with `AmiAuthenticationException`. `ConnectionLost` is raised once, for the loss, and nothing after it until the connection is back.
+
+**Keep handlers short.** `ConnectionLost` handlers and the connection's `Reconnected` handlers run one at a time on a thread-pool thread, in the order the loss and the reconnect happened. They never hold the connection's reader, heartbeat or reconnect, but the reload after the reconnect waits for every one of them, so a slow handler delays it. A handler that throws is logged and the handlers after it still run; a handler that never returns stops every later notification, the reload of every later reconnect included.
 
 ---
 
@@ -245,3 +285,27 @@ Open the resulting `.nettrace` in PerfView or Chromium `about:tracing`.
 3. **Opt out entirely** in non-critical deployments by not registering `SessionReconciliationService` (skip `AddSessions(reconcile: true)` and call the reconciler manually on demand).
 
 **Observability:** watch the `Verbara.Sdk.Sessions` activity source — `reconcile` spans carry a `sessions.scanned` tag so you can correlate burst size with reconnect events.
+
+---
+
+## Voice AI / AudioSocket
+
+### `ChannelIdInUse`: a connection presented a UUID that another call still holds
+
+**Symptoms:** `[AudioSocket] Channel <uuid> still has a live session after <n> ms, refusing the connection that presented it again`, at Warning, from `Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer`; `<n>` is about 1000.
+
+**Cause:** two calls that are live at the same time presented one AudioSocket UUID, usually a dialplan that takes the UUID from a global variable or a fixed string. A call that comes back to the bot with the UUID it saved (a second `AudioSocket()`, a transfer, a redirect) is not a refusal: the server waits up to 1 second for the previous session with that UUID to end and then serves it.
+
+**Solutions:**
+1. Give every concurrent AudioSocket call its own UUID, for example `Set(BOTID=${UUID()})` once per call, and reuse it only when the same call comes back.
+2. If the log shows the call that came back was the same call (its previous session ended just after the Warning), look for an `OnHangup` handler that does slow work: the previous session keeps its UUID until every `OnHangup` handler has returned. Hand slow work off from the handler.
+
+The refused connection receives a hangup frame, so on Asterisk 20 and later `AudioSocket()` returns and the dialplan goes on; on Asterisk 18 any end from the server, a hangup frame included, hangs the call up. The call already holding the UUID is untouched.
+
+### `SessionLimitReached`: the server is at `MaxConcurrentSessions`
+
+**Symptoms:** `[AudioSocket] Session limit reached (<limit>), rejecting connection`, at Warning.
+
+**Cause:** the number of live sessions has reached `AudioSocketOptions.MaxConcurrentSessions`. A call that comes back with a UUID a live session holds is not counted against the limit, since it takes that session's place.
+
+**Solutions:** raise `MaxConcurrentSessions` if the host has room, or spread calls over more servers. The refused connection receives a hangup frame, with the same Asterisk 20 and later / Asterisk 18 behaviour as above. Refused connections are not counted in `audiosocket.connections.accepted` and open no `audiosocket.session` activity.

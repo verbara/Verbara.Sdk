@@ -72,6 +72,112 @@ public sealed class SpeechSynthesizerEndOfInputBoundTests
         }
     }
 
+    public static TheoryData<string, bool> FrameAtTheBound => new()
+    {
+        { "Cartesia", false }, { "Deepgram", false }, { "ElevenLabs", false }, { "LMNT", false },
+        // The two synthesizers that assemble a message across reads, with a 72 KB frame: the read that
+        // returns its first 64 KiB is the one the bound runs out in.
+        { "Cartesia", true }, { "ElevenLabs", true },
+    };
+
+    /// <summary>
+    /// The bound running out in the instant a vendor frame arrives, inside the read that returns it (the
+    /// whole frame, or the first 64 KiB of a larger one). The read still succeeds, with the socket aborted
+    /// under it, and the loop then found the socket closed and ended as though the vendor had finished:
+    /// the synthesis completed, short, with no failure (20 of 20 per case, measured). The bound found the
+    /// vendor silent, so the synthesis fails as it does when the bound runs out between reads.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(FrameAtTheBound))]
+    public async Task SynthesizeAsync_ShouldThrowTransportFailure_WhenTheBoundRunsOutInsideTheReadThatReturnsAFrame(
+        string client, bool oversizedFrame)
+    {
+        // Arrange — the vendor answers the end of input with one chunk, then sends one more frame only when asked.
+        await using var peer = oversizedFrame
+            ? CreatePeerWithAnOversizedFrame(client)
+            : SynthesizerEndOfInputPeers.Create(client, EndOfInputPeerMode.FrameOnRequest);
+        peer.Start();
+        var clock = new FakeTimeProvider();
+        using var receive = new WebSocketReceiveHook();
+        var caller = receive.Watch(() => new SynthesisCaller(
+            SynthesizerEndOfInputPeers.CreateSynthesizer(client, peer.Port, clock), CancellationToken.None));
+
+        await peer.EndOfInputSeen.WaitAsync(SignalTimeout);
+        await caller.NextChunkAsync().WaitAsync(SignalTimeout);
+        await WaitForTheBoundToArmAsync(clock);
+
+        // Act — the whole bound passes inside the read that returns the vendor's next frame, or its first part.
+        receive.Arm(() => clock.Advance(Bound));
+        await peer.SendFrameAsync().WaitAsync(SignalTimeout);
+        await receive.Fired.WaitAsync(SignalTimeout);
+        var ending = await Record.ExceptionAsync(() => caller.Run.WaitAsync(SignalTimeout));
+
+        // Assert
+        var failure = ending.Should().BeOfType<SpeechProviderFailureException>(
+            "the bound found the vendor silent, whichever way the receive loop then left").Subject;
+        using (new AssertionScope())
+        {
+            failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
+            failure.InnerException.Should().BeOfType<TimeoutException>();
+            caller.Chunks.Should().Be(
+                oversizedFrame ? 1 : 2,
+                "a whole frame the read returned is delivered; the first part of one is not");
+            receive.ReceivesStartedAfterwards.Should().Be(0, "the socket is aborted; nothing is read after it");
+        }
+    }
+
+    /// <summary>
+    /// The tie: the frame the read returns as the bound runs out is ElevenLabs' <c>isFinal</c> flag. That
+    /// flag does not end the session, which ends only with the vendor's close, so it does not say the
+    /// vendor finished: the flag carries no audio, and the synthesis fails, as in the theory above.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowTransportFailure_WhenTheBoundRunsOutAsTheFinalFlagArrives()
+    {
+        // Arrange — the vendor's frame on request is the final flag.
+        await using var peer = SynthesizerEndOfInputPeers.Create(
+            "ElevenLabs", EndOfInputPeerMode.FrameOnRequest, progress: [PeerFrame.Text("""{"isFinal":true}""")]);
+        peer.Start();
+        var clock = new FakeTimeProvider();
+        using var receive = new WebSocketReceiveHook();
+        var caller = receive.Watch(() => new SynthesisCaller(
+            SynthesizerEndOfInputPeers.CreateSynthesizer("ElevenLabs", peer.Port, clock), CancellationToken.None));
+
+        await peer.EndOfInputSeen.WaitAsync(SignalTimeout);
+        await caller.NextChunkAsync().WaitAsync(SignalTimeout);
+        await WaitForTheBoundToArmAsync(clock);
+
+        // Act — the whole bound passes inside the read that returns the final flag.
+        receive.Arm(() => clock.Advance(Bound));
+        await peer.SendFrameAsync().WaitAsync(SignalTimeout);
+        await receive.Fired.WaitAsync(SignalTimeout);
+        var ending = await Record.ExceptionAsync(() => caller.Run.WaitAsync(SignalTimeout));
+
+        // Assert
+        var failure = ending.Should().BeOfType<SpeechProviderFailureException>(
+            "the bound found the vendor silent, whichever way the receive loop then left").Subject;
+        using (new AssertionScope())
+        {
+            failure.Signal.Should().Be(SpeechProviderFailureSignal.Transport);
+            failure.InnerException.Should().BeOfType<TimeoutException>();
+            caller.Chunks.Should().Be(1, "the final flag carries no audio, so only the answer's chunk was delivered");
+            receive.ReceivesStartedAfterwards.Should().Be(0, "the socket is aborted; nothing is read after it");
+        }
+    }
+
+    /// <summary>A peer whose frame on request is one 72 KB audio frame, larger than the clients' 64 KiB read buffer.</summary>
+    private static EndOfInputPeer CreatePeerWithAnOversizedFrame(string client)
+    {
+        var base64 = Convert.ToBase64String(new byte[54_000]); // 72,000 characters
+        var oversized = client switch
+        {
+            "Cartesia" => "{\"type\":\"chunk\",\"data\":\"" + base64 + "\",\"done\":false,\"status_code\":206,\"context_id\":\"c\"}",
+            "ElevenLabs" => "{\"audio\":\"" + base64 + "\",\"isFinal\":null}",
+            _ => throw new ArgumentOutOfRangeException(nameof(client), client, null),
+        };
+        return SynthesizerEndOfInputPeers.Create(client, EndOfInputPeerMode.FrameOnRequest, [PeerFrame.Text(oversized)]);
+    }
+
     /// <summary>
     /// Every vendor frame restarts the bound, so a vendor that keeps sending is never cut, however long
     /// it takes in total: eight frames 2 s apart end 16 s after the end of input with nine chunks. True

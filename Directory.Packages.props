@@ -51,7 +51,7 @@
 
   <!-- NATS (Verbara.Sdk.Push.Nats bridge) -->
   <ItemGroup>
-    <PackageVersion Include="NATS.Client.Core" Version="3.1.0" />
+    <PackageVersion Include="NATS.Client.Core" Version="3.2.0" />
     <PackageVersion Include="NATS.Client.Hosting" Version="2.7.3" />
   </ItemGroup>
 
@@ -62,10 +62,10 @@
 
   <!-- OpenTelemetry (Verbara.Sdk.OpenTelemetry batteries-included package) -->
   <ItemGroup>
-    <PackageVersion Include="OpenTelemetry" Version="1.17.0" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
-    <PackageVersion Include="OpenTelemetry.Exporter.Console" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry" Version="1.19.1" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.Console" Version="1.19.1" />
     <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.15.2-beta.1" />
   </ItemGroup>
 
@@ -77,7 +77,7 @@
 
   <!-- SourceLink — debuggable NuGet packages -->
   <ItemGroup>
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.303" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.401" />
   </ItemGroup>
 
   <!-- Analyzers — Layer 1: API Protection -->

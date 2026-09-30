@@ -30,13 +30,16 @@ internal static class RecognizerEndOfInputPeers
     public static TheoryData<string> Clients => ["Deepgram", "AssemblyAI", "Cartesia", "Speechmatics"];
 
     /// <summary>The peer that speaks <paramref name="client"/>'s protocol up to its end of input.</summary>
-    public static EndOfInputPeer Create(string client, EndOfInputPeerMode mode) => client switch
+    /// <param name="client">The recognizer.</param>
+    /// <param name="mode">What the peer does once the end of input has arrived.</param>
+    /// <param name="progress">Replaces the profile's <see cref="EndOfInputPeer.Progress"/> round when given.</param>
+    public static EndOfInputPeer Create(string client, EndOfInputPeerMode mode, IReadOnlyList<PeerFrame>? progress = null) => client switch
     {
         "Deepgram" => new EndOfInputPeer(mode)
         {
             Preamble = [PeerFrame.Text(DeepgramFakeServer.BuildResultJson("hello", 0.9f, isFinal: false))],
             IsEndOfInput = static t => t.Contains("CloseStream", StringComparison.Ordinal),
-            Progress = [PeerFrame.Text(DeepgramFakeServer.BuildResultJson("hello", 0.9f, isFinal: false))],
+            Progress = progress ?? [PeerFrame.Text(DeepgramFakeServer.BuildResultJson("hello", 0.9f, isFinal: false))],
             Answer =
             [
                 PeerFrame.Text(DeepgramFakeServer.BuildResultJson("hello world", 0.95f, isFinal: true)),
@@ -51,7 +54,7 @@ internal static class RecognizerEndOfInputPeers
                 PeerFrame.Text(AssemblyAiFakeServer.BuildTurnJson("hello", endOfTurn: false)),
             ],
             IsEndOfInput = static t => t.Contains("Terminate", StringComparison.Ordinal),
-            Progress = [PeerFrame.Text(AssemblyAiFakeServer.BuildTurnJson("hello", endOfTurn: false))],
+            Progress = progress ?? [PeerFrame.Text(AssemblyAiFakeServer.BuildTurnJson("hello", endOfTurn: false))],
             Answer =
             [
                 PeerFrame.Text(AssemblyAiFakeServer.BuildTurnJson("hello world", endOfTurn: true)),
@@ -62,7 +65,7 @@ internal static class RecognizerEndOfInputPeers
         {
             Preamble = [PeerFrame.Text(CartesiaSttFake.BuildTranscriptJson("hello", 0.9f, isFinal: false))],
             IsEndOfInput = static t => t == "done",
-            Progress = [PeerFrame.Text(CartesiaSttFake.BuildTranscriptJson("hello", 0.9f, isFinal: false))],
+            Progress = progress ?? [PeerFrame.Text(CartesiaSttFake.BuildTranscriptJson("hello", 0.9f, isFinal: false))],
             Answer =
             [
                 PeerFrame.Text(CartesiaSttFake.BuildTranscriptJson("hello world", 0.95f, isFinal: true)),
@@ -79,7 +82,7 @@ internal static class RecognizerEndOfInputPeers
                   ]
                 : [],
             IsEndOfInput = static t => t.Contains("EndOfStream", StringComparison.Ordinal),
-            Progress = [PeerFrame.Text(SpeechmaticsFakeServer.BuildPartialTranscriptJson("hello", 0.9f))],
+            Progress = progress ?? [PeerFrame.Text(SpeechmaticsFakeServer.BuildPartialTranscriptJson("hello", 0.9f))],
             Answer =
             [
                 PeerFrame.Text(SpeechmaticsFakeServer.BuildFinalTranscriptJson("hello world", 0.95f)),

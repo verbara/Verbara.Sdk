@@ -15,6 +15,26 @@ namespace Verbara.Sdk.VoiceAi.AudioSocket;
 /// TCP server that accepts AudioSocket connections from Asterisk.
 /// Implements <see cref="IHostedService"/> for DI lifecycle management.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>One live session per channel id.</b> Asterisk does not keep the AudioSocket UUID unique: a
+/// dialplan that runs <c>AudioSocket()</c> or <c>Dial(AudioSocket/…)</c> again with the id it saved,
+/// a redirect or a transfer that re-enters the bot, all connect again with the same id, and they do
+/// it within milliseconds of the previous connection closing, before this server has released it.
+/// A connection that presents the id of a session that is still live therefore waits, up to one
+/// second, for that session's hangup to run, and is then served. Its <see cref="OnSessionStarted"/> is
+/// raised after every <see cref="AudioSocketSession.OnHangup"/> handler of the previous session has
+/// returned, so a consumer that keys its own state by <see cref="AudioSocketSession.ChannelId"/> never
+/// sees two live sessions under one id.
+/// </para>
+/// <para>
+/// A connection whose id stays held past that wait (two calls configured with one UUID) is refused:
+/// the server writes a hangup frame, so on Asterisk 20 and later the call goes on in the dialplan after
+/// <c>AudioSocket()</c>, closes the connection and logs a warning that names the channel id. A
+/// connection over <see cref="AudioSocketOptions.MaxConcurrentSessions"/> is refused the same way and
+/// logged as the limit. A refused connection is never announced, counted or traced as a session.
+/// </para>
+/// </remarks>
 public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
 {
     /// <summary>The wait after the first of a run of failed accepts.</summary>
@@ -29,6 +49,15 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private readonly ConcurrentDictionary<Guid, AudioSocketSession> _sessions = new();
+
+    /// <summary>
+    /// How long a connection that presents the id of a live session waits for that session to be
+    /// released before it is refused. Asterisk reconnects 0.1–7 ms after the previous connection ends
+    /// (measured on 20.20.1, 22.9.0 and 23.4.1). 2.6.0's code released an ending session within 8.5 ms
+    /// with the host idle and within 256 ms with the host saturated. Only a duplicate id pays the whole
+    /// wait, as silence before its dialplan goes on.
+    /// </summary>
+    internal static readonly TimeSpan SameIdGrace = TimeSpan.FromSeconds(1);
     private readonly Meter _instanceMeter;
 
     /// <summary>
@@ -40,12 +69,17 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     private int _disposed;
 
     /// <summary>Raised when a new AudioSocket session has been established and the UUID frame received.</summary>
+    /// <remarks>Raised once per served connection, and never for a refused one. For a channel id that
+    /// connects again, it is raised after every <see cref="AudioSocketSession.OnHangup"/> handler of the
+    /// previous session has returned (see the class remarks).</remarks>
     public event Func<AudioSocketSession, ValueTask>? OnSessionStarted;
 
     /// <summary>The actual port the server is listening on. Available after <see cref="StartAsync"/>.</summary>
     public int BoundPort => (_listener?.LocalEndpoint as IPEndPoint)?.Port ?? 0;
 
     /// <summary>Number of currently active sessions.</summary>
+    /// <remarks>A session counts until every one of its <see cref="AudioSocketSession.OnHangup"/> handlers
+    /// has returned, and holds its channel id until then.</remarks>
     public int ActiveSessionCount => _sessions.Count;
 
     /// <summary>Initializes a new instance.</summary>
@@ -220,27 +254,52 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
                 return;
             }
 
+            var session = new AudioSocketSession(channelId, client, reader, _options.DefaultFormat, _logger);
+
+            // Two refusals, each logged as what it is. Neither connection was ever a session, so neither
+            // is counted, traced or timed: the accepted count moves only for a connection whose close
+            // will move the closed count.
+            // A connection that presents a held id is that call coming back. It waits for its holder
+            // below and takes the holder's place, so it never raises the count, and the limit must not
+            // turn it away while the holder is still ending.
+            if (_sessions.Count >= _options.MaxConcurrentSessions && !_sessions.ContainsKey(channelId))
+            {
+                AudioSocketLog.SessionLimitReached(_logger, _options.MaxConcurrentSessions);
+                await RefuseAsync(session).ConfigureAwait(false);
+                return;
+            }
+
+            var waitStart = _timeProvider.GetTimestamp();
+            switch (await RegisterAsync(channelId, session, waitStart, ct).ConfigureAwait(false))
+            {
+                case Registration.Registered:
+                    break;
+                case Registration.StillHeld:
+                    AudioSocketLog.ChannelIdInUse(
+                        _logger, channelId, (long)_timeProvider.GetElapsedTime(waitStart).TotalMilliseconds);
+                    await RefuseAsync(session).ConfigureAwait(false);
+                    return;
+                default:
+                    // The server is stopping: nothing to log, the client missed nothing. The hangup
+                    // frame still lets the call go on in the dialplan.
+                    await RefuseAsync(session).ConfigureAwait(false);
+                    return;
+            }
+
             var sessionStart = Stopwatch.GetTimestamp();
             AudioSocketMetrics.ConnectionsAccepted.Add(1);
             using var activity = AudioSocketActivitySource.StartSession(channelId);
 
-            var session = new AudioSocketSession(channelId, client, reader, _options.DefaultFormat, _logger);
+            // Set before the read loop starts, so no hangup can fire without it. The session invokes it
+            // after every OnHangup handler, so a same-id connection waiting on HungUp is let in only
+            // once the consumer has finished with this one.
+            session.Released = () => ReleaseSession(session);
             session.OnHangup += () =>
             {
-                ReleaseSession(session);
                 AudioSocketMetrics.ConnectionsClosed.Add(1);
                 AudioSocketMetrics.SessionDurationMs.Record(
                     Stopwatch.GetElapsedTime(sessionStart).TotalMilliseconds);
             };
-
-            if (_sessions.Count >= _options.MaxConcurrentSessions || !_sessions.TryAdd(channelId, session))
-            {
-                AudioSocketLog.SessionLimitReached(_logger, _options.MaxConcurrentSessions);
-#pragma warning disable IDISP016 // False positive — session was just created, this is the first dispose
-                await session.DisposeAsync().ConfigureAwait(false);
-#pragma warning restore IDISP016
-                return;
-            }
 
             session.StartReadLoop();
 
@@ -256,9 +315,56 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
         }
     }
 
+    private enum Registration { Registered, StillHeld, Stopping }
+
     /// <summary>
-    /// Releases the registry entry of a session that has hung up: the release its hangup handler
-    /// performs, named in one place. The handler keeps recording the close metrics itself, so calling
+    /// Registers <paramref name="session"/> under <paramref name="channelId"/>. While another session
+    /// holds the id, it waits for that session's release, up to <see cref="SameIdGrace"/> from
+    /// <paramref name="waitStart"/> in all, and tries again: the holder of a re-entered id is already
+    /// ending, and its release is the edge that lets this one in.
+    /// </summary>
+    private async ValueTask<Registration> RegisterAsync(
+        Guid channelId, AudioSocketSession session, long waitStart, CancellationToken ct)
+    {
+        while (!_sessions.TryAdd(channelId, session))
+        {
+            if (!_sessions.TryGetValue(channelId, out var holder))
+                continue; // released between the two calls: try again
+
+            var left = SameIdGrace - _timeProvider.GetElapsedTime(waitStart);
+            if (left <= TimeSpan.Zero)
+                return Registration.StillHeld;
+
+            try
+            {
+                await holder.HungUp.WaitAsync(left, _timeProvider, ct).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                // The grace ran out with the holder still live: two calls share this id.
+                return Registration.StillHeld;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // The server is stopping; the caller closes this connection quietly.
+                return Registration.Stopping;
+            }
+        }
+
+        return Registration.Registered;
+    }
+
+    /// <summary>
+    /// Closes a connection the server will not serve, with a hangup frame first so that, on Asterisk 20
+    /// and later, the call goes on in the dialplan. The session never started its read loop, so its
+    /// hangup never fires and it releases nothing.
+    /// </summary>
+    private static ValueTask RefuseAsync(AudioSocketSession session) => session.EndFromServerAsync();
+
+    /// <summary>
+    /// Releases the registry entry of a session that has hung up: the release its
+    /// <see cref="AudioSocketSession.Released"/> callback performs after every hangup handler, named in
+    /// one place. The server's hangup handler records the close metrics itself, so calling
     /// this directly moves no process-wide instrument. Internal so a test can release a session it
     /// built through the internal constructor.
     /// </summary>
@@ -268,8 +374,8 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// session's (a stop cleared the table and a same-id connection registered since) leaves that
     /// other session registered, where a removal by key alone would unregister it. The key is the
     /// session's <see cref="AudioSocketSession.ChannelId"/>, which is get-only and set from the id the
-    /// session registered under. A same-id connection is still refused at connect time, so there is
-    /// nothing to hand over here.
+    /// session registered under. A same-id connection waiting on this session is let in once the
+    /// session's hangup has finished (<see cref="AudioSocketSession.HungUp"/>), not by anything here.
     /// </remarks>
     internal void ReleaseSession(AudioSocketSession session) =>
         _sessions.TryRemove(new KeyValuePair<Guid, AudioSocketSession>(session.ChannelId, session));
