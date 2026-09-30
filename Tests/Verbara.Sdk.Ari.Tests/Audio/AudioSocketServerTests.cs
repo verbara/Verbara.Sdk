@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
@@ -11,7 +12,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Verbara.Sdk.Ari.Tests.Audio;
 
-public class AudioSocketServerTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public class AudioSocketServerTests : IAsyncLifetime
 {
     /// <summary>Upper bound on any single wait. Reaching it is a failure, never a pace.</summary>
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
@@ -160,6 +162,8 @@ public class AudioSocketServerTests : IAsyncDisposable
         var act = async () => await server.DisposeAsync();
 
         await act.Should().NotThrowAsync();
+        // Set to null so the fixture cleanup does not double-dispose
+        _server = null;
     }
 
     [Fact]
@@ -1713,10 +1717,16 @@ public class AudioSocketServerTests : IAsyncDisposable
             _entries.Enqueue(new LogEntry(logLevel, eventId.Name, exception?.GetType().Name));
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         if (_server is not null)
             await _server.DisposeAsync();
-        GC.SuppressFinalize(this);
     }
 }
