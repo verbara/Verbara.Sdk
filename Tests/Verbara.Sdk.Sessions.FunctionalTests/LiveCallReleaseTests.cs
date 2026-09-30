@@ -90,17 +90,11 @@ public sealed class LiveCallReleaseTests
 
         var endedInStore = 0;
         foreach (var call in ended)
-        {
-            if (await rig.Store.GetAsync(call.SessionId, CancellationToken.None) is not null)
-                endedInStore++;
-        }
+            endedInStore += await rig.Store.GetAsync(call.SessionId, CancellationToken.None) is not null ? 1 : 0;
 
         var liveInStore = 0;
         foreach (var call in live)
-        {
-            if (ReferenceEquals(await rig.Store.GetAsync(call.SessionId, CancellationToken.None), call))
-                liveInStore++;
-        }
+            liveInStore += ReferenceEquals(await rig.Store.GetAsync(call.SessionId, CancellationToken.None), call) ? 1 : 0;
 
         var active = rig.Manager.ActiveSessions.ToHashSet();
         new

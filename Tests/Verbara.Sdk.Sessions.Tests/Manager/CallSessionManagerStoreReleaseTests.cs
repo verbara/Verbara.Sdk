@@ -61,7 +61,7 @@ public sealed class CallSessionManagerStoreReleaseTests : IAsyncDisposable
         var record = await store.GetAsync(call.SessionId, CancellationToken.None);
 
         new { Kept = record?.SessionId, store.Deletes }.Should().BeEquivalentTo(
-            new { Kept = (string?)call.SessionId, Deletes = 0 },
+            new { Kept = call.SessionId, Deletes = 0 },
             "a store that provides durability keeps its own retention: the manager's release neither "
             + "deletes the record the consumer registered that store to keep nor asks the store to");
     }
@@ -86,7 +86,7 @@ public sealed class CallSessionManagerStoreReleaseTests : IAsyncDisposable
                 {
                     _serverB.Channels.OnNewChannel("n-1", "PJSIP/100-n-1", ChannelState.Ring, linkedId: "L-n");
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
                     during.Failure = ex;
                 }
@@ -100,7 +100,7 @@ public sealed class CallSessionManagerStoreReleaseTests : IAsyncDisposable
 
         new { SaveHeldOpen = store.SaveStepRan, during.ArrivalFinished, during.Failure, during.ReleasedBeforeTheWrite }
             .Should().BeEquivalentTo(
-                new { SaveHeldOpen = true, ArrivalFinished = true, Failure = (Exception?)null, ReleasedBeforeTheWrite = true },
+                new { SaveHeldOpen = true, ArrivalFinished = true, Failure = default(Exception), ReleasedBeforeTheWrite = true },
                 "premise: the ending's save was under way when the other server's arrival released the call");
 
         var byId = await store.Inner.GetAsync(call.SessionId, CancellationToken.None);
@@ -109,7 +109,7 @@ public sealed class CallSessionManagerStoreReleaseTests : IAsyncDisposable
 
         new { ById = byId?.SessionId, ByLinkedId = byLinkedId?.SessionId, ArrivedCallStored = arrived is not null }
             .Should().BeEquivalentTo(
-                new { ById = (string?)null, ByLinkedId = (string?)null, ArrivedCallStored = true },
+                new { ById = default(string), ByLinkedId = default(string), ArrivedCallStored = true },
                 "the store's write of the call landed after the manager released it and told the store "
                 + "so; the manager checks again once the save is done and tells the store again, so the "
                 + "write cannot outlast the release — while the arriving call is saved as usual");
@@ -137,7 +137,7 @@ public sealed class CallSessionManagerStoreReleaseTests : IAsyncDisposable
                 {
                     _serverA.Channels.OnHangup("x-v", HangupCause.NormalClearing);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
                     during.Failure = ex;
                 }
@@ -158,14 +158,14 @@ public sealed class CallSessionManagerStoreReleaseTests : IAsyncDisposable
             LateLegLeft = call.Participants.Single(p => p.UniqueId == "x-v").LeftAt.HasValue,
             Released = sut.GetById(call.SessionId) is null,
         }.Should().BeEquivalentTo(
-            new { ReleaseStepRan = true, DepartureFinished = true, Failure = (Exception?)null, LateLegLeft = true, Released = true },
+            new { ReleaseStepRan = true, DepartureFinished = true, Failure = default(Exception), LateLegLeft = true, Released = true },
             "premise: the late leg left while the arrival on the other server was releasing the call");
 
         var byId = await store.Inner.GetAsync(call.SessionId, CancellationToken.None);
 
         new { ById = byId?.SessionId, WritesDuringTheRelease = during.SavesOfTheCall - writesBefore }
             .Should().BeEquivalentTo(
-                new { ById = (string?)null, WritesDuringTheRelease = 0 },
+                new { ById = default(string), WritesDuringTheRelease = 0 },
                 "the manager stops holding the call before it tells the store, so a save that checks "
                 + "while the release is under way already finds the call released and writes nothing; "
                 + "told the other way round, the save would find it held, write it back after the store "

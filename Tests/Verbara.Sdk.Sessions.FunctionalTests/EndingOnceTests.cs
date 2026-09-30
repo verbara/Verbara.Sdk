@@ -64,7 +64,7 @@ public sealed class EndingOnceTests
         new { Endings = rig.EndingsFor(call.SessionId), QueueEntries = rig.QueueEntriesFor(call.SessionId) }
             .Should().BeEquivalentTo(
                 new { Endings = 1, QueueEntries = 1 },
-                $"the reload delivered the call's ending (after it: {afterReload}); the unseen leg's "
+                $"the reload delivered the call's ending (after it: {afterReload.Endings} endings, {afterReload.QueueEntries} queue entries); the unseen leg's "
                 + $"hangup does not deliver it again. Measured: {rig.Describe()}");
     }
 

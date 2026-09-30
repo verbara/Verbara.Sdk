@@ -214,11 +214,9 @@ internal static class ConformanceRecordScanner
         var clientTypeRows = 0;
         var webSocketRows = 0;
 
-        foreach (var row in TableRows(record))
+        foreach (var row in TableRows(record).Where(row => row.Cell(ClientTypeHeader) is not null))
         {
-            if (row.Cell(ClientTypeHeader) is not { } clientTypeCell)
-                continue;
-
+            var clientTypeCell = row.Cell(ClientTypeHeader)!;
             clientTypeRows++;
             var clientType = IsCodeSpan(clientTypeCell) ? clientTypeCell[1..^1] : clientTypeCell;
             void Report(string detail) => violations.Add(new ConformanceRowViolation(row.Line, clientType, detail));

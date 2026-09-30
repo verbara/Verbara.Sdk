@@ -308,7 +308,7 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
             if (OnSessionStarted is not null)
                 await OnSessionStarted(session).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AudioSocketLog.HandleConnectionError(_logger, ex);
             client.Dispose();

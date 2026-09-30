@@ -244,7 +244,7 @@ public sealed class ReleaseOnArrivalTests
         {
             action();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             fault(ex);
         }
@@ -270,10 +270,7 @@ public sealed class ReleaseOnArrivalTests
     {
         var inStore = 0;
         foreach (var session in ended)
-        {
-            if (await rig.Store.GetAsync(session.SessionId, CancellationToken.None) is not null)
-                inStore++;
-        }
+            inStore += await rig.Store.GetAsync(session.SessionId, CancellationToken.None) is not null ? 1 : 0;
 
         return new Held(
             RecentCompleted: rig.Manager.GetRecentCompleted(int.MaxValue).Count(),

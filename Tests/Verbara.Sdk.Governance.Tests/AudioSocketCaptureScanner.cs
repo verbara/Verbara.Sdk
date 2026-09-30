@@ -76,23 +76,15 @@ internal static class AudioSocketCaptureScanner
         ArgumentNullException.ThrowIfNull(fixtureSource);
 
         var root = CSharpSyntaxTree.ParseText(fixtureSource).GetRoot();
-        var constants = new List<CapturedConstant>();
-        foreach (var field in root.DescendantNodes().OfType<FieldDeclarationSyntax>())
-        {
-            if (!field.Modifiers.Any(SyntaxKind.ConstKeyword))
-                continue;
-
-            foreach (var variable in field.Declaration.Variables)
-            {
-                if (variable.Initializer?.Value is not { } value || Fold(value) is not { } text)
-                    continue;
-
-                if (DecodeWholeDump(text) is { } bytes)
-                    constants.Add(new CapturedConstant(variable.Identifier.Text, bytes));
-            }
-        }
-
-        return constants;
+        return root.DescendantNodes().OfType<FieldDeclarationSyntax>()
+            .Where(field => field.Modifiers.Any(SyntaxKind.ConstKeyword))
+            .SelectMany(field => field.Declaration.Variables)
+            .Select(variable => (
+                Name: variable.Identifier.Text,
+                Bytes: variable.Initializer?.Value is { } value && Fold(value) is { } text ? DecodeWholeDump(text) : null))
+            .Where(constant => constant.Bytes is not null)
+            .Select(constant => new CapturedConstant(constant.Name, constant.Bytes!))
+            .ToList();
     }
 
     /// <summary>Every run of byte values <paramref name="source"/> writes as literals, in source order.</summary>

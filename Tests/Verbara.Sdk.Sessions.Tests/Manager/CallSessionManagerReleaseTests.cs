@@ -75,7 +75,7 @@ public sealed class CallSessionManagerReleaseTests
             new
             {
                 HeadEntries = 0,
-                LiveCallByLinkedId = (string?)reuser.SessionId,
+                LiveCallByLinkedId = reuser.SessionId,
                 EligibleStillHeld = 0,
                 RecentHeld = true,
                 RecentEntries = 1,

@@ -35,7 +35,7 @@ public sealed class DefaultStoreReleaseTests
         var byLinkedId = await rig.Store.GetByLinkedIdAsync(ResidencyRig.LinkedIdOf("v"), CancellationToken.None);
 
         new { ById = byId?.SessionId, ByLinkedId = byLinkedId?.SessionId }.Should().BeEquivalentTo(
-            new { ById = (string?)null, ByLinkedId = (string?)null },
+            new { ById = default(string), ByLinkedId = default(string) },
             "the default store releases what the manager releases; holding the same object after the "
             + $"manager let it go frees nothing. Measured: {rig.Describe()}");
     }
@@ -63,7 +63,7 @@ public sealed class DefaultStoreReleaseTests
         var byLinkedId = await rig.Store.GetByLinkedIdAsync(ResidencyRig.LinkedIdOf("v"), CancellationToken.None);
 
         new { ById = byId?.SessionId, ByLinkedId = byLinkedId?.SessionId }.Should().BeEquivalentTo(
-            new { ById = (string?)null, ByLinkedId = (string?)null },
+            new { ById = default(string), ByLinkedId = default(string) },
             "the save that follows the leg's departure is about a call the manager no longer holds, "
             + $"and must not put it back in the store (store before the departure: {beforeDeparture}). "
             + $"Measured: {rig.Describe()}");

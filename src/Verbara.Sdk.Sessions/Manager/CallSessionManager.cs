@@ -125,7 +125,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
             // short on purpose, so it is not a persistence failure and is not logged. A cancellation
             // while the token is still live, such as a store-side timeout, is still logged below.
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             LogPersistError(ex, session.SessionId);
         }
@@ -183,10 +183,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
     {
         var count = 0L;
         foreach (var held in _sessions)
-        {
-            if (HasEnded(held.Value) == ended)
-                count++;
-        }
+            count += HasEnded(held.Value) == ended ? 1 : 0;
 
         return count;
     }
