@@ -20,10 +20,15 @@ public static class AmiMetrics
         Meter.CreateCounter<long>("ami.events.received", "events",
             "Total AMI events received from Asterisk");
 
-    /// <summary>AMI events dropped due to full event pump buffer.</summary>
+    /// <summary>
+    /// AMI events dropped by a full event pump or discarded by a caller's ending, tagged <c>reason</c>:
+    /// <c>buffer_full</c> for an event the full buffer refused (one per event), <c>caller_ending</c> for the events
+    /// still buffered when the caller's <c>DisconnectAsync</c> or <c>DisposeAsync</c> ended the connection (one
+    /// measurement per ending, with the count). An alert on capacity filters on <c>reason=buffer_full</c>.
+    /// </summary>
     public static readonly Counter<long> EventsDropped =
         Meter.CreateCounter<long>("ami.events.dropped", "events",
-            "AMI events dropped due to full event pump");
+            "AMI events dropped by a full event pump or discarded by a caller's ending");
 
     /// <summary>AMI events dispatched to observers.</summary>
     public static readonly Counter<long> EventsDispatched =

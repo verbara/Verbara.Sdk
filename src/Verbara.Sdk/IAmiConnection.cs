@@ -73,6 +73,11 @@ public interface IAmiConnection : IAsyncDisposable
     /// <see cref="AmiConnectionState.Disconnected"/> and the socket has been released. The connection cannot be
     /// connected again: a later <see cref="ConnectAsync"/> throws <see cref="ObjectDisposedException"/>.
     /// <c>DisposeAsync</c> ends the connection the same way.
+    /// <para>
+    /// The ending waits for the event whose handler is running, if any; events still buffered are not delivered. They
+    /// are counted on <c>ami.events.dropped</c> with <c>reason=caller_ending</c> and logged once at Warning with the
+    /// count. A connection lost without this call still delivers every buffered event, in order.
+    /// </para>
     /// </remarks>
     ValueTask DisconnectAsync(CancellationToken cancellationToken = default);
 }
