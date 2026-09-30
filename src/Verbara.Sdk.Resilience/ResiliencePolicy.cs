@@ -100,13 +100,14 @@ public sealed class ResiliencePolicy
                     {
                         result = await action(linked.Token).ConfigureAwait(false);
                     }
-                    catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+                    catch (OperationCanceledException ex) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
                     {
                         ResilienceMetrics.TimeoutFired.Add(
                             1,
                             new KeyValuePair<string, object?>("key", key));
                         throw new TimeoutException(
-                            $"Action for key '{key}' exceeded timeout of {_timeout.Value}.");
+                            $"Action for key '{key}' exceeded timeout of {_timeout.Value}.",
+                            ex);
                     }
                 }
                 else

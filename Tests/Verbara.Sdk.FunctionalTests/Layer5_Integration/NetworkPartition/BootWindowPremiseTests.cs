@@ -886,10 +886,10 @@ public sealed class BootWindowPremiseTests : IClassFixture<BootWindowPremiseTest
             {
                 return await _unread.Reader.ReadAsync(cancellationToken);
             }
-            catch (ChannelClosedException)
+            catch (ChannelClosedException ex)
             {
                 // The reader completes the channel when Asterisk ends the session.
-                throw new IOException("Asterisk ended the session.");
+                throw new IOException("Asterisk ended the session.", ex);
             }
         }
 
