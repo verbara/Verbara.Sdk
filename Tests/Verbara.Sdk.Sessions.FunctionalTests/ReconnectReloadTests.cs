@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -24,7 +25,8 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// <para>These tests assert the behaviour a consumer needs, not the behaviour the code has, so a
 /// failure here is the measurement. Each one states what the current code is expected to do.</para>
 /// </summary>
-public sealed class ReconnectReloadTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class ReconnectReloadTests : IAsyncLifetime
 {
     private const string ServerId = "test-srv";
     private const string CallerUid = "caller-001";
@@ -195,7 +197,14 @@ public sealed class ReconnectReloadTests : IAsyncDisposable
                 "the surviving call keeps its identity, or every downstream record keyed on it is orphaned");
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         await _sessions.DisposeAsync();
         await _server.DisposeAsync();

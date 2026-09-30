@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -33,7 +34,8 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// after <c>VerbaraServer</c> captured its admission mark and before the snapshot is reconciled.
 /// The only clock is the guard that bounds the wait for <c>async void OnReconnected</c>.</para>
 /// </summary>
-public sealed class ReloadAdmissionWindowTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class ReloadAdmissionWindowTests : IAsyncLifetime
 {
     private const string ServerId = "test-srv";
     private const string CallerUid = "caller-001";
@@ -235,7 +237,14 @@ public sealed class ReloadAdmissionWindowTests : IAsyncDisposable
             $"Measured: {Describe()}");
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         _sessionSubscription.Dispose();
         await _sessions.DisposeAsync();

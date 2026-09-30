@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -42,7 +43,8 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// <c>OnReconnected</c> is <c>async void</c>, so its log lines are the only completion signal it
 /// produces.</para>
 /// </summary>
-public sealed class ReloadCompletionPathTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class ReloadCompletionPathTests : IAsyncLifetime
 {
     private const string ServerId = "test-srv";
 
@@ -408,7 +410,14 @@ public sealed class ReloadCompletionPathTests : IAsyncDisposable
             + $"the time it was recorded. Measured: {Describe()}");
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         _consumer.Dispose();
         await _sessions.DisposeAsync();
