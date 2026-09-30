@@ -1,6 +1,7 @@
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using Verbara.Sdk.Ari.Audio;
+using Verbara.Sdk.Tests.Shared.Sockets;
 using FluentAssertions;
 using NSubstitute;
 using NSubstitute.ReturnsExtensions;
@@ -14,22 +15,22 @@ public sealed class CompositeAudioServerTests
     {
         // Arrange — one options instance for both servers, as AddVerbara registers them, with a limit
         // of one; an AudioSocket call holds that place
-        var options = new AudioServerOptions
-        {
-            ListenAddress = "127.0.0.1",
-            AudioSocketPort = FreePort(),
-            WebSocketPort = FreePort(),
-            MaxConcurrentStreams = 1,
-        };
-        await using var audioSocket = new AudioSocketServer(options, Microsoft.Extensions.Logging.Abstractions.NullLogger<AudioSocketServer>.Instance);
-        await using var webSocket = new WebSocketAudioServer(options, Microsoft.Extensions.Logging.Abstractions.NullLogger<WebSocketAudioServer>.Instance);
-        await audioSocket.StartAsync();
-        await webSocket.StartAsync();
+        var (servers, audioSocketPort, webSocketPort) = await LoopbackServerBind.StartAsync(
+            (audioSocketPort, webSocketPort) => new ServersSharingOneOptions(new AudioServerOptions
+            {
+                ListenAddress = "127.0.0.1",
+                AudioSocketPort = audioSocketPort,
+                WebSocketPort = webSocketPort,
+                MaxConcurrentStreams = 1,
+            }),
+            pair => pair.StartAsync());
+        await using var bothServers = servers;
+        var audioSocket = servers.AudioSocket;
 
         var announced = new TaskCompletionSource<IAudioStream>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var announcement = audioSocket.OnStreamConnected.Subscribe(stream => announced.TrySetResult(stream));
         using var call = new System.Net.Sockets.TcpClient();
-        await call.ConnectAsync(System.Net.IPAddress.Loopback, options.AudioSocketPort);
+        await call.ConnectAsync(System.Net.IPAddress.Loopback, audioSocketPort);
         var uuid = Guid.NewGuid();
         var frame = new byte[19];
         frame[0] = (byte)AudioFrameType.Uuid;
@@ -41,7 +42,7 @@ public sealed class CompositeAudioServerTests
         // Act — a WebSocket call arrives while the AudioSocket call is live
         using var second = new System.Net.WebSockets.ClientWebSocket();
         var connect = async () => await second
-            .ConnectAsync(new Uri($"ws://127.0.0.1:{options.WebSocketPort}/ws/ch-second"), CancellationToken.None)
+            .ConnectAsync(new Uri($"ws://127.0.0.1:{webSocketPort}/ws/ch-second"), CancellationToken.None)
             .WaitAsync(TimeSpan.FromSeconds(10));
 
         // Assert
@@ -49,13 +50,36 @@ public sealed class CompositeAudioServerTests
             "MaxConcurrentStreams is documented as the limit across both protocols, so the one place is taken");
     }
 
-    private static int FreePort()
+    /// <summary>
+    /// An AudioSocket server and a WebSocket server built on one options instance, started and
+    /// disposed as one, so <see cref="LoopbackServerBind"/> can retry the pair on fresh servers when
+    /// either bind finds its probed port in use.
+    /// </summary>
+    private sealed class ServersSharingOneOptions(AudioServerOptions options) : IAsyncDisposable
     {
-        using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
+        public AudioSocketServer AudioSocket { get; } =
+            new(options, Microsoft.Extensions.Logging.Abstractions.NullLogger<AudioSocketServer>.Instance);
+
+        public WebSocketAudioServer WebSocket { get; } =
+            new(options, Microsoft.Extensions.Logging.Abstractions.NullLogger<WebSocketAudioServer>.Instance);
+
+        public async ValueTask StartAsync()
+        {
+            await AudioSocket.StartAsync();
+            await WebSocket.StartAsync();
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            try
+            {
+                await WebSocket.DisposeAsync();
+            }
+            finally
+            {
+                await AudioSocket.DisposeAsync();
+            }
+        }
     }
 
     [Fact]

@@ -7,6 +7,7 @@ using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging;
 using Verbara.Sdk.Ari.Audio;
 using Verbara.Sdk.Ari.Tests.TestSupport;
+using Verbara.Sdk.Tests.Shared.Sockets;
 
 namespace Verbara.Sdk.Ari.Tests.Audio;
 
@@ -554,32 +555,6 @@ public sealed class AudioSocketTransportFailureTests
             var client = new ReleaseSignallingClient(socket);
             _accepted.TrySetResult(client);
             return client;
-        }
-    }
-
-    /// <summary>
-    /// A client around an accepted socket that completes <see cref="Released"/> when its owner
-    /// disposes it, which for the AudioSocket server is the last thing its handler does.
-    /// </summary>
-    private sealed class ReleaseSignallingClient : TcpClient
-    {
-        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public ReleaseSignallingClient(Socket accepted)
-            : base(AddressFamily.InterNetwork)
-        {
-            var unused = Client;
-            Client = accepted;
-            unused.Dispose();
-        }
-
-        public Task Released => _released.Task;
-
-        protected override void Dispose(bool disposing)
-        {
-            base.Dispose(disposing);
-            if (disposing)
-                _released.TrySetResult();
         }
     }
 }
