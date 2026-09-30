@@ -191,8 +191,9 @@ public sealed class AriOutboundListener : IAriOutboundListener
                 // CancellationToken.None on the hand-off, and deliberately so: this work item carries
                 // the only reference to a connection already accepted, and a Task.Run token that
                 // skipped it would leave that connection with no owner and nothing to close it. `ct`
-                // travels with it as an argument instead. The sibling accept loop
-                // (AudioSocketServer.AcceptLoopAsync) passes None for the same reason.
+                // travels with it as an argument instead. The sibling accept loop in this package
+                // (AudioSocketServer.AcceptLoopAsync) needs no such token: it starts its handler inline,
+                // without Task.Run.
                 _ = Task.Run(() => HandleConnectionAsync(client, ct), CancellationToken.None);
                 continue;
             }

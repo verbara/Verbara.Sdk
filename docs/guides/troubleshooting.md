@@ -96,7 +96,7 @@ See [High-Load Tuning Guide](high-load-tuning.md) for sizing recommendations.
 **Symptoms:** Expected events never arrive.
 
 **Checklist:**
-1. Verify AMI user has `read = all` (or specific classes like `read = call,agent,queue`)
+1. Verify AMI user has `read = all` (or specific classes like `read = system,call,agent`: queue events are in the `agent` class, since `queue` is not an AMI class, and `system` carries `FullyBooted`, which the live state's load waits for)
 2. Check ARI application name matches your Stasis app
 3. Ensure you subscribe before the events fire (subscribe before `ConnectAsync` or use `ReplaySubject`)
 

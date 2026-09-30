@@ -1,6 +1,6 @@
 # OpenAiRealtimeExample
 
-Demonstrates a GPT-4o Realtime voice bridge: Asterisk sends audio over AudioSocket, the OpenAI Realtime API handles speech recognition and synthesis end-to-end, and tool calls are supported via registered functions.
+Demonstrates an OpenAI Realtime voice bridge: Asterisk sends audio over AudioSocket, the OpenAI Realtime API handles speech recognition and synthesis end-to-end, and tool calls are supported via registered functions.
 
 ## Prerequisites
 

@@ -214,6 +214,10 @@ All notable changes to this project will be documented in this file.
   or `DisposeAsync` awaited from an `OnEvent` handler, or waited on from an observer, hung: it waited
   for the dispatch it was running in, the socket was never released, and every later ending returned
   without releasing it.
+- **An action awaited while the connection ends is cancelled without waiting for the event handlers.** A
+  `SendActionAsync` awaited from an event handler during an ending used to wait out `DefaultResponseTimeout`
+  (2 s by default), because the ending waited for the handlers before it cancelled the pending actions. It now
+  ends at once, with the same `OperationCanceledException`.
 - **`State` reads `Disconnected` only once the socket is released**, and a `DisposeAsync` issued while
   another ending is still releasing waits for that release instead of returning with the socket open.
 - **A connection whose `ConnectAsync` fails inside `AmiConnectionFactory.CreateAndConnectAsync` is

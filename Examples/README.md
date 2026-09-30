@@ -73,7 +73,7 @@ dotnet run --project Examples/{ExampleName}/
 | [VoiceAiCartesiaExample](VoiceAiCartesiaExample/) | Voice AI with Cartesia Sonic TTS provider |
 | [VoiceAiSpeechmaticsExample](VoiceAiSpeechmaticsExample/) | Voice AI with Speechmatics STT provider |
 | [VoiceAiCustomProviderExample](VoiceAiCustomProviderExample/) | Custom VoiceAi provider implementation pattern |
-| [OpenAiRealtimeExample](OpenAiRealtimeExample/) | GPT-4o direct bridge via OpenAI Realtime API with function calling |
+| [OpenAiRealtimeExample](OpenAiRealtimeExample/) | Direct speech-to-speech bridge via OpenAI Realtime API with function calling |
 
 ### Telemetry
 
