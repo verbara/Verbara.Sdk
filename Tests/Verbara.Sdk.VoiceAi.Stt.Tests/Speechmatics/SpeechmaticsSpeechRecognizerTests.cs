@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -29,7 +30,8 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Speechmatics;
 /// half open. The Speechmatics <em>TTS</em> suite is a separate, HTTP-transport surface and does
 /// migrate (§4.5).
 /// </summary>
-public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public class SpeechmaticsSpeechRecognizerTests : IAsyncLifetime
 {
     private readonly SpeechmaticsFakeServer _server;
 
@@ -758,9 +760,15 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncDisposable
         await Task.CompletedTask;
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
-        GC.SuppressFinalize(this);
         await _server.DisposeAsync();
     }
 }

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -23,7 +24,8 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Cartesia;
 /// §7's documentation-derived route, <c>class: "synthetic"</c> with a <c>source_schema</c> block.
 /// That closes the field-set half of the D4 gap and not the drift half.
 /// </summary>
-public class CartesiaSpeechRecognizerTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public class CartesiaSpeechRecognizerTests : IAsyncLifetime
 {
     private readonly CartesiaFakeServer _server;
 
@@ -605,9 +607,15 @@ public class CartesiaSpeechRecognizerTests : IAsyncDisposable
         await Task.CompletedTask;
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
-        GC.SuppressFinalize(this);
         await _server.DisposeAsync();
     }
 }
