@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: a caller's `DisposeAsync` or `DisconnectAsync` no longer delivers the AMI events still buffered (#360)
+
+Ending an `AmiConnection` delivered every event still in its event pump before the call returned: the pump looked
+at its cancellation only while waiting for a new event, never between the events it held. With 20 events buffered
+and a 250 ms handler, a caller's `DisposeAsync` waited about 5.3 s and its handler received all 20 after asking to
+close; the pump alone took about 241 s to release 20,000 events at 10 ms each. A host could not cut that wait: the
+token it passes to `DisconnectAsync` bounds only the Logoff write.
+
+- **A caller's ending now waits for the event whose handler is running, if any, and delivers none of the events
+  still buffered** (0 of 20 in the same setup), wherever it lands: with the connection up, while a lost connection
+  is delivering its buffer, during the reconnect's backoff, or when it joins the ending of a loss without
+  `AutoReconnect`. A caller closing 500 ms into a loss's drain used to wait about 4.8 s and receive 19 events; it
+  now returns after the event in progress and receives none.
+- **A connection lost without the caller's ending is unchanged:** its buffered events are still delivered, in
+  order, before the redial or `Disconnected`.
+- **The discarded events are counted and logged.** One Warning per ending, `[AMI_EVENT] Discarded on caller ending:
+  count={Count}`, and one measurement of the count on `ami.events.dropped`, which now carries a `reason` tag:
+  `caller_ending` for these, `buffer_full` for the existing full-buffer drops. **An alert on
+  `ami.events.dropped > 0` must filter on `reason=buffer_full`**, or it fires on every close that finds events
+  buffered. The instrument's description changes with it.
+- An ending asked from inside a handler already delivered no later event; those skipped events are now counted and
+  logged the same way, after the handler returns, and `AsyncEventPump.ProcessedEvents` no longer counts them.
+- `AsyncEventPump.DisposeAsync` (public) stops after the event in progress too. A direct user that needs the buffer
+  delivered stops enqueueing and waits for `PendingCount` to reach 0 before disposing.
+- No API signature changes; the event in progress is still awaited (a handler that receives the ending's token is
+  a separate change).
+
+**Migration guide:** [`docs/guides/ami-caller-ending-buffered-events-migration.md`](docs/guides/ami-caller-ending-buffered-events-migration.md)
+
 ## [2.6.1] - 2026-09-29
 
 ### Fixed — BREAKING: the Voice AI session broker could not stop the sessions it started, and kept dispatching after it stopped (#334)
