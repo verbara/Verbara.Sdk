@@ -1256,10 +1256,11 @@ public sealed class AmiConnection : IAmiConnection
 
             _pendingEventActions.Clear();
 
-            // Completes the pump's channel and cancels it here; its consumer is awaited below, outside the lock.
+            // Completes the pump's channel here and lets its consumer deliver what is buffered; the release is
+            // awaited below, outside the lock.
             if (_eventPump is not null)
             {
-                _pumpReleased = _eventPump.DisposeAsync().AsTask();
+                _pumpReleased = _eventPump.DrainAndDisposeAsync().AsTask();
                 _eventPump = null;
             }
 
