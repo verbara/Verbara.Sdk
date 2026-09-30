@@ -209,7 +209,7 @@ public class MyConversationHandler : IConversationHandler
 | `Verbara.Sdk.VoiceAi.AudioSocket` | AudioSocket + `chan_websocket` servers with Pipelines streaming |
 | `Verbara.Sdk.VoiceAi.Stt` | STT providers: AssemblyAI, Cartesia, Deepgram, Google Speech, Speechmatics, Whisper (cloud REST), Azure Whisper |
 | `Verbara.Sdk.VoiceAi.Tts` | TTS providers: ElevenLabs (Flash 2.5), Azure, Cartesia, Speechmatics, Deepgram (Aura 2 WS), LMNT |
-| `Verbara.Sdk.VoiceAi.OpenAiRealtime` | OpenAI Realtime API bridge (GPT-4o voice-to-voice) |
+| `Verbara.Sdk.VoiceAi.OpenAiRealtime` | OpenAI Realtime API bridge (voice-to-voice, default model `gpt-realtime`) |
 | `Verbara.Sdk.VoiceAi.TurnDetection` | ML-based turn detector (Pipecat smart-turn-v3.2 ONNX) — drop-in replacement for `SilenceTurnDetector` |
 | `Verbara.Sdk.VoiceAi.Testing` | Fakes for unit testing Voice AI pipelines (STT/TTS/handler/turn-detector) |
 

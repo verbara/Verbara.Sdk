@@ -31,7 +31,7 @@ var bridge = host.Services.GetRequiredService<OpenAiRealtimeBridge>();
 bridge.Events
     .OfType<RealtimeTranscriptEvent>()
     .Where(e => e.IsFinal)
-    .Subscribe(e => Console.WriteLine($"[{e.ChannelId:D}] User said: {e.Transcript}"));
+    .Subscribe(e => Console.WriteLine($"[{e.ChannelId:D}] Assistant said: {e.Transcript}"));
 
 bridge.Events
     .OfType<RealtimeResponseStartedEvent>()
@@ -46,7 +46,7 @@ bridge.Events
     .Subscribe(e => Console.Error.WriteLine($"[{e.ChannelId:D}] ERROR: {e.Message}"));
 
 Console.WriteLine("OpenAI Realtime bridge listening on AudioSocket port 9092.");
-Console.WriteLine("Dial your Asterisk number to start a conversation with GPT-4o.");
+Console.WriteLine("Dial your Asterisk number to start a conversation with the OpenAI Realtime model.");
 Console.WriteLine("Press Ctrl+C to stop.");
 
 await host.RunAsync();

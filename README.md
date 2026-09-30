@@ -142,7 +142,7 @@ dotnet add package Verbara.Sdk.VoiceAi
 dotnet add package Verbara.Sdk.VoiceAi.Stt      # STT providers
 dotnet add package Verbara.Sdk.VoiceAi.Tts      # TTS providers
 
-# Voice AI — OpenAI Realtime (GPT-4o direct bridge)
+# Voice AI — OpenAI Realtime (direct speech-to-speech bridge)
 dotnet add package Verbara.Sdk.VoiceAi.OpenAiRealtime
 ```
 
@@ -340,7 +340,7 @@ class MyConversationHandler : IConversationHandler
 }
 ```
 
-### Voice AI: OpenAI Realtime Bridge (GPT-4o direct)
+### Voice AI: OpenAI Realtime Bridge (direct speech-to-speech)
 
 Replace the entire STT+LLM+TTS chain with a single WebSocket to OpenAI Realtime API:
 
@@ -459,7 +459,7 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 | **Verbara.Sdk.VoiceAi.AudioSocket** | AudioSocket + `chan_websocket` (JSON control protocol) servers with `System.IO.Pipelines` bidirectional streaming |
 | **Verbara.Sdk.VoiceAi.Stt** | STT providers: AssemblyAI, Cartesia (Ink-Whisper), Deepgram, Google Speech, Speechmatics, Whisper (cloud REST), Azure Whisper |
 | **Verbara.Sdk.VoiceAi.Tts** | TTS providers: ElevenLabs (Flash 2.5), Azure, Cartesia (Sonic-3), Speechmatics, Deepgram (Aura 2 WS), LMNT (WS+HTTP; vendor shut down). Vendor-published latencies, cited and dated, are in that package's README |
-| **Verbara.Sdk.VoiceAi.OpenAiRealtime** | OpenAI Realtime API bridge (GPT-4o): dual-loop WebSocket, function calling, observability events |
+| **Verbara.Sdk.VoiceAi.OpenAiRealtime** | OpenAI Realtime API bridge (default model `gpt-realtime`): dual-loop WebSocket, function calling, observability events |
 | **Verbara.Sdk.VoiceAi.TurnDetection** | ML-based turn detector using the Pipecat [smart-turn-v3.2-cpu](https://huggingface.co/pipecat-ai/smart-turn-v3/blob/main/benchmarks/smart-turn-v3.2-cpu.md) ONNX model, for which Pipecat publish 94.26% English accuracy. Replaces `SilenceTurnDetector` via `AddSmartTurnDetection()`. |
 | **Verbara.Sdk.VoiceAi.Testing** | Fake STT/TTS/handler/turn-detector implementations for unit testing pipelines |
 
@@ -493,7 +493,7 @@ The `Examples/` directory contains standalone console applications demonstrating
 | `VoiceAiCartesiaExample` | Voice AI with Cartesia Sonic TTS provider |
 | `VoiceAiSpeechmaticsExample` | Voice AI with Speechmatics STT provider |
 | `VoiceAiCustomProviderExample` | Custom VoiceAi provider implementation pattern |
-| `OpenAiRealtimeExample` | GPT-4o direct bridge via OpenAI Realtime API with function calling |
+| `OpenAiRealtimeExample` | Direct speech-to-speech bridge via OpenAI Realtime API with function calling |
 | `WebSocketMediaExample` | chan_websocket audio + JSON control protocol |
 | `TelemetryExample` | OpenTelemetry discovery: ActivitySources, Meters, HealthChecks |
 | `PbxAdmin` | _(Moved to [own repo](https://github.com/verbara/Verbara.Sdk.PbxAdmin))_ |

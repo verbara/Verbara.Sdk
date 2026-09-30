@@ -77,10 +77,10 @@ All five VoiceAi packages publish a `Meter` + `ActivitySource` + `IHealthCheck`.
 
 | Meter | Key Instruments |
 |-------|-----------------|
-| `Verbara.Sdk.VoiceAi` | `voiceai.sessions.started` / `.completed` / `.failed`, `voiceai.session.duration` (histogram) |
-| `Verbara.Sdk.VoiceAi.Stt` | `stt.transcriptions.started` / `.completed` / `.failed`, `stt.transcription.latency` |
-| `Verbara.Sdk.VoiceAi.Tts` | `tts.syntheses.started` / `.completed` / `.failed`, `tts.synthesis.latency`, `tts.synthesis.characters` |
-| `Verbara.Sdk.VoiceAi.AudioSocket` | `audiosocket.frames.{in,out}`, `audiosocket.bytes.{in,out}` |
+| `Verbara.Sdk.VoiceAi` | `voiceai.sessions.started` / `.completed` / `.failed`, `voiceai.session.duration_ms` (histogram) |
+| `Verbara.Sdk.VoiceAi.Stt` | `stt.transcriptions.started` / `.completed` / `.failed`, `stt.transcription.latency_ms` |
+| `Verbara.Sdk.VoiceAi.Tts` | `tts.syntheses.started` / `.completed` / `.failed` / `.silent`, `tts.synthesis.latency_ms`, `tts.synthesis.ttfa_ms`, `tts.synthesis.characters` |
+| `Verbara.Sdk.VoiceAi.AudioSocket` | `audiosocket.connections.{accepted,closed}`, `audiosocket.frames.{received,sent}`, `audiosocket.bytes.{received,sent}`, `audiosocket.session.duration_ms` |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | `openai_realtime.sessions.{started,completed,failed,close_unanswered}`, `openai_realtime.session.duration_ms` |
 
 HealthChecks exposed via `/health` when using the standard ASP.NET Core pipeline:

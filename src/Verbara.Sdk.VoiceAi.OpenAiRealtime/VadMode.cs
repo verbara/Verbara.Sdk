@@ -7,8 +7,9 @@ public enum VadMode
     ServerSide,
 
     /// <summary>
-    /// VAD disabled — caller must send <c>input_audio_buffer.commit</c> manually.
-    /// Use only when driving turn boundaries externally.
+    /// VAD disabled: the session is opened with <c>turn_detection</c> set to <c>null</c>, so OpenAI detects no end
+    /// of turn. This package sends no <c>input_audio_buffer.commit</c> and exposes no member that does, so in this
+    /// mode the model does not answer the caller's audio. Use <see cref="ServerSide"/>.
     /// </summary>
     Disabled
 }

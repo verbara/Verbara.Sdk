@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>OpenAI Realtime API bridge for Verbara.Sdk.VoiceAi — connects Asterisk AudioSocket directly to GPT-4o in real time, with function calling and observability. Zero third-party dependencies.</Description>
+    <Description>OpenAI Realtime API bridge for Verbara.Sdk.VoiceAi — connects Asterisk AudioSocket directly to an OpenAI Realtime model, with function calling and observability. Zero third-party dependencies.</Description>
     <PackageTags>$(PackageTags);voiceai;openai;realtime;gpt4o;speech;function-calling</PackageTags>
   </PropertyGroup>
   <ItemGroup>
