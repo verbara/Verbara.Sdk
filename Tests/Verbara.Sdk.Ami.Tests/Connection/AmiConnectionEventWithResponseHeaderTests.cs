@@ -266,7 +266,96 @@ public sealed class AmiConnectionEventWithResponseHeaderTests
         }
     }
 
+    // ── The counters ─────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// An <c>OriginateResponse</c> is counted where it is delivered: in <c>ami.events.received</c>, not in
+    /// <c>ami.responses.received</c>. Between two sentinels the peer writes the originate's response, its
+    /// <c>OriginateResponse</c> and the second sentinel: one response and two events. The counters are process-wide, so
+    /// only what this test's connection reads is counted: its reader loop runs in the execution context of the connect,
+    /// which carries <see cref="CountedHere"/>.
+    /// </summary>
+    [Fact]
+    public async Task ReaderLoop_ShouldCountOriginateResponseAsAnEvent_WhenTheEventCarriesAResponseHeader()
+    {
+        using var counts = new ReceivedCounts();
+        CountedHere.Value = true;
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory();
+        await using var connection = Create(factory);
+        var before = new Received();
+        var after = new Received(SecondSentinelPeer);
+        connection.OnEvent += evt =>
+        {
+            before.Add(evt);
+            after.Add(evt);
+            return ValueTask.CompletedTask;
+        };
+        var peer = await ConnectAsync(connection, factory, peerCts);
+        (await WriteSentinelAsync(peer)).Should().BeTrue("the peer sends the first sentinel");
+        (await CompletesWithinBoundAsync(before.Sentinel)).Should().BeTrue("the handler receives the first sentinel");
+        var (eventsBefore, responsesBefore) = counts.Read();
+
+        var ended = ReadToEndAsync(connection.SendEventGeneratingActionAsync(NewOriginate()));
+        var id = await ReadActionIdAsync(peer, peerCts);
+        (await AnswerOriginateAsync(peer, id, "Success")).Should().BeTrue("the peer answers the originate as Asterisk does");
+        (await peer.WriteEventAsync("PeerStatus", [new("Peer", SecondSentinelPeer)]))
+            .Should().BeTrue("the peer sends the second sentinel");
+        (await CompletesWithinBoundAsync(after.Sentinel)).Should().BeTrue("the handler receives the second sentinel");
+        var (eventsAfter, responsesAfter) = counts.Read();
+        await ended.WaitAsync(Bound);
+
+        using (new AssertionScope())
+        {
+            (responsesAfter - responsesBefore).Should().Be(1,
+                "ami.responses.received counts the originate's own response, and the OriginateResponse is not one");
+            (eventsAfter - eventsBefore).Should().Be(2,
+                "ami.events.received counts the OriginateResponse and the second sentinel");
+        }
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────────────────────────────
+
+    private const string SecondSentinelPeer = "SIP/sentinel-2";
+
+    /// <summary>Marks the execution context whose counter increments <see cref="ReceivedCounts"/> keeps.</summary>
+    private static readonly AsyncLocal<bool> CountedHere = new();
+
+    /// <summary>
+    /// Sums <c>ami.events.received</c> and <c>ami.responses.received</c>, keeping only the increments made in an
+    /// execution context that carries <see cref="CountedHere"/>.
+    /// </summary>
+    private sealed class ReceivedCounts : IDisposable
+    {
+        private readonly System.Diagnostics.Metrics.MeterListener _listener = new();
+        private long _events;
+        private long _responses;
+
+        public ReceivedCounts()
+        {
+            _listener.InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Name is "ami.events.received" or "ami.responses.received")
+                    listener.EnableMeasurementEvents(instrument);
+            };
+            _listener.SetMeasurementEventCallback<long>((instrument, measurement, _, _) =>
+            {
+                if (!CountedHere.Value)
+                    return;
+
+                if (instrument.Name == "ami.events.received")
+                    Interlocked.Add(ref _events, measurement);
+                else
+                    Interlocked.Add(ref _responses, measurement);
+            });
+            _listener.Start();
+        }
+
+        public (long Events, long Responses) Read() =>
+            (Interlocked.Read(ref _events), Interlocked.Read(ref _responses));
+
+        public void Dispose() => _listener.Dispose();
+    }
 
     private const string OriginatedChannel = "Local/s@hold-00000132;1";
 
@@ -374,9 +463,10 @@ public sealed class AmiConnectionEventWithResponseHeaderTests
 
     /// <summary>
     /// Records every event delivered to it, as an <c>OnEvent</c> handler or as an observer, and completes
-    /// <see cref="Sentinel"/> when the sentinel PeerStatus arrives.
+    /// <see cref="Sentinel"/> when the sentinel PeerStatus (by default, the one <see cref="WriteSentinelAsync"/> writes)
+    /// arrives.
     /// </summary>
-    private sealed class Received : IObserver<ManagerEvent>
+    private sealed class Received(string sentinelPeer = SentinelPeer) : IObserver<ManagerEvent>
     {
         private readonly Lock _gate = new();
         private readonly List<ManagerEvent> _events = [];
@@ -386,7 +476,7 @@ public sealed class AmiConnectionEventWithResponseHeaderTests
 
         public void Add(ManagerEvent evt)
         {
-            if (evt is PeerStatusEvent { Peer: SentinelPeer })
+            if (evt is PeerStatusEvent peerStatus && peerStatus.Peer == sentinelPeer)
             {
                 _sentinel.TrySetResult();
                 return;

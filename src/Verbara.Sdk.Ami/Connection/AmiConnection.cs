@@ -800,10 +800,18 @@ public sealed class AmiConnection : IAmiConnection
                     var actionId = msg.ActionId;
                     if (actionId is not null && _pendingEventActions.TryGetValue(actionId, out var collector))
                     {
-                        // Check for "complete" events
                         var eventName = msg.EventType ?? "";
                         if (eventName.EndsWith("Complete", StringComparison.OrdinalIgnoreCase))
                         {
+                            // A list's "…Complete" event marks its end and is not part of it.
+                            collector.Complete();
+                            _pendingEventActions.TryRemove(actionId, out _);
+                        }
+                        else if (string.Equals(eventName, "OriginateResponse", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // An async Originate gets exactly one OriginateResponse, and it is the sequence's payload:
+                            // yield it, then end, rather than leave the caller to wait for DefaultEventTimeout.
+                            collector.Add(evt);
                             collector.Complete();
                             _pendingEventActions.TryRemove(actionId, out _);
                         }
@@ -1439,7 +1447,8 @@ internal sealed class EventActionOutcome
 /// Uses a bounded System.Threading.Channel to prevent unbounded memory growth.
 /// </summary>
 /// <remarks>
-/// It ends once, in one of three ways: Asterisk completes the list (<see cref="Complete"/>), Asterisk refuses the action
+/// It ends once, in one of three ways: Asterisk completes the action (<see cref="Complete"/>, at a list's
+/// <c>…Complete</c> event or after an originate's one <c>OriginateResponse</c>), Asterisk refuses the action
 /// (<see cref="Reject"/>), or the session ends first (<see cref="Abandon"/>). The first way to arrive is the one it
 /// records, and each records how it ended before it completes the channel, so a reader that sees the end sees why.
 /// </remarks>
@@ -1465,7 +1474,7 @@ internal sealed class ResponseEventCollector
 
     public void Add(ManagerEvent evt) => _channel.Writer.TryWrite(evt);
 
-    /// <summary>Asterisk completed the action's list.</summary>
+    /// <summary>Asterisk completed the action: its list's <c>…Complete</c> event, or an originate's <c>OriginateResponse</c>.</summary>
     public void Complete()
     {
         if (Interlocked.Exchange(ref _ended, 1) == 0)
