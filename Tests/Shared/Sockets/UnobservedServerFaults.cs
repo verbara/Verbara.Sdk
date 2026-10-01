@@ -36,13 +36,15 @@ internal sealed class UnobservedServerFaults : IDisposable
     /// <summary>
     /// Collects, so a faulted task that nothing references any more is finalised and its
     /// exception, if nothing observed it, is published before this returns. Call it only once the
-    /// task in question has completed.
+    /// task in question has completed. Each pass is the same request as <c>GC.Collect()</c> — a full,
+    /// forced, blocking collection — written with its intent explicit (CodeQL's <c>cs/call-to-gc</c>
+    /// flags only the parameterless form).
     /// </summary>
     public static void CollectDiscardedTasks()
     {
         for (var pass = 0; pass < 3; pass++)
         {
-            GC.Collect();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
             GC.WaitForPendingFinalizers();
         }
     }
