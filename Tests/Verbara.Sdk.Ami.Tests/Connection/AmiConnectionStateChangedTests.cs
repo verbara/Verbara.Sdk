@@ -28,9 +28,9 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// awaits <c>PendingNotifications</c>, the tail of the queue the changes are delivered on.
 /// </para>
 /// <para>
-/// The dispatch mark (<c>_inDispatch</c>) is a private field, read by reflection (a test project is not AOT-published, and
-/// an <c>extern</c> accessor reads as unmanaged code to the code scan). A renamed field fails the test with
-/// <see cref="MissingFieldException"/>.
+/// The dispatch mark (<c>InDispatch</c>, which reads the current dispatch's frame) is a private property, read by
+/// reflection (a test project is not AOT-published, and an <c>extern</c> accessor reads as unmanaged code to the code
+/// scan). A renamed property fails the test with <see cref="MissingMemberException"/>.
 /// </para>
 /// </remarks>
 public sealed class AmiConnectionStateChangedTests : IAsyncLifetime, IDisposable
@@ -434,12 +434,12 @@ public sealed class AmiConnectionStateChangedTests : IAsyncLifetime, IDisposable
 
     /// <summary>The connection's dispatch mark, as the current execution context reads it.</summary>
     private static bool InDispatch(AmiConnection connection) =>
-        ((AsyncLocal<bool>)PrivateField(typeof(AmiConnection), "_inDispatch").GetValue(connection)!).Value;
+        (bool)PrivateProperty(typeof(AmiConnection), "InDispatch").GetValue(connection)!;
 
-    private static FieldInfo PrivateField(
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicFields)] Type owner, string name) =>
-        owner.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
-        ?? throw new MissingFieldException(owner.FullName, name);
+    private static PropertyInfo PrivateProperty(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicProperties)] Type owner, string name) =>
+        owner.GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingMemberException(owner.FullName, name);
 
     private static TaskCompletionSource NewSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 

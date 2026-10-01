@@ -75,6 +75,9 @@ internal static partial class AmiConnectionLog
         Message = "[AMI] A {Event} handler has not returned after {Seconds} s; later notifications wait for it")]
     public static partial void NotificationHandlerStuck(ILogger logger, string @event, double seconds);
 
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI] Reconnected not delivered: the caller has ended the connection")]
+    public static partial void ReconnectedDroppedAfterEnding(ILogger logger);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] OnEvent handler threw on {EventType}")]
     public static partial void HandlerFault(ILogger logger, string? eventType, Exception exception);
 }
@@ -158,9 +161,21 @@ public sealed class AmiConnection : IAmiConnection
     // first and no loop starts.
     private Task? _reconnectLoop;
 
-    // True on the event pump's consumer, where every dispatch runs, and in whatever an observer's OnNext or an
-    // OnEvent handler calls or awaits from there. Set by DispatchEventAsync.
-    private readonly AsyncLocal<bool> _inDispatch = new();
+    // The dispatch the current execution context runs in, if any. DispatchEventAsync sets a new frame for every event
+    // and marks it finished once that event's observers and every OnEvent handler have returned, so the frame flows
+    // into whatever an observer or a handler calls, awaits or starts from there, and reads as inside the dispatch only
+    // while that dispatch runs. A task a dispatch started and left running is outside once the dispatch has returned.
+    private readonly AsyncLocal<DispatchFrame?> _dispatchFrame = new();
+
+    /// <summary>One event's dispatch, as an ending started from it sees it.</summary>
+    private sealed class DispatchFrame
+    {
+        // Written once, by the dispatch's own finally; read by an ending on any thread.
+        public volatile bool Finished;
+    }
+
+    // True when the current execution context runs inside a dispatch that has not returned yet.
+    private bool InDispatch => _dispatchFrame.Value is { Finished: false };
 
     // Completed when the caller ends the connection from inside its own event dispatch. That dispatch is the
     // pump's consumer, and the reconnect loop's release may be waiting on it, so from then on no ending waits on
@@ -1343,6 +1358,14 @@ public sealed class AmiConnection : IAmiConnection
 
         Notify(nameof(Reconnected), () =>
         {
+            // Read at delivery time: the caller's ending, recorded while this notification waited behind a slow
+            // handler, ends the connection for good, and an ending raises no Reconnected.
+            if (_closedByCaller)
+            {
+                AmiConnectionLog.ReconnectedDroppedAfterEnding(_logger);
+                return;
+            }
+
             // Read at delivery time: a handler removed while this notification waited is not called.
             var handlers = Reconnected;
             if (handlers is null)
@@ -1409,7 +1432,7 @@ public sealed class AmiConnection : IAmiConnection
     /// <summary>
     /// <see cref="Notify"/> for a caller that holds <c>_notifyLock</c>. The notification is queued with the execution
     /// context's flow suppressed: it is often queued from inside an event dispatch (an ending an <see cref="OnEvent"/>
-    /// handler called), and a handler must not inherit that dispatch's mark (<c>_inDispatch</c>) or anything else that
+    /// handler called), and a handler must not inherit that dispatch's frame (<c>_dispatchFrame</c>) or anything else that
     /// flows with the context of whoever queued it.
     /// </summary>
     private void NotifyLocked(string eventName, Action notification)
@@ -1463,70 +1486,92 @@ public sealed class AmiConnection : IAmiConnection
         if (_endedFromDispatch.Task.IsCompleted)
             return ValueTask.CompletedTask;
 
-        // Marks the pump's consumer as the dispatch. Set once: it persists on that task for every later event, and
-        // flows into each OnNext and each OnEvent handler and into whatever they call or await, so an ending
-        // called from there knows not to wait for the dispatch it runs in.
-        if (!_inDispatch.Value)
-            _inDispatch.Value = true;
-
-        var sw = Stopwatch.GetTimestamp();
-
-        // Lock-free read: volatile array reference swap is atomic
-        var snapshot = _observers;
-
-        foreach (var observer in snapshot)
+        // A new frame for this dispatch. It flows into each OnNext and each OnEvent handler and into whatever they
+        // call, await or start from there, so an ending called from there knows not to wait for the dispatch it runs
+        // in. It is marked finished only once every handler has returned, faulted or not (AwaitHandlersAsync's
+        // finally when one is still running, the finally below otherwise): a handler that awaits an ending while
+        // another one is still running is inside the dispatch for as long as the dispatch waits for it.
+        var frame = new DispatchFrame();
+        _dispatchFrame.Value = frame;
+        var handedOff = false;
+        try
         {
-            try
+            var sw = Stopwatch.GetTimestamp();
+
+            // Lock-free read: volatile array reference swap is atomic
+            var snapshot = _observers;
+
+            foreach (var observer in snapshot)
             {
-                observer.OnNext(evt);
+                try
+                {
+                    observer.OnNext(evt);
+                }
+                catch
+                {
+                    // Observer errors should not crash the pump
+                }
             }
-            catch
+
+            AmiMetrics.EventsDispatched.Add(1);
+            AmiMetrics.EventDispatchMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
+
+            // Every handler is started in order, each guarded, before any is awaited; then every one that has not
+            // completed is awaited, each guarded. A failure is logged and counted, and stops neither the other
+            // handlers nor the pump.
+            var handlers = _handlers;
+            ValueTask[]? pending = null;
+            var pendingCount = 0;
+            for (var i = 0; i < handlers.Length; i++)
             {
-                // Observer errors should not crash the pump
+                try
+                {
+                    var task = handlers[i](evt);
+                    if (task.IsCompletedSuccessfully)
+                        continue;
+
+                    // Still running, or already faulted or cancelled: awaited below, where a failure is observed.
+                    (pending ??= new ValueTask[handlers.Length - i])[pendingCount++] = task;
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    RecordHandlerFault(evt, ex);
+                }
             }
+
+            if (pendingCount == 0)
+                return ValueTask.CompletedTask;
+
+            var awaiting = AwaitHandlersAsync(pending!, pendingCount, evt, frame);
+            handedOff = true;
+            return awaiting;
         }
-
-        AmiMetrics.EventsDispatched.Add(1);
-        AmiMetrics.EventDispatchMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
-
-        // Every handler is started in order, each guarded, before any is awaited; then every one that has not
-        // completed is awaited, each guarded. A failure is logged and counted, and stops neither the other handlers
-        // nor the pump.
-        var handlers = _handlers;
-        ValueTask[]? pending = null;
-        var pendingCount = 0;
-        for (var i = 0; i < handlers.Length; i++)
+        finally
         {
-            try
-            {
-                var task = handlers[i](evt);
-                if (task.IsCompletedSuccessfully)
-                    continue;
-
-                // Still running, or already faulted or cancelled: awaited below, where a failure is observed.
-                (pending ??= new ValueTask[handlers.Length - i])[pendingCount++] = task;
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
-                RecordHandlerFault(evt, ex);
-            }
+            if (!handedOff)
+                frame.Finished = true;
         }
-
-        return pendingCount == 0 ? ValueTask.CompletedTask : AwaitHandlersAsync(pending!, pendingCount, evt);
     }
 
-    private async ValueTask AwaitHandlersAsync(ValueTask[] pending, int count, ManagerEvent evt)
+    private async ValueTask AwaitHandlersAsync(ValueTask[] pending, int count, ManagerEvent evt, DispatchFrame frame)
     {
-        for (var i = 0; i < count; i++)
+        try
         {
-            try
+            for (var i = 0; i < count; i++)
             {
-                await pending[i].ConfigureAwait(false);
+                try
+                {
+                    await pending[i].ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    RecordHandlerFault(evt, ex);
+                }
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
-                RecordHandlerFault(evt, ex);
-            }
+        }
+        finally
+        {
+            frame.Finished = true;
         }
     }
 
@@ -1600,7 +1645,7 @@ public sealed class AmiConnection : IAmiConnection
             reconnectLoop = _reconnectLoop;
         }
 
-        if (byCaller && _inDispatch.Value)
+        if (byCaller && InDispatch)
         {
             // Called from inside this connection's own event dispatch, which waits for this call: no ending may
             // wait for that dispatch, or for the loop whose release may be waiting on it.
@@ -1804,12 +1849,24 @@ public sealed class AmiConnection : IAmiConnection
     /// <c>[AMI_EVENT] Discarded on caller ending</c>, with the count.
     /// </para>
     /// <para>
-    /// The one exception is a call made from inside the connection's own event dispatch: an
-    /// <see cref="OnEvent"/> handler that awaits it, an observer's <c>OnNext</c> that waits on it, or anything
-    /// they call or start from there, such as a server pool that removes this connection's server. That
-    /// dispatch is waiting for the call, so the call does not wait for it. It releases everything else,
-    /// reports <see cref="AmiConnectionState.Disconnected"/> and returns. The event pump dispatches no later
-    /// event, and stops once the calling dispatch returns.
+    /// The one exception is a call made from inside the connection's own event dispatch, while that dispatch is
+    /// running: an <see cref="OnEvent"/> handler that awaits it, an observer's <c>OnNext</c> that waits on it, or
+    /// anything they call from there, such as a server pool that removes this connection's server, or a task they
+    /// start that calls it before the dispatch has returned. That dispatch is waiting for the call, so the call does
+    /// not wait for it. It releases everything else, reports <see cref="AmiConnectionState.Disconnected"/> and
+    /// returns. The event pump dispatches no later event, and stops once the calling dispatch returns.
+    /// </para>
+    /// <para>
+    /// A task a dispatch started and left running is no longer inside it once that dispatch has returned: a call it
+    /// makes from then on waits for the event in progress and releases everything, as a call from anywhere else does.
+    /// A handler that waits for an ending should therefore call this method, never await the stored task of a call
+    /// made outside its own dispatch (by the caller, or by a task an earlier, finished dispatch started): that ending
+    /// waits for the dispatch in progress, the dispatch waits for the ending, and neither finishes.
+    /// </para>
+    /// <para>
+    /// A <see cref="Reconnected"/> still queued when this call is made is not delivered. The state changes of this
+    /// ending are still announced on <see cref="StateChanged"/>, and can be delivered after this call has returned:
+    /// the call does not wait for the notification queue.
     /// </para>
     /// </remarks>
     public async ValueTask DisposeAsync()

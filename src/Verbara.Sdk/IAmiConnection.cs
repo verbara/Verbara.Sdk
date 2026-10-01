@@ -145,6 +145,18 @@ public interface IAmiConnection : IAsyncDisposable
     /// are counted on <c>ami.events.dropped</c> with <c>reason=caller_ending</c> and logged once at Warning with the
     /// count. A connection lost without this call still delivers every buffered event, in order.
     /// </para>
+    /// <para>
+    /// A <see cref="Reconnected"/> queued before this call and still undelivered is dropped: no handler runs for it.
+    /// The ending's own state changes are still raised on <see cref="StateChanged"/>, possibly after the call has
+    /// returned; the ending does not wait for the notification queue.
+    /// </para>
+    /// <para>
+    /// Called from inside the connection's own event dispatch while that dispatch is running (an event handler that
+    /// awaits it, or a task the handler started that calls it before the dispatch returns), the ending does not wait
+    /// for that dispatch, which is waiting for it. A task a dispatch left running is outside it once the dispatch has
+    /// returned, and its call waits like any other. A handler that waits for an ending calls this method; awaiting the
+    /// stored task of an ending started elsewhere makes the dispatch and that ending wait for each other.
+    /// </para>
     /// </remarks>
     ValueTask DisconnectAsync(CancellationToken cancellationToken = default);
 }
