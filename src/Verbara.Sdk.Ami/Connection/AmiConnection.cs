@@ -110,6 +110,11 @@ public sealed class AmiConnection : IAmiConnection
     private static readonly KeyValuePair<string, object?> BufferFullReason = new("reason", "buffer_full");
     private static readonly KeyValuePair<string, object?> CallerEndingReason = new("reason", "caller_ending");
 
+    // How long the caller's ending tries its Logoff: the wait for the write lock and the write itself. A send whose write
+    // is blocked by a peer that stopped reading holds the lock until the ending's release disposes the socket, so the
+    // Logoff gives up after this and the release runs. A Logoff to a peer that reads is written in well under it.
+    private static readonly TimeSpan LogoffBound = TimeSpan.FromSeconds(2);
+
     /// <summary>The longest delay <see cref="CancellationTokenSource.CancelAfter(TimeSpan)"/> takes.</summary>
     private static readonly TimeSpan MaxCancelAfter = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
 
@@ -415,18 +420,28 @@ public sealed class AmiConnection : IAmiConnection
                 var connectToken = connectCts.Token;
 
                 socket = _socketFactory.Create();
-                var reader = new AmiProtocolReader(socket.Input);
-                var writer = new AmiProtocolWriter(socket.Output);
                 lock (_endingLock)
                 {
                     ThrowIfEndingRecordedLocked(byLoop);
                     _socket = socket;
-                    _reader = reader;
-                    _writer = writer;
                     socketPublished = true;
                 }
 
                 await socket.ConnectAsync(_options.Hostname, _options.Port, _options.UseSsl, connectToken);
+
+                // The transport's pipes exist only once it is connected (PipelineSocketConnection throws before), so the
+                // reader and writer are made here. Under the lock, once no ending is recorded: an ending's release, which
+                // disposes the published socket and its pipes, has not begun.
+                AmiProtocolReader reader;
+                AmiProtocolWriter writer;
+                lock (_endingLock)
+                {
+                    ThrowIfEndingRecordedLocked(byLoop);
+                    reader = new AmiProtocolReader(socket.Input);
+                    writer = new AmiProtocolWriter(socket.Output);
+                    _reader = reader;
+                    _writer = writer;
+                }
 
                 // Read protocol identifier
                 var identMsg = await reader.ReadMessageAsync(connectToken);
@@ -830,14 +845,14 @@ public sealed class AmiConnection : IAmiConnection
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
-            await WriteActionLockedAsync(actionName, actionId, fields, cancellationToken);
+            await WriteActionLockedAsync(actionName, actionId, fields, sending: true, cancellationToken);
             AmiMetrics.ActionsSent.Add(1);
 
             using var timeout = new CancellationTokenSource(_options.DefaultResponseTimeout);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
 
             var sw = Stopwatch.GetTimestamp();
-            var responseMsg = await tcs.Task.WaitAsync(linked.Token);
+            var responseMsg = await AwaitResponseAsync(tcs, linked.Token, cancellationToken);
             AmiMetrics.ActionRoundtripMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
 
             // Use source-generated deserializer for typed response mapping
@@ -873,14 +888,14 @@ public sealed class AmiConnection : IAmiConnection
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
-            await WriteActionLockedAsync(actionName, actionId, fields, cancellationToken);
+            await WriteActionLockedAsync(actionName, actionId, fields, sending: true, cancellationToken);
             AmiMetrics.ActionsSent.Add(1);
 
             using var timeout = new CancellationTokenSource(_options.DefaultResponseTimeout);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
 
             var sw = Stopwatch.GetTimestamp();
-            var responseMsg = await tcs.Task.WaitAsync(linked.Token);
+            var responseMsg = await AwaitResponseAsync(tcs, linked.Token, cancellationToken);
             AmiMetrics.ActionRoundtripMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
 
             // Use source-generated deserializer for full typed response
@@ -994,7 +1009,7 @@ public sealed class AmiConnection : IAmiConnection
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
-            await WriteActionLockedAsync(actionName, actionId, fields, ct);
+            await WriteActionLockedAsync(actionName, actionId, fields, sending: true, ct);
 
             var eventCount = 0;
             await foreach (var evt in collector.ReadAllAsync(ct))
@@ -1035,18 +1050,62 @@ public sealed class AmiConnection : IAmiConnection
         return list;
     }
 
-    /// <summary>Serialize writes to the PipeWriter to prevent interleaving from concurrent callers.</summary>
+    /// <summary>
+    /// Writes one action under the write lock, which serializes writes so that concurrent callers never interleave.
+    /// </summary>
+    /// <remarks>
+    /// An ending may have begun while the caller waited for the lock: it writes <c>Disconnecting</c> (or a loss writes
+    /// <c>Reconnecting</c>) before it releases anything, and its release disposes the socket and then clears the writer
+    /// under this same lock. So a send re-checks the state once it holds the lock, and a writer already cleared, or a
+    /// flush that finds the transport's output completed, is reported as <see cref="AmiNotConnectedException"/> with
+    /// the state — what the same send throws a moment later — never as a <see cref="NullReferenceException"/> or a
+    /// write that silently went nowhere.
+    /// </remarks>
+    /// <param name="actionName">The action's name.</param>
+    /// <param name="actionId">The action's ActionID.</param>
+    /// <param name="fields">The action's fields.</param>
+    /// <param name="sending">
+    /// <see langword="true"/> for the three send paths, which re-check that the connection is connected under the lock;
+    /// <see langword="false"/> for the Logoff of the caller's ending, which writes while the state is
+    /// <c>Disconnecting</c>.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the wait for the lock and the write.</param>
     private async ValueTask WriteActionLockedAsync(string actionName, string actionId,
-        IEnumerable<KeyValuePair<string, string>> fields, CancellationToken cancellationToken)
+        IEnumerable<KeyValuePair<string, string>> fields, bool sending, CancellationToken cancellationToken)
     {
         await _writeLock.WaitAsync(cancellationToken);
         try
         {
-            await _writer!.WriteActionAsync(actionName, actionId, fields, cancellationToken);
+            if (sending)
+                EnsureConnected();
+
+            var writer = _writer ?? throw NotConnected();
+            if (await writer.WriteActionFlushAsync(actionName, actionId, fields, cancellationToken))
+                throw NotConnected();
         }
         finally
         {
             _writeLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Waits for an action's response. A response the release of the connection's ending abandoned is reported as
+    /// <see cref="AmiNotConnectedException"/> with the state, not as the cancellation that release gives it; the
+    /// caller's own token, and the response timeout, still surface as their <see cref="OperationCanceledException"/>.
+    /// </summary>
+    private async Task<AmiMessage> AwaitResponseAsync(
+        TaskCompletionSource<AmiMessage> response, CancellationToken bound, CancellationToken callerToken)
+    {
+        try
+        {
+            return await response.Task.WaitAsync(bound);
+        }
+        catch (OperationCanceledException) when (response.Task.IsCanceled
+                                                 && !callerToken.IsCancellationRequested
+                                                 && EndingRecorded())
+        {
+            throw NotConnected();
         }
     }
 
@@ -1682,7 +1741,11 @@ public sealed class AmiConnection : IAmiConnection
             {
                 try
                 {
-                    await WriteActionLockedAsync("Logoff", NextActionId(), [], logoffToken);
+                    // Bounded: a send whose write is blocked by a peer that stopped reading holds the write lock until
+                    // the release below disposes the socket, so an unbounded wait here would never reach that release.
+                    using var bounded = CancellationTokenSource.CreateLinkedTokenSource(logoffToken);
+                    bounded.CancelAfter(LogoffBound);
+                    await WriteActionLockedAsync("Logoff", NextActionId(), [], sending: false, bounded.Token);
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
@@ -1760,8 +1823,19 @@ public sealed class AmiConnection : IAmiConnection
                 _socket = null;
             }
 
-            _reader = null;
-            _writer = null;
+            // Under the write lock, after the socket's disposal: a send that holds the lock re-checks the state and the
+            // writer there, and a write still in flight is ended by that disposal, so this wait never stands behind a
+            // blocked write.
+            await _writeLock.WaitAsync();
+            try
+            {
+                _reader = null;
+                _writer = null;
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
 
             _cts?.Dispose();
             _cts = null;
@@ -1886,9 +1960,11 @@ public sealed class AmiConnection : IAmiConnection
     {
         if (_state != AmiConnectionState.Connected)
         {
-            throw new AmiNotConnectedException($"Not connected. Current state: {_state}");
+            throw NotConnected();
         }
     }
+
+    private AmiNotConnectedException NotConnected() => new($"Not connected. Current state: {_state}");
 
     private sealed class Unsubscriber(AmiConnection connection, IObserver<ManagerEvent> observer) : IDisposable
     {

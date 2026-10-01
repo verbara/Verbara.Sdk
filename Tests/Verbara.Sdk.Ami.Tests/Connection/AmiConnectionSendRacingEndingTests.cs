@@ -150,6 +150,100 @@ public sealed class AmiConnectionSendRacingEndingTests
         }
     }
 
+    /// <summary>
+    /// A send whose action was written and whose response the peer never sends: the caller's ending abandons the
+    /// response, and the send reports the connection as not connected instead of the cancellation the release gives it.
+    /// </summary>
+    [Theory]
+    [InlineData(Untyped)]
+    [InlineData(Typed)]
+    public async Task SendActionAsync_ShouldThrowNotConnected_WhenTheCallerEndsTheConnectionWhileTheResponseIsAwaited(string send)
+    {
+        await using var run = await UnansweredSendAsync(send, CancellationToken.None);
+
+        await run.Connection.DisconnectAsync().AsTask().WaitAsync(Bound);
+        var thrown = await Record.ExceptionAsync(() => run.Sending.WaitAsync(Bound));
+
+        thrown.Should().BeOfType<AmiNotConnectedException>(
+            "the caller's ending abandoned the response, and a send overtaken by the ending reports the connection as not connected");
+    }
+
+    /// <summary>The control: the caller's own token still ends the wait for the response with its cancellation.</summary>
+    [Theory]
+    [InlineData(Untyped)]
+    [InlineData(Typed)]
+    public async Task SendActionAsync_ShouldThrowOperationCanceled_WhenTheCallersTokenEndsTheWaitForTheResponse(string send)
+    {
+        using var caller = new CancellationTokenSource();
+        await using var run = await UnansweredSendAsync(send, caller.Token);
+
+        await caller.CancelAsync();
+        var thrown = await Record.ExceptionAsync(() => run.Sending.WaitAsync(Bound));
+
+        using (new AssertionScope())
+        {
+            thrown.Should().BeAssignableTo<OperationCanceledException>("the caller withdrew the send, and cancellation stays cancellation");
+            run.Connection.State.Should().Be(AmiConnectionState.Connected);
+        }
+    }
+
+    /// <summary>
+    /// The connection connects over the real socket transport, whose pipes exist only once it is connected: the reader
+    /// and writer are made after the dial, never before it.
+    /// </summary>
+    [Fact]
+    public async Task ConnectAsync_ShouldConnect_WhenTheTransportIsTheSocketConnection()
+    {
+        await using var harness = await Harness.ConnectAsync(Pipeline);
+
+        using (new AssertionScope())
+        {
+            harness.Connection.State.Should().Be(AmiConnectionState.Connected);
+            harness.Connection.AsteriskVersion.Should().Be("20.0.0");
+        }
+    }
+
+    /// <summary>A connected connection over a <see cref="PipedSocket"/>, and a send the peer has read and leaves unanswered.</summary>
+    private static async Task<UnansweredSend> UnansweredSendAsync(string send, CancellationToken sendToken)
+    {
+        var sockets = new PipedSocketFactory();
+        var connection = new AmiConnection(Options.Create(new AmiConnectionOptions
+        {
+            Hostname = "localhost",
+            Port = 5038,
+            Username = "admin",
+            Password = "secret",
+            EnableHeartbeat = false,
+            AutoReconnect = false,
+            DefaultResponseTimeout = Bound * 3,
+        }), sockets, NullLogger<AmiConnection>.Instance);
+        var peerCts = new CancellationTokenSource(Bound * 3);
+        var read = Task.Run(async () =>
+        {
+            var socket = await sockets.NextAsync(peerCts.Token);
+            await socket.CompleteLoginAsync(peerCts.Token);
+            return await socket.ReadActionAsync(peerCts.Token);
+        });
+        await connection.ConnectAsync(CancellationToken.None).AsTask().WaitAsync(Bound, CancellationToken.None);
+
+        var action = new CommandAction { Command = "core show uptime" };
+        Task sending = send == Typed
+            ? connection.SendActionAsync<ManagerResponse>(action, sendToken).AsTask()
+            : connection.SendActionAsync(action, sendToken).AsTask();
+        (await read.WaitAsync(Bound, CancellationToken.None)).Should().StartWith("Action: Command", "the peer read the action before the test goes on");
+        return new UnansweredSend(connection, sending, peerCts);
+    }
+
+    private sealed record UnansweredSend(AmiConnection Connection, Task Sending, CancellationTokenSource PeerCts) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            await Connection.DisposeAsync().AsTask().WaitAsync(Bound);
+            _ = await Record.ExceptionAsync(() => Sending.WaitAsync(Bound));
+            PeerCts.Dispose();
+        }
+    }
+
     private static Task StartSend(AmiConnection connection, string send)
     {
         switch (send)

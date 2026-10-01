@@ -39,6 +39,14 @@ public interface IAmiConnection : IAsyncDisposable
     /// is sent, no response is awaited, and the connection stays usable. The message names the field
     /// but never includes its value.
     /// </exception>
+    /// <exception cref="AsteriskException">
+    /// An <c>AmiNotConnectedException</c>, naming the connection's state: the connection is not connected when the call
+    /// is made, or no longer is when its turn to write comes (a loss, or the caller's <c>DisconnectAsync</c> or
+    /// <c>DisposeAsync</c>, began while it waited); the transport was released while the action was being written; or
+    /// the connection's ending (the caller's, or a loss it will not come back from) abandoned the response the call was
+    /// waiting for. The caller's own <paramref name="cancellationToken"/> still ends the call with its
+    /// <see cref="System.OperationCanceledException"/>.
+    /// </exception>
     ValueTask<ManagerResponse> SendActionAsync(ManagerAction action, CancellationToken cancellationToken = default);
 
     /// <summary>Send an action and wait for a typed response.</summary>
@@ -47,6 +55,14 @@ public interface IAmiConnection : IAsyncDisposable
     /// break (CR or LF), which would split one action into several on the wire. Nothing of the action
     /// is sent, no response is awaited, and the connection stays usable. The message names the field
     /// but never includes its value.
+    /// </exception>
+    /// <exception cref="AsteriskException">
+    /// An <c>AmiNotConnectedException</c>, naming the connection's state: the connection is not connected when the call
+    /// is made, or no longer is when its turn to write comes (a loss, or the caller's <c>DisconnectAsync</c> or
+    /// <c>DisposeAsync</c>, began while it waited); the transport was released while the action was being written; or
+    /// the connection's ending (the caller's, or a loss it will not come back from) abandoned the response the call was
+    /// waiting for. The caller's own <paramref name="cancellationToken"/> still ends the call with its
+    /// <see cref="System.OperationCanceledException"/>.
     /// </exception>
     ValueTask<TResponse> SendActionAsync<TResponse>(ManagerAction action, CancellationToken cancellationToken = default)
         where TResponse : ManagerResponse;
@@ -73,6 +89,13 @@ public interface IAmiConnection : IAsyncDisposable
     /// split one action into several on the wire. Nothing of the action is sent, no events are
     /// awaited, and the connection stays usable. The message names the field but never includes its
     /// value.
+    /// </exception>
+    /// <exception cref="AsteriskException">
+    /// Surfaced by the first <c>MoveNextAsync</c> of the returned sequence: an <c>AmiNotConnectedException</c>, naming
+    /// the connection's state, when the connection is not connected, no longer is when its turn to write comes (a loss,
+    /// or the caller's <c>DisconnectAsync</c> or <c>DisposeAsync</c>, began while it waited), or its transport was
+    /// released while the action was being written. A session that ends after the action was written ends the sequence
+    /// instead, with the events received so far.
     /// </exception>
     IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
         ManagerAction action, CancellationToken cancellationToken = default);

@@ -54,12 +54,26 @@ public sealed class AmiProtocolWriter
         IEnumerable<KeyValuePair<string, string>>? fields = null,
         CancellationToken cancellationToken = default)
     {
+        await WriteActionFlushAsync(actionName, actionId, fields, cancellationToken);
+    }
+
+    /// <summary>
+    /// <see cref="WriteActionAsync"/>, which also returns whether the flush found the reading side of the output
+    /// completed: a transport released while the action was being written, or before it was, completes its output's
+    /// reader, and the flush then returns with <see cref="FlushResult.IsCompleted"/> set instead of throwing. The action
+    /// did not reach the peer.
+    /// </summary>
+    /// <returns><see langword="true"/> when the transport's output was completed, so the action was not sent.</returns>
+    internal async ValueTask<bool> WriteActionFlushAsync(string actionName, string actionId,
+        IEnumerable<KeyValuePair<string, string>>? fields, CancellationToken cancellationToken)
+    {
         // WriteMessage reads a null name or ID as "no such header", so null must stop here.
         ArgumentNullException.ThrowIfNull(actionName);
         ArgumentNullException.ThrowIfNull(actionId);
 
         WriteMessage(actionName, actionId, fields);
-        await _writer.FlushAsync(cancellationToken);
+        var flushed = await _writer.FlushAsync(cancellationToken);
+        return flushed.IsCompleted;
     }
 
     /// <summary>
