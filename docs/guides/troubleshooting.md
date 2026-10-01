@@ -25,7 +25,7 @@
    ```
 5. Increase `ConnectionTimeout` if network is slow:
    ```json
-   { "AmiConnection": { "ConnectionTimeout": "00:00:10" } }
+   { "Asterisk": { "Ami": { "ConnectionTimeout": "00:00:10" } } }
    ```
 
 ### AMI: Authentication failed
@@ -75,7 +75,7 @@
 **Solutions:**
 1. Increase buffer capacity:
    ```json
-   { "AmiConnection": { "EventPumpCapacity": 50000 } }
+   { "Asterisk": { "Ami": { "EventPumpCapacity": 50000 } } }
    ```
 2. Speed up event handlers — offload heavy work to background queues
 3. Filter high-volume events (e.g., `VarSet`) early in your observer
@@ -121,8 +121,10 @@ See [High-Load Tuning Guide](high-load-tuning.md) for sizing recommendations.
 **Solution:** Set `MaxReconnectAttempts` to a finite value:
 ```json
 {
-  "AmiConnection": { "MaxReconnectAttempts": 10 },
-  "AriClient": { "MaxReconnectAttempts": 10 }
+  "Asterisk": {
+    "Ami": { "MaxReconnectAttempts": 10 },
+    "Ari": { "MaxReconnectAttempts": 10 }
+  }
 }
 ```
 
@@ -170,7 +172,7 @@ It is raised after the connection's `State` has left `Connected`, whether `AutoR
 - A stream Asterisk closes or resets is seen at once.
 - A peer that goes silent is seen by the heartbeat, within one `HeartbeatInterval` plus the `Ping` wait, which is the smaller of `HeartbeatTimeout` and `DefaultResponseTimeout`. With the defaults (30 s, 10 s and 2 s) that is up to about 32 s after the peer went silent; measured, 2.2–32.0 s. A shorter `HeartbeatInterval` sees it sooner.
 
-**When the reconnect gives up.** With `MaxReconnectAttempts` set to N, the connection gives up after N backoff delays, plus the time its failed attempts take, and then reads `Disconnected`. The first delay is `ReconnectInitialDelay`; each next one is multiplied by `ReconnectMultiplier` and capped at `ReconnectMaxDelay`. As examples, measured from the moment Asterisk was started again with the application's credentials rejected, not from the loss: 17.2–17.7 s with 1 s ×2 and N = 4; 6.9–8.6 s with 0.5 s ×2 capped at 2 s and N = 4. The give-up raises nothing: read `State`.
+**When the reconnect gives up.** With `MaxReconnectAttempts` set to N, the connection gives up after N failed attempts, each made after its backoff delay, and then reads `Disconnected`. The first delay is `ReconnectInitialDelay`; each next one is multiplied by `ReconnectMultiplier` and capped at `ReconnectMaxDelay`. As examples, measured from the moment Asterisk was started again with the application's credentials rejected, not from the loss: 17.2–18.8 s with 1 s ×2 and N = 4; 8.1–9.2 s with 0.5 s ×2 capped at 2 s and N = 4. The give-up raises nothing: read `State`.
 
 **With `MaxReconnectAttempts = 0`** (the default) the connection never gives up: it retries for ever, rejected credentials included, each attempt failing with `AmiAuthenticationException`. `ConnectionLost` is raised once, for the loss, and nothing after it until the connection is back.
 
@@ -290,7 +292,7 @@ Open the resulting `.nettrace` in PerfView or Chromium `about:tracing`.
 **Solutions:**
 1. **Increase EventPumpCapacity** to absorb the burst (see [high-load-tuning.md](high-load-tuning.md)):
    ```json
-   { "AmiConnection": { "EventPumpCapacity": 50000 } }
+   { "Asterisk": { "Ami": { "EventPumpCapacity": 50000 } } }
    ```
 2. **Stagger reconciliation** if the burst is disruptive — lengthen the interval and accept slightly slower orphan detection:
    ```json

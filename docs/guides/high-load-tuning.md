@@ -27,19 +27,23 @@ Both AMI (`AsyncEventPump`) and ARI (`AriEventPump`) use bounded `Channel<T>` bu
 
 ### Configuration
 
+`AddVerbara(builder.Configuration)` reads the AMI options from the `Asterisk:Ami` section and the ARI options from `Asterisk:Ari`, with the option names as keys; the inline `AddVerbara(options => …)` sets the same options on `options.Ami` and `options.Ari`.
+
 ```json
 {
-  "AmiConnection": {
-    "EventPumpCapacity": 50000
+  "Asterisk": {
+    "Ami": {
+      "EventPumpCapacity": 50000
+    }
   }
 }
 ```
 
-<!-- skip-doc-snippet -->
 ```csharp
+var services = new ServiceCollection();
 services.AddVerbara(options =>
 {
-    options.AmiConnection.EventPumpCapacity = 50_000;
+    options.Ami.EventPumpCapacity = 50_000;
 });
 ```
 
@@ -159,12 +163,14 @@ Both AMI and ARI support exponential backoff reconnection.
 
 ```json
 {
-  "AmiConnection": {
-    "AutoReconnect": true,
-    "MaxReconnectAttempts": 0,
-    "ReconnectInitialDelay": "00:00:01",
-    "ReconnectMaxDelay": "00:00:30",
-    "ReconnectMultiplier": 2.0
+  "Asterisk": {
+    "Ami": {
+      "AutoReconnect": true,
+      "MaxReconnectAttempts": 0,
+      "ReconnectInitialDelay": "00:00:01",
+      "ReconnectMaxDelay": "00:00:30",
+      "ReconnectMultiplier": 2.0
+    }
   }
 }
 ```
@@ -173,17 +179,30 @@ Both AMI and ARI support exponential backoff reconnection.
 
 ```json
 {
-  "AriClient": {
-    "AutoReconnect": true,
-    "MaxReconnectAttempts": 0,
-    "ReconnectInitialDelay": "00:00:01",
-    "ReconnectMaxDelay": "00:00:30",
-    "ReconnectMultiplier": 2.0
+  "Asterisk": {
+    "Ari": {
+      "AutoReconnect": true,
+      "MaxReconnectAttempts": 0,
+      "ReconnectInitialDelay": "00:00:01",
+      "ReconnectMaxDelay": "00:00:30",
+      "ReconnectMultiplier": 2.0
+    }
   }
 }
 ```
 
-> `MaxReconnectAttempts = 0` means unlimited. Set to a positive value (e.g., 10) to prevent infinite loops in production.
+> `MaxReconnectAttempts = 0` means unlimited. Set to a positive value (e.g., 10) to prevent infinite loops in production: with `MaxReconnectAttempts = N` the client makes N reconnect attempts, each after its backoff delay, and then gives up (AMI reads `Disconnected`, ARI `Faulted`).
+
+**Accepted values.** While `AutoReconnect` is on, both clients accept only values the backoff can use:
+
+| Option | Accepted |
+|--------|----------|
+| `ReconnectInitialDelay` | from `00:00:00` to `24.20:31:23.647` (`int.MaxValue` ms, the longest delay .NET can wait) |
+| `ReconnectMaxDelay` | from `ReconnectInitialDelay` to `24.20:31:23.647` |
+| `ReconnectMultiplier` | a finite number of at least `1.0` |
+| `MaxReconnectAttempts` | `0` (unlimited) or more |
+
+A value outside these ranges fails the host's start with an `OptionsValidationException` naming the option (through `AddVerbara`, or any registration that validates on start), and a client constructed directly throws `ArgumentOutOfRangeException` whose `ParamName` is the option. With `AutoReconnect` off the backoff values are not checked, except AMI's `MaxReconnectAttempts`, which must be 0 or more either way.
 
 ---
 
@@ -201,15 +220,15 @@ Both AMI and ARI support exponential backoff reconnection.
 | `SessionOptions.SlaThreshold` | 20s | Align with your contact-center SLA |
 | `SessionOptions.QueueMetricsWindow` | 30min | Rolling window for `QueueSessionTracker` — reduce if per-queue RAM matters |
 | `SessionOptions.WrapUpDuration` | 30s | Not a lever: nothing in the SDK reads it, and the SDK raises no `CallWrapUpEvent`. An agent that `IAgentSessionTracker` moves to wrap-up when its call ends stays there until its next call connects, whatever this is set to |
-| `AmiConnection.EventPumpCapacity` | 20,000 | Size to absorb 10s of peak event rate **plus** the expected reconcile burst |
+| `AmiConnectionOptions.EventPumpCapacity` | 20,000 | Size to absorb 10s of peak event rate **plus** the expected reconcile burst |
 
-<!-- skip-doc-snippet -->
 ```csharp
+var services = new ServiceCollection();
 services.AddVerbara(options =>
 {
-    options.AmiConnection.EventPumpCapacity = 100_000;
+    options.Ami.EventPumpCapacity = 100_000;
 });
-services.AddSessionsCore(options =>
+services.AddVerbaraSessions(options =>
 {
     options.ReconciliationInterval = TimeSpan.FromMinutes(1);
 });
@@ -223,17 +242,19 @@ services.AddSessionsCore(options =>
 
 ```json
 {
-  "AmiConnection": {
-    "Hostname": "pbx.example.com",
-    "Port": 5038,
-    "Username": "sdk",
-    "Password": "secret",
-    "EventPumpCapacity": 50000,
-    "AutoReconnect": true,
-    "MaxReconnectAttempts": 10,
-    "ReconnectInitialDelay": "00:00:01",
-    "ReconnectMaxDelay": "00:00:30",
-    "DefaultResponseTimeout": "00:00:05"
+  "Asterisk": {
+    "Ami": {
+      "Hostname": "pbx.example.com",
+      "Port": 5038,
+      "Username": "sdk",
+      "Password": "secret",
+      "EventPumpCapacity": 50000,
+      "AutoReconnect": true,
+      "MaxReconnectAttempts": 10,
+      "ReconnectInitialDelay": "00:00:01",
+      "ReconnectMaxDelay": "00:00:30",
+      "DefaultResponseTimeout": "00:00:05"
+    }
   }
 }
 ```
@@ -242,13 +263,13 @@ services.AddSessionsCore(options =>
 
 At 100K+ agents, use `VerbaraServerPool` to distribute load across multiple Asterisk servers:
 
-<!-- skip-doc-snippet -->
 ```csharp
+var services = new ServiceCollection();
 services.AddVerbara(options =>
 {
-    options.AmiConnection.EventPumpCapacity = 200_000;
-    options.AmiConnection.MaxReconnectAttempts = 20;
-    options.AmiConnection.DefaultResponseTimeout = TimeSpan.FromSeconds(10);
+    options.Ami.EventPumpCapacity = 200_000;
+    options.Ami.MaxReconnectAttempts = 20;
+    options.Ami.DefaultResponseTimeout = TimeSpan.FromSeconds(10);
 });
 ```
 
