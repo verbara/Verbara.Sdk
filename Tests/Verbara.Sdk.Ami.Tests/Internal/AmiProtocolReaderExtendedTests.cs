@@ -204,6 +204,23 @@ public sealed class AmiProtocolReaderExtendedTests
         msg.IsEvent.Should().BeTrue();
     }
 
+    /// <summary>
+    /// <c>OriginateResponse</c> as Asterisk 22.9.0 writes it: an event whose <c>Response</c> header is the originate's
+    /// outcome. A message that carries <c>Event</c> is an event, whatever else it carries.
+    /// </summary>
+    [Fact]
+    public async Task IsResponse_ShouldBeFalse_ForAnEventWithAResponseHeader()
+    {
+        var msg = await WriteAndRead(
+            "Event: OriginateResponse\r\nPrivilege: call,all\r\nActionID: h73o\r\nResponse: Success\r\n" +
+            "Channel: Local/s@hold-00000132;1\r\nReason: 4\r\n\r\n");
+
+        msg.Should().NotBeNull();
+        msg!.IsEvent.Should().BeTrue();
+        msg.IsResponse.Should().BeFalse("a message that carries an Event header is an event, not a response");
+        msg.EventType.Should().Be("OriginateResponse");
+    }
+
     [Fact]
     public async Task EventType_ShouldReturnNull_ForResponse()
     {
