@@ -14,6 +14,9 @@ public class LiveHealthCheckTests
     private static VerbaraServer CreateServer()
     {
         var connection = Substitute.For<IAmiConnection>();
+        // A connected connection: these tests read the table, and an unset substitute reads Initial, which the live
+        // check reports as Degraded whatever the table holds.
+        connection.State.Returns(AmiConnectionState.Connected);
         var logger = Substitute.For<ILogger<VerbaraServer>>();
         return new VerbaraServer(connection, logger);
     }
