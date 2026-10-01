@@ -1,7 +1,9 @@
 using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Ari.Client;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Microsoft.Extensions.Options;
+using Verbara.Sdk.Resilience;
 
 namespace Verbara.Sdk.Ami.Tests.Connection;
 
@@ -123,5 +125,138 @@ public class AmiConnectionOptionsValidatorTests
             ReconnectMaxDelay = TimeSpan.FromSeconds(30),
             MaxReconnectAttempts = 0,
         });
+    }
+
+    /// <summary>
+    /// The reconnect values the backoff cannot use, each with the option it names. With <c>AutoReconnect</c> on, the
+    /// validator rejects each one naming that option; they are exactly what <see cref="BackoffSchedule.Compute"/> rejects.
+    /// </summary>
+    public static TheoryData<string, string> UnusableReconnectValues => new()
+    {
+        { "ReconnectMultiplier = 0.5", nameof(AmiConnectionOptions.ReconnectMultiplier) },
+        { "ReconnectMultiplier = 0", nameof(AmiConnectionOptions.ReconnectMultiplier) },
+        { "ReconnectMultiplier = -1", nameof(AmiConnectionOptions.ReconnectMultiplier) },
+        { "ReconnectMultiplier = NaN", nameof(AmiConnectionOptions.ReconnectMultiplier) },
+        { "ReconnectMultiplier = +Infinity", nameof(AmiConnectionOptions.ReconnectMultiplier) },
+        { "ReconnectMaxDelay = 500 ms < ReconnectInitialDelay = 1 s", nameof(AmiConnectionOptions.ReconnectMaxDelay) },
+        { "ReconnectInitialDelay = -1 s", nameof(AmiConnectionOptions.ReconnectInitialDelay) },
+    };
+
+    /// <summary>The boundary values the backoff accepts: a multiplier of exactly 1, a maximum equal to the initial delay, a zero initial delay.</summary>
+    public static TheoryData<string> BoundaryReconnectValues => new()
+    {
+        "ReconnectMultiplier = 1",
+        "ReconnectMaxDelay = ReconnectInitialDelay = 1 s",
+        "ReconnectInitialDelay = 0",
+        "ReconnectInitialDelay = 0, ReconnectMultiplier = 1, ReconnectMaxDelay = 0",
+    };
+
+    [Theory]
+    [MemberData(nameof(UnusableReconnectValues))]
+    public void Validate_ShouldFailNamingTheOption_WhenAReconnectValueIsUnusableAndAutoReconnectIsOn(string value, string option)
+    {
+        var options = ReconnectOptions(value, autoReconnect: true);
+
+        var result = _validator.Validate(null, options);
+
+        result.Succeeded.Should().BeFalse($"with AutoReconnect on, {value} is a value the reconnect backoff cannot use");
+        result.FailureMessage.Should().Contain(option, "the failure names the option to fix");
+    }
+
+    [Theory]
+    [MemberData(nameof(BoundaryReconnectValues))]
+    public void Validate_ShouldSucceed_WhenTheBoundaryValuesAreUsed(string value)
+    {
+        var options = ReconnectOptions(value, autoReconnect: true);
+
+        var result = _validator.Validate(null, options);
+
+        result.Succeeded.Should().BeTrue($"{value} is a value the reconnect backoff accepts; failure: {result.FailureMessage}");
+    }
+
+    [Theory]
+    [MemberData(nameof(UnusableReconnectValues))]
+    public void Validate_ShouldSucceed_WhenAutoReconnectIsOffWithUnusableValues(string value, string option)
+    {
+        var options = ReconnectOptions(value, autoReconnect: false);
+
+        var result = _validator.Validate(null, options);
+
+        result.Succeeded.Should().BeTrue(
+            $"without AutoReconnect the backoff never runs, so {value} ({option}) is not checked; failure: {result.FailureMessage}");
+    }
+
+    [Fact]
+    public void Validate_ShouldAgreeWithTheBackoffSchedule_OverTheBoundarySet()
+    {
+        IEnumerable<object[]> unusable = UnusableReconnectValues;
+        IEnumerable<object[]> boundary = BoundaryReconnectValues;
+        var values = unusable.Concat(boundary).Select(row => (string)row[0]);
+
+        using (new AssertionScope())
+        {
+            foreach (var value in values)
+            {
+                var options = ReconnectOptions(value, autoReconnect: true);
+                var validatorAccepts = _validator.Validate(null, options).Succeeded;
+
+                validatorAccepts.Should().Be(BackoffAccepts(options),
+                    $"the validator accepts {value} if and only if BackoffSchedule.Compute does");
+            }
+        }
+    }
+
+    private static bool BackoffAccepts(AmiConnectionOptions options)
+    {
+        try
+        {
+            _ = BackoffSchedule.Compute(1, options.ReconnectInitialDelay, options.ReconnectMultiplier, options.ReconnectMaxDelay);
+            return true;
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Valid options with <paramref name="autoReconnect"/>, changed by the one value named.</summary>
+    internal static AmiConnectionOptions ReconnectOptions(string value, bool autoReconnect)
+    {
+        var options = new AmiConnectionOptions
+        {
+            Hostname = "localhost",
+            Port = 5038,
+            Username = "admin",
+            Password = "secret",
+            AutoReconnect = autoReconnect,
+        };
+
+        switch (value)
+        {
+            case "ReconnectMultiplier = 0.5": options.ReconnectMultiplier = 0.5; break;
+            case "ReconnectMultiplier = 0": options.ReconnectMultiplier = 0; break;
+            case "ReconnectMultiplier = -1": options.ReconnectMultiplier = -1; break;
+            case "ReconnectMultiplier = NaN": options.ReconnectMultiplier = double.NaN; break;
+            case "ReconnectMultiplier = +Infinity": options.ReconnectMultiplier = double.PositiveInfinity; break;
+            case "ReconnectMaxDelay = 500 ms < ReconnectInitialDelay = 1 s":
+                options.ReconnectInitialDelay = TimeSpan.FromSeconds(1);
+                options.ReconnectMaxDelay = TimeSpan.FromMilliseconds(500);
+                break;
+            case "ReconnectInitialDelay = -1 s": options.ReconnectInitialDelay = TimeSpan.FromSeconds(-1); break;
+            case "ReconnectMultiplier = 1": options.ReconnectMultiplier = 1.0; break;
+            case "ReconnectMaxDelay = ReconnectInitialDelay = 1 s":
+                options.ReconnectInitialDelay = TimeSpan.FromSeconds(1);
+                options.ReconnectMaxDelay = TimeSpan.FromSeconds(1);
+                break;
+            case "ReconnectInitialDelay = 0": options.ReconnectInitialDelay = TimeSpan.Zero; break;
+            case "ReconnectInitialDelay = 0, ReconnectMultiplier = 1, ReconnectMaxDelay = 0":
+                options.ReconnectInitialDelay = TimeSpan.Zero;
+                options.ReconnectMultiplier = 1.0;
+                options.ReconnectMaxDelay = TimeSpan.Zero;
+                break;
+            default: throw new ArgumentOutOfRangeException(nameof(value), value, "Not a reconnect value of these tests.");
+        }
+
+        return options;
     }
 }
