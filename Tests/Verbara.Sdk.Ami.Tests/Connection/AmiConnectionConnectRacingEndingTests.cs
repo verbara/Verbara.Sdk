@@ -36,10 +36,14 @@ public sealed class AmiConnectionConnectRacingEndingTests
     /// <summary>A hang bound. Every wait ends on its signal long before it; only a defect reaches it.</summary>
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(10);
 
+    /// <summary>The attempt has read the MD5 challenge and is about to write its login.</summary>
+    public const string ChallengeAnswered = "challenge answered";
+
     /// <summary>The attempt has sent the version probe and waits for its answer, which never comes.</summary>
     public const string VersionProbePending = "version probe pending";
 
     [Theory]
+    [InlineData(ChallengeAnswered)]
     [InlineData(VersionProbePending)]
     public async Task ConnectAsync_ShouldThrowOperationCanceled_WhenTheCallerEndsTheConnectionDuringTheAttempt(string point)
     {
@@ -93,6 +97,14 @@ public sealed class AmiConnectionConnectRacingEndingTests
         var input = sockets.Readers[0];
         await socket.WriteAsync("Asterisk Call Manager/6.0.0\r\n");
         var challenge = await socket.ReadActionAsync(ct) ?? throw new InvalidOperationException("No challenge.");
+        if (point == ChallengeAnswered)
+        {
+            // The attempt's read of the challenge's answer completes with it, and the hold keeps it there.
+            input.HoldNext();
+            await socket.RespondAsync("Success", PipedSocket.ActionIdOf(challenge), [new("Challenge", "abc123")]);
+            return input;
+        }
+
         await socket.RespondAsync("Success", PipedSocket.ActionIdOf(challenge), [new("Challenge", "abc123")]);
         var login = await socket.ReadActionAsync(ct) ?? throw new InvalidOperationException("No login.");
         await socket.RespondAsync("Success", PipedSocket.ActionIdOf(login), [new("Message", "Authentication accepted")]);

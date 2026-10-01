@@ -85,6 +85,71 @@ public sealed class AmiConnectionSendRacingEndingTests
         }
     }
 
+    /// <summary>
+    /// A send whose write is blocked because the peer stopped reading holds the write lock for as long as the peer does
+    /// not read. The caller's <see cref="AmiConnection.DisposeAsync"/> still completes: its Logoff is bounded, so the
+    /// release, whose disposal of the socket is what ends the blocked write, is reached; the send then reports the
+    /// connection as not connected.
+    /// </summary>
+    /// <remarks>
+    /// Over the real transport only: the in-memory <see cref="PipedSocket"/> never completes the pipe the connection
+    /// writes on, so a write blocked on it stays blocked after the connection disposes it. The payload is far larger than
+    /// the pipe's pause threshold and the loopback socket's buffers, with the peer's receive buffer shrunk, so the send's
+    /// flush is still waiting when the call returns to the test.
+    /// </remarks>
+    [Fact]
+    public async Task DisposeAsync_ShouldComplete_WhenASendIsBlockedByAPeerThatStoppedReading()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 3);
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var connection = new AmiConnection(Options.Create(new AmiConnectionOptions
+        {
+            Hostname = "127.0.0.1",
+            Port = ((IPEndPoint)listener.LocalEndpoint).Port,
+            Username = "admin",
+            Password = "secret",
+            EnableHeartbeat = false,
+            AutoReconnect = false,
+        }), new PipelineSocketConnectionFactory(), NullLogger<AmiConnection>.Instance);
+        TcpClient? server = null;
+        Task disposing = Task.CompletedTask;
+        try
+        {
+            var served = Task.Run(async () =>
+            {
+                server = await listener.AcceptTcpClientAsync(peerCts.Token);
+                server.ReceiveBufferSize = 4096;
+                await new LoopbackPeer(server.GetStream()).CompleteLoginAsync(peerCts.Token);
+                // From here the peer reads nothing.
+            }, peerCts.Token);
+            await connection.ConnectAsync().AsTask().WaitAsync(Bound);
+            await served.WaitAsync(Bound);
+
+            var sending = connection.SendActionAsync(new CommandAction { Command = new string('x', 16 * 1024 * 1024) }).AsTask();
+            disposing = connection.DisposeAsync().AsTask();
+            var disposeThrown = await Record.ExceptionAsync(() => disposing.WaitAsync(Bound));
+            var sendThrown = await Record.ExceptionAsync(() => sending.WaitAsync(Bound));
+
+            using (new AssertionScope())
+            {
+                disposeThrown.Should().BeNull(
+                    "the ending's Logoff gives up on a write lock that a blocked send holds, and the release that unblocks it runs");
+                sendThrown.Should().BeOfType<AmiNotConnectedException>(
+                    "the send's write was ended by the caller's ending, which reports the connection as not connected");
+                connection.State.Should().Be(AmiConnectionState.Disconnected);
+            }
+        }
+        finally
+        {
+            // The peer goes away, which ends a write the unfixed code leaves blocked, and with it that code's ending.
+            server?.Dispose();
+            _ = await Record.ExceptionAsync(() => disposing.WaitAsync(Bound));
+            await connection.DisposeAsync().AsTask().WaitAsync(Bound);
+            listener.Stop();
+        }
+    }
+
     private static Task StartSend(AmiConnection connection, string send)
     {
         switch (send)
