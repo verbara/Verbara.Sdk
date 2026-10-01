@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
-using System.Runtime.CompilerServices;
+using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 using System.Threading.Channels;
 using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Enums;
@@ -21,17 +22,27 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// <see cref="AmiConnection.State"/> at that exact point: either the state has been written by then, or it has not.
 /// </para>
 /// <para>
-/// The seam lives only here, in two <see cref="UnsafeAccessorAttribute"/>s. A renamed field fails the test with
+/// The seam lives only here: two private fields reached by reflection (a test project is not AOT-published, and an
+/// <c>extern</c> accessor reads as unmanaged code to the code scan). A renamed field fails the test with
 /// <see cref="MissingFieldException"/>; it cannot pass in silence.
 /// </para>
 /// </remarks>
 public sealed partial class AmiConnectionEventActionOutcomeTests
 {
-    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_pendingEventActions")]
-    private static extern ref ConcurrentDictionary<string, ResponseEventCollector> PendingEventActions(AmiConnection connection);
+    private static ConcurrentDictionary<string, ResponseEventCollector> PendingEventActions(AmiConnection connection) =>
+        (ConcurrentDictionary<string, ResponseEventCollector>)PrivateField(typeof(AmiConnection), "_pendingEventActions")
+            .GetValue(connection)!;
 
-    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_channel")]
-    private static extern ref Channel<ManagerEvent> CollectorChannel(ResponseEventCollector collector);
+    private static void ReplaceCollectorChannel(ResponseEventCollector collector, Channel<ManagerEvent> channel) =>
+        PrivateField(typeof(ResponseEventCollector), "_channel").SetValue(collector, channel);
+
+    private static Channel<ManagerEvent> CollectorChannel(ResponseEventCollector collector) =>
+        (Channel<ManagerEvent>)PrivateField(typeof(ResponseEventCollector), "_channel").GetValue(collector)!;
+
+    private static FieldInfo PrivateField(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicFields)] Type owner, string name) =>
+        owner.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingFieldException(owner.FullName, name);
 
     [Theory]
     [InlineData(true)]
@@ -44,8 +55,8 @@ public sealed partial class AmiConnectionEventActionOutcomeTests
         var peer = await ConnectAsync(connection, factory, peerCts);
 
         var probe = new ResponseEventCollector();
-        CollectorChannel(probe) = Channel.CreateUnbounded<ManagerEvent>(
-            new UnboundedChannelOptions { AllowSynchronousContinuations = true });
+        ReplaceCollectorChannel(probe, Channel.CreateUnbounded<ManagerEvent>(
+            new UnboundedChannelOptions { AllowSynchronousContinuations = true }));
         var stateAtAbandon = new TaskCompletionSource<AmiConnectionState>(TaskCreationOptions.RunContinuationsAsynchronously);
         // The channel's completion completes inside Abandon's TryComplete, and runs this continuation there.
         _ = CollectorChannel(probe).Reader.Completion.ContinueWith(

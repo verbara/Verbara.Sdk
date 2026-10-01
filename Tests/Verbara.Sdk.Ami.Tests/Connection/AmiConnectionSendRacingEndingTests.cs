@@ -1,7 +1,7 @@
 using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.CompilerServices;
+using System.Reflection;
 using System.Text;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Connection;
@@ -22,8 +22,9 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The race is made deterministic through a seam that lives only in this test: the write lock is held through an
-/// <see cref="UnsafeAccessorAttribute"/>. A send called on the test thread runs synchronously up to its wait on that lock,
+/// The race is made deterministic through a seam that lives only in this test: the write lock, a private field reached
+/// by reflection (a test project is not AOT-published, and an <c>extern</c> accessor reads as unmanaged code to the
+/// code scan), is held by the test. A send called on the test thread runs synchronously up to its wait on that lock,
 /// so once the call returns it has passed the connected check and waits. The disconnect is then started with a token
 /// already cancelled, so its Logoff gives up at once instead of queueing on the lock, and it is not awaited before the
 /// lock is released: a cleanup that takes the write lock would wait for the release.
@@ -44,8 +45,9 @@ public sealed class AmiConnectionSendRacingEndingTests
     public const string Typed = "SendActionAsync<TResponse>";
     public const string EventGenerating = "SendEventGeneratingActionAsync";
 
-    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_writeLock")]
-    private static extern ref SemaphoreSlim WriteLock(AmiConnection connection);
+    private static SemaphoreSlim WriteLock(AmiConnection connection) =>
+        (SemaphoreSlim)(typeof(AmiConnection).GetField("_writeLock", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingFieldException(nameof(AmiConnection), "_writeLock")).GetValue(connection)!;
 
     [Theory]
     [InlineData(Untyped, Piped)]
