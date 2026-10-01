@@ -14,6 +14,18 @@ public interface IAmiConnection : IAsyncDisposable
     string? AsteriskVersion { get; }
 
     /// <summary>Connect and authenticate to the Asterisk AMI.</summary>
+    /// <remarks>
+    /// A connect that fails — a refused dial, a banner that is not Asterisk's, a rejected login, a timeout, or the
+    /// caller's own cancellation — releases what it acquired and leaves <see cref="State"/> at
+    /// <see cref="AmiConnectionState.Disconnected"/> before its exception reaches the caller, unchanged; the connection
+    /// can be connected again. A connect overtaken by the caller's <c>DisconnectAsync</c> or <c>DisposeAsync</c> yields to
+    /// that ending and throws <see cref="System.OperationCanceledException"/>.
+    /// </remarks>
+    /// <exception cref="System.InvalidOperationException">
+    /// The connection has a live session: <see cref="State"/> reads <see cref="AmiConnectionState.Connected"/>,
+    /// <see cref="AmiConnectionState.Reconnecting"/> or <see cref="AmiConnectionState.Connecting"/>. Nothing is dialled
+    /// and the session goes on; a lost connection reconnects on its own.
+    /// </exception>
     /// <exception cref="System.ArgumentException">
     /// The configured username contains a line break (CR or LF), which would split the login action
     /// into several on the wire. The login action is not sent.

@@ -118,6 +118,55 @@ public sealed class AmiConnectionFailedConnectTests
     }
 
     [Fact]
+    public async Task ConnectAsync_ShouldAnnounceTheFailureAsTheCallers_WhenTheLoginIsRejected()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var sockets = new PipedSocketFactory();
+        await using var connection = Create(sockets);
+        var changes = new List<AmiConnectionStateChange>();
+        connection.StateChanged += changes.Add;
+        var peer = PlayAsync(sockets, RejectLoginAsync, peerCts.Token);
+
+        var (thrown, _) = await ConnectAndCatchAsync(connection, CancellationToken.None);
+        await peer.WaitAsync(Bound);
+        await connection.PendingNotifications.WaitAsync(Bound);
+
+        using (new AssertionScope())
+        {
+            changes.Select(c => (c.Previous, c.Current)).Should().Equal(
+                [(AmiConnectionState.Initial, AmiConnectionState.Connecting), (AmiConnectionState.Connecting, AmiConnectionState.Disconnected)],
+                "the failed attempt announces one change out of Connecting, straight to Disconnected");
+            changes.Should().OnlyContain(c => c.ByCaller, "both changes are the caller's connect");
+            changes[^1].Cause.Should().BeSameAs(thrown, "the change carries what ended the attempt");
+            changes[^1].IsFinal.Should().BeFalse("the caller's failed connect is not the connection giving up");
+        }
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldAnnounceNoCause_WhenTheCallerCancelsTheAttempt()
+    {
+        var sockets = new PipedSocketFactory();
+        await using var connection = Create(sockets);
+        var changes = new List<AmiConnectionStateChange>();
+        connection.StateChanged += changes.Add;
+        using var callerCts = new CancellationTokenSource();
+
+        var connect = ConnectAndCatchAsync(connection, callerCts.Token);
+        await sockets.NextAsync(CancellationToken.None).AsTask().WaitAsync(Bound);
+        await callerCts.CancelAsync();
+        await connect.WaitAsync(Bound);
+        await connection.PendingNotifications.WaitAsync(Bound);
+
+        using (new AssertionScope())
+        {
+            changes.Should().HaveCount(2, "the attempt announced Connecting, then its end");
+            changes[^1].Current.Should().Be(AmiConnectionState.Disconnected);
+            changes[^1].ByCaller.Should().BeTrue("the caller withdrew its own attempt");
+            changes[^1].Cause.Should().BeNull("a withdrawal by the caller's own token is no failure to report");
+        }
+    }
+
+    [Fact]
     public async Task ConnectAsync_ShouldConnect_WhenCalledAgainAfterAFailedAttempt()
     {
         using var peerCts = new CancellationTokenSource(Bound * 2);

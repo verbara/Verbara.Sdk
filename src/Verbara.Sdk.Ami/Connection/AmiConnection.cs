@@ -341,18 +341,39 @@ public sealed class AmiConnection : IAmiConnection
     /// The connect itself, for a caller's <see cref="ConnectAsync"/> and for the reconnect loop, which does not
     /// pass the guard at <see cref="ConnectAsync"/>'s entry: that guard is the caller's.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The attempt holds what it acquires — its token source, its socket and the reader and writer over it — in locals,
+    /// and publishes each to the connection's fields under <c>_endingLock</c>, where an ending records itself: what was
+    /// published before an ending was recorded, that ending's cleanup releases; nothing is published after it, and what
+    /// was never published the attempt releases itself. The session starts — <see cref="AmiConnectionState.Connected"/>,
+    /// the event pump, the reader loop and the heartbeat — under the same lock, so an ending either finds all of it or
+    /// none of it.
+    /// </para>
+    /// <para>
+    /// A caller's attempt that fails with no ending recorded releases what it acquired and writes
+    /// <see cref="AmiConnectionState.Disconnected"/> before its exception reaches the caller; it records no ending, so a
+    /// later <see cref="ConnectAsync"/> proceeds. The reconnect loop's failed attempt leaves its socket to the loop's
+    /// next cleanup or its give-up, as before.
+    /// </para>
+    /// </remarks>
     /// <param name="byLoop">
     /// <see langword="true"/> for the reconnect loop, whose state changes are announced as the connection's own;
     /// <see langword="false"/> for the caller's connect, whose changes are announced as the caller's. Either way the
     /// attempt's state writes yield to an ending recorded meanwhile, and the attempt is abandoned with an
-    /// <see cref="OperationCanceledException"/>. For the reconnect loop, the ending that cut it short releases what it
-    /// acquired, once the loop has left.
+    /// <see cref="OperationCanceledException"/>.
     /// </param>
     /// <param name="cancellationToken">The caller's token, or the lifetime token for the reconnect loop.</param>
     private async ValueTask ConnectCoreAsync(bool byLoop, CancellationToken cancellationToken)
     {
         SetConnectState(AmiConnectionState.Connecting, byLoop);
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        // Read once, while the source is this attempt's alone: once published, an ending's cleanup may dispose it.
+        var sessionToken = cts.Token;
+        var ctsPublished = false;
+        ISocketConnection? socket = null;
+        var socketPublished = false;
 
         // This attempt's session. Renewed before the login, because an Asterisk that has already started reports
         // FullyBooted right after the login's response. The attempt ends it if it fails before its reader loop runs;
@@ -361,58 +382,67 @@ public sealed class AmiConnection : IAmiConnection
         _fullyBooted = fullyBooted;
         // A heartbeat failure belongs to the session it ended; this attempt's session starts without one.
         _heartbeatFailure = null;
-        var readerLoopStarted = false;
         try
         {
+            lock (_endingLock)
+            {
+                ThrowIfEndingRecordedLocked(byLoop);
+                _cts = cts;
+                ctsPublished = true;
+            }
+
             // Apply ConnectionTimeout to socket connect + banner read so the reconnect loop
             // never hangs indefinitely on a slow or unresponsive Asterisk instance.
             // Block form on purpose: the timeout source is released here, before the pumps start.
-            using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts.Token))
+            using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, sessionToken))
             {
                 connectCts.CancelAfter(_options.ConnectionTimeout);
                 var connectToken = connectCts.Token;
 
-                _socket = _socketFactory.Create();
-                await _socket.ConnectAsync(_options.Hostname, _options.Port, _options.UseSsl, connectToken);
+                socket = _socketFactory.Create();
+                var reader = new AmiProtocolReader(socket.Input);
+                var writer = new AmiProtocolWriter(socket.Output);
+                lock (_endingLock)
+                {
+                    ThrowIfEndingRecordedLocked(byLoop);
+                    _socket = socket;
+                    _reader = reader;
+                    _writer = writer;
+                    socketPublished = true;
+                }
 
-                _reader = new AmiProtocolReader(_socket.Input);
-                _writer = new AmiProtocolWriter(_socket.Output);
+                await socket.ConnectAsync(_options.Hostname, _options.Port, _options.UseSsl, connectToken);
 
                 // Read protocol identifier
-                var identMsg = await _reader.ReadMessageAsync(connectToken);
+                var identMsg = await reader.ReadMessageAsync(connectToken);
                 if (identMsg is null || !identMsg.IsProtocolIdentifier)
                 {
                     throw new AmiProtocolException("Expected Asterisk protocol identifier");
                 }
 
                 // MD5 challenge-response login
-                await LoginAsync(connectToken);
+                await LoginAsync(reader, writer, connectToken);
 
                 // Detect Asterisk version
-                await DetectVersionAsync(connectToken, cancellationToken);
+                await DetectVersionAsync(reader, writer, connectToken, cancellationToken);
             }
 
-            SetConnectState(AmiConnectionState.Connected, byLoop);
-
-            // Start event pump and reader loop. The pump observes the caller's ending from its creation, before
-            // Start: once _lifetime is cancelled it delivers nothing after the event in progress.
-            _eventPump = new AsyncEventPump(_options.EventPumpCapacity) { StopToken = _lifetime.Token };
-            _eventPump.OnEventDropped = evt =>
-            {
-                AmiMetrics.EventsDropped.Add(1, BufferFullReason);
-                var channel = evt.RawFields is not null && evt.RawFields.TryGetValue("Channel", out var ch) ? ch : null;
-                AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
-            };
-            _eventPump.Start(DispatchEventAsync);
-            var readerToken = _cts.Token;
-            _readerLoop = Task.Run(() => ReaderLoopAsync(fullyBooted, readerToken), CancellationToken.None);
-            readerLoopStarted = true;
+            StartSession(byLoop, fullyBooted, socket, sessionToken);
         }
-        finally
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // A session that never came up never reports FullyBooted: whoever bound to its task learns it here.
-            if (!readerLoopStarted)
-                fullyBooted.TrySetCanceled(CancellationToken.None);
+            // A session that never came up never reports FullyBooted: whoever bound to its task learns it here, before
+            // the state the failure writes.
+            fullyBooted.TrySetCanceled(CancellationToken.None);
+
+            var cause = !byLoop && cancellationToken.IsCancellationRequested ? null : ex;
+            var yielded = await ReleaseFailedAttemptAsync(byLoop, cts, ctsPublished, socket, socketPublished, cause);
+            if (!yielded || ex is OperationCanceledException)
+                throw;
+
+            throw new OperationCanceledException(
+                byLoop ? "The connection was ended during a reconnect attempt." : "The connection was ended during the connect.",
+                ex, _lifetime.Token);
         }
 
         // Register observable gauges only once (avoid accumulation on reconnect)
@@ -425,22 +455,102 @@ public sealed class AmiConnection : IAmiConnection
             _gaugesRegistered = true;
         }
 
-        // Start heartbeat loop if enabled
-        if (_options.EnableHeartbeat && _options.HeartbeatInterval > TimeSpan.Zero)
+        AmiConnectionLog.Connected(_logger, _options.Hostname, _options.Port, AsteriskVersion);
+    }
+
+    /// <summary>
+    /// Writes <see cref="AmiConnectionState.Connected"/> and starts the session's event pump, reader loop and heartbeat,
+    /// all under <c>_endingLock</c>, unless an ending has been recorded: then nothing starts, and the attempt yields with
+    /// an <see cref="OperationCanceledException"/>. An ending recorded afterwards finds every part of the session in place.
+    /// </summary>
+    private void StartSession(bool byLoop, TaskCompletionSource fullyBooted, ISocketConnection socket, CancellationToken sessionToken)
+    {
+        lock (_endingLock)
         {
-            var socket = _socket;
-            var token = _cts.Token;
-            _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(socket, token), CancellationToken.None);
+            ThrowIfEndingRecordedLocked(byLoop);
+            SetStateLocked(AmiConnectionState.Connected, cause: null, byCaller: !byLoop);
+
+            // The pump observes the caller's ending from its creation, before Start: once _lifetime is cancelled it
+            // delivers nothing after the event in progress.
+            var pump = new AsyncEventPump(_options.EventPumpCapacity) { StopToken = _lifetime.Token };
+            pump.OnEventDropped = evt =>
+            {
+                AmiMetrics.EventsDropped.Add(1, BufferFullReason);
+                var channel = evt.RawFields is not null && evt.RawFields.TryGetValue("Channel", out var ch) ? ch : null;
+                AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
+            };
+            _eventPump = pump;
+            pump.Start(DispatchEventAsync);
+            _readerLoop = Task.Run(() => ReaderLoopAsync(fullyBooted, sessionToken), CancellationToken.None);
+
+            if (_options.EnableHeartbeat && _options.HeartbeatInterval > TimeSpan.Zero)
+                _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(socket, sessionToken), CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Releases what a failed attempt owns, and for a caller's attempt writes <see cref="AmiConnectionState.Disconnected"/>
+    /// once the release has finished. Returns <see langword="true"/> when an ending was recorded meanwhile: that ending
+    /// owns the state, and its cleanup releases what the attempt had published.
+    /// </summary>
+    /// <remarks>
+    /// Never <see cref="CleanupAsync"/> or an ending: the attempt releases its own socket and token source, held in
+    /// locals, and nothing a session before it left — the caller's attempt runs only on a connection with no live
+    /// session, and records no ending, so a later <see cref="ConnectAsync"/> proceeds.
+    /// </remarks>
+    private async ValueTask<bool> ReleaseFailedAttemptAsync(bool byLoop, CancellationTokenSource cts, bool ctsPublished,
+        ISocketConnection? socket, bool socketPublished, Exception? cause)
+    {
+        bool yielded;
+        bool releaseSocket;
+        bool releaseCts;
+        lock (_endingLock)
+        {
+            yielded = _ending is not null;
+            // What was published belongs to the ending's cleanup once an ending is recorded, and to the loop's next
+            // cleanup or its give-up for the loop's attempt; the caller's attempt with no ending takes it back.
+            var takeBack = !yielded && !byLoop;
+            if (takeBack)
+            {
+                if (socketPublished && ReferenceEquals(_socket, socket))
+                {
+                    _socket = null;
+                    _reader = null;
+                    _writer = null;
+                }
+
+                if (ctsPublished && ReferenceEquals(_cts, cts))
+                    _cts = null;
+            }
+
+            releaseSocket = socket is not null && (!socketPublished || takeBack);
+            releaseCts = !ctsPublished || takeBack;
         }
 
-        AmiConnectionLog.Connected(_logger, _options.Hostname, _options.Port, AsteriskVersion);
+        if (releaseSocket)
+            await socket!.DisposeAsync();
+
+        if (releaseCts)
+            cts.Dispose();
+
+        if (yielded || byLoop)
+            return yielded;
+
+        lock (_endingLock)
+        {
+            // An ending recorded during the release found nothing of this attempt's, and writes Disconnected itself.
+            if (_ending is not null)
+                return true;
+
+            SetStateLocked(AmiConnectionState.Disconnected, cause, byCaller: true);
+            return false;
+        }
     }
 
     /// <summary>
     /// A connection lost for good was released, not disposed, so its caller may connect it again. Its
     /// finished ending is forgotten before the connect acquires anything, so that the next ending releases
-    /// what this connect acquires — the socket a failed connect leaves open included — instead of joining
-    /// the ending that is already over.
+    /// what this connect acquires instead of joining the ending that is already over.
     /// </summary>
     private void ForgetLostConnectionEnding()
     {
@@ -452,11 +562,12 @@ public sealed class AmiConnection : IAmiConnection
     }
 
     /// <summary>
-    /// A connect writes its state, the caller's and the reconnect loop's alike, unless an ending has been recorded:
-    /// from then on that ending owns the state, and the attempt is abandoned with an
+    /// A connect writes <see cref="AmiConnectionState.Connecting"/>, the caller's and the reconnect loop's alike, unless an
+    /// ending has been recorded: from then on that ending owns the state, and the attempt is abandoned with an
     /// <see cref="OperationCanceledException"/>. A caller's connect that finds the caller's own ending recorded before
     /// it wrote anything throws <see cref="ObjectDisposedException"/>, as <see cref="ConnectAsync"/>'s guard does once
-    /// that ending has finished.
+    /// that ending has finished; one that finds a live session — connected, reconnecting, or in a connect attempt —
+    /// throws <see cref="InvalidOperationException"/> and changes nothing.
     /// </summary>
     private void SetConnectState(AmiConnectionState state, bool byLoop)
     {
@@ -465,6 +576,13 @@ public sealed class AmiConnection : IAmiConnection
         {
             if (_ending is null)
             {
+                var current = _state;
+                if (!byLoop && current is AmiConnectionState.Connected or AmiConnectionState.Reconnecting or AmiConnectionState.Connecting)
+                {
+                    throw new InvalidOperationException(
+                        $"The AMI connection is {current}: ConnectAsync connects a connection that has no live session, and a lost connection reconnects on its own.");
+                }
+
                 SetStateLocked(state, cause: null, byCaller: !byLoop);
                 return;
             }
@@ -475,8 +593,22 @@ public sealed class AmiConnection : IAmiConnection
         if (byLoop)
             throw new OperationCanceledException("The connection was ended during a reconnect attempt.", _lifetime.Token);
 
-        ObjectDisposedException.ThrowIf(state == AmiConnectionState.Connecting && closedByCaller, this);
+        ObjectDisposedException.ThrowIf(closedByCaller, this);
         throw new OperationCanceledException("The connection was ended during the connect.", _lifetime.Token);
+    }
+
+    /// <summary>
+    /// Throws the <see cref="OperationCanceledException"/> an attempt yields with once an ending has been recorded. The
+    /// caller holds <c>_endingLock</c>.
+    /// </summary>
+    private void ThrowIfEndingRecordedLocked(bool byLoop)
+    {
+        if (_ending is null)
+            return;
+
+        throw new OperationCanceledException(
+            byLoop ? "The connection was ended during a reconnect attempt." : "The connection was ended during the connect.",
+            _lifetime.Token);
     }
 
     /// <summary>
@@ -553,14 +685,14 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
-    private async ValueTask LoginAsync(CancellationToken ct)
+    private async ValueTask LoginAsync(AmiProtocolReader reader, AmiProtocolWriter writer, CancellationToken ct)
     {
         // Step 1: Send Challenge action
         var challengeId = NextActionId();
-        await _writer!.WriteActionAsync("Challenge", challengeId,
+        await writer.WriteActionAsync("Challenge", challengeId,
             [new("AuthType", "MD5")], ct);
 
-        var challengeResponse = await ReadResponseAsync(challengeId, ct);
+        var challengeResponse = await ReadResponseAsync(reader, challengeId, ct);
         var challenge = challengeResponse["Challenge"]
             ?? throw new AmiAuthenticationException("No challenge received from Asterisk");
 
@@ -573,14 +705,14 @@ public sealed class AmiConnection : IAmiConnection
 
         // Step 3: Send Login action with MD5 key
         var loginId = NextActionId();
-        await _writer.WriteActionAsync("Login", loginId,
+        await writer.WriteActionAsync("Login", loginId,
         [
             new("AuthType", "MD5"),
             new("Username", _options.Username),
             new("Key", key)
         ], ct);
 
-        var loginResponse = await ReadResponseAsync(loginId, ct);
+        var loginResponse = await ReadResponseAsync(reader, loginId, ct);
         if (!string.Equals(loginResponse.ResponseStatus, "Success", StringComparison.OrdinalIgnoreCase))
         {
             var msg = loginResponse["Message"] ?? "Unknown error";
@@ -588,15 +720,16 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
-    private async ValueTask DetectVersionAsync(CancellationToken ct, CancellationToken callerToken)
+    private async ValueTask DetectVersionAsync(AmiProtocolReader reader, AmiProtocolWriter writer, CancellationToken ct,
+        CancellationToken callerToken)
     {
         // A probe that fails or times out falls back to the CLI command and then to "Unknown",
         // but a caller who cancelled ConnectAsync must get that cancellation, not a connection.
         try
         {
             var actionId = NextActionId();
-            await _writer!.WriteActionAsync("CoreSettings", actionId, cancellationToken: ct);
-            var response = await ReadResponseAsync(actionId, ct);
+            await writer.WriteActionAsync("CoreSettings", actionId, cancellationToken: ct);
+            var response = await ReadResponseAsync(reader, actionId, ct);
             AsteriskVersion = response["AsteriskVersion"];
         }
         catch (Exception) when (!callerToken.IsCancellationRequested)
@@ -605,9 +738,9 @@ public sealed class AmiConnection : IAmiConnection
             try
             {
                 var actionId = NextActionId();
-                await _writer!.WriteActionAsync("Command", actionId,
+                await writer.WriteActionAsync("Command", actionId,
                     [new("Command", "core show version")], ct);
-                var response = await ReadResponseAsync(actionId, ct);
+                var response = await ReadResponseAsync(reader, actionId, ct);
                 AsteriskVersion = response.CommandOutput?.Trim();
             }
             catch (Exception) when (!callerToken.IsCancellationRequested)
@@ -622,14 +755,14 @@ public sealed class AmiConnection : IAmiConnection
     /// loop runs: every other message it reads is dropped, except that a <c>FullyBooted</c> event completes the
     /// session's <see cref="FullyBooted"/>.
     /// </summary>
-    private async ValueTask<AmiMessage> ReadResponseAsync(string actionId, CancellationToken ct)
+    private async ValueTask<AmiMessage> ReadResponseAsync(AmiProtocolReader reader, string actionId, CancellationToken ct)
     {
         using var timeout = new CancellationTokenSource(_options.DefaultResponseTimeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
 
         while (true)
         {
-            var msg = await _reader!.ReadMessageAsync(linked.Token)
+            var msg = await reader.ReadMessageAsync(linked.Token)
                 ?? throw new AmiConnectionException("Connection closed while waiting for response");
 
             if (msg.IsResponse && string.Equals(msg.ActionId, actionId, StringComparison.OrdinalIgnoreCase))
