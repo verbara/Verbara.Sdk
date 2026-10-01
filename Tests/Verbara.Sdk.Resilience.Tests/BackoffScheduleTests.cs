@@ -88,6 +88,18 @@ public sealed class BackoffScheduleTests
         result.Should().Be(TimeSpan.FromMinutes(5));
     }
 
+    [Theory]
+    [InlineData(2000.0, 100)]
+    [InlineData(1e10, 32)]
+    [InlineData(double.MaxValue, 3)]
+    public void Compute_ShouldReturnZero_WhenTheBaseDelayIsZeroAndThePowerOverflows(double multiplier, int attempt)
+    {
+        // Zero times an infinite power is not a number; the delay of a zero base is zero at every attempt.
+        var act = () => BackoffSchedule.Compute(attempt, TimeSpan.Zero, multiplier, TimeSpan.FromSeconds(30));
+
+        act.Should().NotThrow().Which.Should().Be(TimeSpan.Zero);
+    }
+
     [Fact]
     public void ComputeWithJitter_ShouldReturnValueNearBase_WhenJitterFractionIsSmall()
     {

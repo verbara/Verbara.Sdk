@@ -457,6 +457,220 @@ public sealed class AmiReconnectLoopTests
         (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue();
     }
 
+    /// <summary>
+    /// Values inside the rule must keep the loop reconnecting past the attempt where the multiplier's power overflows a
+    /// <see cref="double"/> (about the 100th with a multiplier of 2000): a zero initial delay times an infinite power is
+    /// not a number, which the backoff must not turn into an exception that ends the reconnect. 120 refused connects,
+    /// then the give-up at <c>MaxReconnectAttempts</c>, and no <c>ReconnectBackoffFailed</c>.
+    /// </summary>
+    [Fact]
+    public async Task ReconnectLoop_ShouldKeepReconnecting_WhenAZeroInitialDelayMeetsAMultiplierWhosePowerOverflows()
+    {
+        const int maxReconnectAttempts = 120;
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory { ConnectsAccepted = 1 };
+        var logger = new RecordingLogger();
+        var connection = new AmiConnection(Options.Create(new AmiConnectionOptions
+        {
+            Hostname = "localhost",
+            Username = "admin",
+            Password = "secret",
+            EnableHeartbeat = false,
+            AutoReconnect = true,
+            MaxReconnectAttempts = maxReconnectAttempts,
+            ReconnectInitialDelay = TimeSpan.Zero,
+            ReconnectMultiplier = 2000.0,
+            ReconnectMaxDelay = TimeSpan.Zero,
+        }), factory, logger);
+        var first = await ConnectAsync(connection, factory, peerCts);
+        var disconnected = logger.Logged("[AMI] Disconnected");
+
+        first.CloseFromPeer();
+        var ended = await CompletesWithinBoundAsync(disconnected);
+
+        using (new AssertionScope())
+        {
+            ended.Should().BeTrue("the loop ends, at its give-up");
+            logger.Named("ReconnectBackoffFailed").Should().BeEmpty("values the rule accepted never fail the backoff");
+            (factory.Created.Count - 1).Should().Be(maxReconnectAttempts, "every attempt up to the limit is made");
+            connection.State.Should().Be(AmiConnectionState.Disconnected);
+        }
+
+        (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// The count's second failure mode: every reconnect's TCP connect is accepted and the peer closes the socket before
+    /// the banner, as an Asterisk restarting behind a listener does. Each such connect is one failed attempt, so
+    /// <c>MaxReconnectAttempts = N</c> still makes exactly N reconnect connects, then gives up
+    /// <see cref="AmiConnectionState.Disconnected"/> with every socket released once.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public async Task ReconnectLoop_ShouldMakeExactlyNConnects_WhenEveryReconnectIsAcceptedAndClosed(int maxReconnectAttempts)
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory();
+        var logger = new SignalingLogger<AmiConnection>();
+        var connection = new AmiConnection(Options.Create(new AmiConnectionOptions
+        {
+            Hostname = "localhost",
+            Username = "admin",
+            Password = "secret",
+            EnableHeartbeat = false,
+            AutoReconnect = true,
+            MaxReconnectAttempts = maxReconnectAttempts,
+            ReconnectInitialDelay = TimeSpan.FromMilliseconds(5),
+            ReconnectMaxDelay = TimeSpan.FromMilliseconds(5),
+        }), factory, logger);
+        var first = await ConnectAsync(connection, factory, peerCts);
+        var gaveUp = logger.Logged("[AMI] Disconnected");
+        // Every socket the loop creates is accepted and closed by its peer before the banner.
+        var closer = Task.Run(async () =>
+        {
+            try
+            {
+                while (true)
+                    (await factory.NextAsync(peerCts.Token)).CloseFromPeer();
+            }
+            catch (OperationCanceledException) when (peerCts.IsCancellationRequested)
+            {
+                // The test is over.
+            }
+        });
+
+        first.CloseFromPeer();
+        var ended = await CompletesWithinBoundAsync(gaveUp);
+        var loop = ReconnectLoopOf(connection);
+        var loopCompleted = loop is not null && await CompletesWithinBoundAsync(loop);
+
+        var sockets = factory.Created;
+        using (new AssertionScope())
+        {
+            ended.Should().BeTrue("the loop gives up once its attempts are used");
+            loopCompleted.Should().BeTrue("the loop's task completes at the give-up");
+            (sockets.Count - 1).Should().Be(maxReconnectAttempts,
+                $"MaxReconnectAttempts = {maxReconnectAttempts} makes exactly that many reconnect connects when each is accepted and closed");
+            connection.State.Should().Be(AmiConnectionState.Disconnected);
+            logger.Entries.Count(e => e.Line.Contains("[AMI] Reconnect attempt failed", StringComparison.Ordinal)).Should().Be(maxReconnectAttempts,
+                "each accepted-and-closed connect is one failed attempt");
+            Unreleased(sockets).Should().BeEmpty("every socket the connection created is released exactly once");
+        }
+
+        (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue();
+        await peerCts.CancelAsync();
+        (await CompletesWithinBoundAsync(closer)).Should().BeTrue("the peer stops with the test");
+    }
+
+    /// <summary>
+    /// A caller's ending racing the give-up, from both sides (the #360 ending paths). <c>before</c>: the ending is issued
+    /// on the loop's own last <c>[AMI] Reconnect attempt failed</c> line, so it is recorded before the loop reaches its
+    /// attempt check. <c>during</c>: the ending is issued from inside the give-up's own release of the last socket, so it
+    /// joins the connection's ending under way. Either way the caller's call returns, nothing is dialled after the
+    /// N-th connect, every socket is released exactly once and the connection ends <see cref="AmiConnectionState.Disconnected"/>.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(AmiConnection.DisposeAsync), "before")]
+    [InlineData(nameof(AmiConnection.DisposeAsync), "during")]
+    [InlineData(nameof(AmiConnection.DisconnectAsync), "before")]
+    [InlineData(nameof(AmiConnection.DisconnectAsync), "during")]
+    public async Task Ending_ShouldReleaseEverySocketOnce_WhenTheCallerEndsTheConnectionAsTheLoopGivesUp(string ending, string when)
+    {
+        const int maxReconnectAttempts = 2;
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory { ConnectsAccepted = 1 };
+        var logger = new ActingLogger("[AMI] Reconnect attempt failed", occurrence: maxReconnectAttempts);
+        var connection = new AmiConnection(Options.Create(new AmiConnectionOptions
+        {
+            Hostname = "localhost",
+            Username = "admin",
+            Password = "secret",
+            EnableHeartbeat = false,
+            AutoReconnect = true,
+            MaxReconnectAttempts = maxReconnectAttempts,
+            ReconnectInitialDelay = TimeSpan.FromMilliseconds(5),
+            ReconnectMaxDelay = TimeSpan.FromMilliseconds(5),
+        }), factory, logger);
+        var issued = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+        logger.Act = when == "before"
+            ? () => issued.TrySetResult(EndAsync(connection, ending))
+            // The last failed connect's socket is released by the give-up's own ending: issue the caller's there.
+            : () => factory.Created[^1].DuringFirstDispose = () => issued.TrySetResult(EndAsync(connection, ending));
+        var first = await ConnectAsync(connection, factory, peerCts);
+
+        first.CloseFromPeer();
+        var callerEnding = await ResultWithinBoundAsync(issued.Task);
+        callerEnding.Should().NotBeNull("the caller's ending is issued at the give-up");
+        var returned = await CompletesWithinBoundAsync(callerEnding!);
+        var loop = ReconnectLoopOf(connection);
+        var loopCompleted = loop is not null && await CompletesWithinBoundAsync(loop);
+
+        var sockets = factory.Created;
+        using (new AssertionScope())
+        {
+            returned.Should().BeTrue($"{ending} returns when it lands on the give-up ({when})");
+            loopCompleted.Should().BeTrue("the reconnect loop's task completes");
+            (sockets.Count - 1).Should().Be(maxReconnectAttempts, "nothing is dialled after the last attempt");
+            Unreleased(sockets).Should().BeEmpty("every socket is released exactly once, whichever ending releases it");
+            connection.State.Should().Be(AmiConnectionState.Disconnected);
+            logger.Entries.Count(e => e.Line.Contains("[AMI] Disconnected", StringComparison.Ordinal)).Should().Be(1,
+                "the two endings are one ending: Disconnected is reported once");
+        }
+
+        (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// A caller's ending issued on the loop's own <c>ReconnectBackoffFailed</c> line, right before the loop ends the
+    /// connection itself: the loop's ending yields to the caller's, which returns, releases the lost socket once and
+    /// leaves <see cref="AmiConnectionState.Disconnected"/>.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(AmiConnection.DisposeAsync))]
+    [InlineData(nameof(AmiConnection.DisconnectAsync))]
+    public async Task Ending_ShouldReleaseTheLostSocketOnce_WhenTheCallerEndsTheConnectionAsTheBackoffFails(string ending)
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory { ConnectsAccepted = 1 };
+        var logger = new ActingLogger("[AMI] Reconnect backoff failed", occurrence: 1);
+        var options = new AmiConnectionOptions
+        {
+            Hostname = "localhost",
+            Username = "admin",
+            Password = "secret",
+            EnableHeartbeat = false,
+            AutoReconnect = true,
+            ReconnectInitialDelay = Backoff,
+            ReconnectMaxDelay = Backoff,
+        };
+        var connection = new AmiConnection(Options.Create(options), factory, logger);
+        // Changed after construction, so the constructor's check never saw it.
+        options.ReconnectMultiplier = 0.5;
+        var issued = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+        logger.Act = () => issued.TrySetResult(EndAsync(connection, ending));
+        var first = await ConnectAsync(connection, factory, peerCts);
+
+        first.CloseFromPeer();
+        var callerEnding = await ResultWithinBoundAsync(issued.Task);
+        callerEnding.Should().NotBeNull("the backoff fails and its line issues the caller's ending");
+        var returned = await CompletesWithinBoundAsync(callerEnding!);
+        var loop = ReconnectLoopOf(connection);
+        var loopCompleted = loop is not null && await CompletesWithinBoundAsync(loop);
+
+        var sockets = factory.Created;
+        using (new AssertionScope())
+        {
+            returned.Should().BeTrue($"{ending} returns when it lands on the backoff failure");
+            loopCompleted.Should().BeTrue("the reconnect loop's task completes");
+            sockets.Should().HaveCount(1, "the loop makes no connect");
+            Unreleased(sockets).Should().BeEmpty("the lost socket is released exactly once");
+            connection.State.Should().Be(AmiConnectionState.Disconnected);
+            logger.Entries.Count(e => e.Line.Contains("[AMI] Disconnected", StringComparison.Ordinal)).Should().Be(1,
+                "the two endings are one ending: Disconnected is reported once");
+        }
+    }
+
     /// <summary>The connection's private field that holds the reconnect loop's task.</summary>
     private static readonly FieldInfo ReconnectLoopField =
         typeof(AmiConnection).GetField("_reconnectLoop", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -600,6 +814,8 @@ public sealed class AmiReconnectLoopTests
         private int _seen;
 
         public Action? Act { get; set; }
+
+        public IReadOnlyList<(LogLevel Level, string Line)> Entries => _signals.Entries;
 
         public Task Logged(string lineFragment) => _signals.Logged(lineFragment);
 

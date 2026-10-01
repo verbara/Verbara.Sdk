@@ -61,6 +61,30 @@ public sealed partial class AddVerbaraOptionsDeliveryTests
         [nameof(AriClientOptions.MaxReconnectAttempts)] = ("3", o => o.MaxReconnectAttempts = 3, o => o.MaxReconnectAttempts),
     };
 
+    /// <summary>
+    /// The two lists above are the set of options these tests prove are delivered, and <c>CopyAmiOptions</c> /
+    /// <c>CopyAriOptions</c> are hand-written: an option added to either type later, and to neither list, would be
+    /// dropped by <c>AddVerbara(o => …)</c> with every test here still green. Read by reflection, in the test only.
+    /// </summary>
+    [Fact]
+    public void OptionLists_ShouldNameEverySettableOption_OfBothOptionTypes()
+    {
+        static string[] Settable([System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties)] Type type) =>
+            [.. type.GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public)
+                .Where(p => p.SetMethod is { IsPublic: true })
+                .Select(p => p.Name)
+                .Order(StringComparer.Ordinal)];
+
+        using (new AssertionScope())
+        {
+            AmiOptions.Keys.Order(StringComparer.Ordinal).Should().Equal(Settable(typeof(AmiConnectionOptions)),
+                "every settable AmiConnectionOptions option is one whose delivery through AddVerbara is tested");
+            AriOptions.Keys.Append(nameof(AriClientOptions.ConfigureAudioServer)).Order(StringComparer.Ordinal)
+                .Should().Equal(Settable(typeof(AriClientOptions)),
+                    "every settable AriClientOptions option is one whose delivery through AddVerbara is tested (the audio-server callback by its own test)");
+        }
+    }
+
     public static TheoryData<string> AmiOptionNames => new(AmiOptions.Keys);
 
     public static TheoryData<string> AriOptionNames => new(AriOptions.Keys);

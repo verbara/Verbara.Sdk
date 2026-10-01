@@ -199,6 +199,49 @@ public sealed class AriClientOptionsValidatorTests
         }
     }
 
+    /// <summary>
+    /// Reconnect values the rule accepts, at its edges: a zero initial delay with a multiplier whose powers overflow a
+    /// <see cref="double"/>, the largest finite multiplier, delays at the wait limit. Initial and maximum delay in ms.
+    /// </summary>
+    public static TheoryData<long, double, long> AcceptedReconnectEdges => new()
+    {
+        { 0, double.MaxValue, int.MaxValue },
+        { 0, 2000.0, int.MaxValue },
+        { 0, 1e10, 1000 },
+        { 1, double.MaxValue, int.MaxValue },
+        { int.MaxValue, 1.0, int.MaxValue },
+        { 1000, 2.0, 30_000 },
+    };
+
+    /// <summary>
+    /// "Accepted ⇒ <see cref="BackoffSchedule.Compute"/> accepts" must hold at every attempt the loop can reach, not only
+    /// the first: the loop computes a delay on each iteration, and a value the rule accepted that throws there ends the
+    /// reconnect. Every delay is also between zero and the maximum, so it is one the loop can wait.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(AcceptedReconnectEdges))]
+    public void Validate_ShouldAcceptOnlyValuesTheBackoffComputesAtEveryAttempt(long initialMs, double multiplier, long maxMs)
+    {
+        var options = ReconnectOptions("ReconnectMultiplier = 1", autoReconnect: true);
+        options.ReconnectInitialDelay = TimeSpan.FromMilliseconds(initialMs);
+        options.ReconnectMultiplier = multiplier;
+        options.ReconnectMaxDelay = TimeSpan.FromMilliseconds(maxMs);
+        int[] attempts = [1, 2, 3, 32, 50, 100, 101, 102, 1000, int.MaxValue];
+
+        using (new AssertionScope())
+        {
+            _sut.Validate(null, options).Succeeded.Should().BeTrue("these values are inside the rule");
+            foreach (var attempt in attempts)
+            {
+                var compute = () => BackoffSchedule.Compute(attempt, options.ReconnectInitialDelay, options.ReconnectMultiplier, options.ReconnectMaxDelay);
+                compute.Should().NotThrow($"the rule accepted initial {initialMs} ms, multiplier {multiplier}, max {maxMs} ms, so attempt {attempt} is computable");
+                if (Record.Exception(() => { _ = compute(); }) is null)
+                    compute().Should().BeGreaterThanOrEqualTo(TimeSpan.Zero).And.BeLessThanOrEqualTo(options.ReconnectMaxDelay,
+                        $"attempt {attempt}'s delay is one the loop can wait");
+            }
+        }
+    }
+
     /// <summary>The longest delay .NET can wait: <see cref="int.MaxValue"/> ms, about 24.8 days (owner ruling Q2).</summary>
     internal static readonly TimeSpan WaitLimit = TimeSpan.FromMilliseconds(int.MaxValue);
 

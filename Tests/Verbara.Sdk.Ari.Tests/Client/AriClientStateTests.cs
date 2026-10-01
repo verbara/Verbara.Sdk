@@ -758,6 +758,72 @@ public sealed class AriClientStateTests
         }
     }
 
+    /// <summary>
+    /// The count's second failure mode: every reconnect's TCP connection is accepted and closed before any answer, as a
+    /// restarting Asterisk behind a listener does. The HTTP stack may retry such a connection inside one dial, so TCP
+    /// accepts are not attempts; the loop's own <c>Reconnecting</c> entries are. <c>MaxReconnectAttempts = N</c> makes N
+    /// attempts, numbered 1 to N, then gives up Faulted with one <c>ReconnectGaveUp</c>.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public async Task ReconnectLoop_ShouldMakeExactlyNAttempts_WhenEveryReconnectIsAcceptedAndClosed(int maxReconnectAttempts)
+    {
+        using var server = new TcpListener(IPAddress.Loopback, 0);
+        server.Start();
+        using var serverStop = new CancellationTokenSource();
+
+        var port = ((IPEndPoint)server.LocalEndpoint).Port;
+        var logger = new RecordingLogger();
+        var sut = new AriClient(ReconnectOptions(port, maxReconnectAttempts), logger);
+
+        var firstConnection = Task.Run(async () =>
+        {
+            using var accepted = await server.AcceptTcpClientAsync();
+            var stream = accepted.GetStream();
+            var (wsKey, _) = await WebSocketAudioServer.ReadUpgradeRequestAsync(stream, CancellationToken.None);
+            await WebSocketAudioServer.SendUpgradeResponseAsync(stream, wsKey!, CancellationToken.None);
+        });
+        await sut.ConnectAsync();
+        await firstConnection;
+
+        // Every later connection is accepted and closed at once, before anything is read or answered.
+        var accepts = 0;
+        var closer = Task.Run(async () =>
+        {
+            while (!serverStop.IsCancellationRequested)
+            {
+                using var accepted = await server.AcceptTcpClientAsync(serverStop.Token);
+                Interlocked.Increment(ref accepts);
+                accepted.Client.LingerState = new LingerOption(true, 0);
+            }
+        });
+
+        try
+        {
+            // The loop ends on its own, at MaxReconnectAttempts; nothing here cancels it.
+            await sut.EventLoop!.WaitAsync(WaitLimit);
+
+            using (new AssertionScope())
+            {
+                logger.Entries
+                    .Where(e => e.EventId.Name == "Reconnecting")
+                    .Select(e => e.Properties.Single(p => p.Key == "Attempt").Value)
+                    .Should().Equal(Enumerable.Range(1, maxReconnectAttempts).Cast<object>(),
+                        $"MaxReconnectAttempts = {maxReconnectAttempts} makes exactly that many attempts when each is accepted and closed");
+                Volatile.Read(ref accepts).Should().BeGreaterThanOrEqualTo(maxReconnectAttempts, "each attempt reached the listener");
+                sut.State.Should().Be(AriConnectionState.Faulted, "the loop gave up after its last attempt");
+                logger.Entries.Should().ContainSingle(e => e.EventId.Name == "ReconnectGaveUp");
+            }
+        }
+        finally
+        {
+            await sut.DisposeAsync();
+            await serverStop.CancelAsync();
+            await closer.ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+        }
+    }
+
     [Fact]
     public async Task DisposeAsync_ShouldStopReconnecting_WhenAReconnectUpgradeIsHeld()
     {
