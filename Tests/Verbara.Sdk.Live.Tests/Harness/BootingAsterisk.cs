@@ -151,6 +151,14 @@ internal sealed class BootingAsterisk
     /// </summary>
     public string? OriginateOutcome { get; init; }
 
+    /// <summary>
+    /// How long the destination of an accepted <c>Originate</c> rings before Asterisk reports its outcome: the peer
+    /// writes the <c>Response: Success</c> at once and the <c>OriginateResponse</c> this long after it, as Asterisk does
+    /// for a destination that answers late (8 s after the action for a dialplan <c>Wait(8)</c> before <c>Answer</c>,
+    /// measured on 20.20.1, 22.9.0 and 23.4.1). <see cref="TimeSpan.Zero"/> reports it at once.
+    /// </summary>
+    public TimeSpan OriginateRings { get; init; }
+
     /// <summary>The channels the peer lists on <c>Status</c>. Settable between two loads.</summary>
     public IReadOnlyList<StatusChannel> StatusChannels { get; set; } = [];
 
@@ -324,7 +332,7 @@ internal sealed class BootingAsterisk
 
         if (OriginateOutcome is { } outcome && string.Equals(name, "Originate", StringComparison.OrdinalIgnoreCase))
         {
-            await AnswerOriginateAsync(socket, id, outcome);
+            await AnswerOriginateAsync(socket, id, outcome, OriginateRings);
             return true;
         }
 
@@ -403,9 +411,15 @@ internal sealed class BootingAsterisk
     }
 
     /// <summary>The order and headers Asterisk 22.9.0 wrote for an async originate, raw.</summary>
-    private static async Task AnswerOriginateAsync(PipedSocket socket, string id, string outcome)
+    private static async Task AnswerOriginateAsync(PipedSocket socket, string id, string outcome, TimeSpan rings)
     {
         await socket.RespondAsync("Success", id, [new("Message", "Originate successfully queued")]);
+        if (rings > TimeSpan.Zero)
+        {
+            // fence-allow: SIMULATED-WORK — the destination rings this long before Asterisk reports the outcome
+            await Task.Delay(rings);
+        }
+
         var success = string.Equals(outcome, "Success", StringComparison.Ordinal);
         await socket.WriteEventAsync("OriginateResponse",
         [
