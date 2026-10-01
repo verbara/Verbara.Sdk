@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed: a destroyed bridge is released ten minutes after its destruction (#370)
+
+`BridgeManager` held every destroyed bridge until the next reconnect, about 1.9 KB each: 50,000 bridges over a
+simulated day left 50,000 held and 96.6 MB of heap. Now `GetById` still finds a destroyed bridge for 10 minutes, then
+the next bridge create or destroy releases it (no timer): the same day leaves 348 held and about 707 KB. A
+`BridgeDestroyed` subscriber that throws no longer keeps a bridge held. `BridgeCount` keeps its value, every bridge
+created since the last `Clear()` (active plus destroyed), and its documentation now says so.
+
+### Added: `BridgeManager.ActiveBridgeCount` (#370)
+
+The number of bridges not yet destroyed (the size of `ActiveBridges`), read in O(1).
+
 ### Added: an AMI connection announces every state it takes on `IAmiConnection.StateChanged` (#368)
 
 `StateChanged` raises one `AmiConnectionStateChange` per state the connection takes, in order, with `Previous`,
