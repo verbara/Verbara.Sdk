@@ -154,7 +154,7 @@ public class AmiConnectionOptionsValidatorTests
         get
         {
             var data = new TheoryData<string, string>();
-            foreach (var row in (IEnumerable<object[]>)UnusableReconnectValues)
+            foreach (var row in UnusableReconnectValues)
                 data.Add((string)row[0], (string)row[1]);
             data.Add("MaxReconnectAttempts = -1", nameof(AmiConnectionOptions.MaxReconnectAttempts));
             return data;

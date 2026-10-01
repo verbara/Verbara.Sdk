@@ -289,7 +289,8 @@ public sealed partial class AddVerbaraOptionsDeliveryTests
     public async Task AddVerbara_ShouldDeliverEveryKey_OfADocumentedConfigurationBlock(string file, int line)
     {
         var json = DocumentedBlocks().Single(b => b.File == file && b.Line == line).Json;
-        var configuration = new ConfigurationBuilder().AddJsonStream(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json))).Build();
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+        var configuration = new ConfigurationBuilder().AddJsonStream(stream).Build();
         var leaves = configuration.AsEnumerable().Where(kv => kv.Value is not null).ToList();
 
         await using var provider = Build(services => services.AddVerbara(configuration));
@@ -303,12 +304,16 @@ public sealed partial class AddVerbaraOptionsDeliveryTests
             foreach (var (key, text) in leaves)
             {
                 var delivered = Delivered(key, ami, ari, agiPort);
-                delivered.Should().NotBeNull(
-                    $"{file}:{line} shows the key {key}, which must be one AddVerbara(configuration) reads " +
-                    "(Asterisk:Ami:<option>, Asterisk:Ari:<option> or Asterisk:AgiPort)");
-                if (delivered is not null)
-                    delivered.Should().Be(Parse(text!, delivered.GetType()),
-                        $"{file}:{line} sets {key} = \"{text}\", and that is the value the client runs with");
+                if (delivered is null)
+                {
+                    Execute.Assertion.FailWith(
+                        "Expected {0} to be a key AddVerbara(configuration) reads (Asterisk:Ami:<option>, Asterisk:Ari:<option> " +
+                        "or Asterisk:AgiPort), because {1}:{2} shows it, but no option receives it.", key, file, line);
+                    continue;
+                }
+
+                delivered.Should().Be(Parse(text!, delivered.GetType()),
+                    $"{file}:{line} sets {key} = \"{text}\", and that is the value the client runs with");
             }
         }
     }
@@ -317,7 +322,8 @@ public sealed partial class AddVerbaraOptionsDeliveryTests
     public async Task AddVerbara_ShouldPassStartupValidation_WhenConfiguredWithTheHostingReadmeExample()
     {
         var (_, _, json) = DocumentedBlocks().First(b => b.File == "src/Verbara.Sdk.Hosting/README.md");
-        var configuration = new ConfigurationBuilder().AddJsonStream(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json))).Build();
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+        var configuration = new ConfigurationBuilder().AddJsonStream(stream).Build();
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddVerbara(configuration);

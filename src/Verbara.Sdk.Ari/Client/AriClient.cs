@@ -272,6 +272,10 @@ public sealed class AriClient : IAriClient
     {
         SetState(AriConnectionState.Reconnecting);
 
+        // The connection that ended is released before the first backoff, which can end the loop. From here on an
+        // attempt that fails releases its own socket in its catch; a cancelled one leaves it to DisposeAsync.
+        _webSocket?.Dispose();
+
         var attempt = 0;
 
         while (!ct.IsCancellationRequested)
@@ -318,8 +322,6 @@ public sealed class AriClient : IAriClient
             ClientWebSocket? socket = null;
             try
             {
-                // Dispose old WebSocket
-                _webSocket?.Dispose();
                 socket = new ClientWebSocket();
                 _webSocket = socket;
 
@@ -350,12 +352,15 @@ public sealed class AriClient : IAriClient
             catch (WebSocketException ex) when (socket?.HttpStatusCode == HttpStatusCode.Unauthorized)
             {
                 // 401 Unauthorized — credentials are wrong, do not retry. Final for this client instance.
+                socket.Dispose();
                 AriClientLog.ReconnectRejected(_logger, ex, (int)HttpStatusCode.Unauthorized);
                 SetState(AriConnectionState.Faulted);
                 return;
             }
             catch (Exception ex)
             {
+                // The next attempt dials a new socket, so this one is released here.
+                socket?.Dispose();
                 AriClientLog.WebSocketError(_logger, ex);
             }
 
