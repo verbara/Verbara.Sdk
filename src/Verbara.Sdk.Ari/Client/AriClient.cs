@@ -46,6 +46,11 @@ internal static partial class AriClientLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[ARI] Reconnect rejected: status_code={StatusCode}, not retrying")]
     public static partial void ReconnectRejected(ILogger logger, Exception exception, int statusCode);
+
+    // The loop's backoff could not be computed or waited: the reconnect ends here, Faulted, instead of dying where
+    // nobody sees it. Tests match it by its event name.
+    [LoggerMessage(Level = LogLevel.Error, Message = "[ARI] Reconnect backoff failed: the reconnect loop ends")]
+    public static partial void ReconnectBackoffFailed(ILogger logger, Exception exception);
 }
 
 /// <summary>
@@ -113,6 +118,10 @@ public sealed class AriClient : IAriClient
     public AriClient(IOptions<AriClientOptions> options, ILogger<AriClient> logger, IAudioServer? audioServer = null)
     {
         _options = options.Value;
+        // No validator runs on this path (factories, Options.Create, a registration built by hand): with
+        // AutoReconnect on, a value the reconnect backoff cannot use is rejected here, naming the option, instead of
+        // in a loop after a loss. Checked before the HttpClient exists, so a rejected client leaves nothing to dispose.
+        ReconnectRule.ThrowIfUnusable(_options);
         _logger = logger;
 
         // The HttpClient disposes the logging handler, and the logging handler its inner handler.
@@ -276,21 +285,31 @@ public sealed class AriClient : IAriClient
                 return;
             }
 
-            AriMetrics.Reconnections.Add(1);
-            var delay = global::Verbara.Sdk.Resilience.BackoffSchedule.Compute(
-                attempt,
-                _options.ReconnectInitialDelay,
-                _options.ReconnectMultiplier,
-                _options.ReconnectMaxDelay);
-            var delayMs = (long)delay.TotalMilliseconds;
-            AriClientLog.Reconnecting(_logger, delayMs, attempt);
-
             try
             {
+                // The options are held by reference and can change after construction, so the rule the constructor
+                // checked is checked again here; Compute and the delay throw on what it rejects.
+                ReconnectRule.ThrowIfUnusable(_options);
+                var delay = global::Verbara.Sdk.Resilience.BackoffSchedule.Compute(
+                    attempt,
+                    _options.ReconnectInitialDelay,
+                    _options.ReconnectMultiplier,
+                    _options.ReconnectMaxDelay);
+
+                AriMetrics.Reconnections.Add(1);
+                AriClientLog.Reconnecting(_logger, (long)delay.TotalMilliseconds, attempt);
                 await Task.Delay(delay, ct);
             }
             catch (OperationCanceledException)
             {
+                return;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // The backoff cannot be computed or waited. It would fail the same way on every iteration, with no
+                // delay, so it is not a failed attempt to retry: the loop ends as a give-up does, once, loudly.
+                AriClientLog.ReconnectBackoffFailed(_logger, ex);
+                SetState(AriConnectionState.Faulted);
                 return;
             }
 
