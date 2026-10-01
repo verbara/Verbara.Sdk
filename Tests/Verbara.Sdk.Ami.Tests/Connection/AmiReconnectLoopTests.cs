@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+using System.Reflection;
 using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Enums;
 using FluentAssertions;
@@ -53,9 +53,9 @@ public sealed class AmiReconnectLoopTests
     private static readonly TimeSpan DialWindow = Backoff * 5;
 
     [Theory]
-    // Gives up before any connect of its own: what is left is the socket the peer closed.
+    // Gives up after its one refused connect: what is left is the socket that connect created.
     [InlineData(1)]
-    // Gives up after refused connects: what is left is the last socket it created.
+    // Gives up after three refused connects: what is left is the last socket it created.
     [InlineData(3)]
     public async Task ReconnectLoop_ShouldDisposeEverySocket_WhenItGivesUpAtMaxReconnectAttempts(int maxReconnectAttempts)
     {
@@ -457,14 +457,16 @@ public sealed class AmiReconnectLoopTests
         (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue();
     }
 
-    /// <summary>
-    /// The reconnect loop's task, which the connection keeps private. Read through a test-only accessor so a test can wait
-    /// for the loop itself to end; <c>src/</c> exposes nothing for it.
-    /// </summary>
-    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_reconnectLoop")]
-    private static extern ref Task? ReconnectLoopField(AmiConnection connection);
+    /// <summary>The connection's private field that holds the reconnect loop's task.</summary>
+    private static readonly FieldInfo ReconnectLoopField =
+        typeof(AmiConnection).GetField("_reconnectLoop", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException("AmiConnection has no _reconnectLoop field: the test's seam moved.");
 
-    private static Task? ReconnectLoopOf(AmiConnection connection) => ReconnectLoopField(connection);
+    /// <summary>
+    /// The reconnect loop's task, which the connection keeps private. Read by reflection, in the test only, so a test can
+    /// wait for the loop itself to end; <c>src/</c> exposes nothing for it.
+    /// </summary>
+    private static Task? ReconnectLoopOf(AmiConnection connection) => (Task?)ReconnectLoopField.GetValue(connection);
 
     /// <summary>Each socket not disposed exactly once, described by its place in creation order.</summary>
     private static List<string> Unreleased(IReadOnlyList<PipedSocket> sockets) =>
