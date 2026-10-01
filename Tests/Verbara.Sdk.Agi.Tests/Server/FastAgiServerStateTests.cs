@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
 using Verbara.Sdk.Agi.Mapping;
@@ -9,30 +10,29 @@ using NSubstitute;
 
 namespace Verbara.Sdk.Agi.Tests.Server;
 
-public sealed class FastAgiServerStateTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class FastAgiServerStateTests : IAsyncLifetime
 {
     private FastAgiServer? _sut;
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         if (_sut is not null)
             await _sut.DisposeAsync();
-    }
-
-    private static int GetAvailablePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
     }
 
     [Fact]
     public void NewServer_ShouldHaveStoppedState()
     {
         var strategy = Substitute.For<IMappingStrategy>();
-        _sut = new FastAgiServer(GetAvailablePort(), strategy, NullLogger<FastAgiServer>.Instance);
+        _sut = new FastAgiServer(0, strategy, NullLogger<FastAgiServer>.Instance);
 
         _sut.State.Should().Be(AgiServerState.Stopped);
     }
@@ -41,7 +41,7 @@ public sealed class FastAgiServerStateTests : IAsyncDisposable
     public async Task StartAsync_ShouldTransitionToListening()
     {
         var strategy = Substitute.For<IMappingStrategy>();
-        _sut = new FastAgiServer(GetAvailablePort(), strategy, NullLogger<FastAgiServer>.Instance);
+        _sut = new FastAgiServer(0, strategy, NullLogger<FastAgiServer>.Instance);
 
         await _sut.StartAsync();
 
@@ -54,7 +54,7 @@ public sealed class FastAgiServerStateTests : IAsyncDisposable
     public async Task StopAsync_ShouldTransitionToStopped()
     {
         var strategy = Substitute.For<IMappingStrategy>();
-        _sut = new FastAgiServer(GetAvailablePort(), strategy, NullLogger<FastAgiServer>.Instance);
+        _sut = new FastAgiServer(0, strategy, NullLogger<FastAgiServer>.Instance);
 
         await _sut.StartAsync();
         await _sut.StopAsync();

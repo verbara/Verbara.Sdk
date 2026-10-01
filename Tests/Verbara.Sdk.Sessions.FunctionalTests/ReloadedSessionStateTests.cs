@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -35,7 +36,8 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// reloaded ones, so it asserts that a channel arriving live opens and progresses exactly as it
 /// does today even when it arrives already <c>Up</c>.</para>
 /// </summary>
-public sealed class ReloadedSessionStateTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class ReloadedSessionStateTests : IAsyncLifetime
 {
     private const string ServerId = "test-srv";
 
@@ -335,7 +337,14 @@ public sealed class ReloadedSessionStateTests : IAsyncDisposable
             + $"the difference the reloaded path must not erase. Measured: {Describe()}");
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         _sessionSubscription.Dispose();
         await _sessions.DisposeAsync();

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -36,7 +37,8 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// exactly once through <c>ChannelAdded</c>, that nothing is announced as removed, and that the
 /// announcement reaches the session manager.</para>
 /// </summary>
-public sealed class InitialLoadTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class InitialLoadTests : IAsyncLifetime
 {
     private const string ServerId = "test-srv";
 
@@ -263,7 +265,14 @@ public sealed class InitialLoadTests : IAsyncDisposable
         _sessions.ActiveSessions.Should().BeEmpty();
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         _sessionSubscription.Dispose();
         await _sessions.DisposeAsync();

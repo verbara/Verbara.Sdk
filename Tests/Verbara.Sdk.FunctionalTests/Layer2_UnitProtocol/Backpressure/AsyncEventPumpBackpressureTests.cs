@@ -1,11 +1,15 @@
 namespace Verbara.Sdk.FunctionalTests.Layer2_UnitProtocol.Backpressure;
 
+using System.Diagnostics.CodeAnalysis;
 using Verbara.Sdk.Ami.Internal;
 using FluentAssertions;
 
 [Trait("Category", "Unit")]
-public sealed class AsyncEventPumpBackpressureTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class AsyncEventPumpBackpressureTests : IAsyncLifetime
 {
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
     private readonly AsyncEventPump _pump;
 
     public AsyncEventPumpBackpressureTests()
@@ -78,5 +82,9 @@ public sealed class AsyncEventPumpBackpressureTests : IAsyncDisposable
         _pump.ProcessedEvents.Should().BeGreaterThanOrEqualTo(3);
     }
 
-    public async ValueTask DisposeAsync() => await _pump.DisposeAsync();
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync() => await _pump.DisposeAsync();
 }

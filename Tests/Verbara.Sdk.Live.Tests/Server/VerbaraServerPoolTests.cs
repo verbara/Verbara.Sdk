@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verbara.Sdk;
 using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Live.Server;
@@ -8,7 +9,8 @@ using NSubstitute;
 
 namespace Verbara.Sdk.Live.Tests.Server;
 
-public sealed class VerbaraServerPoolTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class VerbaraServerPoolTests : IAsyncLifetime
 {
     private readonly IAmiConnectionFactory _connectionFactory;
     private readonly VerbaraServerPool _sut;
@@ -34,10 +36,16 @@ public sealed class VerbaraServerPoolTests : IAsyncDisposable
         _sut = new VerbaraServerPool(_connectionFactory, NullLoggerFactory.Instance);
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         await _sut.DisposeAsync();
-        GC.SuppressFinalize(this);
     }
 
     private static IAmiConnection NewConnection()

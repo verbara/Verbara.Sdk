@@ -6,6 +6,7 @@ using Verbara.Sdk.Agi.Diagnostics;
 using Verbara.Sdk.Agi.Mapping;
 using Verbara.Sdk.Agi.Server;
 using Verbara.Sdk.Agi.Tests.TestSupport;
+using Verbara.Sdk.Tests.Shared.Sockets;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -275,7 +276,7 @@ public sealed class FastAgiConnectionWindowTests
         var logger = new CapturingLogger();
         using var accepted = AcceptedClients.NeverConnected();
         using var client = new ReleaseSignallingClient(accepted.Socket);
-        using var unobserved = new UnobservedServerFaults();
+        using var unobserved = new UnobservedServerFaults(nameof(FastAgiServer));
         var attempts = 0;
         var releasedAtNextAccept = false;
         var secondAttempt = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -407,78 +408,6 @@ public sealed class FastAgiConnectionWindowTests
         ILogger<FastAgiServer> logger,
         TimeProvider timeProvider) =>
         new(0, strategy, logger, timeProvider);
-
-    /// <summary>
-    /// A client that wraps a fixture's socket and signals when the server disposes it, so a test can
-    /// wait on the release instead of polling the socket.
-    /// </summary>
-    private sealed class ReleaseSignallingClient : TcpClient
-    {
-        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public ReleaseSignallingClient(Socket socket)
-            : base(AddressFamily.InterNetwork)
-        {
-            var unused = Client;
-            Client = socket;
-            unused.Dispose();
-        }
-
-        public Task Released => _released.Task;
-
-        protected override void Dispose(bool disposing)
-        {
-            base.Dispose(disposing);
-            if (disposing)
-                _released.TrySetResult();
-        }
-    }
-
-    /// <summary>
-    /// Records every task exception that went unobserved while it is subscribed and whose stack names
-    /// this server. The subscription is process-wide, so the filter keeps a fault from another test
-    /// class running in parallel out of this one's assertion; <see cref="All"/> keeps everything, for
-    /// the failure message.
-    /// </summary>
-    private sealed class UnobservedServerFaults : IDisposable
-    {
-        private readonly ConcurrentQueue<Exception> _seen = new();
-
-        public UnobservedServerFaults() => TaskScheduler.UnobservedTaskException += OnUnobserved;
-
-        /// <summary>The unobserved exceptions thrown through <see cref="FastAgiServer"/>.</summary>
-        public IReadOnlyList<string> Faults =>
-        [
-            .. _seen
-                .Where(ex => ex.StackTrace?.Contains(nameof(FastAgiServer), StringComparison.Ordinal) == true)
-                .Select(ex => $"{ex.GetType().Name}: {ex.Message}")
-        ];
-
-        /// <summary>Every unobserved exception seen, whatever threw it.</summary>
-        public IReadOnlyList<string> All => [.. _seen.Select(ex => $"{ex.GetType().Name}: {ex.Message}")];
-
-        /// <summary>
-        /// Collects, so a faulted task that nothing references any more is finalised and its
-        /// exception, if nothing observed it, is published before this returns. Call it only once the
-        /// task in question has completed.
-        /// </summary>
-        public static void CollectDiscardedTasks()
-        {
-            for (var pass = 0; pass < 3; pass++)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            }
-        }
-
-        public void Dispose() => TaskScheduler.UnobservedTaskException -= OnUnobserved;
-
-        private void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e)
-        {
-            foreach (var inner in e.Exception.InnerExceptions)
-                _seen.Enqueue(inner);
-        }
-    }
 
     /// <summary>A server log entry, reduced to what these tests assert on.</summary>
     private sealed record LogEntry(LogLevel Level, string? EventName, string? ExceptionType);

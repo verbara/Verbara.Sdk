@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
@@ -15,7 +16,8 @@ namespace Verbara.Sdk.VoiceAi.Tts.Tests.ElevenLabs;
 /// <c>ElevenLabsFakeServer</c> on <c>WebSocketTestServer</c> stays. Fidelity here comes from recorded
 /// frames (D4), not from a different server.
 /// </summary>
-public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public class ElevenLabsSpeechSynthesizerTests : IAsyncLifetime
 {
     private readonly ElevenLabsFakeServer _server;
 
@@ -564,9 +566,15 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncDisposable
         _server.LastRequestUrl.Should().StartWith("/v1/text-to-speech/voice-from-options/stream-input");
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
-        GC.SuppressFinalize(this);
         await _server.DisposeAsync();
     }
 }

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
 using Verbara.Sdk.Sessions.Internal;
 using Verbara.Sdk.Sessions.Manager;
@@ -7,7 +8,8 @@ using Microsoft.Extensions.Options;
 
 namespace Verbara.Sdk.Sessions.Tests.Manager;
 
-public sealed class CallSessionManagerReconstructionTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class CallSessionManagerReconstructionTests : IAsyncLifetime
 {
     private readonly CallSessionManager _sut;
 
@@ -17,7 +19,14 @@ public sealed class CallSessionManagerReconstructionTests : IAsyncDisposable
         _sut = new CallSessionManager(options, NullLogger<CallSessionManager>.Instance, new InMemorySessionStore());
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         await _sut.DisposeAsync();
     }

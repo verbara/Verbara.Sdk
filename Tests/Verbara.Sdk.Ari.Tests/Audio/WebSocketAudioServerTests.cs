@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Channels;
 using Verbara.Sdk.Ari.Audio;
 using Verbara.Sdk.Ari.Tests.TestSupport;
+using Verbara.Sdk.Tests.Shared.Sockets;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging;
@@ -88,8 +89,8 @@ public class WebSocketAudioServerTests
     [Fact]
     public async Task HandleConnectionAsync_ShouldRemoveAndDisposeSession_WhenClientCloses()
     {
-        var port = GetFreePort();
-        await using var server = await StartServerAsync(port);
+        var (started, port) = await StartOnLoopbackAsync();
+        await using var server = started;
         var disposedSignal = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var tracking = server.OnStreamConnected.Subscribe(stream => disposedSignal.TrySetResult(WhenDisposed(stream)));
 
@@ -108,8 +109,8 @@ public class WebSocketAudioServerTests
     [Fact]
     public async Task HandleConnectionAsync_ShouldRemoveAndDisposeSession_WhenStreamConnectedSubscriberThrows()
     {
-        var port = GetFreePort();
-        await using var server = await StartServerAsync(port);
+        var (started, port) = await StartOnLoopbackAsync();
+        await using var server = started;
         var disposedSignal = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
         // Observers run in subscription order: this one sees the session before the next one throws.
         using var tracking = server.OnStreamConnected.Subscribe(stream => disposedSignal.TrySetResult(WhenDisposed(stream)));
@@ -129,8 +130,8 @@ public class WebSocketAudioServerTests
     [Fact]
     public async Task HandleConnectionAsync_ShouldKeepFirstSession_WhenDuplicateChannelConnectionCloses()
     {
-        var port = GetFreePort();
-        await using var server = await StartServerAsync(port);
+        var (started, port) = await StartOnLoopbackAsync();
+        await using var server = started;
         var firstSignal = new TaskCompletionSource<IAudioStream>(TaskCreationOptions.RunContinuationsAsynchronously);
         var secondDisposedSignal = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var tracking = server.OnStreamConnected.Subscribe(stream =>
@@ -157,8 +158,8 @@ public class WebSocketAudioServerTests
     [Fact]
     public async Task HandleConnectionAsync_ShouldCloseClient_WhenUpgradeRequestHasNoKey()
     {
-        var port = GetFreePort();
-        await using var server = await StartServerAsync(port);
+        var (started, port) = await StartOnLoopbackAsync();
+        await using var server = started;
 
         using var client = new TcpClient();
         await client.ConnectAsync(IPAddress.Loopback, port);
@@ -175,8 +176,8 @@ public class WebSocketAudioServerTests
     [Fact]
     public async Task StopAsync_ShouldDisposeSession_WhenClientStillConnected()
     {
-        var port = GetFreePort();
-        await using var server = await StartServerAsync(port);
+        var (started, port) = await StartOnLoopbackAsync();
+        await using var server = started;
         var disposedSignal = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var tracking = server.OnStreamConnected.Subscribe(stream => disposedSignal.TrySetResult(WhenDisposed(stream)));
 
@@ -197,8 +198,8 @@ public class WebSocketAudioServerTests
     [Fact]
     public async Task StopAsync_ShouldReturnWithSessionDisposed_WhenTokenIsCancelledWhileSubscriberBlocks()
     {
-        var port = GetFreePort();
-        await using var server = await StartServerAsync(port);
+        var (started, port) = await StartOnLoopbackAsync();
+        await using var server = started;
         var disposedSignal = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
         var subscriberEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var subscriberLeft = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -251,9 +252,8 @@ public class WebSocketAudioServerTests
     public async Task StartAsync_ShouldBindNoSecondListener_WhenTheServerIsAlreadyRunning()
     {
         // Arrange — a server already bound and accepting.
-        var port = GetFreePort();
         var logger = new CapturingLogger();
-        var server = await StartServerAsync(port, logger);
+        var (server, port) = await StartOnLoopbackAsync(logger);
         var connected = new TaskCompletionSource<IAudioStream>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var tracking = server.OnStreamConnected.Subscribe(stream => connected.TrySetResult(stream));
 
@@ -305,9 +305,9 @@ public class WebSocketAudioServerTests
     public async Task StopAsync_ShouldTearDownOnce_WhenCalledTwice()
     {
         // Arrange
-        var port = GetFreePort();
         var logger = new CapturingLogger();
-        await using var server = await StartServerAsync(port, logger);
+        await using var server = CreateServer(PortTheOsPicks, logger);
+        await server.StartAsync();
 
         // Act — the second stop finds the server already stopped. Without the guard it walks the
         // whole teardown again: Stop() on a listener that is already down, a second CancelAsync,
@@ -330,8 +330,8 @@ public class WebSocketAudioServerTests
         // waits for every tracked handler, so while this one is parked the stop cannot finish, and
         // the flag can be read from the middle of it. The 101 response has already gone out by the
         // time the emission happens, so the client's connect completes before the park.
-        var port = GetFreePort();
-        await using var server = await StartServerAsync(port);
+        var (started, port) = await StartOnLoopbackAsync();
+        await using var server = started;
         var handlerParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var release = new ManualResetEventSlim();
         using var parking = server.OnStreamConnected.Subscribe(_ =>
@@ -383,7 +383,7 @@ public class WebSocketAudioServerTests
         // runs on a fake clock, so the loop resumes when this test moves it and at no other moment.
         var time = new FakeTimeProvider();
         var logger = new CapturingLogger();
-        await using var server = CreateServer(GetFreePort(), logger, time);
+        await using var server = CreateServer(PortTheOsPicks, logger, time);
         var attempts = 0;
         var secondAttempt = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         server.AcceptOverride = token =>
@@ -433,7 +433,7 @@ public class WebSocketAudioServerTests
         // Arrange — every accept fails, so the loop is a pure backoff generator and each wait it asks
         // for is read off the fake clock without any of it being spent.
         var time = new FakeTimeProvider();
-        await using var server = CreateServer(GetFreePort(), new CapturingLogger(), time);
+        await using var server = CreateServer(PortTheOsPicks, new CapturingLogger(), time);
         server.AcceptOverride = _ => throw new SocketException((int)SocketError.TooManyOpenSockets);
 
         await server.StartAsync();
@@ -479,7 +479,7 @@ public class WebSocketAudioServerTests
         using var accepted = await pair.AcceptTcpClientAsync();
 
         var time = new FakeTimeProvider();
-        await using var server = CreateServer(GetFreePort(), new CapturingLogger(), time);
+        await using var server = CreateServer(PortTheOsPicks, new CapturingLogger(), time);
         var attempts = 0;
         server.AcceptOverride = token => Interlocked.Increment(ref attempts) switch
         {
@@ -523,7 +523,7 @@ public class WebSocketAudioServerTests
         // and would never be waited out by accident.
         var time = new FakeTimeProvider();
         var logger = new CapturingLogger();
-        await using var server = CreateServer(GetFreePort(), logger, time);
+        await using var server = CreateServer(PortTheOsPicks, logger, time);
         var accepting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         server.AcceptOverride = token =>
         {
@@ -557,9 +557,9 @@ public class WebSocketAudioServerTests
         // next accept when _listener.Stop() aborts it. Which of the two shutdown shapes the platform
         // raises is not deterministic, so this case cannot be the guard — it is the evidence that the
         // guarded path is the one production actually takes.
-        var port = GetFreePort();
         var logger = new CapturingLogger();
-        await using var server = await StartServerAsync(port, logger);
+        var (started, port) = await StartOnLoopbackAsync(logger);
+        await using var server = started;
         var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var tracking = server.OnStreamConnected.Subscribe(_ => connected.TrySetResult());
 
@@ -793,8 +793,8 @@ public class WebSocketAudioServerTests
     public async Task HandleConnectionAsync_ShouldHandTheChannelToTheConnectionThatSharedIt_WhenTheFirstCloses()
     {
         // Arrange — the first client holds ch-shared; a second connects to the same path after it
-        var port = GetFreePort();
-        await using var server = await StartServerAsync(port);
+        var (started, port) = await StartOnLoopbackAsync();
+        await using var server = started;
         using var announcements = new Announcements(server);
 
         using var first = await ConnectAndAwaitAnnouncementAsync(port, "ch-shared", announcements);
@@ -816,8 +816,8 @@ public class WebSocketAudioServerTests
     {
         // Arrange — the chan_websocket shape: three calls through one websocket_client connection
         // upgrade on the same URI, in the order first, second, third
-        var port = GetFreePort();
-        await using var server = await StartServerAsync(port);
+        var (started, port) = await StartOnLoopbackAsync();
+        await using var server = started;
         using var announcements = new Announcements(server);
 
         using var first = await ConnectAndAwaitAnnouncementAsync(port, "ch-client", announcements);
@@ -855,8 +855,8 @@ public class WebSocketAudioServerTests
         // connection's announcement, before its handler subscribes the observer that ends its wait.
         // Parking inside the second session's Disconnected notification therefore holds its release
         // back, by construction, while the first one ends.
-        var port = GetFreePort();
-        await using var server = await StartServerAsync(port);
+        var (started, port) = await StartOnLoopbackAsync();
+        await using var server = started;
         using var announcements = new Announcements(server);
 
         var closedButNotReleased = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -914,8 +914,8 @@ public class WebSocketAudioServerTests
     public async Task ActiveStreamCount_ShouldCountEveryLiveConnection_WhenConnectionsShareOnePath()
     {
         // Arrange — the chan_websocket shape: three live calls upgrade on one URI
-        var port = GetFreePort();
-        await using var server = await StartServerAsync(port);
+        var (started, port) = await StartOnLoopbackAsync();
+        await using var server = started;
         using var announcements = new Announcements(server);
 
         using var first = await ConnectAndAwaitAnnouncementAsync(port, "ch-count", announcements);
@@ -955,9 +955,8 @@ public class WebSocketAudioServerTests
     public async Task AcceptLoop_ShouldCloseTheConnectionOverTheLimit_WhenLiveConnectionsSharingOnePathFillIt()
     {
         // Arrange — two live calls on one URI, under a limit of two
-        var port = GetFreePort();
-        await using var server = CreateServer(port, maxStreams: 2);
-        await server.StartAsync();
+        var (started, port) = await StartOnLoopbackAsync(maxStreams: 2);
+        await using var server = started;
         using var announcements = new Announcements(server);
 
         using var first = await ConnectAndAwaitAnnouncementAsync(port, "ch-limit", announcements);
@@ -981,9 +980,8 @@ public class WebSocketAudioServerTests
         // Arrange — a connection the server has accepted and that has not sent its upgrade request.
         // Its handshake completed before the next connection's began, and the loop accepts in that
         // order, so it has taken its place by the time the next one is admitted or refused.
-        var port = GetFreePort();
-        await using var server = CreateServer(port, maxStreams: 1);
-        await server.StartAsync();
+        var (started, port) = await StartOnLoopbackAsync(maxStreams: 1);
+        await using var server = started;
         using var silent = new TcpClient();
         await silent.ConnectAsync(IPAddress.Loopback, port);
 
@@ -1005,9 +1003,8 @@ public class WebSocketAudioServerTests
         // The server runs on a fake clock with the default IdleTimeout, and the wait for the upgrade is
         // bounded on that clock: its timer is read as it is created, and the clock is moved past it.
         var time = new FakeTimeProvider();
-        var port = GetFreePort();
-        await using var server = CreateServer(port, timeProvider: time, maxStreams: 1);
-        await server.StartAsync();
+        var (started, port) = await StartOnLoopbackAsync(timeProvider: time, maxStreams: 1);
+        await using var server = started;
         using var announcements = new Announcements(server);
         using var silent = new TcpClient();
         await silent.ConnectAsync(IPAddress.Loopback, port);
@@ -1033,8 +1030,8 @@ public class WebSocketAudioServerTests
         // Arrange — chan_websocket's JSON control format (Dial option f(json)): the first frame is
         // MEDIA_START, named by `event`, as captured from Asterisk 22.9.0 and 23.4.1. The connection keeps
         // its path key; nothing here depends on the key.
-        var port = GetFreePort();
-        await using var server = await StartServerAsync(port);
+        var (started, port) = await StartOnLoopbackAsync();
+        await using var server = started;
         using var announcements = new Announcements(server);
         using var client = new ClientWebSocket();
         await client.ConnectAsync(ChannelUri(port, "ch-json"), CancellationToken.None);
@@ -1074,8 +1071,8 @@ public class WebSocketAudioServerTests
     {
         // Arrange — chan_websocket's default control format: the first frame is a plain-text
         // MEDIA_START, which is not JSON at all
-        var port = GetFreePort();
-        await using var server = await StartServerAsync(port);
+        var (started, port) = await StartOnLoopbackAsync();
+        await using var server = started;
         using var announcements = new Announcements(server);
         using var client = new ClientWebSocket();
         await client.ConnectAsync(ChannelUri(port, "ch-text"), CancellationToken.None);
@@ -1110,9 +1107,8 @@ public class WebSocketAudioServerTests
     public async Task AcceptLoop_ShouldGiveThePlaceBack_WhenItsUpgradeIsInvalid()
     {
         // Arrange — a limit of one; the first connection's upgrade has no Sec-WebSocket-Key
-        var port = GetFreePort();
-        await using var server = CreateServer(port, maxStreams: 1);
-        await server.StartAsync();
+        var (started, port) = await StartOnLoopbackAsync(maxStreams: 1);
+        await using var server = started;
         using var announcements = new Announcements(server);
         using (var invalid = new TcpClient())
         {
@@ -1135,9 +1131,8 @@ public class WebSocketAudioServerTests
     public async Task AcceptLoop_ShouldAdmitAFullSecondWave_WhenEveryConnectionOfTheFirstHasEnded()
     {
         // Arrange — a limit of two, filled by two calls on distinct paths that then close
-        var port = GetFreePort();
-        await using var server = CreateServer(port, maxStreams: 2);
-        await server.StartAsync();
+        var (started, port) = await StartOnLoopbackAsync(maxStreams: 2);
+        await using var server = started;
         using var announcements = new Announcements(server);
 
         using (var first = await ConnectAndAwaitAnnouncementAsync(port, "ch-wave-1", announcements))
@@ -1276,15 +1271,6 @@ public class WebSocketAudioServerTests
         public void Dispose() => client.Dispose();
     }
 
-    private static int GetFreePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
-
     [Fact]
     public async Task PublicConstructor_ShouldBindAndAccept_WhenGivenOnlyOptionsAndALogger()
     {
@@ -1292,12 +1278,13 @@ public class WebSocketAudioServerTests
         // reaches past it for the internal overload that takes a clock. A TCP connection the server
         // accepts is the assertion: it proves the delegated construction bound a listener and put a
         // loop on it, which is what the delegation has to produce.
-        var port = GetFreePort();
-        await using var server = new WebSocketAudioServer(
-            new AudioServerOptions { ListenAddress = "127.0.0.1", WebSocketPort = port },
-            NullLogger<WebSocketAudioServer>.Instance);
-
-        await server.StartAsync();
+        var bound = await LoopbackServerBind.StartAsync(
+            port => new WebSocketAudioServer(
+                new AudioServerOptions { ListenAddress = "127.0.0.1", WebSocketPort = port },
+                NullLogger<WebSocketAudioServer>.Instance),
+            server => server.StartAsync());
+        await using var server = bound.Server;
+        var port = bound.Port;
 
         using var client = new TcpClient();
         await client.ConnectAsync(IPAddress.Loopback, port);
@@ -1308,9 +1295,8 @@ public class WebSocketAudioServerTests
 
     /// <summary>
     /// Port 0, so the OS picks the port when the server binds. It is for a server the test never
-    /// dials, because its accepts come from <c>AcceptOverride</c>. A port probed with
-    /// <see cref="GetFreePort"/> is released before the server binds it, and any process on the
-    /// machine can take it in between; the start then fails with "Address already in use".
+    /// dials: the server does not expose the port it bound. A server the test dials is started with
+    /// <see cref="StartOnLoopbackAsync"/>, whose own bind is the reservation.
     /// </summary>
     private const int PortTheOsPicks = 0;
 
@@ -1331,13 +1317,19 @@ public class WebSocketAudioServerTests
             logger ?? NullLogger<WebSocketAudioServer>.Instance,
             timeProvider ?? TimeProvider.System);
 
-    private static async Task<WebSocketAudioServer> StartServerAsync(
-        int port, ILogger<WebSocketAudioServer>? logger = null)
-    {
-        var server = CreateServer(port, logger);
-        await server.StartAsync();
-        return server;
-    }
+    /// <summary>
+    /// Starts a server on a loopback port the test can dial. A port probed and released before the
+    /// bind can be taken by any process in between, so <see cref="LoopbackServerBind"/> retries on a
+    /// fresh server when the bind finds it in use; a failed attempt's server is disposed by the helper.
+    /// The caller owns the server that started.
+    /// </summary>
+    private static Task<(WebSocketAudioServer Server, int Port)> StartOnLoopbackAsync(
+        ILogger<WebSocketAudioServer>? logger = null,
+        TimeProvider? timeProvider = null,
+        int maxStreams = 1000) =>
+        LoopbackServerBind.StartAsync(
+            port => CreateServer(port, logger, timeProvider, maxStreams),
+            server => server.StartAsync());
 
     private static Uri ChannelUri(int port, string channelId) => new($"ws://127.0.0.1:{port}/ws/{channelId}");
 
@@ -1371,33 +1363,6 @@ public class WebSocketAudioServerTests
     /// <summary>What the server logged so far, for a failure message.</summary>
     private static string Describe(CapturingLogger logger) =>
         string.Join(", ", logger.Entries.Select(entry => $"{entry.Level}:{entry.EventName}({entry.ExceptionType})"));
-
-    /// <summary>
-    /// A client around a socket an accept fixture built, that completes <see cref="Released"/> when its
-    /// owner disposes it. For this server that is the handler's <c>using (client)</c>, the last thing
-    /// it does, so it comes after anything the handler logs.
-    /// </summary>
-    private sealed class ReleaseSignallingClient : TcpClient
-    {
-        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public ReleaseSignallingClient(Socket socket)
-            : base(AddressFamily.InterNetwork)
-        {
-            var unused = Client;
-            Client = socket;
-            unused.Dispose();
-        }
-
-        public Task Released => _released.Task;
-
-        protected override void Dispose(bool disposing)
-        {
-            base.Dispose(disposing);
-            if (disposing)
-                _released.TrySetResult();
-        }
-    }
 
     /// <summary>A server log entry, reduced to what these tests assert on.</summary>
     private sealed record LogEntry(LogLevel Level, string? EventName, string? ExceptionType);

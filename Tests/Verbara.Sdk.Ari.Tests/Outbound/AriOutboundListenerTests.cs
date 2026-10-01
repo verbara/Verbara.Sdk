@@ -9,6 +9,7 @@ using System.Threading.Channels;
 using Verbara.Sdk;
 using Verbara.Sdk.Ari.Outbound;
 using Verbara.Sdk.Ari.Tests.TestSupport;
+using Verbara.Sdk.Tests.Shared.Sockets;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging;
@@ -1275,33 +1276,6 @@ public sealed class AriOutboundListenerTests
     /// <summary>What the listener logged so far, for a failure message.</summary>
     private static string Describe(CapturingLogger logger) =>
         string.Join(", ", logger.Entries.Select(entry => $"{entry.Level}:{entry.EventName}({entry.ExceptionType})"));
-
-    /// <summary>
-    /// A client around a socket an accept fixture built, that completes <see cref="Released"/> when its
-    /// owner disposes it. For this listener that is the last thing the handler does, in the
-    /// <c>using (client)</c> it opens with, so it comes after anything the handler logs.
-    /// </summary>
-    private sealed class ReleaseSignallingClient : TcpClient
-    {
-        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public ReleaseSignallingClient(Socket socket)
-            : base(AddressFamily.InterNetwork)
-        {
-            var unused = Client;
-            Client = socket;
-            unused.Dispose();
-        }
-
-        public Task Released => _released.Task;
-
-        protected override void Dispose(bool disposing)
-        {
-            base.Dispose(disposing);
-            if (disposing)
-                _released.TrySetResult();
-        }
-    }
 
     /// <summary>
     /// The listener's accept, served from a loopback listener of the test's own. Each connection a peer

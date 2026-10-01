@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -29,7 +30,8 @@ namespace Verbara.Sdk.Sessions.Tests.Manager;
 /// late leg's departure, on a thread of its own, right after it has let go of the call and before the
 /// release returns). Each waits for its thread to finish.</para>
 /// </summary>
-public sealed class CallSessionManagerStoreReleaseTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class CallSessionManagerStoreReleaseTests : IAsyncLifetime
 {
     /// <summary>Bounds the wait on a test's second thread; never reached when it runs.</summary>
     private static readonly TimeSpan ThreadBound = TimeSpan.FromSeconds(10);
@@ -40,7 +42,14 @@ public sealed class CallSessionManagerStoreReleaseTests : IAsyncDisposable
     private readonly VerbaraServer _serverB = NewServer();
     private CallSessionManager? _sut;
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         if (_sut is not null)
             await _sut.DisposeAsync();

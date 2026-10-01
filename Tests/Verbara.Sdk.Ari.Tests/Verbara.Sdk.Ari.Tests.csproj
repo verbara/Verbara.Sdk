@@ -6,6 +6,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Shared\Sockets\ReleaseSignallingClient.cs" Link="Shared\Sockets\ReleaseSignallingClient.cs" />
+    <Compile Include="..\Shared\Sockets\UnobservedServerFaults.cs" Link="Shared\Sockets\UnobservedServerFaults.cs" />
+    <Compile Include="..\Shared\Sockets\LoopbackServerBind.cs" Link="Shared\Sockets\LoopbackServerBind.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />

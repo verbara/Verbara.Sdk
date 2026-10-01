@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
 using Verbara.Sdk.Ari.Audio;
 using Verbara.Sdk.Ari.Tests.TestSupport;
+using Verbara.Sdk.Tests.Shared.Sockets;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging;
@@ -11,7 +13,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Verbara.Sdk.Ari.Tests.Audio;
 
-public class AudioSocketServerTests : IAsyncDisposable
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public class AudioSocketServerTests : IAsyncLifetime
 {
     /// <summary>Upper bound on any single wait. Reaching it is a failure, never a pace.</summary>
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
@@ -26,33 +29,25 @@ public class AudioSocketServerTests : IAsyncDisposable
         // until this test nothing exercised the delegation and nothing said that a server built the
         // way consumers build it accepts at all. A real UUID handshake is the assertion, because
         // registering a stream is the whole of what the delegated construction has to produce.
-        var port = GetFreePort();
-        await using var server = new AudioSocketServer(
-            new AudioServerOptions
-            {
-                AudioSocketPort = port,
-                ListenAddress = "127.0.0.1",
-                DefaultFormat = "slin16",
-                IdleTimeout = TimeSpan.FromSeconds(5)
-            },
-            NullLogger<AudioSocketServer>.Instance);
-
-        await server.StartAsync();
+        var bound = await LoopbackServerBind.StartAsync(
+            port => new AudioSocketServer(
+                new AudioServerOptions
+                {
+                    AudioSocketPort = port,
+                    ListenAddress = "127.0.0.1",
+                    DefaultFormat = "slin16",
+                    IdleTimeout = TimeSpan.FromSeconds(5)
+                },
+                NullLogger<AudioSocketServer>.Instance),
+            server => server.StartAsync());
+        await using var server = bound.Server;
+        var port = bound.Port;
 
         var uuid = Guid.NewGuid();
         using var client = await ConnectAndSendUuidAsync(port, uuid, server);
 
         server.IsRunning.Should().BeTrue("the delegated construction produced a running server");
         server.ActiveStreamCount.Should().Be(1, "and one that registers what it accepted");
-    }
-
-    private static int GetFreePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
     }
 
     /// <summary>One byte of type, two of big-endian length, then the payload.</summary>
@@ -75,9 +70,8 @@ public class AudioSocketServerTests : IAsyncDisposable
 
     /// <summary>
     /// Port 0, so the OS picks the port when the server binds. It is for a server the test never
-    /// dials, because its accepts come from <c>AcceptOverride</c>. A port probed with
-    /// <see cref="GetFreePort"/> is released before the server binds it, and any process on the
-    /// machine can take it in between; the start then fails with "Address already in use".
+    /// dials: the server does not expose the port it bound. A server the test dials is started with
+    /// <see cref="StartOnLoopbackAsync"/>, whose own bind is the reservation.
     /// </summary>
     private const int PortTheOsPicks = 0;
 
@@ -88,6 +82,36 @@ public class AudioSocketServerTests : IAsyncDisposable
         ILogger<AudioSocketServer>? logger = null,
         TimeProvider? timeProvider = null)
     {
+        _server = NewServer(port, maxStreams, idleTimeout, logger, timeProvider);
+        return _server;
+    }
+
+    /// <summary>
+    /// Starts a server on a loopback port the test can dial. A port probed and released before the
+    /// bind can be taken by any process in between, so <see cref="LoopbackServerBind"/> retries on a
+    /// fresh server when the bind finds it in use. Only the server that started becomes the one the
+    /// class cleanup releases; a failed attempt's server is disposed by the helper.
+    /// </summary>
+    private async Task<(AudioSocketServer Server, int Port)> StartOnLoopbackAsync(
+        int maxStreams = 1000,
+        TimeSpan? idleTimeout = null,
+        ILogger<AudioSocketServer>? logger = null,
+        TimeProvider? timeProvider = null)
+    {
+        var (server, port) = await LoopbackServerBind.StartAsync(
+            p => NewServer(p, maxStreams, idleTimeout, logger, timeProvider),
+            s => s.StartAsync());
+        _server = server;
+        return (server, port);
+    }
+
+    private static AudioSocketServer NewServer(
+        int port,
+        int maxStreams,
+        TimeSpan? idleTimeout,
+        ILogger<AudioSocketServer>? logger,
+        TimeProvider? timeProvider)
+    {
         var options = new AudioServerOptions
         {
             AudioSocketPort = port,
@@ -96,11 +120,10 @@ public class AudioSocketServerTests : IAsyncDisposable
             DefaultFormat = "slin16",
             IdleTimeout = idleTimeout ?? TimeSpan.FromSeconds(5)
         };
-        _server = new AudioSocketServer(
+        return new AudioSocketServer(
             options,
             logger ?? NullLogger<AudioSocketServer>.Instance,
             timeProvider ?? TimeProvider.System);
-        return _server;
     }
 
     private static async Task<TcpClient> ConnectAsync(int port)
@@ -129,8 +152,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     [Fact]
     public async Task StartAsync_ShouldSetIsRunning()
     {
-        var port = GetFreePort();
-        var server = CreateServer(port);
+        var server = CreateServer(PortTheOsPicks);
 
         server.IsRunning.Should().BeFalse();
 
@@ -142,8 +164,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     [Fact]
     public async Task StopAsync_ShouldClearIsRunning()
     {
-        var port = GetFreePort();
-        var server = CreateServer(port);
+        var server = CreateServer(PortTheOsPicks);
 
         await server.StartAsync();
         server.IsRunning.Should().BeTrue();
@@ -155,18 +176,19 @@ public class AudioSocketServerTests : IAsyncDisposable
     [Fact]
     public async Task DisposeAsync_ShouldNotThrow_WhenNotStarted()
     {
-        var server = CreateServer(GetFreePort());
+        var server = CreateServer(PortTheOsPicks);
 
         var act = async () => await server.DisposeAsync();
 
         await act.Should().NotThrowAsync();
+        // Set to null so the fixture cleanup does not double-dispose
+        _server = null;
     }
 
     [Fact]
     public async Task ActiveStreamCount_ShouldBeZero_WhenNoConnections()
     {
-        var port = GetFreePort();
-        var server = CreateServer(port);
+        var server = CreateServer(PortTheOsPicks);
         await server.StartAsync();
 
         server.ActiveStreamCount.Should().Be(0);
@@ -176,8 +198,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     [Fact]
     public async Task GetStream_ShouldReturnNull_WhenNoStreams()
     {
-        var port = GetFreePort();
-        var server = CreateServer(port);
+        var server = CreateServer(PortTheOsPicks);
         await server.StartAsync();
 
         server.GetStream("nonexistent-channel-id").Should().BeNull();
@@ -186,9 +207,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     [Fact]
     public async Task HandleConnection_ShouldRegisterStream_WhenUuidReceived()
     {
-        var port = GetFreePort();
-        var server = CreateServer(port);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync();
 
         var uuid = Guid.NewGuid();
         using var client = await ConnectAndSendUuidAsync(port, uuid, server);
@@ -219,9 +238,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         canonical.Should().NotBe(asSentToAsterisk,
             "the fixture has to differ in spelling from its canonical form, or this test controls nothing");
 
-        var port = GetFreePort();
-        var server = CreateServer(port);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync();
 
         using var client = await ConnectAndSendUuidAsync(port, wireUuid, server);
 
@@ -239,9 +256,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     [Fact]
     public async Task HandleConnection_ShouldEmitOnStreamConnected_WhenUuidReceived()
     {
-        var port = GetFreePort();
-        var server = CreateServer(port);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync();
 
         IAudioStream? emittedStream = null;
         var streamReceived = new TaskCompletionSource();
@@ -263,9 +278,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     [Fact]
     public async Task HandleConnection_ShouldRemoveStream_WhenHangupReceived()
     {
-        var port = GetFreePort();
-        var server = CreateServer(port);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync();
 
         var uuid = Guid.NewGuid();
         using var client = await ConnectAndSendUuidAsync(port, uuid, server);
@@ -290,9 +303,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     [Fact]
     public async Task HandleConnection_ShouldDisposeSession_WhenNoUuidReceived()
     {
-        var port = GetFreePort();
-        var server = CreateServer(port, idleTimeout: TimeSpan.FromMilliseconds(300));
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync(idleTimeout: TimeSpan.FromMilliseconds(300));
 
         // Connect but never send a UUID frame
         using var client = await ConnectAsync(port);
@@ -307,9 +318,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     [Fact]
     public async Task MaxConcurrentStreams_ShouldDropExcessConnections()
     {
-        var port = GetFreePort();
-        var server = CreateServer(port, maxStreams: 1);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync(maxStreams: 1);
 
         // First connection — should be accepted
         var uuid1 = Guid.NewGuid();
@@ -335,9 +344,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     [Fact]
     public async Task StopAsync_ShouldDisposeAllActiveSessions()
     {
-        var port = GetFreePort();
-        var server = CreateServer(port);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync();
 
         var uuid = Guid.NewGuid();
         using var client = await ConnectAndSendUuidAsync(port, uuid, server);
@@ -352,8 +359,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     [Fact]
     public async Task DisposeAsync_ShouldStopRunningServer()
     {
-        var port = GetFreePort();
-        var server = CreateServer(port);
+        var server = CreateServer(PortTheOsPicks);
         await server.StartAsync();
         server.IsRunning.Should().BeTrue();
 
@@ -370,10 +376,8 @@ public class AudioSocketServerTests : IAsyncDisposable
     public async Task StartAsync_ShouldBindNoSecondListener_WhenTheServerIsAlreadyRunning()
     {
         // Arrange — a server already bound and accepting.
-        var port = GetFreePort();
         var logger = new CapturingLogger();
-        var server = CreateServer(port, logger: logger);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync(logger: logger);
 
         try
         {
@@ -422,9 +426,8 @@ public class AudioSocketServerTests : IAsyncDisposable
     public async Task StopAsync_ShouldTearDownOnce_WhenCalledTwice()
     {
         // Arrange
-        var port = GetFreePort();
         var logger = new CapturingLogger();
-        var server = CreateServer(port, logger: logger);
+        var server = CreateServer(PortTheOsPicks, logger: logger);
         await server.StartAsync();
 
         // Act — the second stop finds the server already stopped. Without the guard it walks the
@@ -450,9 +453,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         // cannot dispose it first. That is what keeps the stop in flight while this test reads the
         // flag: the stop's own teardown of that session awaits the session's read pump, which is
         // parked on a socket read on another thread and so cannot complete inline.
-        var port = GetFreePort();
-        var server = CreateServer(port);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync();
 
         var handlerParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var release = new ManualResetEventSlim();
@@ -507,7 +508,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         // runs on a fake clock, so the loop resumes when this test moves it and at no other moment.
         var time = new FakeTimeProvider();
         var logger = new CapturingLogger();
-        var server = CreateServer(GetFreePort(), logger: logger, timeProvider: time);
+        var server = CreateServer(PortTheOsPicks, logger: logger, timeProvider: time);
         var attempts = 0;
         var secondAttempt = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         server.AcceptOverride = token =>
@@ -564,7 +565,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         // Arrange — every accept fails, so the loop is a pure backoff generator and each wait it asks
         // for is read off the fake clock without any of it being spent.
         var time = new FakeTimeProvider();
-        var server = CreateServer(GetFreePort(), logger: new CapturingLogger(), timeProvider: time);
+        var server = CreateServer(PortTheOsPicks, logger: new CapturingLogger(), timeProvider: time);
         server.AcceptOverride = _ => throw new SocketException((int)SocketError.TooManyOpenSockets);
 
         await server.StartAsync();
@@ -617,7 +618,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         using var accepted = await pair.AcceptTcpClientAsync();
 
         var time = new FakeTimeProvider();
-        var server = CreateServer(GetFreePort(), logger: new CapturingLogger(), timeProvider: time);
+        var server = CreateServer(PortTheOsPicks, logger: new CapturingLogger(), timeProvider: time);
         var attempts = 0;
         server.AcceptOverride = token => Interlocked.Increment(ref attempts) switch
         {
@@ -664,7 +665,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         // and would never be waited out by accident.
         var time = new FakeTimeProvider();
         var logger = new CapturingLogger();
-        var server = CreateServer(GetFreePort(), logger: logger, timeProvider: time);
+        var server = CreateServer(PortTheOsPicks, logger: logger, timeProvider: time);
         var accepting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         server.AcceptOverride = token =>
         {
@@ -701,9 +702,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         // guarded path is the one production actually takes.
         var time = new FakeTimeProvider();
         var logger = new CapturingLogger();
-        var port = GetFreePort();
-        var server = CreateServer(port, logger: logger, timeProvider: time);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync(logger: logger, timeProvider: time);
 
         using var client = await ConnectAndSendUuidAsync(port, Guid.NewGuid(), server);
         server.ActiveStreamCount.Should().Be(1, "the loop has accepted once and is parked on the next accept");
@@ -900,7 +899,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         var server = CreateServer(PortTheOsPicks, logger: logger, timeProvider: new FakeTimeProvider());
         using var accepted = AcceptedClients.NeverConnected();
         using var client = new ReleaseSignallingClient(accepted.Socket);
-        using var unobserved = new UnobservedServerFaults();
+        using var unobserved = new UnobservedServerFaults(nameof(AudioSocketServer));
         var attempts = 0;
         var releasedBeforeNextAccept = false;
         var secondAttempt = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -963,10 +962,8 @@ public class AudioSocketServerTests : IAsyncDisposable
         // so a consumer's subscription throwing is an exception the handler is left holding. Until
         // this test that arm had no coverage of any kind, which left "a consumer's fault is not the
         // server's" as an intention rather than a fact.
-        var port = GetFreePort();
         var logger = new CapturingLogger();
-        var server = CreateServer(port, logger: logger);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync(logger: logger);
 
         using var sub = server.OnStreamConnected.Subscribe(
             _ => throw new InvalidOperationException("the consumer's handler failed"));
@@ -1014,10 +1011,8 @@ public class AudioSocketServerTests : IAsyncDisposable
         // new subscriber — so on this ordering the replay has ALREADY completed the wait by the time
         // the check runs. The check still covers the case the replay cannot: a session disposed
         // while its last published state is still Connected. Removing it leaves this test green.
-        var port = GetFreePort();
         var logger = new CapturingLogger();
-        var server = CreateServer(port, idleTimeout: TimeSpan.FromSeconds(30), logger: logger);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync(idleTimeout: TimeSpan.FromSeconds(30), logger: logger);
 
         using var client = await ConnectAsync(port);
         var stream = client.GetStream();
@@ -1056,9 +1051,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     public async Task HandleConnection_ShouldKeepTheLiveStreamRegistered_WhenASameIdConnectionEnds()
     {
         // Arrange — A holds X; B presents X while A is live, so B does not become its holder
-        var port = GetFreePort();
-        var server = CreateServer(port);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync();
         using var announcements = new Announcements(server);
         var x = Guid.NewGuid();
 
@@ -1080,9 +1073,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     public async Task HandleConnection_ShouldHandTheIdToTheConnectionThatSharedIt_WhenTheHolderEnds()
     {
         // Arrange — the order a real call takes: A holds X, B presents X after it, and A ends first
-        var port = GetFreePort();
-        var server = CreateServer(port);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync();
         using var announcements = new Announcements(server);
         var x = Guid.NewGuid();
 
@@ -1109,9 +1100,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     public async Task HandleConnection_ShouldReleaseTheIdItRegisteredUnder_WhenTheConnectionIdentifiesItselfTwice()
     {
         // Arrange — C holds Y; A registers under X
-        var port = GetFreePort();
-        var server = CreateServer(port);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync();
         using var announcements = new Announcements(server);
         var x = Guid.NewGuid();
         var y = Guid.NewGuid();
@@ -1138,9 +1127,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     public async Task HandleConnection_ShouldHandTheIdOnInArrivalOrder_WhenAWaitingConnectionEndsFirst()
     {
         // Arrange — A holds X; B and then C present X
-        var port = GetFreePort();
-        var server = CreateServer(port);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync();
         using var announcements = new Announcements(server);
         var x = Guid.NewGuid();
 
@@ -1175,9 +1162,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         // observers in subscription order, and the one below subscribes inside B's announcement, before
         // B's handler subscribes the observer that ends its wait. Parking inside B's Disconnected
         // notification therefore holds B's release back, by construction, while A ends.
-        var port = GetFreePort();
-        var server = CreateServer(port);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync();
         using var announcements = new Announcements(server);
         var x = Guid.NewGuid();
 
@@ -1234,9 +1219,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         // A characterization pin, green before the hand-over existed: it holds that a hand-over never
         // outlives a stop. The stop's Clear() empties the table, and after that no entry maps to an
         // ending session any more, so no release can hand X to a connection that is still waiting.
-        var port = GetFreePort();
-        var server = CreateServer(port);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync();
         using var announcements = new Announcements(server);
         var x = Guid.NewGuid();
 
@@ -1264,9 +1247,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     public async Task ActiveStreamCount_ShouldCountEveryLiveConnection_WhenConnectionsShareOneId()
     {
         // Arrange — A holds X; B and then C present X while A is live
-        var port = GetFreePort();
-        var server = CreateServer(port);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync();
         using var announcements = new Announcements(server);
         var x = Guid.NewGuid();
 
@@ -1305,9 +1286,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     public async Task AcceptLoop_ShouldCloseTheConnectionOverTheLimit_WhenLiveConnectionsSharingOneIdFillIt()
     {
         // Arrange — two live connections on one UUID, under a limit of two
-        var port = GetFreePort();
-        var server = CreateServer(port, maxStreams: 2);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync(maxStreams: 2);
         using var announcements = new Announcements(server);
         var x = Guid.NewGuid();
 
@@ -1334,9 +1313,7 @@ public class AudioSocketServerTests : IAsyncDisposable
         // Arrange — a connection the server has accepted and that has sent no identification frame.
         // Its handshake completed before the next connection's began, and the loop accepts in that
         // order, so it has taken its place by the time the next one is admitted or refused.
-        var port = GetFreePort();
-        var server = CreateServer(port, maxStreams: 1);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync(maxStreams: 1);
         using var silent = await ConnectAsync(port);
 
         // Act
@@ -1398,9 +1375,7 @@ public class AudioSocketServerTests : IAsyncDisposable
     public async Task AcceptLoop_ShouldAdmitAFullSecondWave_WhenEveryConnectionOfTheFirstHasEnded()
     {
         // Arrange — a limit of two, filled by two calls on distinct UUIDs that then hang up
-        var port = GetFreePort();
-        var server = CreateServer(port, maxStreams: 2);
-        await server.StartAsync();
+        var (server, port) = await StartOnLoopbackAsync(maxStreams: 2);
         using var announcements = new Announcements(server);
 
         using (var first = await ConnectAndAwaitAnnouncementAsync(port, Guid.NewGuid(), announcements))
@@ -1617,79 +1592,6 @@ public class AudioSocketServerTests : IAsyncDisposable
     private static string Describe(CapturingLogger logger) =>
         string.Join(", ", logger.Entries.Select(entry => $"{entry.Level}:{entry.EventName}({entry.ExceptionType})"));
 
-    /// <summary>
-    /// A client around a socket an accept fixture built, that completes <see cref="Released"/> when its
-    /// owner disposes it. For this server that is the handler's <c>using (client)</c>, the last thing
-    /// it does, so it comes after anything the handler logs.
-    /// </summary>
-    private sealed class ReleaseSignallingClient : TcpClient
-    {
-        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public ReleaseSignallingClient(Socket socket)
-            : base(AddressFamily.InterNetwork)
-        {
-            var unused = Client;
-            Client = socket;
-            unused.Dispose();
-        }
-
-        public Task Released => _released.Task;
-
-        protected override void Dispose(bool disposing)
-        {
-            base.Dispose(disposing);
-            if (disposing)
-                _released.TrySetResult();
-        }
-    }
-
-    /// <summary>
-    /// Records every task exception that went unobserved while it is subscribed and whose stack names
-    /// this server. The subscription is process-wide, so the filter keeps a fault from another test
-    /// class running in parallel out of this one's assertion; <see cref="All"/> keeps everything, for
-    /// the failure message.
-    /// </summary>
-    private sealed class UnobservedServerFaults : IDisposable
-    {
-        private readonly ConcurrentQueue<Exception> _seen = new();
-
-        public UnobservedServerFaults() => TaskScheduler.UnobservedTaskException += OnUnobserved;
-
-        /// <summary>The unobserved exceptions thrown through <see cref="AudioSocketServer"/>.</summary>
-        public IReadOnlyList<string> Faults =>
-        [
-            .. _seen
-                .Where(ex => ex.StackTrace?.Contains(nameof(AudioSocketServer), StringComparison.Ordinal) == true)
-                .Select(ex => $"{ex.GetType().Name}: {ex.Message}")
-        ];
-
-        /// <summary>Every unobserved exception seen, whatever threw it.</summary>
-        public IReadOnlyList<string> All => [.. _seen.Select(ex => $"{ex.GetType().Name}: {ex.Message}")];
-
-        /// <summary>
-        /// Collects, so a faulted task that nothing references any more is finalised and its
-        /// exception, if nothing observed it, is published before this returns. Call it only once the
-        /// task in question has completed.
-        /// </summary>
-        public static void CollectDiscardedTasks()
-        {
-            for (var pass = 0; pass < 3; pass++)
-            {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-            }
-        }
-
-        public void Dispose() => TaskScheduler.UnobservedTaskException -= OnUnobserved;
-
-        private void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e)
-        {
-            foreach (var inner in e.Exception.InnerExceptions)
-                _seen.Enqueue(inner);
-        }
-    }
-
     /// <summary>A server log entry, reduced to what these tests assert on.</summary>
     private sealed record LogEntry(LogLevel Level, string? EventName, string? ExceptionType);
 
@@ -1713,10 +1615,16 @@ public class AudioSocketServerTests : IAsyncDisposable
             _entries.Enqueue(new LogEntry(logLevel, eventId.Name, exception?.GetType().Name));
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
+    private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync() => ReleaseAsync().WaitAsync(CleanupBound);
+
+    private async Task ReleaseAsync()
     {
         if (_server is not null)
             await _server.DisposeAsync();
-        GC.SuppressFinalize(this);
     }
 }
