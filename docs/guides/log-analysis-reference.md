@@ -7,9 +7,9 @@
 | Tag | Domain | Class(es) | Events |
 |-----|--------|-----------|--------|
 | `[AMI]` | AMI connection | `AmiConnectionLog` | Connect, disconnect, reconnect, reader error |
-| `[AMI_EVENT]` | AMI events | `AmiConnectionLog` | Event received, dropped, discarded on caller ending |
+| `[AMI_EVENT]` | AMI events | `AmiConnectionLog` | Event received, dropped, discarded on caller ending, `OnEvent` handler fault |
 | `[AMI_ACTION]` | AMI actions | `AmiConnectionLog` | Response received |
-| `[LIVE]` | Live state | `VerbaraServerLog` | Initial state, reconnect reload |
+| `[LIVE]` | Live state | `VerbaraServerLog` | Initial state, reconnect reload, `Status` refused |
 | `[CHANNEL]` | Channels | `ChannelManagerLog` | New, state change, hangup, rename, link/unlink |
 | `[QUEUE]` | Queues | `QueueManagerLog` | Params, member add/remove/pause/status, caller join/leave |
 | `[AGENT]` | Agents | `AgentManagerLog` | Login, logoff, connect, complete, pause |
@@ -41,6 +41,8 @@
 | `[AMI] Reader error` with `IOException` | Infra: unstable network | — |
 | `[AMI_EVENT] Dropped` | Infra: event buffer full (tune `EventPumpCapacity`) | — |
 | `[AMI_EVENT] Discarded on caller ending` | Expected: the caller ended the connection with events buffered | Ignore |
+| `[AMI_EVENT] OnEvent handler threw on <EventType>` | Bug: an application `OnEvent` handler failed (exception attached); delivery went on | P1 |
+| `[LIVE] Status refused` | Config: the AMI user may not run `Status` (needs `system`, `call` or `reporting` in `write`); no channel was reconciled | — |
 | `[QUEUE] Caller left` without Exception | Expected: caller hung up | Ignore |
 | `[AGENT] Logoff` without Exception | Expected: agent disconnected | Ignore |
 | `[CALL_FLOW] Completed` without Exception | Expected: call ended | Ignore |
