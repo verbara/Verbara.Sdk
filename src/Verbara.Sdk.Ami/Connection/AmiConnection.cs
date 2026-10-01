@@ -62,6 +62,9 @@ internal static partial class AmiConnectionLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Connection-lost handler error")]
     public static partial void LostHandlerError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] OnEvent handler threw on {EventType}")]
+    public static partial void HandlerFault(ILogger logger, string? eventType, Exception exception);
 }
 
 /// <summary>
@@ -220,9 +223,59 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
-#pragma warning disable CS0067
-    public event Func<ManagerEvent, ValueTask>? OnEvent;
-#pragma warning restore CS0067
+    // The OnEvent handlers, in subscription order: an immutable array swapped under _handlersLock, read lock-free
+    // by the dispatch, like _observers.
+    private volatile Func<ManagerEvent, ValueTask>[] _handlers = [];
+    private readonly Lock _handlersLock = new();
+
+    /// <summary>Raised for every AMI event the connection delivers, in the order Asterisk sent them.</summary>
+    /// <remarks>
+    /// <para>
+    /// Each handler is called in the order it subscribed, and every handler is called before any is awaited. The
+    /// event pump then waits for every handler's task, not only the last one's, before it delivers the next event:
+    /// a slow handler holds delivery whatever its position, and events that arrive meanwhile wait in the pump's
+    /// buffer (<c>AmiConnectionOptions.EventPumpCapacity</c>), where a full buffer drops them
+    /// (<c>ami.events.dropped</c>, <c>reason=buffer_full</c>). A handler that must not hold delivery hands its work
+    /// off and returns.
+    /// </para>
+    /// <para>
+    /// A handler that throws, or whose task faults, stops neither delivery nor the other subscribers: the other
+    /// handlers and the observers receive that event too, and the failing handler receives the next one. Each failure
+    /// is logged once at Warning (<c>[AMI_EVENT] OnEvent handler threw on {EventType}</c>, with the exception) and
+    /// counted once on <c>ami.events.handler_faults</c>.
+    /// </para>
+    /// </remarks>
+    public event Func<ManagerEvent, ValueTask>? OnEvent
+    {
+        add
+        {
+            if (value is null)
+                return;
+
+            lock (_handlersLock)
+                _handlers = [.. _handlers, value];
+        }
+        remove
+        {
+            if (value is null)
+                return;
+
+            lock (_handlersLock)
+            {
+                // The last subscription of that handler goes, as a multicast delegate's removal does.
+                var current = _handlers;
+                var index = Array.LastIndexOf(current, value);
+                if (index < 0)
+                    return;
+
+                var next = new Func<ManagerEvent, ValueTask>[current.Length - 1];
+                Array.Copy(current, 0, next, 0, index);
+                Array.Copy(current, index + 1, next, index, current.Length - index - 1);
+                _handlers = next;
+            }
+        }
+    }
+
     public event Action? Reconnected;
 
     public AmiConnection(IOptions<AmiConnectionOptions> options, ISocketConnectionFactory socketFactory, ILogger<AmiConnection> logger)
@@ -1135,8 +1188,51 @@ public sealed class AmiConnection : IAmiConnection
         AmiMetrics.EventsDispatched.Add(1);
         AmiMetrics.EventDispatchMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
 
-        // Notify event handler
-        return OnEvent?.Invoke(evt) ?? ValueTask.CompletedTask;
+        // Every handler is started in order, each guarded, before any is awaited; then every one that has not
+        // completed is awaited, each guarded. A failure is logged and counted, and stops neither the other handlers
+        // nor the pump.
+        var handlers = _handlers;
+        ValueTask[]? pending = null;
+        var pendingCount = 0;
+        for (var i = 0; i < handlers.Length; i++)
+        {
+            try
+            {
+                var task = handlers[i](evt);
+                if (task.IsCompletedSuccessfully)
+                    continue;
+
+                // Still running, or already faulted or cancelled: awaited below, where a failure is observed.
+                (pending ??= new ValueTask[handlers.Length - i])[pendingCount++] = task;
+            }
+            catch (Exception ex)
+            {
+                RecordHandlerFault(evt, ex);
+            }
+        }
+
+        return pendingCount == 0 ? ValueTask.CompletedTask : AwaitHandlersAsync(pending!, pendingCount, evt);
+    }
+
+    private async ValueTask AwaitHandlersAsync(ValueTask[] pending, int count, ManagerEvent evt)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            try
+            {
+                await pending[i].ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                RecordHandlerFault(evt, ex);
+            }
+        }
+    }
+
+    private void RecordHandlerFault(ManagerEvent evt, Exception exception)
+    {
+        AmiMetrics.HandlerFaults.Add(1);
+        AmiConnectionLog.HandlerFault(_logger, evt.EventType, exception);
     }
 
     /// <inheritdoc />
