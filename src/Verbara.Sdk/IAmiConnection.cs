@@ -14,6 +14,18 @@ public interface IAmiConnection : IAsyncDisposable
     string? AsteriskVersion { get; }
 
     /// <summary>Connect and authenticate to the Asterisk AMI.</summary>
+    /// <remarks>
+    /// A connect that fails — a refused dial, a banner that is not Asterisk's, a rejected login, a timeout, or the
+    /// caller's own cancellation — releases what it acquired and leaves <see cref="State"/> at
+    /// <see cref="AmiConnectionState.Disconnected"/> before its exception reaches the caller, unchanged; the connection
+    /// can be connected again. A connect overtaken by the caller's <c>DisconnectAsync</c> or <c>DisposeAsync</c> yields to
+    /// that ending and throws <see cref="System.OperationCanceledException"/>.
+    /// </remarks>
+    /// <exception cref="System.InvalidOperationException">
+    /// The connection has a live session: <see cref="State"/> reads <see cref="AmiConnectionState.Connected"/>,
+    /// <see cref="AmiConnectionState.Reconnecting"/> or <see cref="AmiConnectionState.Connecting"/>. Nothing is dialled
+    /// and the session goes on; a lost connection reconnects on its own.
+    /// </exception>
     /// <exception cref="System.ArgumentException">
     /// The configured username contains a line break (CR or LF), which would split the login action
     /// into several on the wire. The login action is not sent.
@@ -27,6 +39,14 @@ public interface IAmiConnection : IAsyncDisposable
     /// is sent, no response is awaited, and the connection stays usable. The message names the field
     /// but never includes its value.
     /// </exception>
+    /// <exception cref="AsteriskException">
+    /// An <c>AmiNotConnectedException</c>, naming the connection's state: the connection is not connected when the call
+    /// is made, or no longer is when its turn to write comes (a loss, or the caller's <c>DisconnectAsync</c> or
+    /// <c>DisposeAsync</c>, began while it waited); the transport was released while the action was being written; or
+    /// the connection's ending (the caller's, or a loss it will not come back from) abandoned the response the call was
+    /// waiting for. The caller's own <paramref name="cancellationToken"/> still ends the call with its
+    /// <see cref="System.OperationCanceledException"/>.
+    /// </exception>
     ValueTask<ManagerResponse> SendActionAsync(ManagerAction action, CancellationToken cancellationToken = default);
 
     /// <summary>Send an action and wait for a typed response.</summary>
@@ -35,6 +55,14 @@ public interface IAmiConnection : IAsyncDisposable
     /// break (CR or LF), which would split one action into several on the wire. Nothing of the action
     /// is sent, no response is awaited, and the connection stays usable. The message names the field
     /// but never includes its value.
+    /// </exception>
+    /// <exception cref="AsteriskException">
+    /// An <c>AmiNotConnectedException</c>, naming the connection's state: the connection is not connected when the call
+    /// is made, or no longer is when its turn to write comes (a loss, or the caller's <c>DisconnectAsync</c> or
+    /// <c>DisposeAsync</c>, began while it waited); the transport was released while the action was being written; or
+    /// the connection's ending (the caller's, or a loss it will not come back from) abandoned the response the call was
+    /// waiting for. The caller's own <paramref name="cancellationToken"/> still ends the call with its
+    /// <see cref="System.OperationCanceledException"/>.
     /// </exception>
     ValueTask<TResponse> SendActionAsync<TResponse>(ManagerAction action, CancellationToken cancellationToken = default)
         where TResponse : ManagerResponse;
@@ -62,6 +90,13 @@ public interface IAmiConnection : IAsyncDisposable
     /// awaited, and the connection stays usable. The message names the field but never includes its
     /// value.
     /// </exception>
+    /// <exception cref="AsteriskException">
+    /// Surfaced by the first <c>MoveNextAsync</c> of the returned sequence: an <c>AmiNotConnectedException</c>, naming
+    /// the connection's state, when the connection is not connected, no longer is when its turn to write comes (a loss,
+    /// or the caller's <c>DisconnectAsync</c> or <c>DisposeAsync</c>, began while it waited), or its transport was
+    /// released while the action was being written. A session that ends after the action was written ends the sequence
+    /// instead, with the events received so far.
+    /// </exception>
     IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
         ManagerAction action, CancellationToken cancellationToken = default);
 
@@ -80,6 +115,46 @@ public interface IAmiConnection : IAsyncDisposable
     /// </remarks>
     event Action? Reconnected;
 
+    /// <summary>
+    /// Raised for every change of <see cref="State"/>, once per change, with the state before and after, what caused
+    /// it, and whether the caller's own connect or ending made it (<see cref="AmiConnectionStateChange"/>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Order.</b> Changes are delivered in the order the state was written, whoever wrote it: the caller's connect
+    /// or ending, the reader that lost the connection, or the reconnect loop. Each change's
+    /// <see cref="AmiConnectionStateChange.Previous"/> is the <see cref="AmiConnectionStateChange.Current"/> of the
+    /// change delivered before it, and a write that leaves the state as it was announces nothing. Once the caller's
+    /// ending has been recorded, no connect announces a state other than the ending's.
+    /// </para>
+    /// <para>
+    /// <b>Queue and thread.</b> The changes share one ordered queue with <see cref="Reconnected"/> (and, on
+    /// <c>AmiConnection</c>, with the loss announcement Verbara.Sdk.Live raises <c>ConnectionLost</c> from): the change
+    /// that leaves <see cref="AmiConnectionState.Connected"/> is delivered before the loss is announced, and a
+    /// reconnect's change to <see cref="AmiConnectionState.Connected"/> before its <see cref="Reconnected"/>. Handlers
+    /// run one at a time on the thread pool, never on the connection's reader, heartbeat or reconnect loop, and none of
+    /// those waits for them. A slow handler delays only the notifications queued behind it, so keep handlers short.
+    /// The handlers are read when a change is delivered, and nothing is queued while the event has no handler. The
+    /// caller's own <see cref="AmiConnectionState.Disconnecting"/> and <see cref="AmiConnectionState.Disconnected"/>
+    /// can be delivered after <see cref="DisconnectAsync"/> or <c>DisposeAsync</c> has returned.
+    /// </para>
+    /// <para>
+    /// <b>Handlers that throw, or end the connection.</b> A handler that throws is logged, and the handlers after it
+    /// still receive the change. A handler may end the connection and wait for that ending: no ending waits for the
+    /// queue.
+    /// </para>
+    /// <para>
+    /// <b>Default implementation.</b> An implementation of this interface that does not provide the event raises
+    /// nothing: subscribing to it is accepted and has no effect. An implementation that wraps another connection
+    /// forwards the inner connection's changes.
+    /// </para>
+    /// </remarks>
+    event Action<AmiConnectionStateChange>? StateChanged
+    {
+        add { }
+        remove { }
+    }
+
     /// <summary>Gracefully disconnect from the AMI.</summary>
     /// <remarks>
     /// The connection ends for good, including a reconnect in progress: the reconnect loop stops wherever it
@@ -92,6 +167,18 @@ public interface IAmiConnection : IAsyncDisposable
     /// The ending waits for the event whose handler is running, if any; events still buffered are not delivered. They
     /// are counted on <c>ami.events.dropped</c> with <c>reason=caller_ending</c> and logged once at Warning with the
     /// count. A connection lost without this call still delivers every buffered event, in order.
+    /// </para>
+    /// <para>
+    /// A <see cref="Reconnected"/> queued before this call and still undelivered is dropped: no handler runs for it.
+    /// The ending's own state changes are still raised on <see cref="StateChanged"/>, possibly after the call has
+    /// returned; the ending does not wait for the notification queue.
+    /// </para>
+    /// <para>
+    /// Called from inside the connection's own event dispatch while that dispatch is running (an event handler that
+    /// awaits it, or a task the handler started that calls it before the dispatch returns), the ending does not wait
+    /// for that dispatch, which is waiting for it. A task a dispatch left running is outside it once the dispatch has
+    /// returned, and its call waits like any other. A handler that waits for an ending calls this method; awaiting the
+    /// stored task of an ending started elsewhere makes the dispatch and that ending wait for each other.
     /// </para>
     /// </remarks>
     ValueTask DisconnectAsync(CancellationToken cancellationToken = default);

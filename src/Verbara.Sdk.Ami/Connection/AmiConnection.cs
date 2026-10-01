@@ -68,6 +68,16 @@ internal static partial class AmiConnectionLog
     [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Connection-lost handler error")]
     public static partial void LostHandlerError(ILogger logger, Exception exception);
 
+    [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] State-change handler error")]
+    public static partial void StateChangedHandlerError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "[AMI] A {Event} handler has not returned after {Seconds} s; later notifications wait for it")]
+    public static partial void NotificationHandlerStuck(ILogger logger, string @event, double seconds);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI] Reconnected not delivered: the caller has ended the connection")]
+    public static partial void ReconnectedDroppedAfterEnding(ILogger logger);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] OnEvent handler threw on {EventType}")]
     public static partial void HandlerFault(ILogger logger, string? eventType, Exception exception);
 }
@@ -86,9 +96,24 @@ public sealed class AmiConnection : IAmiConnection
     private readonly ISocketConnectionFactory _socketFactory;
     private readonly ILogger<AmiConnection> _logger;
 
+    // The clock the stuck-notification bound is measured on: TimeProvider.System, unless a test passes its own through
+    // the internal constructor overload.
+    private readonly TimeProvider _timeProvider;
+
+    /// <summary>
+    /// How long one notification may run before the connection reports, once, that its handler has not returned. Fixed,
+    /// not an option: the report changes nothing, and every later notification still waits for that handler.
+    /// </summary>
+    internal static readonly TimeSpan StuckNotificationBound = TimeSpan.FromSeconds(30);
+
     // Tags of ami.events.dropped: the reasons AmiMetrics.EventsDropped documents.
     private static readonly KeyValuePair<string, object?> BufferFullReason = new("reason", "buffer_full");
     private static readonly KeyValuePair<string, object?> CallerEndingReason = new("reason", "caller_ending");
+
+    // How long the caller's ending tries its Logoff: the wait for the write lock and the write itself. A send whose write
+    // is blocked by a peer that stopped reading holds the lock until the ending's release disposes the socket, so the
+    // Logoff gives up after this and the release runs. A Logoff to a peer that reads is written in well under it.
+    private static readonly TimeSpan LogoffBound = TimeSpan.FromSeconds(2);
 
     /// <summary>The longest delay <see cref="CancellationTokenSource.CancelAfter(TimeSpan)"/> takes.</summary>
     private static readonly TimeSpan MaxCancelAfter = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
@@ -113,6 +138,7 @@ public sealed class AmiConnection : IAmiConnection
     private volatile IObserver<ManagerEvent>[] _observers = [];
     private readonly Lock _observerLock = new();
 
+    // Written only by SetStateLocked, the funnel that announces each change on StateChanged.
     private volatile AmiConnectionState _state = AmiConnectionState.Initial;
 
     // Set by DisconnectAsync and DisposeAsync. A connection that ended on its own (the peer closed, or a
@@ -140,9 +166,21 @@ public sealed class AmiConnection : IAmiConnection
     // first and no loop starts.
     private Task? _reconnectLoop;
 
-    // True on the event pump's consumer, where every dispatch runs, and in whatever an observer's OnNext or an
-    // OnEvent handler calls or awaits from there. Set by DispatchEventAsync.
-    private readonly AsyncLocal<bool> _inDispatch = new();
+    // The dispatch the current execution context runs in, if any. DispatchEventAsync sets a new frame for every event
+    // and marks it finished once that event's observers and every OnEvent handler have returned, so the frame flows
+    // into whatever an observer or a handler calls, awaits or starts from there, and reads as inside the dispatch only
+    // while that dispatch runs. A task a dispatch started and left running is outside once the dispatch has returned.
+    private readonly AsyncLocal<DispatchFrame?> _dispatchFrame = new();
+
+    /// <summary>One event's dispatch, as an ending started from it sees it.</summary>
+    private sealed class DispatchFrame
+    {
+        // Written once, by the dispatch's own finally; read by an ending on any thread.
+        public volatile bool Finished;
+    }
+
+    // True when the current execution context runs inside a dispatch that has not returned yet.
+    private bool InDispatch => _dispatchFrame.Value is { Finished: false };
 
     // Completed when the caller ends the connection from inside its own event dispatch. That dispatch is the
     // pump's consumer, and the reconnect loop's release may be waiting on it, so from then on no ending waits on
@@ -163,8 +201,9 @@ public sealed class AmiConnection : IAmiConnection
     // announces says what ended the connection. Cleared by every connect attempt, next to the renewal of _fullyBooted.
     private volatile TimeoutException? _heartbeatFailure;
 
-    // The queue Lost and Reconnected are delivered on: one notification at a time, in the order they were queued, on the
-    // thread pool. The reader, the heartbeat and the reconnect loop only append to it; nothing awaits it.
+    // The queue StateChanged, Lost and Reconnected are delivered on: one notification at a time, in the order they were
+    // queued, on the thread pool. The reader, the heartbeat, the reconnect loop and the endings only append to it; nothing
+    // awaits it. Taken inside _endingLock where both are held, never the reverse.
     private readonly Lock _notifyLock = new();
     private Task _notifyTail = Task.CompletedTask;
 
@@ -215,9 +254,10 @@ public sealed class AmiConnection : IAmiConnection
     internal event Action<Exception?>? Lost;
 
     /// <summary>
-    /// The tail of the queue <see cref="Lost"/> and <see cref="Reconnected"/> are delivered on: it completes once every
-    /// notification queued before the read has been delivered. For tests, which await it after an ending to assert that
-    /// nothing more was announced. Not called by Verbara.Sdk.Live, and not part of what it binds to.
+    /// The tail of the queue <see cref="StateChanged"/>, <see cref="Lost"/> and <see cref="Reconnected"/> are delivered
+    /// on: it completes once every notification queued before the read has been delivered. For tests, which await it
+    /// after an ending to assert that nothing more was announced. Not called by Verbara.Sdk.Live, and not part of what it
+    /// binds to.
     /// </summary>
     internal Task PendingNotifications
     {
@@ -283,14 +323,29 @@ public sealed class AmiConnection : IAmiConnection
 
     public event Action? Reconnected;
 
+    /// <inheritdoc />
+    public event Action<AmiConnectionStateChange>? StateChanged;
+
     public AmiConnection(IOptions<AmiConnectionOptions> options, ISocketConnectionFactory socketFactory, ILogger<AmiConnection> logger)
+        : this(options, socketFactory, logger, TimeProvider.System)
     {
+    }
+
+    /// <summary>
+    /// The connection, measuring the stuck-notification bound on <paramref name="timeProvider"/>. Internal: tests move a
+    /// fake clock past the bound instead of waiting it out.
+    /// </summary>
+    internal AmiConnection(IOptions<AmiConnectionOptions> options, ISocketConnectionFactory socketFactory, ILogger<AmiConnection> logger,
+        TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(timeProvider);
         _options = options.Value;
         // No validator runs on this path (factories, the server pool, Options.Create): with AutoReconnect on, a value
         // the reconnect backoff cannot use is rejected here, naming the option, instead of in a loop after a loss.
         ReconnectRule.ThrowIfUnusable(_options);
         _socketFactory = socketFactory;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -306,16 +361,39 @@ public sealed class AmiConnection : IAmiConnection
     /// The connect itself, for a caller's <see cref="ConnectAsync"/> and for the reconnect loop, which does not
     /// pass the guard at <see cref="ConnectAsync"/>'s entry: that guard is the caller's.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The attempt holds what it acquires — its token source, its socket and the reader and writer over it — in locals,
+    /// and publishes each to the connection's fields under <c>_endingLock</c>, where an ending records itself: what was
+    /// published before an ending was recorded, that ending's cleanup releases; nothing is published after it, and what
+    /// was never published the attempt releases itself. The session starts — <see cref="AmiConnectionState.Connected"/>,
+    /// the event pump, the reader loop and the heartbeat — under the same lock, so an ending either finds all of it or
+    /// none of it.
+    /// </para>
+    /// <para>
+    /// A caller's attempt that fails with no ending recorded releases what it acquired and writes
+    /// <see cref="AmiConnectionState.Disconnected"/> before its exception reaches the caller; it records no ending, so a
+    /// later <see cref="ConnectAsync"/> proceeds. The reconnect loop's failed attempt leaves its socket to the loop's
+    /// next cleanup or its give-up, as before.
+    /// </para>
+    /// </remarks>
     /// <param name="byLoop">
-    /// <see langword="true"/> for the reconnect loop. Its state writes then yield to an ending recorded
-    /// meanwhile, and the attempt is abandoned with an <see cref="OperationCanceledException"/>. The ending
-    /// that cut it short releases what it acquired, once the loop has left.
+    /// <see langword="true"/> for the reconnect loop, whose state changes are announced as the connection's own;
+    /// <see langword="false"/> for the caller's connect, whose changes are announced as the caller's. Either way the
+    /// attempt's state writes yield to an ending recorded meanwhile, and the attempt is abandoned with an
+    /// <see cref="OperationCanceledException"/>.
     /// </param>
     /// <param name="cancellationToken">The caller's token, or the lifetime token for the reconnect loop.</param>
     private async ValueTask ConnectCoreAsync(bool byLoop, CancellationToken cancellationToken)
     {
         SetConnectState(AmiConnectionState.Connecting, byLoop);
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        // Read once, while the source is this attempt's alone: once published, an ending's cleanup may dispose it.
+        var sessionToken = cts.Token;
+        var ctsPublished = false;
+        ISocketConnection? socket = null;
+        var socketPublished = false;
 
         // This attempt's session. Renewed before the login, because an Asterisk that has already started reports
         // FullyBooted right after the login's response. The attempt ends it if it fails before its reader loop runs;
@@ -324,58 +402,77 @@ public sealed class AmiConnection : IAmiConnection
         _fullyBooted = fullyBooted;
         // A heartbeat failure belongs to the session it ended; this attempt's session starts without one.
         _heartbeatFailure = null;
-        var readerLoopStarted = false;
         try
         {
+            lock (_endingLock)
+            {
+                ThrowIfEndingRecordedLocked(byLoop);
+                _cts = cts;
+                ctsPublished = true;
+            }
+
             // Apply ConnectionTimeout to socket connect + banner read so the reconnect loop
             // never hangs indefinitely on a slow or unresponsive Asterisk instance.
             // Block form on purpose: the timeout source is released here, before the pumps start.
-            using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts.Token))
+            using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, sessionToken))
             {
                 connectCts.CancelAfter(_options.ConnectionTimeout);
                 var connectToken = connectCts.Token;
 
-                _socket = _socketFactory.Create();
-                await _socket.ConnectAsync(_options.Hostname, _options.Port, _options.UseSsl, connectToken);
+                socket = _socketFactory.Create();
+                lock (_endingLock)
+                {
+                    ThrowIfEndingRecordedLocked(byLoop);
+                    _socket = socket;
+                    socketPublished = true;
+                }
 
-                _reader = new AmiProtocolReader(_socket.Input);
-                _writer = new AmiProtocolWriter(_socket.Output);
+                await socket.ConnectAsync(_options.Hostname, _options.Port, _options.UseSsl, connectToken);
+
+                // The transport's pipes exist only once it is connected (PipelineSocketConnection throws before), so the
+                // reader and writer are made here. Under the lock, once no ending is recorded: an ending's release, which
+                // disposes the published socket and its pipes, has not begun.
+                AmiProtocolReader reader;
+                AmiProtocolWriter writer;
+                lock (_endingLock)
+                {
+                    ThrowIfEndingRecordedLocked(byLoop);
+                    reader = new AmiProtocolReader(socket.Input);
+                    writer = new AmiProtocolWriter(socket.Output);
+                    _reader = reader;
+                    _writer = writer;
+                }
 
                 // Read protocol identifier
-                var identMsg = await _reader.ReadMessageAsync(connectToken);
+                var identMsg = await reader.ReadMessageAsync(connectToken);
                 if (identMsg is null || !identMsg.IsProtocolIdentifier)
                 {
                     throw new AmiProtocolException("Expected Asterisk protocol identifier");
                 }
 
                 // MD5 challenge-response login
-                await LoginAsync(connectToken);
+                await LoginAsync(reader, writer, connectToken);
 
                 // Detect Asterisk version
-                await DetectVersionAsync(connectToken, cancellationToken);
+                await DetectVersionAsync(reader, writer, connectToken, cancellationToken);
             }
 
-            SetConnectState(AmiConnectionState.Connected, byLoop);
-
-            // Start event pump and reader loop. The pump observes the caller's ending from its creation, before
-            // Start: once _lifetime is cancelled it delivers nothing after the event in progress.
-            _eventPump = new AsyncEventPump(_options.EventPumpCapacity) { StopToken = _lifetime.Token };
-            _eventPump.OnEventDropped = evt =>
-            {
-                AmiMetrics.EventsDropped.Add(1, BufferFullReason);
-                var channel = evt.RawFields is not null && evt.RawFields.TryGetValue("Channel", out var ch) ? ch : null;
-                AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
-            };
-            _eventPump.Start(DispatchEventAsync);
-            var readerToken = _cts.Token;
-            _readerLoop = Task.Run(() => ReaderLoopAsync(fullyBooted, readerToken), CancellationToken.None);
-            readerLoopStarted = true;
+            StartSession(byLoop, fullyBooted, socket, sessionToken);
         }
-        finally
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // A session that never came up never reports FullyBooted: whoever bound to its task learns it here.
-            if (!readerLoopStarted)
-                fullyBooted.TrySetCanceled(CancellationToken.None);
+            // A session that never came up never reports FullyBooted: whoever bound to its task learns it here, before
+            // the state the failure writes.
+            fullyBooted.TrySetCanceled(CancellationToken.None);
+
+            var cause = !byLoop && cancellationToken.IsCancellationRequested ? null : ex;
+            var yielded = await ReleaseFailedAttemptAsync(byLoop, cts, ctsPublished, socket, socketPublished, cause);
+            if (!yielded || ex is OperationCanceledException)
+                throw;
+
+            throw new OperationCanceledException(
+                byLoop ? "The connection was ended during a reconnect attempt." : "The connection was ended during the connect.",
+                ex, _lifetime.Token);
         }
 
         // Register observable gauges only once (avoid accumulation on reconnect)
@@ -388,22 +485,102 @@ public sealed class AmiConnection : IAmiConnection
             _gaugesRegistered = true;
         }
 
-        // Start heartbeat loop if enabled
-        if (_options.EnableHeartbeat && _options.HeartbeatInterval > TimeSpan.Zero)
+        AmiConnectionLog.Connected(_logger, _options.Hostname, _options.Port, AsteriskVersion);
+    }
+
+    /// <summary>
+    /// Writes <see cref="AmiConnectionState.Connected"/> and starts the session's event pump, reader loop and heartbeat,
+    /// all under <c>_endingLock</c>, unless an ending has been recorded: then nothing starts, and the attempt yields with
+    /// an <see cref="OperationCanceledException"/>. An ending recorded afterwards finds every part of the session in place.
+    /// </summary>
+    private void StartSession(bool byLoop, TaskCompletionSource fullyBooted, ISocketConnection socket, CancellationToken sessionToken)
+    {
+        lock (_endingLock)
         {
-            var socket = _socket;
-            var token = _cts.Token;
-            _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(socket, token), CancellationToken.None);
+            ThrowIfEndingRecordedLocked(byLoop);
+            SetStateLocked(AmiConnectionState.Connected, cause: null, byCaller: !byLoop);
+
+            // The pump observes the caller's ending from its creation, before Start: once _lifetime is cancelled it
+            // delivers nothing after the event in progress.
+            var pump = new AsyncEventPump(_options.EventPumpCapacity) { StopToken = _lifetime.Token };
+            pump.OnEventDropped = evt =>
+            {
+                AmiMetrics.EventsDropped.Add(1, BufferFullReason);
+                var channel = evt.RawFields is not null && evt.RawFields.TryGetValue("Channel", out var ch) ? ch : null;
+                AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
+            };
+            _eventPump = pump;
+            pump.Start(DispatchEventAsync);
+            _readerLoop = Task.Run(() => ReaderLoopAsync(fullyBooted, sessionToken), CancellationToken.None);
+
+            if (_options.EnableHeartbeat && _options.HeartbeatInterval > TimeSpan.Zero)
+                _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(socket, sessionToken), CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Releases what a failed attempt owns, and for a caller's attempt writes <see cref="AmiConnectionState.Disconnected"/>
+    /// once the release has finished. Returns <see langword="true"/> when an ending was recorded meanwhile: that ending
+    /// owns the state, and its cleanup releases what the attempt had published.
+    /// </summary>
+    /// <remarks>
+    /// Never <see cref="CleanupAsync"/> or an ending: the attempt releases its own socket and token source, held in
+    /// locals, and nothing a session before it left — the caller's attempt runs only on a connection with no live
+    /// session, and records no ending, so a later <see cref="ConnectAsync"/> proceeds.
+    /// </remarks>
+    private async ValueTask<bool> ReleaseFailedAttemptAsync(bool byLoop, CancellationTokenSource cts, bool ctsPublished,
+        ISocketConnection? socket, bool socketPublished, Exception? cause)
+    {
+        bool yielded;
+        bool releaseSocket;
+        bool releaseCts;
+        lock (_endingLock)
+        {
+            yielded = _ending is not null;
+            // What was published belongs to the ending's cleanup once an ending is recorded, and to the loop's next
+            // cleanup or its give-up for the loop's attempt; the caller's attempt with no ending takes it back.
+            var takeBack = !yielded && !byLoop;
+            if (takeBack)
+            {
+                if (socketPublished && ReferenceEquals(_socket, socket))
+                {
+                    _socket = null;
+                    _reader = null;
+                    _writer = null;
+                }
+
+                if (ctsPublished && ReferenceEquals(_cts, cts))
+                    _cts = null;
+            }
+
+            releaseSocket = socket is not null && (!socketPublished || takeBack);
+            releaseCts = !ctsPublished || takeBack;
         }
 
-        AmiConnectionLog.Connected(_logger, _options.Hostname, _options.Port, AsteriskVersion);
+        if (releaseSocket)
+            await socket!.DisposeAsync();
+
+        if (releaseCts)
+            cts.Dispose();
+
+        if (yielded || byLoop)
+            return yielded;
+
+        lock (_endingLock)
+        {
+            // An ending recorded during the release found nothing of this attempt's, and writes Disconnected itself.
+            if (_ending is not null)
+                return true;
+
+            SetStateLocked(AmiConnectionState.Disconnected, cause, byCaller: true);
+            return false;
+        }
     }
 
     /// <summary>
     /// A connection lost for good was released, not disposed, so its caller may connect it again. Its
     /// finished ending is forgotten before the connect acquires anything, so that the next ending releases
-    /// what this connect acquires — the socket a failed connect leaves open included — instead of joining
-    /// the ending that is already over.
+    /// what this connect acquires instead of joining the ending that is already over.
     /// </summary>
     private void ForgetLostConnectionEnding()
     {
@@ -415,34 +592,118 @@ public sealed class AmiConnection : IAmiConnection
     }
 
     /// <summary>
-    /// A caller's connect writes its state. The reconnect loop's connect yields to an ending recorded meanwhile
-    /// and abandons the attempt.
+    /// A connect writes <see cref="AmiConnectionState.Connecting"/>, the caller's and the reconnect loop's alike, unless an
+    /// ending has been recorded: from then on that ending owns the state, and the attempt is abandoned with an
+    /// <see cref="OperationCanceledException"/>. A caller's connect that finds the caller's own ending recorded before
+    /// it wrote anything throws <see cref="ObjectDisposedException"/>, as <see cref="ConnectAsync"/>'s guard does once
+    /// that ending has finished; one that finds a live session — connected, reconnecting, or in a connect attempt —
+    /// throws <see cref="InvalidOperationException"/> and changes nothing.
     /// </summary>
     private void SetConnectState(AmiConnectionState state, bool byLoop)
     {
-        if (!byLoop)
+        bool closedByCaller;
+        lock (_endingLock)
         {
-            _state = state;
+            if (_ending is null)
+            {
+                var current = _state;
+                if (!byLoop && current is AmiConnectionState.Connected or AmiConnectionState.Reconnecting or AmiConnectionState.Connecting)
+                {
+                    throw new InvalidOperationException(
+                        $"The AMI connection is {current}: ConnectAsync connects a connection that has no live session, and a lost connection reconnects on its own.");
+                }
+
+                SetStateLocked(state, cause: null, byCaller: !byLoop);
+                return;
+            }
+
+            closedByCaller = _closedByCaller;
         }
-        else if (!TrySetAutomaticState(state))
-        {
+
+        if (byLoop)
             throw new OperationCanceledException("The connection was ended during a reconnect attempt.", _lifetime.Token);
-        }
+
+        ObjectDisposedException.ThrowIf(closedByCaller, this);
+        throw new OperationCanceledException("The connection was ended during the connect.", _lifetime.Token);
+    }
+
+    /// <summary>
+    /// Throws the <see cref="OperationCanceledException"/> an attempt yields with once an ending has been recorded. The
+    /// caller holds <c>_endingLock</c>.
+    /// </summary>
+    private void ThrowIfEndingRecordedLocked(bool byLoop)
+    {
+        if (_ending is null)
+            return;
+
+        throw new OperationCanceledException(
+            byLoop ? "The connection was ended during a reconnect attempt." : "The connection was ended during the connect.",
+            _lifetime.Token);
     }
 
     /// <summary>
     /// Writes a state the connection chose on its own, the reconnect loop's, unless an ending has been
     /// recorded: from then on that ending owns the state. Returns <see langword="false"/> when it yielded.
     /// </summary>
-    private bool TrySetAutomaticState(AmiConnectionState state)
+    private bool TrySetAutomaticState(AmiConnectionState state, Exception? cause)
     {
         lock (_endingLock)
         {
             if (_ending is not null)
                 return false;
 
-            _state = state;
+            SetStateLocked(state, cause, byCaller: false);
             return true;
+        }
+    }
+
+    /// <summary>
+    /// The one write of <see cref="State"/>. It reads the previous state, writes the next one and queues the change for
+    /// <see cref="StateChanged"/>'s handlers under <c>_notifyLock</c>, so the changes are delivered in the order they were
+    /// written and each one's previous state is the state the one before it announced. A write that leaves the state as
+    /// it was announces nothing, and nothing is queued while the event has no handler.
+    /// </summary>
+    /// <remarks>
+    /// The caller holds <c>_endingLock</c>: an ending records itself under it, so a write that checks for a recorded
+    /// ending, and the ending's own writes, are ordered with it. <c>_notifyLock</c> is always taken inside it.
+    /// </remarks>
+    private void SetStateLocked(AmiConnectionState next, Exception? cause, bool byCaller)
+    {
+        Debug.Assert(_endingLock.IsHeldByCurrentThread, "Every state write holds _endingLock.");
+        lock (_notifyLock)
+        {
+            var previous = _state;
+            if (previous == next)
+                return;
+
+            _state = next;
+            if (StateChanged is null)
+                return;
+
+            var change = new AmiConnectionStateChange(previous, next, cause, byCaller);
+            NotifyLocked(nameof(StateChanged), () => DeliverStateChange(change));
+        }
+    }
+
+    /// <summary>Delivers one change to <see cref="StateChanged"/>'s handlers, handler by handler.</summary>
+    private void DeliverStateChange(AmiConnectionStateChange change)
+    {
+        // Read at delivery time: a handler removed while this notification waited is not called.
+        var handlers = StateChanged;
+        if (handlers is null)
+            return;
+
+        foreach (var handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((Action<AmiConnectionStateChange>)handler).Invoke(change);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // A subscriber's failure is its own: logged, and the handlers after it still run.
+                AmiConnectionLog.StateChangedHandlerError(_logger, ex);
+            }
         }
     }
 
@@ -454,14 +715,14 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
-    private async ValueTask LoginAsync(CancellationToken ct)
+    private async ValueTask LoginAsync(AmiProtocolReader reader, AmiProtocolWriter writer, CancellationToken ct)
     {
         // Step 1: Send Challenge action
         var challengeId = NextActionId();
-        await _writer!.WriteActionAsync("Challenge", challengeId,
+        await writer.WriteActionAsync("Challenge", challengeId,
             [new("AuthType", "MD5")], ct);
 
-        var challengeResponse = await ReadResponseAsync(challengeId, ct);
+        var challengeResponse = await ReadResponseAsync(reader, challengeId, ct);
         var challenge = challengeResponse["Challenge"]
             ?? throw new AmiAuthenticationException("No challenge received from Asterisk");
 
@@ -474,14 +735,14 @@ public sealed class AmiConnection : IAmiConnection
 
         // Step 3: Send Login action with MD5 key
         var loginId = NextActionId();
-        await _writer.WriteActionAsync("Login", loginId,
+        await writer.WriteActionAsync("Login", loginId,
         [
             new("AuthType", "MD5"),
             new("Username", _options.Username),
             new("Key", key)
         ], ct);
 
-        var loginResponse = await ReadResponseAsync(loginId, ct);
+        var loginResponse = await ReadResponseAsync(reader, loginId, ct);
         if (!string.Equals(loginResponse.ResponseStatus, "Success", StringComparison.OrdinalIgnoreCase))
         {
             var msg = loginResponse["Message"] ?? "Unknown error";
@@ -489,15 +750,16 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
-    private async ValueTask DetectVersionAsync(CancellationToken ct, CancellationToken callerToken)
+    private async ValueTask DetectVersionAsync(AmiProtocolReader reader, AmiProtocolWriter writer, CancellationToken ct,
+        CancellationToken callerToken)
     {
         // A probe that fails or times out falls back to the CLI command and then to "Unknown",
         // but a caller who cancelled ConnectAsync must get that cancellation, not a connection.
         try
         {
             var actionId = NextActionId();
-            await _writer!.WriteActionAsync("CoreSettings", actionId, cancellationToken: ct);
-            var response = await ReadResponseAsync(actionId, ct);
+            await writer.WriteActionAsync("CoreSettings", actionId, cancellationToken: ct);
+            var response = await ReadResponseAsync(reader, actionId, ct);
             AsteriskVersion = response["AsteriskVersion"];
         }
         catch (Exception) when (!callerToken.IsCancellationRequested)
@@ -506,9 +768,9 @@ public sealed class AmiConnection : IAmiConnection
             try
             {
                 var actionId = NextActionId();
-                await _writer!.WriteActionAsync("Command", actionId,
+                await writer.WriteActionAsync("Command", actionId,
                     [new("Command", "core show version")], ct);
-                var response = await ReadResponseAsync(actionId, ct);
+                var response = await ReadResponseAsync(reader, actionId, ct);
                 AsteriskVersion = response.CommandOutput?.Trim();
             }
             catch (Exception) when (!callerToken.IsCancellationRequested)
@@ -523,14 +785,14 @@ public sealed class AmiConnection : IAmiConnection
     /// loop runs: every other message it reads is dropped, except that a <c>FullyBooted</c> event completes the
     /// session's <see cref="FullyBooted"/>.
     /// </summary>
-    private async ValueTask<AmiMessage> ReadResponseAsync(string actionId, CancellationToken ct)
+    private async ValueTask<AmiMessage> ReadResponseAsync(AmiProtocolReader reader, string actionId, CancellationToken ct)
     {
         using var timeout = new CancellationTokenSource(_options.DefaultResponseTimeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
 
         while (true)
         {
-            var msg = await _reader!.ReadMessageAsync(linked.Token)
+            var msg = await reader.ReadMessageAsync(linked.Token)
                 ?? throw new AmiConnectionException("Connection closed while waiting for response");
 
             if (msg.IsResponse && string.Equals(msg.ActionId, actionId, StringComparison.OrdinalIgnoreCase))
@@ -583,14 +845,14 @@ public sealed class AmiConnection : IAmiConnection
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
-            await WriteActionLockedAsync(actionName, actionId, fields, cancellationToken);
+            await WriteActionLockedAsync(actionName, actionId, fields, sending: true, cancellationToken);
             AmiMetrics.ActionsSent.Add(1);
 
             using var timeout = new CancellationTokenSource(_options.DefaultResponseTimeout);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
 
             var sw = Stopwatch.GetTimestamp();
-            var responseMsg = await tcs.Task.WaitAsync(linked.Token);
+            var responseMsg = await AwaitResponseAsync(tcs, linked.Token, cancellationToken);
             AmiMetrics.ActionRoundtripMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
 
             // Use source-generated deserializer for typed response mapping
@@ -626,14 +888,14 @@ public sealed class AmiConnection : IAmiConnection
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
-            await WriteActionLockedAsync(actionName, actionId, fields, cancellationToken);
+            await WriteActionLockedAsync(actionName, actionId, fields, sending: true, cancellationToken);
             AmiMetrics.ActionsSent.Add(1);
 
             using var timeout = new CancellationTokenSource(_options.DefaultResponseTimeout);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
 
             var sw = Stopwatch.GetTimestamp();
-            var responseMsg = await tcs.Task.WaitAsync(linked.Token);
+            var responseMsg = await AwaitResponseAsync(tcs, linked.Token, cancellationToken);
             AmiMetrics.ActionRoundtripMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
 
             // Use source-generated deserializer for full typed response
@@ -747,7 +1009,7 @@ public sealed class AmiConnection : IAmiConnection
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
-            await WriteActionLockedAsync(actionName, actionId, fields, ct);
+            await WriteActionLockedAsync(actionName, actionId, fields, sending: true, ct);
 
             var eventCount = 0;
             await foreach (var evt in collector.ReadAllAsync(ct))
@@ -788,18 +1050,62 @@ public sealed class AmiConnection : IAmiConnection
         return list;
     }
 
-    /// <summary>Serialize writes to the PipeWriter to prevent interleaving from concurrent callers.</summary>
+    /// <summary>
+    /// Writes one action under the write lock, which serializes writes so that concurrent callers never interleave.
+    /// </summary>
+    /// <remarks>
+    /// An ending may have begun while the caller waited for the lock: it writes <c>Disconnecting</c> (or a loss writes
+    /// <c>Reconnecting</c>) before it releases anything, and its release disposes the socket and then clears the writer
+    /// under this same lock. So a send re-checks the state once it holds the lock, and a writer already cleared, or a
+    /// flush that finds the transport's output completed, is reported as <see cref="AmiNotConnectedException"/> with
+    /// the state — what the same send throws a moment later — never as a <see cref="NullReferenceException"/> or a
+    /// write that silently went nowhere.
+    /// </remarks>
+    /// <param name="actionName">The action's name.</param>
+    /// <param name="actionId">The action's ActionID.</param>
+    /// <param name="fields">The action's fields.</param>
+    /// <param name="sending">
+    /// <see langword="true"/> for the three send paths, which re-check that the connection is connected under the lock;
+    /// <see langword="false"/> for the Logoff of the caller's ending, which writes while the state is
+    /// <c>Disconnecting</c>.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the wait for the lock and the write.</param>
     private async ValueTask WriteActionLockedAsync(string actionName, string actionId,
-        IEnumerable<KeyValuePair<string, string>> fields, CancellationToken cancellationToken)
+        IEnumerable<KeyValuePair<string, string>> fields, bool sending, CancellationToken cancellationToken)
     {
         await _writeLock.WaitAsync(cancellationToken);
         try
         {
-            await _writer!.WriteActionAsync(actionName, actionId, fields, cancellationToken);
+            if (sending)
+                EnsureConnected();
+
+            var writer = _writer ?? throw NotConnected();
+            if (await writer.WriteActionFlushAsync(actionName, actionId, fields, cancellationToken))
+                throw NotConnected();
         }
         finally
         {
             _writeLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Waits for an action's response. A response the release of the connection's ending abandoned is reported as
+    /// <see cref="AmiNotConnectedException"/> with the state, not as the cancellation that release gives it; the
+    /// caller's own token, and the response timeout, still surface as their <see cref="OperationCanceledException"/>.
+    /// </summary>
+    private async Task<AmiMessage> AwaitResponseAsync(
+        TaskCompletionSource<AmiMessage> response, CancellationToken bound, CancellationToken callerToken)
+    {
+        try
+        {
+            return await response.Task.WaitAsync(bound);
+        }
+        catch (OperationCanceledException) when (response.Task.IsCanceled
+                                                 && !callerToken.IsCancellationRequested
+                                                 && EndingRecorded())
+        {
+            throw NotConnected();
         }
     }
 
@@ -962,15 +1268,15 @@ public sealed class AmiConnection : IAmiConnection
                     var cause = (Exception?)_heartbeatFailure ?? endedBy;
                     if (_options.AutoReconnect)
                     {
-                        _state = AmiConnectionState.Reconnecting;
+                        SetStateLocked(AmiConnectionState.Reconnecting, cause, byCaller: false);
                         NotifyLost(cause);
                         _reconnectLoop = Task.Run(() => ReconnectLoopAsync(), CancellationToken.None);
                     }
                     else
                     {
-                        _state = AmiConnectionState.Disconnecting;
+                        SetStateLocked(AmiConnectionState.Disconnecting, cause, byCaller: false);
                         NotifyLost(cause);
-                        _ = Task.Run(() => EndLostConnectionAsync(), CancellationToken.None);
+                        _ = Task.Run(() => EndLostConnectionAsync(cause), CancellationToken.None);
                     }
                 }
             }
@@ -1005,7 +1311,11 @@ public sealed class AmiConnection : IAmiConnection
     /// same ending a caller's <see cref="DisconnectAsync"/> runs, without the Logoff. It runs on a task of
     /// its own, never on the reader loop or the heartbeat, which <see cref="CleanupAsync"/> awaits.
     /// </summary>
-    private Task EndLostConnectionAsync() => EndAsync(byCaller: false, CancellationToken.None);
+    /// <param name="cause">
+    /// What ended the connection for good, announced on its final change to <see cref="AmiConnectionState.Disconnected"/>:
+    /// the loss's cause without AutoReconnect, the last failed attempt's exception for the give-up.
+    /// </param>
+    private Task EndLostConnectionAsync(Exception? cause) => EndAsync(byCaller: false, CancellationToken.None, cause);
 
     /// <summary>
     /// Reconnects with backoff until a connect succeeds, the loop gives up at
@@ -1020,6 +1330,9 @@ public sealed class AmiConnection : IAmiConnection
     {
         var lifetime = _lifetime.Token;
         var attempt = 0;
+        // The last failed attempt's exception: the cause the give-up announces. MaxReconnectAttempts = N makes N connects,
+        // so a give-up always follows at least one failed attempt, and this is set by then.
+        Exception? lastError = null;
 
         while (!lifetime.IsCancellationRequested && _state == AmiConnectionState.Reconnecting)
         {
@@ -1032,7 +1345,7 @@ public sealed class AmiConnection : IAmiConnection
                 // behind is released: the last one a failed connect created. The ending writes Disconnecting
                 // itself, and only when no other ending is under way; a caller's ending under way is not joined,
                 // because it is waiting for this loop.
-                await EndLostConnectionAsync();
+                await EndLostConnectionAsync(lastError);
                 return;
             }
 
@@ -1061,7 +1374,7 @@ public sealed class AmiConnection : IAmiConnection
                 // The backoff cannot be computed or waited. It would fail the same way on every iteration, with no
                 // delay, so it is not a failed attempt to retry: the loop ends as a give-up does, once, loudly.
                 AmiConnectionLog.ReconnectBackoffFailed(_logger, ex);
-                await EndLostConnectionAsync();
+                await EndLostConnectionAsync(ex);
                 return;
             }
 
@@ -1083,9 +1396,10 @@ public sealed class AmiConnection : IAmiConnection
             {
                 // The attempt wrote Connecting. Reconnecting again keeps the loop going, unless an ending was
                 // recorded meanwhile: that ending owns the state, and the attempt is the one it cut short.
-                if (!TrySetAutomaticState(AmiConnectionState.Reconnecting))
+                if (!TrySetAutomaticState(AmiConnectionState.Reconnecting, ex))
                     return;
 
+                lastError = ex;
                 AmiConnectionLog.ReconnectAttemptFailed(_logger, ex);
             }
         }
@@ -1101,8 +1415,16 @@ public sealed class AmiConnection : IAmiConnection
         if (Reconnected is null)
             return;
 
-        Notify(() =>
+        Notify(nameof(Reconnected), () =>
         {
+            // Read at delivery time: the caller's ending, recorded while this notification waited behind a slow
+            // handler, ends the connection for good, and an ending raises no Reconnected.
+            if (_closedByCaller)
+            {
+                AmiConnectionLog.ReconnectedDroppedAfterEnding(_logger);
+                return;
+            }
+
             // Read at delivery time: a handler removed while this notification waited is not called.
             var handlers = Reconnected;
             if (handlers is null)
@@ -1133,7 +1455,7 @@ public sealed class AmiConnection : IAmiConnection
         if (Lost is null)
             return;
 
-        Notify(() =>
+        Notify(nameof(Lost), () =>
         {
             // Read at delivery time: a handler removed while this notification waited is not called.
             var handlers = Lost;
@@ -1160,17 +1482,60 @@ public sealed class AmiConnection : IAmiConnection
     /// Appends a notification to the queue: it runs on the thread pool once the one before it has returned. Nothing
     /// awaits the queue, so no loop is ever held by a handler.
     /// </summary>
-    private void Notify(Action notification)
+    private void Notify(string eventName, Action notification)
     {
         lock (_notifyLock)
+            NotifyLocked(eventName, notification);
+    }
+
+    /// <summary>
+    /// <see cref="Notify"/> for a caller that holds <c>_notifyLock</c>. The notification is queued with the execution
+    /// context's flow suppressed: it is often queued from inside an event dispatch (an ending an <see cref="OnEvent"/>
+    /// handler called), and a handler must not inherit that dispatch's frame (<c>_dispatchFrame</c>) or anything else that
+    /// flows with the context of whoever queued it.
+    /// </summary>
+    private void NotifyLocked(string eventName, Action notification)
+    {
+        var queued = new QueuedNotification(this, eventName, notification);
+        if (ExecutionContext.IsFlowSuppressed())
         {
+            Append(queued);
+            return;
+        }
+
+        using (ExecutionContext.SuppressFlow())
+            Append(queued);
+
+        void Append(QueuedNotification next) =>
             _notifyTail = _notifyTail.ContinueWith(
-                static (_, state) => ((Action)state!).Invoke(),
-                notification,
+                static (_, state) => ((QueuedNotification)state!).Run(),
+                next,
                 CancellationToken.None,
                 TaskContinuationOptions.None,
                 TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// One notification on the queue, and the event it delivers. It runs watched: when its handlers have not returned
+    /// once <see cref="StuckNotificationBound"/> has passed on the connection's clock, one Warning names the event, and
+    /// nothing else changes — the notification is neither skipped nor abandoned, and every later one still waits for it.
+    /// </summary>
+    private sealed class QueuedNotification(AmiConnection owner, string eventName, Action deliver)
+    {
+        public void Run()
+        {
+            // One-shot: a notification is reported once, however long it runs. Disposed when the handlers return, so a
+            // notification that returned before the bound is never reported.
+            using var watchdog = owner._timeProvider.CreateTimer(
+                static state => ((QueuedNotification)state!).ReportStuck(),
+                this,
+                StuckNotificationBound,
+                Timeout.InfiniteTimeSpan);
+            deliver();
         }
+
+        private void ReportStuck() =>
+            AmiConnectionLog.NotificationHandlerStuck(owner._logger, eventName, StuckNotificationBound.TotalSeconds);
     }
 
     private ValueTask DispatchEventAsync(ManagerEvent evt)
@@ -1180,70 +1545,92 @@ public sealed class AmiConnection : IAmiConnection
         if (_endedFromDispatch.Task.IsCompleted)
             return ValueTask.CompletedTask;
 
-        // Marks the pump's consumer as the dispatch. Set once: it persists on that task for every later event, and
-        // flows into each OnNext and each OnEvent handler and into whatever they call or await, so an ending
-        // called from there knows not to wait for the dispatch it runs in.
-        if (!_inDispatch.Value)
-            _inDispatch.Value = true;
-
-        var sw = Stopwatch.GetTimestamp();
-
-        // Lock-free read: volatile array reference swap is atomic
-        var snapshot = _observers;
-
-        foreach (var observer in snapshot)
+        // A new frame for this dispatch. It flows into each OnNext and each OnEvent handler and into whatever they
+        // call, await or start from there, so an ending called from there knows not to wait for the dispatch it runs
+        // in. It is marked finished only once every handler has returned, faulted or not (AwaitHandlersAsync's
+        // finally when one is still running, the finally below otherwise): a handler that awaits an ending while
+        // another one is still running is inside the dispatch for as long as the dispatch waits for it.
+        var frame = new DispatchFrame();
+        _dispatchFrame.Value = frame;
+        var handedOff = false;
+        try
         {
-            try
+            var sw = Stopwatch.GetTimestamp();
+
+            // Lock-free read: volatile array reference swap is atomic
+            var snapshot = _observers;
+
+            foreach (var observer in snapshot)
             {
-                observer.OnNext(evt);
+                try
+                {
+                    observer.OnNext(evt);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    // Observer errors should not crash the pump
+                }
             }
-            catch
+
+            AmiMetrics.EventsDispatched.Add(1);
+            AmiMetrics.EventDispatchMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
+
+            // Every handler is started in order, each guarded, before any is awaited; then every one that has not
+            // completed is awaited, each guarded. A failure is logged and counted, and stops neither the other
+            // handlers nor the pump.
+            var handlers = _handlers;
+            ValueTask[]? pending = null;
+            var pendingCount = 0;
+            for (var i = 0; i < handlers.Length; i++)
             {
-                // Observer errors should not crash the pump
+                try
+                {
+                    var task = handlers[i](evt);
+                    if (task.IsCompletedSuccessfully)
+                        continue;
+
+                    // Still running, or already faulted or cancelled: awaited below, where a failure is observed.
+                    (pending ??= new ValueTask[handlers.Length - i])[pendingCount++] = task;
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    RecordHandlerFault(evt, ex);
+                }
             }
+
+            if (pendingCount == 0)
+                return ValueTask.CompletedTask;
+
+            var awaiting = AwaitHandlersAsync(pending!, pendingCount, evt, frame);
+            handedOff = true;
+            return awaiting;
         }
-
-        AmiMetrics.EventsDispatched.Add(1);
-        AmiMetrics.EventDispatchMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
-
-        // Every handler is started in order, each guarded, before any is awaited; then every one that has not
-        // completed is awaited, each guarded. A failure is logged and counted, and stops neither the other handlers
-        // nor the pump.
-        var handlers = _handlers;
-        ValueTask[]? pending = null;
-        var pendingCount = 0;
-        for (var i = 0; i < handlers.Length; i++)
+        finally
         {
-            try
-            {
-                var task = handlers[i](evt);
-                if (task.IsCompletedSuccessfully)
-                    continue;
-
-                // Still running, or already faulted or cancelled: awaited below, where a failure is observed.
-                (pending ??= new ValueTask[handlers.Length - i])[pendingCount++] = task;
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
-                RecordHandlerFault(evt, ex);
-            }
+            if (!handedOff)
+                frame.Finished = true;
         }
-
-        return pendingCount == 0 ? ValueTask.CompletedTask : AwaitHandlersAsync(pending!, pendingCount, evt);
     }
 
-    private async ValueTask AwaitHandlersAsync(ValueTask[] pending, int count, ManagerEvent evt)
+    private async ValueTask AwaitHandlersAsync(ValueTask[] pending, int count, ManagerEvent evt, DispatchFrame frame)
     {
-        for (var i = 0; i < count; i++)
+        try
         {
-            try
+            for (var i = 0; i < count; i++)
             {
-                await pending[i].ConfigureAwait(false);
+                try
+                {
+                    await pending[i].ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    RecordHandlerFault(evt, ex);
+                }
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
-                RecordHandlerFault(evt, ex);
-            }
+        }
+        finally
+        {
+            frame.Finished = true;
         }
     }
 
@@ -1291,7 +1678,11 @@ public sealed class AmiConnection : IAmiConnection
     /// mark the connection as ended by its caller, so it cannot be connected again.
     /// </param>
     /// <param name="logoffToken">Cancels only the Logoff write, never the release.</param>
-    private async Task EndAsync(bool byCaller, CancellationToken logoffToken)
+    /// <param name="cause">
+    /// What ended a connection lost for good, announced on the ending's changes; <see langword="null"/> for the caller's
+    /// ending.
+    /// </param>
+    private async Task EndAsync(bool byCaller, CancellationToken logoffToken, Exception? cause = null)
     {
         TaskCompletionSource? mine = null;
         Task ending;
@@ -1305,15 +1696,15 @@ public sealed class AmiConnection : IAmiConnection
             {
                 mine = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 _ending = mine;
-                // Written under the lock the reconnect loop's state writes take, so none of them overrides it.
-                _state = AmiConnectionState.Disconnecting;
+                // Written under the lock every connect's state writes take, so none of them overrides it.
+                SetStateLocked(AmiConnectionState.Disconnecting, byCaller ? null : cause, byCaller);
             }
 
             ending = _ending.Task;
             reconnectLoop = _reconnectLoop;
         }
 
-        if (byCaller && _inDispatch.Value)
+        if (byCaller && InDispatch)
         {
             // Called from inside this connection's own event dispatch, which waits for this call: no ending may
             // wait for that dispatch, or for the loop whose release may be waiting on it.
@@ -1350,7 +1741,11 @@ public sealed class AmiConnection : IAmiConnection
             {
                 try
                 {
-                    await WriteActionLockedAsync("Logoff", NextActionId(), [], logoffToken);
+                    // Bounded: a send whose write is blocked by a peer that stopped reading holds the write lock until
+                    // the release below disposes the socket, so an unbounded wait here would never reach that release.
+                    using var bounded = CancellationTokenSource.CreateLinkedTokenSource(logoffToken);
+                    bounded.CancelAfter(LogoffBound);
+                    await WriteActionLockedAsync("Logoff", NextActionId(), [], sending: false, bounded.Token);
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
@@ -1362,7 +1757,9 @@ public sealed class AmiConnection : IAmiConnection
         }
         finally
         {
-            _state = AmiConnectionState.Disconnected;
+            lock (_endingLock)
+                SetStateLocked(AmiConnectionState.Disconnected, byCaller ? null : cause, byCaller);
+
             AmiConnectionLog.Disconnected(_logger);
             mine.TrySetResult();
         }
@@ -1426,8 +1823,19 @@ public sealed class AmiConnection : IAmiConnection
                 _socket = null;
             }
 
-            _reader = null;
-            _writer = null;
+            // Under the write lock, after the socket's disposal: a send that holds the lock re-checks the state and the
+            // writer there, and a write still in flight is ended by that disposal, so this wait never stands behind a
+            // blocked write.
+            await _writeLock.WaitAsync();
+            try
+            {
+                _reader = null;
+                _writer = null;
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
 
             _cts?.Dispose();
             _cts = null;
@@ -1515,12 +1923,24 @@ public sealed class AmiConnection : IAmiConnection
     /// <c>[AMI_EVENT] Discarded on caller ending</c>, with the count.
     /// </para>
     /// <para>
-    /// The one exception is a call made from inside the connection's own event dispatch: an
-    /// <see cref="OnEvent"/> handler that awaits it, an observer's <c>OnNext</c> that waits on it, or anything
-    /// they call or start from there, such as a server pool that removes this connection's server. That
-    /// dispatch is waiting for the call, so the call does not wait for it. It releases everything else,
-    /// reports <see cref="AmiConnectionState.Disconnected"/> and returns. The event pump dispatches no later
-    /// event, and stops once the calling dispatch returns.
+    /// The one exception is a call made from inside the connection's own event dispatch, while that dispatch is
+    /// running: an <see cref="OnEvent"/> handler that awaits it, an observer's <c>OnNext</c> that waits on it, or
+    /// anything they call from there, such as a server pool that removes this connection's server, or a task they
+    /// start that calls it before the dispatch has returned. That dispatch is waiting for the call, so the call does
+    /// not wait for it. It releases everything else, reports <see cref="AmiConnectionState.Disconnected"/> and
+    /// returns. The event pump dispatches no later event, and stops once the calling dispatch returns.
+    /// </para>
+    /// <para>
+    /// A task a dispatch started and left running is no longer inside it once that dispatch has returned: a call it
+    /// makes from then on waits for the event in progress and releases everything, as a call from anywhere else does.
+    /// A handler that waits for an ending should therefore call this method, never await the stored task of a call
+    /// made outside its own dispatch (by the caller, or by a task an earlier, finished dispatch started): that ending
+    /// waits for the dispatch in progress, the dispatch waits for the ending, and neither finishes.
+    /// </para>
+    /// <para>
+    /// A <see cref="Reconnected"/> still queued when this call is made is not delivered. The state changes of this
+    /// ending are still announced on <see cref="StateChanged"/>, and can be delivered after this call has returned:
+    /// the call does not wait for the notification queue.
     /// </para>
     /// </remarks>
     public async ValueTask DisposeAsync()
@@ -1540,9 +1960,11 @@ public sealed class AmiConnection : IAmiConnection
     {
         if (_state != AmiConnectionState.Connected)
         {
-            throw new AmiNotConnectedException($"Not connected. Current state: {_state}");
+            throw NotConnected();
         }
     }
+
+    private AmiNotConnectedException NotConnected() => new($"Not connected. Current state: {_state}");
 
     private sealed class Unsubscriber(AmiConnection connection, IObserver<ManagerEvent> observer) : IDisposable
     {

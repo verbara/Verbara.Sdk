@@ -66,7 +66,7 @@ decision records, specs, plans and research notes are kept locally and are not t
 | 101 | session-store provenance: re-measured 2026-09-12, .NET 10.0.12, xunit Fact + Stopwatch against local Docker, PostgreSQL 18.4 / Redis 7.4.8, median of five runs; Postgres single-save latency is the WAL flush | COHERENCE | `PerformanceTableCoherenceTests` — the per-row provenance test | PARTIAL — date and runtime asserted against the Performance section; server versions, run count and the WAL-flush attribution stated, not asserted; and the check is opt-in, so deleting `provenance` from the record unbinds this line unnoticed |
 | 124 | 9 ActivitySources | ENFORCING | `MarketingClaimsTests.cs:45-50` | OK |
 | 125 | 15 Meters | ENFORCING | `MarketingClaimsTests.cs:52-57` | OK |
-| 126 | 11 IHealthChecks — 6 core + 5 VoiceAi | ENFORCING | `MarketingClaimsTests.cs:76-97` | PARTIAL — total pinned, the 6/5 split is not |
+| 126 | 12 IHealthChecks — 7 core + 5 VoiceAi | ENFORCING | `MarketingClaimsTests.cs:76-97` | PARTIAL — total pinned, the 7/5 split is not |
 | 127 | 60 const strings, 14 nested classes, "14+ unit tests" | ENFORCING | `MarketingClaimsTests.cs:59-74` | PARTIAL — the "14+ tests" sub-claim is unpinned |
 | 155 | "First contact in 10 lines" | COHERENCE | — | WRONG — the snippet at :158-172 is 15 lines (13 non-blank); the old anchor :166-182 was already off before #322 |
 | 461 | Cartesia Sonic-3, no figure | — | — | **DELETED** — the figure moved to `src/Verbara.Sdk.VoiceAi.Tts/README.md`, cited; `40-90 ms` was never Cartesia's number (they publish sub-90 ms) |
@@ -136,7 +136,7 @@ decision records, specs, plans and research notes are kept locally and are not t
 | `Verbara.Sdk.Audio/README.md:39` | zero-alloc Span API throughout | ENFORCING | — | GAP — `MemoryDiagnoser` runs but nothing asserts |
 | `Verbara.Sdk.Push/README.md:112` | 0 trim warnings, **naming its own guard** | ENFORCING | AotCanary | OK — the only README that cites its guard |
 | `Verbara.Sdk.Resilience/README.md:8` | maxAttempts capped at 10, ±20% jitter | ENFORCING | — | GAP — see *Unresolved* |
-| `Verbara.Sdk.Hosting/README.md:108` | 0 trim warnings | ENFORCING | AotCanary | OK |
+| `Verbara.Sdk.Hosting/README.md:112` | 0 trim warnings | ENFORCING | AotCanary | OK |
 | `VoiceAi.Tts/README.md:3` | 6 providers | ENFORCING | — | GAP |
 | `VoiceAi.Tts/README.md:9-14,73,81` | per-vendor TTFA (~150 ms, 40-90 ms, sub-100 ms, …) | ATTRIBUTED | — | GAP — no citation; the same vendor figure appears three times with three values |
 | `VoiceAi.Stt/README.md:3` | 7 providers | ENFORCING | — | GAP |
@@ -173,7 +173,7 @@ Missed by the first sweep — tracked, public, and read as current by every cont
 
 ## `docs/guides/`
 
-`docs/guides/README.md` carries no quantitative claim beyond `:9` (below).
+`docs/guides/README.md` carries no quantitative claim beyond `:10` (below).
 
 | location | claim | class | status |
 |---|---|---|---|
@@ -184,6 +184,7 @@ Missed by the first sweep — tracked, public, and read as current by every cont
 | `high-load-tuning.md:149-151` | pauseWriter 1 MB / resumeWriter 512 KB / segment 4 KB "hardcoded" | ENFORCING | GAP |
 | `high-load-tuning.md:223` | EventPumpCapacity 20,000 | ENFORCING | OK — matches source; `README-technical.md:503` is the wrong one |
 | `high-load-tuning.md:194,196-203` | with `MaxReconnectAttempts = N` the client makes N reconnect attempts; while `AutoReconnect` is on the backoff options are accepted from `00:00:00` / `ReconnectInitialDelay` to `24.20:31:23.647` (`int.MaxValue` ms), a multiplier of at least `1.0`, and `MaxReconnectAttempts` of 0 or more | ENFORCING | OK — `AmiConnectionOptionsValidatorTests` / `AriClientOptionsValidatorTests` `Validate_ShouldAgreeWithTheBackoffScheduleAndTheWaitLimit_OverTheBoundarySet` (the boundary set holds exactly `int.MaxValue` ms, accepted, and 60 days, rejected) and `…ShouldAcceptOnlyValuesTheBackoffComputesAtEveryAttempt`; `AmiReconnectLoopTests.ReconnectLoop_ShouldMakeExactlyNConnects_WhenEveryReconnectIsRefused` and `AriClientStateTests.ReconnectLoop_ShouldMakeExactlyNDials_WhenEveryReconnectIsRefused` (N ∈ {1, 2, 4}) |
+| `ami-connection-state-and-health-migration.md:124-125` | a `StateChanged` handler that has not returned after 30 s is logged once at Warning | ENFORCING | OK — the same guard as `troubleshooting.md:190` (`AmiConnection.StuckNotificationBound`, `AmiConnectionStuckNotificationTests`) |
 | `ari-connection-state-and-accept-loop-migration.md` | accept backoff 100 ms doubling to a 5 s cap; at most 12 Error lines a minute at the cap | ENFORCING | GAP — the bounds are `internal` constants in `AriOutboundListener`; the per-minute figure is 60/5 s, arithmetic over them. Both are restated from the `[Unreleased]` #291 entry, not newly derived |
 | `audiosocket-wire-format-migration.md:10-18` | a three-byte header; Asterisk closed the connection "two seconds later"; "1,411 frames" captured against Asterisk 22.9.0; identification `01 00 10` plus sixteen bytes of UUID, audio `10 01 40` plus 320 bytes | — | GAP — no class declared; added by #302 (`24855e10`, 2026-09-24), which edited this registry in the same PR (the ADR-count row) without adding one |
 | `externalmedia-channel-id-migration.md:154-155` | `ConnectionTimeout` "30 seconds by default" | — | GAP — a documented default, unclassed until *Unresolved* 1 is ruled; added by #305 (`9f2cbde7`, 2026-09-24) without a row |
@@ -204,11 +205,12 @@ Missed by the first sweep — tracked, public, and read as current by every cont
 | `troubleshooting.md:173,177` | the defaults `HeartbeatInterval` 30 s, `HeartbeatTimeout` 10 s, `DefaultResponseTimeout` 2 s and `MaxReconnectAttempts` 0; a silent peer seen "up to about 32 s" after it went silent (30 s + the 2 s `Ping` wait) | — | GAP — documented defaults, true against `AmiConnectionOptions` as of 2026-09-29, unclassed until *Unresolved* 1 is ruled; the 32 s is their sum |
 | `troubleshooting.md:173` | with the defaults, a silent peer was seen 2.2–32.0 s after it went silent | **EVIDENCE** | dated record — measured 2026-09-28 on Asterisk 22.9.0 and 23.4.1 with the default heartbeat, n = 40 (the container paused, or disconnected from its network, at a random point of the heartbeat period), from the fault to the connection's `State` leaving `Connected`; minimum to maximum |
 | `troubleshooting.md:175` | the give-up after N failed attempts, as examples measured from Asterisk's restart with the credentials rejected: 17.2–18.8 s with 1 s ×2 and N = 4; 8.1–9.2 s with 0.5 s ×2 capped at 2 s and N = 4 | **EVIDENCE** | dated record — from `docker start` of an Asterisk whose AMI user had been deleted to the connection's `State` reading `Disconnected`, measured 2026-10-01 on 20.20.1, 22.9.0 and 23.4.1, n = 10 per version and configuration (60 runs); every run made 4 reconnect connects, logged 4 `[AMI] Reconnecting` and 4 `[AMI] Reconnect attempt failed` lines, and made no connect after the give-up. 17.2–18.8 s with 1 s ×2; 8.1–9.2 s with 0.5 s ×2 capped at 2 s. Control, the same harness on the code before N meant N attempts: 3 connects in every run (60 of 60), 17.2–17.6 s and 7.0–8.2 s — the figures this row recorded until then (17.2–17.7 s, 2026-09-28/29, n = 80; 6.9–8.6 s, 2026-09-28, n = 20) |
-| `troubleshooting.md:208` | designed for zero trim warnings | ENFORCING | PARTIAL — 22/29 |
-| `troubleshooting.md:246,250-258` | 9 registered sources, enumerated by name | ENFORCING | PARTIAL — count pinned, the by-name list is not |
-| `troubleshooting.md:286` | reconcile burst over 5-30 seconds | — | GAP |
-| `troubleshooting.md:311,313` | `ChannelIdInUse` reports about 1000 ms waited; a call that comes back is waited for up to 1 second | ENFORCING | OK — the same guard as `VoiceAi.AudioSocket/README.md:50,55` (`SameIdGrace`, asserted by `…_WhenTheHolderHangsUpWithinTheGrace` and `…_ShouldLogTheChannelIdNotTheLimit_WhenItRefusesASameIdConnection`) |
-| `troubleshooting.md:319,327` | after a refusal's hangup frame the dialplan goes on on Asterisk 20 and later; Asterisk 18 hangs the call up | **EVIDENCE** | dated record — the same measurement as `VoiceAi.AudioSocket/README.md:59-61` |
+| `troubleshooting.md:190` | an AMI notification handler still running 30 s after its notification began is logged once at Warning | ENFORCING | OK — `AmiConnection.StuckNotificationBound`; `AmiConnectionStuckNotificationTests.Notify_ShouldLogOneWarning_WhenAHandlerHasNotReturnedOnceTheBoundHasPassed` drives the queue on a manual clock and asserts no Warning 1 ms before 30 s, one at 30 s and still one at ten times the bound, and `…_ShouldLogNoWarning_WhenEveryHandlerReturnedBeforeTheBound` that a handler that returned is never reported |
+| `troubleshooting.md:219` | designed for zero trim warnings | ENFORCING | PARTIAL — 22/29 |
+| `troubleshooting.md:257,261-269` | 9 registered sources, enumerated by name | ENFORCING | PARTIAL — count pinned, the by-name list is not |
+| `troubleshooting.md:297` | reconcile burst over 5-30 seconds | — | GAP |
+| `troubleshooting.md:322,324` | `ChannelIdInUse` reports about 1000 ms waited; a call that comes back is waited for up to 1 second | ENFORCING | OK — the same guard as `VoiceAi.AudioSocket/README.md:50,55` (`SameIdGrace`, asserted by `…_WhenTheHolderHangsUpWithinTheGrace` and `…_ShouldLogTheChannelIdNotTheLimit_WhenItRefusesASameIdConnection`) |
+| `troubleshooting.md:330,338` | after a refusal's hangup frame the dialplan goes on on Asterisk 20 and later; Asterisk 18 hangs the call up | **EVIDENCE** | dated record — the same measurement as `VoiceAi.AudioSocket/README.md:59-61` |
 | `log-analysis-reference.md:5,22` | SDK Tags (11), Dashboard Tags (8) | ENFORCING | GAP |
 | `asterisk-version-compatibility.md:9,157` | "**no data is ever lost**", "zero data loss" | ENFORCING | GAP — absolute claim, testable against the `RawFields` fallback |
 | `provider-test-substrate.md:6` | fourteen provider surfaces | ENFORCING | GAP |

@@ -26,6 +26,8 @@ For each error or warning, classify using this table:
 | `[AMI_EVENT] Discarded on caller ending` | Expected: the caller ended the connection with events buffered | Ignore; not a capacity problem |
 | `[AMI_EVENT] OnEvent handler threw on <EventType>` | Bug: an application `OnEvent` handler failed on that event; delivery went on | Fix the handler (the exception is attached); `ami.events.handler_faults` counts each failure |
 | `[AMI] Reconnecting` | Infra: connection loss | Check Asterisk uptime |
+| `[AMI] State-change handler error` | Bug: an application `StateChanged` handler threw; the handlers after it still ran | Fix the handler (the exception is attached) |
+| `[AMI] A <Event> handler has not returned after <n> s` | Bug: an application `StateChanged`, `ConnectionLost` (`Lost`) or `Reconnected` handler blocks; every later notification, the Live reload after a reconnect included, waits for it | Find the blocking handler; keep handlers short and hand long work off |
 | `[LIVE] Status refused` | Config: the AMI user may not run `Status`; the load reconciled no channel | Give the user `system`, `call` or `reporting` in `write` |
 | `[CALL_FLOW] Evicted stale` | Infra: zombie call | Investigate missing Hangup events |
 | `[AGENT] Unknown agent` | Config: agent not tracked | Check AgentsAction response |

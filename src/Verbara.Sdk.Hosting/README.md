@@ -7,7 +7,7 @@ The recommended entry point to the [Verbara.Sdk](https://github.com/verbara/Verb
 - **`AddVerbara(IConfiguration | Action<VerbaraOptions>)`** — registers `IAmiConnection`, `IAriClient`, `IAgiServer`, the Live API (`VerbaraServer`), `IActivityRegistry`, `ISessionEngine`, and the supporting hosted services. Idempotent and source-generator-validated.
 - **`VerbaraOptions`** — strongly-typed configuration model with `[OptionsValidator]` source-generated validation (no runtime reflection). Bind directly from `appsettings.json` or configure inline.
 - **Hosted lifecycle** — `IHostedService` implementations connect AMI on `StartAsync`, drain on `StopAsync`. AGI server, ARI WebSocket, and `VerbaraServer` (Live aggregate) follow the same pattern.
-- **Health checks** — `AmiHealthCheck`, `AriHealthCheck`, `AgiHealthCheck` auto-registered. Expose at `/health` for Kubernetes probes.
+- **Health checks** — `AmiHealthCheck` (`ami`), `LiveHealthCheck` (`live`) and `AgiHealthCheck` (`agi`) auto-registered, `AriHealthCheck` (`ari`) with an `Ari` section; `AddVerbaraMultiServer` adds `VerbaraServerPoolHealthCheck` (`verbara-pool`). Expose at `/health` for Kubernetes probes.
 - **Multi-server support** — register multiple `VerbaraServer` instances via `VerbaraServerPool` for federated deployments.
 
 This is a **meta-package**: it does not contain its own runtime types. It transitively pulls in `Verbara.Sdk`, `Verbara.Sdk.Ami`, `Verbara.Sdk.Agi`, `Verbara.Sdk.Ari`, `Verbara.Sdk.Live`, `Verbara.Sdk.Activities`, `Verbara.Sdk.Sessions`, and `Verbara.Sdk.Config`. Add Voice AI / Push / OpenTelemetry packages on top as needed.
@@ -75,6 +75,8 @@ builder.Services.AddHealthChecks();
 app.MapHealthChecks("/health");
 ```
 
+The `live` check reads the AMI connection before the state it holds: `Connected` reports on the state as before, `Reconnecting`, `Connecting` or not yet connected is `Degraded` (the state is not being updated, but the connection may come back), and `Disconnecting` or `Disconnected` is `Unhealthy`; its data carries the connection's state as `amiState`.
+
 ## Multi-server (federation)
 
 Register multi-server support at DI time, then resolve the pool after `Build()` and add servers at runtime:
@@ -100,6 +102,8 @@ await pool.AddServerAsync("pbx-west", new AmiConnectionOptions
     Password = "secret"
 });
 ```
+
+`AddVerbaraMultiServer` also registers a health check named `verbara-pool`, with no tags, once however often it is called. It reads every server's AMI connection when it runs: `Healthy` when every server is connected or the pool holds none, `Unhealthy` when every server's connection has ended (`Disconnecting` or `Disconnected`), and `Degraded` otherwise; its data maps each server id to its connection's state. An unfiltered `/health` endpoint includes it, so point a liveness probe at an endpoint filtered by tag ([migration guide](../../docs/guides/ami-connection-state-and-health-migration.md)).
 
 See `Examples/MultiServerExample/` for a full federation walkthrough.
 

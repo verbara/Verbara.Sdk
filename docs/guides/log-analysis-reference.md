@@ -6,7 +6,7 @@
 
 | Tag | Domain | Class(es) | Events |
 |-----|--------|-----------|--------|
-| `[AMI]` | AMI connection | `AmiConnectionLog` | Connect, disconnect, reconnect, reader error |
+| `[AMI]` | AMI connection | `AmiConnectionLog` | Connect, disconnect, reconnect, reader error, notification handler error, notification handler that has not returned |
 | `[AMI_EVENT]` | AMI events | `AmiConnectionLog` | Event received, dropped, discarded on caller ending, `OnEvent` handler fault |
 | `[AMI_ACTION]` | AMI actions | `AmiConnectionLog` | Response received |
 | `[LIVE]` | Live state | `VerbaraServerLog` | Initial state, reconnect reload, `Status` refused |
@@ -39,6 +39,8 @@
 | `InvalidOperationException` in `[QUEUE]` | Bug: invalid state | P0 |
 | `[CONFIG_DB] Operation failed` with `NpgsqlException` | Infra: DB unavailable | — |
 | `[AMI] Reader error` with `IOException` | Infra: unstable network | — |
+| `[AMI] State-change handler error` | Bug: an application `StateChanged` handler threw (exception attached); the handlers after it still ran | P1 |
+| `[AMI] A <Event> handler has not returned after <n> s` | Bug: an application `StateChanged`, `ConnectionLost` (`Lost`) or `Reconnected` handler blocks; later notifications, the Live reload included, wait for it | P1 |
 | `[AMI_EVENT] Dropped` | Infra: event buffer full (tune `EventPumpCapacity`) | — |
 | `[AMI_EVENT] Discarded on caller ending` | Expected: the caller ended the connection with events buffered | Ignore |
 | `[AMI_EVENT] OnEvent handler threw on <EventType>` | Bug: an application `OnEvent` handler failed (exception attached); delivery went on | P1 |

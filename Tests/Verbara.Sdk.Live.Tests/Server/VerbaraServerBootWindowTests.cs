@@ -687,6 +687,53 @@ public sealed class VerbaraServerBootWindowTests
     }
 
     /// <summary>
+    /// A start on a connection whose caller's connect failed (the login was rejected) throws the not-connected exception
+    /// from the load's first request, whatever state the failed connect left: today it leaves <c>Connecting</c>, and a
+    /// failed connect that leaves <c>Disconnected</c> must throw the same. Neither state is one a reload follows.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ShouldThrow_WhenTheConnectionNeverConnected()
+    {
+        using var peerCts = new CancellationTokenSource(Run.Bound * 2);
+        var sockets = new PipedSocketFactory();
+        var serverLog = new SignalingLogger<VerbaraServer>();
+        await using var connection = new AmiConnection(
+            Microsoft.Extensions.Options.Options.Create(new AmiConnectionOptions
+            {
+                Hostname = "localhost",
+                Username = "admin",
+                Password = "secret",
+                EnableHeartbeat = false,
+                AutoReconnect = true,
+            }),
+            sockets,
+            new SignalingLogger<AmiConnection>());
+        await using var server = new VerbaraServer(connection, serverLog);
+        var peer = Task.Run(async () =>
+        {
+            var socket = await sockets.NextAsync(peerCts.Token);
+            await socket.WriteAsync("Asterisk Call Manager/6.0.0\r\n");
+            var challenge = await socket.ReadActionAsync(peerCts.Token) ?? throw new InvalidOperationException("No challenge.");
+            await socket.RespondAsync("Success", PipedSocket.ActionIdOf(challenge), [new("Challenge", "abc123")]);
+            var login = await socket.ReadActionAsync(peerCts.Token) ?? throw new InvalidOperationException("No login.");
+            await socket.RespondAsync("Error", PipedSocket.ActionIdOf(login), [new("Message", "Authentication failed")]);
+        }, peerCts.Token);
+        var connectOutcome = await Record.ExceptionAsync(() => connection.ConnectAsync().AsTask().WaitAsync(Run.Bound));
+        await peer.WaitAsync(Run.Bound);
+
+        var outcome = await Record.ExceptionAsync(() => server.StartAsync().WaitAsync(Run.Bound));
+
+        using (new AssertionScope())
+        {
+            connectOutcome.Should().BeOfType<AmiAuthenticationException>("the peer rejected the login");
+            outcome.Should().BeOfType<AmiNotConnectedException>(
+                "a start on a connection that never connected has nothing to load, and no reconnect will reload it");
+            Lines(serverLog, StateLoaded).Should().Be(0, "nothing was loaded");
+            Warnings(serverLog).Should().BeEmpty("a start that throws is not an interrupted load");
+        }
+    }
+
+    /// <summary>
     /// The reconnect loop's own connect attempt also reads <c>Connecting</c>, and the connection's state cannot tell it
     /// from a caller's first connect. A start that begins there throws, as it does today.
     /// </summary>

@@ -27,7 +27,7 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// Every wait is bounded by <see cref="Bound"/> and ends on the signal it asserts. The exceptions are
 /// observation windows for an absence, each paired with its positive control:
 /// <see cref="HeldReleaseWindow"/> (the state never reads <see cref="AmiConnectionState.Disconnected"/>
-/// while the release is held; the same poll does see it once the gate opens), <see cref="DialWindow"/>
+/// while the release is held; the same watch does see it once the gate opens), <see cref="DialWindow"/>
 /// (the reconnect loop dials no more; a loop nothing ended dials inside it) and
 /// <see cref="LaterEventWindow"/> (the pump dispatches no buffered event; a handler that does not end the
 /// connection receives it inside it).
@@ -67,19 +67,20 @@ public sealed class AmiConnectionEndingTests
         (await socket.WriteEventAsync("FullyBooted")).Should().BeTrue("the peer sends one event");
         (await CompletesWithinBoundAsync(dispatch.Entered)).Should().BeTrue("the handler receives the event and holds its dispatch");
 
+        var disconnected = WatchDisconnected(connection, socket);
         var disconnect = connection.DisconnectAsync().AsTask();
-        var whileHeld = await FirstDisconnectedReadAsync(connection, socket, HeldReleaseWindow);
+        var whileHeld = await ResultWithinAsync(disconnected, HeldReleaseWindow);
         var stillReleasing = !disconnect.IsCompleted;
 
         dispatch.Open();
-        var afterRelease = await FirstDisconnectedReadAsync(connection, socket, Bound);
+        var afterRelease = await ResultWithinAsync(disconnected, Bound);
 
         whileHeld.Should().BeNull(
             "the handler holds the release open, so the connection must not report Disconnected yet: " +
             "a caller who sees Disconnected must find the socket released");
         stillReleasing.Should().BeTrue("DisconnectAsync cannot finish while the handler holds the release open");
         afterRelease.Should().Be(DisconnectedRead(disposeCount: 1),
-            "positive control: once the handler returns, the same poll sees Disconnected, with the socket released exactly once");
+            "positive control: once the handler returns, the same watch sees Disconnected, with the socket released exactly once");
         (await CompletesWithinBoundAsync(disconnect)).Should().BeTrue("DisconnectAsync returns once the release has finished");
         (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue();
         socket.DisposeCount.Should().Be(1, "a DisposeAsync after the ending disposes no socket a second time");
@@ -103,9 +104,10 @@ public sealed class AmiConnectionEndingTests
         (await socket.WriteEventAsync("FullyBooted")).Should().BeTrue("the peer sends one event");
         (await CompletesWithinBoundAsync(dispatch.Entered)).Should().BeTrue("the handler receives the event and holds its dispatch");
 
+        var disconnected = WatchDisconnected(connection, socket);
         var disconnect = connection.DisconnectAsync().AsTask();
         // Only places the DisposeAsync below; what this watch reads is asserted by the test above.
-        await FirstDisconnectedReadAsync(connection, socket, HeldReleaseWindow);
+        await ResultWithinAsync(disconnected, HeldReleaseWindow);
         var seenAtReturn = SeenWhenDisposeAsyncReturnsAsync(connection, factory);
 
         dispatch.Open();
@@ -120,9 +122,9 @@ public sealed class AmiConnectionEndingTests
     /// <summary>
     /// A pin, green before and after the single-flight ending: it holds where a lost connection's ending
     /// is forgotten. A connection lost with AutoReconnect off was released, not disposed, so its caller
-    /// may connect it again; when that connect fails it leaves an open socket behind (the state reads
-    /// Connecting), and a later <c>DisposeAsync</c> must release it rather than join the old, finished
-    /// ending. Forgetting the old ending only once a connect succeeds would leave this socket open.
+    /// may connect it again; when that connect fails it releases its own socket and the state reads
+    /// Disconnected, and a later <c>DisposeAsync</c> must neither join the old, finished ending nor release
+    /// that socket a second time.
     /// </summary>
     [Fact]
     public async Task DisposeAsync_ShouldReleaseTheSocket_WhenAConnectAfterALostConnectionFailed()
@@ -150,7 +152,7 @@ public sealed class AmiConnectionEndingTests
         (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue();
 
         second.DisposeCount.Should().Be(1,
-            "DisposeAsync releases the socket the failed connect left open, instead of joining the ending that released the first one");
+            "the failed connect released its socket, and DisposeAsync, which does not join the ending that released the first one, releases it no second time");
         first.DisposeCount.Should().Be(1);
         connection.State.Should().Be(AmiConnectionState.Disconnected);
     }
@@ -580,24 +582,19 @@ public sealed class AmiConnectionEndingTests
     }
 
     /// <summary>
-    /// Reads <see cref="AmiConnection.State"/> until it reads Disconnected, and describes that read with
-    /// the socket's disposal count taken right after it; <see langword="null"/> when
-    /// <paramref name="limit"/> passes first.
+    /// Completes when <see cref="AmiConnection.StateChanged"/> delivers the change to Disconnected, with that change
+    /// described with the socket's disposal count taken as it is delivered. The change is announced after the state
+    /// is written, so the count is never read before the state reads Disconnected.
     /// </summary>
-    private static async Task<string?> FirstDisconnectedReadAsync(AmiConnection connection, PipedSocket socket,
-        TimeSpan limit)
+    private static Task<string> WatchDisconnected(AmiConnection connection, PipedSocket socket)
     {
-        using var limitCts = new CancellationTokenSource(limit);
-        while (true)
+        var seen = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.StateChanged += change =>
         {
-            if (connection.State == AmiConnectionState.Disconnected)
-                return DisconnectedRead(socket.DisposeCount);
-
-            if (limitCts.IsCancellationRequested)
-                return null;
-
-            await Task.Delay(5); // fence-allow: LOOP-DRIVER — AmiConnection exposes State but no state-change signal
-        }
+            if (change.Current == AmiConnectionState.Disconnected)
+                seen.TrySetResult(DisconnectedRead(socket.DisposeCount));
+        };
+        return seen.Task;
     }
 
     private static string DisconnectedRead(int disposeCount) =>
