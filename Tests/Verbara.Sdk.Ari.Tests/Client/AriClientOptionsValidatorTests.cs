@@ -74,31 +74,36 @@ public sealed class AriClientOptionsValidatorTests
         result.Failed.Should().BeTrue();
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void Validate_ShouldFail_WhenMaxReconnectAttemptsIsNegative(bool autoReconnect)
+    [Fact]
+    public void Validate_ShouldFail_WhenMaxReconnectAttemptsIsNegativeAndAutoReconnectIsOn()
     {
-        var options = new AriClientOptions
-        {
-            BaseUrl = "http://localhost:8088",
-            Username = "admin",
-            Password = "secret",
-            Application = "myapp",
-            AutoReconnect = autoReconnect,
-            MaxReconnectAttempts = -1,
-        };
+        var options = ReconnectOptions("MaxReconnectAttempts = -1", autoReconnect: true);
 
         var result = _sut.Validate(null, options);
 
-        result.Succeeded.Should().BeFalse(
-            $"a negative attempt limit is rejected as the AMI validator rejects it, AutoReconnect = {autoReconnect} or not");
+        result.Succeeded.Should().BeFalse("with AutoReconnect on, a negative attempt limit is rejected as the AMI validator rejects it");
         result.FailureMessage.Should().Contain(nameof(AriClientOptions.MaxReconnectAttempts), "the failure names the option to fix");
     }
 
     /// <summary>
+    /// Owner ruling Q1 (2026-09-30): ARI's attempt-limit check applies only with <c>AutoReconnect</c> on, like the rest of
+    /// the reconnect rule, so a host with reconnection off and a negative limit keeps validating as it does today.
+    /// </summary>
+    [Fact]
+    public void Validate_ShouldSucceed_WhenMaxReconnectAttemptsIsNegativeAndAutoReconnectIsOff()
+    {
+        var options = ReconnectOptions("MaxReconnectAttempts = -1", autoReconnect: false);
+
+        var result = _sut.Validate(null, options);
+
+        result.Succeeded.Should().BeTrue(
+            $"without AutoReconnect the attempt limit is never used, so it is not checked; failure: {result.FailureMessage}");
+    }
+
+    /// <summary>
     /// The reconnect values the backoff cannot use, each with the option it names. With <c>AutoReconnect</c> on, the
-    /// validator rejects each one naming that option; they are exactly what <see cref="BackoffSchedule.Compute"/> rejects.
+    /// validator rejects each one naming that option; they are what <see cref="BackoffSchedule.Compute"/> rejects, plus a
+    /// delay above what .NET can wait (<see cref="int.MaxValue"/> ms, about 24.8 days; owner ruling Q2, 2026-09-30).
     /// </summary>
     public static TheoryData<string, string> UnusableReconnectValues => new()
     {
@@ -109,11 +114,13 @@ public sealed class AriClientOptionsValidatorTests
         { "ReconnectMultiplier = +Infinity", nameof(AriClientOptions.ReconnectMultiplier) },
         { "ReconnectMaxDelay = 500 ms < ReconnectInitialDelay = 1 s", nameof(AriClientOptions.ReconnectMaxDelay) },
         { "ReconnectInitialDelay = -1 s", nameof(AriClientOptions.ReconnectInitialDelay) },
+        { "ReconnectMaxDelay = Timeout.InfiniteTimeSpan", nameof(AriClientOptions.ReconnectMaxDelay) },
+        { "ReconnectMaxDelay = 60 days, above the int.MaxValue ms wait limit", nameof(AriClientOptions.ReconnectMaxDelay) },
     };
 
     /// <summary>
     /// What a constructor rejects with <c>AutoReconnect</c> on: every value of <see cref="UnusableReconnectValues"/>, and a
-    /// negative attempt limit, which the validator rejects through its range attribute but a constructor must check itself.
+    /// negative attempt limit, which the validator also rejects with <c>AutoReconnect</c> on and a constructor must check itself.
     /// </summary>
     public static TheoryData<string, string> ValuesAConstructorRejects
     {
@@ -127,13 +134,14 @@ public sealed class AriClientOptionsValidatorTests
         }
     }
 
-    /// <summary>The boundary values the backoff accepts: a multiplier of exactly 1, a maximum equal to the initial delay, a zero initial delay.</summary>
+    /// <summary>The boundary values the backoff accepts: a multiplier of exactly 1, a maximum equal to the initial delay, a zero initial delay, a maximum of exactly the wait limit.</summary>
     public static TheoryData<string> BoundaryReconnectValues => new()
     {
         "ReconnectMultiplier = 1",
         "ReconnectMaxDelay = ReconnectInitialDelay = 1 s",
         "ReconnectInitialDelay = 0",
         "ReconnectInitialDelay = 0, ReconnectMultiplier = 1, ReconnectMaxDelay = 0",
+        "ReconnectMaxDelay = int.MaxValue ms",
     };
 
     [Theory]
@@ -172,7 +180,7 @@ public sealed class AriClientOptionsValidatorTests
     }
 
     [Fact]
-    public void Validate_ShouldAgreeWithTheBackoffSchedule_OverTheBoundarySet()
+    public void Validate_ShouldAgreeWithTheBackoffScheduleAndTheWaitLimit_OverTheBoundarySet()
     {
         IEnumerable<object[]> unusable = UnusableReconnectValues;
         IEnumerable<object[]> boundary = BoundaryReconnectValues;
@@ -185,11 +193,17 @@ public sealed class AriClientOptionsValidatorTests
                 var options = ReconnectOptions(value, autoReconnect: true);
                 var validatorAccepts = _sut.Validate(null, options).Succeeded;
 
-                validatorAccepts.Should().Be(BackoffAccepts(options),
-                    $"the validator accepts {value} if and only if BackoffSchedule.Compute does");
+                validatorAccepts.Should().Be(BackoffAccepts(options) && WithinWaitLimit(options),
+                    $"the validator accepts {value} if and only if BackoffSchedule.Compute does and no delay exceeds the wait limit");
             }
         }
     }
+
+    /// <summary>The longest delay .NET can wait: <see cref="int.MaxValue"/> ms, about 24.8 days (owner ruling Q2).</summary>
+    internal static readonly TimeSpan WaitLimit = TimeSpan.FromMilliseconds(int.MaxValue);
+
+    private static bool WithinWaitLimit(AriClientOptions options) =>
+        options.ReconnectInitialDelay <= WaitLimit && options.ReconnectMaxDelay <= WaitLimit;
 
     private static bool BackoffAccepts(AriClientOptions options)
     {
@@ -228,6 +242,9 @@ public sealed class AriClientOptionsValidatorTests
                 options.ReconnectMaxDelay = TimeSpan.FromMilliseconds(500);
                 break;
             case "ReconnectInitialDelay = -1 s": options.ReconnectInitialDelay = TimeSpan.FromSeconds(-1); break;
+            case "ReconnectMaxDelay = Timeout.InfiniteTimeSpan": options.ReconnectMaxDelay = Timeout.InfiniteTimeSpan; break;
+            case "ReconnectMaxDelay = 60 days, above the int.MaxValue ms wait limit": options.ReconnectMaxDelay = TimeSpan.FromDays(60); break;
+            case "ReconnectMaxDelay = int.MaxValue ms": options.ReconnectMaxDelay = WaitLimit; break;
             case "MaxReconnectAttempts = -1": options.MaxReconnectAttempts = -1; break;
             case "ReconnectMultiplier = 1": options.ReconnectMultiplier = 1.0; break;
             case "ReconnectMaxDelay = ReconnectInitialDelay = 1 s":

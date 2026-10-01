@@ -129,7 +129,8 @@ public class AmiConnectionOptionsValidatorTests
 
     /// <summary>
     /// The reconnect values the backoff cannot use, each with the option it names. With <c>AutoReconnect</c> on, the
-    /// validator rejects each one naming that option; they are exactly what <see cref="BackoffSchedule.Compute"/> rejects.
+    /// validator rejects each one naming that option; they are what <see cref="BackoffSchedule.Compute"/> rejects, plus a
+    /// delay above what .NET can wait (<see cref="int.MaxValue"/> ms, about 24.8 days; owner ruling Q2, 2026-09-30).
     /// </summary>
     public static TheoryData<string, string> UnusableReconnectValues => new()
     {
@@ -140,6 +141,8 @@ public class AmiConnectionOptionsValidatorTests
         { "ReconnectMultiplier = +Infinity", nameof(AmiConnectionOptions.ReconnectMultiplier) },
         { "ReconnectMaxDelay = 500 ms < ReconnectInitialDelay = 1 s", nameof(AmiConnectionOptions.ReconnectMaxDelay) },
         { "ReconnectInitialDelay = -1 s", nameof(AmiConnectionOptions.ReconnectInitialDelay) },
+        { "ReconnectMaxDelay = Timeout.InfiniteTimeSpan", nameof(AmiConnectionOptions.ReconnectMaxDelay) },
+        { "ReconnectMaxDelay = 60 days, above the int.MaxValue ms wait limit", nameof(AmiConnectionOptions.ReconnectMaxDelay) },
     };
 
     /// <summary>
@@ -158,13 +161,14 @@ public class AmiConnectionOptionsValidatorTests
         }
     }
 
-    /// <summary>The boundary values the backoff accepts: a multiplier of exactly 1, a maximum equal to the initial delay, a zero initial delay.</summary>
+    /// <summary>The boundary values the backoff accepts: a multiplier of exactly 1, a maximum equal to the initial delay, a zero initial delay, a maximum of exactly the wait limit.</summary>
     public static TheoryData<string> BoundaryReconnectValues => new()
     {
         "ReconnectMultiplier = 1",
         "ReconnectMaxDelay = ReconnectInitialDelay = 1 s",
         "ReconnectInitialDelay = 0",
         "ReconnectInitialDelay = 0, ReconnectMultiplier = 1, ReconnectMaxDelay = 0",
+        "ReconnectMaxDelay = int.MaxValue ms",
     };
 
     [Theory]
@@ -203,7 +207,7 @@ public class AmiConnectionOptionsValidatorTests
     }
 
     [Fact]
-    public void Validate_ShouldAgreeWithTheBackoffSchedule_OverTheBoundarySet()
+    public void Validate_ShouldAgreeWithTheBackoffScheduleAndTheWaitLimit_OverTheBoundarySet()
     {
         IEnumerable<object[]> unusable = UnusableReconnectValues;
         IEnumerable<object[]> boundary = BoundaryReconnectValues;
@@ -216,11 +220,17 @@ public class AmiConnectionOptionsValidatorTests
                 var options = ReconnectOptions(value, autoReconnect: true);
                 var validatorAccepts = _validator.Validate(null, options).Succeeded;
 
-                validatorAccepts.Should().Be(BackoffAccepts(options),
-                    $"the validator accepts {value} if and only if BackoffSchedule.Compute does");
+                validatorAccepts.Should().Be(BackoffAccepts(options) && WithinWaitLimit(options),
+                    $"the validator accepts {value} if and only if BackoffSchedule.Compute does and no delay exceeds the wait limit");
             }
         }
     }
+
+    /// <summary>The longest delay .NET can wait: <see cref="int.MaxValue"/> ms, about 24.8 days (owner ruling Q2).</summary>
+    internal static readonly TimeSpan WaitLimit = TimeSpan.FromMilliseconds(int.MaxValue);
+
+    private static bool WithinWaitLimit(AmiConnectionOptions options) =>
+        options.ReconnectInitialDelay <= WaitLimit && options.ReconnectMaxDelay <= WaitLimit;
 
     private static bool BackoffAccepts(AmiConnectionOptions options)
     {
@@ -259,6 +269,9 @@ public class AmiConnectionOptionsValidatorTests
                 options.ReconnectMaxDelay = TimeSpan.FromMilliseconds(500);
                 break;
             case "ReconnectInitialDelay = -1 s": options.ReconnectInitialDelay = TimeSpan.FromSeconds(-1); break;
+            case "ReconnectMaxDelay = Timeout.InfiniteTimeSpan": options.ReconnectMaxDelay = Timeout.InfiniteTimeSpan; break;
+            case "ReconnectMaxDelay = 60 days, above the int.MaxValue ms wait limit": options.ReconnectMaxDelay = TimeSpan.FromDays(60); break;
+            case "ReconnectMaxDelay = int.MaxValue ms": options.ReconnectMaxDelay = WaitLimit; break;
             case "MaxReconnectAttempts = -1": options.MaxReconnectAttempts = -1; break;
             case "ReconnectMultiplier = 1": options.ReconnectMultiplier = 1.0; break;
             case "ReconnectMaxDelay = ReconnectInitialDelay = 1 s":
