@@ -112,21 +112,33 @@ internal static class LoopbackServerBind
     /// </summary>
     public static IReadOnlyList<int> ProbePorts(int count)
     {
-        var listeners = new List<TcpListener>(count);
-        try
-        {
-            for (var i = 0; i < count; i++)
-            {
-                var listener = new TcpListener(IPAddress.Loopback, 0);
-                listeners.Add(listener);
-                listener.Start();
-            }
+        using var held = new HeldListeners(count);
+        for (var i = 0; i < count; i++)
+            held.StartOne();
 
-            return [.. listeners.Select(l => ((IPEndPoint)l.LocalEndpoint).Port)];
-        }
-        finally
+        return held.Ports();
+    }
+
+    /// <summary>
+    /// The listeners one probe holds. Each is owned before its <c>Start</c> can throw, and all of them
+    /// are released together, in the order they were opened, only after every port has been read.
+    /// </summary>
+    private sealed class HeldListeners(int capacity) : IDisposable
+    {
+        private readonly List<TcpListener> _listeners = new(capacity);
+
+        public void StartOne()
         {
-            foreach (var listener in listeners)
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            _listeners.Add(listener);
+            listener.Start();
+        }
+
+        public IReadOnlyList<int> Ports() => [.. _listeners.Select(l => ((IPEndPoint)l.LocalEndpoint).Port)];
+
+        public void Dispose()
+        {
+            foreach (var listener in _listeners)
                 listener.Dispose();
         }
     }

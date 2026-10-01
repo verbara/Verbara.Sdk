@@ -111,19 +111,12 @@ internal static class TestClassCleanupScanner
             }
         }
 
-        var fixtures = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var info in types.Values)
-        {
-            foreach (var part in info.Parts)
-            {
-                foreach (var argument in FixtureArguments(part.Declaration))
-                {
-                    var resolved = Resolve(argument, part.Context, types);
-                    if (resolved is not null)
-                        fixtures.Add(resolved);
-                }
-            }
-        }
+        var fixtures = new HashSet<string>(
+            types.Values
+                .SelectMany(info => info.Parts)
+                .SelectMany(part => FixtureArguments(part.Declaration).Select(argument => Resolve(argument, part.Context, types)))
+                .OfType<string>(),
+            StringComparer.Ordinal);
 
         var violations = new List<TestClassCleanupViolation>();
         var testClasses = 0;
@@ -176,23 +169,13 @@ internal static class TestClassCleanupScanner
         return false;
     }
 
-    private static TypeInfo? BaseClassOf(TypeInfo info, Dictionary<string, TypeInfo> types)
-    {
-        foreach (var part in info.Parts)
-        {
-            if (part.Declaration.BaseList is null)
-                continue;
-
-            foreach (var baseType in part.Declaration.BaseList.Types)
-            {
-                var resolved = Resolve(baseType.Type, part.Context, types);
-                if (resolved is not null && resolved != info.Key && types[resolved].IsClass)
-                    return types[resolved];
-            }
-        }
-
-        return null;
-    }
+    private static TypeInfo? BaseClassOf(TypeInfo info, Dictionary<string, TypeInfo> types) =>
+        info.Parts
+            .SelectMany(part => BaseTypes(part.Declaration).Select(baseType => Resolve(baseType.Type, part.Context, types)))
+            .OfType<string>()
+            .Where(resolved => resolved != info.Key && types[resolved].IsClass)
+            .Select(resolved => types[resolved])
+            .FirstOrDefault();
 
     /// <summary>
     /// Walks the interface closure of <paramref name="info"/> through every base-list entry that
@@ -206,42 +189,25 @@ internal static class TestClassCleanupScanner
         if (!visited.Add(info.Key))
             return false;
 
-        foreach (var part in info.Parts)
-        {
-            if (part.Declaration.BaseList is null)
-                continue;
+        direct = info.Parts.FirstOrDefault(part =>
+            BaseTypes(part.Declaration).Any(baseType => WellKnownName(baseType.Type, part.Context) == AsyncDisposable));
+        if (direct is not null)
+            return true;
 
-            foreach (var baseType in part.Declaration.BaseList.Types)
-            {
-                if (WellKnownName(baseType.Type, part.Context) == AsyncDisposable)
-                {
-                    direct = part;
-                    return true;
-                }
-            }
-        }
-
-        foreach (var part in info.Parts)
-        {
-            if (part.Declaration.BaseList is null)
-                continue;
-
-            foreach (var baseType in part.Declaration.BaseList.Types)
-            {
-                if (WellKnownName(baseType.Type, part.Context) is not null)
-                    continue;
-
-                var resolved = Resolve(baseType.Type, part.Context, types);
-                if (resolved is null || resolved == info.Key)
-                    continue;
-
-                if (HasAsyncDisposable(types[resolved], types, visited, out _))
-                    return true;
-            }
-        }
-
-        return false;
+        // Lazy, in declaration order, stopping at the first base that reaches it — `visited` is shared
+        // with the recursion, so the order of the walk is the order of the loop it replaces.
+        return info.Parts
+            .SelectMany(part => BaseTypes(part.Declaration)
+                .Where(baseType => WellKnownName(baseType.Type, part.Context) is null)
+                .Select(baseType => Resolve(baseType.Type, part.Context, types)))
+            .OfType<string>()
+            .Where(resolved => resolved != info.Key)
+            .Any(resolved => HasAsyncDisposable(types[resolved], types, visited, out _));
     }
+
+    /// <summary>The entries of a declaration's base list, empty when it has none.</summary>
+    private static SeparatedSyntaxList<BaseTypeSyntax> BaseTypes(TypeDeclarationSyntax declaration) =>
+        declaration.BaseList?.Types ?? default;
 
     /// <summary>
     /// <c>IAsyncDisposable</c>, <c>IAsyncLifetime</c> or <c>IDisposable</c> when <paramref name="type"/>
@@ -261,27 +227,19 @@ internal static class TestClassCleanupScanner
         return last is AsyncDisposable or AsyncLifetime or Disposable ? last : null;
     }
 
-    private static IEnumerable<TypeSyntax> FixtureArguments(TypeDeclarationSyntax declaration)
-    {
-        if (declaration.BaseList is null)
-            yield break;
-
-        foreach (var baseType in declaration.BaseList.Types)
-        {
-            var generic = baseType.Type switch
+    private static IEnumerable<TypeSyntax> FixtureArguments(TypeDeclarationSyntax declaration) =>
+        BaseTypes(declaration)
+            .Select(baseType => baseType.Type switch
             {
                 GenericNameSyntax g => g,
                 QualifiedNameSyntax { Right: GenericNameSyntax g } => g,
                 AliasQualifiedNameSyntax { Name: GenericNameSyntax g } => g,
                 _ => null,
-            };
-            if (generic is null || generic.TypeArgumentList.Arguments.Count != 1)
-                continue;
-
-            if (generic.Identifier.ValueText is "IClassFixture" or "ICollectionFixture")
-                yield return generic.TypeArgumentList.Arguments[0];
-        }
-    }
+            })
+            .OfType<GenericNameSyntax>()
+            .Where(generic => generic.TypeArgumentList.Arguments.Count == 1
+                && generic.Identifier.ValueText is "IClassFixture" or "ICollectionFixture")
+            .Select(generic => generic.TypeArgumentList.Arguments[0]);
 
     /// <summary>Resolves a type name to the key of a type declared in the scanned tree, or null.</summary>
     private static string? Resolve(TypeSyntax type, ResolutionContext context, Dictionary<string, TypeInfo> types)
@@ -302,12 +260,9 @@ internal static class TestClassCleanupScanner
             return types.ContainsKey(full) ? full : null;
         }
 
-        foreach (var container in context.ContainingTypes)
-        {
-            var candidate = container + "." + text;
-            if (types.ContainsKey(candidate))
-                return candidate;
-        }
+        var nested = context.ContainingTypes.Select(container => container + "." + text).FirstOrDefault(types.ContainsKey);
+        if (nested is not null)
+            return nested;
 
         for (var ns = context.Namespace; ; ns = ParentNamespace(ns))
         {
@@ -318,14 +273,7 @@ internal static class TestClassCleanupScanner
                 break;
         }
 
-        foreach (var imported in context.Usings)
-        {
-            var candidate = imported + "." + text;
-            if (types.ContainsKey(candidate))
-                return candidate;
-        }
-
-        return null;
+        return context.Usings.Select(imported => imported + "." + text).FirstOrDefault(types.ContainsKey);
     }
 
     private static string ParentNamespace(string ns)
@@ -400,19 +348,16 @@ internal static class TestClassCleanupScanner
     private static void AddUsings(
         IEnumerable<UsingDirectiveSyntax> directives, List<string> usings, Dictionary<string, string> aliases)
     {
-        foreach (var directive in directives)
+        var named = directives
+            .Where(directive => !directive.StaticKeyword.IsKind(SyntaxKind.StaticKeyword))
+            .Select(directive => (directive.Alias, Target: directive.Name is { } name ? Dotted(name)?.Text : null))
+            .Where(directive => directive.Target is not null);
+        foreach (var (alias, target) in named)
         {
-            if (directive.StaticKeyword.IsKind(SyntaxKind.StaticKeyword) || directive.Name is not { } name)
-                continue;
-
-            var target = Dotted(name);
-            if (target is null)
-                continue;
-
-            if (directive.Alias is not null)
-                aliases.TryAdd(directive.Alias.Name.Identifier.ValueText, target.Value.Text);
+            if (alias is not null)
+                aliases.TryAdd(alias.Name.Identifier.ValueText, target!);
             else
-                usings.Add(target.Value.Text);
+                usings.Add(target!);
         }
     }
 
