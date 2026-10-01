@@ -4,6 +4,83 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: an AMI connection announces every state it takes on `IAmiConnection.StateChanged`
+
+`StateChanged` raises one `AmiConnectionStateChange` per state the connection takes, in order, with `Previous`,
+`Current`, `Cause` and `ByCaller`, plus `IsLoss` and `IsFinal`. It shares one ordered queue with `ConnectionLost` and
+`Reconnected`, so a reconnect's change to `Connected` arrives before its `Reconnected`. The reconnect loop's give-up,
+which used to be silent, is announced once as a final `Disconnected` carrying the last failed attempt's exception
+(`AmiAuthenticationException` against Asterisk 22.9.0 and 23.4.1, 5 of 5 runs each). A loss without `AutoReconnect`
+ends carrying the loss's cause.
+
+### Added: a notification handler that has not returned after 30 s is logged
+
+A `StateChanged`, `ConnectionLost` or `Reconnected` handler still running after 30 s is logged once at Warning:
+`[AMI] A {Event} handler has not returned after 30 s; later notifications wait for it`. Nothing is skipped and no
+option is added; before, a handler that never returned held every later notification with no log line.
+
+### Fixed — BREAKING: a failed `ConnectAsync` leaves the connection `Disconnected` and releases its socket
+
+A caller's `ConnectAsync` that threw left `State` at `Connecting` and the attempt's socket open (20 of 20 runs). It
+now leaves `Disconnected`, disposes the socket once, and announces `Connecting → Disconnected` with the cause. This
+restores what `docs/guides/troubleshooting.md` documents: `Connecting` only "while a connect attempt runs". A connect
+overtaken by the caller's own `DisposeAsync`/`DisconnectAsync` now throws `OperationCanceledException` (it threw
+`NullReferenceException` and could leave a disposed connection reading `Connected` with its event pump running).
+
+**Migration guide:** [`docs/guides/ami-connection-state-and-health-migration.md`](docs/guides/ami-connection-state-and-health-migration.md)
+
+### Changed — BREAKING: `ConnectAsync` on a live session is refused
+
+`ConnectAsync` on a connection that is `Connected`, `Reconnecting` or `Connecting` throws `InvalidOperationException`
+and changes nothing. Before, it dialled a second socket and replaced the live session without releasing it (3 of 3
+cases, 20 of 20 runs); while `Reconnecting` it raced the reconnect loop. Upgrade: call `ConnectAsync` once, or after
+`DisconnectAsync` returns; let `AutoReconnect` own the reconnect.
+
+**Migration guide:** [`docs/guides/ami-connection-state-and-health-migration.md`](docs/guides/ami-connection-state-and-health-migration.md)
+
+### Changed — BREAKING: the `live` health check reads its AMI connection first
+
+`LiveHealthCheck` reported `Healthy` from the table it holds, even with the AMI connection lost or given up. It now
+reads `server.Connection.State` first: `Reconnecting`, `Connecting` and `Initial` report `Degraded` ("Live state is not
+being updated: AMI {state}"); `Disconnecting` and `Disconnected` report `Unhealthy`; `Connected` is unchanged. Its
+data gains `amiState`. A liveness probe pointed at `live` now sees `Unhealthy` after a disconnect or a give-up.
+
+**Migration guide:** [`docs/guides/ami-connection-state-and-health-migration.md`](docs/guides/ami-connection-state-and-health-migration.md)
+
+### Changed — BREAKING: a multi-server host gets the `verbara-pool` health check
+
+`AddVerbaraMultiServer` registered no health check for the pool's servers. It now registers the new public
+`VerbaraServerPoolHealthCheck` as `verbara-pool`, untagged, once however many times it is called: every server
+`Connected` or an empty pool → `Healthy`; every server `Disconnecting`/`Disconnected` → `Unhealthy`; otherwise
+`Degraded`. Its data maps each server id to its state. An unfiltered `/health` endpoint now includes it; point liveness
+at a tag-filtered endpoint.
+
+**Migration guide:** [`docs/guides/ami-connection-state-and-health-migration.md`](docs/guides/ami-connection-state-and-health-migration.md)
+
+### Changed — BREAKING: an ending called from a task a notification handler left running waits for the dispatch
+
+A `DisconnectAsync`/`DisposeAsync` called from a task that a `StateChanged`, `ConnectionLost` or `Reconnected` handler
+started and left running was treated as an ending from inside the handler and did not wait. It now waits for the
+dispatch in progress once that dispatch has returned, like any other caller. A handler that must end the connection
+should call `DisconnectAsync`/`DisposeAsync`, not await the stored task of an ending it did not call; awaiting it
+makes the handler and the ending wait for each other.
+
+**Migration guide:** [`docs/guides/ami-connection-state-and-health-migration.md`](docs/guides/ami-connection-state-and-health-migration.md)
+
+### Fixed: a `Reconnected` still queued is not delivered after the caller ends the connection
+
+`IAmiConnection.DisconnectAsync` documents that it "raises no `Reconnected`", but a `Reconnected` already queued when
+the caller's `DisconnectAsync`/`DisposeAsync` was recorded was still delivered. It is now dropped.
+
+### Fixed: a send racing the caller's ending throws `AmiNotConnectedException`, and `DisposeAsync` no longer hangs on a blocked send
+
+`IVerbaraServer.StartAsync` and `RequestInitialStateAsync` document `AmiNotConnectedException` when the AMI session
+ends. A send overtaken by the caller's `DisposeAsync`/`DisconnectAsync` (or a loss the connection will not come back
+from) threw `NullReferenceException` instead (20 of 20 runs on the loopback transport; 17 of 20, plus 3
+`TaskCanceledException`, on the piped one). It now throws `AmiNotConnectedException` with the state. `DisposeAsync`
+waited forever when a send was blocked by a peer that stopped reading; its Logoff now gives up after 2 s and the
+dispose completes.
+
 ### Changed — BREAKING: a reconnect option the backoff cannot use is rejected while AutoReconnect is on (#363)
 
 With `AutoReconnect` on, `ReconnectMultiplier` below 1.0 (or NaN/∞), `ReconnectMaxDelay` below `ReconnectInitialDelay`,
