@@ -8,8 +8,8 @@ using Microsoft.Extensions.Options;
 namespace Verbara.Sdk.Ami.Tests.Connection;
 
 /// <summary>
-/// A caller's <see cref="AmiConnection.ConnectAsync"/> on a connection whose session is live — connected, or lost and
-/// reconnecting — is refused with an <see cref="InvalidOperationException"/> before it acquires anything: it dials no
+/// A caller's <see cref="AmiConnection.ConnectAsync"/> on a connection whose session is live — connected, lost and
+/// reconnecting, or in the middle of the reconnect loop's attempt — is refused with an <see cref="InvalidOperationException"/> before it acquires anything: it dials no
 /// socket, and the live session, its reader loop and its reconnect loop go on as if the call had not been made.
 /// </summary>
 /// <remarks>
@@ -94,9 +94,43 @@ public sealed class AmiConnectionLiveSessionConnectTests
         }
     }
 
+    [Fact]
+    public async Task ConnectAsync_ShouldThrowInvalidOperation_WhenTheReconnectLoopIsConnecting()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 3);
+        // The first socket and the loop's attempt connect; a third dial is refused.
+        var sockets = new PipedSocketFactory { ConnectsAccepted = 2 };
+        // The loop's first attempt comes after 20 ms; its peer accepts the dial and never sends a banner, so the
+        // attempt waits in Connecting for a minute, which no wait here reaches.
+        var connection = Create(sockets, firstBackoff: TimeSpan.FromMilliseconds(20));
+        try
+        {
+            var served = ServeFirstAsync(sockets, peerCts.Token);
+            await connection.ConnectAsync().AsTask().WaitAsync(Bound);
+            var first = await served.WaitAsync(Bound);
+            first.CloseFromPeer();
+            // The attempt writes Connecting before it creates its socket.
+            await sockets.NextAsync(peerCts.Token).AsTask().WaitAsync(Bound);
+
+            var thrown = await Record.ExceptionAsync(() => connection.ConnectAsync().AsTask().WaitAsync(Bound));
+
+            using (new AssertionScope())
+            {
+                thrown.Should().BeOfType<InvalidOperationException>(
+                    "a connect while the reconnect loop's attempt is in progress is refused; that attempt owns the connection");
+                connection.State.Should().Be(AmiConnectionState.Connecting, "the loop's attempt goes on");
+                sockets.Created.Should().HaveCount(2, "the refused connect dials nothing");
+            }
+        }
+        finally
+        {
+            await EndAsync(sockets, connection);
+        }
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-    private static AmiConnection Create(PipedSocketFactory sockets) =>
+    private static AmiConnection Create(PipedSocketFactory sockets, TimeSpan? firstBackoff = null) =>
         new(Options.Create(new AmiConnectionOptions
         {
             Hostname = "localhost",
@@ -104,9 +138,10 @@ public sealed class AmiConnectionLiveSessionConnectTests
             Password = "secret",
             EnableHeartbeat = false,
             AutoReconnect = true,
-            // Limits, never waits: no attempt and no backoff here runs until them.
+            // Limits, never waits: no attempt and no backoff here runs until them, except a first backoff a test asks for.
             ConnectionTimeout = TimeSpan.FromMinutes(1),
-            ReconnectInitialDelay = TimeSpan.FromMinutes(1),
+            ReconnectInitialDelay = firstBackoff ?? TimeSpan.FromMinutes(1),
+            ReconnectMultiplier = 3000,
             ReconnectMaxDelay = TimeSpan.FromMinutes(1),
         }), sockets, NullLogger<AmiConnection>.Instance);
 
