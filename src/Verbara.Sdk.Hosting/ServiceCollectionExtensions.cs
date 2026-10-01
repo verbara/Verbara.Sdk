@@ -1,3 +1,4 @@
+using System.Globalization;
 using Verbara.Sdk;
 using Verbara.Sdk.Agi.Mapping;
 using Verbara.Sdk.Agi.Server;
@@ -39,16 +40,10 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<ISocketConnectionFactory, PipelineSocketConnectionFactory>();
 
         // AMI (single-server) with AOT-safe source-generated validation
+        // Every option is copied, so a value set here replaces one a Configure<T> placed before AddVerbara set,
+        // and a Configure<T> placed after it adjusts what AddVerbara set.
         services.AddOptions<AmiConnectionOptions>()
-            .Configure(o =>
-            {
-                o.Hostname = options.Ami.Hostname;
-                o.Port = options.Ami.Port;
-                o.Username = options.Ami.Username;
-                o.Password = options.Ami.Password;
-                o.UseSsl = options.Ami.UseSsl;
-                o.AutoReconnect = options.Ami.AutoReconnect;
-            })
+            .Configure(o => CopyAmiOptions(options.Ami, o))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<AmiConnectionOptions>, AmiConnectionOptionsValidator>();
         services.TryAddSingleton<IAmiConnection, AmiConnection>();
@@ -85,14 +80,9 @@ public static class ServiceCollectionExtensions
         // ARI with validation
         if (options.Ari is not null)
         {
+            var ariOptions = options.Ari;
             services.AddOptions<AriClientOptions>()
-                .Configure(o =>
-                {
-                    o.BaseUrl = options.Ari.BaseUrl;
-                    o.Username = options.Ari.Username;
-                    o.Password = options.Ari.Password;
-                    o.Application = options.Ari.Application;
-                })
+                .Configure(o => CopyAriOptions(ariOptions, o))
                 .ValidateOnStart();
             services.AddSingleton<IValidateOptions<AriClientOptions>, AriClientOptionsValidator>();
 
@@ -134,8 +124,11 @@ public static class ServiceCollectionExtensions
 
     /// <summary>
     /// Add all Verbara Sdk services binding options from <see cref="IConfiguration"/>.
-    /// Expects an "Asterisk" section with "Ami", "Ari", etc. sub-sections.
-    /// AOT-safe: manually reads configuration keys instead of using reflection-based Bind().
+    /// Binds every option of <see cref="AmiConnectionOptions"/> from the <c>Asterisk:Ami</c> section and of
+    /// <see cref="AriClientOptions"/> from the <c>Asterisk:Ari</c> section (the ARI client is registered only when that
+    /// section exists), and the AGI port from <c>Asterisk:AgiPort</c>. Values are parsed with the invariant culture, and
+    /// a value that cannot be converted throws an <see cref="InvalidOperationException"/> naming its key.
+    /// AOT-safe: the binding is emitted by the configuration-binding source generator, not done by reflection.
     /// </summary>
     public static IServiceCollection AddVerbara(
         this IServiceCollection services,
@@ -146,24 +139,55 @@ public static class ServiceCollectionExtensions
 
         return services.AddVerbara(o =>
         {
-            if (ami[nameof(o.Ami.Hostname)] is { } hostname) o.Ami.Hostname = hostname;
-            if (int.TryParse(ami[nameof(o.Ami.Port)], out var port)) o.Ami.Port = port;
-            if (ami[nameof(o.Ami.Username)] is { } username) o.Ami.Username = username;
-            if (ami[nameof(o.Ami.Password)] is { } password) o.Ami.Password = password;
-            if (bool.TryParse(ami[nameof(o.Ami.UseSsl)], out var useSsl)) o.Ami.UseSsl = useSsl;
-            if (bool.TryParse(ami[nameof(o.Ami.AutoReconnect)], out var autoReconnect)) o.Ami.AutoReconnect = autoReconnect;
+            ami.Bind(o.Ami);
 
-            if (int.TryParse(configuration["Asterisk:AgiPort"], out var agiPort)) o.AgiPort = agiPort;
+            if (int.TryParse(configuration["Asterisk:AgiPort"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var agiPort))
+                o.AgiPort = agiPort;
 
             if (ari.Exists())
             {
                 o.Ari = new AriClientOptions();
-                if (ari[nameof(o.Ari.BaseUrl)] is { } baseUrl) o.Ari.BaseUrl = baseUrl;
-                if (ari[nameof(o.Ari.Username)] is { } ariUser) o.Ari.Username = ariUser;
-                if (ari[nameof(o.Ari.Password)] is { } ariPass) o.Ari.Password = ariPass;
-                if (ari[nameof(o.Ari.Application)] is { } app) o.Ari.Application = app;
+                ari.Bind(o.Ari);
             }
         });
+    }
+
+    /// <summary>Copies every settable option of <paramref name="source"/> onto <paramref name="target"/>.</summary>
+    private static void CopyAmiOptions(AmiConnectionOptions source, AmiConnectionOptions target)
+    {
+        target.Hostname = source.Hostname;
+        target.Port = source.Port;
+        target.Username = source.Username;
+        target.Password = source.Password;
+        target.UseSsl = source.UseSsl;
+        target.ConnectionTimeout = source.ConnectionTimeout;
+        target.ReadTimeout = source.ReadTimeout;
+        target.DefaultResponseTimeout = source.DefaultResponseTimeout;
+        target.DefaultEventTimeout = source.DefaultEventTimeout;
+        target.AutoReconnect = source.AutoReconnect;
+        target.MaxReconnectAttempts = source.MaxReconnectAttempts;
+        target.EventPumpCapacity = source.EventPumpCapacity;
+        target.ReconnectInitialDelay = source.ReconnectInitialDelay;
+        target.ReconnectMaxDelay = source.ReconnectMaxDelay;
+        target.ReconnectMultiplier = source.ReconnectMultiplier;
+        target.EnableHeartbeat = source.EnableHeartbeat;
+        target.HeartbeatInterval = source.HeartbeatInterval;
+        target.HeartbeatTimeout = source.HeartbeatTimeout;
+    }
+
+    /// <summary>Copies every settable option of <paramref name="source"/> onto <paramref name="target"/>, the audio-server callback included.</summary>
+    private static void CopyAriOptions(AriClientOptions source, AriClientOptions target)
+    {
+        target.ConfigureAudioServer = source.ConfigureAudioServer;
+        target.BaseUrl = source.BaseUrl;
+        target.Username = source.Username;
+        target.Password = source.Password;
+        target.Application = source.Application;
+        target.AutoReconnect = source.AutoReconnect;
+        target.ReconnectInitialDelay = source.ReconnectInitialDelay;
+        target.ReconnectMaxDelay = source.ReconnectMaxDelay;
+        target.ReconnectMultiplier = source.ReconnectMultiplier;
+        target.MaxReconnectAttempts = source.MaxReconnectAttempts;
     }
 
     /// <summary>
