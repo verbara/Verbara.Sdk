@@ -17,9 +17,9 @@ Asterisk Manager Interface (AMI) client for .NET 10 with Native AOT support.
 ```csharp
 services.AddVerbara(options =>
 {
-    options.AmiConnection.Hostname = "pbx.example.com";
-    options.AmiConnection.Username = "admin";
-    options.AmiConnection.Password = "secret";
+    options.Ami.Hostname = "pbx.example.com";
+    options.Ami.Username = "admin";
+    options.Ami.Password = "secret";
 });
 ```
 

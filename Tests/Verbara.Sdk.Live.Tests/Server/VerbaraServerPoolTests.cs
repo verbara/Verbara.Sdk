@@ -1,8 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
 using Verbara.Sdk;
 using Verbara.Sdk.Ami.Connection;
+using Verbara.Sdk.Ami.Transport;
 using Verbara.Sdk.Live.Server;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -67,6 +69,40 @@ public sealed class VerbaraServerPoolTests : IAsyncLifetime
     {
         await Task.CompletedTask;
         yield break;
+    }
+
+    // ── An unusable reconnect value never reaches a pool connection ────────────────────────────────
+
+    /// <summary>
+    /// The pool builds its connection through the real <see cref="AmiConnectionFactory"/>, and no options validator runs
+    /// on that path, so the connection's constructor is what rejects a maximum delay below the initial one. The socket
+    /// factory refuses to hand out a socket: a connection that reached its connect would surface that refusal instead.
+    /// </summary>
+    [Fact]
+    public async Task AddServerAsync_ShouldThrowNamingTheOption_WhenAReconnectValueIsUnusable()
+    {
+        var sockets = Substitute.For<ISocketConnectionFactory>();
+        sockets.Create().Returns(_ => throw new InvalidOperationException("No socket in this test: the connection must not get as far as its connect."));
+        await using var pool = new VerbaraServerPool(new AmiConnectionFactory(sockets, NullLoggerFactory.Instance), NullLoggerFactory.Instance);
+        var options = new AmiConnectionOptions
+        {
+            Username = "admin",
+            Password = "secret",
+            AutoReconnect = true,
+            ReconnectInitialDelay = TimeSpan.FromSeconds(1),
+            ReconnectMaxDelay = TimeSpan.FromMilliseconds(500),
+        };
+
+        var act = async () => await pool.AddServerAsync("unusable", options);
+
+        var thrown = await act.Should().ThrowAsync<ArgumentOutOfRangeException>(
+            "with AutoReconnect on, a maximum delay below the initial one is a value the reconnect backoff cannot use");
+        using (new AssertionScope())
+        {
+            thrown.Which.ParamName.Should().Be(nameof(AmiConnectionOptions.ReconnectMaxDelay), "the error names the option to fix");
+            pool.Servers.Should().NotContain(entry => entry.Key == "unusable", "the pool holds no server under that id");
+            sockets.ReceivedCalls().Should().BeEmpty("the connection is rejected before it asks for a socket");
+        }
     }
 
     // ── The pool releases the AMI connection behind every server it drops ────────────────────────────

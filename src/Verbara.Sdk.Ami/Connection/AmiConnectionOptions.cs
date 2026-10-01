@@ -48,6 +48,7 @@ public sealed class AmiConnectionOptions
     public bool AutoReconnect { get; set; } = true;
 
     /// <summary>Maximum reconnection attempts. 0 = unlimited. Default: 0.</summary>
+    /// <remarks>Accepted: 0 or more. Checked whether or not <see cref="AutoReconnect"/> is on.</remarks>
     [Range(0, int.MaxValue)]
     public int MaxReconnectAttempts { get; set; }
 
@@ -56,12 +57,29 @@ public sealed class AmiConnectionOptions
     public int EventPumpCapacity { get; set; } = Internal.AsyncEventPump.DefaultCapacity;
 
     /// <summary>Initial delay before the first reconnection attempt. Default: 1 second.</summary>
+    /// <remarks>
+    /// Accepted: from zero to <see cref="int.MaxValue"/> milliseconds (about 24.8 days, the longest delay .NET can wait).
+    /// Checked only when <see cref="AutoReconnect"/> is on: by the options validator, naming this option, and by the
+    /// connection's constructor, which throws <see cref="ArgumentOutOfRangeException"/>.
+    /// </remarks>
+    [ReconnectRule]
     public TimeSpan ReconnectInitialDelay { get; set; } = TimeSpan.FromSeconds(1);
 
     /// <summary>Maximum delay between reconnection attempts. Default: 30 seconds.</summary>
+    /// <remarks>
+    /// Accepted: from <see cref="ReconnectInitialDelay"/> to <see cref="int.MaxValue"/> milliseconds (about 24.8 days);
+    /// <see cref="Timeout.InfiniteTimeSpan"/> is not accepted. Checked only when <see cref="AutoReconnect"/> is on, as
+    /// <see cref="ReconnectInitialDelay"/> is.
+    /// </remarks>
+    [ReconnectRule]
     public TimeSpan ReconnectMaxDelay { get; set; } = TimeSpan.FromSeconds(30);
 
     /// <summary>Multiplier applied to the delay after each failed reconnection attempt. Default: 2.0.</summary>
+    /// <remarks>
+    /// Accepted: a finite number of at least 1.0 (exactly 1.0 keeps the delay constant). Checked only when
+    /// <see cref="AutoReconnect"/> is on, as <see cref="ReconnectInitialDelay"/> is.
+    /// </remarks>
+    [ReconnectRule]
     public double ReconnectMultiplier { get; set; } = 2.0;
 
     /// <summary>Enable periodic heartbeat (Ping) to detect dead connections. Default: true.</summary>

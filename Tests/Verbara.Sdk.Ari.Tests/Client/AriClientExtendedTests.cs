@@ -187,4 +187,61 @@ public sealed class AriClientExtendedTests
         await stream.WriteAsync("HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"u8.ToArray());
         return Encoding.ASCII.GetString(buffer, 0, total);
     }
+
+    [Theory]
+    [MemberData(nameof(AriClientOptionsValidatorTests.ValuesAConstructorRejects), MemberType = typeof(AriClientOptionsValidatorTests))]
+    public async Task Ctor_ShouldThrowNamingTheOption_WhenAReconnectValueIsUnusableAndAutoReconnectIsOn(string value, string option)
+    {
+        var options = AriClientOptionsValidatorTests.ReconnectOptions(value, autoReconnect: true);
+        AriClient? created = null;
+
+        var act = () => created = new AriClient(Options.Create(options), NullLogger<AriClient>.Instance);
+
+        try
+        {
+            act.Should().Throw<ArgumentOutOfRangeException>(
+                    $"with AutoReconnect on, {value} is a value the reconnect backoff cannot use, and no validator runs on this path")
+                .Which.ParamName.Should().Be(option, "the error names the option to fix");
+        }
+        finally
+        {
+            if (created is not null)
+                await created.DisposeAsync();
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(AriClientOptionsValidatorTests.ValuesAConstructorRejects), MemberType = typeof(AriClientOptionsValidatorTests))]
+    public async Task Ctor_ShouldSucceed_WhenAutoReconnectIsOffWithUnusableValues(string value, string option)
+    {
+        var options = AriClientOptionsValidatorTests.ReconnectOptions(value, autoReconnect: false);
+
+        var client = new AriClient(Options.Create(options), NullLogger<AriClient>.Instance);
+
+        client.State.Should().Be(AriConnectionState.Initial,
+            $"without AutoReconnect the backoff never runs, so {value} ({option}) is not checked at construction");
+        await client.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Create_ShouldThrowNamingTheOption_WhenAReconnectValueIsUnusableAndAutoReconnectIsOn()
+    {
+        var sut = new AriClientFactory(NullLoggerFactory.Instance);
+        var options = AriClientOptionsValidatorTests.ReconnectOptions("ReconnectMultiplier = NaN", autoReconnect: true);
+        IAriClient? created = null;
+
+        var act = () => created = sut.Create(options);
+
+        try
+        {
+            act.Should().Throw<ArgumentOutOfRangeException>(
+                    "the factory constructs through the client's constructor, which rejects a NaN multiplier with AutoReconnect on")
+                .Which.ParamName.Should().Be(nameof(AriClientOptions.ReconnectMultiplier));
+        }
+        finally
+        {
+            if (created is not null)
+                await created.DisposeAsync();
+        }
+    }
 }

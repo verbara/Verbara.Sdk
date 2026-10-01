@@ -54,6 +54,11 @@ internal static partial class AmiConnectionLog
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI] Reconnect attempt failed")]
     public static partial void ReconnectAttemptFailed(ILogger logger, Exception exception);
 
+    // The loop's backoff could not be computed or waited: the reconnect ends here, Disconnected, instead of dying
+    // where nobody sees it. Tests match it by its event name.
+    [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Reconnect backoff failed: the reconnect loop ends")]
+    public static partial void ReconnectBackoffFailed(ILogger logger, Exception exception);
+
     [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Reconnect handler error")]
     public static partial void ReconnectHandlerError(ILogger logger, Exception exception);
 
@@ -281,6 +286,9 @@ public sealed class AmiConnection : IAmiConnection
     public AmiConnection(IOptions<AmiConnectionOptions> options, ISocketConnectionFactory socketFactory, ILogger<AmiConnection> logger)
     {
         _options = options.Value;
+        // No validator runs on this path (factories, the server pool, Options.Create): with AutoReconnect on, a value
+        // the reconnect backoff cannot use is rejected here, naming the option, instead of in a loop after a loss.
+        ReconnectRule.ThrowIfUnusable(_options);
         _socketFactory = socketFactory;
         _logger = logger;
     }
@@ -1016,33 +1024,43 @@ public sealed class AmiConnection : IAmiConnection
         while (!lifetime.IsCancellationRequested && _state == AmiConnectionState.Reconnecting)
         {
             attempt++;
-            var delay = Verbara.Sdk.Resilience.BackoffSchedule.Compute(
-                attempt,
-                _options.ReconnectInitialDelay,
-                _options.ReconnectMultiplier,
-                _options.ReconnectMaxDelay);
-            var delayMs = (int)Math.Min(delay.TotalMilliseconds, int.MaxValue);
+            if (_options.MaxReconnectAttempts > 0 && attempt > _options.MaxReconnectAttempts)
+            {
+                // MaxReconnectAttempts = N makes N reconnect connects: the limit is checked at the top of the
+                // iteration, before any backoff, so the give-up follows the last failed connect with no further
+                // delay. Giving up ends the connection as a loss without AutoReconnect does, so the socket left
+                // behind is released: the last one a failed connect created. The ending writes Disconnecting
+                // itself, and only when no other ending is under way; a caller's ending under way is not joined,
+                // because it is waiting for this loop.
+                await EndLostConnectionAsync();
+                return;
+            }
 
-            AmiMetrics.ReconnectionAttempts.Add(1);
-            AmiConnectionLog.Reconnecting(_logger, delayMs: delayMs, attempt);
             try
             {
-                await Task.Delay(delayMs, lifetime);
+                // The options are held by reference and can change after construction, so the rule the constructor
+                // checked is checked again here; Compute and the delay throw on what it rejects.
+                ReconnectRule.ThrowIfUnusable(_options);
+                var delay = Verbara.Sdk.Resilience.BackoffSchedule.Compute(
+                    attempt,
+                    _options.ReconnectInitialDelay,
+                    _options.ReconnectMultiplier,
+                    _options.ReconnectMaxDelay);
+
+                AmiMetrics.ReconnectionAttempts.Add(1);
+                AmiConnectionLog.Reconnecting(_logger, delayMs: (int)delay.TotalMilliseconds, attempt);
+                await Task.Delay(delay, lifetime);
             }
             catch (OperationCanceledException)
             {
                 // The caller ended the connection during the backoff. Its ending releases what is left.
                 return;
             }
-
-            if (_options.MaxReconnectAttempts > 0 && attempt >= _options.MaxReconnectAttempts)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                // Giving up ends the connection as a loss without AutoReconnect does, so the socket left
-                // behind is released: the last one a failed connect created, or the lost one when no
-                // connect was made. Checked after the delay and before the connect, the limit makes
-                // N - 1 connects for N; whether it should make N is an open ruling, not this release.
-                // The ending writes Disconnecting itself, and only when no other ending is under way; a
-                // caller's ending under way is not joined, because it is waiting for this loop.
+                // The backoff cannot be computed or waited. It would fail the same way on every iteration, with no
+                // delay, so it is not a failed attempt to retry: the loop ends as a give-up does, once, loudly.
+                AmiConnectionLog.ReconnectBackoffFailed(_logger, ex);
                 await EndLostConnectionAsync();
                 return;
             }

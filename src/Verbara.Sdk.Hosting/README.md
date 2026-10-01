@@ -35,11 +35,13 @@ await host.RunAsync();
 {
   "Asterisk": {
     "Ami": { "Hostname": "pbx.example.com", "Username": "admin", "Password": "secret" },
-    "Ari": { "BaseUrl": "http://pbx.example.com:8088", "Username": "admin", "Password": "secret", "ApplicationName": "my-app" },
-    "Agi": { "Port": 4573 }
+    "Ari": { "BaseUrl": "http://pbx.example.com:8088", "Username": "admin", "Password": "secret", "Application": "my-app" },
+    "AgiPort": 4573
   }
 }
 ```
+
+`Asterisk:Ami` and `Asterisk:Ari` take every option of `AmiConnectionOptions` and `AriClientOptions`, by name (`"MaxReconnectAttempts": 10`, `"ReconnectInitialDelay": "00:00:01"`); values are read with the invariant culture, and one that cannot be read as the option's type makes `AddVerbara` throw an `InvalidOperationException` naming its key. A value of the right type that the options do not accept (with `AutoReconnect` on, a reconnect delay or multiplier the backoff cannot use, for example; see the [high-load tuning guide](../../docs/guides/high-load-tuning.md#reconnection-tuning)) fails the host's start with an `OptionsValidationException` naming the option. The `Ari` section is optional: without it no ARI client is registered. `AgiPort` is the FastAGI server's port.
 
 ## Quick start — inline configure
 

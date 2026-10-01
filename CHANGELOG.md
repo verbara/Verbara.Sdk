@@ -4,6 +4,55 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: a reconnect option the backoff cannot use is rejected while AutoReconnect is on (#363)
+
+With `AutoReconnect` on, `ReconnectMultiplier` below 1.0 (or NaN/∞), `ReconnectMaxDelay` below `ReconnectInitialDelay`,
+a negative delay, a delay above `int.MaxValue` ms (≈24.8 days), or a negative ARI `MaxReconnectAttempts` passed
+validation and left the connection `Reconnecting` for ever with no dial and no log line (20 of 20 runs per client;
+a 60-day delay killed the ARI loop 10 of 10 and AMI silently clamped it to 24.8 days). Now:
+- `AmiConnectionOptions`/`AriClientOptions` validation fails start-up naming the option, and the `AmiConnection` and
+  `AriClient` constructors (factories and `VerbaraServerPool.AddServerAsync` included) throw
+  `ArgumentOutOfRangeException` whose `ParamName` is the option. With `AutoReconnect` off nothing is checked except
+  AMI's `MaxReconnectAttempts`, which must be 0 or more as before.
+- A backoff that still fails in the loop (options changed after construction) ends it once, loudly:
+  `ReconnectBackoffFailed` at Error, then AMI `Disconnected` / ARI `Faulted`.
+Upgrade: fix the value the exception names. Accepted values: docs/guides/high-load-tuning.md#reconnection-tuning.
+
+**Migration guide:** [`docs/guides/reconnect-options-migration.md`](docs/guides/reconnect-options-migration.md)
+
+### Changed — BREAKING: AMI `MaxReconnectAttempts = N` makes N reconnect attempts, not N − 1 (#363)
+
+AMI made 0/1/3 connects for N = 1/2/4 while ARI made 1/2/4; `= 1` never reconnected. AMI now checks the limit before
+each backoff: N attempts, N `[AMI] Reconnecting` and N `[AMI] Reconnect attempt failed` lines, then `Disconnected` with
+no further delay. Against Asterisk 20/22/23, N = 4 made 4 connects in 60 of 60 runs (3 before). The give-up comes one
+failed attempt later: 17.2–18.8 s with 1 s ×2 (was 17.2–17.6 s), 8.1–9.2 s with 0.5 s ×2 capped at 2 s (was 7.0–8.2 s),
+from Asterisk's restart with the credentials rejected. Upgrade: set N − 1 to keep the old number of attempts.
+
+**Migration guide:** [`docs/guides/reconnect-options-migration.md`](docs/guides/reconnect-options-migration.md)
+
+### Fixed — BREAKING: options set through AddVerbara reach the AMI and ARI clients (#363)
+
+`AddVerbara(o => …)` copied 6 AMI and 4 ARI options and dropped the rest; `AddVerbara(configuration)` read only those
+keys. `MaxReconnectAttempts = 3` arrived as 0 (retry for ever). Now the inline overload copies every option (18 AMI,
+10 ARI, `ConfigureAudioServer` included) and the configuration overload binds the whole `Asterisk:Ami` and
+`Asterisk:Ari` sections with the configuration-binding source generator (AOT-clean; invariant culture; a value that
+cannot be converted throws `InvalidOperationException` naming its key). What changes for a host:
+- every option it set starts to apply: a finite `MaxReconnectAttempts`, ARI `AutoReconnect = false`, delays, timeouts,
+  heartbeat, `EventPumpCapacity`;
+- a `Configure<AmiConnectionOptions>`/`Configure<AriClientOptions>` placed before `AddVerbara` no longer survives (one
+  placed after it still wins);
+- `Verbara.Sdk.Hosting` now depends on `Microsoft.Extensions.Configuration.Binder`.
+The guides named `"AmiConnection"`/`"AriClient"` sections and `options.AmiConnection.*`, which nothing reads, and the
+Hosting README's `appsettings.json` (`ApplicationName`, `Agi:Port`) failed start-up validation; they now use
+`Asterisk:Ami`, `Asterisk:Ari`, `Application` and `AgiPort`.
+
+**Migration guide:** [`docs/guides/reconnect-options-migration.md`](docs/guides/reconnect-options-migration.md)
+
+### Fixed: `BackoffSchedule.Compute` with a zero base delay threw once the multiplier's power overflowed (#363)
+
+`0 × ∞` gave NaN and `TimeSpan.FromMilliseconds` threw, so a reconnect with `ReconnectInitialDelay = 0` and a large
+multiplier ended after ~95 attempts. A zero base now backs off zero at every attempt.
+
 ### Fixed — BREAKING: every originate Asterisk accepted ended in a timeout, and events that carry a Response header never reached OnEvent (#362)
 
 `AmiMessage.IsResponse` was true for any message with a `Response` header, so an event that also carries one was taken

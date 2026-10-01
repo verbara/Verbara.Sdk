@@ -33,7 +33,9 @@ using Verbara.Sdk.Push.Webhooks;
 using Verbara.Sdk.Resilience;
 using Verbara.Sdk.Cluster.Primitives;
 using Verbara.Sdk.Cluster.Primitives.InMemory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 Console.WriteLine("AOT Canary — all SDK types are trim-safe");
 
@@ -170,6 +172,41 @@ var sample = new Verbara.Sdk.AotCanary.CanaryPushEvent
 _ = filter.IsDeliverableToSubscriber(sample, subscriber);
 await bus.PublishAsync(sample);
 
+// Exercise AddVerbara(IConfiguration): the Asterisk:Ami / Asterisk:Ari sections are bound by the configuration-binding
+// source generator, and only a call brings that generated code into ILC's analysis (a typeof would not). The bound
+// values are printed and checked, so the smoke run fails if the native binary stops reading them.
+{
+    var configuration = new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Asterisk:Ami:Username"] = "canary",
+            ["Asterisk:Ami:Password"] = "canary",
+            ["Asterisk:Ami:MaxReconnectAttempts"] = "3",
+            ["Asterisk:Ami:ReconnectMultiplier"] = "1.5",
+            ["Asterisk:Ami:ReconnectInitialDelay"] = "00:00:03",
+            ["Asterisk:Ari:Username"] = "canary",
+            ["Asterisk:Ari:Password"] = "canary",
+            ["Asterisk:Ari:Application"] = "canary",
+            ["Asterisk:Ari:AutoReconnect"] = "false",
+            ["Asterisk:AgiPort"] = "4999",
+        })
+        .Build();
+    var hostingServices = new ServiceCollection();
+    hostingServices.AddLogging();
+    hostingServices.AddVerbara(configuration);
+    using var hostingProvider = hostingServices.BuildServiceProvider();
+    var ami = hostingProvider.GetRequiredService<IOptions<AmiConnectionOptions>>().Value;
+    var ari = hostingProvider.GetRequiredService<IOptions<AriClientOptions>>().Value;
+    Console.WriteLine(
+        $"AddVerbara(IConfiguration): MaxReconnectAttempts={ami.MaxReconnectAttempts} ReconnectMultiplier={ami.ReconnectMultiplier.ToString(System.Globalization.CultureInfo.InvariantCulture)} " +
+        $"ReconnectInitialDelay={ami.ReconnectInitialDelay:c} Ari.AutoReconnect={ari.AutoReconnect}");
+    if (ami.MaxReconnectAttempts != 3 || ami.ReconnectMultiplier != 1.5 || ami.ReconnectInitialDelay != TimeSpan.FromSeconds(3) || ari.AutoReconnect)
+    {
+        Console.Error.WriteLine("AOT canary: AddVerbara(IConfiguration) did not deliver the configured values.");
+        return 1;
+    }
+}
+
 
 
 // v2.2.0+ Data.Npgsql + Cluster.Postgres force-load (Platform/ADR-0022 Phase D + Phase A.5).
@@ -180,3 +217,5 @@ await bus.PublishAsync(sample);
 _ = typeof(Verbara.Sdk.Data.Npgsql.NpgsqlExecutor);
 _ = typeof(Verbara.Sdk.Cluster.Postgres.DependencyInjection.ClusterPostgresServiceCollectionExtensions);
 _ = typeof(Verbara.Sdk.Cluster.Postgres.Migrations.MigrationRunner);
+
+return 0;

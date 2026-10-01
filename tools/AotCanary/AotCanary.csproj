@@ -10,6 +10,10 @@
     <NoWarn>$(NoWarn);NU5118;NU5125</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The in-memory configuration provider, so the canary can reach AddVerbara(IConfiguration). -->
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Verbara.Sdk\Verbara.Sdk.csproj" />
     <ProjectReference Include="..\..\src\Verbara.Sdk.Ami\Verbara.Sdk.Ami.csproj" />
     <ProjectReference Include="..\..\src\Verbara.Sdk.Agi\Verbara.Sdk.Agi.csproj" />
