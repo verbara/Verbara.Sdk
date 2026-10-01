@@ -1205,7 +1205,7 @@ public sealed class AmiConnection : IAmiConnection
                 // Still running, or already faulted or cancelled: awaited below, where a failure is observed.
                 (pending ??= new ValueTask[handlers.Length - i])[pendingCount++] = task;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 RecordHandlerFault(evt, ex);
             }
@@ -1222,7 +1222,7 @@ public sealed class AmiConnection : IAmiConnection
             {
                 await pending[i].ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 RecordHandlerFault(evt, ex);
             }

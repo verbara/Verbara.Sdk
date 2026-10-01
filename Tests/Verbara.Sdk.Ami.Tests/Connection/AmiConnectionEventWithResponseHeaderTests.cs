@@ -373,9 +373,13 @@ public sealed class AmiConnectionEventWithResponseHeaderTests
     /// Answers an async originate as Asterisk 22.9.0 did: the action's <c>Response: Success</c>, then one
     /// <c>OriginateResponse</c> for its ActionID with <paramref name="outcome"/> as its <c>Response</c>.
     /// </summary>
-    private static async Task<bool> AnswerOriginateAsync(PipedSocket peer, string id, string outcome) =>
-        await peer.RespondAsync("Success", id, [new("Message", "Originate successfully queued")])
-        & await WriteOriginateResponseAsync(peer, id, outcome);
+    private static async Task<bool> AnswerOriginateAsync(PipedSocket peer, string id, string outcome)
+    {
+        // Both are written whatever the first returns, as Asterisk sends both.
+        var responded = await peer.RespondAsync("Success", id, [new("Message", "Originate successfully queued")]);
+        var announced = await WriteOriginateResponseAsync(peer, id, outcome);
+        return responded && announced;
+    }
 
     private static Task<bool> WriteOriginateResponseAsync(PipedSocket peer, string id, string outcome) =>
         peer.WriteEventAsync("OriginateResponse",

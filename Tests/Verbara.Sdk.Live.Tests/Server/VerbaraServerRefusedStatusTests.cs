@@ -127,10 +127,10 @@ public sealed class VerbaraServerRefusedStatusTests
         };
         ActivitySource.AddActivityListener(listener);
 
-        string? parentId;
+        string parentId;
         using (var parent = testSource.StartActivity("refused-status test"))
         {
-            parentId = parent?.Id;
+            parentId = parent?.Id ?? throw new InvalidOperationException("The test's parent activity was not sampled.");
             peer.StatusRefusedFromAsk = 3;
             await run.Server.RequestInitialStateAsync().AsTask().WaitAsync(Run.Bound);
             await run.Server.RequestInitialStateAsync().AsTask().WaitAsync(Run.Bound);
@@ -139,7 +139,6 @@ public sealed class VerbaraServerRefusedStatusTests
         var mine = loads.Where(a => a.OperationName == "live state-load" && a.ParentId == parentId).ToList();
         using (new AssertionScope())
         {
-            parentId.Should().NotBeNull("the test's parent activity was sampled");
             mine.Should().HaveCount(2, "the test ran two loads under its parent");
             mine.Should().ContainSingle(a => a.GetTagItem(StatusRefusedTag) == null,
                 "the load whose Status Asterisk answered carries no refusal");

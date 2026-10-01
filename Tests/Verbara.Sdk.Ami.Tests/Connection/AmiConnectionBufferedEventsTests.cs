@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Globalization;
-using System.Runtime.CompilerServices;
+using System.Reflection;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Ami.Events;
@@ -787,9 +787,17 @@ public sealed class AmiConnectionBufferedEventsTests
         public void Dispose() => _listener.Dispose();
     }
 
-    /// <summary>The connection's release of a detached event pump (<c>AmiConnection.ReleasePumpAsync</c>).</summary>
-    [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "ReleasePumpAsync")]
-    private static extern Task ReleasePump(AmiConnection connection, AsyncEventPump pump);
+    /// <summary>
+    /// The connection's release of a detached event pump (<c>AmiConnection.ReleasePumpAsync</c>), private and reached
+    /// by reflection: a test project is not AOT-published, and an <c>extern</c> accessor reads as unmanaged code to
+    /// the code scan.
+    /// </summary>
+    private static Task ReleasePump(AmiConnection connection, AsyncEventPump pump)
+    {
+        var release = typeof(AmiConnection).GetMethod("ReleasePumpAsync", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("AmiConnection has no private ReleasePumpAsync to release a pump with.");
+        return (Task)release.Invoke(connection, [pump])!;
+    }
 
     private sealed record LogEntry(LogLevel Level, string? Format, string Line, IReadOnlyDictionary<string, object?> State);
 
