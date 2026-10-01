@@ -48,9 +48,10 @@ public class LiveHealthCheckTests
     }
 
     // ── The AMI connection behind the table ──────────────────────────────────────────────────────────────────────
-    // A table nothing updates is not healthy: while the connection is not Connected, the live check must not answer
-    // Healthy over the channels it still holds. These assert "not Healthy" only; which status it reports instead is the
-    // owner's ruling (design D8, Q1), pinned once it is made.
+    // A table nothing updates is not healthy. The owner's table (design D8, Q1, 2026-09-30): Connected reads the
+    // collections as before; Reconnecting, Connecting and Initial report Degraded (stale, may recover on its own);
+    // Disconnecting and Disconnected report Unhealthy (nothing updates the table until a new connect). Every row
+    // holds a loaded channel, so a check that skipped the connection would answer Healthy.
 
     private static (VerbaraServer Server, IAmiConnection Connection) CreateServerOver(AmiConnectionState state)
     {
@@ -60,30 +61,74 @@ public class LiveHealthCheckTests
         return (server, connection);
     }
 
-    [Fact]
-    public async Task CheckHealthAsync_ShouldNotReportHealthy_WhenTheAmiConnectionIsReconnecting()
+    private static async Task<HealthCheckResult> CheckLoadedTableOverAsync(AmiConnectionState state)
     {
-        var (server, _) = CreateServerOver(AmiConnectionState.Reconnecting);
+        var (server, _) = CreateServerOver(state);
         server.Channels.OnNewChannel("uid-1", "PJSIP/100-0001", ChannelState.Up, "100");
         var check = new LiveHealthCheck(server);
-
-        var result = await check.CheckHealthAsync(new HealthCheckContext());
-
-        result.Status.Should().NotBe(HealthStatus.Healthy,
-            "the connection is reconnecting, so nothing updates the channel the table still holds");
+        return await check.CheckHealthAsync(new HealthCheckContext());
     }
 
     [Fact]
-    public async Task CheckHealthAsync_ShouldNotReportHealthy_WhenTheAmiConnectionIsDisconnected()
+    public async Task CheckHealthAsync_ShouldReportDegraded_WhenTheAmiConnectionIsReconnecting()
     {
-        var (server, _) = CreateServerOver(AmiConnectionState.Disconnected);
-        server.Channels.OnNewChannel("uid-1", "PJSIP/100-0001", ChannelState.Up, "100");
-        var check = new LiveHealthCheck(server);
+        var result = await CheckLoadedTableOverAsync(AmiConnectionState.Reconnecting);
 
-        var result = await check.CheckHealthAsync(new HealthCheckContext());
+        result.Status.Should().Be(HealthStatus.Degraded,
+            "the connection is reconnecting, so nothing updates the channel the table still holds, but it may recover");
+        result.Description.Should().Be("Live state is not being updated: AMI Reconnecting");
+        result.Data.Should().ContainKey("amiState").WhoseValue.Should().Be("Reconnecting");
+    }
 
-        result.Status.Should().NotBe(HealthStatus.Healthy,
+    [Fact]
+    public async Task CheckHealthAsync_ShouldReportDegraded_WhenTheAmiConnectionIsConnecting()
+    {
+        var result = await CheckLoadedTableOverAsync(AmiConnectionState.Connecting);
+
+        result.Status.Should().Be(HealthStatus.Degraded,
+            "the connection is connecting, so nothing updates the table yet, but it may come up");
+        result.Description.Should().Be("Live state is not being updated: AMI Connecting");
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_ShouldReportDegraded_WhenTheAmiConnectionHasNotConnectedYet()
+    {
+        var result = await CheckLoadedTableOverAsync(AmiConnectionState.Initial);
+
+        result.Status.Should().Be(HealthStatus.Degraded,
+            "the connection has not connected yet, so nothing updates the table");
+        result.Description.Should().Be("Live state is not being updated: AMI Initial");
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_ShouldReportUnhealthy_WhenTheAmiConnectionIsDisconnecting()
+    {
+        var result = await CheckLoadedTableOverAsync(AmiConnectionState.Disconnecting);
+
+        result.Status.Should().Be(HealthStatus.Unhealthy,
+            "the connection is ending, so nothing will update the table until a new connect");
+        result.Description.Should().Be("Live state is not being updated: AMI Disconnecting");
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_ShouldReportUnhealthy_WhenTheAmiConnectionIsDisconnected()
+    {
+        var result = await CheckLoadedTableOverAsync(AmiConnectionState.Disconnected);
+
+        result.Status.Should().Be(HealthStatus.Unhealthy,
             "the connection has ended, so nothing will update the channel the table still holds");
+        result.Description.Should().Be("Live state is not being updated: AMI Disconnected");
+        result.Data.Should().ContainKey("amiState").WhoseValue.Should().Be("Disconnected");
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_ShouldCarryTheAmiStateAsAString_WhenConnected()
+    {
+        var result = await CheckLoadedTableOverAsync(AmiConnectionState.Connected);
+
+        result.Data.Should().ContainKey("amiState").WhoseValue.Should().BeOfType<string>()
+            .Which.Should().Be("Connected", "a reflection-free JSON writer cannot serialize a boxed enum");
+        result.Data.Should().ContainKey("channels").WhoseValue.Should().Be(1);
     }
 
     [Fact]
