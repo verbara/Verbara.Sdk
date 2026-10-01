@@ -1566,7 +1566,7 @@ public sealed class AmiConnection : IAmiConnection
                 {
                     observer.OnNext(evt);
                 }
-                catch
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
                     // Observer errors should not crash the pump
                 }

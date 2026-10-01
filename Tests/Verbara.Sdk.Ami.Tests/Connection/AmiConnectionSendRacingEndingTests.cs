@@ -2,6 +2,7 @@ using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Connection;
@@ -112,15 +113,17 @@ public sealed class AmiConnectionSendRacingEndingTests
             EnableHeartbeat = false,
             AutoReconnect = false,
         }), new PipelineSocketConnectionFactory(), NullLogger<AmiConnection>.Instance);
-        TcpClient? server = null;
+        // Held in a box: the accepting task fills it, and the finally below must release it before it awaits the dispose.
+        var server = new StrongBox<TcpClient?>();
         Task disposing = Task.CompletedTask;
         try
         {
             var served = Task.Run(async () =>
             {
-                server = await listener.AcceptTcpClientAsync(peerCts.Token);
-                server.ReceiveBufferSize = 4096;
-                await new LoopbackPeer(server.GetStream()).CompleteLoginAsync(peerCts.Token);
+                var client = await listener.AcceptTcpClientAsync(peerCts.Token);
+                server.Value = client;
+                client.ReceiveBufferSize = 4096;
+                await new LoopbackPeer(client.GetStream()).CompleteLoginAsync(peerCts.Token);
                 // From here the peer reads nothing.
             }, peerCts.Token);
             await connection.ConnectAsync().AsTask().WaitAsync(Bound);
@@ -143,7 +146,7 @@ public sealed class AmiConnectionSendRacingEndingTests
         finally
         {
             // The peer goes away, which ends a write the unfixed code leaves blocked, and with it that code's ending.
-            server?.Dispose();
+            server.Value?.Dispose();
             _ = await Record.ExceptionAsync(() => disposing.WaitAsync(Bound));
             await connection.DisposeAsync().AsTask().WaitAsync(Bound);
             listener.Stop();
@@ -159,7 +162,8 @@ public sealed class AmiConnectionSendRacingEndingTests
     [InlineData(Typed)]
     public async Task SendActionAsync_ShouldThrowNotConnected_WhenTheCallerEndsTheConnectionWhileTheResponseIsAwaited(string send)
     {
-        await using var run = await UnansweredSendAsync(send, CancellationToken.None);
+        using var peerCts = new CancellationTokenSource(Bound * 3);
+        await using var run = await UnansweredSendAsync(send, CancellationToken.None, peerCts.Token);
 
         await run.Connection.DisconnectAsync().AsTask().WaitAsync(Bound);
         var thrown = await Record.ExceptionAsync(() => run.Sending.WaitAsync(Bound));
@@ -175,7 +179,8 @@ public sealed class AmiConnectionSendRacingEndingTests
     public async Task SendActionAsync_ShouldThrowOperationCanceled_WhenTheCallersTokenEndsTheWaitForTheResponse(string send)
     {
         using var caller = new CancellationTokenSource();
-        await using var run = await UnansweredSendAsync(send, caller.Token);
+        using var peerCts = new CancellationTokenSource(Bound * 3);
+        await using var run = await UnansweredSendAsync(send, caller.Token, peerCts.Token);
 
         await caller.CancelAsync();
         var thrown = await Record.ExceptionAsync(() => run.Sending.WaitAsync(Bound));
@@ -204,7 +209,7 @@ public sealed class AmiConnectionSendRacingEndingTests
     }
 
     /// <summary>A connected connection over a <see cref="PipedSocket"/>, and a send the peer has read and leaves unanswered.</summary>
-    private static async Task<UnansweredSend> UnansweredSendAsync(string send, CancellationToken sendToken)
+    private static async Task<UnansweredSend> UnansweredSendAsync(string send, CancellationToken sendToken, CancellationToken peerToken)
     {
         var sockets = new PipedSocketFactory();
         var connection = new AmiConnection(Options.Create(new AmiConnectionOptions
@@ -217,12 +222,11 @@ public sealed class AmiConnectionSendRacingEndingTests
             AutoReconnect = false,
             DefaultResponseTimeout = Bound * 3,
         }), sockets, NullLogger<AmiConnection>.Instance);
-        var peerCts = new CancellationTokenSource(Bound * 3);
         var read = Task.Run(async () =>
         {
-            var socket = await sockets.NextAsync(peerCts.Token);
-            await socket.CompleteLoginAsync(peerCts.Token);
-            return await socket.ReadActionAsync(peerCts.Token);
+            var socket = await sockets.NextAsync(peerToken);
+            await socket.CompleteLoginAsync(peerToken);
+            return await socket.ReadActionAsync(peerToken);
         });
         await connection.ConnectAsync(CancellationToken.None).AsTask().WaitAsync(Bound, CancellationToken.None);
 
@@ -231,16 +235,15 @@ public sealed class AmiConnectionSendRacingEndingTests
             ? connection.SendActionAsync<ManagerResponse>(action, sendToken).AsTask()
             : connection.SendActionAsync(action, sendToken).AsTask();
         (await read.WaitAsync(Bound, CancellationToken.None)).Should().StartWith("Action: Command", "the peer read the action before the test goes on");
-        return new UnansweredSend(connection, sending, peerCts);
+        return new UnansweredSend(connection, sending);
     }
 
-    private sealed record UnansweredSend(AmiConnection Connection, Task Sending, CancellationTokenSource PeerCts) : IAsyncDisposable
+    private sealed record UnansweredSend(AmiConnection Connection, Task Sending) : IAsyncDisposable
     {
         public async ValueTask DisposeAsync()
         {
             await Connection.DisposeAsync().AsTask().WaitAsync(Bound);
             _ = await Record.ExceptionAsync(() => Sending.WaitAsync(Bound));
-            PeerCts.Dispose();
         }
     }
 
