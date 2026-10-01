@@ -17,8 +17,11 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// and a loss's drain stopped at the failing event with the rest of the buffer undelivered.
 /// </summary>
 /// <remarks>
-/// Each test uses one handler, so what it pins holds whichever shape the guard takes (one guard around the invocation,
-/// or one per handler). Deliveries are counted, never timed: the peer answers a Ping after the events it writes, and
+/// Every test but one uses one handler, so what it pins holds whichever shape the guard takes. The guard is one per
+/// handler (the owner's ruling, 2026-09-30): <see cref="OnEvent_ShouldCallTheOtherHandlersAndObservers_WhenOneHandlerThrows"/>
+/// pins what only that shape gives — the other handlers and the observers receive the event one handler threw on —
+/// and <see cref="OnEvent_ShouldCountTheFault_WhenAHandlerThrows"/> the <c>ami.events.handler_faults</c> counter kept
+/// with it. Deliveries are counted, never timed: the peer answers a Ping after the events it writes, and
 /// the test waits for a sentinel event written last, which arrives only once everything before it has been dispatched.
 /// Time enters only as <see cref="Bound"/>, a hang bound. The class runs in <see cref="AmiEventsDroppedMetricGroup"/>
 /// because one test listens on the process-wide <c>ami.events.dropped</c> counter.
@@ -107,6 +110,70 @@ public sealed class AmiConnectionHandlerFaultTests
             faults.Select(e => e.State.GetValueOrDefault("EventType")).Should().Equal(["PeerStatus"],
                 "the line names the type of the event the handler threw on");
             faults.Should().OnlyContain(e => e.Exception is InvalidOperationException, "the handler's exception is logged with it");
+        }
+    }
+
+    /// <summary>
+    /// Every failure is counted once on <c>ami.events.handler_faults</c>, beside its Warning, so a host sees a handler
+    /// that keeps failing without reading its logs. The counter is process-wide; this class runs apart from every other
+    /// test class (<see cref="AmiEventsDroppedMetricGroup"/>), so nothing but this test's handler records on it.
+    /// </summary>
+    [Fact]
+    public async Task OnEvent_ShouldCountTheFault_WhenAHandlerThrows()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        using var faults = new HandlerFaults();
+        var factory = new PipedSocketFactory();
+        await using var connection = Create(factory, autoReconnect: false);
+        var handler = new FailingHandler(failOn: 1, Failure.Throw);
+        connection.OnEvent += handler.HandleAsync;
+        var socket = await ConnectAsync(connection, factory, peerCts);
+
+        await WritePeersAsync(socket, 0, 1 + Later);
+        (await socket.WriteEventAsync("PeerStatus", [new("Peer", Sentinel)])).Should().BeTrue();
+        var delivered = await CompletesWithinBoundAsync(handler.SentinelReached);
+
+        using (new AssertionScope())
+        {
+            delivered.Should().BeTrue("delivery goes on after the handler threw, up to the sentinel written last");
+            faults.Published.Should().BeTrue("the connection publishes the ami.events.handler_faults counter");
+            faults.Total.Should().Be(1, "the one failure is counted once, and the events delivered after it are not");
+        }
+    }
+
+    /// <summary>
+    /// The first of two handlers throws synchronously on the event; the second handler and the observer still receive
+    /// that event, and the next one. Before, the multicast stopped at the throw, so the second handler never saw the
+    /// event, and the consumer ended, so no one saw anything after it.
+    /// </summary>
+    [Fact]
+    public async Task OnEvent_ShouldCallTheOtherHandlersAndObservers_WhenOneHandlerThrows()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory();
+        await using var connection = Create(factory, autoReconnect: false);
+        var first = new FailingHandler(failOn: 1, Failure.Throw);
+        var second = new Recorder();
+        var observer = new Recorder();
+        connection.OnEvent += first.HandleAsync;
+        connection.OnEvent += second.HandleAsync;
+        using var subscription = connection.Subscribe(observer);
+        var socket = await ConnectAsync(connection, factory, peerCts);
+
+        await WritePeersAsync(socket, 0, 2);
+        (await socket.WriteEventAsync("PeerStatus", [new("Peer", Sentinel)])).Should().BeTrue();
+        var secondReached = await CompletesWithinBoundAsync(second.SentinelReached);
+        var observerReached = await CompletesWithinBoundAsync(observer.SentinelReached);
+
+        using (new AssertionScope())
+        {
+            secondReached.Should().BeTrue("the second handler receives every event up to the sentinel written last");
+            observerReached.Should().BeTrue("the observer receives every event up to the sentinel written last");
+            second.Peers().Should().Equal(Peers(0, 2),
+                "the second handler receives the event the first one threw on, and the next one, in order");
+            observer.Peers().Should().Equal(Peers(0, 2),
+                "the observer receives the event the first handler threw on, and the next one, in order");
+            first.PeersAfterTheFailure().Should().Equal(Peers(1, 1), "the handler that threw goes on receiving events");
         }
     }
 
@@ -283,6 +350,56 @@ public sealed class AmiConnectionHandlerFaultTests
         }
     }
 
+    /// <summary>
+    /// An <c>OnEvent</c> handler and an observer at once, that never fails: records the peer of every PeerStatus before
+    /// the sentinel, in order; the sentinel completes <see cref="SentinelReached"/>.
+    /// </summary>
+    private sealed class Recorder : IObserver<ManagerEvent>
+    {
+        private readonly Lock _gate = new();
+        private readonly List<string?> _peers = [];
+        private readonly TaskCompletionSource _sentinel = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task SentinelReached => _sentinel.Task;
+
+        public IReadOnlyList<string?> Peers()
+        {
+            lock (_gate)
+            {
+                return [.. _peers];
+            }
+        }
+
+        public ValueTask HandleAsync(ManagerEvent evt)
+        {
+            OnNext(evt);
+            return ValueTask.CompletedTask;
+        }
+
+        public void OnNext(ManagerEvent value)
+        {
+            var peer = (value as PeerStatusEvent)?.Peer;
+            if (peer == Sentinel)
+            {
+                _sentinel.TrySetResult();
+                return;
+            }
+
+            lock (_gate)
+            {
+                _peers.Add(peer);
+            }
+        }
+
+        public void OnError(Exception error)
+        {
+        }
+
+        public void OnCompleted()
+        {
+        }
+    }
+
     private sealed record Entry(LogLevel Level, string? Format, string Line, IReadOnlyDictionary<string, object?> State,
         Exception? Exception);
 
@@ -375,6 +492,34 @@ public sealed class AmiConnectionHandlerFaultTests
             });
             _listener.Start();
         }
+
+        public long Total => Interlocked.Read(ref _total);
+
+        public void Dispose() => _listener.Dispose();
+    }
+
+    /// <summary>Every handler fault counted on <c>ami.events.handler_faults</c>, process-wide, while this capture is alive.</summary>
+    private sealed class HandlerFaults : IDisposable
+    {
+        private readonly System.Diagnostics.Metrics.MeterListener _listener = new();
+        private long _total;
+        private int _published;
+
+        public HandlerFaults()
+        {
+            _listener.InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Meter.Name == "Verbara.Sdk.Ami" && instrument.Name == "ami.events.handler_faults")
+                {
+                    Interlocked.Exchange(ref _published, 1);
+                    listener.EnableMeasurementEvents(instrument);
+                }
+            };
+            _listener.SetMeasurementEventCallback<long>((_, value, _, _) => Interlocked.Add(ref _total, value));
+            _listener.Start();
+        }
+
+        public bool Published => Volatile.Read(ref _published) == 1;
 
         public long Total => Interlocked.Read(ref _total);
 
