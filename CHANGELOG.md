@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added: an AMI connection announces every state it takes on `IAmiConnection.StateChanged`
+### Added: an AMI connection announces every state it takes on `IAmiConnection.StateChanged` (#368)
 
 `StateChanged` raises one `AmiConnectionStateChange` per state the connection takes, in order, with `Previous`,
 `Current`, `Cause` and `ByCaller`, plus `IsLoss` and `IsFinal`. It shares one ordered queue with `ConnectionLost` and
@@ -13,13 +13,13 @@ which used to be silent, is announced once as a final `Disconnected` carrying th
 (`AmiAuthenticationException` against Asterisk 22.9.0 and 23.4.1, 5 of 5 runs each). A loss without `AutoReconnect`
 ends carrying the loss's cause.
 
-### Added: a notification handler that has not returned after 30 s is logged
+### Added: a notification handler that has not returned after 30 s is logged (#368)
 
 A `StateChanged`, `ConnectionLost` or `Reconnected` handler still running after 30 s is logged once at Warning:
 `[AMI] A {Event} handler has not returned after 30 s; later notifications wait for it`. Nothing is skipped and no
 option is added; before, a handler that never returned held every later notification with no log line.
 
-### Fixed — BREAKING: a failed `ConnectAsync` leaves the connection `Disconnected` and releases its socket
+### Fixed — BREAKING: a failed `ConnectAsync` leaves the connection `Disconnected` and releases its socket (#368)
 
 A caller's `ConnectAsync` that threw left `State` at `Connecting` and the attempt's socket open (20 of 20 runs). It
 now leaves `Disconnected`, disposes the socket once, and announces `Connecting → Disconnected` with the cause. This
@@ -29,7 +29,7 @@ overtaken by the caller's own `DisposeAsync`/`DisconnectAsync` now throws `Opera
 
 **Migration guide:** [`docs/guides/ami-connection-state-and-health-migration.md`](docs/guides/ami-connection-state-and-health-migration.md)
 
-### Changed — BREAKING: `ConnectAsync` on a live session is refused
+### Changed — BREAKING: `ConnectAsync` on a live session is refused (#368)
 
 `ConnectAsync` on a connection that is `Connected`, `Reconnecting` or `Connecting` throws `InvalidOperationException`
 and changes nothing. Before, it dialled a second socket and replaced the live session without releasing it (3 of 3
@@ -38,7 +38,7 @@ cases, 20 of 20 runs); while `Reconnecting` it raced the reconnect loop. Upgrade
 
 **Migration guide:** [`docs/guides/ami-connection-state-and-health-migration.md`](docs/guides/ami-connection-state-and-health-migration.md)
 
-### Changed — BREAKING: the `live` health check reads its AMI connection first
+### Changed — BREAKING: the `live` health check reads its AMI connection first (#368)
 
 `LiveHealthCheck` reported `Healthy` from the table it holds, even with the AMI connection lost or given up. It now
 reads `server.Connection.State` first: `Reconnecting`, `Connecting` and `Initial` report `Degraded` ("Live state is not
@@ -47,7 +47,7 @@ data gains `amiState`. A liveness probe pointed at `live` now sees `Unhealthy` a
 
 **Migration guide:** [`docs/guides/ami-connection-state-and-health-migration.md`](docs/guides/ami-connection-state-and-health-migration.md)
 
-### Changed — BREAKING: a multi-server host gets the `verbara-pool` health check
+### Changed — BREAKING: a multi-server host gets the `verbara-pool` health check (#368)
 
 `AddVerbaraMultiServer` registered no health check for the pool's servers. It now registers the new public
 `VerbaraServerPoolHealthCheck` as `verbara-pool`, untagged, once however many times it is called: every server
@@ -57,7 +57,7 @@ at a tag-filtered endpoint.
 
 **Migration guide:** [`docs/guides/ami-connection-state-and-health-migration.md`](docs/guides/ami-connection-state-and-health-migration.md)
 
-### Changed — BREAKING: an ending called from a task a notification handler left running waits for the dispatch
+### Changed — BREAKING: an ending called from a task a notification handler left running waits for the dispatch (#368)
 
 A `DisconnectAsync`/`DisposeAsync` called from a task that a `StateChanged`, `ConnectionLost` or `Reconnected` handler
 started and left running was treated as an ending from inside the handler and did not wait. It now waits for the
@@ -67,12 +67,12 @@ makes the handler and the ending wait for each other.
 
 **Migration guide:** [`docs/guides/ami-connection-state-and-health-migration.md`](docs/guides/ami-connection-state-and-health-migration.md)
 
-### Fixed: a `Reconnected` still queued is not delivered after the caller ends the connection
+### Fixed: a `Reconnected` still queued is not delivered after the caller ends the connection (#368)
 
 `IAmiConnection.DisconnectAsync` documents that it "raises no `Reconnected`", but a `Reconnected` already queued when
 the caller's `DisconnectAsync`/`DisposeAsync` was recorded was still delivered. It is now dropped.
 
-### Fixed: a send racing the caller's ending throws `AmiNotConnectedException`, and `DisposeAsync` no longer hangs on a blocked send
+### Fixed: a send racing the caller's ending throws `AmiNotConnectedException`, and `DisposeAsync` no longer hangs on a blocked send (#368)
 
 `IVerbaraServer.StartAsync` and `RequestInitialStateAsync` document `AmiNotConnectedException` when the AMI session
 ends. A send overtaken by the caller's `DisposeAsync`/`DisconnectAsync` (or a loss the connection will not come back
