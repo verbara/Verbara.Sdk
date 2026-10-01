@@ -34,6 +34,11 @@ public static class BackoffSchedule
         if (maxDelay < baseDelay)
             throw new ArgumentOutOfRangeException(nameof(maxDelay), maxDelay, "Max delay must be >= base delay.");
 
+        // A zero base is zero at every attempt. Computed, it is zero times a power that overflows to infinity for a
+        // large multiplier or attempt, which is not a number and which TimeSpan rejects.
+        if (baseDelay == TimeSpan.Zero)
+            return TimeSpan.Zero;
+
         // Cap shift to avoid overflow: multiplier^30 >> 1_000_000 for multiplier=2.
         // For attempt > 100 (extremely rare) we'd otherwise multiply a very large number.
         var exponent = Math.Min(attempt - 1, 100);
