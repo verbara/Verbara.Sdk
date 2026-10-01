@@ -722,6 +722,14 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>
     /// Originate an outbound call asynchronously.
     /// </summary>
+    /// <remarks>
+    /// Returns the outcome Asterisk reports in its <c>OriginateResponse</c>, once the destination answers or
+    /// <paramref name="timeout"/> (30 s when not given) runs out. Over an <see cref="AmiConnection"/> the wait for it is
+    /// bounded by <paramref name="timeout"/> plus the connection's <c>DefaultResponseTimeout</c>, not by its
+    /// <c>DefaultEventTimeout</c>, so a destination that rings longer than the event timeout still returns its outcome;
+    /// past that bound the call throws <see cref="OperationCanceledException"/>. Over any other
+    /// <see cref="IAmiConnection"/> the wait is that connection's own.
+    /// </remarks>
     public async ValueTask<OriginateResult> OriginateAsync(
         string channel, string context, string extension, int priority = 1,
         string? callerId = null, TimeSpan? timeout = null,
@@ -729,6 +737,7 @@ public sealed class VerbaraServer : IVerbaraServer
     {
         using var activity = LiveActivitySource.StartOriginate(channel, context, extension);
 
+        var ringFor = timeout ?? TimeSpan.FromMilliseconds(30000);
         var action = new OriginateAction
         {
             Channel = channel,
@@ -736,11 +745,19 @@ public sealed class VerbaraServer : IVerbaraServer
             Exten = extension,
             Priority = priority,
             CallerId = callerId,
-            Timeout = timeout.HasValue ? (long)timeout.Value.TotalMilliseconds : 30000,
+            Timeout = (long)ringFor.TotalMilliseconds,
             IsAsync = true
         };
 
-        await foreach (var evt in _connection.SendEventGeneratingActionAsync(action, cancellationToken))
+        // Asterisk reports the outcome once the destination answers or the originate's Timeout runs out, which can be
+        // long after DefaultEventTimeout (5 s by default): over an AmiConnection the wait is bounded by that Timeout
+        // plus DefaultResponseTimeout instead. Any other IAmiConnection keeps the public overload and its own bound.
+        var events = _connection is AmiConnection amiConnection
+            ? amiConnection.SendEventGeneratingActionAsync(
+                action, outcome: null, ringFor, cancellationToken)
+            : _connection.SendEventGeneratingActionAsync(action, cancellationToken);
+
+        await foreach (var evt in events)
         {
             if (evt is OriginateResponseEvent ore)
             {

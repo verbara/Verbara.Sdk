@@ -82,6 +82,9 @@ public sealed class AmiConnection : IAmiConnection
     private static readonly KeyValuePair<string, object?> BufferFullReason = new("reason", "buffer_full");
     private static readonly KeyValuePair<string, object?> CallerEndingReason = new("reason", "caller_ending");
 
+    /// <summary>The longest delay <see cref="CancellationTokenSource.CancelAfter(TimeSpan)"/> takes.</summary>
+    private static readonly TimeSpan MaxCancelAfter = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
+
     private ISocketConnection? _socket;
     private AmiProtocolReader? _reader;
     private AmiProtocolWriter? _writer;
@@ -610,17 +613,60 @@ public sealed class AmiConnection : IAmiConnection
     /// <param name="action">The action to send.</param>
     /// <param name="outcome">Receives how the action ended; <see langword="null"/> for a caller that does not ask.</param>
     /// <param name="cancellationToken">Cancels the enumeration.</param>
-    internal async IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
-        ManagerAction action, EventActionOutcome? outcome,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    internal IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
+        ManagerAction action, EventActionOutcome? outcome, CancellationToken cancellationToken = default) =>
+        SendEventGeneratingCoreAsync(action, outcome, _options.DefaultEventTimeout, cancellationToken);
+
+    /// <summary>
+    /// <see cref="SendEventGeneratingActionAsync(ManagerAction, EventActionOutcome, CancellationToken)"/> for an action
+    /// that Asterisk may take up to <paramref name="completesWithin"/> to end: the wait for its sequence is bounded by
+    /// <paramref name="completesWithin"/> plus <see cref="AmiConnectionOptions.DefaultResponseTimeout"/>, in place of
+    /// <see cref="AmiConnectionOptions.DefaultEventTimeout"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An asynchronous <c>Originate</c> reports its outcome in an <c>OriginateResponse</c> once the destination answers or
+    /// its <c>Timeout</c> runs out: 8.0 s after the action for a destination that answers after a dialplan
+    /// <c>Wait(8)</c>, 12.0 s for one that never answers within a 12 s <c>Timeout</c> (measured on Asterisk 20.20.1,
+    /// 22.9.0 and 23.4.1). Bounded by <see cref="AmiConnectionOptions.DefaultEventTimeout"/>, 5 s by default, every
+    /// originate to a destination that rang longer ended in an <see cref="OperationCanceledException"/>. The
+    /// <see cref="AmiConnectionOptions.DefaultResponseTimeout"/> on top is the margin for Asterisk to write the event once
+    /// that time is up. The bound applies even when <see cref="AmiConnectionOptions.DefaultEventTimeout"/> is
+    /// <see cref="TimeSpan.Zero"/> (no bound); a negative <paramref name="completesWithin"/> counts as zero. The events
+    /// come from the reader loop, as for the other overloads, not through the event pump, so none is dropped when the
+    /// pump is full. When the bound runs out the enumeration ends with <see cref="OperationCanceledException"/>.
+    /// </para>
+    /// <para>
+    /// Called by Verbara.Sdk.Live's <c>OriginateAsync</c> since 2.7.0; kept with this signature until 3.0, because a
+    /// Live package of the 2.x line runs on any newer Ami.
+    /// </para>
+    /// </remarks>
+    /// <param name="action">The action to send.</param>
+    /// <param name="outcome">Receives how the action ended; <see langword="null"/> for a caller that does not ask.</param>
+    /// <param name="completesWithin">How long Asterisk may take to end the action's sequence: for an originate, its
+    /// <c>Timeout</c>.</param>
+    /// <param name="cancellationToken">Cancels the enumeration.</param>
+    internal IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
+        ManagerAction action, EventActionOutcome? outcome, TimeSpan completesWithin,
+        CancellationToken cancellationToken = default) =>
+        SendEventGeneratingCoreAsync(action, outcome,
+            (completesWithin > TimeSpan.Zero ? completesWithin : TimeSpan.Zero) + _options.DefaultResponseTimeout,
+            cancellationToken);
+
+    /// <summary>
+    /// Sends <paramref name="action"/> and yields the events its sequence carries, the wait bounded by
+    /// <paramref name="eventTimeout"/> (<see cref="TimeSpan.Zero"/> or less: no bound).
+    /// </summary>
+    private async IAsyncEnumerable<ManagerEvent> SendEventGeneratingCoreAsync(
+        ManagerAction action, EventActionOutcome? outcome, TimeSpan eventTimeout,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         EnsureConnected();
 
-        // Apply DefaultEventTimeout if configured
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        if (_options.DefaultEventTimeout > TimeSpan.Zero)
+        if (eventTimeout > TimeSpan.Zero)
         {
-            timeoutCts.CancelAfter(_options.DefaultEventTimeout);
+            timeoutCts.CancelAfter(eventTimeout < MaxCancelAfter ? eventTimeout : MaxCancelAfter);
         }
 
         var ct = timeoutCts.Token;
