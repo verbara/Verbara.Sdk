@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Enums;
 using FluentAssertions;
@@ -18,11 +19,11 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// </summary>
 /// <remarks>
 /// <para>
-/// How many connects the loop makes is deliberately not asserted. The limit is checked after the delay and
-/// before the connect, so today <c>MaxReconnectAttempts = N</c> makes N − 1 connects (3 makes two, 1 makes
-/// none). Whether N should mean N attempts is ruling C3 of the 2026-09-26 decision audit (ADR-0008 addendum),
-/// still open, and these tests must hold under either answer: they read the sockets the factory actually
-/// created instead of predicting how many there are.
+/// How many connects the loop makes is ruling C3 of the 2026-09-26 decision audit (ADR-0008 addendum):
+/// <c>MaxReconnectAttempts = N</c> makes N reconnect connects, every <c>[AMI] Reconnecting</c> line is followed by a
+/// connect, and the give-up comes right after the last failed attempt, with no further backoff.
+/// <see cref="ReconnectLoop_ShouldMakeExactlyNConnects_WhenEveryReconnectIsRefused"/> counts them on the client side,
+/// from the sockets the factory created; the other tests read those sockets instead of predicting how many there are.
 /// </para>
 /// <para>
 /// Each peer is an in-memory <see cref="PipedSocket"/>, a fresh one per connect. The first accepts its
@@ -403,6 +404,67 @@ public sealed class AmiReconnectLoopTests
 
         (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue();
     }
+
+    /// <summary>
+    /// <c>MaxReconnectAttempts = N</c> makes exactly N reconnect connects when every one is refused, then gives up
+    /// <see cref="AmiConnectionState.Disconnected"/>. Counted on the client side: the factory's sockets, read after the
+    /// loop's own task has completed, so a connect the loop made after the give-up would be counted too.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public async Task ReconnectLoop_ShouldMakeExactlyNConnects_WhenEveryReconnectIsRefused(int maxReconnectAttempts)
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        // Only the first socket accepts its connect: every reconnect is refused, as by an Asterisk that is down.
+        var factory = new PipedSocketFactory { ConnectsAccepted = 1 };
+        var logger = new SignalingLogger<AmiConnection>();
+        var connection = new AmiConnection(Options.Create(new AmiConnectionOptions
+        {
+            Hostname = "localhost",
+            Username = "admin",
+            Password = "secret",
+            EnableHeartbeat = false,
+            AutoReconnect = true,
+            MaxReconnectAttempts = maxReconnectAttempts,
+            ReconnectInitialDelay = TimeSpan.FromMilliseconds(5),
+            ReconnectMaxDelay = TimeSpan.FromMilliseconds(5),
+        }), factory, logger);
+        var first = await ConnectAsync(connection, factory, peerCts);
+        // Nothing else ends this connection, so the line is the loop giving up.
+        var gaveUp = logger.Logged("[AMI] Disconnected");
+
+        first.CloseFromPeer();
+        var ended = await CompletesWithinBoundAsync(gaveUp);
+        var loop = ReconnectLoopOf(connection);
+        var loopCompleted = loop is not null && await CompletesWithinBoundAsync(loop);
+
+        var reconnectConnects = factory.Created.Count - 1;
+        using (new AssertionScope())
+        {
+            ended.Should().BeTrue("the loop gives up once its attempts are used");
+            loopCompleted.Should().BeTrue("the loop's task completes at the give-up");
+            reconnectConnects.Should().Be(maxReconnectAttempts,
+                $"MaxReconnectAttempts = {maxReconnectAttempts} makes exactly that many reconnect connects, and none after the give-up");
+            connection.State.Should().Be(AmiConnectionState.Disconnected);
+            logger.Entries.Count(e => e.Line.Contains("[AMI] Reconnecting", StringComparison.Ordinal)).Should().Be(maxReconnectAttempts,
+                "every [AMI] Reconnecting line is followed by a connect");
+            logger.Entries.Count(e => e.Line.Contains("[AMI] Reconnect attempt failed", StringComparison.Ordinal)).Should().Be(maxReconnectAttempts,
+                "each refused connect is one failed attempt");
+        }
+
+        (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue();
+    }
+
+    /// <summary>
+    /// The reconnect loop's task, which the connection keeps private. Read through a test-only accessor so a test can wait
+    /// for the loop itself to end; <c>src/</c> exposes nothing for it.
+    /// </summary>
+    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_reconnectLoop")]
+    private static extern ref Task? ReconnectLoopField(AmiConnection connection);
+
+    private static Task? ReconnectLoopOf(AmiConnection connection) => ReconnectLoopField(connection);
 
     /// <summary>Each socket not disposed exactly once, described by its place in creation order.</summary>
     private static List<string> Unreleased(IReadOnlyList<PipedSocket> sockets) =>

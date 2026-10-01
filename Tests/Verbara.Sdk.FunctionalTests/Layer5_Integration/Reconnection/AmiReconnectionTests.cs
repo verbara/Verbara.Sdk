@@ -123,14 +123,14 @@ public sealed class AmiReconnectionTests : FunctionalTestBase
         {
             await DockerControl.KillContainerAsync();
 
-            // Wait long enough for 3 attempts at 500ms each, plus margin
-            await Task.Delay(TimeSpan.FromSeconds(10));
+            // Asterisk stays down, so every reconnect is refused: the loop uses its three attempts and gives up.
+            // Bounded wait for the give-up itself, not an observation window.
+            var gaveUp = await WaitForStateAsync(connection, AmiConnectionState.Disconnected, TimeSpan.FromSeconds(60));
 
-            // After exhausting max attempts, state should be terminal or mid-attempt
-            connection.State.Should().BeOneOf(
-                AmiConnectionState.Connecting,
-                AmiConnectionState.Reconnecting,
-                AmiConnectionState.Disconnected);
+            gaveUp.Should().BeTrue("with MaxReconnectAttempts = 3 and Asterisk down, the connection gives up and reads Disconnected");
+            LogCapture.Entries
+                .Count(e => e.Message.Contains("[AMI] Reconnect attempt failed", StringComparison.Ordinal))
+                .Should().Be(3, "MaxReconnectAttempts = 3 makes exactly three reconnect attempts, each refused");
         }
         finally
         {
@@ -173,5 +173,17 @@ public sealed class AmiReconnectionTests : FunctionalTestBase
             await DockerControl.StartContainerAsync();
             await DockerControl.WaitForHealthyAsync();
         }
+    }
+
+    private static async Task<bool> WaitForStateAsync(Verbara.Sdk.Ami.Connection.AmiConnection connection, AmiConnectionState state, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (connection.State == state) return true;
+            await Task.Delay(50); // fence-allow: LOOP-DRIVER — AmiConnection exposes State but no state-change signal; bounded by the caller's timeout
+        }
+
+        return connection.State == state;
     }
 }
