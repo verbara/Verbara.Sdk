@@ -34,7 +34,8 @@ public sealed class AmiConnectionStateChange
     /// <summary>
     /// What caused the change, when something failed: the heartbeat timeout (<see cref="TimeoutException"/>) or the
     /// reader's exception that lost an established connection, the error of a failed reconnect attempt (for example
-    /// an authentication failure), or, when the reconnect loop gives up, the error of its last attempt.
+    /// an authentication failure), or, when the reconnect loop gives up, the error of its last attempt. The ending of a
+    /// connection lost without <c>AutoReconnect</c> carries the loss's cause on both of its changes.
     /// <see langword="null"/> when the connection's stream ended (Asterisk closed it, or it was reset: the socket
     /// transport reports both as an end of stream), for the caller's own connect or ending, and for a successful
     /// connect.

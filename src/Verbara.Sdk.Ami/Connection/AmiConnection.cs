@@ -71,6 +71,10 @@ internal static partial class AmiConnectionLog
     [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] State-change handler error")]
     public static partial void StateChangedHandlerError(ILogger logger, Exception exception);
 
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "[AMI] A {Event} handler has not returned after {Seconds} s; later notifications wait for it")]
+    public static partial void NotificationHandlerStuck(ILogger logger, string @event, double seconds);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] OnEvent handler threw on {EventType}")]
     public static partial void HandlerFault(ILogger logger, string? eventType, Exception exception);
 }
@@ -88,6 +92,16 @@ public sealed class AmiConnection : IAmiConnection
     private readonly AmiConnectionOptions _options;
     private readonly ISocketConnectionFactory _socketFactory;
     private readonly ILogger<AmiConnection> _logger;
+
+    // The clock the stuck-notification bound is measured on: TimeProvider.System, unless a test passes its own through
+    // the internal constructor overload.
+    private readonly TimeProvider _timeProvider;
+
+    /// <summary>
+    /// How long one notification may run before the connection reports, once, that its handler has not returned. Fixed,
+    /// not an option: the report changes nothing, and every later notification still waits for that handler.
+    /// </summary>
+    internal static readonly TimeSpan StuckNotificationBound = TimeSpan.FromSeconds(30);
 
     // Tags of ami.events.dropped: the reasons AmiMetrics.EventsDropped documents.
     private static readonly KeyValuePair<string, object?> BufferFullReason = new("reason", "buffer_full");
@@ -293,13 +307,25 @@ public sealed class AmiConnection : IAmiConnection
     public event Action<AmiConnectionStateChange>? StateChanged;
 
     public AmiConnection(IOptions<AmiConnectionOptions> options, ISocketConnectionFactory socketFactory, ILogger<AmiConnection> logger)
+        : this(options, socketFactory, logger, TimeProvider.System)
     {
+    }
+
+    /// <summary>
+    /// The connection, measuring the stuck-notification bound on <paramref name="timeProvider"/>. Internal: tests move a
+    /// fake clock past the bound instead of waiting it out.
+    /// </summary>
+    internal AmiConnection(IOptions<AmiConnectionOptions> options, ISocketConnectionFactory socketFactory, ILogger<AmiConnection> logger,
+        TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(timeProvider);
         _options = options.Value;
         // No validator runs on this path (factories, the server pool, Options.Create): with AutoReconnect on, a value
         // the reconnect backoff cannot use is rejected here, naming the option, instead of in a loop after a loss.
         ReconnectRule.ThrowIfUnusable(_options);
         _socketFactory = socketFactory;
         _logger = logger;
+        _timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -493,7 +519,7 @@ public sealed class AmiConnection : IAmiConnection
                 return;
 
             var change = new AmiConnectionStateChange(previous, next, cause, byCaller);
-            NotifyLocked(() => DeliverStateChange(change));
+            NotifyLocked(nameof(StateChanged), () => DeliverStateChange(change));
         }
     }
 
@@ -1043,7 +1069,7 @@ public sealed class AmiConnection : IAmiConnection
                     {
                         SetStateLocked(AmiConnectionState.Disconnecting, cause, byCaller: false);
                         NotifyLost(cause);
-                        _ = Task.Run(() => EndLostConnectionAsync(), CancellationToken.None);
+                        _ = Task.Run(() => EndLostConnectionAsync(cause), CancellationToken.None);
                     }
                 }
             }
@@ -1078,7 +1104,11 @@ public sealed class AmiConnection : IAmiConnection
     /// same ending a caller's <see cref="DisconnectAsync"/> runs, without the Logoff. It runs on a task of
     /// its own, never on the reader loop or the heartbeat, which <see cref="CleanupAsync"/> awaits.
     /// </summary>
-    private Task EndLostConnectionAsync() => EndAsync(byCaller: false, CancellationToken.None);
+    /// <param name="cause">
+    /// What ended the connection for good, announced on its final change to <see cref="AmiConnectionState.Disconnected"/>:
+    /// the loss's cause without AutoReconnect, the last failed attempt's exception for the give-up.
+    /// </param>
+    private Task EndLostConnectionAsync(Exception? cause) => EndAsync(byCaller: false, CancellationToken.None, cause);
 
     /// <summary>
     /// Reconnects with backoff until a connect succeeds, the loop gives up at
@@ -1093,6 +1123,9 @@ public sealed class AmiConnection : IAmiConnection
     {
         var lifetime = _lifetime.Token;
         var attempt = 0;
+        // The last failed attempt's exception: the cause the give-up announces. MaxReconnectAttempts = N makes N connects,
+        // so a give-up always follows at least one failed attempt, and this is set by then.
+        Exception? lastError = null;
 
         while (!lifetime.IsCancellationRequested && _state == AmiConnectionState.Reconnecting)
         {
@@ -1105,7 +1138,7 @@ public sealed class AmiConnection : IAmiConnection
                 // behind is released: the last one a failed connect created. The ending writes Disconnecting
                 // itself, and only when no other ending is under way; a caller's ending under way is not joined,
                 // because it is waiting for this loop.
-                await EndLostConnectionAsync();
+                await EndLostConnectionAsync(lastError);
                 return;
             }
 
@@ -1134,7 +1167,7 @@ public sealed class AmiConnection : IAmiConnection
                 // The backoff cannot be computed or waited. It would fail the same way on every iteration, with no
                 // delay, so it is not a failed attempt to retry: the loop ends as a give-up does, once, loudly.
                 AmiConnectionLog.ReconnectBackoffFailed(_logger, ex);
-                await EndLostConnectionAsync();
+                await EndLostConnectionAsync(ex);
                 return;
             }
 
@@ -1159,6 +1192,7 @@ public sealed class AmiConnection : IAmiConnection
                 if (!TrySetAutomaticState(AmiConnectionState.Reconnecting, ex))
                     return;
 
+                lastError = ex;
                 AmiConnectionLog.ReconnectAttemptFailed(_logger, ex);
             }
         }
@@ -1174,7 +1208,7 @@ public sealed class AmiConnection : IAmiConnection
         if (Reconnected is null)
             return;
 
-        Notify(() =>
+        Notify(nameof(Reconnected), () =>
         {
             // Read at delivery time: a handler removed while this notification waited is not called.
             var handlers = Reconnected;
@@ -1206,7 +1240,7 @@ public sealed class AmiConnection : IAmiConnection
         if (Lost is null)
             return;
 
-        Notify(() =>
+        Notify(nameof(Lost), () =>
         {
             // Read at delivery time: a handler removed while this notification waited is not called.
             var handlers = Lost;
@@ -1233,10 +1267,10 @@ public sealed class AmiConnection : IAmiConnection
     /// Appends a notification to the queue: it runs on the thread pool once the one before it has returned. Nothing
     /// awaits the queue, so no loop is ever held by a handler.
     /// </summary>
-    private void Notify(Action notification)
+    private void Notify(string eventName, Action notification)
     {
         lock (_notifyLock)
-            NotifyLocked(notification);
+            NotifyLocked(eventName, notification);
     }
 
     /// <summary>
@@ -1245,24 +1279,48 @@ public sealed class AmiConnection : IAmiConnection
     /// handler called), and a handler must not inherit that dispatch's mark (<c>_inDispatch</c>) or anything else that
     /// flows with the context of whoever queued it.
     /// </summary>
-    private void NotifyLocked(Action notification)
+    private void NotifyLocked(string eventName, Action notification)
     {
+        var queued = new QueuedNotification(this, eventName, notification);
         if (ExecutionContext.IsFlowSuppressed())
         {
-            Append(notification);
+            Append(queued);
             return;
         }
 
         using (ExecutionContext.SuppressFlow())
-            Append(notification);
+            Append(queued);
 
-        void Append(Action next) =>
+        void Append(QueuedNotification next) =>
             _notifyTail = _notifyTail.ContinueWith(
-                static (_, state) => ((Action)state!).Invoke(),
+                static (_, state) => ((QueuedNotification)state!).Run(),
                 next,
                 CancellationToken.None,
                 TaskContinuationOptions.None,
                 TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// One notification on the queue, and the event it delivers. It runs watched: when its handlers have not returned
+    /// once <see cref="StuckNotificationBound"/> has passed on the connection's clock, one Warning names the event, and
+    /// nothing else changes — the notification is neither skipped nor abandoned, and every later one still waits for it.
+    /// </summary>
+    private sealed class QueuedNotification(AmiConnection owner, string eventName, Action deliver)
+    {
+        public void Run()
+        {
+            // One-shot: a notification is reported once, however long it runs. Disposed when the handlers return, so a
+            // notification that returned before the bound is never reported.
+            using var watchdog = owner._timeProvider.CreateTimer(
+                static state => ((QueuedNotification)state!).ReportStuck(),
+                this,
+                StuckNotificationBound,
+                Timeout.InfiniteTimeSpan);
+            deliver();
+        }
+
+        private void ReportStuck() =>
+            AmiConnectionLog.NotificationHandlerStuck(owner._logger, eventName, StuckNotificationBound.TotalSeconds);
     }
 
     private ValueTask DispatchEventAsync(ManagerEvent evt)
@@ -1383,7 +1441,11 @@ public sealed class AmiConnection : IAmiConnection
     /// mark the connection as ended by its caller, so it cannot be connected again.
     /// </param>
     /// <param name="logoffToken">Cancels only the Logoff write, never the release.</param>
-    private async Task EndAsync(bool byCaller, CancellationToken logoffToken)
+    /// <param name="cause">
+    /// What ended a connection lost for good, announced on the ending's changes; <see langword="null"/> for the caller's
+    /// ending.
+    /// </param>
+    private async Task EndAsync(bool byCaller, CancellationToken logoffToken, Exception? cause = null)
     {
         TaskCompletionSource? mine = null;
         Task ending;
@@ -1398,7 +1460,7 @@ public sealed class AmiConnection : IAmiConnection
                 mine = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 _ending = mine;
                 // Written under the lock every connect's state writes take, so none of them overrides it.
-                SetStateLocked(AmiConnectionState.Disconnecting, cause: null, byCaller);
+                SetStateLocked(AmiConnectionState.Disconnecting, byCaller ? null : cause, byCaller);
             }
 
             ending = _ending.Task;
@@ -1455,7 +1517,7 @@ public sealed class AmiConnection : IAmiConnection
         finally
         {
             lock (_endingLock)
-                SetStateLocked(AmiConnectionState.Disconnected, cause: null, byCaller);
+                SetStateLocked(AmiConnectionState.Disconnected, byCaller ? null : cause, byCaller);
 
             AmiConnectionLog.Disconnected(_logger);
             mine.TrySetResult();
