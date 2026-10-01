@@ -35,10 +35,13 @@ public sealed class AmiConnectionStateChange
     /// What caused the change, when something failed: the heartbeat timeout (<see cref="TimeoutException"/>) or the
     /// reader's exception that lost an established connection, the error of a failed reconnect attempt (for example
     /// an authentication failure), or, when the reconnect loop gives up, the error of its last attempt. The ending of a
-    /// connection lost without <c>AutoReconnect</c> carries the loss's cause on both of its changes.
+    /// connection lost without <c>AutoReconnect</c> carries the loss's cause on both of its changes, and the change to
+    /// <see cref="AmiConnectionState.Disconnected"/> after a caller's failed <c>ConnectAsync</c> carries the exception
+    /// that connect threw.
     /// <see langword="null"/> when the connection's stream ended (Asterisk closed it, or it was reset: the socket
-    /// transport reports both as an end of stream), for the caller's own connect or ending, and for a successful
-    /// connect.
+    /// transport reports both as an end of stream), for the caller's ending, and for every other change a connect makes:
+    /// its <see cref="AmiConnectionState.Connecting"/>, its <see cref="AmiConnectionState.Connected"/>, and the
+    /// <see cref="AmiConnectionState.Disconnected"/> of a caller's connect that the caller's own token withdrew.
     /// </summary>
     public Exception? Cause { get; }
 
